@@ -1,0 +1,43 @@
+[package]
+name = "baudelaire"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+typst = { version = "0.15" }
+typst-html = { version = "0.15" }
+typst-library = { version = "0.15" }
+typst-kit = { version = "0.15", features = [
+  "system-files",
+  "system-downloader",
+  "scan-fonts",
+] }
+typst-eval = "0.15"
+miette = { version = "7", features = ["fancy"] }
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+time = { version = "0.3", features = ["serde", "parsing", "formatting"] }
+itertools = "0.15.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+kdl = { version = "6" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+quick-xml = "0.41"
+wax = "0.7"
+anstream = "1"
+owo-colors = "4"
+rayon = "1"
+notify = "8"
+notify-debouncer-full = "0.5"
+tiny_http = "0.12"
+open = "5"
+lightningcss = "1.0.0-alpha.71"
+rolldown = "1"
+tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread"] }
+rolldown_common = "1"
+
+[dev-dependencies]
+tempfile = "3"
+insta = "1"

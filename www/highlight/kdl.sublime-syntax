@@ -1,0 +1,138 @@
+%YAML 1.2
+---
+# KDL 2.0 grammar for Typst's syntect-based highlighter (https://kdl.dev).
+# Covers nodes, arguments, properties, the `#` keywords, all string forms
+# (quoted, raw, multi-line, raw multi-line), hex/octal/binary/decimal numbers,
+# type annotations, line continuations, and `//`, `/* */` (nested), and `/-`
+# (slashdash) comments. Scopes are chosen to match the sentinel theme in
+# baudelaire.tmTheme.
+name: KDL
+file_extensions:
+  - kdl
+scope: source.kdl
+
+variables:
+  # A bare identifier / unquoted string: any run that is not whitespace or one
+  # of KDL's structural characters.
+  bare: '[^\s\\/(){}\[\]<>;=#"]+'
+
+contexts:
+  main:
+    - include: comments
+    - include: tokens
+
+  # ---- Comments -----------------------------------------------------------
+  comments:
+    # Slashdash comments out the next node, argument, property, or block.
+    - match: '/-'
+      scope: comment.block.documentation.slashdash.kdl
+    - match: '//'
+      scope: punctuation.definition.comment.kdl
+      push:
+        - meta_scope: comment.line.double-slash.kdl
+        - match: '$\n?'
+          pop: true
+    - match: '/\*'
+      scope: punctuation.definition.comment.kdl
+      push: block-comment
+
+  block-comment:
+    - meta_scope: comment.block.kdl
+    - match: '/\*'
+      push: block-comment      # multi-line comments nest
+    - match: '\*/'
+      pop: true
+
+  # ---- Tokens -------------------------------------------------------------
+  tokens:
+    - include: strings
+    - include: keywords
+    - include: numbers
+    - include: type-annotation
+    - include: property
+    - include: names
+    - include: punctuation
+
+  keywords:
+    - match: '#(?:true|false|null|nan|inf|-inf)\b'
+      scope: constant.language.kdl
+
+  numbers:
+    - match: '[-+]?0x[0-9a-fA-F][0-9a-fA-F_]*'
+      scope: constant.numeric.integer.hexadecimal.kdl
+    - match: '[-+]?0o[0-7][0-7_]*'
+      scope: constant.numeric.integer.octal.kdl
+    - match: '[-+]?0b[01][01_]*'
+      scope: constant.numeric.integer.binary.kdl
+    - match: '[-+]?[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][-+]?[0-9]+)?'
+      scope: constant.numeric.decimal.kdl
+
+  # A parenthesised type annotation: `(u8)`, `(date)`, `(regex)`, …
+  type-annotation:
+    - match: '(\()([^)]*)(\))'
+      captures:
+        1: punctuation.definition.annotation.kdl
+        2: storage.type.kdl
+        3: punctuation.definition.annotation.kdl
+
+  # A property key: an identifier or quoted string immediately before `=`.
+  property:
+    - match: '({{bare}})\s*(=)'
+      captures:
+        1: variable.parameter.kdl
+        2: keyword.operator.assignment.kdl
+
+  names:
+    # The first token on a node line is the node name.
+    - match: '^\s*(/-\s*)?({{bare}})'
+      captures:
+        1: comment.block.documentation.slashdash.kdl
+        2: entity.name.function.kdl
+    # Any other bare token is an unquoted-string argument.
+    - match: '{{bare}}'
+      scope: string.unquoted.kdl
+
+  punctuation:
+    - match: '[{};]'
+      scope: punctuation.section.block.kdl
+    - match: '\\'
+      scope: keyword.operator.continuation.kdl
+
+  # ---- Strings ------------------------------------------------------------
+  strings:
+    # Raw multi-line: #"""…"""#
+    - match: '#+"""'
+      scope: punctuation.definition.string.begin.kdl
+      push:
+        - meta_scope: string.quoted.other.raw.block.kdl
+        - match: '"""#+'
+          scope: punctuation.definition.string.end.kdl
+          pop: true
+    # Multi-line: """…"""
+    - match: '"""'
+      scope: punctuation.definition.string.begin.kdl
+      push:
+        - meta_scope: string.quoted.double.block.kdl
+        - match: '\\.'
+          scope: constant.character.escape.kdl
+        - match: '"""'
+          scope: punctuation.definition.string.end.kdl
+          pop: true
+    # Raw: #"…"#
+    - match: '#+"'
+      scope: punctuation.definition.string.begin.kdl
+      push:
+        - meta_scope: string.quoted.other.raw.kdl
+        - match: '"#+'
+          scope: punctuation.definition.string.end.kdl
+          pop: true
+    # Quoted: "…"
+    - match: '"'
+      scope: punctuation.definition.string.begin.kdl
+      push:
+        - meta_scope: string.quoted.double.kdl
+        - match: '\\.'
+          scope: constant.character.escape.kdl
+        - match: '"'
+          scope: punctuation.definition.string.end.kdl
+          pop: true

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Incremental builds</title>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/assets/style.0134a7d7abae1462.css">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.d7e871f655828ebc.svg">
+    <header class="site-header">
+      <a class="skip-link" href="#main">Skip to content</a> <a class="brand" href="/">Baudelaire</a>
+      <nav class="top-nav" aria-label="Primary"><a href="/guide/install/">Guide</a> <a href="/features/">Features</a> <a href="/blog/">Blog</a></nav>
+      <button class="search-trigger" type="button" aria-label="Search" aria-keyshortcuts="Control+K /" data-search-open><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span class="search-trigger-label">Search</span><kbd class="search-trigger-key">⌘K</kbd></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle><span class="icon-moon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></span><span class="icon-sun" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sidebar" data-nav-toggle><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 12h16"></path><path d="M4 6h16"></path><path d="M4 18h16"></path></svg></button>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Documentation">
+        <div class="nav-group">
+          <p class="nav-title">Guide</p>
+          <ul>
+            <li><a href="/guide/install/">Install</a></li>
+            <li><a href="/guide/quickstart/">Quickstart</a></li>
+            <li><a href="/guide/config/">Configuration</a></li>
+            <li><a href="/guide/cli/">CLI reference</a></li>
+            <li><a href="/guide/highlighting/">Syntax highlighting</a></li>
+            <li><a href="/guide/deploy/">Deploying</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">Features</p>
+          <ul>
+            <li><a href="/features/search/">Search</a></li>
+            <li><a href="/features/assets/">Asset pipeline</a></li>
+            <li><a href="/features/hooks/">Build hooks</a></li>
+            <li><a href="/features/taxonomies/">Taxonomies</a></li>
+            <li><a href="/features/pagination/">Pagination</a></li>
+            <li><a href="/features/feeds/">Feeds &amp; sitemap</a></li>
+            <li><a href="/features/context/">Build metadata</a></li>
+            <li><a href="/features/incremental/">Incremental builds</a></li>
+            <li><a href="/features/redirects/">Redirects</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">More</p>
+          <ul>
+            <li><a href="/blog/">Blog</a></li>
+            <li><a href="/tags/">Tags</a></li>
+          </ul>
+        </div>
+      </nav>
+      <main class="content" id="main">
+        <article>
+          <h1>Incremental builds</h1>
+          <p>Edit one page in a thousand and Baudelaire recompiles one page. The rest are served straight from cache, so a rebuild is measured in milliseconds and <code>serve</code> reloads the browser almost the instant you save.</p>
+          <pre><code data-lang="sh"><span style="color: #e5d006">$</span> baudelaire build
+ <span style="color: #e5d006">built</span> 420 pages (0 cached)      <span style="color: #e5d008">#</span><span style="color: #e5d001"> cold: everything compiled</span>
+
+<span style="color: #e5d006">$</span> baudelaire build               <span style="color: #e5d008">#</span><span style="color: #e5d001"> after editing one post</span>
+ <span style="color: #e5d006">built</span> 420 pages (419 cached)    <span style="color: #e5d008">#</span><span style="color: #e5d001"> only that post recompiled</span></code></pre>
+          <h3>How it decides</h3>
+          <p>Each page is fingerprinted by two things: the exact source Typst compiles, and every file that compilation actually read. Typst’s import and data-loading are tracked, so the dependency list is precise rather than guessed. A page is reused only when its fingerprint and all of its dependencies are unchanged.</p>
+          <p>That makes invalidation sharp and predictable:</p>
+          <dl>
+            <dt>Edit a post</dt>
+            <dd>only that post rebuilds.</dd>
+            <dt>Edit a shared template or an imported module</dt>
+            <dd>every page that used it rebuilds, and nothing else.</dd>
+            <dt>Change <code>config.kdl</code></dt>
+            <dd>the whole site rebuilds, since config can change any permalink.</dd>
+            <dt>New commit or new day</dt>
+            <dd>pages that print build metadata rebuild, because that metadata is part of the fingerprint.</dd>
+          </dl>
+          <h3>The cache</h3>
+          <p>Rendered HTML lives in <code>.baudelaire/</code>, stored content-addressed: identical output is kept once, and an unchanged page’s markup is never rewritten, so the cache stays small and writes stay cheap. <code>build</code> and <code>serve</code> share it, so switching between them recompiles nothing.</p>
+          <div class="callout callout-tip">
+            <p class="callout-label">TIP</p>
+            Persist <code>.baudelaire/</code> between CI runs and deploys become near-instant too. <code>--no-cache</code> forces a clean rebuild; <code>baudelaire clean</code> removes it entirely.
+          </div>
+          <div class="callout callout-note">
+            <p class="callout-label">NOTE</p>
+            One consequence of content-hashed asset URLs: with <code>fingerprint</code> on, changing a stylesheet rewrites the <code>&lt;link></code> on every page, so every page rebuilds. Use <code>serve --profile dev</code> (fingerprinting off) for instant CSS iteration.
+          </div>
+          <div class="tag-row" aria-label="Tags"><a href="/tags/feature/">#feature</a><a href="/tags/performance/">#performance</a></div>
+        </article>
+      </main>
+    </div>
+    <footer class="site-footer">
+      <div class="build-meta"><span>Built with <a href="/">Baudelaire</a> v0.1.0</span><span>Typst 0.15.0</span></div>
+      <div><a href="/rss.xml">RSS</a> · <a href="/atom.xml">Atom</a> · <a href="/sitemap.xml">Sitemap</a></div>
+    </footer>
+    <script type="module" src="/assets/main.8eeb03a21f68239f.js"></script>
+  </body>
+</html>

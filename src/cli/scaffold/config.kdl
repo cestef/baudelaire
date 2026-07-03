@@ -1,0 +1,51 @@
+site "My Site"
+url "https://example.com"
+lang "en"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+clean #true
+
+typst {
+  features "+html"
+}
+
+collections {
+  posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/"
+}
+
+taxonomies {
+  tags kind="list" index=#true
+}
+
+output {
+  html {
+    pretty #true
+  }
+}
+
+serve {
+  port 3000
+  bind "127.0.0.1"
+  open #true
+  watch #true
+}
+
+profiles {
+  dev {
+    url "http://localhost:3000"
+    future #true
+  }
+  prod {
+    output {
+      html {
+        pretty #false
+      }
+    }
+  }
+}

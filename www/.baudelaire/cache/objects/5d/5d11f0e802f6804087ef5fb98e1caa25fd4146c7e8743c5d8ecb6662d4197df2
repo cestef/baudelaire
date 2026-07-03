@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Baudelaire</title>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/assets/style.0134a7d7abae1462.css">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.d7e871f655828ebc.svg">
+    <header class="site-header">
+      <a class="skip-link" href="#main">Skip to content</a> <a class="brand" href="/">Baudelaire</a>
+      <nav class="top-nav" aria-label="Primary"><a href="/guide/install/">Guide</a> <a href="/features/">Features</a> <a href="/blog/">Blog</a></nav>
+      <button class="search-trigger" type="button" aria-label="Search" aria-keyshortcuts="Control+K /" data-search-open><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span class="search-trigger-label">Search</span><kbd class="search-trigger-key">⌘K</kbd></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle><span class="icon-moon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></span><span class="icon-sun" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sidebar" data-nav-toggle><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 12h16"></path><path d="M4 6h16"></path><path d="M4 18h16"></path></svg></button>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Documentation">
+        <div class="nav-group">
+          <p class="nav-title">Guide</p>
+          <ul>
+            <li><a href="/guide/install/">Install</a></li>
+            <li><a href="/guide/quickstart/">Quickstart</a></li>
+            <li><a href="/guide/config/">Configuration</a></li>
+            <li><a href="/guide/cli/">CLI reference</a></li>
+            <li><a href="/guide/highlighting/">Syntax highlighting</a></li>
+            <li><a href="/guide/deploy/">Deploying</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">Features</p>
+          <ul>
+            <li><a href="/features/search/">Search</a></li>
+            <li><a href="/features/assets/">Asset pipeline</a></li>
+            <li><a href="/features/hooks/">Build hooks</a></li>
+            <li><a href="/features/taxonomies/">Taxonomies</a></li>
+            <li><a href="/features/pagination/">Pagination</a></li>
+            <li><a href="/features/feeds/">Feeds &amp; sitemap</a></li>
+            <li><a href="/features/context/">Build metadata</a></li>
+            <li><a href="/features/incremental/">Incremental builds</a></li>
+            <li><a href="/features/redirects/">Redirects</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">More</p>
+          <ul>
+            <li><a href="/blog/">Blog</a></li>
+            <li><a href="/tags/">Tags</a></li>
+          </ul>
+        </div>
+      </nav>
+      <main class="content" id="main">
+        <article>
+          <h1>Baudelaire</h1>
+          <p class="lead">A static site generator that speaks <a href="https://typst.app">Typst</a>. Write your pages as <code>.typ</code> files and get incremental builds, clean URLs, taxonomies, pagination, feeds, and search. There is no template language to learn, because the template language is Typst.</p>
+          <p><a class="cta" href="/guide/quickstart/">Get started<span style="white-space: pre-wrap">&#x20;</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a></p>
+          <h3>Why Typst instead of Markdown?</h3>
+          <p>Markdown runs out of road quickly. It has no variables, no functions, no math, and no way to load a CSV and build a table from it. The moment you want any of that, you reach for a template engine and a pile of plugins.</p>
+          <p>Typst already has all of it: functions, imports, data loading, math, code highlighting. So a page is a small program, and a layout is just a function that takes content and returns markup. Baudelaire adds what a compiler leaves out: a content model, clean URLs, feeds, and a build cache.</p>
+          <h3>Explore</h3>
+          <ul class="cards">
+            <li><a href="/guide/quickstart/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></svg></span><strong>Quickstart</strong><span>Scaffold, build, and serve in three commands.</span></a></li>
+            <li><a href="/features/search/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></span><strong>Search</strong><span>A flat index and a command palette, from one config block.</span></a></li>
+            <li><a href="/features/assets/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path></svg></span><strong>Asset pipeline</strong><span>Minify CSS, bundle JS, and fingerprint filenames.</span></a></li>
+            <li><a href="/features/taxonomies/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r="1.5"></circle></svg></span><strong>Taxonomies</strong><span>Group pages by tag with generated index pages.</span></a></li>
+            <li><a href="/features/feeds/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></span><strong>Feeds &amp; sitemap</strong><span>RSS, Atom, and sitemap.xml from your dated pages.</span></a></li>
+            <li><a href="/guide/config/"><span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M2 14h4"></path><path d="M10 8h4"></path><path d="M18 16h4"></path></svg></span><strong>Configuration</strong><span>Everything the build reads, in one KDL file.</span></a></li>
+          </ul>
+          <p>This entire site is built with Baudelaire. The source lives in <a href="https://github.com/cestef/baudelaire">the repository</a> under <code>www/</code>.</p>
+        </article>
+      </main>
+    </div>
+    <footer class="site-footer">
+      <div class="build-meta"><span>Built with <a href="/">Baudelaire</a> v0.1.0</span><span>Typst 0.15.0</span></div>
+      <div><a href="/rss.xml">RSS</a> · <a href="/atom.xml">Atom</a> · <a href="/sitemap.xml">Sitemap</a></div>
+    </footer>
+    <script type="module" src="/assets/main.8eeb03a21f68239f.js"></script>
+  </body>
+</html>

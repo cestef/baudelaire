@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>Baudelaire tokens</string>
+  <key>settings</key>
+  <array>
+    <!-- Colors here are arbitrary SENTINELS, not real colors: each scope gets a
+         unique hex that Typst bakes into the inline style. style.css matches on
+         that hex and swaps in a real, theme-aware `var(--sx-*)`, so the actual
+         palette lives in CSS and adapts to light/dark. -->
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d000</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>comment</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d001</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>string, string.quoted, constant.character.escape</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d002</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>constant.numeric</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d003</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>constant.language, keyword</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d004</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>entity.name.function, entity.name.tag</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d005</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>variable.parameter, variable</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d006</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>storage.type, entity.name.type, support.type</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d007</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>scope</key>
+      <string>keyword.operator, punctuation</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#e5d008</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

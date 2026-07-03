@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CLI reference</title>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/assets/style.0134a7d7abae1462.css">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.d7e871f655828ebc.svg">
+    <header class="site-header">
+      <a class="skip-link" href="#main">Skip to content</a> <a class="brand" href="/">Baudelaire</a>
+      <nav class="top-nav" aria-label="Primary"><a href="/guide/install/">Guide</a> <a href="/features/">Features</a> <a href="/blog/">Blog</a></nav>
+      <button class="search-trigger" type="button" aria-label="Search" aria-keyshortcuts="Control+K /" data-search-open><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span class="search-trigger-label">Search</span><kbd class="search-trigger-key">⌘K</kbd></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle><span class="icon-moon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></span><span class="icon-sun" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span></button><span style="white-space: pre-wrap">&#x20;</span><button class="icon-btn nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sidebar" data-nav-toggle><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M4 12h16"></path><path d="M4 6h16"></path><path d="M4 18h16"></path></svg></button>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Documentation">
+        <div class="nav-group">
+          <p class="nav-title">Guide</p>
+          <ul>
+            <li><a href="/guide/install/">Install</a></li>
+            <li><a href="/guide/quickstart/">Quickstart</a></li>
+            <li><a href="/guide/config/">Configuration</a></li>
+            <li><a href="/guide/cli/">CLI reference</a></li>
+            <li><a href="/guide/highlighting/">Syntax highlighting</a></li>
+            <li><a href="/guide/deploy/">Deploying</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">Features</p>
+          <ul>
+            <li><a href="/features/search/">Search</a></li>
+            <li><a href="/features/assets/">Asset pipeline</a></li>
+            <li><a href="/features/hooks/">Build hooks</a></li>
+            <li><a href="/features/taxonomies/">Taxonomies</a></li>
+            <li><a href="/features/pagination/">Pagination</a></li>
+            <li><a href="/features/feeds/">Feeds &amp; sitemap</a></li>
+            <li><a href="/features/context/">Build metadata</a></li>
+            <li><a href="/features/incremental/">Incremental builds</a></li>
+            <li><a href="/features/redirects/">Redirects</a></li>
+          </ul>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">More</p>
+          <ul>
+            <li><a href="/blog/">Blog</a></li>
+            <li><a href="/tags/">Tags</a></li>
+          </ul>
+        </div>
+      </nav>
+      <main class="content" id="main">
+        <article>
+          <h1>CLI reference</h1>
+          <p>Every command reads <code>config.kdl</code> from the current directory (or the path given to <code>--config</code>) and accepts the global flags below.</p>
+          <h3>Commands</h3>
+          <dl>
+            <dt><code>baudelaire build</code></dt>
+            <dd>Compile the site into <code>dist</code>. Incremental by default. This is the default command, so bare <code>baudelaire</code> builds too.</dd>
+            <dt><code>baudelaire serve</code></dt>
+            <dd>Build, serve <code>dist</code> over HTTP, watch for changes, and live-reload the browser. Flags: <code>--port</code>, <code>--bind</code>, <code>--open</code>, <code>--no-watch</code>.</dd>
+            <dt><code>baudelaire check</code></dt>
+            <dd>Compile every page and report broken internal links without writing output. A fast CI gate.</dd>
+            <dt><code>baudelaire new &lt;path></code></dt>
+            <dd>Scaffold a content file with starter frontmatter, e.g. <code>baudelaire new content/posts/hello.typ</code>.</dd>
+            <dt><code>baudelaire init [dir]</code></dt>
+            <dd>Scaffold a whole project (config, content, a template, and a stylesheet) into <code>dir</code>, or the current directory.</dd>
+            <dt><code>baudelaire clean</code></dt>
+            <dd>Remove the output and cache directories.</dd>
+          </dl>
+          <h3>Global flags</h3>
+          <dl>
+            <dt><code>--config &lt;path></code></dt>
+            <dd>Config file to read (default <code>config.kdl</code>).</dd>
+            <dt><code>--root &lt;dir></code></dt>
+            <dd>Change into <code>dir</code> first, so every relative path resolves under it.</dd>
+            <dt><code>--profile &lt;name></code></dt>
+            <dd>Apply a named profile from the <code>profiles</code> block.</dd>
+            <dt><code>--out &lt;dir></code></dt>
+            <dd>Override the output directory.</dd>
+            <dt><code>--base-url &lt;url></code></dt>
+            <dd>Override the site URL, useful for preview deploys.</dd>
+            <dt><code>--drafts</code>, <code>--future</code></dt>
+            <dd>Include draft or future-dated pages.</dd>
+            <dt><code>--no-cache</code></dt>
+            <dd>Ignore the cache and rebuild everything.</dd>
+            <dt><code>--strict-links &lt;bool></code></dt>
+            <dd>Treat broken internal links as errors (default) or warnings.</dd>
+            <dt><code>-v / -vv</code>, <code>-q</code></dt>
+            <dd>More or less output.</dd>
+          </dl>
+          <div class="tag-row" aria-label="Tags"><a href="/tags/guide/">#guide</a><a href="/tags/reference/">#reference</a></div>
+        </article>
+      </main>
+    </div>
+    <footer class="site-footer">
+      <div class="build-meta"><span>Built with <a href="/">Baudelaire</a> v0.1.0</span><span>Typst 0.15.0</span></div>
+      <div><a href="/rss.xml">RSS</a> · <a href="/atom.xml">Atom</a> · <a href="/sitemap.xml">Sitemap</a></div>
+    </footer>
+    <script type="module" src="/assets/main.8eeb03a21f68239f.js"></script>
+  </body>
+</html>

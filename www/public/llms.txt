@@ -1,0 +1,51 @@
+# Baudelaire
+
+> Baudelaire is a Typst-native static site generator: write pages in Typst, get incremental builds, clean URLs, taxonomies, pagination, feeds, search, and an asset pipeline.
+
+## guide
+
+- [Install](https://baudelaire.dev/guide/install/)
+- [Quickstart](https://baudelaire.dev/guide/quickstart/)
+- [Configuration](https://baudelaire.dev/guide/config/)
+- [CLI reference](https://baudelaire.dev/guide/cli/)
+- [Deploying](https://baudelaire.dev/guide/deploy/)
+- [Syntax highlighting](https://baudelaire.dev/guide/highlighting/)
+
+## features
+
+- [Asset pipeline](https://baudelaire.dev/features/assets/)
+- [Build hooks](https://baudelaire.dev/features/hooks/)
+- [Build metadata](https://baudelaire.dev/features/context/)
+- [Feeds & sitemap](https://baudelaire.dev/features/feeds/)
+- [Incremental builds](https://baudelaire.dev/features/incremental/)
+- [Pagination](https://baudelaire.dev/features/pagination/)
+- [Redirects](https://baudelaire.dev/features/redirects/)
+- [Search](https://baudelaire.dev/features/search/)
+- [Taxonomies](https://baudelaire.dev/features/taxonomies/)
+- [Features](https://baudelaire.dev/features/)
+- [Features — page 2](https://baudelaire.dev/features/page/2/)
+
+## blog
+
+- [Search and a real asset pipeline](https://baudelaire.dev/blog/search-and-assets/)
+- [Why I built a Typst site generator](https://baudelaire.dev/blog/hello-baudelaire/)
+- [Blog](https://baudelaire.dev/blog/)
+
+## _root
+
+- [Baudelaire](https://baudelaire.dev/)
+
+## tags
+
+- [Tags](https://baudelaire.dev/tags/)
+- [Tags: assets](https://baudelaire.dev/tags/assets/)
+- [Tags: blog](https://baudelaire.dev/tags/blog/)
+- [Tags: content](https://baudelaire.dev/tags/content/)
+- [Tags: feature](https://baudelaire.dev/tags/feature/)
+- [Tags: guide](https://baudelaire.dev/tags/guide/)
+- [Tags: performance](https://baudelaire.dev/tags/performance/)
+- [Tags: reference](https://baudelaire.dev/tags/reference/)
+- [Tags: release](https://baudelaire.dev/tags/release/)
+- [Tags: search](https://baudelaire.dev/tags/search/)
+- [Tags: seo](https://baudelaire.dev/tags/seo/)
+- [Tags: typst](https://baudelaire.dev/tags/typst/)

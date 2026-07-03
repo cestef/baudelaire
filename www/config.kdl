@@ -1,0 +1,75 @@
+site "Baudelaire"
+url "https://baudelaire.dev"
+author "cstef"
+lang "en"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+clean #true
+
+collections {
+  guide sort="order" template="page.typ"
+  features sort="title" template="page.typ" paginate=6 list="list.typ"
+  blog sort="date" reverse=#true template="page.typ" paginate=5 list="list.typ"
+}
+
+taxonomies {
+  tags kind="list" index=#true template="list.typ"
+}
+
+output {
+  html {
+    pretty #true
+  }
+
+  // Asset pipeline: minify CSS (lightningcss), bundle + minify JS (rolldown),
+  // and content-hash filenames for far-future caching.
+  assets {
+    minify #true
+    bundle #true
+    fingerprint #true
+  }
+
+  // Client-side search: a flat document index. The palette UI is the generated
+  // client, imported into assets/main.js as the `baudelaire:search` virtual
+  // module and bundled by rolldown. The `body` field powers result snippets.
+  search {
+    formats "json"
+    fields "title" "body" "tags"
+  }
+
+  robots {
+    disallow "/drafts/"
+  }
+
+  llms {
+    summary "Baudelaire is a Typst-native static site generator: write pages in Typst, get incremental builds, clean URLs, taxonomies, pagination, feeds, search, and an asset pipeline."
+  }
+
+  feed {
+    formats "rss" "atom"
+    limit 20
+  }
+}
+
+// `baudelaire build --profile dev` skips the asset pipeline (faster rebuilds)
+// and includes draft pages.
+profiles {
+  dev {
+    draft {
+      build #true
+    }
+    output {
+      assets {
+        minify #false
+        bundle #false
+        fingerprint #false
+      }
+    }
+  }
+}
