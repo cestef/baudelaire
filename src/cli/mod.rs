@@ -1,6 +1,7 @@
 //! Command-line interface: per-subcommand args, colored output, dispatch.
 
 pub mod output;
+pub mod prompt;
 pub mod scaffold;
 pub mod serve;
 
@@ -123,6 +124,12 @@ pub struct NewArgs {
 pub struct InitArgs {
     /// Directory to scaffold into (default: current directory).
     pub dir: Option<PathBuf>,
+    /// Skip the prompt and set up version control (default: git).
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Set up this version-control system (implies `--yes`): `git` or `jujutsu`.
+    #[arg(long, value_enum)]
+    pub vcs: Option<scaffold::Vcs>,
 }
 
 impl Cli {
@@ -217,7 +224,7 @@ pub fn run(cli: Cli) -> Result<()> {
             // A positional directory scaffolds there (`init my-site`); with none,
             // the current directory (already `--root`-adjusted) is used.
             let root = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
-            scaffold::init(&mut report, &root)?;
+            scaffold::init(&mut report, &root, args.yes, args.vcs)?;
         }
     }
     Ok(())

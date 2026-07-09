@@ -1,8 +1,11 @@
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use owo_colors::OwoColorize;
 
 use crate::cli::output::Report;
+use crate::cli::prompt::Prompt;
 use crate::config::Config;
 use crate::error::Result;
 use crate::fs;
@@ -73,8 +76,9 @@ impl Config {
     }
 }
 
-/// Scaffold a new project.
-pub fn init(report: &mut Report, root: &Path) -> Result<()> {
+/// Scaffold a new project. `yes` takes the default VCS without asking; `vcs`
+/// pins a specific one.
+pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Result<()> {
     report.milestone(format_args!(
         "initializing project in {}",
         root.display().dimmed()
@@ -88,6 +92,9 @@ pub fn init(report: &mut Report, root: &Path) -> Result<()> {
         .file("content/posts/hello.typ", templates::HELLO)
         .file("templates/post.typ", templates::POST_LAYOUT)
         .apply(report)?;
+    if let Some(vcs) = Repo::wanted(yes, vcs)? {
+        Repo::new(root, vcs).setup(report)?;
+    }
     report.success("project ready")?;
     report.muted(format_args!("run {} to build", "baudelaire build".cyan()))?;
     Ok(())
@@ -110,6 +117,98 @@ pub fn new_page(report: &mut Report, path: &Path, config: &Config) -> Result<()>
         .apply(report)?;
     report.success(format_args!("created {}", path.display()))?;
     Ok(())
+}
+
+/// A version-control system baudelaire can initialize for a new project. Both
+/// use the same `.gitignore` (jujutsu honors it too).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Vcs {
+    Git,
+    #[value(alias = "jj")]
+    Jujutsu,
+}
+
+impl Vcs {
+    /// The command that initializes a repository, and the marker directory whose
+    /// presence means one already exists. Jujutsu colocates a `.git`, so it stays
+    /// interoperable with git tooling.
+    fn init(self) -> (&'static [&'static str], &'static str) {
+        match self {
+            Self::Git => (&["git", "init", "-q"], ".git"),
+            Self::Jujutsu => (&["jj", "git", "init", "--colocate"], ".jj"),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Git => "git",
+            Self::Jujutsu => "jujutsu",
+        }
+    }
+}
+
+/// Optional version-control setup for a freshly scaffolded project: a
+/// `.gitignore` plus a repository. Opt-in, because not every scaffold wants one.
+struct Repo<'a> {
+    root: &'a Path,
+    vcs: Vcs,
+}
+
+impl<'a> Repo<'a> {
+    const IGNORE: &'static str = include_str!("scaffold/gitignore");
+
+    fn new(root: &'a Path, vcs: Vcs) -> Self {
+        Self { root, vcs }
+    }
+
+    /// Which VCS to set up, if any. An explicit `--vcs` wins; `yes` takes the
+    /// default (git) without asking; otherwise ask, but only on an interactive
+    /// terminal — piped or CI input defaults to none, so a scaffold never blocks
+    /// waiting for an answer nor creates a repo unbidden.
+    fn wanted(yes: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
+        if explicit.is_some() {
+            return Ok(explicit);
+        }
+        if yes {
+            return Ok(Some(Vcs::Git));
+        }
+        if !std::io::stdin().is_terminal() {
+            return Ok(None);
+        }
+        // git is the default (empty answer); every option lists its aliases.
+        Prompt::new("set up version control?")
+            .option(&["git", "g", "y", "yes"], Some(Vcs::Git))
+            .default()
+            .option(&["jj", "jujutsu", "j"], Some(Vcs::Jujutsu))
+            .option(&["no", "n"], None)
+            .ask()
+    }
+
+    /// Write `.gitignore` and initialize the repository, skipping either step if
+    /// it already exists. A missing or failing tool is a warning, not an error:
+    /// the project is scaffolded either way.
+    fn setup(&self, report: &mut Report) -> Result<()> {
+        let ignore = self.root.join(".gitignore");
+        if !ignore.exists() {
+            fs::write(&ignore, Self::IGNORE)?;
+            report.muted(format_args!("  {} {}", "+".green(), ".gitignore".dimmed()))?;
+        }
+        let (argv, marker) = self.vcs.init();
+        if self.root.join(marker).exists() {
+            return Ok(());
+        }
+        let (cmd, args) = argv.split_first().expect("non-empty argv");
+        match Command::new(cmd).args(args).current_dir(self.root).status() {
+            Ok(status) if status.success() => report.muted(format_args!(
+                "  {} {} repository",
+                "+".green(),
+                self.vcs.label().dimmed()
+            )),
+            Ok(_) => report.warn(format_args!("{} init failed; skipped repository setup", cmd)),
+            Err(_) => report.warn(format_args!("{cmd} not found; skipped repository setup")),
+        }?;
+        Ok(())
+    }
 }
 
 /// Scaffold templates, embedded from `scaffold/` at build time. Editing those
