@@ -300,6 +300,24 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
 }
 
 #[test]
+fn build_summary_reports_assets_generated_files_and_output_dir() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nurl \"https://x.example\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  search { formats \"json\" }\n}\n",
+    );
+    site.write("assets/style.css", "body { color: red; }");
+    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // The compact summary line counts assets and generated files, and shows dist.
+    assert!(stdout.contains("1 asset"), "assets counted: {stdout}");
+    assert!(stdout.contains("file"), "generated files counted: {stdout}");
+    assert!(stdout.contains("→ public"), "output dir shown: {stdout}");
+}
+
+#[test]
 fn copies_assets_to_dist() {
     let site = Site::new();
     site.write(

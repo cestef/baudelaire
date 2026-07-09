@@ -16,6 +16,7 @@ use crate::error::Result;
 pub(super) struct Llms;
 
 impl Processor for Llms {
+
     fn enabled(&self, config: &Config) -> bool {
         config.llms.enabled
     }

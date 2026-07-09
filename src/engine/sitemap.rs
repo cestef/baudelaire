@@ -11,6 +11,7 @@ use crate::error::Result;
 pub(super) struct SiteMap;
 
 impl Processor for SiteMap {
+
     fn enabled(&self, config: &Config) -> bool {
         config.sitemap
     }

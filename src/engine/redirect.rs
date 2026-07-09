@@ -2,7 +2,7 @@
 
 use std::fmt::{self, Write};
 
-use super::Count;
+use crate::cli::output::Count;
 use super::process::{Emit, Processor, Site};
 use crate::error::Result;
 

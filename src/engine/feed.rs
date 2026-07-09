@@ -13,6 +13,7 @@ use crate::error::Result;
 pub(super) struct Feeds;
 
 impl Processor for Feeds {
+
     fn enabled(&self, config: &Config) -> bool {
         !config.feed.formats.is_empty()
     }

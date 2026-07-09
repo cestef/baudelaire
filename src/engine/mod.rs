@@ -21,7 +21,7 @@ use typst::syntax::{FileId, Source};
 use typst::{World, compile};
 use typst_html::{HtmlDocument, HtmlOptions};
 
-use crate::cli::output::{PageStatus, Report};
+use crate::cli::output::{Count, PageStatus, Paths, Report};
 use crate::config::Config;
 use crate::content::{Page, Pagination, Taxonomy, discover};
 use crate::engine::asset::Assets;
@@ -35,10 +35,44 @@ use crate::render::{AssetMap, Renderer};
 use crate::world::{PageWorld, Project, Tracked};
 pub use crate::world::Mode;
 
-/// Build statistics.
+/// Build statistics returned to callers (the dev server renders its own concise
+/// line from these; the CLI prints the full [`Summary`]).
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub pages: usize,
+    pub cached: usize,
+}
+
+/// The end-of-build summary: one tight result line covering pages (and how many
+/// were cached), assets processed, generated files, any warnings, and the output
+/// directory. Owns its own rendering so [`Engine::build`] only gathers the
+/// numbers. The per-file names stay available at verbose via the emitter notes.
+struct Summary<'a> {
+    pages: usize,
+    cached: usize,
+    assets: usize,
+    generated: usize,
+    warnings: usize,
+    dist: &'a Path,
+}
+
+impl Summary<'_> {
+    fn report(&self, report: &mut Report) -> std::io::Result<()> {
+        let mut parts = vec![match self.cached {
+            0 => Count::pages(self.pages).to_string(),
+            n => format!("{} ({n} cached)", Count::pages(self.pages)),
+        }];
+        if self.assets > 0 {
+            parts.push(Count::assets(self.assets).to_string());
+        }
+        if self.generated > 0 {
+            parts.push(Count::files(self.generated).to_string());
+        }
+        if self.warnings > 0 {
+            parts.push(Count::warnings(self.warnings).to_string());
+        }
+        report.done(format_args!("{} → {}", parts.join(" · "), Paths(&self.dist.display().to_string())))
+    }
 }
 
 /// The build engine. Owns shared project state and drives the pipeline.
@@ -58,6 +92,7 @@ impl Engine {
     pub fn build(&self, report: &mut Report) -> Result<Stats> {
         fs::create_dir_all(&self.config.dist)?;
         let pages = self.announce(report, "building")?;
+        let warned = report.warnings();
 
         // `before` hooks run ahead of the asset pipeline, so anything they
         // generate into `assets/` (e.g. a Tailwind stylesheet) is picked up and
@@ -69,7 +104,7 @@ impl Engine {
         // pipeline (fingerprint rewriting) and folds into the cache fingerprint,
         // so a re-fingerprinted asset invalidates the pages that reference it.
         report.info("processing assets")?;
-        let assets = Assets::new(&self.config).process()?;
+        let (assets, asset_count) = Assets::new(&self.config).process()?;
         let assets_hash = Hash::of(&assets);
         let renderer = Renderer::new(&pages, assets);
         let mut cache = Cache::load(&self.config, self.project.context(), &assets_hash);
@@ -110,7 +145,7 @@ impl Engine {
             .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
             .collect();
         cache.save(&outputs)?;
-        {
+        let generated = {
             let site = Site {
                 config: &self.config,
                 pages: &pages,
@@ -118,19 +153,24 @@ impl Engine {
             };
             let mut emitter = Emitter::new(report);
             Processors::builtin().run(&site, &mut emitter)?;
-        }
+            emitter.written()
+        };
 
         // `after` hooks run once the whole site is on disk (deploy scripts,
         // post-processors like Pagefind, …).
         hooks.after(report)?;
 
         let total = rendered.len() + cached.len();
-        report.done(format_args!(
-            "built {} ({} cached)",
-            Count::pages(total),
-            cached.len()
-        ))?;
-        Ok(Stats { pages: total })
+        Summary {
+            pages: total,
+            cached: cached.len(),
+            assets: asset_count,
+            generated,
+            warnings: report.warnings() - warned,
+            dist: &self.config.dist,
+        }
+        .report(report)?;
+        Ok(Stats { pages: total, cached: cached.len() })
     }
 
     /// Compile every page and report diagnostics without writing any output.
@@ -144,16 +184,14 @@ impl Engine {
         let rendered = self.collect(outcomes, report)?;
         self.check_links(&rendered, report)?;
         report.done(format_args!("checked {}", Count::pages(rendered.len())))?;
-        Ok(Stats {
-            pages: rendered.len(),
-        })
+        Ok(Stats { pages: rendered.len(), cached: 0 })
     }
 
     /// Discover eligible pages and print the opening milestone for `action`.
     fn announce(&self, report: &mut Report, action: &str) -> Result<Vec<Page>> {
         let pages = self.pages()?;
         report.milestone(format_args!(
-            "{action} - {} ({})",
+            "{action} {} ({})",
             self.config.label(),
             Count::pages(pages.len())
         ))?;
@@ -355,24 +393,3 @@ struct Rendered {
     broken: Vec<String>,
 }
 
-/// Displays a count with a pluralized noun: `1 page` / `3 pages`.
-struct Count {
-    n: usize,
-    noun: &'static str,
-}
-
-impl Count {
-    fn pages(n: usize) -> Self {
-        Self { n, noun: "page" }
-    }
-
-    fn redirects(n: usize) -> Self {
-        Self { n, noun: "redirect" }
-    }
-}
-
-impl std::fmt::Display for Count {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}{}", self.n, self.noun, if self.n == 1 { "" } else { "s" })
-    }
-}

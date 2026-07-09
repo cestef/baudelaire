@@ -94,11 +94,18 @@ impl Processors {
 /// [`Report`].
 pub(super) struct Emitter<'a> {
     report: &'a mut Report,
+    written: usize,
 }
 
 impl<'a> Emitter<'a> {
     pub(super) fn new(report: &'a mut Report) -> Self {
-        Self { report }
+        Self { report, written: 0 }
+    }
+
+    /// How many files were written — the count of generated outputs for the
+    /// build summary (feeds, sitemap, search index, and so on).
+    pub(super) fn written(&self) -> usize {
+        self.written
     }
 }
 
@@ -107,7 +114,9 @@ impl Emit for Emitter<'_> {
         if let Some(parent) = path.parent() {
             crate::fs::create_dir_all(parent)?;
         }
-        crate::fs::write(path, contents)
+        crate::fs::write(path, contents)?;
+        self.written += 1;
+        Ok(())
     }
 
     fn note(&mut self, msg: fmt::Arguments) -> Result<()> {

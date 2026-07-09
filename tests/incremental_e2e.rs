@@ -250,8 +250,10 @@ fn no_cache_flag_forces_full_rebuild() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
+    // A forced full rebuild serves nothing from cache — no page nor the summary
+    // mentions caching (the summary omits the cached count when it is zero).
     assert!(
-        stdout.contains("(0 cached)"),
+        !stdout.contains("cached"),
         "no-cache must rebuild everything: {stdout}"
     );
 }

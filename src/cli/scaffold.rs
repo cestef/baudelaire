@@ -4,7 +4,7 @@ use std::process::Command;
 
 use owo_colors::OwoColorize;
 
-use crate::cli::output::Report;
+use crate::cli::output::{Paths, Report};
 use crate::cli::prompt::Prompt;
 use crate::config::Config;
 use crate::error::Result;
@@ -41,7 +41,7 @@ impl<'a> Scaffold<'a> {
             let path = self.root.join(dir);
             if !path.exists() {
                 fs::create_dir_all(&path)?;
-                report.muted(format_args!("  {} {}", "+".green(), dir.display().dimmed()))?;
+                report.muted(format_args!("  {} {}", "+".green(), Paths(&dir.display().to_string())))?;
             }
         }
         for (rel, contents) in &self.files {
@@ -50,7 +50,7 @@ impl<'a> Scaffold<'a> {
                 fs::create_dir_all(parent)?;
             }
             fs::write(&full, contents)?;
-            report.muted(format_args!("  {} {}", "+".green(), rel.display().dimmed()))?;
+            report.muted(format_args!("  {} {}", "+".green(), Paths(&rel.display().to_string())))?;
         }
         Ok(())
     }
@@ -191,7 +191,7 @@ impl<'a> Repo<'a> {
         let ignore = self.root.join(".gitignore");
         if !ignore.exists() {
             fs::write(&ignore, Self::IGNORE)?;
-            report.muted(format_args!("  {} {}", "+".green(), ".gitignore".dimmed()))?;
+            report.muted(format_args!("  {} {}", "+".green(), Paths(".gitignore")))?;
         }
         let (argv, marker) = self.vcs.init();
         if self.root.join(marker).exists() {

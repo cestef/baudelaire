@@ -12,6 +12,7 @@ use crate::error::Result;
 pub(super) struct Robots;
 
 impl Processor for Robots {
+
     fn enabled(&self, config: &Config) -> bool {
         config.robots.enabled
     }

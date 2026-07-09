@@ -62,12 +62,13 @@ impl<'a> Assets<'a> {
     }
 
     /// Process every asset into `dist`, returning the map from original request
-    /// URLs to the URLs they are actually served at (only entries that were
-    /// renamed by fingerprinting appear).
-    pub fn process(&self) -> Result<AssetMap> {
+    /// URLs to the URLs they are actually served at (only entries renamed by
+    /// fingerprinting appear) and the count of files emitted (partials excluded).
+    pub fn process(&self) -> Result<(AssetMap, usize)> {
         let mut map = AssetMap::default();
+        let mut count = 0;
         if !self.src.exists() {
-            return Ok(map);
+            return Ok((map, count));
         }
         // Regenerate the whole tree so stale fingerprinted files never linger.
         if self.dst.exists() {
@@ -82,11 +83,12 @@ impl<'a> Assets<'a> {
             };
             let out = self.fingerprint(rel, &bytes);
             self.write(&out, &bytes)?;
+            count += 1;
             if out != rel {
                 map.insert(self.url(rel), self.url(&out));
             }
         }
-        Ok(map)
+        Ok((map, count))
     }
 
     /// The processed bytes for one asset, or `None` for a partial that is only

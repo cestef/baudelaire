@@ -13,7 +13,7 @@ use owo_colors::OwoColorize;
 use tiny_http::{Header, Request, Response, Server};
 use wax::{Glob, Program};
 
-use crate::cli::output::Report;
+use crate::cli::output::{Level, Paths, Report};
 use crate::config::Config;
 use crate::engine::{Engine, Mode};
 use crate::error::{ContentError, Result};
@@ -72,7 +72,7 @@ impl Dev<'_> {
         let (tx, rx) = mpsc::channel::<DebounceEventResult>();
         let filter = Filter::new(self.config)?;
         let _watcher = Watcher::new(filter.dirs(), tx)?;
-        self.report.info("watching for changes")?;
+        self.report.muted("watching for changes")?;
         for events in rx.into_iter().flatten() {
             self.on_change(events, &live, &filter)?;
         }
@@ -99,22 +99,43 @@ impl Dev<'_> {
         if changed.is_empty() {
             return Ok(());
         }
-        self.report.info("change detected")?;
-        for path in &changed {
-            self.report
-                .muted(format_args!("  {} {}", "~".cyan(), path.display().dimmed()))?;
-        }
-        match Engine::new(self.config.clone(), Mode::Serve).and_then(|e| e.build(self.report)) {
-            Ok(_) => live.bump(),
+
+        // A Vite-style rebuild: a transient status while the build runs, replaced
+        // by a single timestamped log line. The build's own milestone/summary is
+        // silenced so rebuilds never stack the full block over the initial output.
+        let label = Self::label(&changed);
+        self.report.status(format_args!("rebuilding {}", Paths(&label)))?;
+        let prior = self.report.level();
+        self.report.set_level(Level::Silent);
+        let result = Engine::new(self.config.clone(), Mode::Serve).and_then(|e| e.build(self.report));
+        self.report.set_level(prior);
+
+        match result {
+            Ok(stats) => {
+                // Report what the rebuild actually recompiled, not the whole site.
+                self.report.event(label, stats.pages - stats.cached)?;
+                live.bump();
+            }
             Err(e) => {
                 // Render the full diagnostic — spans, offending page, related
                 // errors — the way the top-level miette handler would, instead
                 // of collapsing it to a one-line `Display`.
-                self.report.warn(format_args!("rebuild failed"))?;
+                self.report.warn("rebuild failed")?;
                 eprintln!("{:?}", miette::Report::from(e));
             }
         }
         Ok(())
+    }
+
+    /// A concise label for a rebuild's trigger: the first changed file (relative
+    /// to the project root) and, when several changed, how many more.
+    fn label(changed: &[&PathBuf]) -> String {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let first = changed[0].strip_prefix(&cwd).unwrap_or(changed[0]).display();
+        match changed.len() {
+            1 => first.to_string(),
+            n => format!("{first} +{}", n - 1),
+        }
     }
 
     /// Whether an event actually changes content. Crucially excludes `Access`
