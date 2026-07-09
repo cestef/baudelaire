@@ -1,0 +1,5 @@
+# Build output
+/public/
+
+# Baudelaire cache and scratch state
+/.baudelaire/
