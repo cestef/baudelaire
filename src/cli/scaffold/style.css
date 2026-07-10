@@ -1,0 +1,91 @@
+:root {
+  --fg: #1a1a1a;
+  --muted: #5b6470;
+  --bg: #ffffff;
+  --accent: #2563eb;
+  --rule: #e6e8eb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e7e9ec;
+    --muted: #9aa3af;
+    --bg: #15161a;
+    --accent: #7aa2f7;
+    --rule: #282a30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.site-header,
+main,
+.site-footer {
+  max-width: 44rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  height: 4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+main {
+  padding-block: 3rem 4rem;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
+
+a {
+  color: var(--accent);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+pre,
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+pre {
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+}
+
+.site-footer {
+  margin-top: 3rem;
+  padding-block: 2rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.9rem;
+}

@@ -30,6 +30,9 @@ output {
   into `style.9f3c1a.css`, and every reference in your pages is rewritten to
   match. Now you can cache assets forever and never serve a stale one.
 
+Image optimization lives in its own #link("meta.typ")[images] block, separate
+from these switches.
+
 #callout(kind: "note")[
   JavaScript is only processed when `bundle` is on, because a bundler owns the
   whole JS step. CSS minification is independent of it.

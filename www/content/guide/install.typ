@@ -29,7 +29,7 @@ baudelaire --version
 == From a release
 
 Prebuilt binaries for Linux, macOS, and Windows are attached to every
-#link("https://github.com/cestef/baudelaire/releases")[GitHub release]. Download
+#link("https://codeberg.org/cstef/baudelaire/releases")[release]. Download
 the archive for your platform, extract it, and put the binary on your `PATH`.
 
 Next: #link("quickstart.typ")[the quickstart].

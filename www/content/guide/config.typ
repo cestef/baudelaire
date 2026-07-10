@@ -35,12 +35,18 @@ taxonomies {
 }
 
 output {
-  html { pretty #true }
+  html { pretty #true; meta #true }
+  images { lazy #true; optimize { png; jpeg quality=82 } }
   assets { minify #true; bundle #true; fingerprint #true }
   search { formats "json"; fields "title" "body" "tags" }
   feed { formats "rss" "atom"; limit 20 }
 }
 ```
+
+The `html` block controls the emitted markup (`pretty` formatting, `embed` to
+inline assets as `data:` URIs, `meta` for SEO and social tags); the `images`
+block handles lazy loading and per-format optimization. See
+#link("../features/meta.typ")[meta and images].
 
 Every field has a sensible default, so a minimal `config.kdl` is just
 `site "My Site"`. The rest overrides only what you name.

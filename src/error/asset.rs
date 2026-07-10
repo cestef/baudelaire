@@ -28,6 +28,15 @@ pub enum AssetError {
         #[help]
         detail: String,
     },
+
+    /// oxipng could not optimize the PNG.
+    #[error("failed to optimize image asset `{path}`")]
+    #[diagnostic(code(baudelaire::asset::image))]
+    Image {
+        path: String,
+        #[help]
+        detail: String,
+    },
 }
 
 impl AssetError {
@@ -40,6 +49,13 @@ impl AssetError {
 
     pub fn js(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Js {
+            path: path.to_string(),
+            detail: detail.to_string(),
+        }
+    }
+
+    pub fn image(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
+        Self::Image {
             path: path.to_string(),
             detail: detail.to_string(),
         }

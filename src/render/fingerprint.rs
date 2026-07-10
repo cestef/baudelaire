@@ -26,16 +26,17 @@ impl Transform for Fingerprint {
     }
 }
 
-/// Walks the element tree replacing mapped `href`/`src` values with their
-/// fingerprinted URLs. Anything not in the map (external URLs, already-inlined
-/// `data:` URIs, unmanaged paths) is left untouched.
+/// Walks the element tree replacing mapped `href`/`src`/`content` values with
+/// their fingerprinted URLs. `content` covers asset references in `<meta>` tags
+/// (a social `og:image`). Anything not in the map (external URLs, already-inlined
+/// `data:` URIs, unmanaged paths, plain text) is left untouched.
 struct Rewriter<'a> {
     assets: &'a AssetMap,
 }
 
 impl Rewriter<'_> {
     fn visit(&self, element: &mut HtmlElement) {
-        for key in [attr::href, attr::src] {
+        for key in [attr::href, attr::src, attr::content] {
             if let Some(value) = element.attrs.get_mut(key)
                 && let Some(url) = self.assets.resolve(value)
             {

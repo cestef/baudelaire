@@ -40,8 +40,8 @@ fn init_creates_project_skeleton() {
     assert!(t.exists("config.kdl"));
     assert!(t.exists("content/index.typ"));
     assert!(t.exists("content/posts/hello.typ"));
-    assert!(t.exists("templates/post.typ"));
-    assert!(t.exists("assets"));
+    assert!(t.exists("templates/layout.typ"));
+    assert!(t.exists("assets/style.css"));
 }
 
 #[test]
@@ -49,7 +49,10 @@ fn init_config_is_valid() {
     let t = Tmp::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let cfg = t.read("config.kdl");
-    assert!(cfg.contains("site \"My Site\""));
+    // The site name is templated from the directory, and every placeholder is
+    // filled (no `{{…}}` left behind).
+    assert!(cfg.contains("site \""), "has a site name: {cfg}");
+    assert!(!cfg.contains("{{"), "placeholders filled: {cfg}");
     assert!(cfg.contains("clean #true"));
     assert!(cfg.contains("collections"));
 }

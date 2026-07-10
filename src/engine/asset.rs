@@ -25,7 +25,7 @@ use rolldown::plugin::{
 use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinifyOptions};
 use rolldown_common::{ModuleType, Output};
 
-use crate::config::{Config, SearchFormat};
+use crate::config::{Config, ImageFormat, JpegConfig, PngConfig, PngStrip, SearchFormat};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::graph::Hash;
@@ -100,9 +100,50 @@ impl<'a> Assets<'a> {
             Kind::Entry => bundler
                 .expect("bundler present when an entry is classified")
                 .bundle(file)?,
+            Kind::Image(format) => self.optimize(file, format)?,
             Kind::Css | Kind::Other => fs::read(file)?,
         };
         Ok(Some(bytes))
+    }
+
+    /// Optimize one image, keeping the smaller of the original and the result —
+    /// re-encoding can occasionally grow an already-tight file, and an optimizer
+    /// must never make things worse.
+    fn optimize(&self, file: &Path, format: ImageFormat) -> Result<Vec<u8>> {
+        let bytes = fs::read(file)?;
+        let optimize = &self.config.images.optimize;
+        let optimized = match format {
+            ImageFormat::Png => {
+                Self::optimize_png(&bytes, optimize.png.as_ref().expect("png enabled"), file)?
+            }
+            ImageFormat::Jpeg => {
+                Self::optimize_jpeg(&bytes, optimize.jpeg.as_ref().expect("jpeg enabled"), file)?
+            }
+        };
+        Ok(if optimized.len() < bytes.len() { optimized } else { bytes })
+    }
+
+    /// Losslessly optimize a PNG with oxipng: recompress and strip chunks per the
+    /// configured level and strip mode.
+    fn optimize_png(bytes: &[u8], config: &PngConfig, file: &Path) -> Result<Vec<u8>> {
+        let mut options = oxipng::Options::from_preset(config.level);
+        options.strip = match config.strip {
+            PngStrip::None => oxipng::StripChunks::None,
+            PngStrip::Safe => oxipng::StripChunks::Safe,
+            PngStrip::All => oxipng::StripChunks::All,
+        };
+        oxipng::optimize_from_memory(bytes, &options)
+            .map_err(|e| AssetError::image(file.display(), e).into())
+    }
+
+    /// Re-encode a JPEG at the configured quality (lossy).
+    fn optimize_jpeg(bytes: &[u8], config: &JpegConfig, file: &Path) -> Result<Vec<u8>> {
+        let decoded = image::load_from_memory(bytes).map_err(|e| AssetError::image(file.display(), e))?;
+        let mut out = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, config.quality)
+            .encode_image(&decoded)
+            .map_err(|e| AssetError::image(file.display(), e))?;
+        Ok(out)
     }
 
     /// Minify a stylesheet with lightningcss.
@@ -165,6 +206,8 @@ enum Kind {
     Entry,
     /// A JavaScript partial (`_name.js`): imported only, not emitted standalone.
     Module,
+    /// A raster image to optimize, in the given format.
+    Image(ImageFormat),
     /// Any other file: copied verbatim.
     Other,
 }
@@ -181,6 +224,9 @@ impl Kind {
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| n.starts_with('_'));
             return if partial { Self::Module } else { Self::Entry };
+        }
+        if let Some(format) = config.images.optimize.format(ext) {
+            return Self::Image(format);
         }
         Self::Other
     }

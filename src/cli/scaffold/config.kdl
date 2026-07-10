@@ -1,5 +1,6 @@
-site "My Site"
-url "https://example.com"
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
 lang "en"
 
 paths {
@@ -16,7 +17,7 @@ typst {
 }
 
 collections {
-  posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/"
+  posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ"
 }
 
 taxonomies {
@@ -26,6 +27,7 @@ taxonomies {
 output {
   html {
     pretty #true
+    meta #true
   }
 }
 

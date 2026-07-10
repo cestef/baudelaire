@@ -1,15 +1,8 @@
-// Shared site chrome: header, command-palette search, sidebar, footer, and the
-// page shell. Imported by every template, so the layout — and its accessibility
-// — lives in one place. Content pages import the small helpers (`callout`,
-// `cards`, `link-to`, `lucide`) from here too.
-
 #let link-to(href, label) = html.elem("a", attrs: (href: href), label)
 
 // Build metadata, injected by baudelaire at `sys.inputs.baudelaire`.
 #let build = sys.inputs.at("baudelaire", default: (:))
 #let git = build.at("git", default: none)
-
-// ---- Icons (lucide.dev, inlined so the site stays self-contained) ----------
 
 #let _icons = (
   search: (("circle", (cx: "11", cy: "11", r: "8")), ("path", (d: "m21 21-4.3-4.3"))),
@@ -54,8 +47,6 @@
   },
 )
 
-// ---- Header ---------------------------------------------------------------
-
 #let search-trigger = html.elem(
   "button",
   attrs: (
@@ -65,8 +56,6 @@
     "aria-keyshortcuts": "Control+K /",
     "data-search-open": "",
   ),
-  // Code join, not `[ ]` markup, so no whitespace text nodes land between the
-  // children (they become stray `<span> </span>` elements that break flex/grid).
   {
     lucide("search", size: 16)
     html.elem("span", attrs: (class: "search-trigger-label"), "Search")
@@ -115,12 +104,6 @@
   #nav-toggle
 ]
 
-// The command-palette DOM is built at runtime by the generated search client
-// (mounted in assets/main.js), so no markup lives here. The header's
-// `search-trigger` button carries `data-search-open`, which the client wires up.
-
-// ---- Sidebar --------------------------------------------------------------
-
 #let nav-group(title, items) = html.elem("div", attrs: (class: "nav-group"))[
   #html.elem("p", attrs: (class: "nav-title"), title)
   #html.elem(
@@ -150,6 +133,7 @@
     ("/features/taxonomies/", "Taxonomies"),
     ("/features/pagination/", "Pagination"),
     ("/features/feeds/", "Feeds & sitemap"),
+    ("/features/meta/", "Meta & images"),
     ("/features/context/", "Build metadata"),
     ("/features/incremental/", "Incremental builds"),
     ("/features/redirects/", "Redirects"),
@@ -160,14 +144,12 @@
   ))
 ]
 
-// ---- Footer ---------------------------------------------------------------
-
 #let site-footer = {
   let meta = ()
   meta.push(html.elem("span")[Built with #link-to("/", "Baudelaire") v#build.at("version", default: "dev")])
   meta.push(html.elem("span")[Typst #sys.version])
   if git != none {
-    meta.push(html.elem("span")[commit #html.elem("code", git.hash)])
+    meta.push(html.elem("span")[commit #html.a(href: "https://codeberg.org/cstef/baudelaire/commit/"+git.hash)[#html.code[#git.hash]]])
   }
 
   html.elem("footer", attrs: (class: "site-footer"))[
@@ -180,13 +162,8 @@
   ]
 }
 
-// Behaviour: theme, active nav, mobile nav, and the search palette are bundled
-// from assets/main.js by rolldown.
 #let scripts = html.elem("script", attrs: (type: "module", src: "/assets/main.js"))
 
-// ---- Content helpers (exported for pages) ---------------------------------
-
-// A highlighted aside. `kind` is one of note / tip / warn.
 #let callout(body, kind: "note", label: none) = html.elem(
   "div",
   attrs: (class: "callout callout-" + kind),
@@ -195,14 +172,10 @@
   #body
 ]
 
-// A responsive grid of link cards: `items` is an array of
-// (href, icon, title, blurb).
 #let cards(items) = html.elem(
   "ul",
   attrs: (class: "cards"),
   for (href, icon, title, blurb) in items {
-    // Code-mode join (not `[ ]`) so no whitespace text nodes appear between the
-    // icon, title, and blurb.
     html.elem("li", html.elem("a", attrs: (href: href), {
       html.elem("span", attrs: (class: "card-icon"), lucide(icon, size: 20))
       html.elem("strong", title)
@@ -211,7 +184,6 @@
   },
 )
 
-// A row of tag chips linking into the tag index.
 #let tag-row(tags) = html.elem(
   "div",
   attrs: (class: "tag-row", "aria-label": "Tags"),
@@ -220,17 +192,11 @@
   },
 )
 
-// ---- Page shell -----------------------------------------------------------
-
-// The full page. `title` sets the document title; `main` is the article body.
-// `tags`, when given, renders a chip row under the article.
 #let shell(title, main, tags: ()) = {
   set document(title: title)
-  // Syntax highlighting: teach the highlighter KDL, and theme every code block
-  // with the project's palette (a fixed dark code background, so the baked-in
-  // colours read the same in light and dark mode).
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
-  show raw: set raw(theme: "/highlight/baudelaire.tmTheme")
+  show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
+
   html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.css"))
   html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg"))
   site-header

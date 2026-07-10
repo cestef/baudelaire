@@ -5,7 +5,7 @@ use std::process::Command;
 use owo_colors::OwoColorize;
 
 use crate::cli::output::{Paths, Report};
-use crate::cli::prompt::Prompt;
+use crate::cli::prompt::{Input, Prompt};
 use crate::config::Config;
 use crate::error::Result;
 use crate::fs;
@@ -72,32 +72,92 @@ impl Config {
     fn template_for(&self, collection: &str) -> String {
         self.collection(collection)
             .and_then(|c| c.template.clone())
-            .unwrap_or_else(|| "post.typ".into())
+            .unwrap_or_else(|| "layout.typ".into())
     }
 }
 
-/// Scaffold a new project. `yes` takes the default VCS without asking; `vcs`
-/// pins a specific one.
+/// Scaffold a new project. `yes` takes every prompt's default without asking;
+/// `vcs` pins a version-control system.
 pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Result<()> {
     report.milestone(format_args!(
         "initializing project in {}",
-        root.display().dimmed()
+        Paths(&root.display().to_string())
     ))?;
+    // Prompt only on an interactive terminal; `-y` and piped input take defaults.
+    let interactive = !yes && std::io::stdin().is_terminal();
+    let details = Details::gather(root, interactive)?;
     Scaffold::new(root)
         .dir("content")
         .dir("assets")
         .dir("templates")
-        .file("config.kdl", templates::CONFIG)
+        .file("config.kdl", details.config())
         .file("content/index.typ", templates::INDEX)
         .file("content/posts/hello.typ", templates::HELLO)
-        .file("templates/post.typ", templates::POST_LAYOUT)
+        .file("templates/layout.typ", templates::LAYOUT)
+        .file("assets/style.css", templates::STYLE)
         .apply(report)?;
     if let Some(vcs) = Repo::wanted(yes, vcs)? {
         Repo::new(root, vcs).setup(report)?;
     }
     report.success("project ready")?;
-    report.muted(format_args!("run {} to build", "baudelaire build".cyan()))?;
+    report.muted(format_args!(
+        "run {} to build, {} for a live preview",
+        "baudelaire build".cyan(),
+        "baudelaire serve".cyan()
+    ))?;
     Ok(())
+}
+
+/// Project metadata for a fresh scaffold: prompted interactively, or defaulted
+/// from the target directory name and git config.
+struct Details {
+    site: String,
+    author: String,
+    url: String,
+}
+
+impl Details {
+    fn gather(root: &Path, interactive: bool) -> Result<Self> {
+        let name = Self::dir_name(root);
+        let author = Self::git_author().unwrap_or_default();
+        if !interactive {
+            return Ok(Self { site: name, author, url: "https://example.com".into() });
+        }
+        Ok(Self {
+            site: Input::new("Site name").default(&name).ask()?,
+            author: Input::new("Author").default(&author).ask()?,
+            url: Input::new("Base URL").default("https://example.com").ask()?,
+        })
+    }
+
+    /// The scaffolded `config.kdl`, its placeholders filled in.
+    fn config(&self) -> String {
+        templates::render(
+            templates::CONFIG,
+            &[("site", &self.site), ("author", &self.author), ("url", &self.url)],
+        )
+    }
+
+    /// A sensible default site name from the target directory's own name.
+    fn dir_name(root: &Path) -> String {
+        root.file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_owned)
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_owned))
+            })
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "my-site".into())
+    }
+
+    /// The user's name from git config, if configured.
+    fn git_author() -> Option<String> {
+        let output = Command::new("git").args(["config", "user.name"]).output().ok()?;
+        let name = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+        (!name.is_empty()).then_some(name)
+    }
 }
 
 /// Scaffold a new content file, inferring collection + template from config.
@@ -214,10 +274,12 @@ impl<'a> Repo<'a> {
 /// Scaffold templates, embedded from `scaffold/` at build time. Editing those
 /// files — not string literals here — changes what `init`/`new` produce.
 mod templates {
+    /// Site config; `{{site}}`, `{{author}}`, `{{url}}` are filled by [`render`].
     pub const CONFIG: &str = include_str!("scaffold/config.kdl");
     pub const INDEX: &str = include_str!("scaffold/index.typ");
     pub const HELLO: &str = include_str!("scaffold/hello.typ");
-    pub const POST_LAYOUT: &str = include_str!("scaffold/post.typ");
+    pub const LAYOUT: &str = include_str!("scaffold/layout.typ");
+    pub const STYLE: &str = include_str!("scaffold/style.css");
     /// New-page template; `{{template}}` is filled by [`render`].
     pub const PAGE: &str = include_str!("scaffold/page.typ");
 

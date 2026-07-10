@@ -1,4 +1,4 @@
-use crate::config::{Config, SortKey, TaxoKind};
+use crate::config::{Config, ImageFormat, PngStrip, SortKey, TaxoKind};
 
 fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")
@@ -75,6 +75,45 @@ fn collections_overrides() {
     let notes = cfg.collections.iter().find(|(n, _)| n == "notes").unwrap();
     assert_eq!(notes.1.sort, SortKey::Order);
     assert!(!notes.1.reverse);
+}
+
+#[test]
+fn images_optimize_per_format_with_params_and_lax_extensions() {
+    let cfg = parse(
+        r#"
+        output {
+          images {
+            lazy #false
+            optimize {
+              png level=4 strip="all"
+              jpeg quality=70
+            }
+          }
+        }
+    "#,
+    );
+    assert!(!cfg.images.lazy);
+    let opt = &cfg.images.optimize;
+    let png = opt.png.as_ref().unwrap();
+    assert_eq!(png.level, 4);
+    assert_eq!(png.strip, PngStrip::All);
+    assert_eq!(opt.jpeg.as_ref().unwrap().quality, 70);
+    // Extension matching is lenient and case-insensitive.
+    assert_eq!(opt.format("PNG"), Some(ImageFormat::Png));
+    assert_eq!(opt.format("jpg"), Some(ImageFormat::Jpeg));
+    assert_eq!(opt.format("jpeg"), Some(ImageFormat::Jpeg));
+    assert_eq!(opt.format("gif"), None);
+}
+
+#[test]
+fn images_optimize_defaults_when_empty() {
+    let cfg = parse("output { images { optimize { png } } }");
+    let png = cfg.images.optimize.png.as_ref().unwrap();
+    assert_eq!(png.level, 2);
+    assert_eq!(png.strip, PngStrip::Safe);
+    // An unlisted format stays off.
+    assert!(cfg.images.optimize.jpeg.is_none());
+    assert!(cfg.images.lazy, "lazy defaults on");
 }
 
 #[test]

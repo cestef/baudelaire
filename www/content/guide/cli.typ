@@ -18,8 +18,12 @@ to `--config`) and accepts the global flags below.
   without writing output. A fast CI gate.
 / #raw("baudelaire new <path>"): Scaffold a content file with starter
   frontmatter, e.g. `baudelaire new content/posts/hello.typ`.
-/ #raw("baudelaire init [dir]"): Scaffold a whole project (config, content, a
-  template, and a stylesheet) into `dir`, or the current directory.
+/ #raw("baudelaire init [dir]"): Scaffold a whole project (config, a layout, a
+  starter page and post, and a stylesheet) into `dir`, or the current directory.
+  It prompts for the site name, author (defaulted from your git config), and
+  base URL, then offers to set up version control with a `.gitignore`. Pass
+  `--vcs git` or `--vcs jujutsu` to choose a VCS, or `-y` to accept every
+  default non-interactively.
 / #raw("baudelaire clean"): Remove the output and cache directories.
 
 == Global flags

@@ -17,6 +17,10 @@ impl Site {
     }
 
     fn write(&self, rel: &str, contents: &str) {
+        self.write_bytes(rel, contents.as_bytes());
+    }
+
+    fn write_bytes(&self, rel: &str, contents: &[u8]) {
         let path = self.root.join(rel);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, contents).unwrap();
@@ -315,6 +319,109 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     assert!(stdout.contains("1 asset"), "assets counted: {stdout}");
     assert!(stdout.contains("file"), "generated files counted: {stdout}");
     assert!(stdout.contains("→ public"), "output dir shown: {stdout}");
+}
+
+#[test]
+fn meta_tags_injected_from_frontmatter_and_config() {
+    let site = Site::new();
+    site.write("config.kdl", "site \"S\"\nurl \"https://s.example\"\n");
+    site.write(
+        "content/post.typ",
+        "#frontmatter((title: \"Hello\", summary: \"A short summary.\"))\nbody",
+    );
+    assert!(site.run(&["build"]).status.success());
+    let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
+    assert!(html.contains("name=\"description\" content=\"A short summary.\""), "{html}");
+    assert!(html.contains("property=\"og:title\" content=\"Hello\""), "{html}");
+    assert!(html.contains("property=\"og:site_name\" content=\"S\""), "{html}");
+    // URL-absolute tags appear because a base `url` is set.
+    assert!(html.contains("rel=\"canonical\" href=\"https://s.example/post/\""), "{html}");
+    assert!(html.contains("property=\"og:url\" content=\"https://s.example/post/\""), "{html}");
+}
+
+#[test]
+fn og_image_is_fingerprinted_and_absolute() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"S\"\nurl \"https://s.example\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
+    );
+    site.write_bytes("assets/pic.png", include_bytes!("fixtures/bloated.png"));
+    site.write(
+        "content/post.typ",
+        "#frontmatter((title: \"Hi\", image: \"/assets/pic.png\"))\nbody",
+    );
+    assert!(site.run(&["build"]).status.success());
+    let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
+    assert!(html.contains("property=\"og:image\""), "{html}");
+    // Absolute, and pointing at the content-hashed filename (not the raw name).
+    assert!(html.contains("content=\"https://s.example/assets/pic."), "absolute + hashed: {html}");
+    assert!(!html.contains("assets/pic.png\""), "raw name replaced by hash: {html}");
+}
+
+#[test]
+fn meta_tags_omitted_when_disabled() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"S\"\nurl \"https://s.example\"\noutput {\n  html { meta #false }\n}\n",
+    );
+    site.write("content/post.typ", "#frontmatter((title: \"Hi\", summary: \"s\"))\nbody");
+    assert!(site.run(&["build"]).status.success());
+    let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
+    assert!(!html.contains("og:title"), "meta disabled: {html}");
+}
+
+#[test]
+fn optimize_losslessly_shrinks_png_assets() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  images { optimize { png } }\n}\n",
+    );
+    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    // A PNG bloated with strippable metadata and a stored (uncompressed) IDAT.
+    let png = include_bytes!("fixtures/bloated.png");
+    site.write_bytes("assets/pic.png", png);
+    assert!(site.run(&["build"]).status.success());
+
+    let out = fs::read(site.root.join("public/assets/pic.png")).unwrap();
+    assert!(out.len() < png.len(), "optimized {} < original {}", out.len(), png.len());
+    // Still a valid PNG (signature intact).
+    assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "output is a PNG");
+}
+
+#[test]
+fn optimize_reencodes_jpeg_with_lax_extension() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  images { optimize { jpeg quality=70 } }\n}\n",
+    );
+    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    // A high-quality JPEG shrinks when re-encoded at quality 70. The `.jpg`
+    // extension must match the `jpeg` format leniently.
+    let jpg = include_bytes!("fixtures/big.jpg");
+    site.write_bytes("assets/photo.jpg", jpg);
+    assert!(site.run(&["build"]).status.success());
+
+    let out = fs::read(site.root.join("public/assets/photo.jpg")).unwrap();
+    assert!(out.len() < jpg.len(), "re-encoded {} < original {}", out.len(), jpg.len());
+    assert_eq!(&out[..2], b"\xff\xd8", "output is a JPEG");
+}
+
+#[test]
+fn images_get_lazy_loading_attributes() {
+    let site = Site::new();
+    site.write("config.kdl", "site \"S\"\n");
+    site.write(
+        "content/p.typ",
+        "#frontmatter((title: \"P\"))\n#html.elem(\"img\", attrs: (src: \"/photo.png\"))",
+    );
+    assert!(site.run(&["build"]).status.success());
+    let html = fs::read_to_string(site.root.join("public/p/index.html")).unwrap();
+    assert!(html.contains("loading=\"lazy\""), "{html}");
+    assert!(html.contains("decoding=\"async\""), "{html}");
 }
 
 #[test]

@@ -35,6 +35,17 @@ pub struct Extract {
 }
 
 impl Frontmatter {
+    /// A string value from `extra` (arbitrary frontmatter), if present and a
+    /// string — e.g. `description`, `summary`, `image`, `author`.
+    pub fn text(&self, key: &str) -> Option<String> {
+        self.extra.get(key).and_then(ValueExt::string)
+    }
+
+    /// A string list from `extra`, empty when absent or not an array of strings.
+    pub fn list(&self, key: &str) -> Vec<String> {
+        self.extra.get(key).map(ValueExt::string_list).unwrap_or_default()
+    }
+
     /// Extract frontmatter from a source file. Returns `None` when the file has
     /// no leading `#frontmatter(...)` call.
     pub fn extract(source: &Source) -> Result<Option<Extract>> {

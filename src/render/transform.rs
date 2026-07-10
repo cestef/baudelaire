@@ -15,6 +15,8 @@ use super::AssetMap;
 use super::LinkMap;
 use super::embed::Embed;
 use super::fingerprint::Fingerprint;
+use super::image::Images;
+use super::meta::Meta;
 use super::rewrite::Links;
 
 /// Per-page context handed to every transform. Transforms run sequentially for
@@ -45,9 +47,16 @@ pub(super) struct Transforms(Vec<Box<dyn Transform>>);
 
 impl Transforms {
     pub(super) fn builtin() -> Self {
-        // Order matters: resolve links, then inline embeds (produces `data:`
-        // URIs), then fingerprint whatever asset references remain.
-        Self(vec![Box::new(Links), Box::new(Embed), Box::new(Fingerprint)])
+        // Order matters: resolve links, add meta/image annotations, then inline
+        // embeds (produces `data:` URIs), then fingerprint whatever asset
+        // references remain.
+        Self(vec![
+            Box::new(Links),
+            Box::new(Meta),
+            Box::new(Images),
+            Box::new(Embed),
+            Box::new(Fingerprint),
+        ])
     }
 
     /// Apply every enabled transform to `doc`, in order.

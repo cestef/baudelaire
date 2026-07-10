@@ -64,6 +64,8 @@ pub struct Config {
     pub taxonomies: Vec<(String, TaxonomyConfig)>,
     /// HTML output options.
     pub html: HtmlConfig,
+    /// Image handling (lazy loading, optimization).
+    pub images: ImagesConfig,
     /// Asset pipeline options (minify, bundle, fingerprint).
     pub asset: AssetConfig,
     /// Cache options.
@@ -134,6 +136,7 @@ impl std::hash::Hash for Config {
             collections,
             taxonomies,
             html,
+            images,
             asset,
             cache,
             hooks,
@@ -149,7 +152,8 @@ impl std::hash::Hash for Config {
         } = self;
         (site, url, lang, author, content, dist, assets, templates).hash(state);
         (clean, future, sitemap, robots, llms, draft, links, feed, search).hash(state);
-        (inputs, features, collections, taxonomies, html, asset, cache, hooks, profile).hash(state);
+        (inputs, features, collections, taxonomies, html, images, asset, cache, hooks, profile)
+            .hash(state);
     }
 }
 
@@ -295,6 +299,86 @@ pub struct HtmlConfig {
     pub pretty: bool,
     /// Inline local assets (`/assets/…` refs) as `data:` URIs.
     pub embed: bool,
+    /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
+    /// into each page's `<head>` from frontmatter and config.
+    pub meta: bool,
+}
+
+/// Image handling: markup annotations and build-time optimization. Grouped so
+/// every image setting lives in one `images { … }` block.
+#[derive(Debug, Clone, Hash)]
+pub struct ImagesConfig {
+    /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
+    pub lazy: bool,
+    /// Per-format build-time optimization.
+    pub optimize: OptimizeConfig,
+}
+
+/// Build-time image optimization, per format. A format is enabled by naming it
+/// in the `optimize { … }` block (`png`, `jpeg`); an absent format is left
+/// untouched. Each format carries its own tuning.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct OptimizeConfig {
+    /// PNG optimization (oxipng), when enabled.
+    pub png: Option<PngConfig>,
+    /// JPEG optimization (re-encode), when enabled.
+    pub jpeg: Option<JpegConfig>,
+}
+
+/// A raster format the optimizer recognizes, resolved from a file extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+}
+
+impl OptimizeConfig {
+    /// Whether any format is enabled.
+    pub fn any(&self) -> bool {
+        self.png.is_some() || self.jpeg.is_some()
+    }
+
+    /// The enabled format for a file extension, matched leniently (`jpg`, `jpeg`,
+    /// `jpe` all map to JPEG). `None` when unrecognized or that format is off.
+    pub fn format(&self, ext: &str) -> Option<ImageFormat> {
+        let matched = match ext.to_ascii_lowercase().as_str() {
+            "png" => ImageFormat::Png,
+            "jpg" | "jpeg" | "jpe" | "jfif" => ImageFormat::Jpeg,
+            _ => return None,
+        };
+        let on = match matched {
+            ImageFormat::Png => self.png.is_some(),
+            ImageFormat::Jpeg => self.jpeg.is_some(),
+        };
+        on.then_some(matched)
+    }
+}
+
+/// PNG optimization tuning (oxipng).
+#[derive(Debug, Clone, Hash)]
+pub struct PngConfig {
+    /// Optimization preset, `0` (fast) – `6` (exhaustive).
+    pub level: u8,
+    /// Which ancillary chunks to strip.
+    pub strip: PngStrip,
+}
+
+/// PNG ancillary-chunk stripping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PngStrip {
+    /// Keep every chunk.
+    None,
+    /// Strip everything but display-affecting chunks (the default).
+    Safe,
+    /// Strip all non-critical chunks.
+    All,
+}
+
+/// JPEG optimization tuning (re-encode).
+#[derive(Debug, Clone, Hash)]
+pub struct JpegConfig {
+    /// Re-encode quality, `1`–`100`.
+    pub quality: u8,
 }
 
 /// `robots.txt` generation. Enabled by the presence of a `robots` block.

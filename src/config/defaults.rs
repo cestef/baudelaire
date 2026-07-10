@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
-    HooksConfig, HtmlConfig, LinkConfig, LlmsConfig, RobotsConfig, SearchConfig, SearchField,
-    ServeConfig,
+    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
+    PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, ServeConfig,
 };
 
 impl Default for Config {
@@ -36,6 +36,7 @@ impl Default for Config {
             collections: Default::default(),
             taxonomies: Default::default(),
             html: HtmlConfig::default(),
+            images: ImagesConfig::default(),
             asset: AssetConfig::default(),
             cache: CacheConfig::default(),
             hooks: HooksConfig::default(),
@@ -51,7 +52,34 @@ impl Default for HtmlConfig {
         Self {
             pretty: true,
             embed: false,
+            meta: true,
         }
+    }
+}
+
+impl Default for ImagesConfig {
+    fn default() -> Self {
+        Self {
+            // Lazy loading is a safe, universal win; optimization is opt-in (an
+            // empty `optimize` block) since it re-encodes files and costs time.
+            lazy: true,
+            optimize: OptimizeConfig::default(),
+        }
+    }
+}
+
+impl Default for PngConfig {
+    fn default() -> Self {
+        // Preset 2 is a good balance of savings and speed; Safe strips metadata
+        // without touching anything that affects rendering.
+        Self { level: 2, strip: PngStrip::Safe }
+    }
+}
+
+impl Default for JpegConfig {
+    fn default() -> Self {
+        // 82 is a widely used "visually lossless" default.
+        Self { quality: 82 }
     }
 }
 

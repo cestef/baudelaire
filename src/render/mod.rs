@@ -7,7 +7,9 @@
 mod asset;
 mod embed;
 mod fingerprint;
+mod image;
 mod links;
+mod meta;
 mod rewrite;
 mod transform;
 

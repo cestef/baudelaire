@@ -1,10 +1,10 @@
-//! Interactive terminal prompts: a small, styled, reusable "pick one" widget.
+//! Interactive terminal prompts: small, styled, reusable widgets.
 //!
-//! [`Prompt`] is generic over the value each option yields, so a caller gets a
-//! typed answer back rather than a raw string. Options are added fluently, one is
-//! marked the default, and [`Prompt::ask`] renders a colored line, accepts any of
-//! an option's aliases, re-asks on unrecognized input, and falls back to the
-//! default on an empty line or closed input.
+//! [`Prompt`] is a "pick one" selector, generic over the value each option
+//! yields, so a caller gets a typed answer rather than a raw string; [`Input`] is
+//! a free-text question with an optional default. Both render the same
+//! `? question` prefix, and both fall back to their default on an empty line or
+//! closed input (EOF).
 
 use std::io::Write;
 
@@ -91,5 +91,42 @@ impl<'a, T: Clone> Prompt<'a, T> {
         print!("{} {} {} {} ", "?".cyan().bold(), self.question.bold(), "›".dimmed(), options);
         std::io::stdout().flush()?;
         Ok(())
+    }
+}
+
+/// A styled free-text prompt with an optional default, shown in parentheses and
+/// returned on an empty answer.
+pub struct Input<'a> {
+    question: &'a str,
+    default: &'a str,
+}
+
+impl<'a> Input<'a> {
+    pub fn new(question: &'a str) -> Self {
+        Self { question, default: "" }
+    }
+
+    /// The value returned (and shown as a hint) when the answer is left blank.
+    pub fn default(mut self, value: &'a str) -> Self {
+        self.default = value;
+        self
+    }
+
+    /// Render the prompt and read one line, returning the trimmed answer or the
+    /// default on an empty line or EOF.
+    pub fn ask(&self) -> Result<String> {
+        if self.default.is_empty() {
+            print!("{} {} ", "?".cyan().bold(), self.question.bold());
+        } else {
+            let hint = format!("({})", self.default);
+            print!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
+        }
+        std::io::stdout().flush()?;
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line)? == 0 {
+            println!();
+        }
+        let answer = line.trim();
+        Ok(if answer.is_empty() { self.default.to_owned() } else { answer.to_owned() })
     }
 }

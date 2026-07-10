@@ -5,8 +5,9 @@ use crate::config::dispatch::{Attrs, Block, Keys};
 use crate::config::value::ValueExt;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
-    HooksConfig, HtmlConfig, LinkConfig, LlmsConfig, RobotsConfig, SearchConfig, SearchField,
-    SearchFormat, ServeConfig, TaxoKind, TaxonomyConfig,
+    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
+    PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, SearchFormat, ServeConfig,
+    TaxoKind, TaxonomyConfig,
 };
 use crate::error::{ConfigError, Result};
 
@@ -70,6 +71,10 @@ pub(super) trait NodeExt {
     fn as_collection(&self, text: &str) -> Result<(String, CollectionConfig)>;
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)>;
     fn html(&self, text: &str) -> Result<HtmlConfig>;
+    fn images(&self, text: &str) -> Result<ImagesConfig>;
+    fn optimize(&self, text: &str) -> Result<OptimizeConfig>;
+    fn png(&self, text: &str) -> Result<PngConfig>;
+    fn jpeg(&self, text: &str) -> Result<JpegConfig>;
     fn assets(&self, text: &str) -> Result<AssetConfig>;
     fn robots(&self, text: &str) -> Result<RobotsConfig>;
     fn llms(&self, text: &str) -> Result<LlmsConfig>;
@@ -207,10 +212,75 @@ impl NodeExt for KdlNode {
         const HTML: Block<HtmlConfig> = Block(&[
             ("pretty", |c, n, t| { c.pretty = n.boolean(t, 0, true)?; Ok(()) }),
             ("embed", |c, n, t| { c.embed = n.boolean(t, 0, true)?; Ok(()) }),
+            ("meta", |c, n, t| { c.meta = n.boolean(t, 0, true)?; Ok(()) }),
         ]);
         let mut html = HtmlConfig::default();
         HTML.fill(&mut html, self, text)?;
         Ok(html)
+    }
+
+    /// The `images { lazy; optimize { … } }` section.
+    fn images(&self, text: &str) -> Result<ImagesConfig> {
+        const IMAGES: Block<ImagesConfig> = Block(&[
+            ("lazy", |c, n, t| { c.lazy = n.boolean(t, 0, true)?; Ok(()) }),
+            ("optimize", |c, n, t| { c.optimize = n.optimize(t)?; Ok(()) }),
+        ]);
+        let mut images = ImagesConfig::default();
+        IMAGES.fill(&mut images, self, text)?;
+        Ok(images)
+    }
+
+    /// The `optimize { png [level=…] [strip=…]; jpeg [quality=…] }` block: each
+    /// child names a format (leniently — `jpg`/`jpeg` both work) and enables it,
+    /// with optional per-format tuning as attributes.
+    fn optimize(&self, text: &str) -> Result<OptimizeConfig> {
+        let mut cfg = OptimizeConfig::default();
+        for node in self.block(text)?.nodes() {
+            let span = NodeExt::span(node);
+            match node.name().value() {
+                "png" => cfg.png = Some(node.png(text)?),
+                "jpeg" | "jpg" => cfg.jpeg = Some(node.jpeg(text)?),
+                other => {
+                    return Err(ConfigError::bad_value(
+                        text,
+                        format!("unknown image format `{other}` (valid: png, jpeg)"),
+                        span,
+                    )
+                    .into());
+                }
+            }
+        }
+        Ok(cfg)
+    }
+
+    fn png(&self, text: &str) -> Result<PngConfig> {
+        const ATTRS: Attrs<PngConfig> = Attrs(&[
+            ("level", |c, v, t, s| { c.level = v.integer(t, s)?.clamp(0, 6) as u8; Ok(()) }),
+            ("strip", |c, v, t, s| {
+                c.strip = match v.as_str(t, s)?.as_str() {
+                    "none" => PngStrip::None,
+                    "safe" => PngStrip::Safe,
+                    "all" => PngStrip::All,
+                    other => {
+                        let msg = format!("unknown strip `{other}` (valid: none, safe, all)");
+                        return Err(ConfigError::bad_value(t, msg, s).into());
+                    }
+                };
+                Ok(())
+            }),
+        ]);
+        let mut png = PngConfig::default();
+        ATTRS.apply(&mut png, self, text)?;
+        Ok(png)
+    }
+
+    fn jpeg(&self, text: &str) -> Result<JpegConfig> {
+        const ATTRS: Attrs<JpegConfig> = Attrs(&[
+            ("quality", |c, v, t, s| { c.quality = v.integer(t, s)?.clamp(1, 100) as u8; Ok(()) }),
+        ]);
+        let mut jpeg = JpegConfig::default();
+        ATTRS.apply(&mut jpeg, self, text)?;
+        Ok(jpeg)
     }
 
     fn assets(&self, text: &str) -> Result<AssetConfig> {
@@ -272,6 +342,7 @@ impl NodeExt for KdlNode {
     fn output(&self, config: &mut Config, text: &str) -> Result<()> {
         const OUTPUT: Block<Config> = Block(&[
             ("html", |c, n, t| { c.html = n.html(t)?; Ok(()) }),
+            ("images", |c, n, t| { c.images = n.images(t)?; Ok(()) }),
             ("assets", |c, n, t| { c.asset = n.assets(t)?; Ok(()) }),
             ("sitemap", |c, n, t| { c.sitemap = n.boolean(t, 0, true)?; Ok(()) }),
             ("robots", |c, n, t| { c.robots = n.robots(t)?; Ok(()) }),
