@@ -41,7 +41,11 @@ impl<'a> Scaffold<'a> {
             let path = self.root.join(dir);
             if !path.exists() {
                 fs::create_dir_all(&path)?;
-                report.muted(format_args!("  {} {}", "+".green(), Paths(&dir.display().to_string())))?;
+                report.muted(format_args!(
+                    "  {} {}",
+                    "+".green(),
+                    Paths(&dir.display().to_string())
+                ))?;
             }
         }
         for (rel, contents) in &self.files {
@@ -50,7 +54,11 @@ impl<'a> Scaffold<'a> {
                 fs::create_dir_all(parent)?;
             }
             fs::write(&full, contents)?;
-            report.muted(format_args!("  {} {}", "+".green(), Paths(&rel.display().to_string())))?;
+            report.muted(format_args!(
+                "  {} {}",
+                "+".green(),
+                Paths(&rel.display().to_string())
+            ))?;
         }
         Ok(())
     }
@@ -83,9 +91,14 @@ pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Re
         "initializing project in {}",
         Paths(&root.display().to_string())
     ))?;
-    // Prompt only on an interactive terminal; `-y` and piped input take defaults.
+
     let interactive = !yes && std::io::stdin().is_terminal();
     let details = Details::gather(root, interactive)?;
+    let repo = Repo::wanted(yes, vcs)?;
+    if interactive {
+        report.blank()?;
+    }
+
     Scaffold::new(root)
         .dir("content")
         .dir("assets")
@@ -96,9 +109,12 @@ pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Re
         .file("templates/layout.typ", templates::LAYOUT)
         .file("assets/style.css", templates::STYLE)
         .apply(report)?;
-    if let Some(vcs) = Repo::wanted(yes, vcs)? {
+
+    if let Some(vcs) = repo {
         Repo::new(root, vcs).setup(report)?;
     }
+
+    report.blank()?;
     report.success("project ready")?;
     report.muted(format_args!(
         "run {} to build, {} for a live preview",
@@ -121,12 +137,18 @@ impl Details {
         let name = Self::dir_name(root);
         let author = Self::git_author().unwrap_or_default();
         if !interactive {
-            return Ok(Self { site: name, author, url: "https://example.com".into() });
+            return Ok(Self {
+                site: name,
+                author,
+                url: "https://example.com".into(),
+            });
         }
         Ok(Self {
             site: Input::new("Site name").default(&name).ask()?,
             author: Input::new("Author").default(&author).ask()?,
-            url: Input::new("Base URL").default("https://example.com").ask()?,
+            url: Input::new("Base URL")
+                .default("https://example.com")
+                .ask()?,
         })
     }
 
@@ -134,7 +156,11 @@ impl Details {
     fn config(&self) -> String {
         templates::render(
             templates::CONFIG,
-            &[("site", &self.site), ("author", &self.author), ("url", &self.url)],
+            &[
+                ("site", &self.site),
+                ("author", &self.author),
+                ("url", &self.url),
+            ],
         )
     }
 
@@ -154,7 +180,10 @@ impl Details {
 
     /// The user's name from git config, if configured.
     fn git_author() -> Option<String> {
-        let output = Command::new("git").args(["config", "user.name"]).output().ok()?;
+        let output = Command::new("git")
+            .args(["config", "user.name"])
+            .output()
+            .ok()?;
         let name = String::from_utf8(output.stdout).ok()?.trim().to_owned();
         (!name.is_empty()).then_some(name)
     }
@@ -258,15 +287,24 @@ impl<'a> Repo<'a> {
             return Ok(());
         }
         let (cmd, args) = argv.split_first().expect("non-empty argv");
-        match Command::new(cmd).args(args).current_dir(self.root).status() {
-            Ok(status) if status.success() => report.muted(format_args!(
+        // Capture the tool's output rather than inherit it — jj in particular
+        // prints an "Initialized repo" line and a hint that would clutter the
+        // scaffold log. Surface it only if the command actually failed.
+        match Command::new(cmd).args(args).current_dir(self.root).output() {
+            Ok(out) if out.status.success() => report.muted(format_args!(
                 "  {} {} repository",
                 "+".green(),
                 self.vcs.label().dimmed()
-            )),
-            Ok(_) => report.warn(format_args!("{} init failed; skipped repository setup", cmd)),
-            Err(_) => report.warn(format_args!("{cmd} not found; skipped repository setup")),
-        }?;
+            ))?,
+            Ok(out) => {
+                report.warn(format_args!("{cmd} init failed; skipped repository setup"))?;
+                let detail = String::from_utf8_lossy(&out.stderr);
+                if !detail.trim().is_empty() {
+                    report.item(detail.trim())?;
+                }
+            }
+            Err(_) => report.warn(format_args!("{cmd} not found; skipped repository setup"))?,
+        }
         Ok(())
     }
 }

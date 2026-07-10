@@ -8,6 +8,7 @@
 
 use std::io::Write;
 
+use console::{Key, Term};
 use owo_colors::OwoColorize;
 
 use crate::error::Result;
@@ -44,26 +45,40 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self
     }
 
-    /// Render the prompt and read a choice. Re-asks on unrecognized input;
-    /// returns the default on an empty line or EOF (closed/piped input).
+    /// Read a choice with the arrow keys: ←/→ (or ↑/↓) move, a letter jumps to a
+    /// matching option, Enter confirms, Esc takes the default. Redraws in place.
+    /// Without an interactive terminal (piped/CI) it returns the default at once.
     pub fn ask(&self) -> Result<T> {
+        let term = Term::stdout();
+        if !term.is_term() {
+            return Ok(self.chosen(self.default));
+        }
+        let last = self.options.len() - 1;
+        let mut selected = self.default;
         loop {
-            self.render()?;
-            let mut line = String::new();
-            if std::io::stdin().read_line(&mut line)? == 0 {
-                println!();
-                return Ok(self.chosen(self.default));
-            }
-            let input = line.trim().to_ascii_lowercase();
-            if input.is_empty() {
-                return Ok(self.chosen(self.default));
-            }
-            match self.options.iter().position(|o| o.keys.contains(&input.as_str())) {
-                Some(i) => return Ok(self.chosen(i)),
-                None => {
-                    let labels = self.options.iter().map(|o| o.keys[0]).collect::<Vec<_>>().join(", ");
-                    eprintln!("  {} please answer with one of: {}", "!".yellow(), labels.dimmed());
+            self.render(&term, selected, false)?;
+            match term.read_key()? {
+                Key::ArrowLeft | Key::ArrowUp | Key::BackTab => {
+                    selected = if selected == 0 { last } else { selected - 1 };
                 }
+                Key::ArrowRight | Key::ArrowDown | Key::Tab => {
+                    selected = if selected == last { 0 } else { selected + 1 };
+                }
+                Key::Char(c) => {
+                    let c = c.to_ascii_lowercase();
+                    if let Some(i) = self.options.iter().position(|o| o.keys.iter().any(|k| k.starts_with(c))) {
+                        selected = i;
+                    }
+                }
+                Key::Enter => {
+                    self.render(&term, selected, true)?;
+                    return Ok(self.chosen(selected));
+                }
+                Key::Escape => {
+                    self.render(&term, self.default, true)?;
+                    return Ok(self.chosen(self.default));
+                }
+                _ => {}
             }
         }
     }
@@ -72,24 +87,39 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self.options[i].value.clone()
     }
 
-    /// A line like `? question › git / jj / no`, the default emphasized.
-    fn render(&self) -> Result<()> {
-        let sep = " / ".dimmed().to_string();
-        let options = self
+    /// Redraw the prompt line in place. While choosing, options render as a row of
+    /// chips with the selection highlighted; once `done`, collapse to `✓ question ›
+    /// choice`.
+    fn render(&self, term: &Term, selected: usize, done: bool) -> Result<()> {
+        term.clear_line()?;
+        if done {
+            let label = self.options[selected].keys[0];
+            let line =
+                format!("{} {} {} {}", "✓".green().bold(), self.question.bold(), "›".dimmed(), label.cyan());
+            term.write_line(&line)?;
+            return Ok(());
+        }
+        let chips = self
             .options
             .iter()
             .enumerate()
             .map(|(i, o)| {
-                if i == self.default {
-                    o.keys[0].bold().underline().to_string()
+                let chip = format!(" {} ", o.keys[0]);
+                if i == selected {
+                    chip.black().on_cyan().to_string()
                 } else {
-                    o.keys[0].dimmed().to_string()
+                    chip.dimmed().to_string()
                 }
             })
-            .collect::<Vec<_>>()
-            .join(&sep);
-        print!("{} {} {} {} ", "?".cyan().bold(), self.question.bold(), "›".dimmed(), options);
-        std::io::stdout().flush()?;
+            .collect::<String>();
+        let hint = "(←/→, enter)".dimmed();
+        term.write_str(&format!(
+            "{} {} {} {}  {hint}",
+            "?".cyan().bold(),
+            self.question.bold(),
+            "›".dimmed(),
+            chips
+        ))?;
         Ok(())
     }
 }

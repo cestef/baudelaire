@@ -133,6 +133,14 @@ impl Report {
         writeln!(self.out, "    {} {}", "↳".dimmed(), detail)
     }
 
+    /// A blank line, for vertical grouping. Suppressed when quiet.
+    pub fn blank(&mut self) -> std::io::Result<()> {
+        if self.level <= Level::Quiet {
+            return Ok(());
+        }
+        writeln!(self.out)
+    }
+
     /// Muted secondary detail, in the sub-item column (default+).
     pub fn muted(&mut self, detail: impl Display) -> std::io::Result<()> {
         if self.level <= Level::Quiet {
