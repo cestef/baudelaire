@@ -168,17 +168,24 @@ impl Serve {
     }
 
     pub fn get(&self, path: &str) -> (u16, String) {
-        let resp = Command::new("curl")
-            .args([
-                "-s",
-                "-o",
-                "-",
-                "-w",
-                "\n%{http_code}",
-                &format!("http://127.0.0.1:{}{path}", self.port),
-            ])
-            .output()
-            .expect("curl");
+        self.request(path, false)
+    }
+
+    /// Like [`Serve::get`], but sends the path verbatim (`curl --path-as-is`) so
+    /// `..` segments reach the server instead of being collapsed by the client —
+    /// the only way to exercise path-traversal defenses.
+    pub fn get_raw(&self, path: &str) -> (u16, String) {
+        self.request(path, true)
+    }
+
+    fn request(&self, path: &str, raw: bool) -> (u16, String) {
+        let url = format!("http://127.0.0.1:{}{path}", self.port);
+        let mut cmd = Command::new("curl");
+        cmd.args(["-s", "-o", "-", "-w", "\n%{http_code}"]);
+        if raw {
+            cmd.arg("--path-as-is");
+        }
+        let resp = cmd.arg(&url).output().expect("curl");
         let out = String::from_utf8_lossy(&resp.stdout);
         let mut lines = out.lines().rev();
         let code: u16 = lines.next().unwrap_or("0").parse().unwrap_or(0);

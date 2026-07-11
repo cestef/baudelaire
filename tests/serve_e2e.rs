@@ -28,6 +28,30 @@ fn serve_responds_with_page() {
 }
 
 #[test]
+fn serve_rejects_path_traversal() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        r#"site "S"
+        paths {
+            content "content"
+            dist "public"
+        }
+        clean #true
+        serve { open #false; }"#,
+    );
+    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    // A secret sibling of `dist`, inside the project root but outside the
+    // served tree. `config.kdl` itself is such a file.
+    let srv = Serve::start(&t, &["--no-watch"]);
+    for attack in ["/../config.kdl", "/../../etc/hostname", "/..%2fconfig.kdl"] {
+        let (code, body) = srv.get_raw(attack);
+        assert_eq!(code, 404, "traversal {attack} not blocked: {body}");
+        assert!(!body.contains("dist"), "leaked config via {attack}: {body}");
+    }
+}
+
+#[test]
 fn serve_404_for_missing() {
     let t = Site::new();
     t.write("config.kdl", r#"site "S"

@@ -186,6 +186,10 @@ struct Handler {
 
 impl Handler {
     fn new(dist: PathBuf, live: Option<Live>, level: Level) -> Self {
+        // Canonicalize the served root up front so every per-request traversal
+        // check compares canonical paths (with `..` and symlinks resolved)
+        // against a canonical root.
+        let dist = crate::fs::canonicalize(&dist).unwrap_or(dist);
         Self { dist, live, level }
     }
 
@@ -212,8 +216,8 @@ impl Handler {
             return;
         }
         match self.resolve(&url) {
-            Some(file) if file.exists() => self.serve_file(req, &file),
-            _ => self.respond_404(req, &url),
+            Some(file) => self.serve_file(req, &file),
+            None => self.respond_404(req, &url),
         }
     }
 
@@ -245,18 +249,24 @@ impl Handler {
         let _ = Report::with_level(self.level).muted(format_args!("  {} {}", "✗".red(), url.dimmed()));
     }
 
-    /// Resolve a URL path to a file under `dist`, honoring clean URLs.
+    /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every
+    /// candidate is checked to stay within `dist` (see [`Handler::within`]), so
+    /// a `..`-laden or symlinked request can never escape the served root.
     fn resolve(&self, url: &str) -> Option<PathBuf> {
         let rel = url.split('?').next().unwrap_or(url).trim_start_matches('/');
         let base = self.dist.join(rel);
-        if base.is_file() {
-            return Some(base);
-        }
-        let index = base.join("index.html");
-        if index.is_file() {
-            return Some(index);
-        }
-        Some(self.dist.join(format!("{rel}.html")))
+        self.within(&base)
+            .or_else(|| self.within(&base.join("index.html")))
+            .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
+    }
+
+    /// The canonical path of `candidate` when it is an existing file inside
+    /// `dist`, else `None`. The single guard against path traversal: both the
+    /// root and the candidate are canonical, so `..` segments and symlinks that
+    /// would leave the served tree are rejected before any read.
+    fn within(&self, candidate: &Path) -> Option<PathBuf> {
+        let canon = crate::fs::canonicalize(candidate).ok()?;
+        (canon.starts_with(&self.dist) && canon.is_file()).then_some(canon)
     }
 }
 
