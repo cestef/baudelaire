@@ -84,6 +84,20 @@ impl Permalink {
     pub fn render(&self, ctx: &PermalinkCtx) -> String {
         self.segments.iter().map(|s| s.render(ctx)).collect()
     }
+
+    /// A rooted, trailing-slashed URL path from already-slugged segments:
+    /// `["notes", "rust"]` → `/notes/rust/`, `[]` → `/`. The single joiner for
+    /// *generated* (non-template) URLs — taxonomy, pagination, and root pages —
+    /// so trailing-slash and separator policy lives in one place instead of a
+    /// `format!` at each call site.
+    pub fn join(segments: &[&str]) -> String {
+        let mut url = String::from("/");
+        for segment in segments {
+            url.push_str(segment);
+            url.push('/');
+        }
+        url
+    }
 }
 
 impl fmt::Display for Permalink {
@@ -294,6 +308,14 @@ mod tests {
         let p = Permalink::parse("/posts/{year}/{slug}/").unwrap();
         // empty year leaves a blank segment; clean-url pass normalizes later
         assert_eq!(p.render(&c), "/posts//hello/");
+    }
+
+    #[test]
+    fn join_roots_and_trailing_slashes_segments() {
+        assert_eq!(Permalink::join(&[]), "/");
+        assert_eq!(Permalink::join(&["notes"]), "/notes/");
+        assert_eq!(Permalink::join(&["notes", "rust"]), "/notes/rust/");
+        assert_eq!(Permalink::join(&["tags", "page", "2"]), "/tags/page/2/");
     }
 
     #[test]

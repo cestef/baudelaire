@@ -6,7 +6,7 @@
 
 use crate::config::Config;
 use crate::content::listing::{Item, Listing, Nav, Titlecase};
-use crate::content::{Collection, Page};
+use crate::content::{Collection, Page, Permalink};
 
 /// Builds paginated index pages for a site's collections.
 pub struct Pagination;
@@ -74,8 +74,8 @@ impl<'a> Section<'a> {
     /// Page 1 lives at the collection root; later pages under `page/{n}/`.
     fn url(&self, number: usize) -> String {
         match number {
-            1 => format!("/{}/", self.id),
-            n => format!("/{}/page/{n}/", self.id),
+            1 => Permalink::join(&[self.id]),
+            n => Permalink::join(&[self.id, "page", &n.to_string()]),
         }
     }
 

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::config::{Config, TaxonomyConfig};
 use crate::content::listing::{Item, Listing, Titlecase};
-use crate::content::{Page, Slug};
+use crate::content::{Page, Permalink, Slug};
 use crate::error::{ContentError, Result};
 
 /// Builds the taxonomy index pages for a site.
@@ -83,7 +83,7 @@ impl<'a> Group<'a> {
                 return Err(ContentError::term_collision(self.name, &slug, prev, name).into());
             }
             resolved.push(Term {
-                url: format!("/{}/{}/", self.name, slug),
+                url: Permalink::join(&[self.name, &slug]),
                 name,
                 slug,
                 members: members.as_slice(),
@@ -101,7 +101,7 @@ impl<'a> Group<'a> {
         Listing::new(
             self.name,
             "index",
-            format!("/{}/", self.name),
+            Permalink::join(&[self.name]),
             Titlecase(self.name).to_string(),
         )
         .items(items)

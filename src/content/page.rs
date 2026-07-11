@@ -102,10 +102,10 @@ impl Page {
 
     fn permalink(collection: &str, fm: &Frontmatter, slug: &str, config: &Config) -> String {
         if collection == ROOT {
-            if slug == "index" {
-                return "/".to_owned();
-            }
-            return format!("/{slug}/");
+            // The root collection maps straight onto the site root: `index`
+            // becomes `/`, every other page a top-level `/{slug}/`.
+            let segments: &[&str] = if slug == "index" { &[] } else { &[slug] };
+            return Permalink::join(segments);
         }
         let template = config
             .collection(collection)
