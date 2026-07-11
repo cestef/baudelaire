@@ -70,7 +70,7 @@ impl Text {
                 // Skip the raw body of a <script>/<style> element wholesale.
                 if let Some(tag) = Self::raw_element(&html[i..]) {
                     let close = format!("</{tag}");
-                    if let Some(end) = html[i + 1..].find(&close) {
+                    if let Some(end) = Self::find_ci(&html[i + 1..], &close) {
                         i += 1 + end;
                     }
                 }
@@ -101,6 +101,15 @@ impl Text {
         }
     }
 
+    /// ASCII-case-insensitive substring search — the single case rule shared by
+    /// open- and close-tag matching. `needle` must be lowercase; the haystack is
+    /// lowercased for the match (ASCII lowercasing preserves byte length, so the
+    /// returned offset is valid in the original). HTML tag names are
+    /// case-insensitive, so `</SCRIPT>` must close a `<script>` skip.
+    fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
+        haystack.to_ascii_lowercase().find(needle)
+    }
+
     /// Decode the predefined entities from the shared [`ENTITIES`] table, plus
     /// the numeric apostrophe alias `&#39;`. `&amp;` is decoded last (it is last
     /// in the table) so a literal like `&amp;lt;` does not turn into `<`.
@@ -121,6 +130,14 @@ mod tests {
     fn strips_tags_scripts_and_decodes_entities() {
         let html = "<h1>Hello</h1><script>ignore()</script><p>a &amp; b &lt;c&gt;</p>";
         assert_eq!(Text::extract(html), "Hello a & b <c>");
+    }
+
+    #[test]
+    fn skips_uppercase_script_and_style_bodies() {
+        // HTML tag names are case-insensitive: an uppercase raw element must
+        // still have its body skipped, not indexed as prose.
+        let html = "<p>a</p><SCRIPT>leak()</SCRIPT><STYLE>.x{}</STYLE><p>b</p>";
+        assert_eq!(Text::extract(html), "a b");
     }
 
     #[test]
