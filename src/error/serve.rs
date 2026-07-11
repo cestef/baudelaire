@@ -17,9 +17,18 @@ impl ServeError {
         }
     }
 
-    pub fn watcher(error: notify::Error) -> Self {
+    pub fn watcher_init(error: notify::Error) -> Self {
         Self {
-            kind: ServeErrorKind::Watcher(error),
+            kind: ServeErrorKind::WatcherInit(error),
+        }
+    }
+
+    pub fn watch(dir: &std::path::Path, source: notify::Error) -> Self {
+        Self {
+            kind: ServeErrorKind::Watch {
+                dir: dir.display().to_string(),
+                source,
+            },
         }
     }
 }
@@ -47,9 +56,17 @@ pub enum ServeErrorKind {
         error: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    #[error("file watcher failed")]
-    #[diagnostic(code(baudelaire::serve::watcher))]
-    Watcher(#[source] notify::Error),
+    #[error("failed to start file watcher")]
+    #[diagnostic(code(baudelaire::serve::watcher_init))]
+    WatcherInit(#[source] notify::Error),
+
+    #[error("failed to watch `{dir}`")]
+    #[diagnostic(code(baudelaire::serve::watch))]
+    Watch {
+        dir: String,
+        #[source]
+        source: notify::Error,
+    },
 }
 
 impl From<ServeError> for crate::error::BaudelaireErrorKind {

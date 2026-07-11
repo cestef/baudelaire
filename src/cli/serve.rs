@@ -334,13 +334,13 @@ impl Watcher {
         let handler = move |result: DebounceEventResult| {
             let _ = tx.send(result);
         };
-        let mut debouncer =
-            new_debouncer(Duration::from_millis(500), None, handler).map_err(ServeError::watcher)?;
+        let mut debouncer = new_debouncer(Duration::from_millis(500), None, handler)
+            .map_err(ServeError::watcher_init)?;
         for dir in dirs {
             if dir.exists() {
                 debouncer
                     .watch(dir, notify::RecursiveMode::Recursive)
-                    .map_err(ServeError::watcher)?;
+                    .map_err(|e| ServeError::watch(dir, e))?;
             }
         }
         Ok(Self {
