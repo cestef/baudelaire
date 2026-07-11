@@ -60,65 +60,124 @@ impl Text {
     }
 
     /// Strip tags and raw `script`/`style` bodies, decode entities, and collapse
-    /// whitespace over `html`.
+    /// whitespace — in a single forward pass writing once into the output, with
+    /// no per-entity `replace` passes, per-tag case-folding allocations, or a
+    /// trailing split/join to collapse whitespace.
     fn scan(html: &str) -> String {
-        let mut raw = String::with_capacity(html.len() / 2);
         let bytes = html.as_bytes();
+        let mut out = String::with_capacity(html.len() / 2);
+        // Deferred separator: a run of whitespace or a tag boundary emits at
+        // most one space, and only once a following word is written (so leading
+        // and trailing whitespace vanish for free).
+        let mut gap = false;
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'<' {
-                // Skip the raw body of a <script>/<style> element wholesale.
-                if let Some(tag) = Self::raw_element(&html[i..]) {
-                    let close = format!("</{tag}");
-                    if let Some(end) = Self::find_ci(&html[i + 1..], &close) {
-                        i += 1 + end;
+            match bytes[i] {
+                b'<' => {
+                    // Skip a raw element's body (`<script>`/`<style>`) wholesale.
+                    if let Some(tag) = Self::raw_element(&html[i..])
+                        && let Some(close) = Self::find_close(bytes, i + 1, tag.as_bytes())
+                    {
+                        i = close;
                     }
+                    match html[i..].find('>') {
+                        Some(gt) => i += gt + 1,
+                        None => break,
+                    }
+                    gap = true;
                 }
-                match html[i..].find('>') {
-                    Some(gt) => i += gt + 1,
-                    None => break,
+                b'&' => match Self::entity(&html[i..]) {
+                    Some((ch, len)) => {
+                        Self::push_char(&mut out, &mut gap, ch);
+                        i += len;
+                    }
+                    None => {
+                        Self::push_char(&mut out, &mut gap, '&');
+                        i += 1;
+                    }
+                },
+                b if b.is_ascii_whitespace() => {
+                    gap = true;
+                    i += 1;
                 }
-                raw.push(' ');
-            } else {
-                let end = html[i..].find('<').map_or(html.len(), |gt| i + gt);
-                raw.push_str(&Self::decode(&html[i..end]));
-                i = end;
+                _ => {
+                    // Copy a run of plain content at once. Stopping only at ASCII
+                    // markers keeps the slice on a UTF-8 boundary (multi-byte
+                    // scalars never contain these bytes).
+                    let start = i;
+                    while i < bytes.len()
+                        && !matches!(bytes[i], b'<' | b'&')
+                        && !bytes[i].is_ascii_whitespace()
+                    {
+                        i += 1;
+                    }
+                    Self::push_str(&mut out, &mut gap, &html[start..i]);
+                }
             }
         }
-        raw.split_whitespace().collect::<Vec<_>>().join(" ")
+        out
+    }
+
+    /// Emit `s` after a pending word gap, unless it would be leading whitespace.
+    fn push_str(out: &mut String, gap: &mut bool, s: &str) {
+        if *gap && !out.is_empty() {
+            out.push(' ');
+        }
+        *gap = false;
+        out.push_str(s);
+    }
+
+    /// [`Text::push_str`] for a single decoded character.
+    fn push_char(out: &mut String, gap: &mut bool, ch: char) {
+        if *gap && !out.is_empty() {
+            out.push(' ');
+        }
+        *gap = false;
+        out.push(ch);
     }
 
     /// The name of a raw-text element (`script`/`style`) opening at `tag`, whose
-    /// contents must be skipped rather than indexed.
+    /// contents must be skipped rather than indexed. Case-insensitive without
+    /// allocating (HTML tag names are ASCII).
     fn raw_element(tag: &str) -> Option<&'static str> {
-        let head = tag.get(..7).unwrap_or(tag).to_ascii_lowercase();
-        if head.starts_with("<script") {
+        let b = tag.as_bytes();
+        if b.len() >= 7 && b[..7].eq_ignore_ascii_case(b"<script") {
             Some("script")
-        } else if head.starts_with("<style") {
+        } else if b.len() >= 6 && b[..6].eq_ignore_ascii_case(b"<style") {
             Some("style")
         } else {
             None
         }
     }
 
-    /// ASCII-case-insensitive substring search — the single case rule shared by
-    /// open- and close-tag matching. `needle` must be lowercase; the haystack is
-    /// lowercased for the match (ASCII lowercasing preserves byte length, so the
-    /// returned offset is valid in the original). HTML tag names are
-    /// case-insensitive, so `</SCRIPT>` must close a `<script>` skip.
-    fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
-        haystack.to_ascii_lowercase().find(needle)
+    /// The byte offset of `</tag` at or after `from`, matched case-insensitively
+    /// without copying the haystack. HTML tag names are case-insensitive, so
+    /// `</SCRIPT>` closes a `<script>` skip.
+    fn find_close(hay: &[u8], from: usize, tag: &[u8]) -> Option<usize> {
+        let mut i = from;
+        while i + 2 + tag.len() <= hay.len() {
+            if hay[i] == b'<' && hay[i + 1] == b'/' && hay[i + 2..i + 2 + tag.len()].eq_ignore_ascii_case(tag) {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
     }
 
-    /// Decode the predefined entities from the shared [`ENTITIES`] table, plus
-    /// the numeric apostrophe alias `&#39;`. `&amp;` is decoded last (it is last
-    /// in the table) so a literal like `&amp;lt;` does not turn into `<`.
-    fn decode(s: &str) -> String {
-        let mut out = s.replace("&#39;", "'");
-        for (ch, name) in ENTITIES {
-            out = out.replace(&format!("&{name};"), ch.encode_utf8(&mut [0; 4]));
+    /// Decode one predefined entity at the start of `s` (which begins with `&`),
+    /// returning the character and the byte length consumed, or `None` when it is
+    /// a bare `&`. Consuming the whole entity in one step means `&amp;lt;` decodes
+    /// to a literal `&lt;` for free — no need to order `&amp;` last as the old
+    /// replace-based decoder did.
+    fn entity(s: &str) -> Option<(char, usize)> {
+        if s.starts_with("&#39;") {
+            return Some(('\'', 5));
         }
-        out
+        let after = s.as_bytes().get(1..)?;
+        ENTITIES.iter().find_map(|&(ch, name)| {
+            let n = name.len();
+            (after.len() > n && after[..n] == *name.as_bytes() && after[n] == b';').then_some((ch, n + 2))
+        })
     }
 }
 

@@ -46,6 +46,11 @@ pub struct Stats {
     pub cached: usize,
 }
 
+/// A page reduced to what the cache check needs — its `FileId`, the exact text
+/// typst will compile, and that text's fingerprint — before the costly parse
+/// into a `Source` (deferred to [`Engine::compile`], run only for stale pages).
+type Prepared = (FileId, String, Hash);
+
 /// The end-of-build summary: one tight result line covering pages (and how many
 /// were cached), assets processed, generated files, any warnings, and the output
 /// directory. Owns its own rendering so [`Engine::build`] only gathers the
@@ -125,7 +130,7 @@ impl Engine {
         // deferred to `compile`, so a cache hit never pays to parse a page it
         // will not render.
         let mut cached: Vec<(&Page, String)> = Vec::new();
-        let mut stale: Vec<(&Page, Result<(FileId, String, Hash)>)> = Vec::new();
+        let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
             match self.prepare(page) {
                 Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
@@ -305,7 +310,7 @@ impl Engine {
     /// content fingerprint — a hash of the exact text typst compiles, which
     /// covers generated pages whose sources never touch disk. Built once and
     /// shared by the cache check and the compile.
-    fn prepare(&self, page: &Page) -> Result<(FileId, String, Hash)> {
+    fn prepare(&self, page: &Page) -> Result<Prepared> {
         let rooted = self.project.virtualize(&page.source)?;
         let id = FileId::new(rooted);
         let text = match &page.template {
