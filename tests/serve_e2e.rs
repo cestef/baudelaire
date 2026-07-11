@@ -1,6 +1,7 @@
 mod common;
 
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use common::{Serve, Site};
@@ -115,16 +116,17 @@ fn sse_stream_pushes_reload_on_change() {
     t.write("content/index.typ", "#frontmatter((title: \"H\",))\nv1");
     let srv = Serve::start(&t, &[]);
 
-    // Open the event stream in the background, capped so it can't hang.
-    let stream = Command::new("curl")
+    // Open the event stream in the background. `--max-time` only guards against
+    // a hang: on success the read below exits the instant the event arrives.
+    let mut stream = Command::new("curl")
         .args([
             "-s",
             "-N",
             "--max-time",
-            "5",
+            "10",
             &format!("http://127.0.0.1:{}/__baudelaire/live", srv.port()),
         ])
-        .stdout(std::process::Stdio::piped())
+        .stdout(Stdio::piped())
         .spawn()
         .expect("curl");
 
@@ -132,9 +134,17 @@ fn sse_stream_pushes_reload_on_change() {
     std::thread::sleep(Duration::from_millis(800));
     t.write("content/index.typ", "#frontmatter((title: \"H\",))\nv2");
 
-    let out = stream.wait_with_output().expect("curl output");
-    let body = String::from_utf8_lossy(&out.stdout);
-    assert!(body.contains("data: reload"), "no reload event pushed: {body:?}");
+    // Read until the reload event, then stop — don't wait out the whole stream
+    // (an SSE connection stays open, so `wait_with_output` would block for the
+    // full `--max-time`).
+    let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
+    let pushed = reader
+        .lines()
+        .map_while(Result::ok)
+        .any(|line| line.contains("data: reload"));
+    let _ = stream.kill();
+    let _ = stream.wait();
+    assert!(pushed, "no reload event pushed");
 }
 
 #[test]
