@@ -158,22 +158,22 @@ impl Listing {
         // file need not exist (real pages reach absolute paths via canonicalize).
         let base = crate::fs::canonical(&config.content);
         let source = base.join(&self.section).join(format!("{}.typ", self.slug));
-        Page {
-            id: PageId::new(&self.section, &self.slug),
+        Page::assemble(
+            PageId::new(&self.section, &self.slug),
             source,
-            frontmatter: Frontmatter {
+            Frontmatter {
                 title: Some(self.title.clone()),
                 ..Frontmatter::default()
             },
-            body: self.body(),
+            self.body(),
             // A bound template receives this structured data as `page.frontmatter`;
             // without one, the default body renders and this is unused.
-            data: self.data().to_string(),
-            collection: self.section.clone(),
-            output: config.destination(&self.permalink),
-            permalink: self.permalink.clone(),
-            template: self.template.clone(),
-        }
+            self.data().to_string(),
+            self.section.clone(),
+            self.permalink.clone(),
+            self.template.clone(),
+            config,
+        )
     }
 
     /// The listing as a typst [`Value`], exposed to a bound template as

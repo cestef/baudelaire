@@ -59,22 +59,51 @@ impl Page {
         let raw = frontmatter.slug.clone().unwrap_or_else(|| stem.slug().to_owned());
         let slug = Slug::require(&raw)?.into_string();
         let permalink = Self::permalink(collection, &frontmatter, &slug, config);
-        let output = config.destination(&permalink);
         let template = frontmatter
             .template
             .clone()
             .or_else(|| config.collection(collection).and_then(|c| c.template.clone()));
-        Ok(Self {
-            id: PageId::new(collection, &slug),
-            source: path.to_owned(),
+        Ok(Self::assemble(
+            PageId::new(collection, &slug),
+            path.to_owned(),
             frontmatter,
             body,
             data,
-            collection: collection.to_owned(),
+            collection.to_owned(),
             permalink,
-            output,
             template,
-        })
+            config,
+        ))
+    }
+
+    /// Assemble a page from its resolved parts, deriving the output path from the
+    /// permalink. The single `Page { .. }` constructor: real pages ([`Page::load`])
+    /// and synthetic listings ([`crate::content::listing::Listing::into_page`])
+    /// both build through here, so a new field can never be set in one and
+    /// forgotten in the other.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn assemble(
+        id: PageId,
+        source: PathBuf,
+        frontmatter: Frontmatter,
+        body: String,
+        data: String,
+        collection: String,
+        permalink: String,
+        template: Option<String>,
+        config: &Config,
+    ) -> Self {
+        Self {
+            output: config.destination(&permalink),
+            id,
+            source,
+            frontmatter,
+            body,
+            data,
+            collection,
+            permalink,
+            template,
+        }
     }
 
     /// Display title: frontmatter `title`, else the page id. The single
