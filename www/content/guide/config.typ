@@ -94,7 +94,7 @@ Any string value can pull from the environment with `${VAR}`, with an optional
 want committed:
 
 ```kdl
-url "${SITE_URL:-http://localhost:3000}"
+url "${SITE_URL:-http://localhost:1821}"
 
 typst {
   inputs {

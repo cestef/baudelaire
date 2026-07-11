@@ -11,7 +11,10 @@ fn root_flag_builds_from_that_directory() {
         "site/config.kdl",
         "site \"R\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
     );
-    sb.write("site/content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    sb.write(
+        "site/content/index.typ",
+        "#frontmatter((title: \"H\",))\nhome",
+    );
     let out = sb.run(&["--root", "site", "build"]);
     assert!(
         out.status.success(),
@@ -114,7 +117,7 @@ fn profile_flag_applied() {
         &format!(
             r#"
             site "T"
-            serve {{ port 3000; open #false; }}
+            serve {{ port 1821; open #false; }}
             profiles {{
               ci {{
                 serve {{ port {port}; }}
@@ -131,7 +134,7 @@ fn profile_flag_applied() {
         "serve",
         "--no-watch",
     ]);
-    // Default port is 3000; reachability on `port` proves the `ci` profile won.
+    // Default port is 1821; reachability on `port` proves the `ci` profile won.
     assert!(
         wait_for_port(port, 5000),
         "server never bound profile port {port}"

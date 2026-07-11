@@ -11,7 +11,7 @@ use miette::SourceSpan;
 
 use crate::error::{BaudelaireErrorKind, ConfigError, Result};
 
-use super::parse::NodeExt;
+use super::parse::{EntryExt, NodeExt};
 
 /// A `(key, handler)` rule for a node-keyed [`Block`] scope.
 type Rule<T> = (&'static str, fn(&mut T, &KdlNode, &str) -> Result<()>);
@@ -50,12 +50,33 @@ impl<T> Block<T> {
 pub(super) struct Attrs<T: 'static>(pub(super) &'static [Attr<T>]);
 
 impl<T> Attrs<T> {
-    /// Apply named attributes of `node`, skipping positional (unnamed) ones,
-    /// erroring on the first unrecognized attribute.
-    pub(super) fn apply(&self, value: &mut T, node: &KdlNode, text: &str) -> Result<()> {
+    /// Apply named attributes of `node`, erroring on the first unrecognized
+    /// attribute. At most `leading` positional (unnamed) entries are tolerated,
+    /// and only at the front of the node (the caller consumes them, e.g. a
+    /// collection's glob) — any other positional would be silently discarded,
+    /// so it errors instead.
+    pub(super) fn apply(
+        &self,
+        value: &mut T,
+        node: &KdlNode,
+        text: &str,
+        leading: usize,
+    ) -> Result<()> {
         let span = NodeExt::span(node);
-        for entry in node.entries() {
+        for (position, entry) in node.entries().iter().enumerate() {
             let Some(key) = entry.name().map(|n| n.value()) else {
+                if position >= leading {
+                    return Err(ConfigError::bad_value(
+                        text,
+                        format!(
+                            "unexpected argument {}; `{}` takes `key=value` attributes",
+                            entry.value(),
+                            node.name().value()
+                        ),
+                        EntryExt::span(entry),
+                    )
+                    .into());
+                }
                 continue;
             };
             match self.0.iter().find(|(k, _)| *k == key) {
@@ -69,7 +90,7 @@ impl<T> Attrs<T> {
 
 /// The valid keys of a scope, derived from its dispatch table (never a separate
 /// hand-kept list). Builds "unknown key" errors carrying a nearest-match hint.
-pub(super) struct Keys<'a>(&'a [&'a str]);
+pub(super) struct Keys<'a>(pub(super) &'a [&'a str]);
 
 impl Keys<'_> {
     /// Build an unknown-key error from any dispatch `table`. The table is the
@@ -82,15 +103,17 @@ impl Keys<'_> {
         span: SourceSpan,
     ) -> BaudelaireErrorKind {
         let names: Vec<&str> = table.iter().map(|(k, _)| *k).collect();
-        ConfigError::unknown_key(text, key, Keys(&names).help(key), span).into()
+        ConfigError::unknown_key(text, key, Keys(&names).help(key, "keys"), span).into()
     }
 
-    fn help(&self, unknown: &str) -> String {
+    /// "did you mean …? valid `noun`: …" help for an unrecognized name, reused
+    /// wherever a name set drives validity (dispatch keys, profile names).
+    pub(super) fn help(&self, unknown: &str, noun: &str) -> String {
         let mut help = match self.nearest(unknown) {
             Some(near) => format!("did you mean `{near}`? "),
             None => String::new(),
         };
-        help.push_str("valid keys: ");
+        help.push_str(&format!("valid {noun}: "));
         help.push_str(&self.0.join(", "));
         help
     }
@@ -140,7 +163,7 @@ mod tests {
 
     #[test]
     fn help_lists_valid_keys_and_suggestion() {
-        let help = Keys(&["pretty"]).help("pruty");
+        let help = Keys(&["pretty"]).help("pruty", "keys");
         assert!(help.contains("did you mean `pretty`?"), "{help}");
         assert!(help.contains("valid keys: pretty"), "{help}");
     }

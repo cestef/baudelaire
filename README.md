@@ -1,18 +1,14 @@
-# baudelaire
+# Baudelaire
 
-A static site generator where the pages are [Typst](https://typst.app).
+A static site generator where the everything is just [Typst](https://typst.app).
 
-Write `.typ` files, get a website. Layouts are Typst functions, not a second
-templating language.
+## Quickstart
 
 ```sh
-baudelaire init my-site
-cd my-site
+baudelaire init poem
+# answer some questions...
+cd poem
 baudelaire serve
 ```
 
-Configuration lives in one `config.kdl`. Build with `baudelaire build`.
-
-## Status
-
-Early. Things may change.
+See your new website at [localhost:1821](https://localhost:1821)

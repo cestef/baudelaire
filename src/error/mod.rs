@@ -32,9 +32,14 @@ pub enum BaudelaireErrorKind {
     #[diagnostic(code(baudelaire::typst::virtualize))]
     Virtualize(#[from] VirtualizeError),
 
-    #[error(transparent)]
-    #[diagnostic(code(baudelaire::std::io))]
-    Io(#[from] std::io::Error),
+    /// A terminal write failed while reporting progress. The one remaining
+    /// implicit `io::Error` conversion: every filesystem operation goes through
+    /// [`crate::fs`] and carries path + operation context as [`FsError`], so
+    /// only [`crate::cli::output::Report`] (which writes to stdout) produces
+    /// bare `io::Error`s.
+    #[error("failed to write CLI output")]
+    #[diagnostic(code(baudelaire::output))]
+    Output(#[from] std::io::Error),
 
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -79,6 +84,71 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Hook(#[from] crate::error::HookError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Build(#[from] BuildFailed),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    FeedDate(#[from] FeedDateError),
+}
+
+/// Several pages failed to compile in one build. Each page's own diagnostics
+/// are attached as related errors, so a build with three broken pages renders
+/// all three instead of only the first.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} pages failed to compile", errors.len())]
+#[diagnostic(code(baudelaire::build::failed))]
+pub struct BuildFailed {
+    #[related]
+    errors: Vec<BaudelaireErrorKind>,
+}
+
+impl BuildFailed {
+    /// Collapse per-page failures into one error: a single failure propagates
+    /// unchanged (its diagnostic is already precise), several aggregate under
+    /// one [`BuildFailed`]. `None` when nothing failed.
+    pub fn aggregate(errors: Vec<BaudelaireErrorKind>) -> Option<BaudelaireErrorKind> {
+        match errors.len() {
+            0 => None,
+            1 => errors.into_iter().next(),
+            _ => Some(Self { errors }.into()),
+        }
+    }
+}
+
+/// A page date that a feed's mandated timestamp format cannot represent —
+/// RFC 2822 (RSS `pubDate`) only covers years 1900–9999, RFC 3339 (Atom
+/// `updated`) years 0–9999.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("date `{date}` of `{page}` cannot be formatted as {standard}")]
+#[diagnostic(
+    code(baudelaire::feed::date),
+    help("RFC 2822 (RSS) covers years 1900–9999 and RFC 3339 (Atom) years 0–9999 — adjust the page's `date` or drop the feed format")
+)]
+pub struct FeedDateError {
+    page: String,
+    date: String,
+    standard: &'static str,
+    #[source]
+    source: time::error::Format,
+}
+
+impl FeedDateError {
+    pub fn new(
+        page: impl Into<String>,
+        date: impl Into<String>,
+        standard: &'static str,
+        source: time::error::Format,
+    ) -> Self {
+        Self {
+            page: page.into(),
+            date: date.into(),
+            standard,
+            source,
+        }
+    }
 }
 
 impl From<crate::error::ConfigError> for BaudelaireErrorKind {

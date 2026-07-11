@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::LazyLock;
 
 use crate::content::Frontmatter;
 
@@ -12,30 +13,41 @@ pub struct Permalink {
 }
 
 impl Permalink {
-    /// The permalink for an optional template string, falling back to the
-    /// conventional `/{collection}/{slug}/` when absent or unparseable.
-    pub fn of(template: Option<&str>) -> Self {
-        template
-            .and_then(|t| Self::parse(t).ok())
-            .unwrap_or_else(Self::convention)
-    }
+    /// The conventional template applied when a collection sets no `permalink`.
+    pub const CONVENTION: &'static str = "/{collection}/{slug}/";
 
-    /// The conventional `/{collection}/{slug}/` permalink, built directly so it
-    /// can never fail.
-    pub fn convention() -> Self {
-        Self {
-            segments: vec![
-                Segment::Literal("/".into()),
-                Segment::placeholder("collection"),
-                Segment::Literal("/".into()),
-                Segment::placeholder("slug"),
-                Segment::Literal("/".into()),
-            ],
+    /// The permalink for an optional, *pre-validated* template string (checked
+    /// at config parse), falling back to [`Self::CONVENTION`] when absent.
+    pub fn of(template: Option<&str>) -> Self {
+        match template.map(Self::parse) {
+            Some(Ok(permalink)) => permalink,
+            // Templates are validated when the config is parsed, so reaching
+            // this arm is a bug: fail loudly in debug, fall back to the
+            // convention rather than panicking mid-build in release.
+            Some(Err(e)) => {
+                debug_assert!(false, "permalink template not validated at config parse: {e}");
+                Self::convention()
+            }
+            None => Self::convention(),
         }
     }
 
-    /// Parse a template string into segments. Unknown placeholders error.
+    /// The conventional `/{collection}/{slug}/` permalink — [`Self::CONVENTION`]
+    /// parsed once through the same parser as every user template.
+    pub fn convention() -> Self {
+        static PARSED: LazyLock<Permalink> = LazyLock::new(|| {
+            Permalink::parse(Permalink::CONVENTION).expect("the const convention template parses")
+        });
+        PARSED.clone()
+    }
+
+    /// Parse a template string into segments. Unknown placeholders, an
+    /// unterminated `{`, and `..` path segments all error.
     pub fn parse(src: &str) -> Result<Self, PermalinkError> {
+        // A `..` segment would resolve outside the output directory.
+        if src.split('/').any(|segment| segment == "..") {
+            return Err(PermalinkError::Traversal);
+        }
         let mut segments = Vec::new();
         let mut buf = String::new();
         let mut chars = src.chars().peekable();
@@ -46,11 +58,16 @@ impl Permalink {
                     buf.clear();
                 }
                 let mut name = String::new();
+                let mut closed = false;
                 for c in chars.by_ref() {
                     if c == '}' {
+                        closed = true;
                         break;
                     }
                     name.push(c);
+                }
+                if !closed {
+                    return Err(PermalinkError::Unterminated { name });
                 }
                 segments.push(Segment::parse_placeholder(&name)?);
             } else {
@@ -113,12 +130,6 @@ impl Segment {
             .find(|(n, _)| *n == name)
             .map(|&(n, render)| Self::Placeholder(n, render))
             .ok_or_else(|| PermalinkError::unknown(name))
-    }
-
-    /// Build a known placeholder by name, panicking if absent — for internal
-    /// callers passing a name that is guaranteed valid (e.g. [`Permalink::convention`]).
-    fn placeholder(name: &'static str) -> Self {
-        Self::parse_placeholder(name).expect("known placeholder")
     }
 
     fn render(&self, ctx: &PermalinkCtx) -> String {
@@ -184,6 +195,20 @@ pub enum PermalinkError {
         #[help]
         valid: String,
     },
+
+    #[error("unterminated `{{{name}` in permalink template")]
+    #[diagnostic(
+        code(baudelaire::permalink::unterminated),
+        help("close the placeholder with `}}`, e.g. `{{{name}}}`")
+    )]
+    Unterminated { name: String },
+
+    #[error("permalink template must not contain `..` segments")]
+    #[diagnostic(
+        code(baudelaire::permalink::traversal),
+        help("a permalink cannot point outside the output directory")
+    )]
+    Traversal,
 }
 
 #[cfg(test)]
@@ -231,7 +256,35 @@ mod tests {
 
     #[test]
     fn errors_on_unknown_placeholder() {
-        assert!(Permalink::parse("/{bogus}/").is_err());
+        assert!(matches!(
+            Permalink::parse("/{bogus}/"),
+            Err(PermalinkError::UnknownPlaceholder { .. })
+        ));
+    }
+
+    #[test]
+    fn errors_on_unterminated_placeholder() {
+        assert!(matches!(
+            Permalink::parse("/posts/{slug"),
+            Err(PermalinkError::Unterminated { name }) if name == "slug"
+        ));
+    }
+
+    #[test]
+    fn errors_on_parent_dir_segment() {
+        assert!(matches!(
+            Permalink::parse("/../{slug}/"),
+            Err(PermalinkError::Traversal)
+        ));
+        // `..` embedded in a longer segment is not a parent-dir component.
+        assert!(Permalink::parse("/dots../{slug}/").is_ok());
+    }
+
+    #[test]
+    fn convention_is_the_parsed_const() {
+        let p = Permalink::convention();
+        assert_eq!(p.to_string(), Permalink::CONVENTION);
+        assert_eq!(p.render(&ctx("hello", "notes")), "/notes/hello/");
     }
 
     #[test]

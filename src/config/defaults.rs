@@ -43,6 +43,7 @@ impl Default for Config {
             serve: ServeConfig::default(),
             profile: None,
             profiles: Default::default(),
+            source: String::new(),
         }
     }
 }
@@ -72,7 +73,10 @@ impl Default for PngConfig {
     fn default() -> Self {
         // Preset 2 is a good balance of savings and speed; Safe strips metadata
         // without touching anything that affects rendering.
-        Self { level: 2, strip: PngStrip::Safe }
+        Self {
+            level: 2,
+            strip: PngStrip::Safe,
+        }
     }
 }
 
@@ -132,7 +136,7 @@ impl Default for CacheConfig {
 impl Default for ServeConfig {
     fn default() -> Self {
         Self {
-            port: 3000,
+            port: 1821,
             bind: "127.0.0.1".into(),
             open: true,
             watch: true,

@@ -34,9 +34,18 @@ impl<'a> Hooks<'a> {
     }
 
     fn run(&self, commands: &[String], phase: HookPhase, report: &mut Report) -> Result<()> {
+        if commands.is_empty() {
+            return Ok(());
+        }
+        // Hooks run in the project root (the CLI enters it at startup). If it
+        // cannot be resolved — e.g. it was removed underneath us — that is a
+        // typed error, not a silent fallback to an empty path that would make
+        // the shell fail with a baffling message.
+        let cwd = std::env::current_dir().map_err(|e| HookError::cwd(phase, e))?;
         for command in commands {
             report.info(format_args!("hook: {command}"))?;
             let status = Self::shell()
+                .current_dir(&cwd)
                 .arg(command)
                 .status()
                 .map_err(|e| HookError::spawn(phase, command, e))?;
@@ -49,7 +58,7 @@ impl<'a> Hooks<'a> {
 
     /// The platform shell configured to take a command string.
     fn shell() -> Command {
-        let mut command = if cfg!(windows) {
+        if cfg!(windows) {
             let mut c = Command::new("cmd");
             c.arg("/C");
             c
@@ -57,8 +66,29 @@ impl<'a> Hooks<'a> {
             let mut c = Command::new("sh");
             c.arg("-c");
             c
-        };
-        command.current_dir(std::env::current_dir().unwrap_or_default());
-        command
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::output::{Level, Report};
+
+    /// A removed working directory is a typed hook error, not a spawn in `""`.
+    /// Safe to chdir: nextest runs each test in its own process.
+    #[test]
+    fn missing_working_directory_is_a_typed_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_current_dir(tmp.path()).unwrap();
+        std::fs::remove_dir_all(tmp.path()).unwrap();
+
+        let mut config = Config::default();
+        config.hooks.before = vec!["true".into()];
+        let mut report = Report::with_level(Level::Silent);
+        let err = Hooks::new(&config).before(&mut report).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("working directory"), "{msg}");
+        assert!(msg.contains("before-build"), "{msg}");
     }
 }

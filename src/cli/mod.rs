@@ -136,8 +136,17 @@ impl Cli {
     /// Load config from the configured path, apply profile + CLI overrides.
     pub fn load_config(&self) -> Result<Config> {
         let g = &self.global;
-        let text = std::fs::read_to_string(&g.config)
-            .map_err(|_| crate::error::ConfigError::not_found(&g.config.display().to_string()))?;
+        // Only a genuinely missing file is a "config not found"; anything else
+        // (permission denied, a directory, invalid UTF-8) keeps its precise
+        // filesystem diagnostic instead of being misreported.
+        let text = crate::fs::read_to_string(&g.config).map_err(|e| match e {
+            crate::error::BaudelaireErrorKind::Fs(fs)
+                if fs.kind() == std::io::ErrorKind::NotFound =>
+            {
+                crate::error::ConfigError::not_found(&g.config.display().to_string()).into()
+            }
+            other => other,
+        })?;
         let mut config = Config::parse(&text)?;
         if let Some(profile) = &g.profile {
             config = config.with_profile(profile)?;
@@ -214,7 +223,7 @@ pub fn run(cli: Cli) -> Result<()> {
         }
         Command::New(args) => {
             let config = cli.load_config()?;
-            scaffold::new_page(&mut report, &args.path, &config)?;
+            scaffold::new_page(&mut report, &args.target(&config), &config)?;
         }
         Command::Clean => {
             let config = cli.load_config()?;
@@ -228,6 +237,28 @@ pub fn run(cli: Cli) -> Result<()> {
         }
     }
     Ok(())
+}
+
+impl NewArgs {
+    /// The file `baudelaire new` should create: a relative path lands under
+    /// the content directory (unless it already starts with it, so an explicit
+    /// `content/posts/foo.typ` is not double-prefixed), and `.typ` is appended
+    /// when the name does not already carry it.
+    fn target(&self, config: &Config) -> PathBuf {
+        let mut path = if self.path.is_absolute() || self.path.starts_with(&config.content) {
+            self.path.clone()
+        } else {
+            config.content.join(&self.path)
+        };
+        if path.extension().is_none_or(|e| e != "typ") {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("untitled");
+            path.set_file_name(format!("{name}.typ"));
+        }
+        path
+    }
 }
 
 impl ServeArgs {

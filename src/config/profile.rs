@@ -1,30 +1,57 @@
-use crate::config::Config;
-use crate::error::{ConfigError, ConfigErrorKind, Result};
+use kdl::KdlDocument;
 use miette::SourceSpan;
+
+use crate::config::Config;
+use crate::config::dispatch::Keys;
+use crate::config::parse::NodeExt;
+use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
     pub fn with_profile(mut self, name: &str) -> Result<Self> {
-        let partial = self
-            .profiles
+        // Take the partials out instead of cloning the whole subtree; they are
+        // restored below once the overlay has been applied.
+        let profiles = std::mem::take(&mut self.profiles);
+        let partial = profiles
             .iter()
             .find(|(n, _)| n == name)
-            .map(|(_, doc)| doc.clone())
-            .ok_or_else(|| ConfigError::missing_profile(name))?;
-        let text = partial.to_string();
+            .map(|(_, doc)| doc)
+            .ok_or_else(|| ConfigError::missing_profile(name, &profiles))?;
+        // Errors inside the overlay are reported against the *original*
+        // config text — the retained nodes carry spans into it, so labels
+        // point at the actual config.kdl lines.
+        let text = self.source.clone();
         for node in partial.nodes() {
+            if node.name().value() == "profiles" {
+                return Err(ConfigError::bad_value(
+                    &text,
+                    "`profiles` cannot be nested inside a profile",
+                    NodeExt::span(node),
+                )
+                .into());
+            }
             self.overlay(&text, node)?;
         }
+        self.profiles = profiles;
         self.profile = Some(name.to_owned());
         Ok(self)
     }
 }
 
 impl ConfigError {
-    pub fn missing_profile(name: &str) -> ConfigError {
+    /// A profile name that matches nothing in `profiles { … }`, its help
+    /// listing (and nearest-matching) the names that are configured.
+    pub fn missing_profile(name: &str, profiles: &[(String, KdlDocument)]) -> ConfigError {
+        let names: Vec<&str> = profiles.iter().map(|(n, _)| n.as_str()).collect();
+        let help = if names.is_empty() {
+            "no profiles are configured; add a `profiles { … }` block to config.kdl".to_owned()
+        } else {
+            Keys(&names).help(name, "profiles")
+        };
         ConfigError::at(
             "",
-            ConfigErrorKind::BadValue {
-                detail: format!("profile `{name}` not found in config.kdl"),
+            ConfigErrorKind::MissingProfile {
+                name: name.to_owned(),
+                help,
             },
             SourceSpan::new(0.into(), 0),
         )
@@ -46,13 +73,13 @@ mod tests {
             url "https://example.net"
             profiles {
               dev {
-                url "http://localhost:3000"
+                url "http://localhost:1821"
               }
             }
         "#,
         );
         let dev = cfg.with_profile("dev").expect("profile exists");
-        assert_eq!(dev.url.as_deref(), Some("http://localhost:3000"));
+        assert_eq!(dev.url.as_deref(), Some("http://localhost:1821"));
     }
 
     #[test]
@@ -103,7 +130,7 @@ mod tests {
         let cfg = parse(
             r#"
             serve {
-              port 3000
+              port 1821
             }
             profiles {
               ci {
@@ -121,7 +148,57 @@ mod tests {
     #[test]
     fn profile_not_found_errors() {
         let cfg = parse("site \"x\"");
-        assert!(cfg.with_profile("nope").is_err());
+        let err = cfg
+            .with_profile("nope")
+            .expect_err("no profiles configured");
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(rendered.contains("profile `nope` not found"), "{rendered}");
+        assert!(
+            rendered.contains("no profiles are configured"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn profile_not_found_help_lists_configured_names() {
+        let cfg = parse("profiles {\n  dev { future #true }\n  prod { future #false }\n}\n");
+        let err = cfg.with_profile("prd").expect_err("unknown profile");
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(rendered.contains("profile `prd` not found"), "{rendered}");
+        assert!(rendered.contains("did you mean `prod`?"), "{rendered}");
+        assert!(rendered.contains("valid profiles: dev, prod"), "{rendered}");
+    }
+
+    #[test]
+    fn profile_rejects_nested_profiles() {
+        let cfg = parse("profiles {\n  dev {\n    profiles { inner { future #true } }\n  }\n}\n");
+        let err = cfg.with_profile("dev").expect_err("nested profiles");
+        assert!(
+            err.to_string()
+                .contains("`profiles` cannot be nested inside a profile"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn profile_overlay_error_points_at_original_config_text() {
+        let text = "site \"x\"\nprofiles {\n  dev {\n    clean \"yes\"\n  }\n}\n";
+        let err = parse(text).with_profile("dev").expect_err("bad boolean");
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains("expected boolean, got string"),
+            "{rendered}"
+        );
+        // The label must excerpt the original config.kdl, not a re-serialized
+        // profile subtree with mismatched offsets.
+        assert!(rendered.contains("clean \"yes\""), "{rendered}");
+    }
+
+    #[test]
+    fn profile_partials_survive_application() {
+        let cfg = parse("profiles {\n  dev { future #true }\n}\n");
+        let dev = cfg.with_profile("dev").expect("profile exists");
+        assert_eq!(dev.profiles.len(), 1, "partials are restored after overlay");
     }
 
     #[test]

@@ -50,6 +50,13 @@ impl<'a> Scaffold<'a> {
         }
         for (rel, contents) in &self.files {
             let full = self.root.join(rel);
+            // Never clobber: `init` into an existing project must not
+            // overwrite its config or templates. Existing directories are
+            // fine; existing files are skipped with a warning.
+            if full.exists() {
+                report.warn(format_args!("{} exists — skipped", rel.display()))?;
+                continue;
+            }
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -321,12 +328,76 @@ mod templates {
     /// New-page template; `{{template}}` is filled by [`render`].
     pub const PAGE: &str = include_str!("scaffold/page.typ");
 
-    /// Substitute `{{key}}` placeholders in a template.
+    /// Substitute `{{key}}` placeholders in a template, in a single left-to-
+    /// right pass: a substituted value is never rescanned, so a site name
+    /// containing `{{author}}` stays literal. Values are escaped for the
+    /// double-quoted string context they land in (KDL and typst share `\`
+    /// and `"` escapes), so a quote in a site name yields valid config.
+    /// Unknown placeholders are left untouched.
     pub fn render(template: &str, vars: &[(&str, &str)]) -> String {
-        let mut out = template.to_owned();
-        for (key, value) in vars {
-            out = out.replace(&format!("{{{{{key}}}}}"), value);
+        let mut out = String::with_capacity(template.len());
+        let mut rest = template;
+        while let Some(open) = rest.find("{{") {
+            out.push_str(&rest[..open]);
+            let after = &rest[open + 2..];
+            let Some(close) = after.find("}}") else {
+                // No closing braces anywhere ahead: emit the rest verbatim.
+                out.push_str(&rest[open..]);
+                return out;
+            };
+            let key = &after[..close];
+            match vars.iter().find(|(k, _)| *k == key) {
+                Some((_, value)) => out.push_str(&escape(value)),
+                None => {
+                    out.push_str("{{");
+                    out.push_str(key);
+                    out.push_str("}}");
+                }
+            }
+            rest = &after[close + 2..];
         }
+        out.push_str(rest);
         out
+    }
+
+    /// Escape a value for interpolation into a double-quoted string literal.
+    fn escape(value: &str) -> String {
+        value.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::render;
+
+        #[test]
+        fn fills_known_placeholders() {
+            let out = render("site \"{{site}}\" by {{author}}", &[("site", "S"), ("author", "A")]);
+            assert_eq!(out, "site \"S\" by A");
+        }
+
+        #[test]
+        fn escapes_quotes_and_backslashes_in_values() {
+            let out = render("site \"{{site}}\"", &[("site", "My \"Quoted\\\" Site")]);
+            assert_eq!(out, "site \"My \\\"Quoted\\\\\\\" Site\"");
+        }
+
+        #[test]
+        fn substituted_values_are_never_rescanned() {
+            let out = render(
+                "{{site}} by {{author}}",
+                &[("site", "{{author}}"), ("author", "Me")],
+            );
+            assert_eq!(out, "{{author}} by Me");
+        }
+
+        #[test]
+        fn unknown_placeholders_are_left_alone() {
+            assert_eq!(render("keep {{unknown}}", &[("site", "S")]), "keep {{unknown}}");
+        }
+
+        #[test]
+        fn unterminated_braces_pass_through() {
+            assert_eq!(render("dangling {{site", &[("site", "S")]), "dangling {{site");
+        }
     }
 }

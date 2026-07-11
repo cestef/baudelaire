@@ -39,7 +39,7 @@ fn fixture_config() -> &'static str {
         }
 
         serve {
-          port 3000
+          port 1821
           bind "127.0.0.1"
           open #false
           watch #true
@@ -47,7 +47,7 @@ fn fixture_config() -> &'static str {
 
         profiles {
           dev {
-            url "http://localhost:3000"
+            url "http://localhost:1821"
             future #true
           }
           prod {
@@ -87,7 +87,7 @@ fn profile_dev_overrides() {
     let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     let dev = cfg.with_profile("dev").expect("profile dev");
-    assert_eq!(dev.url.as_deref(), Some("http://localhost:3000"));
+    assert_eq!(dev.url.as_deref(), Some("http://localhost:1821"));
     assert!(dev.future);
 }
 
@@ -119,7 +119,7 @@ fn empty_config_uses_defaults() {
     let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     assert_eq!(cfg.lang, "en");
-    assert_eq!(cfg.serve.port, 3000);
+    assert_eq!(cfg.serve.port, 1821);
     assert!(cfg.cache.incremental);
 }
 

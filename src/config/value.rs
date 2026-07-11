@@ -8,30 +8,39 @@ use crate::config::SortKey;
 use crate::config::dispatch::Keys;
 use crate::error::{ConfigError, Result};
 
+/// A `${VAR}` reference whose variable is unset and which carries no
+/// `:-default` — the one failure mode of [`Env`] expansion.
+#[derive(Debug)]
+struct MissingVar(String);
+
 /// Expands `${VAR}` references in config string values from the process
 /// environment, with an optional `${VAR:-default}` fallback. An unset variable
-/// with no default expands to the empty string. The single place the config
-/// surface reads the environment, so the rule is uniform across every string.
+/// with no default is an error ([`MissingVar`]) rather than a silent empty
+/// string. The single place the config surface reads the environment, so the
+/// rule is uniform across every string.
 struct Env;
 
 impl Env {
-    fn expand(raw: &str) -> String {
+    fn expand(raw: &str) -> Result<String, MissingVar> {
         Self::expand_with(raw, |name| std::env::var(name).ok())
     }
 
     /// Expansion against an arbitrary variable lookup — the core logic, kept
     /// free of the process environment so it is testable without mutating global
     /// state (unsound under multi-threaded test runners).
-    fn expand_with(raw: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+    fn expand_with(
+        raw: &str,
+        lookup: impl Fn(&str) -> Option<String>,
+    ) -> Result<String, MissingVar> {
         let mut out = String::with_capacity(raw.len());
         let mut rest = raw;
         while let Some(start) = rest.find("${") {
             out.push_str(&rest[..start]);
             let after = &rest[start + 2..];
             let Some(end) = after.find('}') else {
-                // No closing brace: emit the rest verbatim and stop.
+                // No closing brace: not a reference — emit verbatim and stop.
                 out.push_str(&rest[start..]);
-                return out;
+                return Ok(out);
             };
             let (name, default) = match after[..end].split_once(":-") {
                 Some((name, default)) => (name.trim(), Some(default)),
@@ -39,19 +48,19 @@ impl Env {
             };
             let value = lookup(name)
                 .or_else(|| default.map(str::to_owned))
-                .unwrap_or_default();
+                .ok_or_else(|| MissingVar(name.to_owned()))?;
             out.push_str(&value);
             rest = &after[end + 1..];
         }
         out.push_str(rest);
-        out
+        Ok(out)
     }
 }
 
 pub(super) trait ValueExt {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String>;
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64>;
-    fn is_true(&self) -> bool;
+    fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
     /// Map a string value through a `(name, value)` table, erroring on an
@@ -68,7 +77,9 @@ pub(super) trait ValueExt {
 impl ValueExt for KdlValue {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String> {
         match self.as_string() {
-            Some(s) => Ok(Env::expand(s)),
+            Some(s) => {
+                Env::expand(s).map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
+            }
             None => Err(ConfigError::bad_value(
                 text,
                 format!("expected string, got {}", self.kind()),
@@ -79,8 +90,11 @@ impl ValueExt for KdlValue {
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {
+        // kdl 6 integers are i128 — a literal beyond i64 must not wrap.
         match self.as_integer() {
-            Some(n) => Ok(n as i64),
+            Some(n) => i64::try_from(n).map_err(|_| {
+                ConfigError::bad_value(text, format!("integer {n} is out of range"), span).into()
+            }),
             None => Err(ConfigError::bad_value(
                 text,
                 format!("expected integer, got {}", self.kind()),
@@ -90,8 +104,16 @@ impl ValueExt for KdlValue {
         }
     }
 
-    fn is_true(&self) -> bool {
-        self.as_bool() == Some(true)
+    fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool> {
+        match self.as_bool() {
+            Some(b) => Ok(b),
+            None => Err(ConfigError::bad_value(
+                text,
+                format!("expected boolean, got {}", self.kind()),
+                span,
+            )
+            .into()),
+        }
     }
 
     fn kind(&self) -> &'static str {
@@ -136,11 +158,17 @@ mod tests {
         // A fixed lookup — no real environment touched, so this is sound under
         // any test runner.
         let env = |name: &str| (name == "APP_ENV").then(|| "prod".to_owned());
-        assert_eq!(Env::expand_with("site-${APP_ENV}", env), "site-prod");
-        assert_eq!(Env::expand_with("${MISSING:-fallback}", env), "fallback");
-        assert_eq!(Env::expand_with("${MISSING}", env), "");
-        assert_eq!(Env::expand_with("no vars here", env), "no vars here");
-        // An unterminated reference is left verbatim.
-        assert_eq!(Env::expand_with("half ${OPEN", env), "half ${OPEN");
+        assert_eq!(Env::expand_with("site-${APP_ENV}", env).unwrap(), "site-prod");
+        assert_eq!(Env::expand_with("${MISSING:-fallback}", env).unwrap(), "fallback");
+        assert_eq!(Env::expand_with("no vars here", env).unwrap(), "no vars here");
+        // An unterminated reference is not a reference: left verbatim.
+        assert_eq!(Env::expand_with("half ${OPEN", env).unwrap(), "half ${OPEN");
+    }
+
+    #[test]
+    fn env_unset_without_default_errors() {
+        let env = |_: &str| None;
+        let err = Env::expand_with("${MISSING}", env).unwrap_err();
+        assert_eq!(err.0, "MISSING");
     }
 }

@@ -29,7 +29,9 @@ use crate::engine::hook::Hooks;
 use crate::engine::layout::Layout;
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::fs;
-use crate::error::{BaudelaireErrorKind, Broken, BrokenLinks, Result, TypstSourceDiagnostic};
+use crate::error::{
+    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
+};
 use crate::graph::{Cache, Deps, Hash};
 use crate::render::{AssetMap, Renderer};
 use crate::world::{PageWorld, Project, Tracked};
@@ -212,14 +214,15 @@ impl Engine {
         Ok(pages)
     }
 
-    /// Report each compile outcome, returning the rendered pages or the first
-    /// error after every failure has been reported.
+    /// Report each compile outcome, returning the rendered pages or — after
+    /// every failure has been reported — an error carrying *all* failed pages'
+    /// diagnostics (a single failure propagates unchanged).
     fn collect<'a>(
         &self,
         outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,
         report: &mut Report,
     ) -> Result<Vec<Rendered<'a>>> {
-        let mut error = None;
+        let mut errors = Vec::new();
         let mut rendered = Vec::new();
         for (page, outcome) in outcomes {
             match outcome {
@@ -229,11 +232,11 @@ impl Engine {
                 }
                 Err(e) => {
                     report.page(self.relative(page), PageStatus::Failed)?;
-                    error.get_or_insert(e);
+                    errors.push(e);
                 }
             }
         }
-        match error {
+        match BuildFailed::aggregate(errors) {
             Some(e) => Err(e),
             None => Ok(rendered),
         }

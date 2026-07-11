@@ -78,6 +78,10 @@ pub struct Config {
     pub profile: Option<String>,
     /// Named profile partials (raw KDL, applied over base in [`Config::with_profile`]).
     pub profiles: Vec<(String, KdlDocument)>,
+    /// The raw `config.kdl` text this config was parsed from. Profile overlay
+    /// errors are reported against it — the retained profile nodes carry spans
+    /// into this exact string.
+    pub(crate) source: String,
 }
 
 impl Config {
@@ -110,13 +114,22 @@ impl Config {
     /// The file a URL path is written to under `dist`, honoring clean URLs.
     /// Single source for the URL→file mapping, shared by page output and
     /// redirect stubs.
+    ///
+    /// `..` segments are dropped here: permalink *templates* are already
+    /// rejected at config parse, and this filter owns the defense for every
+    /// other URL source (e.g. a frontmatter slug), so no page can ever be
+    /// written outside `dist`.
     pub fn destination(&self, url: &str) -> PathBuf {
         if url == "/" {
             return self.dist.join("index.html");
         }
-        let trimmed = url.trim_matches('/');
+        let trimmed = url
+            .split('/')
+            .filter(|segment| !segment.is_empty() && *segment != "..")
+            .collect::<Vec<_>>()
+            .join("/");
         if self.clean {
-            self.dist.join(trimmed).join("index.html")
+            self.dist.join(&trimmed).join("index.html")
         } else {
             self.dist.join(format!("{trimmed}.html"))
         }
@@ -189,6 +202,9 @@ impl std::hash::Hash for Config {
             // *resolved* config drives the build, and applying a profile mutates
             // the fields above — so any effective change is already captured.
             profiles: _,
+            // The raw config text, kept only for error spans. A comment-only
+            // edit must not invalidate the cache.
+            source: _,
         } = self;
         (site, url, lang, author, content, dist, assets, templates).hash(state);
         (clean, future, sitemap, robots, llms, draft, links, feed, search).hash(state);

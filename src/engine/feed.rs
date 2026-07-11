@@ -1,12 +1,36 @@
 //! Syndication feeds: RSS 2.0 and Atom 1.0 from one page set.
 
+use time::OffsetDateTime;
 use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::process::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config, FeedKind};
 use crate::content::Page;
 use crate::engine::xml::Xml;
-use crate::error::Result;
+use crate::error::{FeedDateError, Result};
+
+/// The timestamp behavior each feed standard mandates: RSS wants RFC 2822
+/// `pubDate`s, Atom RFC 3339 `updated`s. An inherent extension here (rather
+/// than in config) because only the feed writer cares how a kind formats time.
+impl FeedKind {
+    /// Format a moment as this feed standard requires. Fallible: the formats
+    /// have year ranges (RFC 2822: 1900–9999, RFC 3339: 0–9999) a page date
+    /// can fall outside of.
+    fn timestamp(self, moment: OffsetDateTime) -> Result<String, time::error::Format> {
+        match self {
+            Self::Rss => moment.format(&Rfc2822),
+            Self::Atom => moment.format(&Rfc3339),
+        }
+    }
+
+    /// The standard's name, for error messages.
+    fn standard(self) -> &'static str {
+        match self {
+            Self::Rss => "RFC 2822",
+            Self::Atom => "RFC 3339",
+        }
+    }
+}
 
 /// Emits a syndication feed file per configured format, of the most recent
 /// dated pages. Requires a base `url` for the absolute links feeds mandate.
@@ -54,14 +78,17 @@ impl<'a> Feed<'a> {
         Self { base, title, items }
     }
 
-    /// Serialize to XML in the requested format.
+    /// Serialize to XML in the requested format. Item timestamps are rendered
+    /// up front — the only fallible step — so the XML building itself stays
+    /// infallible.
     pub(super) fn render(&self, kind: FeedKind) -> Result<String> {
-        let mut xml = Xml::document()?;
+        let stamps = self.stamps(kind)?;
+        let mut xml = Xml::document();
         match kind {
-            FeedKind::Rss => self.rss(&mut xml)?,
-            FeedKind::Atom => self.atom(&mut xml)?,
+            FeedKind::Rss => self.rss(&mut xml, &stamps),
+            FeedKind::Atom => self.atom(&mut xml, &stamps),
         }
-        xml.finish()
+        Ok(xml.finish())
     }
 
     fn home(&self) -> String {
@@ -72,60 +99,72 @@ impl<'a> Feed<'a> {
         self.base.join(&page.permalink)
     }
 
-    fn rss(&self, xml: &mut Xml) -> std::io::Result<()> {
+    fn rss(&self, xml: &mut Xml, stamps: &[Option<String>]) {
         xml.nest("rss", &[("version", "2.0")], |xml| {
             xml.nest("channel", &[], |xml| {
-                xml.leaf("title", self.title)?;
-                xml.leaf("link", &self.home())?;
-                xml.leaf("description", self.title)?;
-                for page in self.items {
+                xml.leaf("title", self.title);
+                xml.leaf("link", &self.home());
+                xml.leaf("description", self.title);
+                for (page, stamp) in self.items.iter().zip(stamps) {
                     xml.nest("item", &[], |xml| {
                         let link = self.link(page);
                         if let Some(title) = &page.frontmatter.title {
-                            xml.leaf("title", title)?;
+                            xml.leaf("title", title);
                         }
-                        xml.leaf("link", &link)?;
-                        xml.leaf("guid", &link)?;
-                        if let Some(stamp) = Self::stamp(page, &Rfc2822) {
-                            xml.leaf("pubDate", &stamp)?;
+                        xml.leaf("link", &link);
+                        xml.leaf("guid", &link);
+                        if let Some(stamp) = stamp {
+                            xml.leaf("pubDate", stamp);
                         }
-                        Ok(())
-                    })?;
+                    });
                 }
-                Ok(())
-            })
-        })
+            });
+        });
     }
 
-    fn atom(&self, xml: &mut Xml) -> std::io::Result<()> {
-        let updated = self.items.iter().find_map(|p| Self::stamp(p, &Rfc3339));
+    fn atom(&self, xml: &mut Xml, stamps: &[Option<String>]) {
+        // Items are newest-first, so the first dated one is the feed's `updated`.
+        let updated = stamps.iter().flatten().next();
         xml.nest("feed", &[("xmlns", "http://www.w3.org/2005/Atom")], |xml| {
-            xml.leaf("title", self.title)?;
-            xml.leaf("id", &self.home())?;
-            xml.empty("link", &[("href", &self.home())])?;
-            if let Some(updated) = &updated {
-                xml.leaf("updated", updated)?;
+            xml.leaf("title", self.title);
+            xml.leaf("id", &self.home());
+            xml.empty("link", &[("href", &self.home())]);
+            if let Some(updated) = updated {
+                xml.leaf("updated", updated);
             }
-            for page in self.items {
+            for (page, stamp) in self.items.iter().zip(stamps) {
                 xml.nest("entry", &[], |xml| {
                     let link = self.link(page);
-                    xml.leaf("title", page.frontmatter.title.as_deref().unwrap_or(""))?;
-                    xml.leaf("id", &link)?;
-                    xml.empty("link", &[("href", &link)])?;
-                    if let Some(stamp) = Self::stamp(page, &Rfc3339) {
-                        xml.leaf("updated", &stamp)?;
+                    xml.leaf("title", page.frontmatter.title.as_deref().unwrap_or(""));
+                    xml.leaf("id", &link);
+                    xml.empty("link", &[("href", &link)]);
+                    if let Some(stamp) = stamp {
+                        xml.leaf("updated", stamp);
                     }
-                    Ok(())
-                })?;
+                });
             }
-            Ok(())
-        })
+        });
     }
 
-    /// A page's date formatted with `fmt` (as UTC midnight), if it has one.
-    fn stamp(page: &Page, fmt: &(impl time::formatting::Formattable + ?Sized)) -> Option<String> {
+    /// Every item's date rendered in `kind`'s timestamp format (as UTC
+    /// midnight), position-aligned with `items`; `None` for undated pages. A
+    /// date the format cannot represent is an error, not a silently missing
+    /// `pubDate`/`updated`.
+    fn stamps(&self, kind: FeedKind) -> Result<Vec<Option<String>>> {
+        self.items
+            .iter()
+            .map(|page| Self::stamp(page, kind))
+            .collect()
+    }
+
+    fn stamp(page: &Page, kind: FeedKind) -> Result<Option<String>> {
         page.frontmatter
             .date
-            .and_then(|d| d.midnight().assume_utc().format(fmt).ok())
+            .map(|d| {
+                kind.timestamp(d.midnight().assume_utc()).map_err(|e| {
+                    FeedDateError::new(&page.permalink, d.to_string(), kind.standard(), e).into()
+                })
+            })
+            .transpose()
     }
 }

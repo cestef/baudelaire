@@ -32,7 +32,7 @@ output {
 }
 
 serve {
-  port 3000
+  port 1821
   bind "127.0.0.1"
   open #true
   watch #true
@@ -40,7 +40,7 @@ serve {
 
 profiles {
   dev {
-    url "http://localhost:3000"
+    url "http://localhost:1821"
     future #true
   }
   prod {

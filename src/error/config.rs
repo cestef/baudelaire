@@ -74,6 +74,17 @@ impl ConfigError {
         )
     }
 
+    /// A `${VAR}` reference to an unset environment variable with no default.
+    pub fn env(source: &str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::MissingEnv {
+                name: name.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A node that requires a `{ ... }` children block but has none.
     pub fn missing_children(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::MissingChildren, span)
@@ -112,12 +123,15 @@ impl miette::Diagnostic for ConfigError {
     }
 
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        Some(&self.text as &dyn miette::SourceCode)
+        // Errors raised outside any config text (missing file, missing profile)
+        // carry no source; suppress the snippet instead of pointing at nothing.
+        (!self.text.is_empty()).then_some(&self.text as &dyn miette::SourceCode)
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        // For a parse error the nested kdl diagnostics carry their own spans.
-        if matches!(self.kind, ConfigErrorKind::Parse(_)) {
+        // For a parse error the nested kdl diagnostics carry their own spans,
+        // and a sourceless error has nothing to label.
+        if self.text.is_empty() || matches!(self.kind, ConfigErrorKind::Parse(_)) {
             return None;
         }
         Some(Box::new(std::iter::once(
@@ -189,5 +203,26 @@ pub enum ConfigErrorKind {
         #[help]
         valid: String,
     },
+
+    #[error("profile `{name}` not found in config.kdl")]
+    #[diagnostic(code(baudelaire::config::missing_profile))]
+    MissingProfile {
+        name: String,
+        #[help]
+        help: String,
+    },
+
+    #[error("environment variable `{name}` is not set")]
+    #[diagnostic(
+        code(baudelaire::config::missing_env),
+        help("set `{name}` or provide a default with `${{{name}:-default}}`")
+    )]
+    MissingEnv { name: String },
+
+    /// An invalid permalink template on a collection, surfaced with the config
+    /// span. Transparent: message, code, and help come from [`PermalinkError`].
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Permalink(#[from] crate::content::PermalinkError),
 }
 

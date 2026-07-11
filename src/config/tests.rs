@@ -10,7 +10,7 @@ fn empty_uses_defaults() {
     assert_eq!(cfg.lang, "en");
     assert!(cfg.clean);
     assert!(cfg.html.pretty);
-    assert_eq!(cfg.serve.port, 3000);
+    assert_eq!(cfg.serve.port, 1821);
     assert!(cfg.cache.incremental);
 }
 
@@ -43,7 +43,7 @@ fn inputs_and_features() {
             site "https://example.net"
             env  "prod"
           }
-          features "+html" "-pdf"
+          features "+html" "pdf"
         }
     "#,
     );
@@ -55,6 +55,16 @@ fn inputs_and_features() {
         ]
     );
     assert_eq!(cfg.features, vec!["html".to_owned(), "pdf".to_owned()]);
+}
+
+#[test]
+fn err_feature_removal_rejected() {
+    let err = Config::parse("typst {\n  features \"-pdf\"\n}\n").unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("removing feature `pdf` is not supported"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -215,4 +225,173 @@ fn err_missing_arg() {
 fn err_missing_children() {
     let err = Config::parse("serve").unwrap_err();
     assert!(err.to_string().contains("missing children"));
+}
+
+#[test]
+fn bare_flag_node_enables() {
+    let cfg = parse("clean");
+    assert!(cfg.clean);
+}
+
+#[test]
+fn err_boolean_type() {
+    let err = Config::parse("clean \"yes\"").unwrap_err();
+    assert!(
+        err.to_string().contains("expected boolean, got string"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_boolean_attr_type() {
+    let err = Config::parse("collections {\n  posts reverse=\"yes\"\n}\n").unwrap_err();
+    assert!(
+        err.to_string().contains("expected boolean, got string"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_port_out_of_range() {
+    let err = Config::parse("serve {\n  port 99999\n}\n").unwrap_err();
+    assert!(
+        err.to_string().contains("port must be 0-65535, got 99999"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_integer_overflows_i64() {
+    let err = Config::parse("serve {\n  port 99999999999999999999\n}\n").unwrap_err();
+    assert!(err.to_string().contains("out of range"), "{err}");
+}
+
+#[test]
+fn err_negative_limit_and_minimum() {
+    let err = Config::parse("output {\n  feed {\n    limit -1\n  }\n}\n").unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("`limit` must not be negative, got -1"),
+        "{err}"
+    );
+    let err = Config::parse("output {\n  search {\n    minimum -2\n  }\n}\n").unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("`minimum` must not be negative, got -2"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_paginate_below_one() {
+    for (config, detail) in [
+        (
+            "collections {\n  posts paginate=0\n}\n",
+            "paginate must be at least 1, got 0",
+        ),
+        (
+            "collections {\n  posts paginate=-3\n}\n",
+            "paginate must be at least 1, got -3",
+        ),
+    ] {
+        let err = Config::parse(config).unwrap_err();
+        assert!(err.to_string().contains(detail), "{err}");
+    }
+}
+
+#[test]
+fn err_duplicate_format() {
+    let err =
+        Config::parse("output {\n  feed {\n    formats \"rss\" \"rss\"\n  }\n}\n").unwrap_err();
+    assert!(
+        err.to_string().contains("duplicate `rss` in `formats`"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_duplicate_collection() {
+    let err = Config::parse("collections {\n  posts\n  posts sort=\"date\"\n}\n").unwrap_err();
+    assert!(
+        err.to_string().contains("duplicate collection `posts`"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_duplicate_taxonomy() {
+    let err = Config::parse("taxonomies {\n  tags\n  tags index=#true\n}\n").unwrap_err();
+    assert!(
+        err.to_string().contains("duplicate taxonomy `tags`"),
+        "{err}"
+    );
+}
+
+#[test]
+fn err_duplicate_profile() {
+    let err = Config::parse("profiles {\n  dev { future #true }\n  dev { future #false }\n}\n")
+        .unwrap_err();
+    assert!(err.to_string().contains("duplicate profile `dev`"), "{err}");
+}
+
+#[test]
+fn err_unknown_permalink_placeholder_is_spanned() {
+    let text = "collections {\n  posts permalink=\"/{bogus}/\"\n}\n";
+    let err = Config::parse(text).unwrap_err();
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(
+        rendered.contains("unknown permalink placeholder `bogus`"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("valid placeholders"), "{rendered}");
+    // The label excerpts config.kdl — the error is spanned at parse time.
+    assert!(rendered.contains("permalink="), "{rendered}");
+}
+
+#[test]
+fn err_unterminated_permalink_placeholder() {
+    let err = Config::parse("collections {\n  posts permalink=\"/{slug\"\n}\n").unwrap_err();
+    assert!(err.to_string().contains("unterminated `{slug`"), "{err}");
+}
+
+#[test]
+fn err_permalink_parent_dir_segment() {
+    let err = Config::parse("collections {\n  posts permalink=\"/../{slug}/\"\n}\n").unwrap_err();
+    assert!(err.to_string().contains("must not contain `..`"), "{err}");
+}
+
+#[test]
+fn err_unexpected_positional_argument() {
+    // Taxonomies take no positional arguments at all.
+    let err = Config::parse("taxonomies {\n  tags \"extra\"\n}\n").unwrap_err();
+    assert!(err.to_string().contains("unexpected argument"), "{err}");
+    // Collections consume exactly one (the glob); a second is discarded today.
+    let err = Config::parse("collections {\n  posts \"posts/*.typ\" \"extra\"\n}\n").unwrap_err();
+    assert!(err.to_string().contains("unexpected argument"), "{err}");
+}
+
+#[test]
+fn err_unset_env_var_without_default() {
+    let err = Config::parse("site \"${BAUDELAIRE_TEST_UNSET_VAR}\"").unwrap_err();
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(
+        rendered.contains("environment variable `BAUDELAIRE_TEST_UNSET_VAR` is not set"),
+        "{rendered}"
+    );
+    assert!(rendered.contains(":-default"), "{rendered}");
+}
+
+#[test]
+fn destination_never_escapes_dist() {
+    let cfg = parse("");
+    let dist = cfg.dist.clone();
+    for url in ["/../../etc/passwd/", "/posts/../../secret/"] {
+        let dest = cfg.destination(url);
+        assert!(dest.starts_with(&dist), "{url} -> {}", dest.display());
+        assert!(
+            !dest.components().any(|c| c.as_os_str() == ".."),
+            "{url} -> {}",
+            dest.display()
+        );
+    }
 }

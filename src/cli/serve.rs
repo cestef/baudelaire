@@ -59,12 +59,13 @@ impl Dev<'_> {
             }
         }
 
+        let level = self.report.level();
         if self.config.serve.watch {
             let live = Live::default();
-            Handler::new(self.config.dist.clone(), Some(live.clone())).spawn(server);
+            Handler::new(self.config.dist.clone(), Some(live.clone()), level).spawn(server);
             self.watch(live)
         } else {
-            Handler::new(self.config.dist.clone(), None).serve(&server);
+            Handler::new(self.config.dist.clone(), None, level).serve(&server);
             Ok(())
         }
     }
@@ -76,10 +77,25 @@ impl Dev<'_> {
         let filter = Filter::new(self.config)?;
         let _watcher = Watcher::new(filter.dirs(), tx)?;
         self.report.muted("watching for changes")?;
-        for events in rx.into_iter().flatten() {
-            self.on_change(events, &live, &filter)?;
+        for result in rx {
+            self.on_event(result, &live, &filter)?;
         }
         Ok(())
+    }
+
+    /// Handle one debounced watcher delivery: rebuild on events, and surface
+    /// watcher failures (dropped watches, queue overflow) as warnings instead
+    /// of silently discarding them — the server keeps serving either way.
+    fn on_event(&mut self, result: DebounceEventResult, live: &Live, filter: &Filter) -> Result<()> {
+        match result {
+            Ok(events) => self.on_change(events, live, filter),
+            Err(errors) => {
+                for error in errors {
+                    self.report.warn(format_args!("file watcher error: {error}"))?;
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Rebuild after a batch of file events, then push a live reload on success.
@@ -162,11 +178,14 @@ impl Dev<'_> {
 struct Handler {
     dist: PathBuf,
     live: Option<Live>,
+    /// The session's verbosity, copied in at construction so per-request
+    /// logging (404s) honors `--quiet` like every other line.
+    level: Level,
 }
 
 impl Handler {
-    fn new(dist: PathBuf, live: Option<Live>) -> Self {
-        Self { dist, live }
+    fn new(dist: PathBuf, live: Option<Live>, level: Level) -> Self {
+        Self { dist, live, level }
     }
 
     /// Run the request loop on its own thread (used while watching, so the main
@@ -193,7 +212,7 @@ impl Handler {
         }
         match self.resolve(&url) {
             Some(file) if file.exists() => self.serve_file(req, &file),
-            _ => Self::respond_404(req, &url),
+            _ => self.respond_404(req, &url),
         }
     }
 
@@ -212,9 +231,12 @@ impl Handler {
         let _ = req.respond(response);
     }
 
-    fn respond_404(req: Request, url: &str) {
+    fn respond_404(&self, req: Request, url: &str) {
         let _ = req.respond(Response::empty(404));
-        let _ = Report::stdout().muted(format_args!("  {} {}", "✗".red(), url.dimmed()));
+        // A per-request report at the session's level, so `--quiet` silences
+        // these lines too. (It may still interleave with a concurrent rebuild
+        // status line; acceptable for now.)
+        let _ = Report::with_level(self.level).muted(format_args!("  {} {}", "✗".red(), url.dimmed()));
     }
 
     /// Resolve a URL path to a file under `dist`, honoring clean URLs.
@@ -378,5 +400,43 @@ impl Filter {
             return true;
         }
         path.extension().is_some_and(|e| e == "typ" || e == "kdl") || path.starts_with(&self.assets)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Watcher failures are reported as warnings and do not stop the watch
+    /// loop (previously the `Err` arm was silently discarded).
+    #[test]
+    fn watcher_errors_warn_and_keep_watching() {
+        let config = Config::default();
+        let mut report = Report::with_level(Level::Silent);
+        let filter = Filter::new(&config).unwrap();
+        let live = Live::default();
+        let mut dev = Dev {
+            config: &config,
+            report: &mut report,
+        };
+        dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
+            .unwrap();
+        assert_eq!(dev.report.warnings(), 1);
+    }
+
+    /// The `Ok` arm still flows into change handling: irrelevant (empty) event
+    /// batches are a no-op and produce no warnings.
+    #[test]
+    fn empty_event_batch_is_a_no_op() {
+        let config = Config::default();
+        let mut report = Report::with_level(Level::Silent);
+        let filter = Filter::new(&config).unwrap();
+        let live = Live::default();
+        let mut dev = Dev {
+            config: &config,
+            report: &mut report,
+        };
+        dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
+        assert_eq!(dev.report.warnings(), 0);
     }
 }

@@ -27,7 +27,7 @@ impl Processor for SiteMap {
         };
         out.file(
             &site.config.dist.join(Self::FILE),
-            &Sitemap::new(&base, site.pages).render()?,
+            &Sitemap::new(&base, site.pages).render(),
         )?;
         out.note(format_args!("wrote {}", Self::FILE))
     }
@@ -50,22 +50,20 @@ impl<'a> Sitemap<'a> {
     }
 
     /// The serialized XML.
-    pub(super) fn render(&self) -> Result<String> {
-        let mut xml = Xml::document()?;
+    pub(super) fn render(&self) -> String {
+        let mut xml = Xml::document();
         xml.nest("urlset", &[("xmlns", Self::XMLNS)], |xml| {
             for page in self.pages {
                 xml.nest("url", &[], |xml| {
-                    xml.leaf("loc", &self.base.join(&page.permalink))?;
+                    xml.leaf("loc", &self.base.join(&page.permalink));
                     if let Some(date) = page.frontmatter.date {
                         // `time::Date` displays as an ISO-8601 calendar date,
                         // exactly the W3C format `lastmod` wants.
-                        xml.leaf("lastmod", &date.to_string())?;
+                        xml.leaf("lastmod", &date.to_string());
                     }
-                    Ok(())
-                })?;
+                });
             }
-            Ok(())
-        })?;
+        });
         xml.finish()
     }
 }

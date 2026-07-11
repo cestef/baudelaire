@@ -58,6 +58,12 @@ impl FsError {
             source,
         }
     }
+
+    /// The OS error kind of the underlying failure, so callers can special-case
+    /// one condition (e.g. a missing config file) without discarding the rest.
+    pub fn kind(&self) -> io::ErrorKind {
+        self.source.kind()
+    }
 }
 
 impl Diagnostic for FsError {

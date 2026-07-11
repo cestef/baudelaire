@@ -140,6 +140,17 @@ class Palette {
   }
 
   render() {
+    // A failed index load is its own state — "No results" would be a lie.
+    if (this.searcher?.failed) {
+      this.hits = [];
+      this.active = -1;
+      this.list.hidden = true;
+      this.list.innerHTML = "";
+      this.empty.hidden = false;
+      this.empty.textContent = "Search index failed to load.";
+      this.input.removeAttribute("aria-activedescendant");
+      return;
+    }
     const query = this.input.value.trim();
     this.hits = query && this.searcher ? this.searcher(query, { limit: this.limit }) : [];
     this.active = this.hits.length ? 0 : -1;

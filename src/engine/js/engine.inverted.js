@@ -11,16 +11,22 @@ const tokenize = (text) =>
 export async function createSearch(url = "/search.inverted.json") {
   let documents = [];
   let postings = {};
+  let failed = false;
   try {
-    const index = await fetch(url).then((response) => response.json());
+    const index = await fetch(url).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
     documents = index.documents || [];
     postings = index.postings || {};
-  } catch {
-    documents = [];
-    postings = {};
+  } catch (error) {
+    // Never silent: an unreachable or malformed index otherwise looks like a
+    // site with no results. The palette reads `search.failed` to say so.
+    failed = true;
+    console.warn(`baudelaire: search index ${url} failed to load:`, error);
   }
 
-  return function search(query, { limit = 12 } = {}) {
+  const search = function search(query, { limit = 12 } = {}) {
     const terms = tokenize(query);
     if (terms.length === 0) return [];
 
@@ -38,4 +44,6 @@ export async function createSearch(url = "/search.inverted.json") {
       .map(([id]) => documents[id])
       .filter(Boolean);
   };
+  search.failed = failed;
+  return search;
 }

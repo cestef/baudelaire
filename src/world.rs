@@ -158,7 +158,10 @@ impl GitInfo {
         Some(Self {
             hash,
             branch: git(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
-            tag: git(root, &["describe", "--tags", "--always"]),
+            // No `--always`: it falls back to a bare commit hash in a tagless
+            // repo, which would populate `git.tag` with a non-tag. An empty
+            // output (no tag reachable) becomes `None` instead.
+            tag: git(root, &["describe", "--tags"]),
             committed: git(root, &["log", "-1", "--format=%cI"]),
             dirty: git_dirty(root),
         })

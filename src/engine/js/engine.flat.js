@@ -9,13 +9,20 @@ const tokenize = (text) =>
 
 export async function createSearch(url = "/search.json") {
   let documents = [];
+  let failed = false;
   try {
-    documents = await fetch(url).then((response) => response.json());
-  } catch {
-    documents = [];
+    documents = await fetch(url).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
+  } catch (error) {
+    // Never silent: an unreachable or malformed index otherwise looks like a
+    // site with no results. The palette reads `search.failed` to say so.
+    failed = true;
+    console.warn(`baudelaire: search index ${url} failed to load:`, error);
   }
 
-  return function search(query, { limit = 12 } = {}) {
+  const search = function search(query, { limit = 12 } = {}) {
     const terms = tokenize(query);
     if (terms.length === 0) return [];
     const phrase = query.trim().toLowerCase();
@@ -49,4 +56,6 @@ export async function createSearch(url = "/search.json") {
 
     return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((hit) => hit.doc);
   };
+  search.failed = failed;
+  return search;
 }
