@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::cli::output::Report;
@@ -189,15 +190,23 @@ impl Cache {
             .iter()
             .map(|(page, html)| (Self::key(page), *html))
             .collect();
-        for (key, entry) in &self.next.pages {
-            let path = self.object(&entry.blob);
-            if path.exists() {
-                continue;
-            }
-            if let Some(contents) = html.get(key.as_path()) {
-                Self::write_object(&path, contents)?;
-            }
-        }
+        // Collect the blobs that actually need writing (new content only), then
+        // write them in parallel — independent content-addressed files.
+        let pending: Vec<(PathBuf, &str)> = self
+            .next
+            .pages
+            .iter()
+            .filter_map(|(key, entry)| {
+                let path = self.object(&entry.blob);
+                if path.exists() {
+                    return None;
+                }
+                html.get(key.as_path()).map(|contents| (path, *contents))
+            })
+            .collect();
+        pending
+            .par_iter()
+            .try_for_each(|(path, contents)| Self::write_object(path, contents))?;
         let json = serde_json::to_vec_pretty(&self.next)
             .map_err(|e| SerializeError::new(Artifact::Cache, e))?;
         Self::write_atomic(&self.dir.join(MANIFEST), json.as_slice())?;

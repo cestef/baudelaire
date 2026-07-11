@@ -154,12 +154,19 @@ impl Engine {
 
         for r in &rendered {
             cache.record(r.page, r.fingerprint.clone(), &r.html, &r.deps);
-            fs::write_all(&r.page.output, &r.html)?;
         }
-        for (page, html) in &cached {
+        for (page, _) in &cached {
             report.page(self.relative(page), PageStatus::Cached)?;
-            fs::write_all(&page.output, html)?;
         }
+        // Write every page's HTML in parallel — independent files, no shared
+        // state — so a page-count-heavy site isn't bottlenecked on serial I/O
+        // after the parallel compile.
+        let writes: Vec<(&Path, &str)> = rendered
+            .iter()
+            .map(|r| (r.page.output.as_path(), r.html.as_str()))
+            .chain(cached.iter().map(|(page, html)| (page.output.as_path(), html.as_str())))
+            .collect();
+        writes.par_iter().try_for_each(|(path, html)| fs::write_all(path, html))?;
 
         // Pair every page (freshly rendered and cache-served alike) with its
         // final HTML. Shared by the cache (to stage HTML blobs) and the
