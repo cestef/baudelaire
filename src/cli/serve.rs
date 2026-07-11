@@ -1,8 +1,10 @@
 //! Dev server: serve the built site, watch for changes, rebuild and live-reload.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -276,15 +278,26 @@ impl Handler {
 /// client opens a Server-Sent Events stream at [`Live::ENDPOINT`]. Each
 /// successful rebuild calls [`Live::bump`], pushing a reload to every open
 /// stream.
+///
+/// Streams are keyed by id so a closed connection is reaped promptly: the writer
+/// thread wakes every [`Live::HEARTBEAT`] to send an SSE comment, notices the
+/// dead socket on the failed write, and removes its own entry — no leak waiting
+/// on the next rebuild.
 #[derive(Clone, Default)]
 struct Live {
-    /// One sender per open SSE connection.
-    streams: Arc<Mutex<Vec<flume::Sender<()>>>>,
+    /// One sender per open SSE connection, keyed for self-removal on close.
+    streams: Arc<Mutex<HashMap<u64, flume::Sender<()>>>>,
+    /// Monotonic source of stream ids.
+    next_id: Arc<AtomicU64>,
 }
 
 impl Live {
     /// Endpoint the injected client connects to for the reload event stream.
     const ENDPOINT: &'static str = "/__baudelaire/live";
+
+    /// How often an idle stream emits a keep-alive comment. Doubles as the upper
+    /// bound on how long a closed connection lingers before it is reaped.
+    const HEARTBEAT: Duration = Duration::from_secs(10);
 
     /// Client script appended to served HTML; reloads on each pushed event.
     const SCRIPT: &'static str = "\n<script>\n\
@@ -300,26 +313,37 @@ impl Live {
         \r\n\
         : ok\n\n";
 
-    /// Advance every open stream, dropping any that have closed.
+    /// Advance every open stream, dropping any whose client has gone.
     fn bump(&self) {
-        self.streams.lock().retain(|tx| tx.send(()).is_ok());
+        self.streams.lock().retain(|_, tx| tx.send(()).is_ok());
     }
 
     /// Open an SSE stream for `req` on its own thread, writing directly to the
-    /// socket so each event flushes the instant a rebuild finishes.
+    /// socket so each event flushes the instant a rebuild finishes. The thread
+    /// removes its own entry when it ends, so a closed tab frees its slot within
+    /// one [`Live::HEARTBEAT`] instead of lingering until the next rebuild.
     fn serve(&self, req: Request) {
         let (tx, signals) = flume::unbounded();
-        self.streams.lock().push(tx);
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        self.streams.lock().insert(id, tx);
+        let streams = Arc::clone(&self.streams);
         std::thread::spawn(move || {
             let mut socket = req.into_writer();
-            if socket.write_all(Self::HEAD.as_bytes()).is_err() || socket.flush().is_err() {
-                return;
-            }
-            while signals.recv().is_ok() {
-                if socket.write_all(b"data: reload\n\n").is_err() || socket.flush().is_err() {
-                    break;
+            if socket.write_all(Self::HEAD.as_bytes()).is_ok() && socket.flush().is_ok() {
+                loop {
+                    // A rebuild pushes `reload`; an idle timeout emits a comment
+                    // keep-alive whose failed write reveals a closed socket.
+                    let payload = match signals.recv_timeout(Self::HEARTBEAT) {
+                        Ok(()) => "data: reload\n\n",
+                        Err(flume::RecvTimeoutError::Timeout) => ": ping\n\n",
+                        Err(flume::RecvTimeoutError::Disconnected) => break,
+                    };
+                    if socket.write_all(payload.as_bytes()).is_err() || socket.flush().is_err() {
+                        break;
+                    }
                 }
             }
+            streams.lock().remove(&id);
         });
     }
 }
@@ -458,5 +482,26 @@ mod tests {
         };
         dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
         assert_eq!(dev.report.warnings(), 0);
+    }
+
+    /// A stream whose client is gone is reaped on the next bump, rather than
+    /// accumulating in the registry.
+    #[test]
+    fn bump_reaps_streams_whose_client_disconnected() {
+        let live = Live::default();
+        let (live_tx, live_rx) = flume::unbounded();
+        let (dead_tx, dead_rx) = flume::unbounded::<()>();
+        live.streams.lock().insert(0, live_tx);
+        live.streams.lock().insert(1, dead_tx);
+        // The dead stream's receiver (its writer thread) is gone.
+        drop(dead_rx);
+
+        live.bump();
+
+        let streams = live.streams.lock();
+        assert!(streams.contains_key(&0), "live stream kept");
+        assert!(!streams.contains_key(&1), "disconnected stream reaped");
+        // The surviving stream received the reload signal.
+        assert!(live_rx.try_recv().is_ok());
     }
 }
