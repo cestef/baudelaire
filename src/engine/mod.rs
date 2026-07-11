@@ -120,15 +120,17 @@ impl Engine {
         let mut cache = Cache::load(&self.config, self.project.context(), &render, report)?;
 
         // Split pages into those the cache can serve verbatim and those needing
-        // a fresh compile. `prepare` builds each page's source + fingerprint
-        // exactly once; stale pages carry theirs into the compile.
+        // a fresh compile. `prepare` produces each page's text + fingerprint
+        // without parsing it — the expensive parse into a typst `Source` is
+        // deferred to `compile`, so a cache hit never pays to parse a page it
+        // will not render.
         let mut cached: Vec<(&Page, String)> = Vec::new();
-        let mut stale: Vec<(&Page, Result<(Source, Hash)>)> = Vec::new();
+        let mut stale: Vec<(&Page, Result<(FileId, String, Hash)>)> = Vec::new();
         for page in &pages {
             match self.prepare(page) {
-                Ok((source, fingerprint)) => match cache.reuse(page, &fingerprint) {
+                Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
                     Some(html) => cached.push((page, html)),
-                    None => stale.push((page, Ok((source, fingerprint)))),
+                    None => stale.push((page, Ok((id, text, fingerprint)))),
                 },
                 Err(e) => stale.push((page, Err(e))),
             }
@@ -138,7 +140,7 @@ impl Engine {
             .into_par_iter()
             .map(|(page, prepared)| {
                 let outcome = prepared
-                    .and_then(|(source, fp)| self.compile(page, source, fp, &renderer));
+                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
                 (page, outcome)
             })
             .collect();
@@ -200,7 +202,7 @@ impl Engine {
             .map(|page| {
                 let outcome = self
                     .prepare(page)
-                    .and_then(|(source, fp)| self.compile(page, source, fp, &renderer));
+                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
                 (page, outcome)
             })
             .collect();
@@ -303,10 +305,19 @@ impl Engine {
     /// content fingerprint — a hash of the exact text typst compiles, which
     /// covers generated pages whose sources never touch disk. Built once and
     /// shared by the cache check and the compile.
-    fn prepare(&self, page: &Page) -> Result<(Source, Hash)> {
-        let source = self.source_for(page)?;
-        let fingerprint = Hash::of_bytes(source.text().as_bytes());
-        Ok((source, fingerprint))
+    fn prepare(&self, page: &Page) -> Result<(FileId, String, Hash)> {
+        let rooted = self.project.virtualize(&page.source)?;
+        let id = FileId::new(rooted);
+        let text = match &page.template {
+            Some(template) => {
+                Layout::new(&self.config.templates, template, &page.data, &page.body).to_string()
+            }
+            None => page.body.clone(),
+        };
+        // Hash the exact text typst will compile — parsing it into a `Source`
+        // (the costly step) is deferred to `compile`, run only for stale pages.
+        let fingerprint = Hash::of_bytes(text.as_bytes());
+        Ok((id, text, fingerprint))
     }
 
     /// Compile a single page to rendered HTML, applying render post-processing
@@ -315,10 +326,13 @@ impl Engine {
     fn compile<'a>(
         &self,
         page: &'a Page,
-        source: Source,
+        id: FileId,
+        text: String,
         fingerprint: Hash,
         renderer: &Renderer,
     ) -> Result<Rendered<'a>> {
+        // Parse only now, for a page that is actually being (re)compiled.
+        let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
         let mut doc = compile::<HtmlDocument>(&world).output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
@@ -362,21 +376,6 @@ impl Engine {
             report.item(format_args!("`{}` in {}", b.target, b.page))?;
         }
         Ok(())
-    }
-
-    /// The source typst compiles for a page: its body, or — when the page
-    /// selects a layout — a synthetic module that binds the body to the
-    /// template.
-    fn source_for(&self, page: &Page) -> Result<Source> {
-        let rooted = self.project.virtualize(&page.source)?;
-        let id = FileId::new(rooted);
-        let text = match &page.template {
-            Some(template) => {
-                Layout::new(&self.config.templates, template, &page.data, &page.body).to_string()
-            }
-            None => page.body.clone(),
-        };
-        Ok(Source::new(id, text))
     }
 
     fn html_options(&self) -> HtmlOptions {
