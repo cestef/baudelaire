@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'release tag (e.g. v0.1.0)'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: linux-amd64
+            target: x86_64-unknown-linux-gnu
+          - name: linux-aarch64
+            runner: linux-arm64
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: release-${{ matrix.target }}-
+
+      - name: rust toolchain
+        shell: bash
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain none --profile minimal
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add ${{ matrix.target }}
+
+      # Each matrix row runs on its native-arch runner, so no cross-linking is
+      # needed. Tar the binary and emit a matching checksum.
+      - name: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --target ${{ matrix.target }}
+          out="baudelaire-${{ matrix.name }}.tar.gz"
+          tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
+          sha256sum "$out" > "$out.sha256"
+          ls -la "$out" "$out.sha256"
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: baudelaire-${{ matrix.name }}
+          path: |
+            baudelaire-${{ matrix.name }}.tar.gz
+            baudelaire-${{ matrix.name }}.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: linux-any
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          path: dist
+
+      - name: flatten artifacts
+        run: |
+          mkdir -p release
+          find dist -mindepth 2 -type f -exec mv -t release {} +
+          ls -la release
+
+      - name: release notes
+        run: |
+          set -euo pipefail
+          bin_size() {
+            local tarball="release/$1"
+            [ -f "$tarball" ] || { echo "?"; return; }
+            local bytes
+            bytes=$(tar -tzvf "$tarball" 2>/dev/null \
+              | awk '/[[:space:]]baudelaire$/ {print $3; exit}')
+            [ -n "$bytes" ] || { echo "?"; return; }
+            awk -v b="$bytes" 'BEGIN { printf "%.1f MB\n", b/1024/1024 }'
+          }
+          SIZE_X86=$(bin_size "baudelaire-linux-x86_64.tar.gz")
+          SIZE_ARM=$(bin_size "baudelaire-linux-aarch64.tar.gz")
+
+          cat > release-notes.md <<EOF
+          ## Install
+
+          Grab a tarball below, extract, and put \`baudelaire\` on your \`PATH\`:
+
+          \`\`\`bash
+          tar -xzf baudelaire-linux-x86_64.tar.gz
+          install -m 0755 baudelaire ~/.local/bin/
+          \`\`\`
+
+          ## Builds
+
+          | Artifact | Size |
+          |----------|------|
+          | \`baudelaire-linux-x86_64\` | ${SIZE_X86} |
+          | \`baudelaire-linux-aarch64\` | ${SIZE_ARM} |
+
+          Each tarball ships with a matching \`.sha256\`. Verify with:
+
+          \`\`\`bash
+          sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256
+          \`\`\`
+          EOF
+          cat release-notes.md
+
+      - uses: https://code.forgejo.org/actions/forgejo-release@v2.11.1
+        with:
+          direction: upload
+          url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          tag: ${{ inputs.tag || github.ref_name }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          release-dir: release
+          release-notes-file: release-notes.md
+          override: true

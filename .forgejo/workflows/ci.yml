@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Deps are built with `--cap-lints allow`, so this only makes the workspace
+  # crates (and their tests/benches) strict — the same bar as local `clippy`.
+  RUSTFLAGS: -D warnings
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    runs-on: linux-any
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: rust toolchain
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain none --profile minimal
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup show active-toolchain || rustup toolchain install
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: install nextest
+        run: |
+          if ! command -v cargo-nextest >/dev/null; then
+            case "$(uname -m)" in
+              aarch64|arm64) slug=linux-arm-musl ;;
+              x86_64|amd64)  slug=linux-musl ;;
+              *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
+            esac
+            mkdir -p ~/.cargo/bin
+            curl -fsSL "https://get.nexte.st/latest/$slug" \
+              | tar -xz -C ~/.cargo/bin cargo-nextest
+          fi
+
+      # The serve/embed end-to-end tests shell out to `curl` and `base64`.
+      - name: test prerequisites
+        run: |
+          command -v curl >/dev/null || { echo "curl is required"; exit 1; }
+          command -v base64 >/dev/null || { echo "base64 is required"; exit 1; }
+
+      - name: nextest
+        run: cargo nextest run --workspace --no-tests warn

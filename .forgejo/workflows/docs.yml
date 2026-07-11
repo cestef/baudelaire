@@ -1,0 +1,58 @@
+name: Docs
+
+# The documentation site lives in `www/` and is built by baudelaire itself —
+# the site is its own dogfood. Build the binary, run it over `www/`, deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "www/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".forgejo/workflows/docs.yml"
+  workflow_dispatch:
+
+jobs:
+  ship:
+    runs-on: linux-any
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: cargo-docs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-docs-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: rust toolchain
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain none --profile minimal
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup show active-toolchain || rustup toolchain install
+
+      - name: build baudelaire
+        run: cargo build --release
+
+      - name: build docs site
+        working-directory: www
+        run: ../target/release/baudelaire build
+
+      - uses: https://codeberg.org/cstef/bloom/deploy@main
+        with:
+          path: www/public
+          service: baudelaire
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-host-key: ${{ secrets.DEPLOY_HOST_KEY }}
+          label: ${{ github.ref_name }}
