@@ -10,7 +10,7 @@ mod redirect;
 mod robots;
 mod search;
 mod sitemap;
-mod text;
+pub mod text;
 mod xml;
 
 use std::path::Path;

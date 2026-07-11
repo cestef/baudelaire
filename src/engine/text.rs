@@ -36,10 +36,10 @@ impl std::fmt::Display for Escaped<'_> {
     }
 }
 
-pub(super) struct Text;
+pub struct Text;
 
 impl Text {
-    pub(super) fn extract(html: &str) -> String {
+    pub fn extract(html: &str) -> String {
         Self::scan(Self::main(html))
     }
 
