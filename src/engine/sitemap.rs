@@ -1,7 +1,7 @@
 //! `sitemap.xml` generation.
 
 use super::process::{Emit, Processor, Site};
-use crate::config::Config;
+use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::engine::xml::Xml;
 use crate::error::Result;
@@ -10,6 +10,11 @@ use crate::error::Result;
 /// sitemaps protocol mandates.
 pub(super) struct SiteMap;
 
+impl SiteMap {
+    /// The output file name — robots.txt references it too.
+    pub(super) const FILE: &'static str = "sitemap.xml";
+}
+
 impl Processor for SiteMap {
 
     fn enabled(&self, config: &Config) -> bool {
@@ -17,15 +22,14 @@ impl Processor for SiteMap {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let Some(base) = site.base_url() else {
-            out.warn(format_args!("sitemap enabled but no `url` set — skipped"))?;
+        let Some(base) = site.base("sitemap", out)? else {
             return Ok(());
         };
         out.file(
-            &site.config.dist.join("sitemap.xml"),
-            &Sitemap::new(base, site.pages).render()?,
+            &site.config.dist.join(Self::FILE),
+            &Sitemap::new(&base, site.pages).render()?,
         )?;
-        out.note(format_args!("wrote sitemap.xml"))
+        out.note(format_args!("wrote {}", Self::FILE))
     }
 }
 
@@ -34,18 +38,15 @@ impl Processor for SiteMap {
 ///
 /// [sitemaps.org]: https://www.sitemaps.org/protocol.html
 pub(super) struct Sitemap<'a> {
-    base: &'a str,
+    base: &'a BaseUrl,
     pages: &'a [Page],
 }
 
 impl<'a> Sitemap<'a> {
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
-    pub(super) fn new(base: &'a str, pages: &'a [Page]) -> Self {
-        Self {
-            base: base.trim_end_matches('/'),
-            pages,
-        }
+    pub(super) fn new(base: &'a BaseUrl, pages: &'a [Page]) -> Self {
+        Self { base, pages }
     }
 
     /// The serialized XML.
@@ -54,15 +55,11 @@ impl<'a> Sitemap<'a> {
         xml.nest("urlset", &[("xmlns", Self::XMLNS)], |xml| {
             for page in self.pages {
                 xml.nest("url", &[], |xml| {
-                    xml.leaf("loc", &format!("{}{}", self.base, page.permalink))?;
+                    xml.leaf("loc", &self.base.join(&page.permalink))?;
                     if let Some(date) = page.frontmatter.date {
-                        let lastmod = format!(
-                            "{:04}-{:02}-{:02}",
-                            date.year(),
-                            u8::from(date.month()),
-                            date.day()
-                        );
-                        xml.leaf("lastmod", &lastmod)?;
+                        // `time::Date` displays as an ISO-8601 calendar date,
+                        // exactly the W3C format `lastmod` wants.
+                        xml.leaf("lastmod", &date.to_string())?;
                     }
                     Ok(())
                 })?;

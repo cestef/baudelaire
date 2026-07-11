@@ -25,6 +25,36 @@ pub fn write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
     std::fs::write(path, contents).map_err(|e| FsError::new(Op::Write, path, e).into())
 }
 
+/// Write bytes to a file, creating any missing parent directories first — the
+/// one shared "emit an output file" path.
+pub fn write_all(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent)?;
+    }
+    write(path, contents)
+}
+
+/// Resolve a path to its canonical, absolute form.
+pub fn canonicalize(path: impl AsRef<Path>) -> Result<PathBuf> {
+    let path = path.as_ref();
+    std::fs::canonicalize(path).map_err(|e| FsError::new(Op::Canonicalize, path, e).into())
+}
+
+/// Canonicalize best-effort: the canonical path when resolvable, else the
+/// lexical path unchanged. For sites where an unresolvable path must not fail
+/// (dependency capture, display, watch filters).
+pub fn canonical(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Remove a file.
+pub fn remove_file(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
+    std::fs::remove_file(path).map_err(|e| FsError::new(Op::Remove, path, e).into())
+}
+
 /// Recursively create a directory and all its parents.
 pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();

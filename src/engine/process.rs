@@ -9,7 +9,7 @@ use std::fmt;
 use std::path::Path;
 
 use crate::cli::output::Report;
-use crate::config::Config;
+use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::Result;
 
@@ -30,9 +30,14 @@ pub(super) struct Site<'a> {
 }
 
 impl Site<'_> {
-    /// Canonical base URL, required by URL-absolute processors (sitemap, feeds).
-    pub(super) fn base_url(&self) -> Option<&str> {
-        self.config.url.as_deref()
+    /// The base URL for a URL-requiring processor — the one warn-and-skip
+    /// policy for a missing `url`, naming the `feature` that needs it.
+    pub(super) fn base(&self, feature: &str, out: &mut dyn Emit) -> Result<Option<BaseUrl>> {
+        let base = self.config.base();
+        if base.is_none() {
+            out.warn(format_args!("{feature} enabled but no `url` set — skipped"))?;
+        }
+        Ok(base)
     }
 }
 
@@ -111,10 +116,7 @@ impl<'a> Emitter<'a> {
 
 impl Emit for Emitter<'_> {
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            crate::fs::create_dir_all(parent)?;
-        }
-        crate::fs::write(path, contents)?;
+        crate::fs::write_all(path, contents)?;
         self.written += 1;
         Ok(())
     }

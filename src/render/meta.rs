@@ -119,8 +119,7 @@ impl Card<'_> {
 
     /// The page's canonical absolute URL, if a base `url` is configured.
     fn url(&self) -> Option<String> {
-        let base = self.config.url.as_deref()?;
-        Some(format!("{}{}", base.trim_end_matches('/'), self.page.permalink))
+        Some(self.config.base()?.join(&self.page.permalink))
     }
 
     /// Resolve a root-relative asset reference to its fingerprinted URL, then
@@ -128,8 +127,8 @@ impl Card<'_> {
     /// value, or one with no base URL, is left as authored (bar fingerprinting).
     fn absolute(&self, src: &str) -> String {
         let src = self.assets.resolve(src).unwrap_or_else(|| src.to_owned());
-        match self.config.url.as_deref() {
-            Some(base) if src.starts_with('/') => format!("{}{src}", base.trim_end_matches('/')),
+        match self.config.base() {
+            Some(base) if src.starts_with('/') => base.join(&src),
             _ => src,
         }
     }

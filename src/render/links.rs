@@ -29,7 +29,7 @@ impl LinkMap {
     pub fn new(pages: &[Page]) -> Self {
         let by_source = pages
             .iter()
-            .filter_map(|p| Some((p.source.canonicalize().ok()?, p.permalink.clone())))
+            .filter_map(|p| Some((crate::fs::canonicalize(&p.source).ok()?, p.permalink.clone())))
             .collect();
         Self { by_source }
     }
@@ -40,18 +40,16 @@ impl LinkMap {
         if Self::is_external(raw) {
             return Link::Passthrough;
         }
-        let (path, tail) = Self::split_tail(raw);
-        if !path.ends_with(".typ") {
+        let split = super::Tail::of(raw);
+        if !split.path.ends_with(".typ") {
             return Link::Passthrough;
         }
         let base = from.parent().unwrap_or_else(|| Path::new("."));
-        match base
-            .join(path)
-            .canonicalize()
+        match crate::fs::canonicalize(base.join(split.path))
             .ok()
             .and_then(|canon| self.by_source.get(&canon))
         {
-            Some(permalink) => Link::Resolved(format!("{permalink}{tail}")),
+            Some(permalink) => Link::Resolved(format!("{permalink}{}", split.tail)),
             None => Link::Broken,
         }
     }
@@ -65,13 +63,6 @@ impl LinkMap {
             || raw.contains("://")
     }
 
-    /// Split a link into its path and its trailing `#fragment` / `?query`.
-    fn split_tail(raw: &str) -> (&str, &str) {
-        match raw.find(['#', '?']) {
-            Some(i) => raw.split_at(i),
-            None => (raw, ""),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -100,9 +91,14 @@ mod tests {
 
     #[test]
     fn splits_fragment_and_query() {
-        assert_eq!(LinkMap::split_tail("b.typ"), ("b.typ", ""));
-        assert_eq!(LinkMap::split_tail("b.typ#s"), ("b.typ", "#s"));
-        assert_eq!(LinkMap::split_tail("b.typ?x=1"), ("b.typ", "?x=1"));
+        for (raw, path, tail) in [
+            ("b.typ", "b.typ", ""),
+            ("b.typ#s", "b.typ", "#s"),
+            ("b.typ?x=1", "b.typ", "?x=1"),
+        ] {
+            let split = crate::render::Tail::of(raw);
+            assert_eq!((split.path, split.tail), (path, tail));
+        }
     }
 
     #[test]

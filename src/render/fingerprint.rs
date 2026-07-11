@@ -6,14 +6,18 @@
 //! `src` that names an original asset to its hashed URL, so caches can serve
 //! assets forever and bust automatically on change.
 
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr};
+use typst_html::{HtmlDocument, attr};
 
 use crate::config::Config;
 
-use super::AssetMap;
-use super::transform::{Cx, Transform};
+use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that swaps asset references for their fingerprinted URLs.
+///
+/// Replaces mapped `href`/`src`/`content` values with their fingerprinted URLs.
+/// `content` covers asset references in `<meta>` tags (a social `og:image`).
+/// Anything not in the map (external URLs, already-inlined `data:` URIs,
+/// unmanaged paths, plain text) is left untouched.
 pub(super) struct Fingerprint;
 
 impl Transform for Fingerprint {
@@ -22,31 +26,10 @@ impl Transform for Fingerprint {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        Rewriter { assets: cx.assets }.visit(doc.root_mut());
-    }
-}
-
-/// Walks the element tree replacing mapped `href`/`src`/`content` values with
-/// their fingerprinted URLs. `content` covers asset references in `<meta>` tags
-/// (a social `og:image`). Anything not in the map (external URLs, already-inlined
-/// `data:` URIs, unmanaged paths, plain text) is left untouched.
-struct Rewriter<'a> {
-    assets: &'a AssetMap,
-}
-
-impl Rewriter<'_> {
-    fn visit(&self, element: &mut HtmlElement) {
-        for key in [attr::href, attr::src, attr::content] {
-            if let Some(value) = element.attrs.get_mut(key)
-                && let Some(url) = self.assets.resolve(value)
-            {
-                *value = url.into();
-            }
-        }
-        for child in element.children.make_mut() {
-            if let HtmlNode::Element(child) = child {
-                self.visit(child);
-            }
-        }
+        doc.root_mut().walk(&mut |element| {
+            element.rewrite(&[attr::href, attr::src, attr::content], |value| {
+                cx.assets.resolve(value)
+            });
+        });
     }
 }

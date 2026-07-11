@@ -165,11 +165,7 @@ impl<'a> Assets<'a> {
 
     /// Write processed bytes to `rel` under the destination directory.
     fn write(&self, rel: &Path, bytes: &[u8]) -> Result<()> {
-        let path = self.dst.join(rel);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&path, bytes)
+        fs::write_all(self.dst.join(rel), bytes)
     }
 
     /// The relative output path for an asset, splicing a content hash into the
@@ -250,7 +246,7 @@ impl Js {
             .build()
             .expect("build tokio runtime");
         // Absolute so rolldown resolves entries regardless of its `cwd`.
-        let cwd = std::fs::canonicalize(&config.assets).unwrap_or_else(|_| config.assets.clone());
+        let cwd = fs::canonical(&config.assets);
         Self {
             runtime,
             cwd,
@@ -261,7 +257,7 @@ impl Js {
 
     /// Bundle a single entry to its output code.
     fn bundle(&self, entry: &Path) -> Result<Vec<u8>> {
-        let import = std::fs::canonicalize(entry).unwrap_or_else(|_| entry.to_path_buf());
+        let import = fs::canonical(entry);
         let options = BundlerOptions {
             input: Some(vec![InputItem {
                 name: None,

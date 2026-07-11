@@ -222,10 +222,7 @@ fn git_dirty(root: &Path) -> bool {
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.
     pub fn new(config: &Config, mode: Mode) -> Result<Self> {
-        let root = config
-            .content
-            .canonicalize()
-            .unwrap_or_else(|_| config.content.clone());
+        let root = crate::fs::canonical(&config.content);
         let project_root = root
             .parent()
             .map(Path::to_path_buf)
@@ -294,7 +291,7 @@ impl Project {
 
     /// Virtualize a filesystem path under the project root.
     pub fn virtualize(&self, path: &Path) -> Result<RootedPath> {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canon = crate::fs::canonical(path);
         let vpath = VirtualPath::virtualize(self.root(), &canon)?;
         Ok(RootedPath::new(VirtualRoot::Project, vpath))
     }
@@ -314,7 +311,7 @@ impl Project {
             .into_iter()
             .filter(|id| *id != main)
             .filter_map(|id| self.path_of(id))
-            .filter_map(|p| p.canonicalize().ok())
+            .filter_map(|p| crate::fs::canonicalize(p).ok())
             .collect();
         Deps::from_paths(files)
     }

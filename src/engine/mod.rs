@@ -110,30 +110,38 @@ impl Engine {
         let mut cache = Cache::load(&self.config, self.project.context(), &assets_hash);
 
         // Split pages into those the cache can serve verbatim and those needing
-        // a fresh compile.
+        // a fresh compile. `prepare` builds each page's source + fingerprint
+        // exactly once; stale pages carry theirs into the compile.
         let mut cached: Vec<(&Page, String)> = Vec::new();
-        let mut stale: Vec<&Page> = Vec::new();
+        let mut stale: Vec<(&Page, Result<(Source, Hash)>)> = Vec::new();
         for page in &pages {
-            match self.fingerprint(page).and_then(|fp| cache.reuse(page, &fp)) {
-                Some(html) => cached.push((page, html)),
-                None => stale.push(page),
+            match self.prepare(page) {
+                Ok((source, fingerprint)) => match cache.reuse(page, &fingerprint) {
+                    Some(html) => cached.push((page, html)),
+                    None => stale.push((page, Ok((source, fingerprint)))),
+                },
+                Err(e) => stale.push((page, Err(e))),
             }
         }
 
         let outcomes: Vec<(&Page, Result<Rendered>)> = stale
-            .par_iter()
-            .map(|page| (*page, self.compile(page, &renderer)))
+            .into_par_iter()
+            .map(|(page, prepared)| {
+                let outcome = prepared
+                    .and_then(|(source, fp)| self.compile(page, source, fp, &renderer));
+                (page, outcome)
+            })
             .collect();
         let rendered = self.collect(outcomes, report)?;
         self.check_links(&rendered, report)?;
 
         for r in &rendered {
-            cache.record(&r.page, r.fingerprint.clone(), &r.html, &r.deps);
-            self.write(&r.page.output, &r.html)?;
+            cache.record(r.page, r.fingerprint.clone(), &r.html, &r.deps);
+            fs::write_all(&r.page.output, &r.html)?;
         }
         for (page, html) in &cached {
             report.page(self.relative(page), PageStatus::Cached)?;
-            self.write(&page.output, html)?;
+            fs::write_all(&page.output, html)?;
         }
 
         // Pair every page (freshly rendered and cache-served alike) with its
@@ -141,7 +149,7 @@ impl Engine {
         // post-build processors (which derive from page text).
         let outputs: Vec<(&Page, &str)> = rendered
             .iter()
-            .map(|r| (&r.page, r.html.as_str()))
+            .map(|r| (r.page, r.html.as_str()))
             .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
             .collect();
         cache.save(&outputs)?;
@@ -179,7 +187,12 @@ impl Engine {
         let renderer = Renderer::new(&pages, AssetMap::default());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
-            .map(|page| (page, self.compile(page, &renderer)))
+            .map(|page| {
+                let outcome = self
+                    .prepare(page)
+                    .and_then(|(source, fp)| self.compile(page, source, fp, &renderer));
+                (page, outcome)
+            })
             .collect();
         let rendered = self.collect(outcomes, report)?;
         self.check_links(&rendered, report)?;
@@ -201,11 +214,11 @@ impl Engine {
 
     /// Report each compile outcome, returning the rendered pages or the first
     /// error after every failure has been reported.
-    fn collect(
+    fn collect<'a>(
         &self,
-        outcomes: Vec<(&Page, Result<Rendered>)>,
+        outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,
         report: &mut Report,
-    ) -> Result<Vec<Rendered>> {
+    ) -> Result<Vec<Rendered<'a>>> {
         let mut error = None;
         let mut rendered = Vec::new();
         for (page, outcome) in outcomes {
@@ -230,8 +243,7 @@ impl Engine {
     /// both discovered pages (content-relative) and generated pages (whose
     /// synthetic sources are canonical-absolute).
     fn relative(&self, page: &Page) -> String {
-        let canonical = self.config.content.canonicalize();
-        let canonical = canonical.as_deref().unwrap_or(&self.config.content);
+        let canonical = fs::canonical(&self.config.content);
         page.source
             .strip_prefix(canonical)
             .or_else(|_| page.source.strip_prefix(&self.config.content))
@@ -255,12 +267,26 @@ impl Engine {
         Ok(pages)
     }
 
+    /// The compile input for a page: its (possibly synthetic) source and its
+    /// content fingerprint — a hash of the exact text typst compiles, which
+    /// covers generated pages whose sources never touch disk. Built once and
+    /// shared by the cache check and the compile.
+    fn prepare(&self, page: &Page) -> Result<(Source, Hash)> {
+        let source = self.source_for(page)?;
+        let fingerprint = Hash::of_bytes(source.text().as_bytes());
+        Ok((source, fingerprint))
+    }
+
     /// Compile a single page to rendered HTML, applying render post-processing
     /// (link rewriting over the typed DOM) before serialization. Records the
     /// files typst read so the cache can invalidate the page precisely.
-    fn compile(&self, page: &Page, renderer: &Renderer) -> Result<Rendered> {
-        let source = self.source_for(page)?;
-        let fingerprint = Hash::of_bytes(source.text().as_bytes());
+    fn compile<'a>(
+        &self,
+        page: &'a Page,
+        source: Source,
+        fingerprint: Hash,
+        renderer: &Renderer,
+    ) -> Result<Rendered<'a>> {
         let world = Tracked::new(self.project.world_for(&source));
         let mut doc = compile::<HtmlDocument>(&world).output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
@@ -270,20 +296,12 @@ impl Engine {
             BaudelaireErrorKind::TypstHtml(self.diagnostics(errs, page, &source, world.inner()))
         })?;
         Ok(Rendered {
-            page: page.clone(),
+            page,
             fingerprint,
             html,
             deps: self.project.dependencies(&world),
             broken,
         })
-    }
-
-    /// Content fingerprint of a page: a hash of the exact text typst compiles
-    /// (real file body or synthetic layout/generated source). Unlike hashing the
-    /// source *path*, this fingerprints generated pages too — their sources never
-    /// touch disk. `None` only if the synthetic source can't be virtualized.
-    fn fingerprint(&self, page: &Page) -> Option<Hash> {
-        Some(Hash::of_bytes(self.source_for(page).ok()?.text().as_bytes()))
     }
 
     /// Report broken internal links found while compiling `rendered`. Under
@@ -295,7 +313,7 @@ impl Engine {
         for r in rendered {
             for target in &r.broken {
                 broken.push(Broken::new(
-                    self.relative(&r.page),
+                    self.relative(r.page),
                     target.clone(),
                     &r.page.source,
                 ));
@@ -307,11 +325,7 @@ impl Engine {
         if self.config.links.strict {
             return Err(BrokenLinks::new(broken).into());
         }
-        report.warn(format_args!(
-            "{} broken internal link{}",
-            broken.len(),
-            if broken.len() == 1 { "" } else { "s" }
-        ))?;
+        report.warn(format_args!("{}", Count::links(broken.len())))?;
         for b in &broken {
             report.item(format_args!("`{}` in {}", b.target, b.page))?;
         }
@@ -373,20 +387,12 @@ impl Engine {
             .collect()
     }
 
-    /// Write a page's HTML, creating parent directories. Errors propagate with
-    /// the offending path (previously they were silently discarded).
-    fn write(&self, out: &Path, html: &str) -> Result<()> {
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(out, html)
-    }
 }
 
 /// A compiled page ready to write, with the files its compilation depended on
 /// and the raw targets of any broken internal links it contained.
-struct Rendered {
-    page: Page,
+struct Rendered<'a> {
+    page: &'a Page,
     fingerprint: Hash,
     html: String,
     deps: Deps,

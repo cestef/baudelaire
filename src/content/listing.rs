@@ -131,10 +131,7 @@ impl Listing {
     pub fn into_page(self, config: &Config) -> Page {
         // Absolute so the world can virtualize it under the project root; the
         // file need not exist (real pages reach absolute paths via canonicalize).
-        let base = config
-            .content
-            .canonicalize()
-            .unwrap_or_else(|_| config.content.clone());
+        let base = crate::fs::canonical(&config.content);
         let source = base.join(&self.section).join(format!("{}.typ", self.slug));
         Page {
             id: PageId::new(&self.section, &self.slug),

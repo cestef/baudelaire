@@ -16,6 +16,25 @@ mod transform;
 pub use asset::AssetMap;
 pub use links::LinkMap;
 
+/// A raw `href`/`src` split at its `#fragment` / `?query` boundary — the one
+/// parsing rule for URL tails, shared by link and asset resolution.
+pub(crate) struct Tail<'a> {
+    /// The path portion, up to the first `#` or `?`.
+    pub path: &'a str,
+    /// The trailing `#fragment` / `?query`, empty when absent.
+    pub tail: &'a str,
+}
+
+impl<'a> Tail<'a> {
+    pub fn of(raw: &'a str) -> Self {
+        let (path, tail) = match raw.find(['#', '?']) {
+            Some(i) => raw.split_at(i),
+            None => (raw, ""),
+        };
+        Self { path, tail }
+    }
+}
+
 use typst_html::HtmlDocument;
 
 use crate::config::Config;

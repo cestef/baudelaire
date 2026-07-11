@@ -4,15 +4,15 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 
 ## Phase 0 — cruft
 
-- [ ] Delete dead `BaudelaireError` wrapper + `SourceAlreadySet` (`src/error/mod.rs:29-104`, ~70 lines, zero external refs; `main.rs` converts `BaudelaireErrorKind` straight to `miette::Report`)
-- [ ] Remove unused deps: `tracing`, `tracing-subscriber`, `insta`; check `time/serde` feature
-- [ ] Delete `TaxoKind` — parsed, hashed, tested, never read (`src/config/mod.rs:183`); `kind=tree` behaves as `list`
-- [ ] Delete `Frontmatter::list` (zero callers)
-- [ ] Remove empty `src/serve/`, `src/script/` dirs
-- [ ] Remove leftover `site/` scaffold at repo root (init test artifact, own .git/.jj)
-- [ ] Rewrite `AGENTS.md` — still says "Rhai orchestrates", points at deleted `PLAN.md`/`docs/research.md`
-- [ ] Fix stale docs/comments: `search-index.json` → real filenames (`src/engine/search.rs:100`, `src/config/mod.rs:255`); `meta.rs:64` fingerprint claim vs `fingerprint.rs:34`; `transform.rs:31` Cx.assets consumers; `parse.rs:93` vs `error/config.rs:83` contradictory miette-version comments; `scaffold.rs:79` "post.typ" → layout.typ
-- [ ] `serve.rs:305` debouncer stored as `Box<dyn Any>` — type is nameable, use it
+- [x] Delete dead `BaudelaireError` wrapper + `SourceAlreadySet` (`src/error/mod.rs:29-104`, ~70 lines, zero external refs; `main.rs` converts `BaudelaireErrorKind` straight to `miette::Report`)
+- [x] Remove unused deps: `tracing`, `tracing-subscriber`, `insta`; check `time/serde` feature
+- [x] Delete `TaxoKind` — parsed, hashed, tested, never read (`src/config/mod.rs:183`); `kind=tree` behaves as `list`
+- [x] Delete `Frontmatter::list` (zero callers)
+- [x] Remove empty `src/serve/`, `src/script/` dirs
+- [x] Remove leftover `site/` scaffold at repo root (init test artifact, own .git/.jj)
+- [x] Rewrite `AGENTS.md` — still says "Rhai orchestrates", points at deleted `PLAN.md`/`docs/research.md`
+- [x] Fix stale docs/comments: `search-index.json` → real filenames (`src/engine/search.rs:100`, `src/config/mod.rs:255`); `meta.rs:64` fingerprint claim vs `fingerprint.rs:34`; `transform.rs:31` Cx.assets consumers; `parse.rs:93` vs `error/config.rs:83` contradictory miette-version comments; `scaffold.rs:79` "post.typ" → layout.typ
+- [x] `serve.rs:305` debouncer stored as `Box<dyn Any>` — type is nameable, use it
 
 ## Phase 1 — shared infrastructure
 

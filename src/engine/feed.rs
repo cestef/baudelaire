@@ -3,7 +3,7 @@
 use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::process::{Emit, Processor, Site};
-use crate::config::{Config, FeedKind};
+use crate::config::{BaseUrl, Config, FeedKind};
 use crate::content::Page;
 use crate::engine::xml::Xml;
 use crate::error::Result;
@@ -19,8 +19,7 @@ impl Processor for Feeds {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let Some(base) = site.base_url() else {
-            out.warn(format_args!("feeds enabled but no `url` set — skipped"))?;
+        let Some(base) = site.base("feeds", out)? else {
             return Ok(());
         };
         let mut dated: Vec<&Page> = site
@@ -33,7 +32,7 @@ impl Processor for Feeds {
         if dated.is_empty() {
             return Ok(());
         }
-        let feed = Feed::new(base, site.config.label(), &dated);
+        let feed = Feed::new(&base, site.config.label(), &dated);
         for kind in &site.config.feed.formats {
             out.file(&site.config.dist.join(kind.file()), &feed.render(*kind)?)?;
             out.note(format_args!("wrote {}", kind.file()))?;
@@ -45,18 +44,14 @@ impl Processor for Feeds {
 /// Renders a feed of the given items (already selected, newest-first) with
 /// absolute links under `base`.
 pub(super) struct Feed<'a> {
-    base: &'a str,
+    base: &'a BaseUrl,
     title: &'a str,
     items: &'a [&'a Page],
 }
 
 impl<'a> Feed<'a> {
-    pub(super) fn new(base: &'a str, title: &'a str, items: &'a [&'a Page]) -> Self {
-        Self {
-            base: base.trim_end_matches('/'),
-            title,
-            items,
-        }
+    pub(super) fn new(base: &'a BaseUrl, title: &'a str, items: &'a [&'a Page]) -> Self {
+        Self { base, title, items }
     }
 
     /// Serialize to XML in the requested format.
@@ -70,11 +65,11 @@ impl<'a> Feed<'a> {
     }
 
     fn home(&self) -> String {
-        format!("{}/", self.base)
+        self.base.home()
     }
 
     fn link(&self, page: &Page) -> String {
-        format!("{}{}", self.base, page.permalink)
+        self.base.join(&page.permalink)
     }
 
     fn rss(&self, xml: &mut Xml) -> std::io::Result<()> {

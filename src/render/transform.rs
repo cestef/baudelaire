@@ -6,7 +6,7 @@
 //! of the DOM pipeline: a new pass is one `impl Transform` plus one line in that
 //! list, each gated on its own config. Even core link resolution is a transform.
 
-use typst_html::HtmlDocument;
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::config::Config;
 use crate::content::Page;
@@ -30,6 +30,37 @@ pub(super) struct Cx<'a> {
     /// Raw targets of internal `.typ` links with no matching page, collected for
     /// link checking.
     pub broken: Vec<String>,
+}
+
+/// The one shared walker over the typed DOM, so every transform visits
+/// elements the same way instead of hand-rolling its own recursion.
+pub(super) trait ElementExt {
+    /// Visit this element, then every descendant element, depth-first.
+    fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
+    /// Rewrite each attribute among `keys` that is present: `f` returns the
+    /// replacement value, or `None` to leave it as authored.
+    fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
+}
+
+impl ElementExt for HtmlElement {
+    fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement)) {
+        f(self);
+        for child in self.children.make_mut() {
+            if let HtmlNode::Element(child) = child {
+                child.walk(f);
+            }
+        }
+    }
+
+    fn rewrite(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
+        for &key in keys {
+            if let Some(value) = self.attrs.get_mut(key)
+                && let Some(new) = f(value)
+            {
+                *value = new.into();
+            }
+        }
+    }
 }
 
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning

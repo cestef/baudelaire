@@ -7,11 +7,12 @@
 
 use std::path::Path;
 
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr};
+use typst_html::{HtmlDocument, attr};
 
 use crate::config::Config;
+use crate::mime::Mime;
 
-use super::transform::{Cx, Transform};
+use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
 pub(super) struct Embed;
@@ -22,12 +23,14 @@ impl Transform for Embed {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        Inliner::new(cx.config).visit(doc.root_mut());
+        let inliner = Inliner::new(cx.config);
+        doc.root_mut().walk(&mut |element| {
+            element.rewrite(&[attr::href, attr::src], |value| inliner.inline(value));
+        });
     }
 }
 
-/// Walks the element tree replacing resolvable local `href`/`src` values with
-/// `data:` URIs.
+/// Resolves local `href`/`src` values to `data:` URIs.
 struct Inliner<'a> {
     assets: &'a Path,
     /// The leading URL segment that maps to the assets directory, e.g.
@@ -48,21 +51,6 @@ impl<'a> Inliner<'a> {
         }
     }
 
-    fn visit(&self, element: &mut HtmlElement) {
-        for key in [attr::href, attr::src] {
-            if let Some(value) = element.attrs.get_mut(key)
-                && let Some(uri) = self.inline(value)
-            {
-                *value = uri.into();
-            }
-        }
-        for child in element.children.make_mut() {
-            if let HtmlNode::Element(child) = child {
-                self.visit(child);
-            }
-        }
-    }
-
     /// The `data:` URI for a local asset reference, or `None` to leave it as is.
     fn inline(&self, raw: &str) -> Option<String> {
         let rest = raw.strip_prefix(self.prefix.as_deref()?)?;
@@ -73,28 +61,7 @@ impl<'a> Inliner<'a> {
         }
         let path = self.assets.join(rest);
         let bytes = std::fs::read(&path).ok()?;
-        Some(format!("data:{};base64,{}", mime(&path), base64(&bytes)))
-    }
-}
-
-/// The MIME type for an asset, by extension. Unknown types fall back to a
-/// generic binary type, which browsers still accept in a `data:` URI.
-fn mime(path: &Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("css") => "text/css",
-        Some("js" | "mjs") => "text/javascript",
-        Some("svg") => "image/svg+xml",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("avif") => "image/avif",
-        Some("ico") => "image/x-icon",
-        Some("woff2") => "font/woff2",
-        Some("woff") => "font/woff",
-        Some("ttf") => "font/ttf",
-        Some("json") => "application/json",
-        _ => "application/octet-stream",
+        Some(format!("data:{};base64,{}", Mime::of(&path), base64(&bytes)))
     }
 }
 

@@ -239,6 +239,10 @@ impl Count {
     pub fn warnings(n: usize) -> Self {
         Self { n, noun: "warning" }
     }
+
+    pub fn links(n: usize) -> Self {
+        Self { n, noun: "broken internal link" }
+    }
 }
 
 impl Display for Count {

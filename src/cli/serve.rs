@@ -20,6 +20,7 @@ use crate::config::Config;
 use crate::engine::{Engine, Mode};
 use crate::error::{ContentError, Result};
 use crate::error::serve::ServeError;
+use crate::mime::Mime;
 
 /// Run the dev server: build once, serve `dist`, and (unless `--no-watch`)
 /// watch for changes to rebuild and live-reload browsers.
@@ -199,13 +200,13 @@ impl Handler {
     /// Serve a file with content-type guessing, injecting the live-reload
     /// client into HTML when live reload is enabled.
     fn serve_file(&self, req: Request, path: &Path) {
-        let content_type = Self::mime(path);
+        let mime = Mime::of(path);
         let mut body = std::fs::read(path).unwrap_or_default();
-        if self.live.is_some() && content_type.starts_with("text/html") {
+        if self.live.is_some() && mime.html() {
             body.extend_from_slice(Live::SCRIPT.as_bytes());
         }
         let mut response = Response::from_data(body);
-        if let Ok(header) = Header::from_bytes(b"Content-Type", content_type.as_bytes()) {
+        if let Ok(header) = Header::from_bytes(b"Content-Type", mime.header().as_bytes()) {
             response = response.with_header(header);
         }
         let _ = req.respond(response);
@@ -228,21 +229,6 @@ impl Handler {
             return Some(index);
         }
         Some(self.dist.join(format!("{rel}.html")))
-    }
-
-    /// Guess a content type from the file extension.
-    fn mime(path: &Path) -> &'static str {
-        match path.extension().and_then(|e| e.to_str()) {
-            Some("html") => "text/html; charset=utf-8",
-            Some("css") => "text/css; charset=utf-8",
-            Some("js") => "application/javascript",
-            Some("png") => "image/png",
-            Some("jpg" | "jpeg") => "image/jpeg",
-            Some("svg") => "image/svg+xml",
-            Some("json") => "application/json",
-            Some("woff2") => "font/woff2",
-            _ => "application/octet-stream",
-        }
     }
 }
 
@@ -340,10 +326,8 @@ struct Filter {
 impl Filter {
     fn new(config: &Config) -> Result<Self> {
         let root = std::env::current_dir().unwrap_or_default();
-        let assets = config
-            .assets
-            .canonicalize()
-            .unwrap_or_else(|_| root.join(&config.assets));
+        let assets =
+            crate::fs::canonicalize(&config.assets).unwrap_or_else(|_| root.join(&config.assets));
         let mut dirs = vec![
             config.content.clone(),
             config.templates.clone(),

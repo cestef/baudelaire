@@ -22,7 +22,14 @@ impl Processor for Llms {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let base = site.base_url().unwrap_or_default().trim_end_matches('/');
+        let base = site.config.base();
+        if base.is_none() {
+            out.warn(format_args!("llms.txt has no `url` set — links will be relative"))?;
+        }
+        let href = |permalink: &str| match &base {
+            Some(base) => base.join(permalink),
+            None => permalink.to_owned(),
+        };
         let mut md = format!("# {}\n", site.config.label());
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");
@@ -31,7 +38,7 @@ impl Processor for Llms {
             let _ = write!(md, "\n## {collection}\n\n");
             for page in pages {
                 let title = page.frontmatter.title.as_deref().unwrap_or(&page.id.0);
-                let _ = writeln!(md, "- [{title}]({base}{})", page.permalink);
+                let _ = writeln!(md, "- [{title}]({})", href(&page.permalink));
             }
         }
         out.file(&site.config.dist.join("llms.txt"), &md)?;

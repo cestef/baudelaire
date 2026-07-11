@@ -27,10 +27,9 @@ impl AssetMap {
     /// Resolve a raw `href`/`src` to its processed URL, preserving any trailing
     /// `#fragment` / `?query`. `None` if the reference is not a mapped asset.
     pub fn resolve(&self, raw: &str) -> Option<String> {
-        let (path, tail) = match raw.find(['#', '?']) {
-            Some(i) => raw.split_at(i),
-            None => (raw, ""),
-        };
-        self.map.get(path).map(|url| format!("{url}{tail}"))
+        let split = super::Tail::of(raw);
+        self.map
+            .get(split.path)
+            .map(|url| format!("{url}{}", split.tail))
     }
 }

@@ -3,6 +3,7 @@
 use std::fmt::Write;
 
 use super::process::{Emit, Processor, Site};
+use super::sitemap::SiteMap;
 use crate::config::Config;
 use crate::error::Result;
 
@@ -26,8 +27,15 @@ impl Processor for Robots {
                 let _ = writeln!(body, "Disallow: {path}");
             }
         }
-        if let Some(base) = site.base_url().filter(|_| site.config.sitemap) {
-            let _ = writeln!(body, "Sitemap: {}/sitemap.xml", base.trim_end_matches('/'));
+        if site.config.sitemap {
+            match site.config.base() {
+                Some(base) => {
+                    let _ = writeln!(body, "Sitemap: {}", base.join(format!("/{}", SiteMap::FILE)));
+                }
+                None => out.warn(format_args!(
+                    "robots.txt sitemap link omitted — no `url` set"
+                ))?,
+            }
         }
         out.file(&site.config.dist.join("robots.txt"), &body)?;
         out.note(format_args!("wrote robots.txt"))

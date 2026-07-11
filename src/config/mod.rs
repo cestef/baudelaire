@@ -91,6 +91,14 @@ impl Config {
         self.site.as_deref().unwrap_or("unnamed")
     }
 
+    /// The configured base URL, normalized for joining. `None` when `url` is
+    /// unset — URL-absolute features gate on this.
+    pub fn base(&self) -> Option<BaseUrl> {
+        self.url
+            .as_deref()
+            .map(|url| BaseUrl(url.trim_end_matches('/').to_owned()))
+    }
+
     /// The file a URL path is written to under `dist`, honoring clean URLs.
     /// Single source for the URL→file mapping, shared by page output and
     /// redirect stubs.
@@ -104,6 +112,30 @@ impl Config {
         } else {
             self.dist.join(format!("{trimmed}.html"))
         }
+    }
+}
+
+/// The site base URL with its trailing slash normalized away — the single
+/// join rule for every consumer that makes root-relative paths absolute
+/// (sitemap, feeds, robots, llms, meta tags).
+#[derive(Debug, Clone)]
+pub struct BaseUrl(String);
+
+impl BaseUrl {
+    /// Absolute URL for a root-relative path (a permalink or `/file`).
+    pub fn join(&self, path: impl AsRef<str>) -> String {
+        format!("{}{}", self.0, path.as_ref())
+    }
+
+    /// The site home page URL (base with a trailing slash).
+    pub fn home(&self) -> String {
+        format!("{}/", self.0)
+    }
+}
+
+impl std::fmt::Display for BaseUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 

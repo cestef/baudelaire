@@ -6,6 +6,7 @@ pub mod engine;
 pub mod error;
 pub mod fs;
 pub mod graph;
+pub mod mime;
 pub mod render;
 pub mod world;
 
