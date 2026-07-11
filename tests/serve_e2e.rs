@@ -131,7 +131,7 @@ fn sse_stream_pushes_reload_on_change() {
         .expect("curl");
 
     // Give the stream a moment to connect, then trigger a rebuild.
-    std::thread::sleep(Duration::from_millis(800));
+    std::thread::sleep(Duration::from_millis(200));
     t.write("content/index.typ", "#frontmatter((title: \"H\",))\nv2");
 
     // Read until the reload event, then stop — don't wait out the whole stream
