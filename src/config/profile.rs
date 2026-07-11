@@ -126,6 +126,28 @@ mod tests {
     }
 
     #[test]
+    fn profile_override_preserves_sibling_fields() {
+        // Overriding one field of a nested section must inherit the base's
+        // other fields, not reset them to defaults.
+        let cfg = parse(
+            r#"
+            output {
+              html { pretty #true; embed #true; meta #true }
+            }
+            profiles {
+              prod {
+                output { html { pretty #false } }
+              }
+            }
+        "#,
+        );
+        let prod = cfg.with_profile("prod").expect("profile exists");
+        assert!(!prod.html.pretty, "pretty overridden");
+        assert!(prod.html.embed, "embed inherited from base");
+        assert!(prod.html.meta, "meta inherited from base");
+    }
+
+    #[test]
     fn profile_overrides_serve() {
         let cfg = parse(
             r#"

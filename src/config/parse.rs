@@ -42,15 +42,15 @@ impl Config {
         ("paths", |c, n, t| n.paths(c, t)),
         ("clean", |c, n, t| { c.clean = n.boolean(t, 0)?; Ok(()) }),
         ("future", |c, n, t| { c.future = n.boolean(t, 0)?; Ok(()) }),
-        ("draft", |c, n, t| { c.draft = n.draft(t)?; Ok(()) }),
-        ("links", |c, n, t| { c.links = n.links(t)?; Ok(()) }),
-        ("cache", |c, n, t| { c.cache = n.cache(t)?; Ok(()) }),
+        ("draft", |c, n, t| n.draft(&mut c.draft, t)),
+        ("links", |c, n, t| n.links(&mut c.links, t)),
+        ("cache", |c, n, t| n.cache(&mut c.cache, t)),
         ("typst", |c, n, t| n.typst(c, t)),
         ("output", |c, n, t| n.output(c, t)),
         ("collections", |c, n, t| { c.collections = n.collections(t)?; Ok(()) }),
         ("taxonomies", |c, n, t| { c.taxonomies = n.taxonomies(t)?; Ok(()) }),
-        ("hooks", |c, n, t| { c.hooks = n.hooks(t)?; Ok(()) }),
-        ("serve", |c, n, t| { c.serve = n.serve(t)?; Ok(()) }),
+        ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
+        ("serve", |c, n, t| n.serve(&mut c.serve, t)),
         ("profiles", |c, n, t| { c.profiles = n.profiles(t)?; Ok(()) }),
     ]);
 }
@@ -87,21 +87,21 @@ pub(super) trait NodeExt {
     fn taxonomies(&self, text: &str) -> Result<Vec<(String, TaxonomyConfig)>>;
     fn as_collection(&self, text: &str) -> Result<(String, CollectionConfig)>;
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)>;
-    fn html(&self, text: &str) -> Result<HtmlConfig>;
-    fn images(&self, text: &str) -> Result<ImagesConfig>;
-    fn optimize(&self, text: &str) -> Result<OptimizeConfig>;
-    fn png(&self, text: &str) -> Result<PngConfig>;
-    fn jpeg(&self, text: &str) -> Result<JpegConfig>;
-    fn assets(&self, text: &str) -> Result<AssetConfig>;
-    fn robots(&self, text: &str) -> Result<RobotsConfig>;
-    fn llms(&self, text: &str) -> Result<LlmsConfig>;
-    fn draft(&self, text: &str) -> Result<DraftConfig>;
-    fn links(&self, text: &str) -> Result<LinkConfig>;
-    fn feed(&self, text: &str) -> Result<FeedConfig>;
-    fn search(&self, text: &str) -> Result<SearchConfig>;
-    fn cache(&self, text: &str) -> Result<CacheConfig>;
-    fn hooks(&self, text: &str) -> Result<HooksConfig>;
-    fn serve(&self, text: &str) -> Result<ServeConfig>;
+    fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()>;
+    fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()>;
+    fn optimize(&self, target: &mut OptimizeConfig, text: &str) -> Result<()>;
+    fn png(&self, target: &mut PngConfig, text: &str) -> Result<()>;
+    fn jpeg(&self, target: &mut JpegConfig, text: &str) -> Result<()>;
+    fn assets(&self, target: &mut AssetConfig, text: &str) -> Result<()>;
+    fn robots(&self, target: &mut RobotsConfig, text: &str) -> Result<()>;
+    fn llms(&self, target: &mut LlmsConfig, text: &str) -> Result<()>;
+    fn draft(&self, target: &mut DraftConfig, text: &str) -> Result<()>;
+    fn links(&self, target: &mut LinkConfig, text: &str) -> Result<()>;
+    fn feed(&self, target: &mut FeedConfig, text: &str) -> Result<()>;
+    fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()>;
+    fn cache(&self, target: &mut CacheConfig, text: &str) -> Result<()>;
+    fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()>;
+    fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()>;
     fn profiles(&self, text: &str) -> Result<Vec<(String, KdlDocument)>>;
 }
 
@@ -275,38 +275,34 @@ impl NodeExt for KdlNode {
         self.unique(text, "taxonomy", |node, t| node.as_taxonomy(t))
     }
 
-    fn html(&self, text: &str) -> Result<HtmlConfig> {
+    fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()> {
         const HTML: Block<HtmlConfig> = Block(&[
             ("pretty", |c, n, t| { c.pretty = n.boolean(t, 0)?; Ok(()) }),
             ("embed", |c, n, t| { c.embed = n.boolean(t, 0)?; Ok(()) }),
             ("meta", |c, n, t| { c.meta = n.boolean(t, 0)?; Ok(()) }),
         ]);
-        let mut html = HtmlConfig::default();
-        HTML.fill(&mut html, self, text)?;
-        Ok(html)
+        HTML.fill(target, self, text)
     }
 
     /// The `images { lazy; optimize { … } }` section.
-    fn images(&self, text: &str) -> Result<ImagesConfig> {
+    fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()> {
         const IMAGES: Block<ImagesConfig> = Block(&[
             ("lazy", |c, n, t| { c.lazy = n.boolean(t, 0)?; Ok(()) }),
-            ("optimize", |c, n, t| { c.optimize = n.optimize(t)?; Ok(()) }),
+            ("optimize", |c, n, t| n.optimize(&mut c.optimize, t)),
         ]);
-        let mut images = ImagesConfig::default();
-        IMAGES.fill(&mut images, self, text)?;
-        Ok(images)
+        IMAGES.fill(target, self, text)
     }
 
     /// The `optimize { png [level=…] [strip=…]; jpeg [quality=…] }` block: each
     /// child names a format (leniently — `jpg`/`jpeg` both work) and enables it,
-    /// with optional per-format tuning as attributes.
-    fn optimize(&self, text: &str) -> Result<OptimizeConfig> {
-        let mut cfg = OptimizeConfig::default();
+    /// with optional per-format tuning as attributes. Fills onto the existing
+    /// per-format config so a profile tuning one attribute keeps its siblings.
+    fn optimize(&self, target: &mut OptimizeConfig, text: &str) -> Result<()> {
         for node in self.block(text)?.nodes() {
             let span = NodeExt::span(node);
             match node.name().value() {
-                "png" => cfg.png = Some(node.png(text)?),
-                "jpeg" | "jpg" => cfg.jpeg = Some(node.jpeg(text)?),
+                "png" => node.png(target.png.get_or_insert_default(), text)?,
+                "jpeg" | "jpg" => node.jpeg(target.jpeg.get_or_insert_default(), text)?,
                 other => {
                     return Err(ConfigError::bad_value(
                         text,
@@ -317,10 +313,10 @@ impl NodeExt for KdlNode {
                 }
             }
         }
-        Ok(cfg)
+        Ok(())
     }
 
-    fn png(&self, text: &str) -> Result<PngConfig> {
+    fn png(&self, target: &mut PngConfig, text: &str) -> Result<()> {
         const ATTRS: Attrs<PngConfig> = Attrs(&[
             ("level", |c, v, t, s| { c.level = v.ranged(t, s, 0, 6)? as u8; Ok(()) }),
             ("strip", |c, v, t, s| {
@@ -332,53 +328,39 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
         ]);
-        let mut png = PngConfig::default();
-        ATTRS.apply(&mut png, self, text, 0)?;
-        Ok(png)
+        ATTRS.apply(target, self, text, 0)
     }
 
-    fn jpeg(&self, text: &str) -> Result<JpegConfig> {
+    fn jpeg(&self, target: &mut JpegConfig, text: &str) -> Result<()> {
         const ATTRS: Attrs<JpegConfig> = Attrs(&[
             ("quality", |c, v, t, s| { c.quality = v.ranged(t, s, 1, 100)? as u8; Ok(()) }),
         ]);
-        let mut jpeg = JpegConfig::default();
-        ATTRS.apply(&mut jpeg, self, text, 0)?;
-        Ok(jpeg)
+        ATTRS.apply(target, self, text, 0)
     }
 
-    fn assets(&self, text: &str) -> Result<AssetConfig> {
+    fn assets(&self, target: &mut AssetConfig, text: &str) -> Result<()> {
         const ASSETS: Block<AssetConfig> = Block(&[
             ("minify", |c, n, t| { c.minify = n.boolean(t, 0)?; Ok(()) }),
             ("bundle", |c, n, t| { c.bundle = n.boolean(t, 0)?; Ok(()) }),
             ("fingerprint", |c, n, t| { c.fingerprint = n.boolean(t, 0)?; Ok(()) }),
         ]);
-        let mut asset = AssetConfig::default();
-        ASSETS.fill(&mut asset, self, text)?;
-        Ok(asset)
+        ASSETS.fill(target, self, text)
     }
 
-    fn robots(&self, text: &str) -> Result<RobotsConfig> {
+    fn robots(&self, target: &mut RobotsConfig, text: &str) -> Result<()> {
         const ROBOTS: Block<RobotsConfig> =
             Block(&[("disallow", |c, n, t| { c.disallow = n.words(t)?; Ok(()) })]);
         // Presence of the block enables emission.
-        let mut robots = RobotsConfig {
-            enabled: true,
-            ..RobotsConfig::default()
-        };
-        ROBOTS.fill(&mut robots, self, text)?;
-        Ok(robots)
+        target.enabled = true;
+        ROBOTS.fill(target, self, text)
     }
 
-    fn llms(&self, text: &str) -> Result<LlmsConfig> {
+    fn llms(&self, target: &mut LlmsConfig, text: &str) -> Result<()> {
         const LLMS: Block<LlmsConfig> =
             Block(&[("summary", |c, n, t| { c.summary = Some(n.string(t, 0)?); Ok(()) })]);
         // Presence of the block enables emission.
-        let mut llms = LlmsConfig {
-            enabled: true,
-            ..LlmsConfig::default()
-        };
-        LLMS.fill(&mut llms, self, text)?;
-        Ok(llms)
+        target.enabled = true;
+        LLMS.fill(target, self, text)
     }
 
     /// The `paths { … }` parent section: directory layout knobs.
@@ -404,49 +386,43 @@ impl NodeExt for KdlNode {
     /// The `output { … }` parent section: everything the build emits.
     fn output(&self, config: &mut Config, text: &str) -> Result<()> {
         const OUTPUT: Block<Config> = Block(&[
-            ("html", |c, n, t| { c.html = n.html(t)?; Ok(()) }),
-            ("images", |c, n, t| { c.images = n.images(t)?; Ok(()) }),
-            ("assets", |c, n, t| { c.asset = n.assets(t)?; Ok(()) }),
+            ("html", |c, n, t| n.html(&mut c.html, t)),
+            ("images", |c, n, t| n.images(&mut c.images, t)),
+            ("assets", |c, n, t| n.assets(&mut c.asset, t)),
             ("sitemap", |c, n, t| { c.sitemap = n.boolean(t, 0)?; Ok(()) }),
-            ("robots", |c, n, t| { c.robots = n.robots(t)?; Ok(()) }),
-            ("llms", |c, n, t| { c.llms = n.llms(t)?; Ok(()) }),
-            ("feed", |c, n, t| { c.feed = n.feed(t)?; Ok(()) }),
-            ("search", |c, n, t| { c.search = n.search(t)?; Ok(()) }),
+            ("robots", |c, n, t| n.robots(&mut c.robots, t)),
+            ("llms", |c, n, t| n.llms(&mut c.llms, t)),
+            ("feed", |c, n, t| n.feed(&mut c.feed, t)),
+            ("search", |c, n, t| n.search(&mut c.search, t)),
         ]);
         OUTPUT.fill(config, self, text)
     }
 
-    fn draft(&self, text: &str) -> Result<DraftConfig> {
+    fn draft(&self, target: &mut DraftConfig, text: &str) -> Result<()> {
         const DRAFT: Block<DraftConfig> = Block(&[
             ("build", |c, n, t| { c.build = n.boolean(t, 0)?; Ok(()) }),
             ("suffix", |c, n, t| { c.suffix = n.string(t, 0)?; Ok(()) }),
         ]);
-        let mut draft = DraftConfig::default();
-        DRAFT.fill(&mut draft, self, text)?;
-        Ok(draft)
+        DRAFT.fill(target, self, text)
     }
 
-    fn links(&self, text: &str) -> Result<LinkConfig> {
+    fn links(&self, target: &mut LinkConfig, text: &str) -> Result<()> {
         const LINKS: Block<LinkConfig> =
             Block(&[("strict", |c, n, t| { c.strict = n.boolean(t, 0)?; Ok(()) })]);
-        let mut links = LinkConfig::default();
-        LINKS.fill(&mut links, self, text)?;
-        Ok(links)
+        LINKS.fill(target, self, text)
     }
 
-    fn feed(&self, text: &str) -> Result<FeedConfig> {
+    fn feed(&self, target: &mut FeedConfig, text: &str) -> Result<()> {
         /// Feed formats as `(name, kind)` — single source for parsing + errors.
         const FORMATS: &[(&str, FeedKind)] = &[("rss", FeedKind::Rss), ("atom", FeedKind::Atom)];
         const FEED: Block<FeedConfig> = Block(&[
             ("formats", |c, n, t| { c.formats = n.mapped(t, FORMATS)?; Ok(()) }),
             ("limit", |c, n, t| { c.limit = n.count(t, 0)?; Ok(()) }),
         ]);
-        let mut feed = FeedConfig::default();
-        FEED.fill(&mut feed, self, text)?;
-        Ok(feed)
+        FEED.fill(target, self, text)
     }
 
-    fn search(&self, text: &str) -> Result<SearchConfig> {
+    fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()> {
         /// Index formats as `(name, kind)` — single source for parsing + errors.
         const FORMATS: &[(&str, SearchFormat)] =
             &[("json", SearchFormat::Json), ("inverted", SearchFormat::Inverted)];
@@ -463,32 +439,29 @@ impl NodeExt for KdlNode {
             ("minimum", |c, n, t| { c.min_length = n.count(t, 0)?; Ok(()) }),
             ("client", |c, n, t| { c.client = n.boolean(t, 0)?; Ok(()) }),
         ]);
-        let mut search = SearchConfig::default();
-        SEARCH.fill(&mut search, self, text)?;
-        Ok(search)
+        SEARCH.fill(target, self, text)
     }
 
-    fn cache(&self, text: &str) -> Result<CacheConfig> {
+    fn cache(&self, target: &mut CacheConfig, text: &str) -> Result<()> {
         const CACHE: Block<CacheConfig> = Block(&[
             ("dir", |c, n, t| { c.dir = n.string(t, 0)?.into(); Ok(()) }),
             ("incremental", |c, n, t| { c.incremental = n.boolean(t, 0)?; Ok(()) }),
         ]);
-        let mut cache = CacheConfig::default();
-        CACHE.fill(&mut cache, self, text)?;
-        Ok(cache)
+        CACHE.fill(target, self, text)
     }
 
-    fn hooks(&self, text: &str) -> Result<HooksConfig> {
+    /// Each list replaces (never appends) so a profile overriding `before`
+    /// leaves `after` inherited from the base — same whole-value replacement as
+    /// every other list field.
+    fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()> {
         const HOOKS: Block<HooksConfig> = Block(&[
-            ("before", |c, n, t| { c.before.extend(n.words(t)?); Ok(()) }),
-            ("after", |c, n, t| { c.after.extend(n.words(t)?); Ok(()) }),
+            ("before", |c, n, t| { c.before = n.words(t)?; Ok(()) }),
+            ("after", |c, n, t| { c.after = n.words(t)?; Ok(()) }),
         ]);
-        let mut hooks = HooksConfig::default();
-        HOOKS.fill(&mut hooks, self, text)?;
-        Ok(hooks)
+        HOOKS.fill(target, self, text)
     }
 
-    fn serve(&self, text: &str) -> Result<ServeConfig> {
+    fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()> {
         const SERVE: Block<ServeConfig> = Block(&[
             ("port", |c, n, t| { c.port = n.port(t, 0)?; Ok(()) }),
             ("bind", |c, n, t| { c.bind = n.string(t, 0)?; Ok(()) }),
@@ -497,9 +470,7 @@ impl NodeExt for KdlNode {
             ("include", |c, n, t| { c.include = n.words(t)?; Ok(()) }),
             ("exclude", |c, n, t| { c.exclude = n.words(t)?; Ok(()) }),
         ]);
-        let mut serve = ServeConfig::default();
-        SERVE.fill(&mut serve, self, text)?;
-        Ok(serve)
+        SERVE.fill(target, self, text)
     }
 
     fn profiles(&self, text: &str) -> Result<Vec<(String, KdlDocument)>> {
