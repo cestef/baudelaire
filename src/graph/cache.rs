@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::cli::output::Report;
 use crate::config::Config;
 use crate::content::Page;
 use crate::error::{Artifact, Result, SerializeError};
@@ -91,14 +92,33 @@ impl Cache {
     /// so a new commit, a new day, a re-fingerprinted asset, a changed permalink,
     /// or an edited embedded file all invalidate the pages they can affect. Only
     /// the small manifest is read here — HTML blobs are fetched lazily on a hit.
-    pub fn load(config: &Config, context: &BuildContext, render: &RenderInputs) -> Self {
+    pub fn load(
+        config: &Config,
+        context: &BuildContext,
+        render: &RenderInputs,
+        report: &mut Report,
+    ) -> Result<Self> {
         let dir = config.cache.dir.clone();
-        let prev = fs::read(dir.join(MANIFEST))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
+        let manifest = dir.join(MANIFEST);
+        let prev = match fs::read(&manifest) {
+            // A present-but-unparseable manifest (a torn write, disk corruption,
+            // a manual edit) is not the same as a fresh cache: warn and rebuild
+            // from scratch rather than silently discarding it as "no cache".
+            Ok(bytes) => match serde_json::from_slice(&bytes) {
+                Ok(prev) => prev,
+                Err(e) => {
+                    report.warn(format_args!(
+                        "ignoring unreadable cache manifest at {}: {e}",
+                        manifest.display()
+                    ))?;
+                    Manifest::default()
+                }
+            },
+            // An absent manifest is the normal first-build case — stay silent.
+            Err(_) => Manifest::default(),
+        };
         let fingerprint = Hash::of(&(config, context, render));
-        Self {
+        Ok(Self {
             dir,
             enabled: config.cache.incremental,
             next: Manifest {
@@ -107,7 +127,7 @@ impl Cache {
             },
             config: fingerprint,
             prev,
-        }
+        })
     }
 
     /// Cached HTML for `page` if still valid — its content fingerprint, every

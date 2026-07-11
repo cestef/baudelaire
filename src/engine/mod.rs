@@ -117,7 +117,7 @@ impl Engine {
             links: renderer.links(),
             embeds: self.config.html.embed.then(|| Hash::of_dir(&self.config.assets)),
         };
-        let mut cache = Cache::load(&self.config, self.project.context(), &render);
+        let mut cache = Cache::load(&self.config, self.project.context(), &render, report)?;
 
         // Split pages into those the cache can serve verbatim and those needing
         // a fresh compile. `prepare` builds each page's source + fingerprint

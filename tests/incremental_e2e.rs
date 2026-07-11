@@ -30,6 +30,28 @@ fn second_build_reuses_all_pages() {
 }
 
 #[test]
+fn corrupt_manifest_warns_and_rebuilds() {
+    let site = Site::with(CONFIG);
+    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
+    site.build();
+
+    // A present-but-unparseable manifest must not be mistaken for a fresh cache.
+    site.write(".baudelaire/cache/manifest.json", "{ not valid json");
+    let out = site.run(&["build", "-v"]);
+    assert!(
+        out.status.success(),
+        "build should self-heal past a corrupt manifest: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let logs = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(logs.contains("unreadable cache manifest"), "expected a warning: {logs}");
+}
+
+#[test]
 fn editing_a_page_rebuilds_only_it() {
     let site = Site::with(CONFIG);
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
