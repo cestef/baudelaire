@@ -148,6 +148,17 @@ impl BaseUrl {
         format!("{}{}", self.0, path.as_ref())
     }
 
+    /// Make a root-relative `path` absolute when a base is configured, else
+    /// leave it as-is — the one "absolutize if we can, otherwise stay relative"
+    /// rule shared by every URL emitter. Non-root-relative refs (external URLs)
+    /// pass through untouched.
+    pub fn resolve(base: Option<&BaseUrl>, path: &str) -> String {
+        match base {
+            Some(base) if path.starts_with('/') => base.join(path),
+            _ => path.to_owned(),
+        }
+    }
+
     /// The site home page URL (base with a trailing slash).
     pub fn home(&self) -> String {
         format!("{}/", self.0)

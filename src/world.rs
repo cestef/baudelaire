@@ -99,7 +99,10 @@ impl std::hash::Hash for BuildContext {
 /// Git state of the site repository at build time.
 #[derive(Debug, Clone, Hash)]
 struct GitInfo {
+    /// The full commit SHA — pages slice it themselves for a short form.
     hash: String,
+    /// The revision number: how many commits are reachable from HEAD.
+    rev: Option<String>,
     branch: Option<String>,
     tag: Option<String>,
     committed: Option<String>,
@@ -154,22 +157,39 @@ impl BuildContext {
 impl GitInfo {
     /// Read git state via the `git` CLI, or `None` outside a repository.
     fn detect(root: &Path) -> Option<Self> {
-        let hash = git(root, &["rev-parse", "--short", "HEAD"])?;
+        let hash = Self::run(root, &["rev-parse", "HEAD"])?;
         Some(Self {
             hash,
-            branch: git(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
+            rev: Self::run(root, &["rev-list", "--count", "HEAD"]),
+            branch: Self::run(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
             // No `--always`: it falls back to a bare commit hash in a tagless
             // repo, which would populate `git.tag` with a non-tag. An empty
             // output (no tag reachable) becomes `None` instead.
-            tag: git(root, &["describe", "--tags"]),
-            committed: git(root, &["log", "-1", "--format=%cI"]),
-            dirty: git_dirty(root),
+            tag: Self::run(root, &["describe", "--tags"]),
+            committed: Self::run(root, &["log", "-1", "--format=%cI"]),
+            // A non-empty `status --porcelain` means uncommitted changes.
+            dirty: Self::run(root, &["status", "--porcelain"]).is_some(),
         })
+    }
+
+    /// Run a `git` command in `root`, returning its trimmed stdout, or `None`
+    /// if git is absent, the command fails, or the output is empty. The single
+    /// place this crate shells out to git.
+    fn run(root: &Path, args: &[&str]) -> Option<String> {
+        let output = Command::new("git").args(args).current_dir(root).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        (!text.is_empty()).then_some(text)
     }
 
     fn to_value(&self) -> Value {
         let mut dict = Dict::new();
         dict.insert(Str::from("hash"), self.hash.clone().into_value());
+        if let Some(rev) = &self.rev {
+            dict.insert(Str::from("rev"), rev.clone().into_value());
+        }
         if let Some(branch) = &self.branch {
             dict.insert(Str::from("branch"), branch.clone().into_value());
         }
@@ -201,26 +221,6 @@ impl SiteInfo {
     }
 }
 
-/// Run a `git` command in `root`, returning its trimmed stdout, or `None` if
-/// git is absent, the command fails, or the output is empty.
-fn git(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git").args(args).current_dir(root).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    (!text.is_empty()).then_some(text)
-}
-
-/// Whether the working tree has uncommitted changes.
-fn git_dirty(root: &Path) -> bool {
-    Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(root)
-        .output()
-        .map(|o| !o.stdout.is_empty())
-        .unwrap_or(false)
-}
 
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.

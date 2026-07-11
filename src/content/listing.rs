@@ -5,11 +5,26 @@
 //! that shape and lowers it to a synthetic [`Page`] whose body is generated
 //! *typst* (never HTML strings), so it compiles like any other page.
 
-use std::fmt::Write;
+use std::fmt::{self, Write};
 
 use crate::codegen::{Content, Str, Value};
 use crate::config::Config;
 use crate::content::{Frontmatter, Page, PageId};
+
+/// Displays a lowercase section id as a title by capitalizing its first letter
+/// (`tags` → `Tags`) — the single display rule for generated listing titles,
+/// in the `Display`-newtype style of `cli::output::Paths`.
+pub struct Titlecase<'a>(pub &'a str);
+
+impl fmt::Display for Titlecase<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut chars = self.0.chars();
+        match chars.next() {
+            Some(first) => write!(f, "{}{}", first.to_uppercase(), chars.as_str()),
+            None => Ok(()),
+        }
+    }
+}
 
 /// One link row: a labelled link with an optional date (dated collection
 /// entries), an optional trailing note (e.g. a taxonomy member count), and the
@@ -118,15 +133,6 @@ impl Listing {
             items: Vec::new(),
             nav: Nav::default(),
             template: None,
-        }
-    }
-
-    /// A display title from a lowercase section id (`tags` → `Tags`).
-    pub fn titlecase(name: &str) -> String {
-        let mut chars = name.chars();
-        match chars.next() {
-            Some(first) => first.to_uppercase().chain(chars).collect(),
-            None => String::new(),
         }
     }
 

@@ -68,7 +68,8 @@ struct Manifest {
 pub struct RenderInputs {
     pub assets: Hash,
     pub links: Hash,
-    pub embeds: Hash,
+    /// Present only when `embed` is on: a content hash of the inlined assets.
+    pub embeds: Option<Hash>,
 }
 
 /// The build cache. Loads the previous manifest, answers reuse queries, and

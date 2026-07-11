@@ -13,7 +13,8 @@ a version stamp, a "last built" line, or a commit link in your footer.
 #build.version           // "0.1.0"  (Baudelaire's version)
 #build.date              // "2026-07-09"
 #build.mode              // "build" | "serve" | "check"
-#build.git.hash          // short commit hash (when in a repo)
+#build.git.hash          // full commit SHA (slice it for a short form)
+#build.git.rev           // revision number (commit count)
 #build.git.dirty         // uncommitted changes?
 #build.site.title        // your configured site title
 ```

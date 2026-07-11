@@ -322,7 +322,7 @@ impl NodeExt for KdlNode {
 
     fn png(&self, text: &str) -> Result<PngConfig> {
         const ATTRS: Attrs<PngConfig> = Attrs(&[
-            ("level", |c, v, t, s| { c.level = v.integer(t, s)?.clamp(0, 6) as u8; Ok(()) }),
+            ("level", |c, v, t, s| { c.level = v.ranged(t, s, 0, 6)? as u8; Ok(()) }),
             ("strip", |c, v, t, s| {
                 c.strip = v.one(t, s, &[
                     ("none", PngStrip::None),
@@ -339,7 +339,7 @@ impl NodeExt for KdlNode {
 
     fn jpeg(&self, text: &str) -> Result<JpegConfig> {
         const ATTRS: Attrs<JpegConfig> = Attrs(&[
-            ("quality", |c, v, t, s| { c.quality = v.integer(t, s)?.clamp(1, 100) as u8; Ok(()) }),
+            ("quality", |c, v, t, s| { c.quality = v.ranged(t, s, 1, 100)? as u8; Ok(()) }),
         ]);
         let mut jpeg = JpegConfig::default();
         ATTRS.apply(&mut jpeg, self, text, 0)?;

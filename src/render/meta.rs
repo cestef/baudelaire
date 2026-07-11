@@ -12,7 +12,7 @@
 
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
-use crate::config::Config;
+use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
 use super::AssetMap;
@@ -127,10 +127,7 @@ impl Card<'_> {
     /// value, or one with no base URL, is left as authored (bar fingerprinting).
     fn absolute(&self, src: &str) -> String {
         let src = self.assets.resolve(src).unwrap_or_else(|| src.to_owned());
-        match self.config.base() {
-            Some(base) if src.starts_with('/') => base.join(&src),
-            _ => src,
-        }
+        BaseUrl::resolve(self.config.base().as_ref(), &src)
     }
 
     /// A `<meta name="…" content="…">` tag.

@@ -30,7 +30,8 @@ use crate::engine::layout::Layout;
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::fs;
 use crate::error::{
-    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
+    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, ContentError, Result,
+    TypstSourceDiagnostic,
 };
 use crate::graph::{Cache, Deps, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
@@ -114,10 +115,7 @@ impl Engine {
         let render = RenderInputs {
             assets: Hash::of(renderer.assets()),
             links: renderer.links(),
-            embeds: match self.config.html.embed {
-                true => Hash::of_dir(&self.config.assets),
-                false => Hash::of(&()),
-            },
+            embeds: self.config.html.embed.then(|| Hash::of_dir(&self.config.assets)),
         };
         let mut cache = Cache::load(&self.config, self.project.context(), &render);
 
@@ -275,9 +273,30 @@ impl Engine {
             .filter(|p| p.eligible(&self.config))
             .cloned()
             .collect();
-        pages.extend(Taxonomy::pages(&self.config, &pages));
+        pages.extend(Taxonomy::pages(&self.config, &pages)?);
         pages.extend(Pagination::pages(&self.config, &collections));
+        Self::ensure_unique(&pages)?;
         Ok(pages)
+    }
+
+    /// Reject two pages that resolve to the same permalink — otherwise the
+    /// second silently overwrites the first's output (and clobbers its cache
+    /// entry, which is keyed by source). Catches colliding slugs, a real
+    /// `posts/index.typ` shadowing a paginated `/posts/`, and nested files that
+    /// flatten to one URL.
+    fn ensure_unique(pages: &[Page]) -> Result<()> {
+        let mut seen: std::collections::HashMap<&str, &Page> = std::collections::HashMap::new();
+        for page in pages {
+            if let Some(prev) = seen.insert(&page.permalink, page) {
+                return Err(ContentError::collision(
+                    &page.permalink,
+                    &prev.source.display().to_string(),
+                    &page.source.display().to_string(),
+                )
+                .into());
+            }
+        }
+        Ok(())
     }
 
     /// The compile input for a page: its (possibly synthetic) source and its

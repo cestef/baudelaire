@@ -60,7 +60,9 @@ impl<'a> Inliner<'a> {
             return None;
         }
         let path = self.assets.join(rest);
-        let bytes = std::fs::read(&path).ok()?;
+        // Best-effort: an unreadable/missing asset is left as a plain reference,
+        // not inlined. Through the facade for consistency.
+        let bytes = crate::fs::read(&path).ok()?;
         Some(format!("data:{};base64,{}", Mime::of(&path), base64(&bytes)))
     }
 }

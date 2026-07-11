@@ -3,7 +3,7 @@ mod common;
 use std::fs;
 
 use baudelaire::content::discover;
-use common::Site;
+use common::{CONFIG, Site};
 
 #[test]
 fn builds_simple_page_to_html() {
@@ -1167,4 +1167,45 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     );
     let html = fs::read_to_string(site.root.join("public/index.html")).unwrap();
     assert!(!html.contains("href=\"/assets/gen.css\""), "reference rewritten: {html}");
+}
+
+#[test]
+fn duplicate_permalinks_are_rejected() {
+    // Two pages with the same slug resolve to one URL — a silent overwrite
+    // before, now a hard error naming both.
+    let site = Site::new();
+    site.write("config.kdl", CONFIG);
+    site.write("content/posts/a.typ", "#frontmatter((title: \"A\", slug: \"same\",))\na");
+    site.write("content/posts/b.typ", "#frontmatter((title: \"B\", slug: \"same\",))\nb");
+    let out = site.run(&["build"]);
+    assert!(!out.status.success(), "colliding permalinks must fail the build");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("resolve to") && err.contains("a.typ") && err.contains("b.typ"), "{err}");
+}
+
+#[test]
+fn a_slug_with_no_url_safe_characters_is_rejected() {
+    let site = Site::new();
+    site.write("config.kdl", CONFIG);
+    site.write("content/posts/p.typ", "#frontmatter((title: \"P\", slug: \"🎉\",))\np");
+    let out = site.run(&["build"]);
+    assert!(!out.status.success(), "an empty slug must fail the build");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("URL-safe"));
+}
+
+#[test]
+fn colliding_taxonomy_terms_are_rejected() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
+         taxonomies {\n  tags index=#true\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\", tags: (\"C++\", \"C--\"),))\na",
+    );
+    let out = site.run(&["build"]);
+    assert!(!out.status.success(), "two terms slugging to `c` must fail the build");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("slug to `c`"));
 }

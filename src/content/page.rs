@@ -5,7 +5,7 @@ use wax::Glob;
 use wax::prelude::*;
 
 use crate::config::{CollectionConfig, Config, SortKey};
-use crate::content::{Frontmatter, Permalink, PermalinkCtx};
+use crate::content::{Frontmatter, Permalink, PermalinkCtx, Slug};
 use crate::error::{ContentError, Result};
 
 /// Stable identifier for a page within the site.
@@ -54,7 +54,10 @@ impl Page {
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
-        let slug = frontmatter.slug.clone().unwrap_or_else(|| stem.slug().to_owned());
+        // One slug policy: normalize the frontmatter slug or the file stem, and
+        // reject a name that yields nothing URL-safe rather than emit `//`.
+        let raw = frontmatter.slug.clone().unwrap_or_else(|| stem.slug().to_owned());
+        let slug = Slug::require(&raw)?.into_string();
         let permalink = Self::permalink(collection, &frontmatter, &slug, config);
         let output = config.destination(&permalink);
         let template = frontmatter

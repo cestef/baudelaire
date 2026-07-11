@@ -91,6 +91,37 @@ impl ContentError {
             },
         }
     }
+
+    /// A name (filename stem, frontmatter slug, or taxonomy term) with no
+    /// URL-safe characters.
+    pub fn empty_slug(name: &str) -> Self {
+        Self {
+            kind: ContentErrorKind::EmptySlug { name: name.to_owned() },
+        }
+    }
+
+    /// Two pages resolving to the same permalink (a silent overwrite otherwise).
+    pub fn collision(permalink: &str, first: &str, second: &str) -> Self {
+        Self {
+            kind: ContentErrorKind::Collision {
+                permalink: permalink.to_owned(),
+                first: first.to_owned(),
+                second: second.to_owned(),
+            },
+        }
+    }
+
+    /// Two taxonomy terms slugging to the same URL.
+    pub fn term_collision(taxonomy: &str, slug: &str, first: &str, second: &str) -> Self {
+        Self {
+            kind: ContentErrorKind::TermCollision {
+                taxonomy: taxonomy.to_owned(),
+                slug: slug.to_owned(),
+                first: first.to_owned(),
+                second: second.to_owned(),
+            },
+        }
+    }
 }
 
 impl miette::Diagnostic for ContentError {
@@ -177,6 +208,36 @@ pub enum ContentErrorKind {
         key: String,
         #[help]
         help: String,
+    },
+
+    #[error("`{name}` has no URL-safe characters, so its slug would be empty")]
+    #[diagnostic(
+        code(baudelaire::content::empty_slug),
+        help("give it a `slug` with at least one ASCII letter or digit")
+    )]
+    EmptySlug { name: String },
+
+    #[error("`{first}` and `{second}` both resolve to `{permalink}`")]
+    #[diagnostic(
+        code(baudelaire::content::collision),
+        help("two pages cannot share a URL — rename one, or set a distinct `slug`/`permalink`")
+    )]
+    Collision {
+        permalink: String,
+        first: String,
+        second: String,
+    },
+
+    #[error("terms `{first}` and `{second}` of `{taxonomy}` both slug to `{slug}`")]
+    #[diagnostic(
+        code(baudelaire::content::term_collision),
+        help("two terms cannot share a URL — rename one so their slugs differ")
+    )]
+    TermCollision {
+        taxonomy: String,
+        slug: String,
+        first: String,
+        second: String,
     },
 }
 

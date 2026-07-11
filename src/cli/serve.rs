@@ -221,7 +221,12 @@ impl Handler {
     /// client into HTML when live reload is enabled.
     fn serve_file(&self, req: Request, path: &Path) {
         let mime = Mime::of(path);
-        let mut body = std::fs::read(path).unwrap_or_default();
+        // A read failure (a permission error, or the file vanishing between the
+        // `exists` check and here during a rebuild) is a 500, never a blank 200.
+        let Ok(mut body) = crate::fs::read(path) else {
+            let _ = req.respond(Response::empty(500));
+            return;
+        };
         if self.live.is_some() && mime.html() {
             body.extend_from_slice(Live::SCRIPT.as_bytes());
         }

@@ -7,8 +7,9 @@
 use std::collections::BTreeMap;
 
 use crate::config::{Config, TaxonomyConfig};
-use crate::content::listing::{Item, Listing};
-use crate::content::Page;
+use crate::content::listing::{Item, Listing, Titlecase};
+use crate::content::{Page, Slug};
+use crate::error::{ContentError, Result};
 
 /// Builds the taxonomy index pages for a site.
 pub struct Taxonomy;
@@ -16,14 +17,14 @@ pub struct Taxonomy;
 impl Taxonomy {
     /// Generate index + term pages for every configured taxonomy that requests
     /// an index, drawing terms from `pages`' frontmatter.
-    pub fn pages(config: &Config, pages: &[Page]) -> Vec<Page> {
+    pub fn pages(config: &Config, pages: &[Page]) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for (name, cfg) in &config.taxonomies {
             if cfg.index {
-                Group::new(name, cfg, pages).build(config, &mut out);
+                Group::new(name, cfg, pages).build(config, &mut out)?;
             }
         }
-        out
+        Ok(out)
     }
 }
 
@@ -57,74 +58,72 @@ impl<'a> Group<'a> {
         }
     }
 
-    /// Emit the index listing and one listing per term.
-    fn build(&self, config: &Config, out: &mut Vec<Page>) {
+    /// Emit the index listing and one listing per term. Resolves every term's
+    /// slug up front so an empty slug or a collision (`C++`/`C--` → `c`) is a
+    /// precise error, not a silent `/tags//` or overwrite.
+    fn build(&self, config: &Config, out: &mut Vec<Page>) -> Result<()> {
         if self.terms.is_empty() {
-            return;
+            return Ok(());
         }
-        out.push(self.index().into_page(config));
-        for term in self.terms.keys() {
+        let resolved = self.resolve()?;
+        out.push(self.index(&resolved).into_page(config));
+        for term in &resolved {
             out.push(self.term(term).into_page(config));
         }
+        Ok(())
+    }
+
+    /// Each term paired with its URL, checked for empty slugs and collisions.
+    fn resolve(&self) -> Result<Vec<Term<'_>>> {
+        let mut seen: BTreeMap<String, &str> = BTreeMap::new();
+        let mut resolved = Vec::with_capacity(self.terms.len());
+        for (name, members) in &self.terms {
+            let slug = Slug::require(name)?.into_string();
+            if let Some(prev) = seen.insert(slug.clone(), name) {
+                return Err(ContentError::term_collision(self.name, &slug, prev, name).into());
+            }
+            resolved.push(Term {
+                url: format!("/{}/{}/", self.name, slug),
+                name,
+                slug,
+                members: members.as_slice(),
+            });
+        }
+        Ok(resolved)
     }
 
     /// The `/{name}/` listing of every term with its member count.
-    fn index(&self) -> Listing {
-        let items = self
-            .terms
+    fn index(&self, terms: &[Term<'_>]) -> Listing {
+        let items = terms
             .iter()
-            .map(|(term, members)| Item::noted(self.url(term), term, members.len().to_string()))
+            .map(|t| Item::noted(t.url.clone(), t.name, t.members.len().to_string()))
             .collect();
         Listing::new(
             self.name,
             "index",
             format!("/{}/", self.name),
-            Listing::titlecase(self.name),
+            Titlecase(self.name).to_string(),
         )
         .items(items)
         .template(self.template.clone())
     }
 
     /// The `/{name}/{term}/` listing of the pages under `term`.
-    fn term(&self, term: &str) -> Listing {
-        let items = self.terms[term].iter().map(|member| Item::of(member)).collect();
-        let title = format!("{}: {term}", Listing::titlecase(self.name));
-        Listing::new(self.name, Self::slug(term), self.url(term), title)
+    fn term(&self, term: &Term<'_>) -> Listing {
+        let items = term.members.iter().map(|member| Item::of(member)).collect();
+        let title = format!("{}: {}", Titlecase(self.name), term.name);
+        Listing::new(self.name, term.slug.clone(), term.url.clone(), title)
             .items(items)
             .template(self.template.clone())
     }
-
-    fn url(&self, term: &str) -> String {
-        format!("/{}/{}/", self.name, Self::slug(term))
-    }
-
-    /// A URL-safe slug: lowercase, non-alphanumeric runs collapsed to `-`.
-    fn slug(term: &str) -> String {
-        let mut slug = String::new();
-        let mut dash = false;
-        for c in term.chars() {
-            if c.is_alphanumeric() {
-                if dash && !slug.is_empty() {
-                    slug.push('-');
-                }
-                dash = false;
-                slug.extend(c.to_lowercase());
-            } else {
-                dash = true;
-            }
-        }
-        slug
-    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Group;
-
-    #[test]
-    fn slug_is_url_safe() {
-        assert_eq!(Group::slug("Hello World"), "hello-world");
-        assert_eq!(Group::slug("C++ & Rust"), "c-rust");
-        assert_eq!(Group::slug("plain"), "plain");
-    }
+/// A taxonomy term with its resolved, collision-checked URL. `members` is a
+/// covariant slice so it borrows the group's page vectors without fighting the
+/// invariance of `&Vec`.
+struct Term<'a> {
+    name: &'a str,
+    slug: String,
+    url: String,
+    members: &'a [&'a Page],
 }

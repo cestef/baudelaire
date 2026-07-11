@@ -60,6 +60,9 @@ impl Env {
 pub(super) trait ValueExt {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String>;
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64>;
+    /// An integer required to fall within `min..=max`, erroring (never clamping)
+    /// when it does not — the same policy as `port` and `paginate`.
+    fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64>;
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
@@ -101,6 +104,15 @@ impl ValueExt for KdlValue {
                 span,
             )
             .into()),
+        }
+    }
+
+    fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64> {
+        let n = self.integer(text, span)?;
+        if (min..=max).contains(&n) {
+            Ok(n)
+        } else {
+            Err(ConfigError::bad_value(text, format!("must be {min}-{max}, got {n}"), span).into())
         }
     }
 

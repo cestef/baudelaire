@@ -76,7 +76,7 @@ impl<'a> Assets<'a> {
         }
         let bundler = self.config.asset.bundle.then(|| Js::new(self.config));
         for file in Walk::files(self.src)? {
-            let rel = file.strip_prefix(self.src).unwrap_or(&file);
+            let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
             let Some(bytes) = self.render(&file, Kind::of(&file, self.config), bundler.as_ref())?
             else {
                 continue;

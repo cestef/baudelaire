@@ -8,7 +8,7 @@
 use std::fmt::Write;
 
 use super::process::{Emit, Processor, Site};
-use crate::config::Config;
+use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::Result;
 
@@ -26,10 +26,6 @@ impl Processor for Llms {
         if base.is_none() {
             out.warn(format_args!("llms.txt has no `url` set — links will be relative"))?;
         }
-        let href = |permalink: &str| match &base {
-            Some(base) => base.join(permalink),
-            None => permalink.to_owned(),
-        };
         let mut md = format!("# {}\n", site.config.label());
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");
@@ -37,7 +33,8 @@ impl Processor for Llms {
         for (collection, pages) in Self::by_collection(site.pages) {
             let _ = write!(md, "\n## {collection}\n\n");
             for page in pages {
-                let _ = writeln!(md, "- [{}]({})", page.title(), href(&page.permalink));
+                let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
+                let _ = writeln!(md, "- [{}]({link})", page.title());
             }
         }
         out.file(&site.config.dist.join("llms.txt"), &md)?;

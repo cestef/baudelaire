@@ -30,8 +30,13 @@ impl EvalWorld {
         let mut sink = Sink::new();
         // Map each evaluated node's span onto its own byte range in `src`, so a
         // syntax error underlines the exact offending text of the frontmatter
-        // snippet (an identity map — `src` *is* the text we show as source).
-        let vpath = VirtualPath::new(path.to_string_lossy()).unwrap_or_else(|_| VirtualPath::new("frontmatter").expect("valid path"));
+        // snippet (an identity map — `src` *is* the text we show as source). The
+        // file id is cosmetic (labels resolve to ranges in `src` directly), so a
+        // best-effort virtual path from the file name is enough.
+        let vpath = path
+            .file_name()
+            .and_then(|name| VirtualPath::new(name.to_string_lossy()).ok())
+            .unwrap_or_else(|| VirtualPath::new("frontmatter.typ").expect("a bare name is valid"));
         let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
         let mapper = RangeMapper::new(Some(0..src.len())).expect("identity range");
         let value = eval_string(

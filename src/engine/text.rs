@@ -10,6 +10,32 @@
 //! chrome (header, sidebar, footer) never pollutes the prose — otherwise every
 //! page would index the same navigation text and search relevance collapses.
 
+/// The predefined HTML/XML entities as `(char, name)` — the single source both
+/// escaping (`char` → `&name;`) and decoding (`&name;` → `char`) read. `amp` is
+/// last so decoding it last leaves a literal like `&amp;lt;` intact.
+const ENTITIES: &[(char, &str)] = &[
+    ('<', "lt"),
+    ('>', "gt"),
+    ('"', "quot"),
+    ('\'', "apos"),
+    ('&', "amp"),
+];
+
+/// Escapes a string for safe inclusion in HTML/XML text or an attribute value.
+pub(super) struct Escaped<'a>(pub(super) &'a str);
+
+impl std::fmt::Display for Escaped<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for c in self.0.chars() {
+            match ENTITIES.iter().find(|(ch, _)| *ch == c) {
+                Some((_, name)) => write!(f, "&{name};")?,
+                None => f.write_str(c.encode_utf8(&mut [0; 4]))?,
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(super) struct Text;
 
 impl Text {
@@ -75,15 +101,15 @@ impl Text {
         }
     }
 
-    /// Decode the five predefined XML/HTML entities. `&amp;` is decoded last so
-    /// a literal like `&amp;lt;` does not turn into `<`.
+    /// Decode the predefined entities from the shared [`ENTITIES`] table, plus
+    /// the numeric apostrophe alias `&#39;`. `&amp;` is decoded last (it is last
+    /// in the table) so a literal like `&amp;lt;` does not turn into `<`.
     fn decode(s: &str) -> String {
-        s.replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&apos;", "'")
-            .replace("&amp;", "&")
+        let mut out = s.replace("&#39;", "'");
+        for (ch, name) in ENTITIES {
+            out = out.replace(&format!("&{name};"), ch.encode_utf8(&mut [0; 4]));
+        }
+        out
     }
 }
 

@@ -5,7 +5,7 @@
 //! `N` members with prev/next navigation.
 
 use crate::config::Config;
-use crate::content::listing::{Item, Listing, Nav};
+use crate::content::listing::{Item, Listing, Nav, Titlecase};
 use crate::content::{Collection, Page};
 
 /// Builds paginated index pages for a site's collections.
@@ -59,8 +59,8 @@ impl<'a> Section<'a> {
     fn page(&self, number: usize, members: &[&Page], total: usize) -> Listing {
         let items = members.iter().map(|p| Item::of(p)).collect();
         let title = match number {
-            1 => Listing::titlecase(self.id),
-            n => format!("{} — page {n}", Listing::titlecase(self.id)),
+            1 => Titlecase(self.id).to_string(),
+            n => format!("{} — page {n}", Titlecase(self.id)),
         };
         Listing::new(self.id, Self::slug(number), self.url(number), title)
             .items(items)

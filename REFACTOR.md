@@ -68,9 +68,9 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 - [x] Embedded assets in dep set (`embed.rs:75`) — embed-on + fingerprint-off = stale data: URIs forever; also embed processed bytes, not source (minify/optimize bypassed)
 - [x] Atomic blob/manifest writes + verify content-address on read (`cache.rs:119,148` — torn write = permanent corrupt hit); lock or grace-period prune for concurrent builds (`cache.rs:161`)
 - [x] Dep paths serialized via `display()` (`cache.rs:129`) — lossy; serde PathBuf
-- [ ] Collision detection pass over `(permalink, PageId, source)` — silent last-writer-wins today (verified); `posts/index.typ` + paginate = identical synthetic source (`listing.rs:134`) clobbering cache entries (`cache.rs:55`)
-- [ ] Taxonomy slug collisions (`C++`/`C--` → `c`) + empty slugs → `/tags//` (`taxonomy.rs:108`)
-- [ ] Unify slug policy: page slugs unslugified (spaces/emoji verbatim; sitemap `<loc>` unescaped, invalid) vs slugified terms; shared `Slug` type, percent-encode sitemap
+- [x] Collision detection pass over `(permalink, PageId, source)` — silent last-writer-wins today (verified); `posts/index.typ` + paginate = identical synthetic source (`listing.rs:134`) clobbering cache entries (`cache.rs:55`)
+- [x] Taxonomy slug collisions (`C++`/`C--` → `c`) + empty slugs → `/tags//` (`taxonomy.rs:108`)
+- [x] Unify slug policy: page slugs unslugified (spaces/emoji verbatim; sitemap `<loc>` unescaped, invalid) vs slugified terms; shared `Slug` type, percent-encode sitemap
 - [ ] Nested content: `a/b/c/deep.typ` → `/a/deep/` — intermediate dirs dropped, cross-dir same-name pages overwrite. Decide: full nested permalinks or explicit error
 - [ ] Fingerprint transform: cover `srcset`/`poster`; CSS `url()` rewrite through AssetMap in lightningcss visitor (`fingerprint.rs:41` — hard 404s today since original filename absent from dist)
 - [ ] Profile overlay resets sibling fields (`parse.rs` builders start from `default()`; base `serve{bind}` + profile `serve{port}` resets bind) — fill-in-place like paths/typst/output

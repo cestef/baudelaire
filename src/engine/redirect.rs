@@ -1,9 +1,10 @@
 //! Redirect stubs: a minimal HTML page that forwards a stale URL to its new one.
 
-use std::fmt::{self, Write};
+use std::fmt;
 
-use crate::cli::output::Count;
 use super::process::{Emit, Processor, Site};
+use super::text::Escaped;
+use crate::cli::output::Count;
 use crate::error::Result;
 
 /// Emits a redirect stub for every `redirect` old-path in a page's
@@ -43,7 +44,7 @@ impl<'a> Redirect<'a> {
 
 impl fmt::Display for Redirect<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let target = Attr(self.target);
+        let target = Escaped(self.target);
         write!(
             f,
             "<!DOCTYPE html>\n\
@@ -53,23 +54,5 @@ impl fmt::Display for Redirect<'_> {
              <title>Redirecting…</title>\n\
              <a href=\"{target}\">Redirecting…</a>\n"
         )
-    }
-}
-
-/// Escapes a string for safe inclusion in an HTML attribute value.
-struct Attr<'a>(&'a str);
-
-impl fmt::Display for Attr<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for c in self.0.chars() {
-            match c {
-                '&' => f.write_str("&amp;")?,
-                '"' => f.write_str("&quot;")?,
-                '<' => f.write_str("&lt;")?,
-                '>' => f.write_str("&gt;")?,
-                _ => f.write_char(c)?,
-            }
-        }
-        Ok(())
     }
 }

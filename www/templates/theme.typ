@@ -149,7 +149,8 @@
   meta.push(html.elem("span")[Built with #link-to("/", "Baudelaire") v#build.at("version", default: "dev")])
   meta.push(html.elem("span")[Typst #sys.version])
   if git != none {
-    meta.push(html.elem("span")[commit #html.a(href: "https://codeberg.org/cstef/baudelaire/commit/"+git.hash)[#html.code[#git.hash]]])
+    let short = git.hash.slice(0, 7)
+    meta.push(html.elem("span")[commit #html.a(href: "https://codeberg.org/cstef/baudelaire/commit/"+git.hash)[#html.code[#short]]])
   }
 
   html.elem("footer", attrs: (class: "site-footer"))[
