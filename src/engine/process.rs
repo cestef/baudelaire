@@ -33,9 +33,21 @@ impl Site<'_> {
     /// The base URL for a URL-requiring processor — the one warn-and-skip
     /// policy for a missing `url`, naming the `feature` that needs it.
     pub(super) fn base(&self, feature: &str, out: &mut dyn Emit) -> Result<Option<BaseUrl>> {
+        self.warn_missing_base(out, format_args!("{feature} enabled but no `url` set — skipped"))
+    }
+
+    /// The base URL, warning with `missing` when absent. The single "is a `url`
+    /// configured?" check shared by every processor — skip-on-absent callers go
+    /// through [`Site::base`]; those that still emit (llms with relative links,
+    /// robots dropping its sitemap line) supply their own message here.
+    pub(super) fn warn_missing_base(
+        &self,
+        out: &mut dyn Emit,
+        missing: fmt::Arguments,
+    ) -> Result<Option<BaseUrl>> {
         let base = self.config.base();
         if base.is_none() {
-            out.warn(format_args!("{feature} enabled but no `url` set — skipped"))?;
+            out.warn(missing)?;
         }
         Ok(base)
     }

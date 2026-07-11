@@ -22,10 +22,8 @@ impl Processor for Llms {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let base = site.config.base();
-        if base.is_none() {
-            out.warn(format_args!("llms.txt has no `url` set — links will be relative"))?;
-        }
+        let base =
+            site.warn_missing_base(out, format_args!("llms.txt has no `url` set — links will be relative"))?;
         let mut md = format!("# {}\n", site.config.label());
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");

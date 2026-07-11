@@ -27,15 +27,13 @@ impl Processor for Robots {
                 let _ = writeln!(body, "Disallow: {path}");
             }
         }
-        if site.config.sitemap {
-            match site.config.base() {
-                Some(base) => {
-                    let _ = writeln!(body, "Sitemap: {}", base.join(format!("/{}", SiteMap::FILE)));
-                }
-                None => out.warn(format_args!(
-                    "robots.txt sitemap link omitted — no `url` set"
-                ))?,
-            }
+        if site.config.sitemap
+            && let Some(base) = site.warn_missing_base(
+                out,
+                format_args!("robots.txt sitemap link omitted — no `url` set"),
+            )?
+        {
+            let _ = writeln!(body, "Sitemap: {}", base.join(format!("/{}", SiteMap::FILE)));
         }
         out.file(&site.config.dist.join("robots.txt"), &body)?;
         out.note(format_args!("wrote robots.txt"))
