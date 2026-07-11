@@ -90,7 +90,15 @@ impl<T> Attrs<T> {
 
 /// The valid keys of a scope, derived from its dispatch table (never a separate
 /// hand-kept list). Builds "unknown key" errors carrying a nearest-match hint.
-pub(super) struct Keys<'a>(pub(super) &'a [&'a str]);
+pub(crate) struct Keys<'a>(pub(super) &'a [&'a str]);
+
+impl<'a> Keys<'a> {
+    /// The single "closest known name" helper, reused wherever a typo should
+    /// suggest a valid name (config keys, frontmatter fields).
+    pub(crate) fn of(names: &'a [&'a str]) -> Self {
+        Self(names)
+    }
+}
 
 impl Keys<'_> {
     /// Build an unknown-key error from any dispatch `table`. The table is the
@@ -119,7 +127,7 @@ impl Keys<'_> {
     }
 
     /// The valid key within edit distance 2 of `unknown` (a typo), if any.
-    fn nearest(&self, unknown: &str) -> Option<&str> {
+    pub(crate) fn nearest(&self, unknown: &str) -> Option<&str> {
         self.0
             .iter()
             .copied()

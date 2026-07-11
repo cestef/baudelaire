@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use typst::{
     Library, LibraryExt, World,
     comemo::Track,
@@ -5,7 +7,7 @@ use typst::{
     engine::Sink,
     foundations::{Bytes, Context, Datetime, Dict, Scope, Value},
     introspection::EmptyIntrospector,
-    syntax::{FileId, Span, SyntaxMode},
+    syntax::{FileId, RangeMapper, RootedPath, Span, SyntaxMode, VirtualPath, VirtualRoot},
     utils::LazyHash,
 };
 use typst_eval::eval_string;
@@ -21,10 +23,17 @@ pub(super) struct EvalWorld {
 }
 
 impl EvalWorld {
-    /// Evaluate a typst dict expression `(key: val, ...)` to a [`Dict`].
-    pub(super) fn dict(src: &str) -> Result<Dict> {
+    /// Evaluate a typst dict expression `(key: val, ...)` to a [`Dict`]. `path`
+    /// names the source file in errors.
+    pub(super) fn dict(src: &str, path: &Path) -> Result<Dict> {
         let world = Self::shared();
         let mut sink = Sink::new();
+        // Map each evaluated node's span onto its own byte range in `src`, so a
+        // syntax error underlines the exact offending text of the frontmatter
+        // snippet (an identity map — `src` *is* the text we show as source).
+        let vpath = VirtualPath::new(path.to_string_lossy()).unwrap_or_else(|_| VirtualPath::new("frontmatter").expect("valid path"));
+        let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
+        let mapper = RangeMapper::new(Some(0..src.len())).expect("identity range");
         let value = eval_string(
             Track::track(world),
             &world.library,
@@ -32,11 +41,11 @@ impl EvalWorld {
             EmptyIntrospector.track(),
             Context::none().track(),
             src,
-            SpanMode::Uniform(Span::detached()),
+            SpanMode::Mapped { id, mapper: &mapper, mapper_error_span: Span::detached() },
             SyntaxMode::Code,
             Scope::new(),
         )
-        .map_err(|errs| ContentError::frontmatter_eval(src, errs))?;
+        .map_err(|errs| ContentError::frontmatter_eval(path, src, errs))?;
         match value {
             Value::Dict(d) => Ok(d),
             other => Err(ContentError::frontmatter_not_dict(src, other).into()),

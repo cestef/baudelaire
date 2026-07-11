@@ -45,9 +45,11 @@ impl Page {
     pub fn load(collection: &str, path: &std::path::Path, config: &Config) -> Result<Self> {
         let text = crate::fs::read_to_string(path)?;
         let src = Source::detached(&text);
-        let (mut frontmatter, body, data) = match Frontmatter::extract(&src)? {
+        let (mut frontmatter, body, data) = match Frontmatter::extract(&src, path, config)? {
             Some(e) => (e.frontmatter, e.body, e.data),
-            None => (Frontmatter::default(), text, "()".to_owned()),
+            // An empty typst dict is `(:)` — `()` is the empty *array*, which a
+            // template's `data.frontmatter.at(..)` cannot index.
+            None => (Frontmatter::default(), text, "(:)".to_owned()),
         };
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.

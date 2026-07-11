@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use typst::foundations::{Datetime, Dict, Value};
 use typst::syntax::{
@@ -6,7 +7,15 @@ use typst::syntax::{
     ast::{AstNode, Expr, Markup},
 };
 
-use crate::error::Result;
+use crate::config::Config;
+use crate::config::dispatch::Keys;
+use crate::error::{ContentError, Result};
+
+/// The recognized scalar/list frontmatter keys (taxonomy keys are configured,
+/// so they are added dynamically). The single source both the `from_dict` match
+/// and the typo suggester read — a new key here plus a match arm, or the sync
+/// test fails.
+const KNOWN: &[&str] = &["title", "date", "draft", "slug", "template", "order", "redirect"];
 
 /// Parsed frontmatter for a single page.
 #[derive(Debug, Clone, Default)]
@@ -38,18 +47,20 @@ impl Frontmatter {
     /// A string value from `extra` (arbitrary frontmatter), if present and a
     /// string — e.g. `description`, `summary`, `image`, `author`.
     pub fn text(&self, key: &str) -> Option<String> {
-        self.extra.get(key).and_then(ValueExt::string)
+        self.extra.get(key).and_then(ValueExt::str)
     }
 
     /// Extract frontmatter from a source file. Returns `None` when the file has
-    /// no leading `#frontmatter(...)` call.
-    pub fn extract(source: &Source) -> Result<Option<Extract>> {
+    /// no leading `#frontmatter(...)` call. `path` names the file in errors;
+    /// `config` supplies the taxonomy keys to recognize.
+    pub fn extract(source: &Source, path: &Path, config: &Config) -> Result<Option<Extract>> {
         let text = source.text();
         let Some(call) = Call::find(source) else {
             return Ok(None);
         };
         let data = &text[call.args()];
-        let frontmatter = Self::from_dict(crate::content::eval::EvalWorld::dict(data)?)?;
+        let frontmatter =
+            Self::from_dict(crate::content::eval::EvalWorld::dict(data, path)?, path, config)?;
         Ok(Some(Extract {
             frontmatter,
             body: call.splice(text),
@@ -57,26 +68,43 @@ impl Frontmatter {
         }))
     }
 
-    fn from_dict(dict: Dict) -> Result<Self> {
+    /// Interpret the evaluated frontmatter dict. A known key with a wrong-typed
+    /// value is an error (never silently dropped); a configured taxonomy key
+    /// collects its terms; a key that is a near-miss of a known one is a typo
+    /// error; anything else passes through to `extra`.
+    fn from_dict(dict: Dict, path: &Path, config: &Config) -> Result<Self> {
+        let taxonomies: Vec<&str> = config.taxonomies.iter().map(|(_, t)| t.key.as_str()).collect();
         let mut fm = Self::default();
         for (key, val) in dict.iter() {
-            match key.as_str() {
-                "title" => fm.title = val.string(),
-                "date" => fm.date = val.date(),
-                "draft" => fm.draft = val.boolean().unwrap_or(false),
-                "slug" => fm.slug = val.string(),
-                "template" => fm.template = val.string(),
-                "order" => fm.order = val.integer(),
-                "redirect" => fm.redirect = val.string_list(),
-                "tags" | "series" if val.is_array() => {
-                    fm.taxonomies.insert(key.to_string(), val.string_list());
+            let key = key.as_str();
+            match key {
+                "title" => fm.title = Some(val.string(path, key)?),
+                "date" => fm.date = Some(val.date(path, key)?),
+                "draft" => fm.draft = val.boolean(path, key)?,
+                "slug" => fm.slug = Some(val.string(path, key)?),
+                "template" => fm.template = Some(val.string(path, key)?),
+                "order" => fm.order = Some(val.integer(path, key)?),
+                "redirect" => fm.redirect = val.strings(path, key)?,
+                _ if taxonomies.contains(&key) => {
+                    fm.taxonomies.insert(key.to_owned(), val.strings(path, key)?);
                 }
-                _ => {
-                    fm.extra.insert(key.to_string(), val.clone());
-                }
+                _ => match Self::suggest(key, &taxonomies) {
+                    Some(near) => return Err(ContentError::unknown_frontmatter(path, key, &near).into()),
+                    None => {
+                        fm.extra.insert(key.to_owned(), val.clone());
+                    }
+                },
             }
         }
         Ok(fm)
+    }
+
+    /// The known key a typo'd `key` most likely meant, if it is a near-miss of
+    /// one (and not itself a real extra key). Reuses the config did-you-mean
+    /// over the one known-key set (built-ins plus configured taxonomies).
+    fn suggest(key: &str, taxonomies: &[&str]) -> Option<String> {
+        let known: Vec<&str> = KNOWN.iter().copied().chain(taxonomies.iter().copied()).collect();
+        Keys::of(&known).nearest(key).map(str::to_owned)
     }
 }
 
@@ -90,10 +118,17 @@ impl Call {
     fn find(source: &Source) -> Option<Self> {
         let root = source.root();
         let markup = root.cast::<Markup>()?;
-        let call = markup.exprs().find_map(|expr| match expr {
-            Expr::FuncCall(c) if Self::is_frontmatter(&c) => Some(c),
-            _ => None,
-        })?;
+        // Only a *leading* call counts: skip leading whitespace, then the first
+        // real expression must be the `#frontmatter(...)` call, else there is
+        // none — a mid-document call is ordinary content, not frontmatter.
+        let mut exprs = markup.exprs();
+        let call = loop {
+            match exprs.next()? {
+                Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_) => continue,
+                Expr::FuncCall(c) if Self::is_frontmatter(&c) => break c,
+                _ => return None,
+            }
+        };
         let linked = LinkedNode::new(root);
         let call_node = linked.find(call.to_untyped().span())?;
         let args_node = linked.find(call.args().to_untyped().span())?;
@@ -118,69 +153,90 @@ impl Call {
     }
 
     fn splice(&self, text: &str) -> String {
+        // Replace the call with exactly as many newlines as it spanned, so every
+        // body line keeps its original number and compile diagnostics point at
+        // the real line (a single `\n` shifted everything below up by one).
+        let newlines = text[self.range.clone()].bytes().filter(|&b| b == b'\n').count();
         let mut out = String::with_capacity(text.len());
         out.push_str(&text[..self.range.start]);
-        out.push('\n');
+        out.extend(std::iter::repeat_n('\n', newlines));
         out.push_str(&text[self.range.end..]);
         out
     }
 }
 
+/// Typed accessors over an evaluated frontmatter [`Value`]. The `path`/`key`
+/// parameters let a type mismatch name the file and field instead of being
+/// silently dropped. [`ValueExt::str`] (infallible, for `extra` reads) is the
+/// exception — a non-string there is simply "absent".
 trait ValueExt {
-    fn string(&self) -> Option<String>;
-    fn boolean(&self) -> Option<bool>;
-    fn integer(&self) -> Option<i64>;
-    fn date(&self) -> Option<time::Date>;
-    fn string_list(&self) -> Vec<String>;
-    fn is_array(&self) -> bool;
+    fn str(&self) -> Option<String>;
+    fn string(&self, path: &Path, key: &str) -> Result<String>;
+    fn boolean(&self, path: &Path, key: &str) -> Result<bool>;
+    fn integer(&self, path: &Path, key: &str) -> Result<i64>;
+    fn date(&self, path: &Path, key: &str) -> Result<time::Date>;
+    fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>>;
+    /// This value's typst type name, for error messages.
+    fn kind(&self) -> &'static str;
 }
 
 impl ValueExt for Value {
-    fn string(&self) -> Option<String> {
-        if let Value::Str(s) = self {
-            Some(s.to_string())
-        } else {
-            None
+    fn str(&self) -> Option<String> {
+        match self {
+            Value::Str(s) => Some(s.to_string()),
+            _ => None,
         }
     }
 
-    fn boolean(&self) -> Option<bool> {
-        if let Value::Bool(b) = self {
-            Some(*b)
-        } else {
-            None
+    fn string(&self, path: &Path, key: &str) -> Result<String> {
+        self.str()
+            .ok_or_else(|| ContentError::frontmatter_field(path, key, "a string", self.kind(), None).into())
+    }
+
+    fn boolean(&self, path: &Path, key: &str) -> Result<bool> {
+        match self {
+            Value::Bool(b) => Ok(*b),
+            _ => Err(ContentError::frontmatter_field(path, key, "a boolean", self.kind(), None).into()),
         }
     }
 
-    fn integer(&self) -> Option<i64> {
-        if let Value::Int(i) = self {
-            Some(*i)
-        } else {
-            None
+    fn integer(&self, path: &Path, key: &str) -> Result<i64> {
+        match self {
+            Value::Int(i) => Ok(*i),
+            _ => Err(ContentError::frontmatter_field(path, key, "an integer", self.kind(), None).into()),
         }
     }
 
-    fn date(&self) -> Option<time::Date> {
-        if let Value::Datetime(d) = self {
-            match d {
-                Datetime::Date(date) => Some(*date),
-                Datetime::Datetime(dt) => Some(dt.date()),
-                _ => None,
-            }
-        } else {
-            None
+    fn date(&self, path: &Path, key: &str) -> Result<time::Date> {
+        match self {
+            Value::Datetime(Datetime::Date(d)) => Ok(*d),
+            Value::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
+            _ => Err(ContentError::frontmatter_field(
+                path,
+                key,
+                "a date",
+                self.kind(),
+                Some("write dates as `datetime(year: 2024, month: 1, day: 1)`"),
+            )
+            .into()),
         }
     }
 
-    fn string_list(&self) -> Vec<String> {
-        if let Value::Array(arr) = self {
-            arr.iter().filter_map(|v| v.string()).collect()
-        } else {
-            Vec::new()
+    fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>> {
+        match self {
+            Value::Array(arr) => Ok(arr.iter().filter_map(ValueExt::str).collect()),
+            _ => Err(ContentError::frontmatter_field(
+                path,
+                key,
+                "a list of strings",
+                self.kind(),
+                None,
+            )
+            .into()),
         }
     }
 
-    fn is_array(&self) -> bool {
-        matches!(self, Value::Array(_))
+    fn kind(&self) -> &'static str {
+        self.ty().long_name()
     }
 }

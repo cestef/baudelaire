@@ -39,28 +39,28 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 
 ## Phase 2 — silent-swallowing sweep
 
-- [ ] `boolean()` never errors (`parse.rs:109`): `clean "yes"` → false silently (verified). Error on non-bool, drop dead `default` param
-- [ ] i128 casts wrap (`parse.rs:119`, `value.rs:74`): `port 99999` → 34463. `try_into` + range errors
-- [ ] `Permalink::of` swallows parse errors (`permalink.rs:19`) — validate templates at config parse; `UnknownPlaceholder` diag currently unreachable. Also unterminated `{slug` accepted (`:48`); `expect("known placeholder")` panic (`:120`); `convention()` hand-assembles instead of parsing const template
-- [ ] Typed frontmatter errors (`frontmatter.rs:65`): `title: 3`→None, `draft:"yes"`→false, `date:"2024-01-01"`→dateless, all silent; no key did-you-mean
-- [ ] `load_config` (`cli/mod.rs:139`): every io error → "not found"; use facade, map only NotFound
-- [ ] `Engine::collect` (`engine/mod.rs:217`) keeps first error only — aggregate all page failures into related diagnostics
-- [ ] Frontmatter eval errors: no filename, no labels (`error/content.rs:126`); fix span resolution (mirror typ.rs), drop N+1 src clones; forward `kind.related()` (`content.rs:83`); hoist dup severity match (`content.rs:153` vs `typ.rs:70`)
-- [ ] Compile diagnostic line off-by-one (frontmatter strip adds a line; link spans correct — reuse that mapping)
-- [ ] Hooks cwd = project root, not `current_dir().unwrap_or_default()` (`hook.rs:61`)
-- [ ] Kill `io::Error::other` in `xml.rs:52` + delete context-free `Io` catch-all variant (`error/mod.rs:110`)
-- [ ] `feed.rs:134` `stamp` swallows format errors with `.ok()`
-- [ ] Watcher errors flattened away (`serve.rs:76`) — warn on Err arm
-- [ ] Reject: extra positional args (`dispatch.rs:57`), duplicate collection/taxonomy/profile ids (`config/mod.rs:62`), `..` in `destination()` (`config/mod.rs:97`), `paginate 0`/negative `.max(0)` clamps (`parse.rs:379,400,462`), empty `draft.suffix`, `features "-…"` (currently strips `-` and ENABLES)
-- [ ] `missing_profile` → dedicated kind listing valid profiles (`profile.rs:22`); profile error spans point into re-serialized text (`profile.rs:13`) — keep original source
-- [ ] `init` overwrite guard (`scaffold.rs:39` clobbers existing config/templates; `new_page` refuses — mirror it) + target preflight
-- [ ] Scaffold `{{}}` render: KDL-escape values, single-pass substitution (`scaffold.rs:325`)
-- [ ] `new posts/my-post` → resolve into content dir, append `.typ`, or error (writes literal cwd path today)
-- [ ] `git describe --tags --always` reports hash as tag (`world.rs:161`) — drop `--always`
-- [ ] `mapped()` accepts duplicates (`formats "rss" "rss"` = feed ×2); unify empty-list policy with `features`
-- [ ] Env `${TYPO}` → `""` silent (`value.rs:39`) — warn or error without `:-`
-- [ ] `prompt.rs`: zero-option panic (`:56`), EOF should fall back to default per module doc (`:86`)
-- [ ] Search JS: fetch failure → silent empty index (`engine.flat.js:12`, `engine.inverted.js:14`) — warn + error state
+- [x] `boolean()` never errors (`parse.rs:109`): `clean "yes"` → false silently (verified). Error on non-bool, drop dead `default` param
+- [x] i128 casts wrap (`parse.rs:119`, `value.rs:74`): `port 99999` → 34463. `try_into` + range errors
+- [x] `Permalink::of` swallows parse errors (`permalink.rs:19`) — validate templates at config parse; `UnknownPlaceholder` diag currently unreachable. Also unterminated `{slug` accepted (`:48`); `expect("known placeholder")` panic (`:120`); `convention()` hand-assembles instead of parsing const template
+- [x] Typed frontmatter errors (`frontmatter.rs:65`): `title: 3`→None, `draft:"yes"`→false, `date:"2024-01-01"`→dateless, all silent; no key did-you-mean
+- [x] `load_config` (`cli/mod.rs:139`): every io error → "not found"; use facade, map only NotFound
+- [x] `Engine::collect` (`engine/mod.rs:217`) keeps first error only — aggregate all page failures into related diagnostics
+- [x] Frontmatter eval errors: no filename, no labels (`error/content.rs:126`); fix span resolution (mirror typ.rs), drop N+1 src clones; forward `kind.related()` (`content.rs:83`); hoist dup severity match (`content.rs:153` vs `typ.rs:70`)
+- [x] Compile diagnostic line off-by-one (frontmatter strip adds a line; link spans correct — reuse that mapping)
+- [x] Hooks cwd = project root, not `current_dir().unwrap_or_default()` (`hook.rs:61`)
+- [x] Kill `io::Error::other` in `xml.rs:52` + delete context-free `Io` catch-all variant (`error/mod.rs:110`)
+- [x] `feed.rs:134` `stamp` swallows format errors with `.ok()`
+- [x] Watcher errors flattened away (`serve.rs:76`) — warn on Err arm
+- [x] Reject: extra positional args (`dispatch.rs:57`), duplicate collection/taxonomy/profile ids (`config/mod.rs:62`), `..` in `destination()` (`config/mod.rs:97`), `paginate 0`/negative `.max(0)` clamps (`parse.rs:379,400,462`), empty `draft.suffix`, `features "-…"` (currently strips `-` and ENABLES)
+- [x] `missing_profile` → dedicated kind listing valid profiles (`profile.rs:22`); profile error spans point into re-serialized text (`profile.rs:13`) — keep original source
+- [x] `init` overwrite guard (`scaffold.rs:39` clobbers existing config/templates; `new_page` refuses — mirror it) + target preflight
+- [x] Scaffold `{{}}` render: KDL-escape values, single-pass substitution (`scaffold.rs:325`)
+- [x] `new posts/my-post` → resolve into content dir, append `.typ`, or error (writes literal cwd path today)
+- [x] `git describe --tags --always` reports hash as tag (`world.rs:161`) — drop `--always`
+- [x] `mapped()` accepts duplicates (`formats "rss" "rss"` = feed ×2); unify empty-list policy with `features`
+- [x] Env `${TYPO}` → `""` silent (`value.rs:39`) — warn or error without `:-`
+- [x] `prompt.rs`: zero-option panic (`:56`), EOF should fall back to default per module doc (`:86`)
+- [x] Search JS: fetch failure → silent empty index (`engine.flat.js:12`, `engine.inverted.js:14`) — warn + error state
 
 ## Phase 3 — cache + output correctness
 
@@ -74,19 +74,19 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 - [ ] Nested content: `a/b/c/deep.typ` → `/a/deep/` — intermediate dirs dropped, cross-dir same-name pages overwrite. Decide: full nested permalinks or explicit error
 - [ ] Fingerprint transform: cover `srcset`/`poster`; CSS `url()` rewrite through AssetMap in lightningcss visitor (`fingerprint.rs:41` — hard 404s today since original filename absent from dist)
 - [ ] Profile overlay resets sibling fields (`parse.rs` builders start from `default()`; base `serve{bind}` + profile `serve{port}` resets bind) — fill-in-place like paths/typst/output
-- [ ] Taxonomy keys from config, not hardcoded `tags|series` (`frontmatter.rs:76` — custom key = zero pages silently)
+- [x] Taxonomy keys from config, not hardcoded `tags|series` (`frontmatter.rs:76` — custom key = zero pages silently)
 - [ ] `--base-url` subpath: resolved links + asset refs ignore it (subdir deploy broken)
 - [ ] `Js::bundle` writes only entry chunk — dynamic imports 404 (`asset.rs:285`)
 - [ ] JPEG re-encode: honor EXIF orientation, skip when quality ≤ target (`asset.rs:140` — portraits rotate, generation loss)
 - [ ] Redirect vs live permalink collision check (`redirect.rs:17` — stale redirect clobbers real page); add `noindex` meta to stubs (`redirect.rs:49`)
 - [ ] Feeds: RSS untitled item needs title-or-description; Atom `<author>` (RFC 4287), `rel="self"` (`feed.rs:89,105`)
-- [ ] `data: "()"` for frontmatter-less pages — typst array, not dict `(:)` (`page.rs:50`); route through codegen
+- [x] `data: "()"` for frontmatter-less pages — typst array, not dict `(:)` (`page.rs:50`); route through codegen
 - [ ] `<title>` fallback (untemplated + default taxonomy pages have none; taxonomy defaults skip site layout entirely)
 - [ ] og:image single owner: drop `content` arm from Fingerprint or Meta's resolve (`meta.rs:76` vs `fingerprint.rs:34`)
 - [ ] Pagination: zero eligible members → emit empty page 1 (`/{collection}/` 404s today); count via `div_ceil` (`pagination.rs:53`)
 - [ ] Root/index permalinks through `Permalink` type — 3 hand-`format!` sites, `index.typ` lands at `/posts/index/` while paginate makes `/posts/` (`page.rs:86`, `pagination.rs:95`)
 - [ ] `codegen::Value::from_typst` via structural conversion, not `repr()` (`codegen.rs:73` — repr not round-trippable for non-data values)
-- [ ] `Call::find` accepts mid-document `#frontmatter` — restrict to leading (`frontmatter.rs:95`)
+- [x] `Call::find` accepts mid-document `#frontmatter` — restrict to leading (`frontmatter.rs:95`)
 - [ ] `text.rs`: case-insensitive `</script>` close + skip-to-EOF when unclosed (`:44`); comment `-->` handling; numeric entities; char-boundary guard (`:68`)
 - [ ] `links.rs`: percent-decode before join, case-insensitive ext, generic scheme detection (`:71`); LinkMap shouldn't drop canonicalize-failures/generated pages (`:31`)
 - [ ] `asset.rs`: guard `dist`==`assets` before `remove_dir_all` (`:74`); lazy current_thread runtime (`:248` rebuilds multi-thread rt every rebuild); 3 `expect()` invariant panics → carry config in `Kind::Image`

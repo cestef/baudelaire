@@ -4,7 +4,7 @@
 //! Conventional defaults live in [`defaults`]. Profile overlay in [`profile`].
 
 pub mod defaults;
-mod dispatch;
+pub(crate) mod dispatch;
 pub mod parse;
 pub mod profile;
 mod value;

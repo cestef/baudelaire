@@ -785,7 +785,7 @@ fn search_indexes_emitted_for_each_configured_format() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  search {\n    formats \"json\" \"inverted\"\n    stopwords \"the\"\n    client #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\ntaxonomies {\n  tags\n}\noutput {\n  search {\n    formats \"json\" \"inverted\"\n    stopwords \"the\"\n    client #true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",

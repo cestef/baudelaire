@@ -1,9 +1,23 @@
+use std::path::Path;
+
+use baudelaire::config::Config;
 use baudelaire::content::Frontmatter;
 use typst::syntax::Source;
 
+/// A config declaring the `tags` and `series` taxonomies most fixtures use —
+/// taxonomy keys are recognized from config, not hard-coded.
+fn config() -> Config {
+    Config::parse("taxonomies {\n  tags\n  series\n}\n").expect("config")
+}
+
+fn try_extract(text: &str, config: &Config) -> baudelaire::error::Result<Option<Frontmatter>> {
+    let src = Source::detached(text);
+    Ok(Frontmatter::extract(&src, Path::new("page.typ"), config)?.map(|e| e.frontmatter))
+}
+
 fn extract(text: &str) -> (Frontmatter, String) {
     let src = Source::detached(text);
-    let e = Frontmatter::extract(&src)
+    let e = Frontmatter::extract(&src, Path::new("page.typ"), &config())
         .expect("extract")
         .expect("has frontmatter");
     (e.frontmatter, e.body)
@@ -113,8 +127,7 @@ fn splices_out_frontmatter_call() {
 
 #[test]
 fn no_frontmatter_returns_none() {
-    let src = Source::detached("just body");
-    assert!(Frontmatter::extract(&src).expect("ok").is_none());
+    assert!(try_extract("just body", &config()).expect("ok").is_none());
 }
 
 #[test]
@@ -132,24 +145,18 @@ body
 
 #[test]
 fn malformed_frontmatter_errors() {
-    let src = Source::detached(
-        r#"
-#frontmatter((title: ))
-body
-"#,
-    );
-    assert!(Frontmatter::extract(&src).is_err());
+    let err = try_extract("\n#frontmatter((title: \"unterminated))\nbody\n", &config()).unwrap_err();
+    // The error names the offending file, not just "failed to evaluate".
+    assert!(err.to_string().contains("page.typ"), "{err}");
+    // ...and the related diagnostic underlines the offending text (a code frame
+    // renders), rather than a bare spanless message.
+    let rendered = format!("{:?}", miette::Report::new(err));
+    assert!(rendered.contains("╭─"), "expected a source snippet: {rendered}");
 }
 
 #[test]
 fn non_dict_frontmatter_errors() {
-    let src = Source::detached(
-        r#"
-#frontmatter("not a dict")
-body
-"#,
-    );
-    assert!(Frontmatter::extract(&src).is_err());
+    assert!(try_extract("\n#frontmatter(\"not a dict\")\nbody\n", &config()).is_err());
 }
 
 #[test]
@@ -163,4 +170,61 @@ Second line
     );
     assert!(spliced.contains("First line"));
     assert!(spliced.contains("Second line"));
+}
+
+#[test]
+fn wrong_typed_known_keys_error() {
+    // Previously these were silently dropped (`title: 3` vanished, a string
+    // `draft`/`date` became false/none). Now each is a precise error.
+    for bad in [
+        "#frontmatter((title: 3))",
+        "#frontmatter((draft: \"yes\"))",
+        "#frontmatter((date: \"2024-01-01\"))",
+        "#frontmatter((order: \"first\"))",
+        "#frontmatter((tags: \"solo\"))",
+    ] {
+        let err = try_extract(bad, &config()).unwrap_err();
+        assert!(
+            err.to_string().contains("must be"),
+            "expected a type error for `{bad}`, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn typo_key_is_suggested() {
+    let err = try_extract("#frontmatter((titel: \"X\"))", &config()).unwrap_err();
+    let rendered = format!("{:?}", miette::Report::new(err));
+    assert!(rendered.contains("did you mean `title`"), "{rendered}");
+}
+
+#[test]
+fn configured_taxonomy_key_is_recognized() {
+    // A taxonomy keyed on a non-default name must populate `taxonomies`, not
+    // silently land in `extra`.
+    let config = Config::parse("taxonomies {\n  categories\n}\n").expect("config");
+    let fm = try_extract("#frontmatter((categories: (\"rust\", \"cli\")))", &config)
+        .expect("ok")
+        .expect("frontmatter");
+    assert_eq!(
+        fm.taxonomies.get("categories").unwrap(),
+        &vec!["rust".to_string(), "cli".to_string()]
+    );
+}
+
+#[test]
+fn mid_document_frontmatter_is_not_extracted() {
+    // A `#frontmatter(...)` that is not the leading expression is ordinary
+    // content, left in the body.
+    let none = try_extract("Some intro.\n\n#frontmatter((title: \"X\"))\n", &config()).expect("ok");
+    assert!(none.is_none());
+}
+
+#[test]
+fn splice_preserves_line_numbers() {
+    // A three-line frontmatter call leaves the body's first line at its
+    // original line number (blank lines stand in for the removed call).
+    let (_, spliced) = extract("#frontmatter((\n  title: \"X\",\n))\nBody line\n");
+    let body_line = spliced.lines().position(|l| l.contains("Body line")).expect("body");
+    assert_eq!(body_line, 3, "body should stay on line 4 (index 3): {spliced:?}");
 }

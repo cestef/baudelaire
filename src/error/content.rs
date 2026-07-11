@@ -2,6 +2,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 use typst::diag::SourceDiagnostic;
 use typst::ecow::EcoVec;
+use typst::syntax::DiagSpanKind;
 
 use crate::error::Annotated;
 
@@ -12,13 +13,18 @@ pub struct ContentError {
 }
 
 impl ContentError {
-    pub fn frontmatter_eval(src: &str, errs: EcoVec<SourceDiagnostic>) -> Self {
+    pub fn frontmatter_eval(
+        path: &std::path::Path,
+        src: &str,
+        errs: EcoVec<SourceDiagnostic>,
+    ) -> Self {
         let diags: Vec<_> = errs
             .into_iter()
             .map(|e| FrontmatterDiag::new(src, e))
             .collect();
         Self {
             kind: ContentErrorKind::FrontmatterEval {
+                path: path.display().to_string(),
                 src: src.to_owned(),
                 errs: diags,
             },
@@ -50,6 +56,38 @@ impl ContentError {
                 src: src.to_owned(),
                 ty: value.ty().long_name(),
                 repr: value.repr().to_string(),
+            },
+        }
+    }
+
+    /// A known frontmatter key whose value has the wrong type — previously
+    /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
+    pub fn frontmatter_field(
+        path: &std::path::Path,
+        key: &str,
+        expected: &'static str,
+        got: &'static str,
+        help: Option<&'static str>,
+    ) -> Self {
+        Self {
+            kind: ContentErrorKind::FrontmatterField {
+                path: path.display().to_string(),
+                key: key.to_owned(),
+                expected,
+                got: got.to_owned(),
+                help: help.map(str::to_owned),
+            },
+        }
+    }
+
+    /// A frontmatter key that is a near-miss of a known one (a typo). Unknown
+    /// keys with no close match pass through to `extra` untouched.
+    pub fn unknown_frontmatter(path: &std::path::Path, key: &str, suggestion: &str) -> Self {
+        Self {
+            kind: ContentErrorKind::UnknownFrontmatterKey {
+                path: path.display().to_string(),
+                key: key.to_owned(),
+                help: format!("did you mean `{suggestion}`?"),
             },
         }
     }
@@ -92,12 +130,13 @@ impl miette::Diagnostic for ContentError {
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum ContentErrorKind {
-    #[error("failed to evaluate frontmatter")]
+    #[error("failed to evaluate frontmatter in {path}")]
     #[diagnostic(
         code(baudelaire::content::frontmatter_eval),
         help("frontmatter must be a typst dict literal of plain data")
     )]
     FrontmatterEval {
+        path: String,
         #[source_code]
         src: String,
         #[related]
@@ -118,6 +157,26 @@ pub enum ContentErrorKind {
         src: String,
         ty: &'static str,
         repr: String,
+    },
+
+    #[error("frontmatter `{key}` in {path} must be {expected}, but is a {got}")]
+    #[diagnostic(code(baudelaire::content::frontmatter_field))]
+    FrontmatterField {
+        path: String,
+        key: String,
+        expected: &'static str,
+        got: String,
+        #[help]
+        help: Option<String>,
+    },
+
+    #[error("unknown frontmatter key `{key}` in {path}")]
+    #[diagnostic(code(baudelaire::content::unknown_frontmatter_key))]
+    UnknownFrontmatterKey {
+        path: String,
+        key: String,
+        #[help]
+        help: String,
     },
 }
 
@@ -159,6 +218,21 @@ impl miette::Diagnostic for FrontmatterDiag {
 
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
         Some(&self.src as &dyn miette::SourceCode)
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        // Frontmatter is evaluated with `SpanMode::Mapped`, so each diagnostic
+        // carries a raw byte range into `src` (the snippet shown above) — draw
+        // an underline there instead of the whole snippet.
+        let DiagSpanKind::Range { range, .. } = self.inner.span.get() else {
+            return None;
+        };
+        let label = miette::LabeledSpan::new(
+            Some(self.inner.message.to_string()),
+            range.start,
+            range.len(),
+        );
+        Some(Box::new(std::iter::once(label)))
     }
 }
 
