@@ -52,7 +52,7 @@ fn fixture_config() -> &'static str {
         }
 
         taxonomies {
-          tags kind="list" index=#true
+          tags index=#true
         }
 
         output {

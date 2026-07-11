@@ -97,7 +97,7 @@ impl Corpus {
         json(&self.documents)
     }
 
-    /// A prebuilt inverted index (`search-index.json`): term → document ids,
+    /// A prebuilt inverted index (`search.inverted.json`): term → document ids,
     /// with tokens shorter than `min_length` or listed in `stopwords` dropped.
     fn inverted_json(&self, stopwords: &[String], min_length: usize) -> Result<String> {
         let stop: HashSet<&str> = stopwords.iter().map(String::as_str).collect();

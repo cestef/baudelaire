@@ -182,7 +182,7 @@ fn generated_pages_are_cached() {
     site.write(
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
-         taxonomies {\n  tags kind=\"list\" index=#true\n}\n",
+         taxonomies {\n  tags index=#true\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -210,7 +210,7 @@ fn retitling_invalidates_taxonomy_listing() {
     site.write(
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
-         taxonomies {\n  tags kind=\"list\" index=#true\n}\n",
+         taxonomies {\n  tags index=#true\n}\n",
     );
     site.write(
         "content/posts/a.typ",

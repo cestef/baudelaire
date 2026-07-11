@@ -7,7 +7,7 @@ use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
     PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, SearchFormat, ServeConfig,
-    TaxoKind, TaxonomyConfig,
+    TaxonomyConfig,
 };
 use crate::error::{ConfigError, Result};
 
@@ -89,7 +89,7 @@ pub(super) trait NodeExt {
 }
 
 impl NodeExt for KdlNode {
-    /// Bridge kdl's miette-5 span to our miette-7 [`SourceSpan`].
+    /// Bridge kdl's `miette::SourceSpan` (its own miette 7) to ours.
     fn span(&self) -> SourceSpan {
         let s = KdlNode::span(self);
         SourceSpan::new(s.offset().into(), s.len())
@@ -473,14 +473,12 @@ impl NodeExt for KdlNode {
 
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)> {
         const ATTRS: Attrs<TaxonomyConfig> = Attrs(&[
-            ("kind", |x, v, t, s| { x.kind = v.taxo_kind(t, s)?; Ok(()) }),
             ("key", |x, v, t, s| { x.key = v.as_str(t, s)?; Ok(()) }),
             ("index", |x, v, _t, _s| { x.index = v.is_true(); Ok(()) }),
             ("template", |x, v, t, s| { x.template = Some(v.as_str(t, s)?); Ok(()) }),
         ]);
         let id = self.name().value().to_owned();
         let mut tax = TaxonomyConfig {
-            kind: TaxoKind::List,
             key: id.clone(),
             index: false,
             template: None,

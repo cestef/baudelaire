@@ -8,7 +8,7 @@ Declare one and Baudelaire generates the index pages for it.
 
 ```kdl
 taxonomies {
-  tags kind="list" index=#true template="list.typ"
+  tags index=#true template="list.typ"
 }
 ```
 
@@ -22,6 +22,5 @@ Both are ordinary templated pages. They receive the term and its entries as
 structured data and render through your `list` template, so they inherit the site
 layout. The chips under this article link straight into `/tags/`.
 
-`kind` is `list` for flat terms or `tree` for nested ones (a series with parts).
 Point several taxonomies at different frontmatter keys to group the same content
 more than one way.

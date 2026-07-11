@@ -25,7 +25,7 @@ pub(super) struct Cx<'a> {
     pub config: &'a Config,
     pub page: &'a Page,
     pub links: &'a LinkMap,
-    /// Processed-asset URL map, consumed by the fingerprint transform.
+    /// Processed-asset URL map, consumed by the fingerprint and meta transforms.
     pub assets: &'a AssetMap,
     /// Raw targets of internal `.typ` links with no matching page, collected for
     /// link checking.

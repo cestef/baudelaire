@@ -179,8 +179,6 @@ pub struct CollectionConfig {
 /// Taxonomy definition.
 #[derive(Debug, Clone, Hash)]
 pub struct TaxonomyConfig {
-    /// Grouping structure.
-    pub kind: TaxoKind,
     /// Frontmatter key to read terms from.
     pub key: String,
     /// Auto-generate index pages for each term.
@@ -252,7 +250,7 @@ pub enum SearchFormat {
     /// A flat document list (`search.json`) — pair with any client library
     /// (Fuse.js, MiniSearch, …), which builds its own index at runtime.
     Json,
-    /// A prebuilt inverted index (`search-index.json`): server-side tokenized
+    /// A prebuilt inverted index (`search.inverted.json`): server-side tokenized
     /// so the client looks up terms directly instead of scanning every doc.
     Inverted,
 }
@@ -281,15 +279,6 @@ pub enum SearchField {
     Title,
     Body,
     Tags,
-}
-
-/// Taxonomy grouping structure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TaxoKind {
-    /// Flat list of terms (e.g. tags).
-    List,
-    /// Hierarchical / nested terms (e.g. series).
-    Tree,
 }
 
 /// HTML output options.

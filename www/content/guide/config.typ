@@ -31,7 +31,7 @@ collections {
 }
 
 taxonomies {
-  tags kind="list" index=#true
+  tags index=#true
 }
 
 output {

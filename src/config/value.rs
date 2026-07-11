@@ -4,7 +4,7 @@
 use kdl::KdlValue;
 use miette::SourceSpan;
 
-use crate::config::{SortKey, TaxoKind};
+use crate::config::SortKey;
 use crate::error::{ConfigError, Result};
 
 /// Expands `${VAR}` references in config string values from the process
@@ -53,7 +53,6 @@ pub(super) trait ValueExt {
     fn is_true(&self) -> bool;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
-    fn taxo_kind(&self, text: &str, span: SourceSpan) -> Result<TaxoKind>;
 }
 
 impl ValueExt for KdlValue {
@@ -109,18 +108,6 @@ impl ValueExt for KdlValue {
         }
     }
 
-    fn taxo_kind(&self, text: &str, span: SourceSpan) -> Result<TaxoKind> {
-        match self.as_str(text, span)?.as_str() {
-            "list" => Ok(TaxoKind::List),
-            "tree" => Ok(TaxoKind::Tree),
-            other => Err(ConfigError::bad_value(
-                text,
-                format!("unknown taxonomy kind `{other}` (expected list or tree)"),
-                span,
-            )
-            .into()),
-        }
-    }
 }
 
 #[cfg(test)]

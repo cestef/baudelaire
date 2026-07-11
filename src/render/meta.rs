@@ -54,8 +54,8 @@ struct Card<'a> {
     config: &'a Config,
     page: &'a Page,
     /// Processed-asset URL map, so a social image is named at its fingerprinted
-    /// URL — the fingerprint transform only rewrites `href`/`src`, not the
-    /// absolute `content` value this emits.
+    /// URL before it is absolutized (the fingerprint transform runs later and
+    /// cannot resolve an already-absolute `content` value).
     assets: &'a AssetMap,
 }
 

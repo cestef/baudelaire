@@ -1,4 +1,4 @@
-use crate::config::{Config, ImageFormat, PngStrip, SortKey, TaxoKind};
+use crate::config::{Config, ImageFormat, PngStrip, SortKey};
 
 fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")
@@ -121,16 +121,14 @@ fn taxonomies() {
     let cfg = parse(
         r#"
         taxonomies {
-          tags   kind="list" index=#true
-          series kind="tree" key="series" index=#false
+          tags   index=#true
+          series key="series" index=#false
         }
     "#,
     );
     let tags = cfg.taxonomies.iter().find(|(n, _)| n == "tags").unwrap();
-    assert_eq!(tags.1.kind, TaxoKind::List);
     assert!(tags.1.index);
     let series = cfg.taxonomies.iter().find(|(n, _)| n == "series").unwrap();
-    assert_eq!(series.1.kind, TaxoKind::Tree);
     assert_eq!(series.1.key, "series");
     assert!(!series.1.index);
 }

@@ -76,7 +76,7 @@ impl Config {
         "posts".to_owned()
     }
 
-    /// Resolve the template file for a collection, defaulting to `post.typ`.
+    /// Resolve the template file for a collection, defaulting to `layout.typ`.
     fn template_for(&self, collection: &str) -> String {
         self.collection(collection)
             .and_then(|c| c.template.clone())

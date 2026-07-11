@@ -8,7 +8,9 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use itertools::Itertools;
-use notify_debouncer_full::{DebounceEventResult, DebouncedEvent, new_debouncer};
+use notify_debouncer_full::{
+    DebounceEventResult, DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+};
 use owo_colors::OwoColorize;
 use tiny_http::{Header, Request, Response, Server};
 use wax::{Glob, Program};
@@ -303,7 +305,7 @@ impl Live {
 
 /// Debounced file watcher for the content + templates directories.
 struct Watcher {
-    _debouncer: Box<dyn std::any::Any + Send>,
+    _debouncer: Debouncer<notify::RecommendedWatcher, RecommendedCache>,
 }
 
 impl Watcher {
@@ -318,7 +320,7 @@ impl Watcher {
             }
         }
         Ok(Self {
-            _debouncer: Box::new(debouncer),
+            _debouncer: debouncer,
         })
     }
 }

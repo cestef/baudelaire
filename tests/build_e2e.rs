@@ -705,7 +705,7 @@ fn taxonomy_index_and_term_pages_generated() {
             }
             clean #true
             taxonomies {
-              tags kind="list" index=#true
+              tags index=#true
             }
         "#,
     );
@@ -1003,7 +1003,7 @@ fn taxonomy_listing_uses_custom_template() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\ntaxonomies {\n  tags kind=\"list\" index=#true template=\"tag.typ\"\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\ntaxonomies {\n  tags index=#true template=\"tag.typ\"\n}\n",
     );
     // The template controls the page from the structured listing data.
     site.write(

@@ -19,7 +19,7 @@ collections {
 }
 
 taxonomies {
-  tags kind="list" index=#true template="list.typ"
+  tags index=#true template="list.typ"
 }
 
 output {
