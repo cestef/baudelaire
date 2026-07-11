@@ -5,13 +5,14 @@
 //! the page carries its own CSS/images/fonts. Best-effort: anything that is not
 //! a resolvable local asset (external URLs, missing files) is left as authored.
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use typst_html::{HtmlDocument, attr};
 
 use crate::config::Config;
 use crate::mime::Mime;
 
+use super::AssetMap;
 use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
@@ -23,7 +24,7 @@ impl Transform for Embed {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let inliner = Inliner::new(cx.config);
+        let inliner = Inliner::new(cx.config, cx.assets);
         doc.root_mut().walk(&mut |element| {
             element.rewrite(&[attr::href, attr::src, attr::poster], |value| inliner.inline(value));
             element.rewrite_srcset(|url| inliner.inline(url));
@@ -31,36 +32,47 @@ impl Transform for Embed {
     }
 }
 
-/// Resolves local `href`/`src` values to `data:` URIs.
+/// Resolves local `href`/`src` values to `data:` URIs over the *processed*
+/// asset — the minified/bundled/optimized (and possibly fingerprinted) output
+/// under `dist`, not the raw source — so an embedded asset carries the same
+/// bytes a linked one would serve.
 struct Inliner<'a> {
-    assets: &'a Path,
+    /// Destination asset directory under `dist` (e.g. `dist/assets`).
+    dst: PathBuf,
     /// The leading URL segment that maps to the assets directory, e.g.
     /// `/assets/`. Refs must start with it to be considered local assets.
-    prefix: Option<String>,
+    prefix: String,
+    /// Request→served URL map, so a fingerprinted reference resolves to its
+    /// hashed output file rather than a name no longer present in `dist`.
+    assets: &'a AssetMap,
 }
 
 impl<'a> Inliner<'a> {
-    fn new(config: &'a Config) -> Self {
-        let prefix = config
+    fn new(config: &Config, assets: &'a AssetMap) -> Self {
+        let name = config
             .assets
             .file_name()
             .and_then(|name| name.to_str())
-            .map(|name| format!("/{name}/"));
+            .unwrap_or("assets");
         Self {
-            assets: &config.assets,
-            prefix,
+            dst: config.dist.join(name),
+            prefix: format!("/{name}/"),
+            assets,
         }
     }
 
     /// The `data:` URI for a local asset reference, or `None` to leave it as is.
     fn inline(&self, raw: &str) -> Option<String> {
-        let rest = raw.strip_prefix(self.prefix.as_deref()?)?;
+        // Resolve through the asset map first: a fingerprinted reference points
+        // at its hashed file; an unmapped one is served under its own name.
+        let served = self.assets.resolve(raw).unwrap_or_else(|| raw.to_owned());
+        let rest = served.strip_prefix(&self.prefix)?;
         // Reject anything that escapes the assets directory or carries a
         // query/fragment — those are not plain file references.
         if rest.contains("..") || rest.contains(['?', '#']) {
             return None;
         }
-        let path = self.assets.join(rest);
+        let path = self.dst.join(rest);
         // Best-effort: an unreadable/missing asset is left as a plain reference,
         // not inlined. Through the facade for consistency.
         let bytes = crate::fs::read(&path).ok()?;

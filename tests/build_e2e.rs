@@ -882,6 +882,35 @@ fn embed_inlines_local_assets_as_data_uris() {
 }
 
 #[test]
+fn embed_inlines_processed_not_source_bytes() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  html { embed #true }\n  assets { minify #true }\n}\n",
+    );
+    // A comment survives only in the raw source; minification drops it.
+    site.write("assets/style.css", "/* source-only comment */\nbody {\n  color: red;\n}\n");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
+    );
+    assert!(site.run(&["build"]).status.success(), "build failed");
+    let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
+    let marker = "data:text/css;base64,";
+    let start = html.find(marker).expect("data uri present") + marker.len();
+    let b64: String = html[start..].chars().take_while(|c| *c != '"').collect();
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("printf %s '{b64}' | base64 -d"))
+        .output()
+        .expect("base64");
+    let decoded = String::from_utf8_lossy(&out.stdout);
+    // The inlined bytes are the minified output, not the raw source.
+    assert!(!decoded.contains("/*"), "inlined raw source, not processed: {decoded}");
+    assert!(decoded.contains("red"), "declaration lost: {decoded}");
+}
+
+#[test]
 fn robots_txt_emitted_when_block_present() {
     let site = Site::new();
     site.write(
