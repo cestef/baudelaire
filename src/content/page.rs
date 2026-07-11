@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use typst::syntax::Source;
 use wax::Glob;
 use wax::prelude::*;
@@ -226,8 +227,6 @@ struct Discovery<'a> {
     config: &'a Config,
     /// Every content file, paired with whether a collection has claimed it.
     files: Vec<(PathBuf, bool)>,
-    /// Accumulated `(collection id, pages)`, in discovery order.
-    groups: Vec<(String, Vec<Page>)>,
 }
 
 impl<'a> Discovery<'a> {
@@ -235,7 +234,6 @@ impl<'a> Discovery<'a> {
         Self {
             config,
             files: Vec::new(),
-            groups: Vec::new(),
         }
     }
 
@@ -244,10 +242,23 @@ impl<'a> Discovery<'a> {
             .into_iter()
             .map(|path| (path, false))
             .collect();
-        self.claim_globs()?;
-        self.claim_convention()?;
-        Ok(self
-            .groups
+        // Resolve which collection owns each file first (cheap, serial), then
+        // load + evaluate every page's frontmatter in parallel — the expensive
+        // part. `Page::load` records its collection, so the flat parallel result
+        // regroups losslessly (rayon preserves input order).
+        let assignments = self.assign()?;
+        let pages: Vec<Page> = assignments
+            .par_iter()
+            .map(|(id, path)| Page::load(id, path, self.config))
+            .collect::<Result<Vec<_>>>()?;
+        let mut groups: Vec<(String, Vec<Page>)> = Vec::new();
+        for page in pages {
+            match groups.iter_mut().find(|(id, _)| *id == page.collection) {
+                Some((_, list)) => list.push(page),
+                None => groups.push((page.collection.clone(), vec![page])),
+            }
+        }
+        Ok(groups
             .into_iter()
             .map(|(id, pages)| Collection::new(id, pages, self.config))
             .collect())
@@ -274,8 +285,12 @@ impl<'a> Discovery<'a> {
         Ok(out)
     }
 
-    /// Assign files to each glob-configured collection, in config order.
-    fn claim_globs(&mut self) -> Result<()> {
+    /// Resolve each content file to its owning collection as `(id, path)` pairs,
+    /// in the same order pages are grouped: glob-configured collections first
+    /// (config order), then convention for whatever remains. Pure bookkeeping —
+    /// no file is read here, so the expensive load can run in parallel.
+    fn assign(&mut self) -> Result<Vec<(String, PathBuf)>> {
+        let mut out = Vec::new();
         let globs: Vec<(String, String)> = self
             .config
             .collections
@@ -284,39 +299,21 @@ impl<'a> Discovery<'a> {
             .collect();
         for (id, glob) in globs {
             let pattern = Glob::new(&glob).map_err(|e| ContentError::bad_glob(&glob, e))?;
-            let mut pages = Vec::new();
             for (path, taken) in &mut self.files {
                 let rel = path.strip_prefix(&self.config.content).unwrap_or(path);
                 if !*taken && pattern.is_match(rel) {
                     *taken = true;
-                    pages.push(Page::load(&id, path, self.config)?);
+                    out.push((id.clone(), path.clone()));
                 }
             }
-            if !pages.is_empty() {
-                self.groups.push((id, pages));
+        }
+        for (path, taken) in &self.files {
+            if !taken {
+                let rel = path.strip_prefix(&self.config.content).unwrap_or(path);
+                out.push((Self::convention_id(rel), path.clone()));
             }
         }
-        Ok(())
-    }
-
-    /// Assign every still-unclaimed file to its convention collection.
-    fn claim_convention(&mut self) -> Result<()> {
-        let remaining: Vec<PathBuf> = self
-            .files
-            .iter()
-            .filter(|(_, taken)| !taken)
-            .map(|(path, _)| path.clone())
-            .collect();
-        for path in remaining {
-            let rel = path.strip_prefix(&self.config.content).unwrap_or(&path);
-            let id = Self::convention_id(rel);
-            let page = Page::load(&id, &path, self.config)?;
-            match self.groups.iter_mut().find(|(gid, _)| *gid == id) {
-                Some((_, pages)) => pages.push(page),
-                None => self.groups.push((id, vec![page])),
-            }
-        }
-        Ok(())
+        Ok(out)
     }
 
     /// The convention collection id for a content-relative path: the top
