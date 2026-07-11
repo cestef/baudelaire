@@ -111,19 +111,7 @@ impl NodeExt for KdlNode {
     }
 
     fn int(&self, text: &str, idx: usize) -> Result<i64> {
-        let span = NodeExt::span(self);
-        let value = self
-            .get(idx)
-            .ok_or_else(|| ConfigError::missing_arg(text, self.name().value(), span))?;
-        match value {
-            KdlValue::Integer(n) => Ok(*n as i64),
-            other => Err(ConfigError::bad_value(
-                text,
-                format!("expected integer, got {}", other.kind()),
-                span,
-            )
-            .into()),
-        }
+        self.arg(text, idx)?.integer(text, NodeExt::span(self))
     }
 
     fn block(&self, text: &str) -> Result<&KdlDocument> {
@@ -257,15 +245,11 @@ impl NodeExt for KdlNode {
         const ATTRS: Attrs<PngConfig> = Attrs(&[
             ("level", |c, v, t, s| { c.level = v.integer(t, s)?.clamp(0, 6) as u8; Ok(()) }),
             ("strip", |c, v, t, s| {
-                c.strip = match v.as_str(t, s)?.as_str() {
-                    "none" => PngStrip::None,
-                    "safe" => PngStrip::Safe,
-                    "all" => PngStrip::All,
-                    other => {
-                        let msg = format!("unknown strip `{other}` (valid: none, safe, all)");
-                        return Err(ConfigError::bad_value(t, msg, s).into());
-                    }
-                };
+                c.strip = v.one(t, s, &[
+                    ("none", PngStrip::None),
+                    ("safe", PngStrip::Safe),
+                    ("all", PngStrip::All),
+                ])?;
                 Ok(())
             }),
         ]);

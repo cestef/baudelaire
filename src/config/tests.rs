@@ -200,7 +200,9 @@ fn err_unknown_top_key() {
 #[test]
 fn err_bad_sort_key() {
     let err = Config::parse("collections {\n  posts sort=\"wat\"\n}\n").unwrap_err();
-    assert!(err.to_string().contains("unknown sort key `wat`"));
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(rendered.contains("unknown key `wat`"), "{rendered}");
+    assert!(rendered.contains("order, date, title"), "{rendered}");
 }
 
 #[test]

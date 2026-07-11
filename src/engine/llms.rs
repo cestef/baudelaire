@@ -37,8 +37,7 @@ impl Processor for Llms {
         for (collection, pages) in Self::by_collection(site.pages) {
             let _ = write!(md, "\n## {collection}\n\n");
             for page in pages {
-                let title = page.frontmatter.title.as_deref().unwrap_or(&page.id.0);
-                let _ = writeln!(md, "- [{title}]({})", href(&page.permalink));
+                let _ = writeln!(md, "- [{}]({})", page.title(), href(&page.permalink));
             }
         }
         out.file(&site.config.dist.join("llms.txt"), &md)?;

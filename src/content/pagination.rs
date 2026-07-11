@@ -4,7 +4,6 @@
 //! [`Listing`]s — `/{collection}/`, `/{collection}/page/2/`, … — each listing
 //! `N` members with prev/next navigation.
 
-use crate::codegen::Value;
 use crate::config::Config;
 use crate::content::listing::{Item, Listing, Nav};
 use crate::content::{Collection, Page};
@@ -39,7 +38,7 @@ impl<'a> Section<'a> {
         let members = collection
             .pages
             .iter()
-            .filter(|p| !p.skipped(config.draft.build, config.future))
+            .filter(|p| p.eligible(config))
             .collect();
         Self {
             id: &collection.id,
@@ -58,25 +57,7 @@ impl<'a> Section<'a> {
 
     /// The listing for page `number` of `total`.
     fn page(&self, number: usize, members: &[&Page], total: usize) -> Listing {
-        let items = members
-            .iter()
-            .map(|p| {
-                let label = p.frontmatter.title.clone().unwrap_or_else(|| p.id.0.clone());
-                let date = p
-                    .frontmatter
-                    .date
-                    .map(|d| format!("{} {}, {}", d.month(), d.day(), d.year()));
-                let extra = Value::dict(
-                    p.frontmatter
-                        .extra
-                        .iter()
-                        .map(|(key, value)| (key.clone(), Value::from_typst(value))),
-                );
-                Item::new(p.permalink.clone(), label)
-                    .dated(date)
-                    .extra(extra)
-            })
-            .collect();
+        let items = members.iter().map(|p| Item::of(p)).collect();
         let title = match number {
             1 => Listing::titlecase(self.id),
             n => format!("{} — page {n}", Listing::titlecase(self.id)),

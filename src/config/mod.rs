@@ -99,6 +99,14 @@ impl Config {
             .map(|url| BaseUrl(url.trim_end_matches('/').to_owned()))
     }
 
+    /// Look up a collection override by id.
+    pub fn collection(&self, id: &str) -> Option<&CollectionConfig> {
+        self.collections
+            .iter()
+            .find(|(n, _)| n == id)
+            .map(|(_, c)| c)
+    }
+
     /// The file a URL path is written to under `dist`, honoring clean URLs.
     /// Single source for the URL→file mapping, shared by page output and
     /// redirect stubs.

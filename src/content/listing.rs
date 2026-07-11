@@ -33,6 +33,25 @@ impl Item {
         }
     }
 
+    /// The listing row for a page — the single page→item mapping, so every
+    /// listing (paginated index, taxonomy term) exposes the same data: link,
+    /// title, display date, and the page's extra frontmatter.
+    pub fn of(page: &Page) -> Self {
+        let date = page
+            .frontmatter
+            .date
+            .map(|d| format!("{} {}, {}", d.month(), d.day(), d.year()));
+        let extra = Value::dict(
+            page.frontmatter
+                .extra
+                .iter()
+                .map(|(key, value)| (key.clone(), Value::from_typst(value))),
+        );
+        Self::new(page.permalink.clone(), page.title())
+            .dated(date)
+            .extra(extra)
+    }
+
     /// A row with a trailing `(note)`.
     pub fn noted(url: impl Into<String>, label: impl Into<String>, note: impl Into<String>) -> Self {
         Self {

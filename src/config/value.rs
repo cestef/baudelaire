@@ -5,6 +5,7 @@ use kdl::KdlValue;
 use miette::SourceSpan;
 
 use crate::config::SortKey;
+use crate::config::dispatch::Keys;
 use crate::error::{ConfigError, Result};
 
 /// Expands `${VAR}` references in config string values from the process
@@ -53,6 +54,15 @@ pub(super) trait ValueExt {
     fn is_true(&self) -> bool;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
+    /// Map a string value through a `(name, value)` table, erroring on an
+    /// unknown name with a nearest-match hint — the single-value counterpart of
+    /// `NodeExt::mapped`, so the table drives both parsing and error help.
+    fn one<T: Copy>(
+        &self,
+        text: &str,
+        span: SourceSpan,
+        table: &[(&'static str, T)],
+    ) -> Result<T>;
 }
 
 impl ValueExt for KdlValue {
@@ -95,19 +105,26 @@ impl ValueExt for KdlValue {
     }
 
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey> {
-        match self.as_str(text, span)?.as_str() {
-            "order" => Ok(SortKey::Order),
-            "date" => Ok(SortKey::Date),
-            "title" => Ok(SortKey::Title),
-            other => Err(ConfigError::bad_value(
-                text,
-                format!("unknown sort key `{other}` (expected order, date, or title)"),
-                span,
-            )
-            .into()),
-        }
+        self.one(text, span, &[
+            ("order", SortKey::Order),
+            ("date", SortKey::Date),
+            ("title", SortKey::Title),
+        ])
     }
 
+    fn one<T: Copy>(
+        &self,
+        text: &str,
+        span: SourceSpan,
+        table: &[(&'static str, T)],
+    ) -> Result<T> {
+        let name = self.as_str(text, span)?;
+        table
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, value)| *value)
+            .ok_or_else(|| Keys::unknown(table, text, &name, span))
+    }
 }
 
 #[cfg(test)]

@@ -72,6 +72,18 @@ impl Page {
         })
     }
 
+    /// Display title: frontmatter `title`, else the page id. The single
+    /// title-fallback rule for every listing and index.
+    pub fn title(&self) -> &str {
+        self.frontmatter.title.as_deref().unwrap_or(&self.id.0)
+    }
+
+    /// Whether this page builds under the current draft/future config — the
+    /// one eligibility predicate, shared by the engine and page generators.
+    pub fn eligible(&self, config: &Config) -> bool {
+        !self.skipped(config.draft.build, config.future)
+    }
+
     /// Whether this page should be skipped given draft/future flags.
     pub fn skipped(&self, drafts: bool, future: bool) -> bool {
         (self.frontmatter.draft && !drafts) || (self.is_future() && !future)
@@ -129,16 +141,6 @@ impl Collection {
             self.pages.reverse();
         }
         self
-    }
-}
-
-impl Config {
-    /// Look up a collection override by id.
-    pub fn collection(&self, id: &str) -> Option<&CollectionConfig> {
-        self.collections
-            .iter()
-            .find(|(n, _)| n == id)
-            .map(|(_, c)| c)
     }
 }
 

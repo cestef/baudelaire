@@ -49,7 +49,7 @@ impl Frontmatter {
             return Ok(None);
         };
         let data = &text[call.args()];
-        let frontmatter = Self::from_dict(crate::content::eval::dict(data)?)?;
+        let frontmatter = Self::from_dict(crate::content::eval::EvalWorld::dict(data)?)?;
         Ok(Some(Extract {
             frontmatter,
             body: call.splice(text),

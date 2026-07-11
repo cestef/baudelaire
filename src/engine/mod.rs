@@ -259,7 +259,7 @@ impl Engine {
         let mut pages: Vec<Page> = collections
             .iter()
             .flat_map(|c| c.pages.iter())
-            .filter(|p| !p.skipped(self.config.draft.build, self.config.future))
+            .filter(|p| p.eligible(&self.config))
             .cloned()
             .collect();
         pages.extend(Taxonomy::pages(&self.config, &pages));

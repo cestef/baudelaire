@@ -87,13 +87,7 @@ impl<'a> Group<'a> {
 
     /// The `/{name}/{term}/` listing of the pages under `term`.
     fn term(&self, term: &str) -> Listing {
-        let items = self.terms[term]
-            .iter()
-            .map(|member| {
-                let label = member.frontmatter.title.clone().unwrap_or_else(|| member.id.0.clone());
-                Item::new(member.permalink.clone(), label)
-            })
-            .collect();
+        let items = self.terms[term].iter().map(|member| Item::of(member)).collect();
         let title = format!("{}: {term}", Listing::titlecase(self.name));
         Listing::new(self.name, Self::slug(term), self.url(term), title)
             .items(items)

@@ -147,9 +147,11 @@ pub struct PermalinkCtx {
 }
 
 impl PermalinkCtx {
-    pub fn from_page(collection: &str, fm: &Frontmatter, fallback_slug: &str) -> Self {
+    /// Context from a page's already-resolved `slug` (frontmatter-else-stem
+    /// precedence is decided once, in `Page::load`).
+    pub fn from_page(collection: &str, fm: &Frontmatter, slug: &str) -> Self {
         Self {
-            slug: fm.slug.clone().unwrap_or_else(|| fallback_slug.to_owned()),
+            slug: slug.to_owned(),
             collection: collection.to_owned(),
             date: fm.date,
             order: fm.order,
