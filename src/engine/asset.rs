@@ -14,9 +14,10 @@
 //! and the original→final URL mapping recorded so references can be rewritten.
 
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
 use rolldown::plugin::{
     HookLoadArgs, HookLoadOutput, HookLoadReturn, HookResolveIdArgs, HookResolveIdOutput,
@@ -75,28 +76,46 @@ impl<'a> Assets<'a> {
             fs::remove_dir_all(&self.dst)?;
         }
         let bundler = self.config.asset.bundle.then(|| Js::new(self.config));
-        for file in Walk::files(self.src)? {
+        // Two passes: every non-CSS asset is fingerprinted first so a stylesheet
+        // can rewrite its `url()` references to the final (hashed) names. A CSS
+        // file processed before its referenced image would otherwise emit a
+        // `url()` pointing at a name that no longer exists in `dist`.
+        let (css, other): (Vec<_>, Vec<_>) = Walk::files(self.src)?
+            .into_iter()
+            .partition(|file| Kind::of(file, self.config) == Kind::Css);
+        for file in other {
             let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
             let Some(bytes) = self.render(&file, Kind::of(&file, self.config), bundler.as_ref())?
             else {
                 continue;
             };
-            let out = self.fingerprint(rel, &bytes);
-            self.write(&out, &bytes)?;
-            count += 1;
-            if out != rel {
-                map.insert(self.url(rel), self.url(&out));
-            }
+            self.emit(rel, &bytes, &mut map, &mut count)?;
+        }
+        for file in css {
+            let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
+            let bytes = self.render_css(&file, rel, &map)?;
+            self.emit(rel, &bytes, &mut map, &mut count)?;
         }
         Ok((map, count))
     }
 
-    /// The processed bytes for one asset, or `None` for a partial that is only
-    /// pulled in through imports (never emitted standalone).
+    /// Fingerprint (when enabled) and write `bytes` for the asset at `rel`,
+    /// recording the request→served URL mapping when the name changed.
+    fn emit(&self, rel: &Path, bytes: &[u8], map: &mut AssetMap, count: &mut usize) -> Result<()> {
+        let out = self.fingerprint(rel, bytes);
+        self.write(&out, bytes)?;
+        *count += 1;
+        if out != rel {
+            map.insert(self.url(rel), self.url(&out));
+        }
+        Ok(())
+    }
+
+    /// The processed bytes for one non-CSS asset, or `None` for a partial that
+    /// is only pulled in through imports (never emitted standalone).
     fn render(&self, file: &Path, kind: Kind, bundler: Option<&Js>) -> Result<Option<Vec<u8>>> {
         let bytes = match kind {
             Kind::Module => return Ok(None),
-            Kind::Css if self.config.asset.minify => Self::minify_css(file)?,
             Kind::Entry => bundler
                 .expect("bundler present when an entry is classified")
                 .bundle(file)?,
@@ -104,6 +123,80 @@ impl<'a> Assets<'a> {
             Kind::Css | Kind::Other => fs::read(file)?,
         };
         Ok(Some(bytes))
+    }
+
+    /// Process one stylesheet: minify (when enabled) and rewrite its `url()` /
+    /// `@import` references to the fingerprinted names recorded in `map`, so a
+    /// stylesheet still points at its assets after they are content-hashed.
+    /// Copied verbatim when neither minify nor fingerprint is on — there is
+    /// nothing to transform, so the bytes are left byte-for-byte identical.
+    fn render_css(&self, file: &Path, rel: &Path, map: &AssetMap) -> Result<Vec<u8>> {
+        if !self.config.asset.minify && !self.config.asset.fingerprint {
+            return fs::read(file);
+        }
+        let code = fs::read_to_string(file)?;
+        let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
+            .map_err(|e| AssetError::css(file.display(), e))?;
+        if self.config.asset.minify {
+            sheet
+                .minify(MinifyOptions::default())
+                .map_err(|e| AssetError::css(file.display(), e))?;
+        }
+        // Only fingerprinting renames assets, so only then must `url()` be
+        // rewritten: analyze dependencies to swap each for its hashed name.
+        let analyze = self.config.asset.fingerprint;
+        let printed = sheet
+            .to_css(PrinterOptions {
+                minify: self.config.asset.minify,
+                analyze_dependencies: analyze.then(DependencyOptions::default),
+                ..PrinterOptions::default()
+            })
+            .map_err(|e| AssetError::css(file.display(), e))?;
+        let mut out = printed.code;
+        // lightningcss replaces each dependency URL with a placeholder; swap the
+        // placeholder for the fingerprinted URL, or the original when unmapped.
+        for dep in printed.dependencies.into_iter().flatten() {
+            let (placeholder, url) = match dep {
+                Dependency::Url(dep) => (dep.placeholder, dep.url),
+                Dependency::Import(dep) => (dep.placeholder, dep.url),
+            };
+            let resolved = self.resolve_css_url(rel, &url, map).unwrap_or(url);
+            out = out.replace(&placeholder, &resolved);
+        }
+        Ok(out.into_bytes())
+    }
+
+    /// The fingerprinted URL for a `url()` reference written in the stylesheet at
+    /// `rel`, or `None` when it is external or unmapped. Relative references
+    /// resolve against the stylesheet's own directory; absolute ones are already
+    /// served URLs.
+    fn resolve_css_url(&self, rel: &Path, raw: &str, map: &AssetMap) -> Option<String> {
+        if raw.starts_with("data:") || raw.starts_with('#') || raw.starts_with("//") || raw.contains("://") {
+            return None;
+        }
+        let key = if raw.starts_with('/') {
+            raw.to_owned()
+        } else {
+            let dir = rel.parent().unwrap_or_else(|| Path::new(""));
+            self.url(&Self::normalize(&dir.join(raw)))
+        };
+        map.resolve(&key)
+    }
+
+    /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
+    /// (the assets live under `dist`, so there is nothing to canonicalize).
+    fn normalize(path: &Path) -> PathBuf {
+        let mut out = PathBuf::new();
+        for component in path.components() {
+            match component {
+                Component::ParentDir => {
+                    out.pop();
+                }
+                Component::CurDir => {}
+                other => out.push(other),
+            }
+        }
+        out
     }
 
     /// Optimize one image, keeping the smaller of the original and the result —
@@ -144,23 +237,6 @@ impl<'a> Assets<'a> {
             .encode_image(&decoded)
             .map_err(|e| AssetError::image(file.display(), e))?;
         Ok(out)
-    }
-
-    /// Minify a stylesheet with lightningcss.
-    fn minify_css(file: &Path) -> Result<Vec<u8>> {
-        let code = fs::read_to_string(file)?;
-        let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
-            .map_err(|e| AssetError::css(file.display(), e))?;
-        sheet
-            .minify(MinifyOptions::default())
-            .map_err(|e| AssetError::css(file.display(), e))?;
-        let printed = sheet
-            .to_css(PrinterOptions {
-                minify: true,
-                ..PrinterOptions::default()
-            })
-            .map_err(|e| AssetError::css(file.display(), e))?;
-        Ok(printed.code.into_bytes())
     }
 
     /// Write processed bytes to `rel` under the destination directory.

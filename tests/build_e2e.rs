@@ -1039,6 +1039,55 @@ fn fingerprint_renames_assets_and_rewrites_references() {
 }
 
 #[test]
+fn css_url_references_are_fingerprinted() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets { fingerprint #true }\n}\n",
+    );
+    site.write("assets/style.css", "body{background:url(bg.png)}");
+    site.write("assets/bg.png", "PNGDATA");
+    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    assert!(site.run(&["build"]).status.success(), "build failed");
+    let names = site.files("public/assets");
+    let bg = names
+        .iter()
+        .find(|n| n.starts_with("bg.") && n.ends_with(".png"))
+        .expect("a fingerprinted image");
+    let css_name = names
+        .iter()
+        .find(|n| n.starts_with("style.") && n.ends_with(".css"))
+        .expect("a fingerprinted stylesheet");
+    let css = fs::read_to_string(site.root.join(format!("public/assets/{css_name}"))).unwrap();
+    // The `url()` now points at the image's hashed name, not the original.
+    assert!(css.contains(&format!("/assets/{bg}")), "url() not rewritten: {css}");
+    assert!(!css.contains("bg.png\"") && !css.contains("(bg.png)"), "stale url(): {css}");
+}
+
+#[test]
+fn srcset_urls_are_fingerprinted() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets { fingerprint #true }\n}\n",
+    );
+    site.write("assets/a.png", "AAA");
+    site.write("assets/b.png", "BBB");
+    site.write(
+        "content/a.typ",
+        "#frontmatter((title: \"A\",))\n#html.elem(\"img\", attrs: (srcset: \"/assets/a.png 1x, /assets/b.png 2x\"))",
+    );
+    assert!(site.run(&["build"]).status.success(), "build failed");
+    let names = site.files("public/assets");
+    let a = names.iter().find(|n| n.starts_with("a.") && n.ends_with(".png")).expect("hashed a");
+    let b = names.iter().find(|n| n.starts_with("b.") && n.ends_with(".png")).expect("hashed b");
+    let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
+    // Each candidate URL is fingerprinted; its descriptor is preserved.
+    assert!(html.contains(&format!("/assets/{a} 1x")), "srcset a not rewritten: {html}");
+    assert!(html.contains(&format!("/assets/{b} 2x")), "srcset b not rewritten: {html}");
+}
+
+#[test]
 fn minify_compacts_css() {
     let site = Site::new();
     site.write(

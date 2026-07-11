@@ -14,9 +14,10 @@ use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that swaps asset references for their fingerprinted URLs.
 ///
-/// Replaces mapped `href`/`src`/`content` values with their fingerprinted URLs.
-/// `content` covers asset references in `<meta>` tags (a social `og:image`).
-/// Anything not in the map (external URLs, already-inlined `data:` URIs,
+/// Replaces mapped `href`/`src`/`content`/`poster`/`srcset` values with their
+/// fingerprinted URLs. `content` covers asset references in `<meta>` tags (a
+/// social `og:image`); `srcset` covers responsive `<img>`/`<source>` candidate
+/// lists. Anything not in the map (external URLs, already-inlined `data:` URIs,
 /// unmanaged paths, plain text) is left untouched.
 pub(super) struct Fingerprint;
 
@@ -27,9 +28,10 @@ impl Transform for Fingerprint {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         doc.root_mut().walk(&mut |element| {
-            element.rewrite(&[attr::href, attr::src, attr::content], |value| {
+            element.rewrite(&[attr::href, attr::src, attr::content, attr::poster], |value| {
                 cx.assets.resolve(value)
             });
+            element.rewrite_srcset(|url| cx.assets.resolve(url));
         });
     }
 }

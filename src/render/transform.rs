@@ -6,7 +6,7 @@
 //! of the DOM pipeline: a new pass is one `impl Transform` plus one line in that
 //! list, each gated on its own config. Even core link resolution is a transform.
 
-use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr};
 
 use crate::config::Config;
 use crate::content::Page;
@@ -40,6 +40,11 @@ pub(super) trait ElementExt {
     /// Rewrite each attribute among `keys` that is present: `f` returns the
     /// replacement value, or `None` to leave it as authored.
     fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
+    /// Rewrite each URL in a `srcset` attribute — a comma-separated list of
+    /// `url [descriptor]` candidates — leaving descriptors intact. `f` maps one
+    /// URL to its replacement, or `None` to keep it. So `<img srcset>` and
+    /// `<source srcset>` get the same asset rewriting as plain `src`.
+    fn rewrite_srcset(&mut self, f: impl FnMut(&str) -> Option<String>);
 }
 
 impl ElementExt for HtmlElement {
@@ -59,6 +64,39 @@ impl ElementExt for HtmlElement {
             {
                 *value = new.into();
             }
+        }
+    }
+
+    fn rewrite_srcset(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
+        let Some(value) = self.attrs.get_mut(attr::srcset) else {
+            return;
+        };
+        let mut changed = false;
+        // Comma-separates candidates; splitting on `,` is exact for the asset
+        // URLs we emit (fingerprinted filenames never contain commas).
+        let rebuilt = value
+            .split(',')
+            .map(|candidate| {
+                let candidate = candidate.trim();
+                let (url, descriptor) = candidate
+                    .split_once(char::is_whitespace)
+                    .map_or((candidate, ""), |(u, d)| (u, d.trim_start()));
+                match f(url) {
+                    Some(new) if descriptor.is_empty() => {
+                        changed = true;
+                        new
+                    }
+                    Some(new) => {
+                        changed = true;
+                        format!("{new} {descriptor}")
+                    }
+                    None => candidate.to_owned(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        if changed {
+            *value = rebuilt.into();
         }
     }
 }
