@@ -211,7 +211,8 @@ fn err_unknown_top_key() {
 fn err_bad_sort_key() {
     let err = Config::parse("collections {\n  posts sort=\"wat\"\n}\n").unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
-    assert!(rendered.contains("unknown key `wat`"), "{rendered}");
+    // An unknown enum *value* reads as "unknown value", not "unknown key".
+    assert!(rendered.contains("unknown value `wat`"), "{rendered}");
     assert!(rendered.contains("order, date, title"), "{rendered}");
 }
 

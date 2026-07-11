@@ -22,12 +22,7 @@ impl Config {
         let text = self.source.clone();
         for node in partial.nodes() {
             if node.name().value() == "profiles" {
-                return Err(ConfigError::bad_value(
-                    &text,
-                    "`profiles` cannot be nested inside a profile",
-                    NodeExt::span(node),
-                )
-                .into());
+                return Err(ConfigError::nested_profiles(&text, NodeExt::span(node)).into());
             }
             self.overlay(&text, node)?;
         }

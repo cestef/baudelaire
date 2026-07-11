@@ -142,12 +142,7 @@ impl NodeExt for KdlNode {
     fn count(&self, text: &str, idx: usize) -> Result<usize> {
         let n = self.int(text, idx)?;
         usize::try_from(n).map_err(|_| {
-            ConfigError::bad_value(
-                text,
-                format!("`{}` must not be negative, got {n}", self.name().value()),
-                NodeExt::span(self),
-            )
-            .into()
+            ConfigError::negative_count(text, self.name().value(), n, NodeExt::span(self)).into()
         })
     }
 
@@ -155,10 +150,7 @@ impl NodeExt for KdlNode {
     /// wrapping to a different port.
     fn port(&self, text: &str, idx: usize) -> Result<u16> {
         let n = self.int(text, idx)?;
-        u16::try_from(n).map_err(|_| {
-            ConfigError::bad_value(text, format!("port must be 0-65535, got {n}"), NodeExt::span(self))
-                .into()
-        })
+        u16::try_from(n).map_err(|_| ConfigError::port_range(text, n, NodeExt::span(self)).into())
     }
 
     fn block(&self, text: &str) -> Result<&KdlDocument> {
@@ -177,12 +169,7 @@ impl NodeExt for KdlNode {
         for node in children.nodes() {
             let (id, item) = each(node, text)?;
             if out.iter().any(|(seen, _)| *seen == id) {
-                return Err(ConfigError::bad_value(
-                    text,
-                    format!("duplicate {noun} `{id}`"),
-                    NodeExt::span(node),
-                )
-                .into());
+                return Err(ConfigError::duplicate_id(text, noun, &id, NodeExt::span(node)).into());
             }
             out.push((id, item));
         }
@@ -214,14 +201,7 @@ impl NodeExt for KdlNode {
                 // A `-` prefix looks like it disables a feature, but nothing
                 // ever subtracts — erroring beats silently *enabling* it.
                 if let Some(name) = raw.strip_prefix('-') {
-                    return Err(ConfigError::bad_value(
-                        text,
-                        format!(
-                            "removing feature `{name}` is not supported; list the features you want enabled"
-                        ),
-                        NodeExt::span(self),
-                    )
-                    .into());
+                    return Err(ConfigError::feature_removal(text, name, NodeExt::span(self)).into());
                 }
                 Ok(raw.strip_prefix('+').unwrap_or(&raw).to_owned())
             })
@@ -251,15 +231,12 @@ impl NodeExt for KdlNode {
             let (canonical, value) = table
                 .iter()
                 .find(|(n, _)| *n == name)
-                .ok_or_else(|| Keys::unknown(table, text, &name, span))?;
+                .ok_or_else(|| Keys::unknown_value(table, text, &name, span))?;
             // A repeated entry would silently emit the output twice.
             if seen.contains(canonical) {
-                return Err(ConfigError::bad_value(
-                    text,
-                    format!("duplicate `{name}` in `{}`", self.name().value()),
-                    span,
-                )
-                .into());
+                return Err(
+                    ConfigError::duplicate_entry(text, &name, self.name().value(), span).into(),
+                );
             }
             seen.push(canonical);
             out.push(*value);
@@ -304,12 +281,7 @@ impl NodeExt for KdlNode {
                 "png" => node.png(target.png.get_or_insert_default(), text)?,
                 "jpeg" | "jpg" => node.jpeg(target.jpeg.get_or_insert_default(), text)?,
                 other => {
-                    return Err(ConfigError::bad_value(
-                        text,
-                        format!("unknown image format `{other}` (valid: png, jpeg)"),
-                        span,
-                    )
-                    .into());
+                    return Err(ConfigError::unknown_image_format(text, other, span).into());
                 }
             }
         }
@@ -495,12 +467,7 @@ impl NodeExt for KdlNode {
             ("paginate", |c, v, t, s| {
                 let n = v.integer(t, s)?;
                 if n < 1 {
-                    return Err(ConfigError::bad_value(
-                        t,
-                        format!("paginate must be at least 1, got {n}"),
-                        s,
-                    )
-                    .into());
+                    return Err(ConfigError::paginate_too_small(t, n, s).into());
                 }
                 c.paginate = Some(n as usize);
                 Ok(())

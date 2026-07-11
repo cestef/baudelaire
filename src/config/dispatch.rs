@@ -32,7 +32,7 @@ impl<T> Block<T> {
             let key = node.name().value();
             match self.0.iter().find(|(k, _)| *k == key) {
                 Some((_, handler)) => handler(value, node, text)?,
-                None => return Err(Keys::unknown(self.0, text, key, NodeExt::span(node))),
+                None => return Err(Keys::unknown_key(self.0, text, key, NodeExt::span(node))),
             }
         }
         Ok(())
@@ -66,13 +66,10 @@ impl<T> Attrs<T> {
         for (position, entry) in node.entries().iter().enumerate() {
             let Some(key) = entry.name().map(|n| n.value()) else {
                 if position >= leading {
-                    return Err(ConfigError::bad_value(
+                    return Err(ConfigError::unexpected_argument(
                         text,
-                        format!(
-                            "unexpected argument {}; `{}` takes `key=value` attributes",
-                            entry.value(),
-                            node.name().value()
-                        ),
+                        &entry.value().to_string(),
+                        node.name().value(),
                         EntryExt::span(entry),
                     )
                     .into());
@@ -81,7 +78,7 @@ impl<T> Attrs<T> {
             };
             match self.0.iter().find(|(k, _)| *k == key) {
                 Some((_, handler)) => handler(value, entry.value(), text, span)?,
-                None => return Err(Keys::unknown(self.0, text, key, span)),
+                None => return Err(Keys::unknown_key(self.0, text, key, span)),
             }
         }
         Ok(())
@@ -101,10 +98,10 @@ impl<'a> Keys<'a> {
 }
 
 impl Keys<'_> {
-    /// Build an unknown-key error from any dispatch `table`. The table is the
-    /// sole source of truth for validity, so suggestions can never drift from
-    /// what actually parses.
-    pub(super) fn unknown<F>(
+    /// Build an unknown-*key* error (a structural node/attribute name) from any
+    /// dispatch `table`. The table is the sole source of truth for validity, so
+    /// suggestions can never drift from what actually parses.
+    pub(super) fn unknown_key<F>(
         table: &[(&'static str, F)],
         text: &str,
         key: &str,
@@ -112,6 +109,19 @@ impl Keys<'_> {
     ) -> BaudelaireErrorKind {
         let names: Vec<&str> = table.iter().map(|(k, _)| *k).collect();
         ConfigError::unknown_key(text, key, Keys(&names).help(key, "keys"), span).into()
+    }
+
+    /// Build an unknown-*value* error (an unrecognized enum variant supplied as
+    /// a value) from an allowed-values `table` — the value counterpart to
+    /// [`Keys::unknown_key`].
+    pub(super) fn unknown_value<F>(
+        table: &[(&'static str, F)],
+        text: &str,
+        value: &str,
+        span: SourceSpan,
+    ) -> BaudelaireErrorKind {
+        let names: Vec<&str> = table.iter().map(|(k, _)| *k).collect();
+        ConfigError::unknown_value(text, value, Keys(&names).help(value, "values"), span).into()
     }
 
     /// "did you mean …? valid `noun`: …" help for an unrecognized name, reused

@@ -39,13 +39,26 @@ impl ConfigError {
         }
     }
 
-    /// An unrecognized key, with a caller-built `help` (nearest match + the
-    /// valid keys for the enclosing scope).
+    /// An unrecognized structural key, with a caller-built `help` (nearest match
+    /// + the valid keys for the enclosing scope).
     pub fn unknown_key(source: &str, key: &str, help: String, span: SourceSpan) -> Self {
         Self::at(
             source,
             ConfigErrorKind::UnknownKey {
                 key: key.to_owned(),
+                help,
+            },
+            span,
+        )
+    }
+
+    /// An unrecognized enum *value* (a `key=value` where the value is not one of
+    /// the allowed variants), distinct from an unknown structural key.
+    pub fn unknown_value(source: &str, value: &str, help: String, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnknownValue {
+                value: value.to_owned(),
                 help,
             },
             span,
@@ -63,15 +76,90 @@ impl ConfigError {
         )
     }
 
-    /// A value of the wrong type or an unrecognized variant.
-    pub fn bad_value(source: &str, detail: impl Into<String>, span: SourceSpan) -> Self {
+    /// A value of the wrong KDL type (e.g. a string where a boolean was
+    /// expected).
+    pub fn type_mismatch(source: &str, expected: &'static str, got: &'static str, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::TypeMismatch { expected, got }, span)
+    }
+
+    /// An integer literal too large to fit the field's type.
+    pub fn integer_overflow(source: &str, value: i128, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::IntegerOverflow { value }, span)
+    }
+
+    /// An integer outside an allowed `[min, max]` range.
+    pub fn out_of_range(source: &str, min: i64, max: i64, got: i64, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::OutOfRange { min, max, got }, span)
+    }
+
+    /// A TCP port outside `0..=65535`.
+    pub fn port_range(source: &str, got: i64, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::PortRange { got }, span)
+    }
+
+    /// A count field given a negative value.
+    pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::BadValue {
-                detail: detail.into(),
-            },
+            ConfigErrorKind::NegativeCount { field: field.to_owned(), got },
             span,
         )
+    }
+
+    /// A `paginate` size below 1.
+    pub fn paginate_too_small(source: &str, got: i64, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::PaginateTooSmall { got }, span)
+    }
+
+    /// A repeated id where each must be unique (a collection, taxonomy, or
+    /// profile), naming the kind.
+    pub fn duplicate_id(source: &str, noun: &'static str, id: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::DuplicateId { noun, id: id.to_owned() },
+            span,
+        )
+    }
+
+    /// A repeated entry within a list-valued node (e.g. `formats rss rss`).
+    pub fn duplicate_entry(source: &str, name: &str, scope: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::DuplicateEntry { name: name.to_owned(), scope: scope.to_owned() },
+            span,
+        )
+    }
+
+    /// An unrecognized image format under `optimize`.
+    pub fn unknown_image_format(source: &str, format: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnknownImageFormat { format: format.to_owned() },
+            span,
+        )
+    }
+
+    /// A `-feature` entry: feature removal is not supported.
+    pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::FeatureRemoval { name: name.to_owned() },
+            span,
+        )
+    }
+
+    /// A stray positional argument on a node that takes only `key=value` attrs.
+    pub fn unexpected_argument(source: &str, value: &str, node: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnexpectedArgument { value: value.to_owned(), node: node.to_owned() },
+            span,
+        )
+    }
+
+    /// A `profiles` block nested inside another profile.
+    pub fn nested_profiles(source: &str, span: SourceSpan) -> Self {
+        Self::at(source, ConfigErrorKind::NestedProfiles, span)
     }
 
     /// A `${VAR}` reference to an unset environment variable with no default.
@@ -168,6 +256,14 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
+    #[error("unknown value `{value}`")]
+    #[diagnostic(code(baudelaire::config::unknown_value))]
+    UnknownValue {
+        value: String,
+        #[help]
+        help: String,
+    },
+
     #[error("missing argument for `{node}`")]
     #[diagnostic(
         code(baudelaire::config::missing_arg),
@@ -175,12 +271,53 @@ pub enum ConfigErrorKind {
     )]
     MissingArg { node: String },
 
-    #[error("{detail}")]
-    #[diagnostic(
-        code(baudelaire::config::bad_value),
-        help("check the expected type / allowed values for this field")
-    )]
-    BadValue { detail: String },
+    #[error("expected {expected}, got {got}")]
+    #[diagnostic(code(baudelaire::config::type_mismatch))]
+    TypeMismatch { expected: &'static str, got: &'static str },
+
+    #[error("integer {value} is out of range")]
+    #[diagnostic(code(baudelaire::config::integer_overflow))]
+    IntegerOverflow { value: i128 },
+
+    #[error("must be {min}-{max}, got {got}")]
+    #[diagnostic(code(baudelaire::config::out_of_range))]
+    OutOfRange { min: i64, max: i64, got: i64 },
+
+    #[error("port must be 0-65535, got {got}")]
+    #[diagnostic(code(baudelaire::config::port_range))]
+    PortRange { got: i64 },
+
+    #[error("`{field}` must not be negative, got {got}")]
+    #[diagnostic(code(baudelaire::config::negative_count))]
+    NegativeCount { field: String, got: i64 },
+
+    #[error("paginate must be at least 1, got {got}")]
+    #[diagnostic(code(baudelaire::config::paginate_too_small))]
+    PaginateTooSmall { got: i64 },
+
+    #[error("duplicate {noun} `{id}`")]
+    #[diagnostic(code(baudelaire::config::duplicate_id))]
+    DuplicateId { noun: &'static str, id: String },
+
+    #[error("duplicate `{name}` in `{scope}`")]
+    #[diagnostic(code(baudelaire::config::duplicate_entry))]
+    DuplicateEntry { name: String, scope: String },
+
+    #[error("unknown image format `{format}` (valid: png, jpeg)")]
+    #[diagnostic(code(baudelaire::config::unknown_image_format))]
+    UnknownImageFormat { format: String },
+
+    #[error("removing feature `{name}` is not supported; list the features you want enabled")]
+    #[diagnostic(code(baudelaire::config::feature_removal))]
+    FeatureRemoval { name: String },
+
+    #[error("unexpected argument {value}; `{node}` takes `key=value` attributes")]
+    #[diagnostic(code(baudelaire::config::unexpected_argument))]
+    UnexpectedArgument { value: String, node: String },
+
+    #[error("`profiles` cannot be nested inside a profile")]
+    #[diagnostic(code(baudelaire::config::nested_profiles))]
+    NestedProfiles,
 
     #[error("node missing children block")]
     #[diagnostic(

@@ -83,27 +83,17 @@ impl ValueExt for KdlValue {
             Some(s) => {
                 Env::expand(s).map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
             }
-            None => Err(ConfigError::bad_value(
-                text,
-                format!("expected string, got {}", self.kind()),
-                span,
-            )
-            .into()),
+            None => Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
         }
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {
         // kdl 6 integers are i128 — a literal beyond i64 must not wrap.
         match self.as_integer() {
-            Some(n) => i64::try_from(n).map_err(|_| {
-                ConfigError::bad_value(text, format!("integer {n} is out of range"), span).into()
-            }),
-            None => Err(ConfigError::bad_value(
-                text,
-                format!("expected integer, got {}", self.kind()),
-                span,
-            )
-            .into()),
+            Some(n) => {
+                i64::try_from(n).map_err(|_| ConfigError::integer_overflow(text, n, span).into())
+            }
+            None => Err(ConfigError::type_mismatch(text, "integer", self.kind(), span).into()),
         }
     }
 
@@ -112,19 +102,14 @@ impl ValueExt for KdlValue {
         if (min..=max).contains(&n) {
             Ok(n)
         } else {
-            Err(ConfigError::bad_value(text, format!("must be {min}-{max}, got {n}"), span).into())
+            Err(ConfigError::out_of_range(text, min, max, n, span).into())
         }
     }
 
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool> {
         match self.as_bool() {
             Some(b) => Ok(b),
-            None => Err(ConfigError::bad_value(
-                text,
-                format!("expected boolean, got {}", self.kind()),
-                span,
-            )
-            .into()),
+            None => Err(ConfigError::type_mismatch(text, "boolean", self.kind(), span).into()),
         }
     }
 
@@ -157,7 +142,7 @@ impl ValueExt for KdlValue {
             .iter()
             .find(|(n, _)| *n == name)
             .map(|(_, value)| *value)
-            .ok_or_else(|| Keys::unknown(table, text, &name, span))
+            .ok_or_else(|| Keys::unknown_value(table, text, &name, span))
     }
 }
 
