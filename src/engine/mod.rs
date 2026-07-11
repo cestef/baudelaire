@@ -32,7 +32,7 @@ use crate::fs;
 use crate::error::{
     BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
 };
-use crate::graph::{Cache, Deps, Hash};
+use crate::graph::{Cache, Deps, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
 use crate::world::{PageWorld, Project, Tracked};
 pub use crate::world::Mode;
@@ -107,9 +107,19 @@ impl Engine {
         // so a re-fingerprinted asset invalidates the pages that reference it.
         report.info("processing assets")?;
         let (assets, asset_count) = Assets::new(&self.config).process()?;
-        let assets_hash = Hash::of(&assets);
         let renderer = Renderer::new(&pages, assets);
-        let mut cache = Cache::load(&self.config, self.project.context(), &assets_hash);
+        // The render-side cache inputs: asset renames, the link map, and — only
+        // when pages inline asset bytes — the embedded asset contents (which the
+        // per-page dependency tracker cannot see, since typst never reads them).
+        let render = RenderInputs {
+            assets: Hash::of(renderer.assets()),
+            links: renderer.links(),
+            embeds: match self.config.html.embed {
+                true => Hash::of_dir(&self.config.assets),
+                false => Hash::of(&()),
+            },
+        };
+        let mut cache = Cache::load(&self.config, self.project.context(), &render);
 
         // Split pages into those the cache can serve verbatim and those needing
         // a fresh compile. `prepare` builds each page's source + fingerprint

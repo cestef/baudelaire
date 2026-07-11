@@ -20,6 +20,7 @@ pub enum Op {
     CreateDir,
     ReadDir,
     Copy,
+    Rename,
     Remove,
     Canonicalize,
     Enter,
@@ -33,6 +34,7 @@ impl fmt::Display for Op {
             Self::CreateDir => "create directory",
             Self::ReadDir => "read directory",
             Self::Copy => "copy",
+            Self::Rename => "rename",
             Self::Remove => "remove",
             Self::Canonicalize => "resolve",
             Self::Enter => "enter directory",
@@ -40,12 +42,15 @@ impl fmt::Display for Op {
     }
 }
 
-/// A filesystem operation that failed on a specific path.
+/// A filesystem operation that failed on a specific path (or, for a two-path
+/// operation like rename, from one path to another).
 #[derive(Error, Debug)]
-#[error("failed to {op} `{}`", path.display())]
+#[error("failed to {op} {}", self.location())]
 pub struct FsError {
     op: Op,
     path: PathBuf,
+    /// The destination of a two-path operation (rename); `None` otherwise.
+    dest: Option<PathBuf>,
     #[source]
     source: io::Error,
 }
@@ -55,7 +60,32 @@ impl FsError {
         Self {
             op,
             path: path.into(),
+            dest: None,
             source,
+        }
+    }
+
+    /// A two-path failure, naming both the source and the destination.
+    pub fn between(
+        op: Op,
+        from: impl Into<PathBuf>,
+        to: impl Into<PathBuf>,
+        source: io::Error,
+    ) -> Self {
+        Self {
+            op,
+            path: from.into(),
+            dest: Some(to.into()),
+            source,
+        }
+    }
+
+    /// The path portion of the message: a single ``\`path\``` or, for a two-path
+    /// operation, ``\`from\` → \`to\```.
+    fn location(&self) -> String {
+        match &self.dest {
+            Some(to) => format!("`{}` → `{}`", self.path.display(), to.display()),
+            None => format!("`{}`", self.path.display()),
         }
     }
 

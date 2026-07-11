@@ -39,8 +39,10 @@ const OBJECTS: &str = "objects";
 struct Entry {
     /// Hash of the page's own source.
     hash: Hash,
-    /// Dependency files and their hashes at compile time.
-    deps: BTreeMap<String, Hash>,
+    /// Dependency files and their hashes at compile time. Keyed by `PathBuf`
+    /// (serde-serialized, not `Display`) so a non-UTF-8 path round-trips
+    /// exactly instead of being lossily replaced and permanently missing.
+    deps: BTreeMap<PathBuf, Hash>,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
 }
@@ -49,11 +51,24 @@ struct Entry {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Manifest {
     /// Fingerprint of the inputs that produced these entries (config, build
-    /// context, asset map). Any change invalidates the whole manifest — it can
-    /// alter every permalink or embedded input.
+    /// context, asset map, link map, embedded assets). Any change invalidates
+    /// the whole manifest — it can alter every permalink or embedded input.
     config: Option<Hash>,
     /// Entries keyed by page source path.
-    pages: BTreeMap<String, Entry>,
+    pages: BTreeMap<PathBuf, Entry>,
+}
+
+/// The render-side inputs folded into the cache fingerprint alongside the
+/// config and build context: the processed-asset URL map, the page→permalink
+/// map, and the embedded-asset content hash. None are visible to the per-page
+/// dependency tracker (asset renames and link resolution happen in the render
+/// pass; embeds inline bytes typst never reads), so they are fingerprinted
+/// whole — any change invalidates every page.
+#[derive(std::hash::Hash)]
+pub struct RenderInputs {
+    pub assets: Hash,
+    pub links: Hash,
+    pub embeds: Hash,
 }
 
 /// The build cache. Loads the previous manifest, answers reuse queries, and
@@ -70,18 +85,18 @@ impl Cache {
     /// Load the cache for a build. When incremental builds are disabled the
     /// cache still records the next manifest but never reports a hit.
     ///
-    /// The manifest fingerprint mixes the config, the build context, *and* the
-    /// asset map, so a new commit, a new day, or a re-fingerprinted asset
-    /// invalidates pages that embed `sys.inputs.baudelaire` or reference assets.
-    /// Only the small manifest is read here — HTML blobs are fetched lazily on a
-    /// hit.
-    pub fn load(config: &Config, context: &BuildContext, assets: &Hash) -> Self {
+    /// The manifest fingerprint mixes the config, the build context, the asset
+    /// map, the link map, and (when `embed` is on) the embedded asset contents,
+    /// so a new commit, a new day, a re-fingerprinted asset, a changed permalink,
+    /// or an edited embedded file all invalidate the pages they can affect. Only
+    /// the small manifest is read here — HTML blobs are fetched lazily on a hit.
+    pub fn load(config: &Config, context: &BuildContext, render: &RenderInputs) -> Self {
         let dir = config.cache.dir.clone();
         let prev = fs::read(dir.join(MANIFEST))
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
-        let fingerprint = Hash::of(&(config, context, assets));
+        let fingerprint = Hash::of(&(config, context, render));
         Self {
             dir,
             enabled: config.cache.incremental,
@@ -106,17 +121,21 @@ impl Cache {
         if !self.enabled || self.prev.config.as_ref() != Some(&self.config) {
             return None;
         }
-        let entry = self.prev.pages.get(&Self::key(page))?;
+        let entry = self.prev.pages.get(Self::key(page))?;
         if &entry.hash != fingerprint {
             return None;
         }
-        if !entry.deps.iter().all(|(path, hash)| {
-            Hash::of_file(Path::new(path)).as_ref() == Some(hash)
-        }) {
+        if !entry.deps.iter().all(|(path, hash)| Hash::of_file(path).as_ref() == Some(hash)) {
             return None;
         }
         let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
-        self.next.pages.insert(Self::key(page), entry.clone());
+        // Verify the blob against its content address: a torn write (e.g. a
+        // crash mid-save) leaves bytes that no longer match the name claiming
+        // their hash. A mismatch is treated as a miss, not served as HTML.
+        if Hash::of_bytes(html.as_bytes()) != entry.blob {
+            return None;
+        }
+        self.next.pages.insert(Self::key(page).to_path_buf(), entry.clone());
         Some(html)
     }
 
@@ -126,11 +145,11 @@ impl Cache {
         let deps = deps
             .files()
             .iter()
-            .filter_map(|p| Some((p.display().to_string(), Hash::of_file(p)?)))
+            .filter_map(|p| Some((p.clone(), Hash::of_file(p)?)))
             .collect();
         let blob = Hash::of_bytes(html.as_bytes());
         self.next.pages.insert(
-            Self::key(page),
+            Self::key(page).to_path_buf(),
             Entry {
                 hash: fingerprint,
                 deps,
@@ -145,7 +164,7 @@ impl Cache {
     /// for freshly recorded pages (cache hits already have their blob on disk).
     pub fn save(&self, outputs: &[(&Page, &str)]) -> Result<()> {
         crate::fs::create_dir_all(&self.dir)?;
-        let html: BTreeMap<String, &str> = outputs
+        let html: BTreeMap<&Path, &str> = outputs
             .iter()
             .map(|(page, html)| (Self::key(page), *html))
             .collect();
@@ -154,13 +173,13 @@ impl Cache {
             if path.exists() {
                 continue;
             }
-            if let Some(contents) = html.get(key) {
+            if let Some(contents) = html.get(key.as_path()) {
                 Self::write_object(&path, contents)?;
             }
         }
         let json = serde_json::to_vec_pretty(&self.next)
             .map_err(|e| SerializeError::new(Artifact::Cache, e))?;
-        crate::fs::write(self.dir.join(MANIFEST), json)?;
+        Self::write_atomic(&self.dir.join(MANIFEST), json.as_slice())?;
         self.prune();
         Ok(())
     }
@@ -173,12 +192,23 @@ impl Cache {
         self.dir.join(OBJECTS).join(shard).join(hex)
     }
 
-    /// Write a blob, creating its shard directory.
+    /// Write a blob, creating its shard directory. Atomic, so a crash can never
+    /// leave a truncated blob whose name claims a hash its bytes don't have.
     fn write_object(path: &Path, contents: &str) -> Result<()> {
         if let Some(parent) = path.parent() {
             crate::fs::create_dir_all(parent)?;
         }
-        crate::fs::write(path, contents)
+        Self::write_atomic(path, contents.as_bytes())
+    }
+
+    /// Write `bytes` to `path` via a temporary sibling and a rename, so a reader
+    /// only ever sees the complete file (rename is atomic on the same
+    /// filesystem). Content-addressed blobs are written once per build, so the
+    /// fixed `.tmp` suffix never races itself.
+    fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+        let tmp = path.with_extension("tmp");
+        crate::fs::write(&tmp, bytes)?;
+        crate::fs::rename(&tmp, path)
     }
 
     /// Remove object files not referenced by the next manifest. Best-effort:
@@ -210,7 +240,7 @@ impl Cache {
         }
     }
 
-    fn key(page: &Page) -> String {
-        page.source.display().to_string()
+    fn key(page: &Page) -> &Path {
+        &page.source
     }
 }

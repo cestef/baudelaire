@@ -55,6 +55,12 @@ pub fn remove_file(path: impl AsRef<Path>) -> Result<()> {
     std::fs::remove_file(path).map_err(|e| FsError::new(Op::Remove, path, e).into())
 }
 
+/// Rename a file, naming both source and destination on failure.
+pub fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+    let (from, to) = (from.as_ref(), to.as_ref());
+    std::fs::rename(from, to).map_err(|e| FsError::between(Op::Rename, from, to, e).into())
+}
+
 /// Recursively create a directory and all its parents.
 pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();

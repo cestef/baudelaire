@@ -33,6 +33,33 @@ impl Hash {
         value.hash(&mut hasher);
         Self(hasher.0.finalize().to_hex().to_string())
     }
+
+    /// A content fingerprint of every file under `dir`, sorted by relative path
+    /// (an empty directory, or an absent one, hashes to a stable empty value).
+    /// Used to invalidate pages that inline asset bytes (`embed`) — a change the
+    /// per-file dependency tracker cannot otherwise see, since typst never reads
+    /// the embedded files.
+    pub fn of_dir(dir: &Path) -> Self {
+        let mut files: Vec<(String, Hash)> = Vec::new();
+        Self::collect(dir, dir, &mut files);
+        files.sort_by(|(a, _), (b, _)| a.cmp(b));
+        Self::of(&files)
+    }
+
+    fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, Hash)>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                Self::collect(root, &path, out);
+            } else if let Some(hash) = Self::of_file(&path) {
+                let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned();
+                out.push((rel, hash));
+            }
+        }
+    }
 }
 
 /// Adapts blake3 to [`std::hash::Hasher`] so any `Hash` value's bytes stream

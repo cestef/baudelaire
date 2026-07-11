@@ -5,6 +5,6 @@ mod cache;
 mod deps;
 mod hash;
 
-pub use cache::Cache;
+pub use cache::{Cache, RenderInputs};
 pub use deps::Deps;
 pub use hash::Hash;

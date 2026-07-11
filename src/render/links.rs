@@ -1,9 +1,10 @@
 //! Resolution of source-relative links to permalinks.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::content::Page;
+use crate::graph::Hash;
 
 /// How a raw link in page markup should be treated.
 #[derive(Debug, PartialEq, Eq)]
@@ -32,6 +33,18 @@ impl LinkMap {
             .filter_map(|p| Some((crate::fs::canonicalize(&p.source).ok()?, p.permalink.clone())))
             .collect();
         Self { by_source }
+    }
+
+    /// A stable fingerprint of every source→permalink mapping. Folded into the
+    /// build cache so a page whose permalink changed invalidates the cached
+    /// pages that might link to it — link resolution is render-side and so is
+    /// invisible to the per-page dependency tracker, which never sees a link
+    /// target's source. Coarse (any permalink change rebuilds every page), but
+    /// permalink changes are rare and this mirrors how the asset map is folded
+    /// in.
+    pub fn fingerprint(&self) -> Hash {
+        let sorted: BTreeMap<&PathBuf, &String> = self.by_source.iter().collect();
+        Hash::of(&sorted)
     }
 
     /// Classify a raw link written in `from`'s body: passthrough, resolved to a

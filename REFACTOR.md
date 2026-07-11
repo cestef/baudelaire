@@ -64,10 +64,10 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 
 ## Phase 3 — cache + output correctness
 
-- [ ] LinkMap in cache fingerprint (`cache.rs:84`) — slug edit leaves other pages' cached links stale, no warning (link check skips cached pages `engine/mod.rs:293`)
-- [ ] Embedded assets in dep set (`embed.rs:75`) — embed-on + fingerprint-off = stale data: URIs forever; also embed processed bytes, not source (minify/optimize bypassed)
-- [ ] Atomic blob/manifest writes + verify content-address on read (`cache.rs:119,148` — torn write = permanent corrupt hit); lock or grace-period prune for concurrent builds (`cache.rs:161`)
-- [ ] Dep paths serialized via `display()` (`cache.rs:129`) — lossy; serde PathBuf
+- [x] LinkMap in cache fingerprint (`cache.rs:84`) — slug edit leaves other pages' cached links stale, no warning (link check skips cached pages `engine/mod.rs:293`)
+- [x] Embedded assets in dep set (`embed.rs:75`) — embed-on + fingerprint-off = stale data: URIs forever; also embed processed bytes, not source (minify/optimize bypassed)
+- [x] Atomic blob/manifest writes + verify content-address on read (`cache.rs:119,148` — torn write = permanent corrupt hit); lock or grace-period prune for concurrent builds (`cache.rs:161`)
+- [x] Dep paths serialized via `display()` (`cache.rs:129`) — lossy; serde PathBuf
 - [ ] Collision detection pass over `(permalink, PageId, source)` — silent last-writer-wins today (verified); `posts/index.typ` + paginate = identical synthetic source (`listing.rs:134`) clobbering cache entries (`cache.rs:55`)
 - [ ] Taxonomy slug collisions (`C++`/`C--` → `c`) + empty slugs → `/tags//` (`taxonomy.rs:108`)
 - [ ] Unify slug policy: page slugs unslugified (spaces/emoji verbatim; sitemap `<loc>` unescaped, invalid) vs slugified terms; shared `Slug` type, percent-encode sitemap

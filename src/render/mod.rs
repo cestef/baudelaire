@@ -60,6 +60,16 @@ impl Renderer {
         }
     }
 
+    /// Fingerprint of the page→permalink map, for the build cache.
+    pub fn links(&self) -> crate::graph::Hash {
+        self.links.fingerprint()
+    }
+
+    /// The processed-asset URL map (for the build-cache fingerprint).
+    pub fn assets(&self) -> &AssetMap {
+        &self.assets
+    }
+
     /// Run the DOM transform pipeline over a page's document in place: link
     /// resolution (source-path `.typ` links → permalinks) first, then the
     /// configured transforms. Returns the raw targets of any internal `.typ`

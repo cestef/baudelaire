@@ -200,6 +200,64 @@ fn retitling_invalidates_taxonomy_listing() {
 }
 
 #[test]
+fn changing_a_slug_updates_links_from_cached_pages() {
+    // Page a links to b by source path; b's permalink is resolved into a's HTML
+    // at render time — a dependency the per-page tracker cannot see (typst never
+    // reads b.typ). Changing b's slug must still invalidate a's cached link.
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\n#link(\"b.typ\")[to b]",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#frontmatter((title: \"B\", slug: \"b\",))\nbeta",
+    );
+    site.build();
+    assert!(
+        site.output("posts/a/index.html").contains("/posts/b/"),
+        "a's link should resolve to b's permalink"
+    );
+
+    // Give b a new slug → new permalink.
+    site.write(
+        "content/posts/b.typ",
+        "#frontmatter((title: \"B\", slug: \"bee\",))\nbeta",
+    );
+    site.build();
+
+    let a = site.output("posts/a/index.html");
+    assert!(a.contains("/posts/bee/"), "a's link was not updated to b's new slug: {a}");
+    assert!(!a.contains("/posts/b/\""), "a still serves b's stale permalink: {a}");
+}
+
+#[test]
+fn editing_an_embedded_asset_invalidates_the_page() {
+    // With `embed`, a page inlines asset bytes as a `data:` URI at render time —
+    // bytes typst never reads, so the per-page tracker is blind to them. Editing
+    // the asset must still rebuild the page (its inlined copy is now stale).
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n\
+         clean #true\noutput {\n  html {\n    embed #true\n  }\n}\n",
+    );
+    site.write("assets/note.svg", "<svg>ONE</svg>");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\n#html.elem(\"img\", attrs: (src: \"/assets/note.svg\"))",
+    );
+    site.build();
+    let first = site.output("posts/a/index.html");
+    assert!(first.contains("data:image/svg"), "asset should be inlined: {first}");
+
+    site.write("assets/note.svg", "<svg>TWO</svg>");
+    let out = site.build();
+
+    assert!(!out.contains("(1 cached)"), "page must rebuild when its embedded asset changes: {out}");
+    // The freshly inlined bytes differ from the original.
+    assert_ne!(first, site.output("posts/a/index.html"), "inlined asset was not refreshed");
+}
+
+#[test]
 fn no_cache_flag_forces_full_rebuild() {
     let site = Site::with(CONFIG);
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
