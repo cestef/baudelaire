@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use time::OffsetDateTime;
 use typst::{
@@ -38,7 +38,9 @@ const FEATURES: &[(&str, Feature)] = &[
 #[derive(Clone)]
 pub struct Project {
     lib: Arc<LazyHash<Library>>,
-    fonts: Arc<FontStore>,
+    /// System fonts, discovered lazily on first glyph lookup — a fully-cached
+    /// rebuild compiles nothing, so it never pays to scan the font directories.
+    fonts: Arc<LazyLock<FontStore>>,
     files: Arc<FileStore<SystemFiles>>,
     root: PathBuf,
     now: OffsetDateTime,
@@ -231,9 +233,6 @@ impl Project {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
 
-        let mut fonts = FontStore::new();
-        fonts.extend(typst_kit::fonts::system());
-
         let now = OffsetDateTime::now_utc();
         let context = BuildContext::detect(&project_root, now, config, mode);
         let mut inputs: Dict = config
@@ -262,7 +261,7 @@ impl Project {
                     .with_inputs(inputs)
                     .build(),
             )),
-            fonts: Arc::new(fonts),
+            fonts: Arc::new(LazyLock::new(Self::system_fonts)),
             files: Arc::new(FileStore::new(SystemFiles::new(
                 FsRoot::new(project_root.clone()),
                 SystemPackages::new(SystemDownloader::new(USER_AGENT)),
@@ -271,6 +270,16 @@ impl Project {
             now,
             context,
         })
+    }
+
+    /// Discover and load the system fonts. Used as the [`LazyLock`] initializer
+    /// for [`Project::fonts`] so the cost (scanning font directories, parsing
+    /// fontconfig) is paid only when a page is actually compiled — never on a
+    /// fully-cached rebuild.
+    fn system_fonts() -> FontStore {
+        let mut fonts = FontStore::new();
+        fonts.extend(typst_kit::fonts::system());
+        fonts
     }
 
     /// Build metadata injected into `sys.inputs.baudelaire`; folded into the
