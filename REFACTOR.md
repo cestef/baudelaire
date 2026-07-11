@@ -22,7 +22,7 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 - [x] One MIME table (`embed.rs:100` vs `serve.rs:232` disagree; charset at serve call site)
 - [x] `tests/common/mod.rs` harness — Sandbox/Tmp/Site copy-pasted 6× across e2e files
 - [x] parking_lot Mutex (kills `.expect("lock")`: `world.rs:334+`, `serve.rs:282+`); flume over std mpsc in serve
-- [ ] Thread a `Root(PathBuf)` instead of `set_current_dir` + 3 independent `current_dir()` re-derivations (`cli/mod.rs:187`, `serve.rs:133,340`, `scaffold.rs:173`) — DEFERRED: chdir is the design (makes every relative config path correct); the user-visible bug is hooks cwd, fixed in Phase 2. Revisit if a second bug class appears.
+- [x] Thread a `Root(PathBuf)` captured once, threaded to serve Filter/label + scaffold dir_name (chdir kept — it makes relative config paths resolve; the 3 current_dir() re-derivations are gone)
 - [x] `NodeExt::int` → delegate to `ValueExt::integer`; single-value counterpart of `mapped()` for `sort()`/`taxo_kind`/png-`strip` hand-rolled enum matches
 - [x] Shared `split_tail` (`render/asset.rs:31` vs `links.rs:69` verbatim dup)
 - [x] `Page::title()`/`Item::of(&Page)` — title fallback ×3 (`pagination.rs:64`, `taxonomy.rs:93`, `llms.rs:33`); give taxonomy items `date`+`extra` like pagination

@@ -5,13 +5,47 @@ pub mod prompt;
 pub mod scaffold;
 pub mod serve;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 
 use crate::cli::output::{Level, Report};
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{FsError, Op, Result};
+
+/// The absolute project root: the directory `--root` selected (into which the
+/// process changes so relative config paths resolve under it) or the launch
+/// directory. Captured once and threaded, so nothing re-derives the root from
+/// the process cwd.
+pub(crate) struct Root(PathBuf);
+
+impl Root {
+    /// Enter and capture the project root. A `--root` argument changes the
+    /// process cwd — the single side effect that makes every relative path in
+    /// the config resolve under the chosen directory — then the absolute root
+    /// is read once, here, and passed by value everywhere else.
+    fn enter(dir: Option<&Path>) -> Result<Self> {
+        if let Some(dir) = dir {
+            std::env::set_current_dir(dir).map_err(|e| FsError::new(Op::Enter, dir, e))?;
+        }
+        let cwd = std::env::current_dir().map_err(|e| FsError::new(Op::Enter, Path::new("."), e))?;
+        Ok(Self(cwd))
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Resolve a path against the root (an absolute path is returned as-is).
+    pub(crate) fn join(&self, path: impl AsRef<Path>) -> PathBuf {
+        self.0.join(path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn at(path: impl Into<PathBuf>) -> Self {
+        Self(path.into())
+    }
+}
 
 /// Baudelaire - a Typst-native static site generator.
 #[derive(Parser, Debug)]
@@ -191,21 +225,12 @@ impl GlobalArgs {
         }
     }
 
-    /// Change into `--root` if given, so config and every relative path resolve
-    /// under it. Applied once before dispatch.
-    fn enter(&self) -> Result<()> {
-        if let Some(root) = &self.root {
-            std::env::set_current_dir(root)
-                .map_err(|e| crate::error::FsError::new(crate::error::Op::Enter, root, e))?;
-        }
-        Ok(())
-    }
 }
 
 /// Dispatch a parsed CLI to the matching engine entrypoint.
 pub fn run(cli: Cli) -> Result<()> {
     let mut report = Report::with_level(cli.level());
-    cli.global.enter()?;
+    let root = Root::enter(cli.global.root.as_deref())?;
     let command = cli.command.clone().unwrap_or(Command::Build(BuildArgs {}));
     match command {
         Command::Build(_) => {
@@ -219,7 +244,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Serve(args) => {
             let mut config = cli.load_config()?;
             args.apply(&mut config);
-            crate::cli::serve::run(&mut report, &config)?;
+            crate::cli::serve::run(&mut report, &config, &root)?;
         }
         Command::New(args) => {
             let config = cli.load_config()?;
@@ -232,8 +257,8 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Init(args) => {
             // A positional directory scaffolds there (`init my-site`); with none,
             // the current directory (already `--root`-adjusted) is used.
-            let root = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
-            scaffold::init(&mut report, &root, args.yes, args.vcs)?;
+            let target = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
+            scaffold::init(&mut report, &target, &root, args.yes, args.vcs)?;
         }
     }
     Ok(())

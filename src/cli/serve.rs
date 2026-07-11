@@ -15,6 +15,7 @@ use owo_colors::OwoColorize;
 use tiny_http::{Header, Request, Response, Server};
 use wax::{Glob, Program};
 
+use crate::cli::Root;
 use crate::cli::output::{Level, Paths, Report};
 use crate::config::Config;
 use crate::engine::{Engine, Mode};
@@ -27,8 +28,8 @@ use crate::mime::Mime;
 ///
 /// CLI flags (`--port`, `--bind`, `--open`, `--no-watch`) are already folded
 /// into `config.serve` by [`crate::cli::ServeArgs::apply`].
-pub fn run(report: &mut Report, config: &Config) -> Result<()> {
-    Dev { config, report }.run()
+pub(crate) fn run(report: &mut Report, config: &Config, root: &Root) -> Result<()> {
+    Dev { config, report, root }.run()
 }
 
 /// Orchestrates a dev-server session: the initial build, the HTTP handler, and
@@ -36,6 +37,7 @@ pub fn run(report: &mut Report, config: &Config) -> Result<()> {
 struct Dev<'a> {
     config: &'a Config,
     report: &'a mut Report,
+    root: &'a Root,
 }
 
 impl Dev<'_> {
@@ -74,7 +76,7 @@ impl Dev<'_> {
     /// every relevant change.
     fn watch(mut self, live: Live) -> Result<()> {
         let (tx, rx) = flume::unbounded::<DebounceEventResult>();
-        let filter = Filter::new(self.config)?;
+        let filter = Filter::new(self.config, self.root)?;
         let _watcher = Watcher::new(filter.dirs(), tx)?;
         self.report.muted("watching for changes")?;
         for result in rx {
@@ -122,7 +124,7 @@ impl Dev<'_> {
         // A Vite-style rebuild: a transient status while the build runs, replaced
         // by a single timestamped log line. The build's own milestone/summary is
         // silenced so rebuilds never stack the full block over the initial output.
-        let label = Self::label(&changed);
+        let label = Self::label(&changed, self.root);
         self.report.status(format_args!("rebuilding {}", Paths(&label)))?;
         let prior = self.report.level();
         self.report.set_level(Level::Silent);
@@ -148,9 +150,8 @@ impl Dev<'_> {
 
     /// A concise label for a rebuild's trigger: the first changed file (relative
     /// to the project root) and, when several changed, how many more.
-    fn label(changed: &[&PathBuf]) -> String {
-        let cwd = std::env::current_dir().unwrap_or_default();
-        let first = changed[0].strip_prefix(&cwd).unwrap_or(changed[0]).display();
+    fn label(changed: &[&PathBuf], root: &Root) -> String {
+        let first = changed[0].strip_prefix(root.path()).unwrap_or(changed[0]).display();
         match changed.len() {
             1 => first.to_string(),
             n => format!("{first} +{}", n - 1),
@@ -346,8 +347,8 @@ struct Filter {
 }
 
 impl Filter {
-    fn new(config: &Config) -> Result<Self> {
-        let root = std::env::current_dir().unwrap_or_default();
+    fn new(config: &Config, root: &Root) -> Result<Self> {
+        let root = root.path().to_path_buf();
         let assets =
             crate::fs::canonicalize(&config.assets).unwrap_or_else(|_| root.join(&config.assets));
         let mut dirs = vec![
@@ -412,12 +413,14 @@ mod tests {
     #[test]
     fn watcher_errors_warn_and_keep_watching() {
         let config = Config::default();
+        let root = Root::at(".");
         let mut report = Report::with_level(Level::Silent);
-        let filter = Filter::new(&config).unwrap();
+        let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: &config,
             report: &mut report,
+            root: &root,
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
             .unwrap();
@@ -429,12 +432,14 @@ mod tests {
     #[test]
     fn empty_event_batch_is_a_no_op() {
         let config = Config::default();
+        let root = Root::at(".");
         let mut report = Report::with_level(Level::Silent);
-        let filter = Filter::new(&config).unwrap();
+        let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: &config,
             report: &mut report,
+            root: &root,
         };
         dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
         assert_eq!(dev.report.warnings(), 0);

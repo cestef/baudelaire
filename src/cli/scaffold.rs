@@ -4,6 +4,7 @@ use std::process::Command;
 
 use owo_colors::OwoColorize;
 
+use crate::cli::Root;
 use crate::cli::output::{Paths, Report};
 use crate::cli::prompt::{Input, Prompt};
 use crate::config::Config;
@@ -91,22 +92,29 @@ impl Config {
     }
 }
 
-/// Scaffold a new project. `yes` takes every prompt's default without asking;
-/// `vcs` pins a version-control system.
-pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Result<()> {
+/// Scaffold a new project into `target` (resolved against the project `root`
+/// for its default site name). `yes` takes every prompt's default without
+/// asking; `vcs` pins a version-control system.
+pub(crate) fn init(
+    report: &mut Report,
+    target: &Path,
+    root: &Root,
+    yes: bool,
+    vcs: Option<Vcs>,
+) -> Result<()> {
     report.milestone(format_args!(
         "initializing project in {}",
-        Paths(&root.display().to_string())
+        Paths(&target.display().to_string())
     ))?;
 
     let interactive = !yes && std::io::stdin().is_terminal();
-    let details = Details::gather(root, interactive)?;
+    let details = Details::gather(target, root, interactive)?;
     let repo = Repo::wanted(yes, interactive, vcs)?;
     if interactive {
         report.blank()?;
     }
 
-    Scaffold::new(root)
+    Scaffold::new(target)
         .dir("content")
         .dir("assets")
         .dir("templates")
@@ -118,7 +126,7 @@ pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Re
         .apply(report)?;
 
     if let Some(vcs) = repo {
-        Repo::new(root, vcs).setup(report)?;
+        Repo::new(target, vcs).setup(report)?;
     }
 
     report.blank()?;
@@ -140,8 +148,8 @@ struct Details {
 }
 
 impl Details {
-    fn gather(root: &Path, interactive: bool) -> Result<Self> {
-        let name = Self::dir_name(root);
+    fn gather(target: &Path, root: &Root, interactive: bool) -> Result<Self> {
+        let name = Self::dir_name(target, root);
         let author = Self::git_author().unwrap_or_default();
         if !interactive {
             return Ok(Self {
@@ -171,17 +179,15 @@ impl Details {
         )
     }
 
-    /// A sensible default site name from the target directory's own name.
-    fn dir_name(root: &Path) -> String {
-        root.file_name()
+    /// A sensible default site name from the target directory's own name. A
+    /// bare `.` resolves against the project root, so it yields the launch
+    /// directory's name rather than an empty string.
+    fn dir_name(target: &Path, root: &Root) -> String {
+        root.join(target)
+            .file_name()
             .and_then(|n| n.to_str())
-            .map(str::to_owned)
-            .or_else(|| {
-                std::env::current_dir()
-                    .ok()
-                    .and_then(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_owned))
-            })
             .filter(|n| !n.is_empty())
+            .map(str::to_owned)
             .unwrap_or_else(|| "my-site".into())
     }
 
