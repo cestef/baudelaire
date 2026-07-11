@@ -1,30 +1,7 @@
-use std::fs;
-use std::path::PathBuf;
+mod common;
 
 use baudelaire::config::Config;
-
-struct Sandbox {
-    _tmp: tempfile::TempDir,
-    root: PathBuf,
-}
-
-impl Sandbox {
-    fn new() -> Self {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().to_path_buf();
-        Self { _tmp: tmp, root }
-    }
-
-    fn write(&self, rel: &str, contents: &str) {
-        let path = self.root.join(rel);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, contents).unwrap();
-    }
-
-    fn config_path(&self) -> PathBuf {
-        self.root.join("config.kdl")
-    }
-}
+use common::Site;
 
 fn fixture_config() -> &'static str {
     r#"
@@ -86,9 +63,9 @@ fn fixture_config() -> &'static str {
 
 #[test]
 fn loads_full_config() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", fixture_config());
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     assert_eq!(cfg.site.as_deref(), Some("Fixture Site"));
     assert_eq!(cfg.url.as_deref(), Some("https://fixture.test"));
@@ -105,9 +82,9 @@ fn loads_full_config() {
 
 #[test]
 fn profile_dev_overrides() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", fixture_config());
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     let dev = cfg.with_profile("dev").expect("profile dev");
     assert_eq!(dev.url.as_deref(), Some("http://localhost:3000"));
@@ -116,9 +93,9 @@ fn profile_dev_overrides() {
 
 #[test]
 fn profile_prod_overrides_nested() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", fixture_config());
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     let prod = cfg.with_profile("prod").expect("profile prod");
     assert!(!prod.html.pretty);
@@ -126,9 +103,9 @@ fn profile_prod_overrides_nested() {
 
 #[test]
 fn minimal_config_builds() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", r#"site "Minimal""#);
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     assert_eq!(cfg.site.as_deref(), Some("Minimal"));
     assert_eq!(cfg.dist, std::path::PathBuf::from("public"));
@@ -137,9 +114,9 @@ fn minimal_config_builds() {
 
 #[test]
 fn empty_config_uses_defaults() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", "");
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let cfg = Config::parse(&text).expect("parse");
     assert_eq!(cfg.lang, "en");
     assert_eq!(cfg.serve.port, 3000);
@@ -148,9 +125,9 @@ fn empty_config_uses_defaults() {
 
 #[test]
 fn malformed_config_errors_with_message() {
-    let sb = Sandbox::new();
+    let sb = Site::new();
     sb.write("config.kdl", "serve {\n  port \"not-a-number\"\n}\n");
-    let text = fs::read_to_string(sb.config_path()).unwrap();
+    let text = sb.read("config.kdl");
     let err = Config::parse(&text).expect_err("should fail");
     assert!(err.to_string().contains("expected integer"));
 }

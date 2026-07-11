@@ -53,11 +53,17 @@ impl<'a, T: Clone> Prompt<'a, T> {
         if !term.is_term() {
             return Ok(self.chosen(self.default));
         }
-        let last = self.options.len() - 1;
+        let last = self.options.len().checked_sub(1).expect("Prompt built with no options");
         let mut selected = self.default;
         loop {
             self.render(&term, selected, false)?;
-            match term.read_key()? {
+            // A read failure (EOF, closed terminal) falls back to the default,
+            // as the module contract promises — it must never error out of init.
+            let Ok(key) = term.read_key() else {
+                self.render(&term, self.default, true)?;
+                return Ok(self.chosen(self.default));
+            };
+            match key {
                 Key::ArrowLeft | Key::ArrowUp | Key::BackTab => {
                     selected = if selected == 0 { last } else { selected - 1 };
                 }
@@ -145,13 +151,15 @@ impl<'a> Input<'a> {
     /// Render the prompt and read one line, returning the trimmed answer or the
     /// default on an empty line or EOF.
     pub fn ask(&self) -> Result<String> {
+        // Through anstream so styling strips on a non-terminal and honors
+        // NO_COLOR, like every other CLI line.
         if self.default.is_empty() {
-            print!("{} {} ", "?".cyan().bold(), self.question.bold());
+            anstream::print!("{} {} ", "?".cyan().bold(), self.question.bold());
         } else {
             let hint = format!("({})", self.default);
-            print!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
+            anstream::print!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
         }
-        std::io::stdout().flush()?;
+        anstream::stdout().flush()?;
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line)? == 0 {
             println!();

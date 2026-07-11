@@ -16,26 +16,26 @@ Full-repo smell audit. Checklist ordered by phase. `[x]` = done.
 
 ## Phase 1 — shared infrastructure
 
-- [ ] One DOM walker + URL-attr iterator in `transform.rs` — replaces 5 hand-rolled walkers (`rewrite.rs:59`, `image.rs:29`, `embed.rs:53`, `fingerprint.rs:44`, `meta.rs:44`)
-- [ ] `BaseUrl` type with `join(&Page)` — replaces 6 hand-joins (`feed.rs:56`, `sitemap.rs:46`, `robots.rs:30`, `llms.rs:25`, `meta.rs:123,132`) + one url-gating policy `Site::require_url(feature)` (feed/sitemap warn, llms/robots currently silent — unify to warn)
-- [ ] `crate::fs` gains `write_all` (mkdir-p+write; 3 copies at `engine/mod.rs:378`, `process.rs:113`, `asset.rs:167`), `canonicalize` (8 bypass sites; `Op::Canonicalize` exists unused), `exists`, `remove_file`
-- [ ] One MIME table (`embed.rs:100` vs `serve.rs:232` disagree; charset at serve call site)
-- [ ] `tests/common/mod.rs` harness — Sandbox/Tmp/Site copy-pasted 6× across e2e files
-- [ ] parking_lot Mutex (kills `.expect("lock")`: `world.rs:334+`, `serve.rs:282+`); flume over std mpsc in serve
-- [ ] Thread a `Root(PathBuf)` instead of `set_current_dir` + 3 independent `current_dir()` re-derivations (`cli/mod.rs:187`, `serve.rs:133,340`, `scaffold.rs:173`)
-- [ ] `NodeExt::int` → delegate to `ValueExt::integer`; single-value counterpart of `mapped()` for `sort()`/`taxo_kind`/png-`strip` hand-rolled enum matches
-- [ ] Shared `split_tail` (`render/asset.rs:31` vs `links.rs:69` verbatim dup)
-- [ ] `Page::title()`/`Item::of(&Page)` — title fallback ×3 (`pagination.rs:64`, `taxonomy.rs:93`, `llms.rs:33`); give taxonomy items `date`+`extra` like pagination
-- [ ] Single eligibility view (`skipped()` predicate dup + asymmetric: `pagination.rs:42` vs `engine/mod.rs:250`)
-- [ ] `eval.rs:16` free `dict()` rebuilds Library+FontBook per page → cached evaluator type
-- [ ] Compute page fingerprint/source once (`engine/mod.rs:262,286` double `source_for`); `Rendered` borrows page instead of clone
-- [ ] `Count::links` instead of hand pluralization (`engine/mod.rs:310`); sitemap date via `time` format (`sitemap.rs:58`)
-- [ ] `SiteMap::FILE` const shared with robots (`robots.rs:30` literal)
-- [ ] Interactivity flag computed once (`scaffold.rs:95` vs `257`)
-- [ ] One styling stack: `Input` (`prompt.rs:149`) raw print! → anstream; consider dropping console or isolating it
-- [ ] Slug precedence resolved once (`page.rs:55` then `permalink.rs:150` re-applies)
-- [ ] Move `impl Config::collection` from `content/page.rs:135` to config module
-- [ ] `Cargo.toml`: add `[lints]` table
+- [x] One DOM walker + URL-attr iterator in `transform.rs` — replaces 5 hand-rolled walkers (`rewrite.rs:59`, `image.rs:29`, `embed.rs:53`, `fingerprint.rs:44`, `meta.rs:44`)
+- [x] `BaseUrl` type with `join(&Page)` — replaces 6 hand-joins (`feed.rs:56`, `sitemap.rs:46`, `robots.rs:30`, `llms.rs:25`, `meta.rs:123,132`) + one url-gating policy `Site::require_url(feature)` (feed/sitemap warn, llms/robots currently silent — unify to warn)
+- [x] `crate::fs` gains `write_all` (mkdir-p+write; 3 copies at `engine/mod.rs:378`, `process.rs:113`, `asset.rs:167`), `canonicalize` (8 bypass sites; `Op::Canonicalize` exists unused), `exists`, `remove_file`
+- [x] One MIME table (`embed.rs:100` vs `serve.rs:232` disagree; charset at serve call site)
+- [x] `tests/common/mod.rs` harness — Sandbox/Tmp/Site copy-pasted 6× across e2e files
+- [x] parking_lot Mutex (kills `.expect("lock")`: `world.rs:334+`, `serve.rs:282+`); flume over std mpsc in serve
+- [ ] Thread a `Root(PathBuf)` instead of `set_current_dir` + 3 independent `current_dir()` re-derivations (`cli/mod.rs:187`, `serve.rs:133,340`, `scaffold.rs:173`) — DEFERRED: chdir is the design (makes every relative config path correct); the user-visible bug is hooks cwd, fixed in Phase 2. Revisit if a second bug class appears.
+- [x] `NodeExt::int` → delegate to `ValueExt::integer`; single-value counterpart of `mapped()` for `sort()`/`taxo_kind`/png-`strip` hand-rolled enum matches
+- [x] Shared `split_tail` (`render/asset.rs:31` vs `links.rs:69` verbatim dup)
+- [x] `Page::title()`/`Item::of(&Page)` — title fallback ×3 (`pagination.rs:64`, `taxonomy.rs:93`, `llms.rs:33`); give taxonomy items `date`+`extra` like pagination
+- [x] Single eligibility view (`skipped()` predicate dup + asymmetric: `pagination.rs:42` vs `engine/mod.rs:250`)
+- [x] `eval.rs:16` free `dict()` rebuilds Library+FontBook per page → cached evaluator type
+- [x] Compute page fingerprint/source once (`engine/mod.rs:262,286` double `source_for`); `Rendered` borrows page instead of clone
+- [x] `Count::links` instead of hand pluralization (`engine/mod.rs:310`); sitemap date via `time` format (`sitemap.rs:58`)
+- [x] `SiteMap::FILE` const shared with robots (`robots.rs:30` literal)
+- [x] Interactivity flag computed once (`scaffold.rs:95` vs `257`)
+- [x] One styling stack: `Input` (`prompt.rs:149`) raw print! → anstream; consider dropping console or isolating it
+- [x] Slug precedence resolved once (`page.rs:55` then `permalink.rs:150` re-applies)
+- [x] Move `impl Config::collection` from `content/page.rs:135` to config module
+- [x] `Cargo.toml`: add `[lints]` table
 
 ## Phase 2 — silent-swallowing sweep
 

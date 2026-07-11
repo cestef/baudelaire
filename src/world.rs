@@ -328,7 +328,7 @@ impl Project {
 /// `editing_transitive_import_invalidates_page`).
 pub struct Tracked<W> {
     inner: W,
-    accessed: std::sync::Mutex<std::collections::HashSet<FileId>>,
+    accessed: parking_lot::Mutex<std::collections::HashSet<FileId>>,
 }
 
 impl<W> Tracked<W> {
@@ -336,7 +336,7 @@ impl<W> Tracked<W> {
     pub fn new(inner: W) -> Self {
         Self {
             inner,
-            accessed: std::sync::Mutex::new(std::collections::HashSet::new()),
+            accessed: parking_lot::Mutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -347,11 +347,11 @@ impl<W> Tracked<W> {
 
     /// The file ids accessed so far.
     pub fn accessed(&self) -> Vec<FileId> {
-        self.accessed.lock().expect("lock").iter().copied().collect()
+        self.accessed.lock().iter().copied().collect()
     }
 
     fn record(&self, id: FileId) {
-        self.accessed.lock().expect("lock").insert(id);
+        self.accessed.lock().insert(id);
     }
 }
 

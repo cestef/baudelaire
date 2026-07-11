@@ -94,7 +94,7 @@ pub fn init(report: &mut Report, root: &Path, yes: bool, vcs: Option<Vcs>) -> Re
 
     let interactive = !yes && std::io::stdin().is_terminal();
     let details = Details::gather(root, interactive)?;
-    let repo = Repo::wanted(yes, vcs)?;
+    let repo = Repo::wanted(yes, interactive, vcs)?;
     if interactive {
         report.blank()?;
     }
@@ -251,17 +251,17 @@ impl<'a> Repo<'a> {
     }
 
     /// Which VCS to set up, if any. An explicit `--vcs` wins; `yes` takes the
-    /// default (git) without asking; otherwise ask, but only on an interactive
-    /// terminal — piped or CI input defaults to none, so a scaffold never blocks
-    /// waiting for an answer nor creates a repo unbidden.
-    fn wanted(yes: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
+    /// default (git) without asking; otherwise ask, but only when the session is
+    /// `interactive` (decided once, in `init`) — piped or CI input defaults to
+    /// none, so a scaffold never blocks nor creates a repo unbidden.
+    fn wanted(yes: bool, interactive: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
         if explicit.is_some() {
             return Ok(explicit);
         }
         if yes {
             return Ok(Some(Vcs::Git));
         }
-        if !std::io::stdin().is_terminal() {
+        if !interactive {
             return Ok(None);
         }
         // git is the default (empty answer); every option lists its aliases.

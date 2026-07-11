@@ -8,54 +8,15 @@
 //! asserts the affected page's *output* actually changed on rebuild; a missed
 //! dependency would leave stale HTML and fail the test.
 
-use std::fs;
-use std::process::Command;
+mod common;
 
-struct Site {
-    _tmp: tempfile::TempDir,
-    root: std::path::PathBuf,
-}
+use common::Site;
 
-impl Site {
-    fn new() -> Self {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().to_path_buf();
-        let site = Self { _tmp: tmp, root };
-        site.write(
-            "config.kdl",
-            "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
-        );
-        site
-    }
-
-    fn write(&self, rel: &str, contents: &str) {
-        let path = self.root.join(rel);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, contents).unwrap();
-    }
-
-    fn build(&self) -> String {
-        let out = Command::new(env!("CARGO_BIN_EXE_baudelaire"))
-            .args(["build", "-v"])
-            .current_dir(&self.root)
-            .output()
-            .expect("run binary");
-        assert!(
-            out.status.success(),
-            "build failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8_lossy(&out.stdout).into_owned()
-    }
-
-    fn output(&self, rel: &str) -> String {
-        fs::read_to_string(self.root.join("public").join(rel)).unwrap()
-    }
-}
+const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
 
 #[test]
 fn second_build_reuses_all_pages() {
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
     site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
 
@@ -70,7 +31,7 @@ fn second_build_reuses_all_pages() {
 
 #[test]
 fn editing_a_page_rebuilds_only_it() {
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
     site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
     site.build();
@@ -87,7 +48,7 @@ fn editing_a_page_rebuilds_only_it() {
 fn editing_transitive_import_invalidates_page() {
     // a imports b, b imports c. Editing only c must rebuild a — proving the
     // transitive dependency was captured.
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     // Modules live at the project root so they aren't discovered as pages.
     site.write("c.typ", "#let value = \"ORIGINAL\"");
     site.write("b.typ", "#import \"/c.typ\": value\n#let msg = value");
@@ -118,7 +79,7 @@ fn shared_module_tracked_for_every_page() {
     // comemo-memoized world. Editing the module must rebuild BOTH — proving
     // the dependency is recorded even when the second page's compile reuses
     // comemo's cached evaluation of the shared module.
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write("shared.typ", "#let v = \"V1\"");
     site.write(
         "content/posts/x.typ",
@@ -149,7 +110,7 @@ fn shared_module_tracked_for_every_page() {
 fn editing_layout_template_rebuilds_dependent_pages() {
     // The layout template is imported through the tracked world, so editing it
     // must invalidate every page bound to it.
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"main\", body)",
@@ -178,7 +139,7 @@ fn generated_pages_are_cached() {
     // Taxonomy/pagination pages have synthetic sources that never touch disk.
     // Their fingerprint is the text typst compiles, so an unchanged rebuild must
     // reuse them alongside the real pages — not silently recompile every time.
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
@@ -206,7 +167,7 @@ fn generated_pages_are_cached() {
 fn retitling_invalidates_taxonomy_listing() {
     // A term listing embeds member titles, so retitling a member must rebuild
     // that listing — but not the index (its per-term counts are unchanged).
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
@@ -240,15 +201,11 @@ fn retitling_invalidates_taxonomy_listing() {
 
 #[test]
 fn no_cache_flag_forces_full_rebuild() {
-    let site = Site::new();
+    let site = Site::with(CONFIG);
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
     site.build();
 
-    let out = Command::new(env!("CARGO_BIN_EXE_baudelaire"))
-        .args(["--no-cache", "build", "-v"])
-        .current_dir(&site.root)
-        .output()
-        .unwrap();
+    let out = site.run(&["--no-cache", "build", "-v"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     // A forced full rebuild serves nothing from cache — no page nor the summary
     // mentions caching (the summary omits the cached count when it is zero).

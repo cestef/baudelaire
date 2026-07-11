@@ -1,36 +1,10 @@
-use std::fs;
-use std::process::Command;
+mod common;
 
-struct Tmp {
-    _tmp: tempfile::TempDir,
-    root: std::path::PathBuf,
-}
-
-impl Tmp {
-    fn new() -> Self {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().to_path_buf();
-        Self { _tmp: tmp, root }
-    }
-
-    fn run(&self, args: &[&str]) -> std::process::Output {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_baudelaire"));
-        cmd.args(args).current_dir(&self.root);
-        cmd.output().expect("run binary")
-    }
-
-    fn exists(&self, rel: &str) -> bool {
-        self.root.join(rel).exists()
-    }
-
-    fn read(&self, rel: &str) -> String {
-        fs::read_to_string(self.root.join(rel)).unwrap()
-    }
-}
+use common::Site;
 
 #[test]
 fn init_creates_project_skeleton() {
-    let t = Tmp::new();
+    let t = Site::new();
     let out = t.run(&["init", "-r", t.root.to_str().unwrap()]);
     assert!(
         out.status.success(),
@@ -46,7 +20,7 @@ fn init_creates_project_skeleton() {
 
 #[test]
 fn init_config_is_valid() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let cfg = t.read("config.kdl");
     // The site name is templated from the directory, and every placeholder is
@@ -59,7 +33,7 @@ fn init_config_is_valid() {
 
 #[test]
 fn init_then_build_works() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["build"]);
     assert!(
@@ -72,7 +46,7 @@ fn init_then_build_works() {
 
 #[test]
 fn new_scaffolds_content_file() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["new", "content/posts/my-post.typ"]);
     assert!(
@@ -89,7 +63,7 @@ fn new_scaffolds_content_file() {
 
 #[test]
 fn new_refuses_existing_file() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["new", "content/posts/hello.typ"]);
     assert!(!out.status.success());
@@ -99,7 +73,7 @@ fn new_refuses_existing_file() {
 
 #[test]
 fn new_creates_parent_dirs() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["new", "content/posts/deep/nested/post.typ"]);
     assert!(
@@ -112,7 +86,7 @@ fn new_creates_parent_dirs() {
 
 #[test]
 fn verbose_shows_per_page_progress() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["-v", "build"]);
     assert!(out.status.success());
@@ -122,7 +96,7 @@ fn verbose_shows_per_page_progress() {
 
 #[test]
 fn quiet_suppresses_milestone() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["-q", "build"]);
     assert!(out.status.success());
@@ -132,7 +106,7 @@ fn quiet_suppresses_milestone() {
 
 #[test]
 fn build_reports_timing() {
-    let t = Tmp::new();
+    let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["build"]);
     assert!(out.status.success());

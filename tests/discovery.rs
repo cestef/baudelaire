@@ -1,34 +1,9 @@
+mod common;
+
 use std::fs;
 
-use baudelaire::config::Config;
 use baudelaire::content::{Page, discover};
-
-struct Site {
-    _tmp: tempfile::TempDir,
-    root: std::path::PathBuf,
-}
-
-impl Site {
-    fn new() -> Self {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().to_path_buf();
-        Self { _tmp: tmp, root }
-    }
-
-    fn write(&self, rel: &str, contents: &str) {
-        let path = self.root.join(rel);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, contents).unwrap();
-    }
-
-    fn config(&self) -> Config {
-        let text = fs::read_to_string(self.root.join("config.kdl")).unwrap();
-        let mut cfg = Config::parse(&text).unwrap();
-        cfg.content = self.root.join(&cfg.content);
-        cfg.dist = self.root.join(&cfg.dist);
-        cfg
-    }
-}
+use common::Site;
 
 fn frontmatter_post(title: &str, slug: &str, date: &str, tags: &[&str]) -> String {
     let tags_str = tags

@@ -1,37 +1,9 @@
+mod common;
+
 use std::fs;
-use std::process::Command;
 
-use baudelaire::config::Config;
 use baudelaire::content::discover;
-
-struct Site {
-    _tmp: tempfile::TempDir,
-    root: std::path::PathBuf,
-}
-
-impl Site {
-    fn new() -> Self {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().to_path_buf();
-        Self { _tmp: tmp, root }
-    }
-
-    fn write(&self, rel: &str, contents: &str) {
-        self.write_bytes(rel, contents.as_bytes());
-    }
-
-    fn write_bytes(&self, rel: &str, contents: &[u8]) {
-        let path = self.root.join(rel);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, contents).unwrap();
-    }
-
-    fn run(&self, args: &[&str]) -> std::process::Output {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_baudelaire"));
-        cmd.args(args).current_dir(&self.root);
-        cmd.output().expect("run binary")
-    }
-}
+use common::Site;
 
 #[test]
 fn builds_simple_page_to_html() {
@@ -482,13 +454,7 @@ fn nested_dirs_traverse_and_build() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let cols = discover(&{
-        let text = fs::read_to_string(site.root.join("config.kdl")).unwrap();
-        let mut cfg = Config::parse(&text).unwrap();
-        cfg.content = site.root.join(&cfg.content);
-        cfg
-    })
-    .unwrap();
+    let cols = discover(&site.config()).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 2);
 }
@@ -1043,18 +1009,6 @@ fn empty_site_builds_without_error() {
     );
 }
 
-/// Names of the immediate files in a directory, for asserting on generated
-/// (possibly fingerprinted) filenames.
-fn file_names(dir: &std::path::Path) -> Vec<String> {
-    fs::read_dir(dir)
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 #[test]
 fn fingerprint_renames_assets_and_rewrites_references() {
     let site = Site::new();
@@ -1072,7 +1026,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
         "build failed"
     );
     // The original name is gone; a content-hashed one replaces it.
-    let names = file_names(&site.root.join("public/assets"));
+    let names = site.files("public/assets");
     assert!(!names.iter().any(|n| n == "style.css"), "{names:?}");
     let hashed = names
         .iter()
@@ -1117,7 +1071,7 @@ fn bundle_inlines_js_imports_and_drops_partials() {
     );
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
     assert!(site.run(&["build"]).status.success(), "build failed");
-    let names = file_names(&site.root.join("public/assets"));
+    let names = site.files("public/assets");
     assert!(names.iter().any(|n| n == "main.js"), "entry emitted: {names:?}");
     // The partial is pulled in through imports, never emitted standalone.
     assert!(!names.iter().any(|n| n == "_util.js"), "partial dropped: {names:?}");
@@ -1206,7 +1160,7 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     );
     let out = site.run(&["build"]);
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    let names = file_names(&site.root.join("public/assets"));
+    let names = site.files("public/assets");
     assert!(
         names.iter().any(|n| n.starts_with("gen.") && n.ends_with(".css")),
         "hook-generated css was fingerprinted: {names:?}"

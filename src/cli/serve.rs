@@ -3,9 +3,9 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::mpsc;
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 use itertools::Itertools;
 use notify_debouncer_full::{
@@ -72,7 +72,7 @@ impl Dev<'_> {
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
     /// every relevant change.
     fn watch(mut self, live: Live) -> Result<()> {
-        let (tx, rx) = mpsc::channel::<DebounceEventResult>();
+        let (tx, rx) = flume::unbounded::<DebounceEventResult>();
         let filter = Filter::new(self.config)?;
         let _watcher = Watcher::new(filter.dirs(), tx)?;
         self.report.muted("watching for changes")?;
@@ -241,7 +241,7 @@ impl Handler {
 #[derive(Clone, Default)]
 struct Live {
     /// One sender per open SSE connection.
-    streams: Arc<Mutex<Vec<mpsc::Sender<()>>>>,
+    streams: Arc<Mutex<Vec<flume::Sender<()>>>>,
 }
 
 impl Live {
@@ -264,17 +264,14 @@ impl Live {
 
     /// Advance every open stream, dropping any that have closed.
     fn bump(&self) {
-        self.streams
-            .lock()
-            .expect("lock")
-            .retain(|tx| tx.send(()).is_ok());
+        self.streams.lock().retain(|tx| tx.send(()).is_ok());
     }
 
     /// Open an SSE stream for `req` on its own thread, writing directly to the
     /// socket so each event flushes the instant a rebuild finishes.
     fn serve(&self, req: Request) {
-        let (tx, signals) = mpsc::channel();
-        self.streams.lock().expect("lock").push(tx);
+        let (tx, signals) = flume::unbounded();
+        self.streams.lock().push(tx);
         std::thread::spawn(move || {
             let mut socket = req.into_writer();
             if socket.write_all(Self::HEAD.as_bytes()).is_err() || socket.flush().is_err() {
@@ -295,9 +292,12 @@ struct Watcher {
 }
 
 impl Watcher {
-    fn new(dirs: &[PathBuf], tx: mpsc::Sender<DebounceEventResult>) -> Result<Self> {
+    fn new(dirs: &[PathBuf], tx: flume::Sender<DebounceEventResult>) -> Result<Self> {
+        let handler = move |result: DebounceEventResult| {
+            let _ = tx.send(result);
+        };
         let mut debouncer =
-            new_debouncer(Duration::from_millis(500), None, tx).map_err(ServeError::watcher)?;
+            new_debouncer(Duration::from_millis(500), None, handler).map_err(ServeError::watcher)?;
         for dir in dirs {
             if dir.exists() {
                 debouncer
