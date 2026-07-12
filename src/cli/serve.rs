@@ -20,9 +20,9 @@ use wax::{Glob, Program};
 use crate::cli::Root;
 use crate::config::Config;
 use crate::engine::{Engine, Mode};
+use crate::error::serve::ServeError;
 use crate::error::warning::{BrowserOpen, ConfigReload, RebuildFailed, WatchLost};
 use crate::error::{ContentError, Result};
-use crate::error::serve::ServeError;
 use crate::mime::Mime;
 use crate::ui::{Level, Paths, Timer, Ui};
 
@@ -35,12 +35,14 @@ pub(crate) fn run<'a>(
     ui: &'a Ui,
     config: Config,
     root: &'a Root,
+    config_path: PathBuf,
     reload: impl FnMut() -> Result<Config> + 'a,
 ) -> Result<()> {
     Dev {
         config,
         ui,
         root,
+        config_path,
         reload: Box::new(reload),
     }
     .run()
@@ -53,6 +55,9 @@ struct Dev<'a> {
     config: Config,
     ui: &'a Ui,
     root: &'a Root,
+    /// The config file the session was started with (`--config`), watched so
+    /// edits to it reload the session live.
+    config_path: PathBuf,
     /// Re-reads `config.kdl` with the same profile and CLI overrides — invoked
     /// when the config file changes so edits take effect live.
     reload: Box<dyn FnMut() -> Result<Config> + 'a>,
@@ -65,7 +70,8 @@ impl Dev<'_> {
 
         Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)?;
         self.ui.blank();
-        self.ui.arrow("local", format!("http://{addr}/").cyan().underline());
+        self.ui
+            .arrow("local", format!("http://{addr}/").cyan().underline());
         self.ui.arrow(
             "watching",
             match self.config.serve.watch {
@@ -97,13 +103,14 @@ impl Dev<'_> {
         }
     }
 
-    /// The watched roots, for the startup banner: the defaults plus any
-    /// `serve.include` globs.
+    /// The watched roots, for the startup banner: the defaults, the config
+    /// file, plus any `serve.include` globs.
     fn watched(&self) -> String {
         let mut parts = vec![
             self.config.content.display().to_string(),
             self.config.templates.display().to_string(),
             self.config.assets.display().to_string(),
+            self.config_path.display().to_string(),
         ];
         parts.extend(self.config.serve.include.iter().cloned());
         parts.join(" · ")
@@ -116,10 +123,10 @@ impl Dev<'_> {
         // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
         // change still needs a restart — the HTTP server is already bound.)
         loop {
-            let filter = Filter::new(&self.config, self.root)?;
+            let filter = Filter::new(&self.config, self.root, &self.config_path)?;
             let (tx, rx) = flume::unbounded::<DebounceEventResult>();
-            let _watcher = Watcher::new(filter.dirs(), tx)?;
-            tracing::debug!(dirs = ?filter.dirs(), "watcher established");
+            let _watcher = Watcher::new(filter.watches(), tx)?;
+            tracing::debug!(watches = ?filter.watches(), "watcher established");
             let mut reloaded = false;
             for result in rx {
                 let outcome = self.on_event(result, &live, &filter)?;
@@ -143,7 +150,12 @@ impl Dev<'_> {
     /// of silently discarding them — the server keeps serving either way.
     /// Returns whether `config.kdl` was reloaded (so the caller recreates the
     /// watcher).
-    fn on_event(&mut self, result: DebounceEventResult, live: &Live, filter: &Filter) -> Result<bool> {
+    fn on_event(
+        &mut self,
+        result: DebounceEventResult,
+        live: &Live,
+        filter: &Filter,
+    ) -> Result<bool> {
         match result {
             Ok(events) => self.on_change(events, live, filter),
             Err(errors) => {
@@ -179,7 +191,7 @@ impl Dev<'_> {
         // A change to the config file reloads it first, so the rebuild — and,
         // back in `watch`, the recreated watcher — see the new settings. A parse
         // error keeps the last-good config so the server stays up.
-        let config_changed = changed.iter().any(|p| p.extension().is_some_and(|e| e == "kdl"));
+        let config_changed = changed.iter().any(|p| filter.is_config(p));
         if config_changed {
             match (self.reload)() {
                 Ok(config) => self.config = config,
@@ -207,7 +219,8 @@ impl Dev<'_> {
         match result {
             Ok(stats) => {
                 // report what the rebuild recompiled, not the whole site.
-                self.ui.event(label, stats.pages - stats.cached, timer.elapsed());
+                self.ui
+                    .event(label, stats.pages - stats.cached, timer.elapsed());
                 live.bump();
             }
             Err(e) => {
@@ -222,7 +235,10 @@ impl Dev<'_> {
     /// A concise label for a rebuild's trigger: the first changed file (relative
     /// to the project root) and, when several changed, how many more.
     fn label(changed: &[&PathBuf], root: &Root) -> String {
-        let first = changed[0].strip_prefix(root.path()).unwrap_or(changed[0]).display();
+        let first = changed[0]
+            .strip_prefix(root.path())
+            .unwrap_or(changed[0])
+            .display();
         match changed.len() {
             1 => first.to_string(),
             n => format!("{first} +{}", n - 1),
@@ -261,7 +277,11 @@ impl Handler {
         // check compares canonical paths (with `..` and symlinks resolved)
         // against a canonical root.
         let dist = crate::fs::canonicalize(&dist).unwrap_or(dist);
-        Self { dist, live, ui: Ui::new(level) }
+        Self {
+            dist,
+            live,
+            ui: Ui::new(level),
+        }
     }
 
     /// Run the request loop on its own thread (used while watching, so the main
@@ -417,22 +437,25 @@ impl Live {
     }
 }
 
-/// Debounced file watcher for the content + templates directories.
+/// Debounced file watcher over the session's watch roots.
 struct Watcher {
     _debouncer: Debouncer<notify::RecommendedWatcher, RecommendedCache>,
 }
 
 impl Watcher {
-    fn new(dirs: &[PathBuf], tx: flume::Sender<DebounceEventResult>) -> Result<Self> {
+    fn new(
+        watches: &[(PathBuf, notify::RecursiveMode)],
+        tx: flume::Sender<DebounceEventResult>,
+    ) -> Result<Self> {
         let handler = move |result: DebounceEventResult| {
             let _ = tx.send(result);
         };
         let mut debouncer = new_debouncer(Duration::from_millis(500), None, handler)
             .map_err(ServeError::watcher_init)?;
-        for dir in dirs {
+        for (dir, mode) in watches {
             if dir.exists() {
                 debouncer
-                    .watch(dir, notify::RecursiveMode::Recursive)
+                    .watch(dir, *mode)
                     .map_err(|e| ServeError::watch(dir, e))?;
             }
         }
@@ -442,42 +465,67 @@ impl Watcher {
     }
 }
 
-/// Decides which changed paths trigger a rebuild, and which directories to
-/// watch. Built once per session from `serve.include` / `serve.exclude` wax
-/// globs: `exclude` (e.g. hook-generated files) wins over everything, then
-/// `include` adds sources beyond the defaults (content, templates, assets).
+/// Decides which changed paths trigger a rebuild, and which roots to watch.
+/// Built once per session from `serve.include` / `serve.exclude` wax globs:
+/// `exclude` (e.g. hook-generated files) wins over everything, then `include`
+/// adds sources beyond the defaults (content, templates, assets, and the
+/// config file itself).
 struct Filter {
     root: PathBuf,
     assets: PathBuf,
-    dirs: Vec<PathBuf>,
+    /// The session's config file, absolute (canonical when it resolves), so a
+    /// changed path can be tested for "is this *my* config" — a sibling `.kdl`
+    /// in the same directory must not reload the session.
+    config: PathBuf,
+    watches: Vec<(PathBuf, notify::RecursiveMode)>,
     include: Vec<Glob<'static>>,
     exclude: Vec<Glob<'static>>,
 }
 
 impl Filter {
-    fn new(config: &Config, root: &Root) -> Result<Self> {
+    fn new(config: &Config, root: &Root, config_path: &Path) -> Result<Self> {
+        use notify::RecursiveMode::{NonRecursive, Recursive};
         let root = root.path().to_path_buf();
         let assets =
             crate::fs::canonicalize(&config.assets).unwrap_or_else(|_| root.join(&config.assets));
-        let mut dirs = vec![
-            config.content.clone(),
-            config.templates.clone(),
-            config.assets.clone(),
+        let mut watches = vec![
+            (config.content.clone(), Recursive),
+            (config.templates.clone(), Recursive),
+            (config.assets.clone(), Recursive),
         ];
+        // Watch the config file via its parent directory, non-recursively —
+        // editors commonly save by rename-over, which drops a watch pinned to
+        // the file itself. A bare `config.kdl` has an empty parent, meaning
+        // the project root.
+        let config_dir = match config_path.parent() {
+            Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+            _ => root.clone(),
+        };
+        watches.push((config_dir, NonRecursive));
+        // Absolute identity for the config file: canonical when it exists,
+        // else root-resolved, so event paths (absolute) compare against it.
+        let config_file = crate::fs::canonicalize(config_path).unwrap_or_else(|_| {
+            if config_path.is_absolute() {
+                config_path.to_path_buf()
+            } else {
+                root.join(config_path)
+            }
+        });
         let include = Self::compile(&config.serve.include)?;
         // Watch the literal prefix directory of each include glob (e.g. `data/`
         // in `data/**/*.json`) so its files are actually observed.
         for glob in &include {
             let (prefix, _) = glob.clone().partition();
             if !prefix.as_os_str().is_empty() {
-                dirs.push(root.join(prefix));
+                watches.push((root.join(prefix), Recursive));
             }
         }
         let exclude = Self::compile(&config.serve.exclude)?;
         Ok(Self {
             root,
             assets,
-            dirs,
+            config: config_file,
+            watches,
             include,
             exclude,
         })
@@ -495,11 +543,22 @@ impl Filter {
             .collect()
     }
 
-    fn dirs(&self) -> &[PathBuf] {
-        &self.dirs
+    fn watches(&self) -> &[(PathBuf, notify::RecursiveMode)] {
+        &self.watches
     }
 
-    /// Whether a changed path should trigger a rebuild.
+    /// Whether a changed path is the session's config file. Canonicalized when
+    /// possible so a symlinked event path still matches; falls back to a raw
+    /// compare when the file is mid-rename (deleted, about to reappear).
+    fn is_config(&self, path: &Path) -> bool {
+        crate::fs::canonicalize(path)
+            .map(|p| p == self.config)
+            .unwrap_or(path == self.config)
+    }
+
+    /// Whether a changed path should trigger a rebuild. Of `.kdl` files only
+    /// the session's own config counts — baudelaire reads no other KDL, and
+    /// the config directory's non-recursive watch also surfaces its siblings.
     fn is_relevant(&self, path: &Path) -> bool {
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
         if self.exclude.iter().any(|g| g.is_match(rel)) {
@@ -508,7 +567,9 @@ impl Filter {
         if self.include.iter().any(|g| g.is_match(rel)) {
             return true;
         }
-        path.extension().is_some_and(|e| e == "typ" || e == "kdl") || path.starts_with(&self.assets)
+        self.is_config(path)
+            || path.extension().is_some_and(|e| e == "typ")
+            || path.starts_with(&self.assets)
     }
 }
 
@@ -523,12 +584,13 @@ mod tests {
         let config = Config::default();
         let root = Root::at(".");
         let ui = Ui::new(Level::Silent);
-        let filter = Filter::new(&config, &root).unwrap();
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: config.clone(),
             ui: &ui,
             root: &root,
+            config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
@@ -543,16 +605,66 @@ mod tests {
         let config = Config::default();
         let root = Root::at(".");
         let ui = Ui::new(Level::Silent);
-        let filter = Filter::new(&config, &root).unwrap();
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: config.clone(),
             ui: &ui,
             root: &root,
+            config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
         assert_eq!(ui.warnings(), 0);
+    }
+
+    /// The config file's directory is watched (non-recursively), so an edit to
+    /// `config.kdl` at the project root reaches the reload path — it lives
+    /// outside content/templates/assets, which are the only recursive roots.
+    #[test]
+    fn config_directory_is_watched_and_config_edits_are_relevant() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+        assert!(
+            filter
+                .watches()
+                .iter()
+                .any(|(dir, mode)| dir == Path::new("/proj")
+                    && *mode == notify::RecursiveMode::NonRecursive),
+            "project root not watched for the config file: {:?}",
+            filter.watches()
+        );
+        assert!(filter.is_relevant(Path::new("/proj/config.kdl")));
+        // Unrelated root-level files seen via the same non-recursive watch do
+        // not trigger rebuilds — not even other `.kdl` files: baudelaire reads
+        // no KDL besides its config.
+        assert!(!filter.is_relevant(Path::new("/proj/README.md")));
+        assert!(!filter.is_relevant(Path::new("/proj/other.kdl")));
+        assert!(filter.is_config(Path::new("/proj/config.kdl")));
+        assert!(!filter.is_config(Path::new("/proj/other.kdl")));
+    }
+
+    /// A `--config` outside the root watches that file's own directory, and
+    /// only that exact file — a sibling `.kdl` there must not reload the
+    /// session or trigger a rebuild.
+    #[test]
+    fn relocated_config_watches_its_parent() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("/etc/baudelaire/prod.kdl")).unwrap();
+        assert!(
+            filter
+                .watches()
+                .iter()
+                .any(|(dir, mode)| dir == Path::new("/etc/baudelaire")
+                    && *mode == notify::RecursiveMode::NonRecursive),
+            "config parent not watched: {:?}",
+            filter.watches()
+        );
+        assert!(filter.is_config(Path::new("/etc/baudelaire/prod.kdl")));
+        assert!(filter.is_relevant(Path::new("/etc/baudelaire/prod.kdl")));
+        assert!(!filter.is_relevant(Path::new("/etc/baudelaire/other-site.kdl")));
     }
 
     /// A stream whose client is gone is reaped on the next bump, rather than

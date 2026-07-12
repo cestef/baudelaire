@@ -269,10 +269,16 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
     let out = site.run(&["build"]);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(!stderr.contains("OutOfBounds"), "renderer panicked: {stderr}");
+    assert!(
+        !stderr.contains("OutOfBounds"),
+        "renderer panicked: {stderr}"
+    );
     assert!(stderr.contains("unknown variable"), "{stderr}");
     // The label lands in the template, not the page.
-    assert!(stderr.contains("page.typ"), "points at the template: {stderr}");
+    assert!(
+        stderr.contains("page.typ"),
+        "points at the template: {stderr}"
+    );
 }
 
 #[test]
@@ -285,7 +291,11 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     site.write("assets/style.css", "body { color: red; }");
     site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let logs = String::from_utf8_lossy(&out.stderr);
     // The compact summary line counts assets and generated files, and shows dist.
     assert!(logs.contains("1 asset"), "assets counted: {logs}");
@@ -303,12 +313,27 @@ fn meta_tags_injected_from_frontmatter_and_config() {
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
-    assert!(html.contains("name=\"description\" content=\"A short summary.\""), "{html}");
-    assert!(html.contains("property=\"og:title\" content=\"Hello\""), "{html}");
-    assert!(html.contains("property=\"og:site_name\" content=\"S\""), "{html}");
+    assert!(
+        html.contains("name=\"description\" content=\"A short summary.\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("property=\"og:title\" content=\"Hello\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("property=\"og:site_name\" content=\"S\""),
+        "{html}"
+    );
     // URL-absolute tags appear because a base `url` is set.
-    assert!(html.contains("rel=\"canonical\" href=\"https://s.example/post/\""), "{html}");
-    assert!(html.contains("property=\"og:url\" content=\"https://s.example/post/\""), "{html}");
+    assert!(
+        html.contains("rel=\"canonical\" href=\"https://s.example/post/\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("property=\"og:url\" content=\"https://s.example/post/\""),
+        "{html}"
+    );
 }
 
 #[test]
@@ -327,8 +352,14 @@ fn og_image_is_fingerprinted_and_absolute() {
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
     assert!(html.contains("property=\"og:image\""), "{html}");
     // Absolute, and pointing at the content-hashed filename (not the raw name).
-    assert!(html.contains("content=\"https://s.example/assets/pic."), "absolute + hashed: {html}");
-    assert!(!html.contains("assets/pic.png\""), "raw name replaced by hash: {html}");
+    assert!(
+        html.contains("content=\"https://s.example/assets/pic."),
+        "absolute + hashed: {html}"
+    );
+    assert!(
+        !html.contains("assets/pic.png\""),
+        "raw name replaced by hash: {html}"
+    );
 }
 
 #[test]
@@ -338,7 +369,10 @@ fn meta_tags_omitted_when_disabled() {
         "config.kdl",
         "site \"S\"\nurl \"https://s.example\"\noutput {\n  html { meta #false }\n}\n",
     );
-    site.write("content/post.typ", "#frontmatter((title: \"Hi\", summary: \"s\"))\nbody");
+    site.write(
+        "content/post.typ",
+        "#frontmatter((title: \"Hi\", summary: \"s\"))\nbody",
+    );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
     assert!(!html.contains("og:title"), "meta disabled: {html}");
@@ -358,7 +392,12 @@ fn optimize_losslessly_shrinks_png_assets() {
     assert!(site.run(&["build"]).status.success());
 
     let out = fs::read(site.root.join("public/assets/pic.png")).unwrap();
-    assert!(out.len() < png.len(), "optimized {} < original {}", out.len(), png.len());
+    assert!(
+        out.len() < png.len(),
+        "optimized {} < original {}",
+        out.len(),
+        png.len()
+    );
     // Still a valid PNG (signature intact).
     assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "output is a PNG");
 }
@@ -378,7 +417,12 @@ fn optimize_reencodes_jpeg_with_lax_extension() {
     assert!(site.run(&["build"]).status.success());
 
     let out = fs::read(site.root.join("public/assets/photo.jpg")).unwrap();
-    assert!(out.len() < jpg.len(), "re-encoded {} < original {}", out.len(), jpg.len());
+    assert!(
+        out.len() < jpg.len(),
+        "re-encoded {} < original {}",
+        out.len(),
+        jpg.len()
+    );
     assert_eq!(&out[..2], b"\xff\xd8", "output is a JPEG");
 }
 
@@ -507,7 +551,10 @@ fn internal_typ_links_rewritten_to_permalinks() {
         "content/posts/a.typ",
         "#frontmatter((title: \"A\",))\nSee #link(\"b.typ\")[B] and #link(\"https://example.com\")[ext].",
     );
-    site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nB body");
+    site.write(
+        "content/posts/b.typ",
+        "#frontmatter((title: \"B\",))\nB body",
+    );
     let out = site.run(&["build"]);
     assert!(
         out.status.success(),
@@ -537,7 +584,10 @@ fn broken_internal_link_fails_strict_build() {
         "#frontmatter((title: \"A\",))\nSee #link(\"missing.typ\")[gone].",
     );
     let out = site.run(&["build"]);
-    assert!(!out.status.success(), "strict build should fail on broken link");
+    assert!(
+        !out.status.success(),
+        "strict build should fail on broken link"
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("broken internal link"), "stderr: {stderr}");
 }
@@ -592,10 +642,16 @@ fn layout_template_wraps_page_body() {
         String::from_utf8_lossy(&out.stderr)
     );
     let html = fs::read_to_string(site.root.join("public/posts/hello/index.html")).unwrap();
-    assert!(html.contains("<article class=\"post\">"), "layout not applied: {html}");
+    assert!(
+        html.contains("<article class=\"post\">"),
+        "layout not applied: {html}"
+    );
     // The heading carries an anchor id (anchors default on); assert the title
     // text reached the h1 without pinning the exact attributes.
-    assert!(html.contains(">Hi</h1>"), "frontmatter data not passed: {html}");
+    assert!(
+        html.contains(">Hi</h1>"),
+        "frontmatter data not passed: {html}"
+    );
     assert!(html.contains("Hello body"), "body not embedded: {html}");
 }
 
@@ -631,7 +687,10 @@ fn layout_template_default_from_collection() {
         String::from_utf8_lossy(&out.stderr)
     );
     let html = fs::read_to_string(site.root.join("public/posts/hello/index.html")).unwrap();
-    assert!(html.contains("<main>"), "collection default layout not applied: {html}");
+    assert!(
+        html.contains("<main>"),
+        "collection default layout not applied: {html}"
+    );
 }
 
 #[test]
@@ -653,7 +712,10 @@ fn frontmatter_redirects_emit_stub_pages() {
     );
     for old in ["public/old/index.html", "public/legacy/post/index.html"] {
         let stub = fs::read_to_string(site.root.join(old)).unwrap();
-        assert!(stub.contains("http-equiv=\"refresh\""), "not a redirect: {stub}");
+        assert!(
+            stub.contains("http-equiv=\"refresh\""),
+            "not a redirect: {stub}"
+        );
         assert!(stub.contains("url=/posts/new/"), "wrong target: {stub}");
     }
     // The real page is still generated.
@@ -699,7 +761,10 @@ fn taxonomy_index_and_term_pages_generated() {
     let intro = fs::read_to_string(site.root.join("public/tags/intro/index.html")).unwrap();
     assert!(intro.contains("href=\"/posts/a/\""), "term page: {intro}");
     assert!(intro.contains("href=\"/posts/b/\""), "term page: {intro}");
-    assert!(intro.contains("Alpha") && intro.contains("Beta"), "term page: {intro}");
+    assert!(
+        intro.contains("Alpha") && intro.contains("Beta"),
+        "term page: {intro}"
+    );
     // `rust` has a single member.
     assert!(site.root.join("public/tags/rust/index.html").exists());
 }
@@ -735,11 +800,17 @@ fn pagination_splits_collection_into_index_pages() {
     );
     // 5 items / 2 per page → 3 index pages.
     let p1 = fs::read_to_string(site.root.join("public/posts/index.html")).unwrap();
-    assert!(p1.contains("href=\"/posts/page/2/\""), "page 1 needs next: {p1}");
+    assert!(
+        p1.contains("href=\"/posts/page/2/\""),
+        "page 1 needs next: {p1}"
+    );
     assert!(!p1.contains("← Previous"), "page 1 has no prev: {p1}");
     assert!(site.root.join("public/posts/page/2/index.html").exists());
     let p3 = fs::read_to_string(site.root.join("public/posts/page/3/index.html")).unwrap();
-    assert!(p3.contains("href=\"/posts/page/2/\""), "page 3 links back: {p3}");
+    assert!(
+        p3.contains("href=\"/posts/page/2/\""),
+        "page 3 links back: {p3}"
+    );
     assert!(!p3.contains("Next →"), "last page has no next: {p3}");
 }
 
@@ -756,7 +827,10 @@ fn sitemap_and_rss_emitted_when_url_set() {
     );
     assert!(site.run(&["build"]).status.success());
     let sitemap = fs::read_to_string(site.root.join("public/sitemap.xml")).unwrap();
-    assert!(sitemap.contains("<loc>https://example.com/posts/a/</loc>"), "{sitemap}");
+    assert!(
+        sitemap.contains("<loc>https://example.com/posts/a/</loc>"),
+        "{sitemap}"
+    );
     let rss = fs::read_to_string(site.root.join("public/rss.xml")).unwrap();
     assert!(rss.contains("<item>"), "{rss}");
     assert!(rss.contains("https://example.com/posts/a/"), "{rss}");
@@ -793,10 +867,7 @@ fn search_indexes_emitted_for_each_configured_format() {
         "content/posts/a.typ",
         "#frontmatter((title: \"Alpha\", slug: \"a\", tags: (\"intro\",),))\nThe quick brown fox",
     );
-    assert!(
-        site.run(&["build"]).status.success(),
-        "build failed",
-    );
+    assert!(site.run(&["build"]).status.success(), "build failed",);
 
     let docs = fs::read_to_string(site.root.join("public/search.json")).unwrap();
     assert!(docs.contains("\"url\":\"/posts/a/\""), "{docs}");
@@ -814,9 +885,15 @@ fn search_indexes_emitted_for_each_configured_format() {
     // engine (`createSearch`), the palette UI (`mountSearch`), and an auto-mount
     // so one `<script>` is a working search box.
     let client = fs::read_to_string(site.root.join("public/search.js")).unwrap();
-    assert!(client.contains("export async function createSearch"), "{client}");
+    assert!(
+        client.contains("export async function createSearch"),
+        "{client}"
+    );
     assert!(client.contains("export function mountSearch"), "{client}");
-    assert!(client.trim_end().ends_with("mountSearch();"), "auto-mounts: {client}");
+    assert!(
+        client.trim_end().ends_with("mountSearch();"),
+        "auto-mounts: {client}"
+    );
     assert!(
         site.root.join("public/search.inverted.js").exists(),
         "inverted client emitted",
@@ -835,17 +912,17 @@ fn search_client_bundles_into_a_user_entry_via_virtual_module() {
         "import { mountSearch } from \"baudelaire:search\";\nmountSearch({ hotkey: \"k\" });\n",
     );
     site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
-    assert!(
-        site.run(&["build"]).status.success(),
-        "build failed",
-    );
+    assert!(site.run(&["build"]).status.success(), "build failed",);
     // rolldown resolves the virtual specifier and inlines the palette into the
     // user's own bundle (no separate fetch of a generated file).
     let bundle = fs::read_to_string(site.root.join("public/assets/main.js")).unwrap();
     assert!(bundle.contains("bd-palette"), "palette inlined: {bundle}");
     assert!(bundle.contains("search.json"), "engine inlined: {bundle}");
     // The bare import was resolved and inlined, not left for the browser to fetch.
-    assert!(!bundle.contains("import {"), "specifier resolved away: {bundle}");
+    assert!(
+        !bundle.contains("import {"),
+        "specifier resolved away: {bundle}"
+    );
 }
 
 #[test]
@@ -873,14 +950,14 @@ fn embed_inlines_local_assets_as_data_uris() {
         "content/posts/a.typ",
         "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
     );
-    assert!(
-        site.run(&["build"]).status.success(),
-        "build failed",
-    );
+    assert!(site.run(&["build"]).status.success(), "build failed",);
     let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
     // `body{color:red}` base64-encodes to this; the /assets ref is inlined.
     assert!(html.contains("data:text/css;base64,"), "{html}");
-    assert!(!html.contains("href=\"/assets/style.css\""), "ref replaced: {html}");
+    assert!(
+        !html.contains("href=\"/assets/style.css\""),
+        "ref replaced: {html}"
+    );
 }
 
 #[test]
@@ -891,7 +968,10 @@ fn embed_inlines_processed_not_source_bytes() {
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  html { embed #true }\n  assets { minify #true }\n}\n",
     );
     // A comment survives only in the raw source; minification drops it.
-    site.write("assets/style.css", "/* source-only comment */\nbody {\n  color: red;\n}\n");
+    site.write(
+        "assets/style.css",
+        "/* source-only comment */\nbody {\n  color: red;\n}\n",
+    );
     site.write(
         "content/posts/a.typ",
         "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
@@ -908,7 +988,10 @@ fn embed_inlines_processed_not_source_bytes() {
         .expect("base64");
     let decoded = String::from_utf8_lossy(&out.stdout);
     // The inlined bytes are the minified output, not the raw source.
-    assert!(!decoded.contains("/*"), "inlined raw source, not processed: {decoded}");
+    assert!(
+        !decoded.contains("/*"),
+        "inlined raw source, not processed: {decoded}"
+    );
     assert!(decoded.contains("red"), "declaration lost: {decoded}");
 }
 
@@ -924,7 +1007,10 @@ fn robots_txt_emitted_when_block_present() {
     let robots = fs::read_to_string(site.root.join("public/robots.txt")).unwrap();
     assert!(robots.contains("User-agent: *"), "{robots}");
     assert!(robots.contains("Disallow: /private/"), "{robots}");
-    assert!(robots.contains("Sitemap: https://example.com/sitemap.xml"), "{robots}");
+    assert!(
+        robots.contains("Sitemap: https://example.com/sitemap.xml"),
+        "{robots}"
+    );
 }
 
 #[test]
@@ -976,7 +1062,10 @@ fn llms_txt_indexes_pages_by_collection() {
     assert!(llms.contains("# T"), "{llms}");
     assert!(llms.contains("> A test site."), "{llms}");
     assert!(llms.contains("## posts"), "{llms}");
-    assert!(llms.contains("- [Alpha](https://example.com/posts/a/)"), "{llms}");
+    assert!(
+        llms.contains("- [Alpha](https://example.com/posts/a/)"),
+        "{llms}"
+    );
 }
 
 #[test]
@@ -1013,9 +1102,18 @@ fn taxonomy_listing_uses_custom_template() {
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/tags/intro/index.html")).unwrap();
-    assert!(html.contains("<main class=\"tax\">"), "template not applied: {html}");
-    assert!(html.contains(">Tags: intro</h2>"), "title data missing: {html}");
-    assert!(html.contains("href=\"/posts/a/\""), "entries data missing: {html}");
+    assert!(
+        html.contains("<main class=\"tax\">"),
+        "template not applied: {html}"
+    );
+    assert!(
+        html.contains(">Tags: intro</h2>"),
+        "title data missing: {html}"
+    );
+    assert!(
+        html.contains("href=\"/posts/a/\""),
+        "entries data missing: {html}"
+    );
     assert!(html.contains("Alpha"), "entry label missing: {html}");
 }
 
@@ -1052,10 +1150,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
         "content/posts/a.typ",
         "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
     );
-    assert!(
-        site.run(&["build"]).status.success(),
-        "build failed"
-    );
+    assert!(site.run(&["build"]).status.success(), "build failed");
     // The original name is gone; a content-hashed one replaces it.
     let names = site.files("public/assets");
     assert!(!names.iter().any(|n| n == "style.css"), "{names:?}");
@@ -1091,8 +1186,14 @@ fn css_url_references_are_fingerprinted() {
         .expect("a fingerprinted stylesheet");
     let css = fs::read_to_string(site.root.join(format!("public/assets/{css_name}"))).unwrap();
     // The `url()` now points at the image's hashed name, not the original.
-    assert!(css.contains(&format!("/assets/{bg}")), "url() not rewritten: {css}");
-    assert!(!css.contains("bg.png\"") && !css.contains("(bg.png)"), "stale url(): {css}");
+    assert!(
+        css.contains(&format!("/assets/{bg}")),
+        "url() not rewritten: {css}"
+    );
+    assert!(
+        !css.contains("bg.png\"") && !css.contains("(bg.png)"),
+        "stale url(): {css}"
+    );
 }
 
 #[test]
@@ -1110,12 +1211,24 @@ fn srcset_urls_are_fingerprinted() {
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
     let names = site.files("public/assets");
-    let a = names.iter().find(|n| n.starts_with("a.") && n.ends_with(".png")).expect("hashed a");
-    let b = names.iter().find(|n| n.starts_with("b.") && n.ends_with(".png")).expect("hashed b");
+    let a = names
+        .iter()
+        .find(|n| n.starts_with("a.") && n.ends_with(".png"))
+        .expect("hashed a");
+    let b = names
+        .iter()
+        .find(|n| n.starts_with("b.") && n.ends_with(".png"))
+        .expect("hashed b");
     let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
     // Each candidate URL is fingerprinted; its descriptor is preserved.
-    assert!(html.contains(&format!("/assets/{a} 1x")), "srcset a not rewritten: {html}");
-    assert!(html.contains(&format!("/assets/{b} 2x")), "srcset b not rewritten: {html}");
+    assert!(
+        html.contains(&format!("/assets/{a} 1x")),
+        "srcset a not rewritten: {html}"
+    );
+    assert!(
+        html.contains(&format!("/assets/{b} 2x")),
+        "srcset b not rewritten: {html}"
+    );
 }
 
 #[test]
@@ -1152,9 +1265,15 @@ fn bundle_inlines_js_imports_and_drops_partials() {
     site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
     assert!(site.run(&["build"]).status.success(), "build failed");
     let names = site.files("public/assets");
-    assert!(names.iter().any(|n| n == "main.js"), "entry emitted: {names:?}");
+    assert!(
+        names.iter().any(|n| n == "main.js"),
+        "entry emitted: {names:?}"
+    );
     // The partial is pulled in through imports, never emitted standalone.
-    assert!(!names.iter().any(|n| n == "_util.js"), "partial dropped: {names:?}");
+    assert!(
+        !names.iter().any(|n| n == "_util.js"),
+        "partial dropped: {names:?}"
+    );
     // The imported function body is bundled into the entry.
     let js = fs::read_to_string(site.root.join("public/assets/main.js")).unwrap();
     assert!(js.contains("42"), "import inlined: {js}");
@@ -1174,8 +1293,14 @@ fn cache_stores_html_in_object_store_not_manifest() {
     assert!(site.run(&["build"]).status.success(), "build failed");
     // The manifest is metadata only — page markup lives in the object store.
     let manifest = fs::read_to_string(site.root.join(".baudelaire/cache/manifest.json")).unwrap();
-    assert!(!manifest.contains("Distinct Body Text"), "no html in manifest: {manifest}");
-    assert!(manifest.contains("blob"), "manifest points at blobs: {manifest}");
+    assert!(
+        !manifest.contains("Distinct Body Text"),
+        "no html in manifest: {manifest}"
+    );
+    assert!(
+        manifest.contains("blob"),
+        "manifest points at blobs: {manifest}"
+    );
     // At least one content-addressed blob was written, holding the HTML.
     let objects = site.root.join(".baudelaire/cache/objects");
     assert!(objects.is_dir(), "object store created");
@@ -1191,7 +1316,10 @@ fn cache_stores_html_in_object_store_not_manifest() {
         .next()
         .expect("a blob file");
     let html = fs::read_to_string(blob.path()).unwrap();
-    assert!(html.contains("Distinct Body Text"), "blob holds html: {html}");
+    assert!(
+        html.contains("Distinct Body Text"),
+        "blob holds html: {html}"
+    );
 }
 
 #[test]
@@ -1203,8 +1331,15 @@ fn hooks_run_before_and_after_the_build() {
     );
     site.write("content/index.typ", "#frontmatter((title: \"H\",))\nbody");
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    assert!(site.root.join("hook-before.txt").exists(), "before hook ran");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        site.root.join("hook-before.txt").exists(),
+        "before hook ran"
+    );
     assert!(site.root.join("hook-after.txt").exists(), "after hook ran");
 }
 
@@ -1217,7 +1352,10 @@ fn a_failing_hook_fails_the_build() {
     );
     site.write("content/index.typ", "#frontmatter((title: \"H\",))\nb");
     let out = site.run(&["build"]);
-    assert!(!out.status.success(), "build should fail when a hook exits non-zero");
+    assert!(
+        !out.status.success(),
+        "build should fail when a hook exits non-zero"
+    );
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("hook"),
         "error should mention the hook: {}",
@@ -1239,14 +1377,23 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
         "#frontmatter((title: \"H\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/gen.css\"))",
     );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let names = site.files("public/assets");
     assert!(
-        names.iter().any(|n| n.starts_with("gen.") && n.ends_with(".css")),
+        names
+            .iter()
+            .any(|n| n.starts_with("gen.") && n.ends_with(".css")),
         "hook-generated css was fingerprinted: {names:?}"
     );
     let html = fs::read_to_string(site.root.join("public/index.html")).unwrap();
-    assert!(!html.contains("href=\"/assets/gen.css\""), "reference rewritten: {html}");
+    assert!(
+        !html.contains("href=\"/assets/gen.css\""),
+        "reference rewritten: {html}"
+    );
 }
 
 #[test]
@@ -1255,19 +1402,34 @@ fn duplicate_permalinks_are_rejected() {
     // before, now a hard error naming both.
     let site = Site::new();
     site.write("config.kdl", CONFIG);
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\", slug: \"same\",))\na");
-    site.write("content/posts/b.typ", "#frontmatter((title: \"B\", slug: \"same\",))\nb");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\", slug: \"same\",))\na",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#frontmatter((title: \"B\", slug: \"same\",))\nb",
+    );
     let out = site.run(&["build"]);
-    assert!(!out.status.success(), "colliding permalinks must fail the build");
+    assert!(
+        !out.status.success(),
+        "colliding permalinks must fail the build"
+    );
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("resolve to") && err.contains("a.typ") && err.contains("b.typ"), "{err}");
+    assert!(
+        err.contains("resolve to") && err.contains("a.typ") && err.contains("b.typ"),
+        "{err}"
+    );
 }
 
 #[test]
 fn a_slug_with_no_url_safe_characters_is_rejected() {
     let site = Site::new();
     site.write("config.kdl", CONFIG);
-    site.write("content/posts/p.typ", "#frontmatter((title: \"P\", slug: \"🎉\",))\np");
+    site.write(
+        "content/posts/p.typ",
+        "#frontmatter((title: \"P\", slug: \"🎉\",))\np",
+    );
     let out = site.run(&["build"]);
     assert!(!out.status.success(), "an empty slug must fail the build");
     assert!(String::from_utf8_lossy(&out.stderr).contains("URL-safe"));
@@ -1286,7 +1448,10 @@ fn colliding_taxonomy_terms_are_rejected() {
         "#frontmatter((title: \"A\", tags: (\"C++\", \"C--\"),))\na",
     );
     let out = site.run(&["build"]);
-    assert!(!out.status.success(), "two terms slugging to `c` must fail the build");
+    assert!(
+        !out.status.success(),
+        "two terms slugging to `c` must fail the build"
+    );
     assert!(String::from_utf8_lossy(&out.stderr).contains("slug to `c`"));
 }
 
@@ -1314,17 +1479,31 @@ fn standard_verify_emits_wellknown_and_link_on_dated_pages() {
         "content/posts/dated.typ",
         "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
     );
-    site.write("content/posts/undated.typ", "#frontmatter((title: \"Undated\",))\nbody");
+    site.write(
+        "content/posts/undated.typ",
+        "#frontmatter((title: \"Undated\",))\nbody",
+    );
 
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
-    let well = fs::read_to_string(site.root.join("public/.well-known/site.standard.publication")).unwrap();
+    let well = fs::read_to_string(
+        site.root
+            .join("public/.well-known/site.standard.publication"),
+    )
+    .unwrap();
     assert_eq!(well, "at://did:plc:test123/site.standard.publication/self");
 
     let dated = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
     assert!(dated.contains(r#"rel="site.standard.document""#), "{dated}");
-    assert!(dated.contains("at://did:plc:test123/site.standard.document/"), "{dated}");
+    assert!(
+        dated.contains("at://did:plc:test123/site.standard.document/"),
+        "{dated}"
+    );
 
     // An undated page is not a document, so it carries no backlink.
     let undated = fs::read_to_string(site.root.join("public/posts/undated/index.html")).unwrap();
@@ -1349,8 +1528,17 @@ fn standard_verify_absent_without_a_did() {
         "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
     );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    assert!(!site.root.join("public/.well-known/site.standard.publication").exists());
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !site
+            .root
+            .join("public/.well-known/site.standard.publication")
+            .exists()
+    );
     let html = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
     assert!(!html.contains("site.standard.document"), "{html}");
 }
@@ -1380,8 +1568,17 @@ fn standard_verify_toggle_suppresses_wellknown_only() {
         "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
     );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    assert!(!site.root.join("public/.well-known/site.standard.publication").exists());
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !site
+            .root
+            .join("public/.well-known/site.standard.publication")
+            .exists()
+    );
     let html = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
     assert!(html.contains(r#"rel="site.standard.document""#), "{html}");
 }
@@ -1395,7 +1592,11 @@ fn headings_get_unique_slug_anchors() {
         "#frontmatter((title: \"Guide\",))\n= Guide\n\n== Setup\none\n\n== Setup\ntwo\n",
     );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let html = fs::read_to_string(site.root.join("public/docs/guide/index.html")).unwrap();
     assert!(html.contains(r#"id="guide""#), "{html}");
     // Two headings sluggging alike are disambiguated, not duplicated.
@@ -1415,7 +1616,11 @@ fn anchors_disabled_leaves_headings_bare() {
         "#frontmatter((title: \"Guide\",))\n== Setup\nbody\n",
     );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let html = fs::read_to_string(site.root.join("public/docs/guide/index.html")).unwrap();
     assert!(!html.contains(r#"id="setup""#), "{html}");
 }

@@ -132,7 +132,9 @@ impl BuildFailed {
 #[error("date `{date}` of `{page}` cannot be formatted as {standard}")]
 #[diagnostic(
     code(baudelaire::feed::date),
-    help("RFC 2822 (RSS) covers years 1900–9999 and RFC 3339 (Atom) years 0–9999 — adjust the page's `date` or drop the feed format")
+    help(
+        "RFC 2822 (RSS) covers years 1900–9999 and RFC 3339 (Atom) years 0–9999 — adjust the page's `date` or drop the feed format"
+    )
 )]
 pub struct FeedDateError {
     page: String,

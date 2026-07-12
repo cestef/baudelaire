@@ -141,7 +141,11 @@ mod tests {
         let key = Rkey::derived("/posts/hello/");
         assert_eq!(key, Rkey::derived("/posts/hello/"));
         assert_eq!(key.as_str().len(), 13);
-        assert!(key.as_str().bytes().all(|b| b"234567abcdefghijklmnopqrstuvwxyz".contains(&b)));
+        assert!(
+            key.as_str()
+                .bytes()
+                .all(|b| b"234567abcdefghijklmnopqrstuvwxyz".contains(&b))
+        );
     }
 
     #[test]
@@ -164,7 +168,10 @@ mod tests {
             Nsid::new("site.standard.document"),
             Rkey::literal("xyz"),
         );
-        assert_eq!(uri.to_string(), "at://did:plc:abc/site.standard.document/xyz");
+        assert_eq!(
+            uri.to_string(),
+            "at://did:plc:abc/site.standard.document/xyz"
+        );
         assert_eq!(
             serde_json::to_value(&uri).unwrap(),
             serde_json::json!("at://did:plc:abc/site.standard.document/xyz")

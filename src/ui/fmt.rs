@@ -20,11 +20,17 @@ impl Count {
     }
 
     pub fn documents(n: usize) -> Self {
-        Self { n, noun: "document" }
+        Self {
+            n,
+            noun: "document",
+        }
     }
 
     pub fn redirects(n: usize) -> Self {
-        Self { n, noun: "redirect" }
+        Self {
+            n,
+            noun: "redirect",
+        }
     }
 
     pub fn assets(n: usize) -> Self {
@@ -42,7 +48,13 @@ impl Count {
 
 impl Display for Count {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}{}", self.n, self.noun, if self.n == 1 { "" } else { "s" })
+        write!(
+            f,
+            "{} {}{}",
+            self.n,
+            self.noun,
+            if self.n == 1 { "" } else { "s" }
+        )
     }
 }
 

@@ -14,12 +14,12 @@ use std::path::Path;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use tempfile::TempDir;
 
-use baudelaire::ui::{Level, Ui};
 use baudelaire::config::Config;
 use baudelaire::content::{Page, discover};
 use baudelaire::engine::text::Text;
 use baudelaire::engine::{Engine, Mode};
 use baudelaire::render::LinkMap;
+use baudelaire::ui::{Level, Ui};
 
 /// A synthetic site under `dir`: `n` cross-linked posts with tags plus a small
 /// asset set, returning a config whose paths are rebased into `dir`.
@@ -57,9 +57,17 @@ fn mksite(dir: &Path, n: usize) -> Config {
         fs::write(dir.join(format!("content/posts/p{i}.typ")), body).unwrap();
     }
     fs::create_dir_all(dir.join("assets")).unwrap();
-    fs::write(dir.join("assets/style.css"), "body{background:url(bg.png);color:red}\n.x{margin:0}\n").unwrap();
+    fs::write(
+        dir.join("assets/style.css"),
+        "body{background:url(bg.png);color:red}\n.x{margin:0}\n",
+    )
+    .unwrap();
     fs::write(dir.join("assets/bg.png"), [0x89u8, 0x50, 0x4e, 0x47]).unwrap();
-    fs::write(dir.join("assets/main.js"), "export const x = 1;\nconsole.log(x);\n").unwrap();
+    fs::write(
+        dir.join("assets/main.js"),
+        "export const x = 1;\nconsole.log(x);\n",
+    )
+    .unwrap();
 
     let mut cfg = Config::parse(kdl).unwrap();
     cfg.content = dir.join(&cfg.content);
@@ -81,7 +89,9 @@ fn html_doc() -> String {
              consectetur &#39;adipiscing&#39; elit. Sed do eiusmod tempor incididunt.</p>"
         ));
     }
-    s.push_str("<script>console.log('ignored')</script></main><footer>copyright</footer></body></html>");
+    s.push_str(
+        "<script>console.log('ignored')</script></main><footer>copyright</footer></body></html>",
+    );
     s
 }
 
@@ -140,5 +150,10 @@ fn bench_incremental_build(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_text_extract, bench_link_classify, bench_incremental_build);
+criterion_group!(
+    benches,
+    bench_text_extract,
+    bench_link_classify,
+    bench_incremental_build
+);
 criterion_main!(benches);

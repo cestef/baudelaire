@@ -29,7 +29,8 @@ impl Root {
         if let Some(dir) = dir {
             std::env::set_current_dir(dir).map_err(|e| FsError::new(Op::Enter, dir, e))?;
         }
-        let cwd = std::env::current_dir().map_err(|e| FsError::new(Op::Enter, Path::new("."), e))?;
+        let cwd =
+            std::env::current_dir().map_err(|e| FsError::new(Op::Enter, Path::new("."), e))?;
         Ok(Self(cwd))
     }
 
@@ -293,7 +294,6 @@ impl GlobalArgs {
             config.cache.incremental = false;
         }
     }
-
 }
 
 /// Run a parsed CLI: install the debug-log subscriber, dispatch, and flush any
@@ -333,7 +333,7 @@ fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
                 args.apply(&mut config);
                 Ok(config)
             };
-            crate::cli::serve::run(ui, config, &root, reload)?;
+            crate::cli::serve::run(ui, config, &root, cli.global.config.clone(), reload)?;
         }
         Command::New(args) => {
             let config = cli.load_config()?;
@@ -420,7 +420,11 @@ mod tests {
     use super::*;
 
     fn args(dist: bool, cache: bool, publish: bool) -> CleanArgs {
-        CleanArgs { dist, cache, publish }
+        CleanArgs {
+            dist,
+            cache,
+            publish,
+        }
     }
 
     #[test]
@@ -438,14 +442,27 @@ mod tests {
     fn full_sweep_names_a_relocated_cache() {
         let mut config = Config::default();
         config.cache.dir = PathBuf::from("/var/tmp/bd-cache");
-        assert!(args(false, false, false).targets(&config).contains(&config.cache.dir));
+        assert!(
+            args(false, false, false)
+                .targets(&config)
+                .contains(&config.cache.dir)
+        );
     }
 
     #[test]
     fn narrowed_sweep_targets_only_the_named_dirs() {
         let config = Config::default();
-        assert_eq!(args(false, true, false).targets(&config), vec![config.cache.dir.clone()]);
-        assert_eq!(args(false, false, true).targets(&config), vec![Config::scratch("publish")]);
-        assert_eq!(args(true, false, false).targets(&config), vec![config.dist.clone()]);
+        assert_eq!(
+            args(false, true, false).targets(&config),
+            vec![config.cache.dir.clone()]
+        );
+        assert_eq!(
+            args(false, false, true).targets(&config),
+            vec![Config::scratch("publish")]
+        );
+        assert_eq!(
+            args(true, false, false).targets(&config),
+            vec![config.dist.clone()]
+        );
     }
 }

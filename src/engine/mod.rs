@@ -30,15 +30,15 @@ use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::Layout;
 use crate::engine::process::{Emitter, Processors, Site};
-use crate::fs;
 use crate::error::{
     BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
 };
+use crate::fs;
 use crate::graph::{Cache, Deps, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
 use crate::ui::{Bytes, Count, Dur, PageStatus, Paths, Timer, Ui};
-use crate::world::{PageWorld, Project, Tracked};
 pub use crate::world::Mode;
+use crate::world::{PageWorld, Project, Tracked};
 
 /// Build statistics returned to callers (the dev server renders its own concise
 /// line from these; the CLI prints the full [`Summary`]).
@@ -113,7 +113,11 @@ impl Engine {
         let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
         let pages = plan(&self.config)?;
-        debug!(pages = pages.len(), site = self.config.label(), "planned build");
+        debug!(
+            pages = pages.len(),
+            site = self.config.label(),
+            "planned build"
+        );
         let warned = ui.warnings();
 
         // `before` hooks run ahead of the asset pipeline so anything they emit
@@ -135,7 +139,11 @@ impl Engine {
         let render = RenderInputs {
             assets: Hash::of(renderer.assets()),
             links: renderer.links(),
-            embeds: self.config.html.embed.then(|| Hash::of_dir(&self.config.assets)),
+            embeds: self
+                .config
+                .html
+                .embed
+                .then(|| Hash::of_dir(&self.config.assets)),
         };
         let mut cache = Cache::load(&self.config, self.project.context(), &render, ui)?;
 
@@ -160,8 +168,8 @@ impl Engine {
         let outcomes: Vec<(&Page, Result<Rendered>)> = stale
             .into_par_iter()
             .map(|(page, prepared)| {
-                let outcome = prepared
-                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
+                let outcome =
+                    prepared.and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
                 progress.tick(self.relative(page));
                 (page, outcome)
             })
@@ -217,14 +225,21 @@ impl Engine {
             elapsed: timer.elapsed(),
         }
         .report(ui);
-        Ok(Stats { pages: total, cached: cached.len() })
+        Ok(Stats {
+            pages: total,
+            cached: cached.len(),
+        })
     }
 
     /// Compile every page and report diagnostics without writing any output.
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let pages = plan(&self.config)?;
-        debug!(pages = pages.len(), site = self.config.label(), "planned check");
+        debug!(
+            pages = pages.len(),
+            site = self.config.label(),
+            "planned check"
+        );
         let renderer = Renderer::new(&pages, AssetMap::default());
         let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
@@ -246,7 +261,10 @@ impl Engine {
             Count::pages(rendered.len()),
             Dur(timer.elapsed())
         ));
-        Ok(Stats { pages: rendered.len(), cached: 0 })
+        Ok(Stats {
+            pages: rendered.len(),
+            cached: 0,
+        })
     }
 
     /// Report each compile outcome — page status lines and any typst warnings
@@ -303,14 +321,25 @@ impl Engine {
         let id = FileId::new(rooted);
         let text = match &page.template {
             Some(template) => {
-                let taxonomies = crate::codegen::Value::dict(page.frontmatter.taxonomies.iter().map(
-                    |(name, terms)| {
-                        (name.clone(), crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)))
-                    },
-                ))
+                let taxonomies = crate::codegen::Value::dict(
+                    page.frontmatter.taxonomies.iter().map(|(name, terms)| {
+                        (
+                            name.clone(),
+                            crate::codegen::Value::array(
+                                terms.iter().map(crate::codegen::Value::str),
+                            ),
+                        )
+                    }),
+                )
                 .to_string();
-                Layout::new(&self.config.templates, template, &page.data, &taxonomies, &page.body)
-                    .to_string()
+                Layout::new(
+                    &self.config.templates,
+                    template,
+                    &page.data,
+                    &taxonomies,
+                    &page.body,
+                )
+                .to_string()
             }
             None => page.body.clone(),
         };
@@ -345,7 +374,10 @@ impl Engine {
         let warnings = compiled
             .warnings
             .into_iter()
-            .filter(|w| !w.message.starts_with("html export is under active development"))
+            .filter(|w| {
+                !w.message
+                    .starts_with("html export is under active development")
+            })
             .collect();
         let warnings = self.diagnostics(warnings, page, &source, world.inner());
         let mut doc = compiled.output.map_err(|errs| {
@@ -430,7 +462,6 @@ impl Engine {
             })
             .collect()
     }
-
 }
 
 /// A compiled page ready to write, with the files its compilation depended on,
@@ -444,4 +475,3 @@ struct Rendered<'a> {
     broken: Vec<String>,
     warnings: Vec<TypstSourceDiagnostic>,
 }
-

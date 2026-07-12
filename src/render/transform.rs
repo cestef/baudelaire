@@ -66,10 +66,13 @@ impl ElementExt for HtmlElement {
     }
 
     fn head(&mut self) -> Option<&mut HtmlElement> {
-        self.children.make_mut().iter_mut().find_map(|node| match node {
-            HtmlNode::Element(el) if el.tag == tag::head => Some(el),
-            _ => None,
-        })
+        self.children
+            .make_mut()
+            .iter_mut()
+            .find_map(|node| match node {
+                HtmlNode::Element(el) if el.tag == tag::head => Some(el),
+                _ => None,
+            })
     }
 
     fn rewrite(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {

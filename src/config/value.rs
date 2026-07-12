@@ -69,20 +69,14 @@ pub(super) trait ValueExt {
     /// Map a string value through a `(name, value)` table, erroring on an
     /// unknown name with a nearest-match hint — the single-value counterpart of
     /// `NodeExt::mapped`, so the table drives both parsing and error help.
-    fn one<T: Copy>(
-        &self,
-        text: &str,
-        span: SourceSpan,
-        table: &[(&'static str, T)],
-    ) -> Result<T>;
+    fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T>;
 }
 
 impl ValueExt for KdlValue {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String> {
         match self.as_string() {
-            Some(s) => {
-                Env::expand(s).map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
-            }
+            Some(s) => Env::expand(s)
+                .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into()),
             None => Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
         }
     }
@@ -124,19 +118,18 @@ impl ValueExt for KdlValue {
     }
 
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey> {
-        self.one(text, span, &[
-            ("order", SortKey::Order),
-            ("date", SortKey::Date),
-            ("title", SortKey::Title),
-        ])
+        self.one(
+            text,
+            span,
+            &[
+                ("order", SortKey::Order),
+                ("date", SortKey::Date),
+                ("title", SortKey::Title),
+            ],
+        )
     }
 
-    fn one<T: Copy>(
-        &self,
-        text: &str,
-        span: SourceSpan,
-        table: &[(&'static str, T)],
-    ) -> Result<T> {
+    fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T> {
         let name = self.as_str(text, span)?;
         table
             .iter()
@@ -154,9 +147,18 @@ mod tests {
     fn env_expands_variables_defaults_and_literals() {
         // fixed lookup, no real env touched — sound under any test runner
         let env = |name: &str| (name == "APP_ENV").then(|| "prod".to_owned());
-        assert_eq!(Env::expand_with("site-${APP_ENV}", env).unwrap(), "site-prod");
-        assert_eq!(Env::expand_with("${MISSING:-fallback}", env).unwrap(), "fallback");
-        assert_eq!(Env::expand_with("no vars here", env).unwrap(), "no vars here");
+        assert_eq!(
+            Env::expand_with("site-${APP_ENV}", env).unwrap(),
+            "site-prod"
+        );
+        assert_eq!(
+            Env::expand_with("${MISSING:-fallback}", env).unwrap(),
+            "fallback"
+        );
+        assert_eq!(
+            Env::expand_with("no vars here", env).unwrap(),
+            "no vars here"
+        );
         // An unterminated reference is not a reference: left verbatim.
         assert_eq!(Env::expand_with("half ${OPEN", env).unwrap(), "half ${OPEN");
     }

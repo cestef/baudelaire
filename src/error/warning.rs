@@ -133,7 +133,9 @@ pub struct Undated {
 #[diagnostic(
     code(baudelaire::publish::did),
     severity(advice),
-    help("pin it with `publish.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time")
+    help(
+        "pin it with `publish.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time"
+    )
 )]
 pub struct DidUnpinned {
     pub did: String,

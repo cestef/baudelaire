@@ -21,12 +21,12 @@ use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::error::warning::ManifestUnreadable;
-use crate::ui::Ui;
 use crate::config::Config;
 use crate::content::Page;
+use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::{Deps, Hash};
+use crate::ui::Ui;
 use crate::world::BuildContext;
 
 /// The on-disk manifest file name under the cache directory.
@@ -109,7 +109,10 @@ impl Cache {
             Ok(bytes) => match serde_json::from_slice(&bytes) {
                 Ok(prev) => prev,
                 Err(e) => {
-                    ui.warn(ManifestUnreadable { path: manifest.clone(), source: e });
+                    ui.warn(ManifestUnreadable {
+                        path: manifest.clone(),
+                        source: e,
+                    });
                     Manifest::default()
                 }
             },
@@ -145,7 +148,11 @@ impl Cache {
         if &entry.hash != fingerprint {
             return None;
         }
-        if !entry.deps.iter().all(|(path, hash)| Hash::of_file(path).as_ref() == Some(hash)) {
+        if !entry
+            .deps
+            .iter()
+            .all(|(path, hash)| Hash::of_file(path).as_ref() == Some(hash))
+        {
             return None;
         }
         let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
@@ -154,7 +161,9 @@ impl Cache {
         if Hash::of_bytes(html.as_bytes()) != entry.blob {
             return None;
         }
-        self.next.pages.insert(Self::key(page).to_path_buf(), entry.clone());
+        self.next
+            .pages
+            .insert(Self::key(page).to_path_buf(), entry.clone());
         Some(html)
     }
 

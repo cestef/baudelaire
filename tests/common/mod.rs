@@ -12,7 +12,8 @@ use baudelaire::config::Config;
 
 /// The minimal config nearly every test starts from: content in, `public` out,
 /// clean URLs on. Tests needing more compose their own.
-pub const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
+pub const CONFIG: &str =
+    "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
 
 /// A throwaway site rooted in a tempdir, removed on drop.
 pub struct Site {
@@ -161,7 +162,10 @@ impl Serve {
             wait_for_port(port, 5000),
             "server did not start within 5000ms"
         );
-        Self { _child: child, port }
+        Self {
+            _child: child,
+            port,
+        }
     }
 
     pub fn port(&self) -> u16 {

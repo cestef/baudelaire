@@ -18,7 +18,12 @@ impl Transform for Links {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let Cx { links, page, broken, .. } = cx;
+        let Cx {
+            links,
+            page,
+            broken,
+            ..
+        } = cx;
         doc.root_mut().walk(&mut |element| {
             element.rewrite(&[attr::href, attr::src], |value| {
                 match links.classify(value, &page.source) {

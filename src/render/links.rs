@@ -30,7 +30,12 @@ impl LinkMap {
     pub fn new(pages: &[Page]) -> Self {
         let by_source = pages
             .iter()
-            .filter_map(|p| Some((crate::fs::canonicalize(&p.source).ok()?, p.permalink.clone())))
+            .filter_map(|p| {
+                Some((
+                    crate::fs::canonicalize(&p.source).ok()?,
+                    p.permalink.clone(),
+                ))
+            })
             .collect();
         Self { by_source }
     }
@@ -75,7 +80,6 @@ impl LinkMap {
             || raw.starts_with("mailto:")
             || raw.contains("://")
     }
-
 }
 
 #[cfg(test)]

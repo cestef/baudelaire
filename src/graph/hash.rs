@@ -55,7 +55,11 @@ impl Hash {
             if path.is_dir() {
                 Self::collect(root, &path, out);
             } else if let Some(hash) = Self::of_file(&path) {
-                let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned();
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .into_owned();
                 out.push((rel, hash));
             }
         }

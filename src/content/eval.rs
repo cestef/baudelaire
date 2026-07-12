@@ -44,7 +44,11 @@ impl EvalWorld {
             EmptyIntrospector.track(),
             Context::none().track(),
             src,
-            SpanMode::Mapped { id, mapper: &mapper, mapper_error_span: Span::detached() },
+            SpanMode::Mapped {
+                id,
+                mapper: &mapper,
+                mapper_error_span: Span::detached(),
+            },
             SyntaxMode::Code,
             Scope::new(),
         )

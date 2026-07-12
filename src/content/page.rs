@@ -64,10 +64,11 @@ impl Page {
             .unwrap_or_else(|| Self::bundle_slug(path, collection, &stem, config));
         let slug = Slug::require(&raw)?.into_string();
         let permalink = Self::permalink(collection, &frontmatter, &slug, config);
-        let template = frontmatter
-            .template
-            .clone()
-            .or_else(|| config.collection(collection).and_then(|c| c.template.clone()));
+        let template = frontmatter.template.clone().or_else(|| {
+            config
+                .collection(collection)
+                .and_then(|c| c.template.clone())
+        });
         Ok(Self::assemble(
             PageId::new(collection, &slug),
             path.to_owned(),
@@ -116,8 +117,14 @@ impl Page {
     /// the file stem. The root `index.typ` keeps its stem, so it still maps to
     /// `/` rather than to the content directory's name.
     fn bundle_slug(path: &Path, collection: &str, stem: &Stem, config: &Config) -> String {
-        let is_index = config.index.as_deref().is_some_and(|idx| stem.slug() == idx);
-        let dir = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str());
+        let is_index = config
+            .index
+            .as_deref()
+            .is_some_and(|idx| stem.slug() == idx);
+        let dir = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str());
         match (is_index && collection != ROOT, dir) {
             (true, Some(dir)) => dir.to_owned(),
             _ => stem.slug().to_owned(),
@@ -159,7 +166,6 @@ impl Page {
             .and_then(|c| c.permalink.as_deref());
         Permalink::of(template).render(&PermalinkCtx::from_page(collection, fm, slug))
     }
-
 }
 
 /// A collection of pages.

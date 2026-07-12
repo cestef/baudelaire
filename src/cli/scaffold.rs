@@ -43,7 +43,11 @@ impl<'a> Scaffold<'a> {
             let path = self.root.join(dir);
             if !path.exists() {
                 fs::create_dir_all(&path)?;
-                ui.detail(format_args!("{} {}", "+".green(), Paths(&dir.display().to_string())));
+                ui.detail(format_args!(
+                    "{} {}",
+                    "+".green(),
+                    Paths(&dir.display().to_string())
+                ));
             }
         }
         for (rel, contents) in &self.files {
@@ -58,7 +62,11 @@ impl<'a> Scaffold<'a> {
                 fs::create_dir_all(parent)?;
             }
             fs::write(&full, contents)?;
-            ui.detail(format_args!("{} {}", "+".green(), Paths(&rel.display().to_string())));
+            ui.detail(format_args!(
+                "{} {}",
+                "+".green(),
+                Paths(&rel.display().to_string())
+            ));
         }
         Ok(())
     }
@@ -87,13 +95,7 @@ impl Config {
 /// Scaffold a new project into `target` (resolved against the project `root`
 /// for its default site name). `yes` takes every prompt's default without
 /// asking; `vcs` pins a version-control system.
-pub(crate) fn init(
-    ui: &Ui,
-    target: &Path,
-    root: &Root,
-    yes: bool,
-    vcs: Option<Vcs>,
-) -> Result<()> {
+pub(crate) fn init(ui: &Ui, target: &Path, root: &Root, yes: bool, vcs: Option<Vcs>) -> Result<()> {
     let interactive = !yes && std::io::stdin().is_terminal();
     let details = Details::gather(target, root, interactive)?;
     let repo = Repo::wanted(yes, interactive, vcs)?;
@@ -117,7 +119,10 @@ pub(crate) fn init(
     }
 
     ui.blank();
-    ui.done(format_args!("project ready in {}", Paths(&target.display().to_string())));
+    ui.done(format_args!(
+        "project ready in {}",
+        Paths(&target.display().to_string())
+    ));
     ui.detail(format_args!(
         "run {} to build, {} for a live preview",
         "baudelaire build".cyan(),
@@ -204,7 +209,10 @@ pub fn new_page(ui: &Ui, path: &Path, config: &Config) -> Result<()> {
     Scaffold::new(path.parent().unwrap_or(Path::new(".")))
         .file(name, body)
         .apply(ui)?;
-    ui.done(format_args!("created {}", Paths(&path.display().to_string())));
+    ui.done(format_args!(
+        "created {}",
+        Paths(&path.display().to_string())
+    ));
     Ok(())
 }
 
@@ -292,7 +300,11 @@ impl<'a> Repo<'a> {
         // scaffold log. Surface it only if the command actually failed.
         match Command::new(cmd).args(args).current_dir(self.root).output() {
             Ok(out) if out.status.success() => {
-                ui.detail(format_args!("{} {} repository", "+".green(), self.vcs.label()));
+                ui.detail(format_args!(
+                    "{} {} repository",
+                    "+".green(),
+                    self.vcs.label()
+                ));
             }
             Ok(out) => {
                 let detail = String::from_utf8_lossy(&out.stderr);
@@ -363,7 +375,10 @@ mod templates {
 
         #[test]
         fn fills_known_placeholders() {
-            let out = render("site \"{{site}}\" by {{author}}", &[("site", "S"), ("author", "A")]);
+            let out = render(
+                "site \"{{site}}\" by {{author}}",
+                &[("site", "S"), ("author", "A")],
+            );
             assert_eq!(out, "site \"S\" by A");
         }
 
@@ -384,12 +399,18 @@ mod templates {
 
         #[test]
         fn unknown_placeholders_are_left_alone() {
-            assert_eq!(render("keep {{unknown}}", &[("site", "S")]), "keep {{unknown}}");
+            assert_eq!(
+                render("keep {{unknown}}", &[("site", "S")]),
+                "keep {{unknown}}"
+            );
         }
 
         #[test]
         fn unterminated_braces_pass_through() {
-            assert_eq!(render("dangling {{site", &[("site", "S")]), "dangling {{site");
+            assert_eq!(
+                render("dangling {{site", &[("site", "S")]),
+                "dangling {{site"
+            );
         }
     }
 }

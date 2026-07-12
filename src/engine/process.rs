@@ -34,8 +34,18 @@ pub(super) struct Site<'a> {
 impl Site<'_> {
     /// The base URL for a URL-requiring processor — the one warn-and-skip
     /// policy for a missing `url`, naming the `feature` that needs it.
-    pub(super) fn base(&self, feature: &'static str, out: &mut dyn Emit) -> Result<Option<BaseUrl>> {
-        self.warn_missing_base(out, BaseUrlMissing { feature, effect: "skipped" })
+    pub(super) fn base(
+        &self,
+        feature: &'static str,
+        out: &mut dyn Emit,
+    ) -> Result<Option<BaseUrl>> {
+        self.warn_missing_base(
+            out,
+            BaseUrlMissing {
+                feature,
+                effect: "skipped",
+            },
+        )
     }
 
     /// The base URL, warning with `missing` when absent. The single "is a `url`
@@ -121,7 +131,11 @@ pub(super) struct Emitter<'a> {
 
 impl<'a> Emitter<'a> {
     pub(super) fn new(ui: &'a Ui) -> Self {
-        Self { ui, written: 0, bytes: 0 }
+        Self {
+            ui,
+            written: 0,
+            bytes: 0,
+        }
     }
 
     /// How many files were written — the count of generated outputs for the

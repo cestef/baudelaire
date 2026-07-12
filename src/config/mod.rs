@@ -7,9 +7,9 @@ pub mod defaults;
 pub(crate) mod dispatch;
 pub mod parse;
 pub mod profile;
-mod value;
 #[cfg(test)]
 mod tests;
+mod value;
 
 use std::path::PathBuf;
 
@@ -251,8 +251,14 @@ impl std::hash::Hash for Config {
             // raw config text, kept only for error spans; a comment-only edit must not bust the cache
             source: _,
         } = self;
-        (site, url, lang, author, content, index, dist, assets, templates).hash(state);
-        (clean, future, sitemap, robots, llms, draft, links, feed, search).hash(state);
+        (
+            site, url, lang, author, content, index, dist, assets, templates,
+        )
+            .hash(state);
+        (
+            clean, future, sitemap, robots, llms, draft, links, feed, search,
+        )
+            .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, publish, profile).hash(state);
     }

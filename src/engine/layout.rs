@@ -63,7 +63,12 @@ impl fmt::Display for Layout<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // import under an internal alias so the template function is never
         // shadowed by a `page`/`body` binding — even a `page.typ`/`body.typ`.
-        writeln!(f, "#import {}: {} as __layout", Str(&self.import()), self.func())?;
+        writeln!(
+            f,
+            "#import {}: {} as __layout",
+            Str(&self.import()),
+            self.func()
+        )?;
         writeln!(
             f,
             "#show: __body => __layout((frontmatter: {}, taxonomies: {}), __body)",
@@ -107,6 +112,9 @@ mod tests {
         // pages carry a `page` dict; the alias makes this collision-proof.
         let out = Layout::new(Path::new("templates"), "page.typ", "(t: 1)", "(:)", "b").to_string();
         assert!(out.contains(": page as __layout"), "{out}");
-        assert!(out.contains("__layout((frontmatter: (t: 1), taxonomies: (:)), __body)"), "{out}");
+        assert!(
+            out.contains("__layout((frontmatter: (t: 1), taxonomies: (:)), __body)"),
+            "{out}"
+        );
     }
 }

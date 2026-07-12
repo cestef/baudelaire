@@ -34,24 +34,51 @@ impl Config {
     /// applies it. This table is the *single source of truth* for what keys are
     /// valid — dispatch and "unknown key" suggestions both read it.
     const RULES: Block<Config> = Block(&[
-        ("site", |c, n, t| { c.site = Some(n.string(t, 0)?); Ok(()) }),
-        ("url", |c, n, t| { c.url = Some(n.string(t, 0)?); Ok(()) }),
-        ("lang", |c, n, t| { c.lang = n.string(t, 0)?; Ok(()) }),
-        ("author", |c, n, t| { c.author = Some(n.string(t, 0)?); Ok(()) }),
+        ("site", |c, n, t| {
+            c.site = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("url", |c, n, t| {
+            c.url = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("lang", |c, n, t| {
+            c.lang = n.string(t, 0)?;
+            Ok(())
+        }),
+        ("author", |c, n, t| {
+            c.author = Some(n.string(t, 0)?);
+            Ok(())
+        }),
         ("paths", |c, n, t| n.paths(c, t)),
-        ("clean", |c, n, t| { c.clean = n.boolean(t, 0)?; Ok(()) }),
-        ("future", |c, n, t| { c.future = n.boolean(t, 0)?; Ok(()) }),
+        ("clean", |c, n, t| {
+            c.clean = n.boolean(t, 0)?;
+            Ok(())
+        }),
+        ("future", |c, n, t| {
+            c.future = n.boolean(t, 0)?;
+            Ok(())
+        }),
         ("draft", |c, n, t| n.draft(&mut c.draft, t)),
         ("links", |c, n, t| n.links(&mut c.links, t)),
         ("cache", |c, n, t| n.cache(&mut c.cache, t)),
         ("typst", |c, n, t| n.typst(c, t)),
         ("output", |c, n, t| n.output(c, t)),
-        ("collections", |c, n, t| { c.collections = n.collections(t)?; Ok(()) }),
-        ("taxonomies", |c, n, t| { c.taxonomies = n.taxonomies(t)?; Ok(()) }),
+        ("collections", |c, n, t| {
+            c.collections = n.collections(t)?;
+            Ok(())
+        }),
+        ("taxonomies", |c, n, t| {
+            c.taxonomies = n.taxonomies(t)?;
+            Ok(())
+        }),
         ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
         ("publish", |c, n, t| n.publish(&mut c.publish, t)),
         ("serve", |c, n, t| n.serve(&mut c.serve, t)),
-        ("profiles", |c, n, t| { c.profiles = n.profiles(t)?; Ok(()) }),
+        ("profiles", |c, n, t| {
+            c.profiles = n.profiles(t)?;
+            Ok(())
+        }),
     ]);
 }
 
@@ -122,7 +149,9 @@ impl NodeExt for KdlNode {
     fn arg(&self, text: &str, idx: usize) -> Result<&KdlValue> {
         match self.get(idx) {
             Some(value) => Ok(value),
-            None => Err(ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into()),
+            None => {
+                Err(ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into())
+            }
         }
     }
 
@@ -203,7 +232,9 @@ impl NodeExt for KdlNode {
                 let raw = entry.value().as_str(text, NodeExt::span(self))?;
                 // a `-` prefix reads as "disable", but nothing subtracts — error beats silently enabling
                 if let Some(name) = raw.strip_prefix('-') {
-                    return Err(ConfigError::feature_removal(text, name, NodeExt::span(self)).into());
+                    return Err(
+                        ConfigError::feature_removal(text, name, NodeExt::span(self)).into(),
+                    );
                 }
                 Ok(raw.strip_prefix('+').unwrap_or(&raw).to_owned())
             })
@@ -256,10 +287,22 @@ impl NodeExt for KdlNode {
 
     fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()> {
         const HTML: Block<HtmlConfig> = Block(&[
-            ("pretty", |c, n, t| { c.pretty = n.boolean(t, 0)?; Ok(()) }),
-            ("embed", |c, n, t| { c.embed = n.boolean(t, 0)?; Ok(()) }),
-            ("meta", |c, n, t| { c.meta = n.boolean(t, 0)?; Ok(()) }),
-            ("anchors", |c, n, t| { c.anchors = n.boolean(t, 0)?; Ok(()) }),
+            ("pretty", |c, n, t| {
+                c.pretty = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("embed", |c, n, t| {
+                c.embed = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("meta", |c, n, t| {
+                c.meta = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("anchors", |c, n, t| {
+                c.anchors = n.boolean(t, 0)?;
+                Ok(())
+            }),
         ]);
         HTML.fill(target, self, text)
     }
@@ -267,7 +310,10 @@ impl NodeExt for KdlNode {
     /// The `images { lazy; optimize { … } }` section.
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()> {
         const IMAGES: Block<ImagesConfig> = Block(&[
-            ("lazy", |c, n, t| { c.lazy = n.boolean(t, 0)?; Ok(()) }),
+            ("lazy", |c, n, t| {
+                c.lazy = n.boolean(t, 0)?;
+                Ok(())
+            }),
             ("optimize", |c, n, t| n.optimize(&mut c.optimize, t)),
         ]);
         IMAGES.fill(target, self, text)
@@ -293,13 +339,20 @@ impl NodeExt for KdlNode {
 
     fn png(&self, target: &mut PngConfig, text: &str) -> Result<()> {
         const ATTRS: Attrs<PngConfig> = Attrs(&[
-            ("level", |c, v, t, s| { c.level = v.ranged(t, s, 0, 6)? as u8; Ok(()) }),
+            ("level", |c, v, t, s| {
+                c.level = v.ranged(t, s, 0, 6)? as u8;
+                Ok(())
+            }),
             ("strip", |c, v, t, s| {
-                c.strip = v.one(t, s, &[
-                    ("none", PngStrip::None),
-                    ("safe", PngStrip::Safe),
-                    ("all", PngStrip::All),
-                ])?;
+                c.strip = v.one(
+                    t,
+                    s,
+                    &[
+                        ("none", PngStrip::None),
+                        ("safe", PngStrip::Safe),
+                        ("all", PngStrip::All),
+                    ],
+                )?;
                 Ok(())
             }),
         ]);
@@ -307,32 +360,46 @@ impl NodeExt for KdlNode {
     }
 
     fn jpeg(&self, target: &mut JpegConfig, text: &str) -> Result<()> {
-        const ATTRS: Attrs<JpegConfig> = Attrs(&[
-            ("quality", |c, v, t, s| { c.quality = v.ranged(t, s, 1, 100)? as u8; Ok(()) }),
-        ]);
+        const ATTRS: Attrs<JpegConfig> = Attrs(&[("quality", |c, v, t, s| {
+            c.quality = v.ranged(t, s, 1, 100)? as u8;
+            Ok(())
+        })]);
         ATTRS.apply(target, self, text, 0)
     }
 
     fn assets(&self, target: &mut AssetConfig, text: &str) -> Result<()> {
         const ASSETS: Block<AssetConfig> = Block(&[
-            ("minify", |c, n, t| { c.minify = n.boolean(t, 0)?; Ok(()) }),
-            ("bundle", |c, n, t| { c.bundle = n.boolean(t, 0)?; Ok(()) }),
-            ("fingerprint", |c, n, t| { c.fingerprint = n.boolean(t, 0)?; Ok(()) }),
+            ("minify", |c, n, t| {
+                c.minify = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("bundle", |c, n, t| {
+                c.bundle = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("fingerprint", |c, n, t| {
+                c.fingerprint = n.boolean(t, 0)?;
+                Ok(())
+            }),
         ]);
         ASSETS.fill(target, self, text)
     }
 
     fn robots(&self, target: &mut RobotsConfig, text: &str) -> Result<()> {
-        const ROBOTS: Block<RobotsConfig> =
-            Block(&[("disallow", |c, n, t| { c.disallow = n.words(t)?; Ok(()) })]);
+        const ROBOTS: Block<RobotsConfig> = Block(&[("disallow", |c, n, t| {
+            c.disallow = n.words(t)?;
+            Ok(())
+        })]);
         // presence of the block enables emission
         target.enabled = true;
         ROBOTS.fill(target, self, text)
     }
 
     fn llms(&self, target: &mut LlmsConfig, text: &str) -> Result<()> {
-        const LLMS: Block<LlmsConfig> =
-            Block(&[("summary", |c, n, t| { c.summary = Some(n.string(t, 0)?); Ok(()) })]);
+        const LLMS: Block<LlmsConfig> = Block(&[("summary", |c, n, t| {
+            c.summary = Some(n.string(t, 0)?);
+            Ok(())
+        })]);
         // presence of the block enables emission
         target.enabled = true;
         LLMS.fill(target, self, text)
@@ -341,11 +408,27 @@ impl NodeExt for KdlNode {
     /// The `paths { … }` parent section: directory layout knobs.
     fn paths(&self, config: &mut Config, text: &str) -> Result<()> {
         const PATHS: Block<Config> = Block(&[
-            ("content", |c, n, t| { c.content = n.string(t, 0)?.into(); Ok(()) }),
-            ("index", |c, n, t| { let s = n.string(t, 0)?; c.index = (!s.is_empty()).then_some(s); Ok(()) }),
-            ("dist", |c, n, t| { c.dist = n.string(t, 0)?.into(); Ok(()) }),
-            ("assets", |c, n, t| { c.assets = n.string(t, 0)?.into(); Ok(()) }),
-            ("templates", |c, n, t| { c.templates = n.string(t, 0)?.into(); Ok(()) }),
+            ("content", |c, n, t| {
+                c.content = n.string(t, 0)?.into();
+                Ok(())
+            }),
+            ("index", |c, n, t| {
+                let s = n.string(t, 0)?;
+                c.index = (!s.is_empty()).then_some(s);
+                Ok(())
+            }),
+            ("dist", |c, n, t| {
+                c.dist = n.string(t, 0)?.into();
+                Ok(())
+            }),
+            ("assets", |c, n, t| {
+                c.assets = n.string(t, 0)?.into();
+                Ok(())
+            }),
+            ("templates", |c, n, t| {
+                c.templates = n.string(t, 0)?.into();
+                Ok(())
+            }),
         ]);
         PATHS.fill(config, self, text)
     }
@@ -353,8 +436,14 @@ impl NodeExt for KdlNode {
     /// The `typst { … }` parent section: typst engine knobs.
     fn typst(&self, config: &mut Config, text: &str) -> Result<()> {
         const TYPST: Block<Config> = Block(&[
-            ("features", |c, n, t| { c.features = n.features(t)?; Ok(()) }),
-            ("inputs", |c, n, t| { c.inputs = n.inputs(t)?; Ok(()) }),
+            ("features", |c, n, t| {
+                c.features = n.features(t)?;
+                Ok(())
+            }),
+            ("inputs", |c, n, t| {
+                c.inputs = n.inputs(t)?;
+                Ok(())
+            }),
         ]);
         TYPST.fill(config, self, text)
     }
@@ -365,7 +454,10 @@ impl NodeExt for KdlNode {
             ("html", |c, n, t| n.html(&mut c.html, t)),
             ("images", |c, n, t| n.images(&mut c.images, t)),
             ("assets", |c, n, t| n.assets(&mut c.asset, t)),
-            ("sitemap", |c, n, t| { c.sitemap = n.boolean(t, 0)?; Ok(()) }),
+            ("sitemap", |c, n, t| {
+                c.sitemap = n.boolean(t, 0)?;
+                Ok(())
+            }),
             ("robots", |c, n, t| n.robots(&mut c.robots, t)),
             ("llms", |c, n, t| n.llms(&mut c.llms, t)),
             ("feed", |c, n, t| n.feed(&mut c.feed, t)),
@@ -376,15 +468,23 @@ impl NodeExt for KdlNode {
 
     fn draft(&self, target: &mut DraftConfig, text: &str) -> Result<()> {
         const DRAFT: Block<DraftConfig> = Block(&[
-            ("build", |c, n, t| { c.build = n.boolean(t, 0)?; Ok(()) }),
-            ("suffix", |c, n, t| { c.suffix = n.string(t, 0)?; Ok(()) }),
+            ("build", |c, n, t| {
+                c.build = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("suffix", |c, n, t| {
+                c.suffix = n.string(t, 0)?;
+                Ok(())
+            }),
         ]);
         DRAFT.fill(target, self, text)
     }
 
     fn links(&self, target: &mut LinkConfig, text: &str) -> Result<()> {
-        const LINKS: Block<LinkConfig> =
-            Block(&[("strict", |c, n, t| { c.strict = n.boolean(t, 0)?; Ok(()) })]);
+        const LINKS: Block<LinkConfig> = Block(&[("strict", |c, n, t| {
+            c.strict = n.boolean(t, 0)?;
+            Ok(())
+        })]);
         LINKS.fill(target, self, text)
     }
 
@@ -392,16 +492,24 @@ impl NodeExt for KdlNode {
         /// Feed formats as `(name, kind)` — single source for parsing + errors.
         const FORMATS: &[(&str, FeedKind)] = &[("rss", FeedKind::Rss), ("atom", FeedKind::Atom)];
         const FEED: Block<FeedConfig> = Block(&[
-            ("formats", |c, n, t| { c.formats = n.mapped(t, FORMATS)?; Ok(()) }),
-            ("limit", |c, n, t| { c.limit = n.count(t, 0)?; Ok(()) }),
+            ("formats", |c, n, t| {
+                c.formats = n.mapped(t, FORMATS)?;
+                Ok(())
+            }),
+            ("limit", |c, n, t| {
+                c.limit = n.count(t, 0)?;
+                Ok(())
+            }),
         ]);
         FEED.fill(target, self, text)
     }
 
     fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()> {
         /// Index formats as `(name, kind)` — single source for parsing + errors.
-        const FORMATS: &[(&str, SearchFormat)] =
-            &[("json", SearchFormat::Json), ("inverted", SearchFormat::Inverted)];
+        const FORMATS: &[(&str, SearchFormat)] = &[
+            ("json", SearchFormat::Json),
+            ("inverted", SearchFormat::Inverted),
+        ];
         /// Indexable page fields as `(name, field)`.
         const FIELDS: &[(&str, SearchField)] = &[
             ("title", SearchField::Title),
@@ -409,19 +517,40 @@ impl NodeExt for KdlNode {
             ("tags", SearchField::Tags),
         ];
         const SEARCH: Block<SearchConfig> = Block(&[
-            ("formats", |c, n, t| { c.formats = n.mapped(t, FORMATS)?; Ok(()) }),
-            ("fields", |c, n, t| { c.fields = n.mapped(t, FIELDS)?; Ok(()) }),
-            ("stopwords", |c, n, t| { c.stopwords = n.words(t)?; Ok(()) }),
-            ("minimum", |c, n, t| { c.min_length = n.count(t, 0)?; Ok(()) }),
-            ("client", |c, n, t| { c.client = n.boolean(t, 0)?; Ok(()) }),
+            ("formats", |c, n, t| {
+                c.formats = n.mapped(t, FORMATS)?;
+                Ok(())
+            }),
+            ("fields", |c, n, t| {
+                c.fields = n.mapped(t, FIELDS)?;
+                Ok(())
+            }),
+            ("stopwords", |c, n, t| {
+                c.stopwords = n.words(t)?;
+                Ok(())
+            }),
+            ("minimum", |c, n, t| {
+                c.min_length = n.count(t, 0)?;
+                Ok(())
+            }),
+            ("client", |c, n, t| {
+                c.client = n.boolean(t, 0)?;
+                Ok(())
+            }),
         ]);
         SEARCH.fill(target, self, text)
     }
 
     fn cache(&self, target: &mut CacheConfig, text: &str) -> Result<()> {
         const CACHE: Block<CacheConfig> = Block(&[
-            ("dir", |c, n, t| { c.dir = n.string(t, 0)?.into(); Ok(()) }),
-            ("incremental", |c, n, t| { c.incremental = n.boolean(t, 0)?; Ok(()) }),
+            ("dir", |c, n, t| {
+                c.dir = n.string(t, 0)?.into();
+                Ok(())
+            }),
+            ("incremental", |c, n, t| {
+                c.incremental = n.boolean(t, 0)?;
+                Ok(())
+            }),
         ]);
         CACHE.fill(target, self, text)
     }
@@ -431,8 +560,14 @@ impl NodeExt for KdlNode {
     /// every other list field.
     fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()> {
         const HOOKS: Block<HooksConfig> = Block(&[
-            ("before", |c, n, t| { c.before = n.words(t)?; Ok(()) }),
-            ("after", |c, n, t| { c.after = n.words(t)?; Ok(()) }),
+            ("before", |c, n, t| {
+                c.before = n.words(t)?;
+                Ok(())
+            }),
+            ("after", |c, n, t| {
+                c.after = n.words(t)?;
+                Ok(())
+            }),
         ]);
         HOOKS.fill(target, self, text)
     }
@@ -448,11 +583,26 @@ impl NodeExt for KdlNode {
     /// Fills onto the existing config so a profile tuning one key keeps the rest.
     fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()> {
         const STANDARD: Block<StandardConfig> = Block(&[
-            ("handle", |c, n, t| { c.handle = n.string(t, 0)?; Ok(()) }),
-            ("did", |c, n, t| { c.did = Some(n.string(t, 0)?); Ok(()) }),
-            ("pds", |c, n, t| { c.pds = n.string(t, 0)?; Ok(()) }),
-            ("discover", |c, n, t| { c.discover = n.boolean(t, 0)?; Ok(()) }),
-            ("icon", |c, n, t| { c.icon = Some(n.string(t, 0)?.into()); Ok(()) }),
+            ("handle", |c, n, t| {
+                c.handle = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("did", |c, n, t| {
+                c.did = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("pds", |c, n, t| {
+                c.pds = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("discover", |c, n, t| {
+                c.discover = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("icon", |c, n, t| {
+                c.icon = Some(n.string(t, 0)?.into());
+                Ok(())
+            }),
             ("verify", |c, n, t| n.verify(&mut c.verify, t)),
         ]);
         let mut cfg = target.take().unwrap_or_default();
@@ -465,20 +615,44 @@ impl NodeExt for KdlNode {
     /// artifacts to emit.
     fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()> {
         const VERIFY: Block<VerifyConfig> = Block(&[
-            ("wellknown", |c, n, t| { c.wellknown = n.boolean(t, 0)?; Ok(()) }),
-            ("links", |c, n, t| { c.links = n.boolean(t, 0)?; Ok(()) }),
+            ("wellknown", |c, n, t| {
+                c.wellknown = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("links", |c, n, t| {
+                c.links = n.boolean(t, 0)?;
+                Ok(())
+            }),
         ]);
         VERIFY.fill(target, self, text)
     }
 
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()> {
         const SERVE: Block<ServeConfig> = Block(&[
-            ("port", |c, n, t| { c.port = n.port(t, 0)?; Ok(()) }),
-            ("bind", |c, n, t| { c.bind = n.string(t, 0)?; Ok(()) }),
-            ("open", |c, n, t| { c.open = n.boolean(t, 0)?; Ok(()) }),
-            ("watch", |c, n, t| { c.watch = n.boolean(t, 0)?; Ok(()) }),
-            ("include", |c, n, t| { c.include = n.words(t)?; Ok(()) }),
-            ("exclude", |c, n, t| { c.exclude = n.words(t)?; Ok(()) }),
+            ("port", |c, n, t| {
+                c.port = n.port(t, 0)?;
+                Ok(())
+            }),
+            ("bind", |c, n, t| {
+                c.bind = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("open", |c, n, t| {
+                c.open = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("watch", |c, n, t| {
+                c.watch = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("include", |c, n, t| {
+                c.include = n.words(t)?;
+                Ok(())
+            }),
+            ("exclude", |c, n, t| {
+                c.exclude = n.words(t)?;
+                Ok(())
+            }),
         ]);
         SERVE.fill(target, self, text)
     }
@@ -491,8 +665,14 @@ impl NodeExt for KdlNode {
 
     fn as_collection(&self, text: &str) -> Result<(String, CollectionConfig)> {
         const ATTRS: Attrs<CollectionConfig> = Attrs(&[
-            ("sort", |c, v, t, s| { c.sort = v.sort(t, s)?; Ok(()) }),
-            ("reverse", |c, v, t, s| { c.reverse = v.boolean(t, s)?; Ok(()) }),
+            ("sort", |c, v, t, s| {
+                c.sort = v.sort(t, s)?;
+                Ok(())
+            }),
+            ("reverse", |c, v, t, s| {
+                c.reverse = v.boolean(t, s)?;
+                Ok(())
+            }),
             ("permalink", |c, v, t, s| {
                 let raw = v.as_str(t, s)?;
                 // validate here so a template typo is a spanned config error,
@@ -501,7 +681,10 @@ impl NodeExt for KdlNode {
                 c.permalink = Some(raw);
                 Ok(())
             }),
-            ("template", |c, v, t, s| { c.template = Some(v.as_str(t, s)?); Ok(()) }),
+            ("template", |c, v, t, s| {
+                c.template = Some(v.as_str(t, s)?);
+                Ok(())
+            }),
             ("paginate", |c, v, t, s| {
                 let n = v.integer(t, s)?;
                 if n < 1 {
@@ -510,8 +693,14 @@ impl NodeExt for KdlNode {
                 c.paginate = Some(n as usize);
                 Ok(())
             }),
-            ("list", |c, v, t, s| { c.list = Some(v.as_str(t, s)?); Ok(()) }),
-            ("index", |c, v, t, s| { c.index = Some(v.as_str(t, s)?); Ok(()) }),
+            ("list", |c, v, t, s| {
+                c.list = Some(v.as_str(t, s)?);
+                Ok(())
+            }),
+            ("index", |c, v, t, s| {
+                c.index = Some(v.as_str(t, s)?);
+                Ok(())
+            }),
         ]);
         let mut cfg = CollectionConfig::default();
         // a leading positional argument is the collection's glob
@@ -524,9 +713,18 @@ impl NodeExt for KdlNode {
 
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)> {
         const ATTRS: Attrs<TaxonomyConfig> = Attrs(&[
-            ("key", |x, v, t, s| { x.key = v.as_str(t, s)?; Ok(()) }),
-            ("index", |x, v, t, s| { x.index = v.boolean(t, s)?; Ok(()) }),
-            ("template", |x, v, t, s| { x.template = Some(v.as_str(t, s)?); Ok(()) }),
+            ("key", |x, v, t, s| {
+                x.key = v.as_str(t, s)?;
+                Ok(())
+            }),
+            ("index", |x, v, t, s| {
+                x.index = v.boolean(t, s)?;
+                Ok(())
+            }),
+            ("template", |x, v, t, s| {
+                x.template = Some(v.as_str(t, s)?);
+                Ok(())
+            }),
         ]);
         let id = self.name().value().to_owned();
         let mut tax = TaxonomyConfig {

@@ -97,7 +97,10 @@ impl ContentError {
         Self::FrontmatterEval {
             path: path.display().to_string(),
             src: src.to_owned(),
-            errs: errs.into_iter().map(|e| FrontmatterDiag::new(src, e)).collect(),
+            errs: errs
+                .into_iter()
+                .map(|e| FrontmatterDiag::new(src, e))
+                .collect(),
         }
     }
 
@@ -157,7 +160,9 @@ impl ContentError {
     /// A name (filename stem, frontmatter slug, or taxonomy term) with no
     /// URL-safe characters.
     pub fn empty_slug(name: &str) -> Self {
-        Self::EmptySlug { name: name.to_owned() }
+        Self::EmptySlug {
+            name: name.to_owned(),
+        }
     }
 
     /// Two pages resolving to the same permalink (a silent overwrite otherwise).

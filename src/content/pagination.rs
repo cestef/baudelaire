@@ -78,7 +78,10 @@ impl<'a> Section<'a> {
     /// for a blog home); later pages under `page/{n}/`.
     fn url(&self, number: usize) -> String {
         match number {
-            1 => self.index.clone().unwrap_or_else(|| Permalink::join(&[self.id])),
+            1 => self
+                .index
+                .clone()
+                .unwrap_or_else(|| Permalink::join(&[self.id])),
             n => Permalink::join(&[self.id, "page", &n.to_string()]),
         }
     }

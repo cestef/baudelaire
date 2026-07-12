@@ -14,7 +14,6 @@ use crate::error::warning::BaseUrlMissing;
 pub(super) struct Robots;
 
 impl Processor for Robots {
-
     fn enabled(&self, config: &Config) -> bool {
         config.robots.enabled
     }
@@ -31,7 +30,10 @@ impl Processor for Robots {
         if site.config.sitemap
             && let Some(base) = site.warn_missing_base(
                 out,
-                BaseUrlMissing { feature: "the robots.txt sitemap link", effect: "omitted" },
+                BaseUrlMissing {
+                    feature: "the robots.txt sitemap link",
+                    effect: "omitted",
+                },
             )?
         {
             let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));

@@ -98,7 +98,9 @@ impl FsError {
 
 impl Diagnostic for FsError {
     fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(format!("baudelaire::fs::{}", self.op).replace(' ', "_")))
+        Some(Box::new(
+            format!("baudelaire::fs::{}", self.op).replace(' ', "_"),
+        ))
     }
 
     /// A remedy keyed off the OS error kind — far more actionable than the raw

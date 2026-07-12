@@ -112,5 +112,8 @@ fn build_reports_timing() {
     assert!(out.status.success());
     // The summary ends `… in 132ms` / `… in 1.24s`.
     let logs = String::from_utf8_lossy(&out.stderr);
-    assert!(logs.contains(" in ") && (logs.contains("ms") || logs.contains("s")), "{logs}");
+    assert!(
+        logs.contains(" in ") && (logs.contains("ms") || logs.contains("s")),
+        "{logs}"
+    );
 }

@@ -15,9 +15,11 @@ impl Progress {
     pub(super) fn bar(verb: &'static str, len: u64) -> Self {
         let bar = ProgressBar::with_draw_target(Some(len), ProgressDrawTarget::stderr());
         bar.set_style(
-            ProgressStyle::with_template("  {prefix:.cyan.bold} {bar:24.magenta/238} {pos}/{len} {wide_msg:.dim}")
-                .expect("static template parses")
-                .progress_chars("━╸─"),
+            ProgressStyle::with_template(
+                "  {prefix:.cyan.bold} {bar:24.magenta/238} {pos}/{len} {wide_msg:.dim}",
+            )
+            .expect("static template parses")
+            .progress_chars("━╸─"),
         );
         bar.set_prefix(verb);
         Self(bar)

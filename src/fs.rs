@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::{Op, Result};
 use crate::error::fs::FsError;
+use crate::error::{Op, Result};
 
 /// Read a file to a string.
 pub fn read_to_string(path: impl AsRef<Path>) -> Result<String> {

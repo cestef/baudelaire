@@ -179,7 +179,13 @@ impl Ui {
         }
         // pad before styling — a width applied to the styled value would count
         // its escape codes and misalign the column.
-        let _ = writeln!(s.out, "  {} {} {}", "➜".green().bold(), format!("{label:<9}").bold(), value);
+        let _ = writeln!(
+            s.out,
+            "  {} {} {}",
+            "➜".green().bold(),
+            format!("{label:<9}").bold(),
+            value
+        );
     }
 
     /// A blank line, for vertical grouping. Suppressed when quiet.
@@ -197,7 +203,13 @@ impl Ui {
         if s.level < Level::Verbose {
             return;
         }
-        let _ = writeln!(s.out, "    {} {} {}", status.icon(), Paths(&path.to_string()), status.label().dimmed());
+        let _ = writeln!(
+            s.out,
+            "    {} {} {}",
+            status.icon(),
+            Paths(&path.to_string()),
+            status.label().dimmed()
+        );
     }
 
     /// A skipped item and why (verbose+).
@@ -206,7 +218,13 @@ impl Ui {
         if s.level < Level::Verbose {
             return;
         }
-        let _ = writeln!(s.out, "    {} {} {}", "·".dimmed(), Paths(&path.to_string()), reason.dimmed());
+        let _ = writeln!(
+            s.out,
+            "    {} {} {}",
+            "·".dimmed(),
+            Paths(&path.to_string()),
+            reason.dimmed()
+        );
     }
 
     /// Collect a warning: a full diagnostic with code, spans, and help,
@@ -311,7 +329,13 @@ impl Ui {
         if s.level < Level::Verbose {
             return;
         }
-        let _ = writeln!(s.out, "  {}  {} {}", fmt::clock().dimmed(), code.yellow(), url.dimmed());
+        let _ = writeln!(
+            s.out,
+            "  {}  {} {}",
+            fmt::clock().dimmed(),
+            code.yellow(),
+            url.dimmed()
+        );
     }
 
     /// A progress bar labeled `verb` over `len` items — visible only on a

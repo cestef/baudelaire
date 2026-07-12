@@ -115,11 +115,17 @@ fn glob_assigns_files_to_its_collection_regardless_of_directory() {
     );
     // Files live under `articles/` but the glob routes them to `blog`.
     site.write("content/articles/a.typ", "#frontmatter((title: \"A\",))\na");
-    site.write("content/articles/sub/b.typ", "#frontmatter((title: \"B\",))\nb");
+    site.write(
+        "content/articles/sub/b.typ",
+        "#frontmatter((title: \"B\",))\nb",
+    );
     let cols = discover(&site.config()).unwrap();
     let ids: Vec<&str> = cols.iter().map(|c| c.id.as_str()).collect();
     assert!(ids.contains(&"blog"), "glob collection missing: {ids:?}");
-    assert!(!ids.contains(&"articles"), "files leaked to convention: {ids:?}");
+    assert!(
+        !ids.contains(&"articles"),
+        "files leaked to convention: {ids:?}"
+    );
     let blog = cols.iter().find(|c| c.id == "blog").unwrap();
     assert_eq!(blog.pages.len(), 2);
 }
@@ -172,7 +178,10 @@ fn page_without_frontmatter_loads() {
 #[test]
 fn clean_urls_output_path() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\nclean #true\npaths {\n  dist \"public\"\n}");
+    site.write(
+        "config.kdl",
+        "site \"T\"\nclean #true\npaths {\n  dist \"public\"\n}",
+    );
     site.write(
         "content/posts/hello.typ",
         &frontmatter_post("Hello", "hello", "year: 2024, month: 1, day: 1", &[]),
@@ -263,7 +272,10 @@ fn draft_page_skipped_unless_flag() {
 #[test]
 fn empty_content_dir_returns_empty() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\npaths {\n  content \"content\"\n}");
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n}",
+    );
     fs::create_dir_all(site.root.join("content")).unwrap();
     let cfg = site.config();
     let collections = discover(&cfg).unwrap();
@@ -273,7 +285,10 @@ fn empty_content_dir_returns_empty() {
 #[test]
 fn missing_content_dir_returns_empty() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\npaths {\n  content \"content\"\n}");
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n}",
+    );
     let cfg = site.config();
     let collections = discover(&cfg).unwrap();
     assert!(collections.is_empty());
@@ -327,12 +342,33 @@ fn bundle_index_takes_slug_from_its_directory() {
         "#,
     );
     // A page bundle: the directory name is the slug, not the `index` filename.
-    site.write("content/posts/ring-buffers/index.typ", "#frontmatter((title: \"RB\",))\nbody");
+    site.write(
+        "content/posts/ring-buffers/index.typ",
+        "#frontmatter((title: \"RB\",))\nbody",
+    );
     // A flat file keeps its stem.
-    site.write("content/posts/flat.typ", "#frontmatter((title: \"Flat\",))\nbody");
+    site.write(
+        "content/posts/flat.typ",
+        "#frontmatter((title: \"Flat\",))\nbody",
+    );
     let out = site.run(&["build"]);
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    assert!(site.root.join("public/posts/ring-buffers/index.html").exists(), "bundle dir slug");
-    assert!(site.root.join("public/posts/flat/index.html").exists(), "flat file slug");
-    assert!(!site.root.join("public/posts/index/index.html").exists(), "index must not be the slug");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        site.root
+            .join("public/posts/ring-buffers/index.html")
+            .exists(),
+        "bundle dir slug"
+    );
+    assert!(
+        site.root.join("public/posts/flat/index.html").exists(),
+        "flat file slug"
+    );
+    assert!(
+        !site.root.join("public/posts/index/index.html").exists(),
+        "index must not be the slug"
+    );
 }

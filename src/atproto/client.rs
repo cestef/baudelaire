@@ -66,11 +66,9 @@ impl Session {
             .header("Content-Type", mime.to_string())
             .send(bytes)?;
         let value: Value = resp.json(NSID)?;
-        value
-            .get("blob")
-            .cloned()
-            .map(Blob)
-            .ok_or_else(|| PublishError::xrpc(NSID, resp.status().as_u16(), "response had no `blob`"))
+        value.get("blob").cloned().map(Blob).ok_or_else(|| {
+            PublishError::xrpc(NSID, resp.status().as_u16(), "response had no `blob`")
+        })
     }
 
     /// Create or replace a record at `collection/rkey`.
@@ -81,22 +79,28 @@ impl Session {
         record: &impl Serialize,
     ) -> Result<(), PublishError> {
         const NSID: &str = "com.atproto.repo.putRecord";
-        self.post(NSID, &json!({
-            "repo": self.did.as_str(),
-            "collection": collection.as_str(),
-            "rkey": rkey.as_str(),
-            "record": record,
-        }))
+        self.post(
+            NSID,
+            &json!({
+                "repo": self.did.as_str(),
+                "collection": collection.as_str(),
+                "rkey": rkey.as_str(),
+                "record": record,
+            }),
+        )
     }
 
     /// Delete the record at `collection/rkey`.
     pub fn delete_record(&self, collection: Nsid, rkey: &Rkey) -> Result<(), PublishError> {
         const NSID: &str = "com.atproto.repo.deleteRecord";
-        self.post(NSID, &json!({
-            "repo": self.did.as_str(),
-            "collection": collection.as_str(),
-            "rkey": rkey.as_str(),
-        }))
+        self.post(
+            NSID,
+            &json!({
+                "repo": self.did.as_str(),
+                "collection": collection.as_str(),
+                "rkey": rkey.as_str(),
+            }),
+        )
     }
 
     /// Every record key currently in `collection`, following pagination — the
@@ -119,7 +123,12 @@ impl Session {
             }
             let mut resp = req.call()?;
             let value: Value = resp.json(NSID)?;
-            for record in value.get("records").and_then(Value::as_array).into_iter().flatten() {
+            for record in value
+                .get("records")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 if let Some(rkey) = record
                     .get("uri")
                     .and_then(Value::as_str)

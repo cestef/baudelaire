@@ -27,10 +27,7 @@ impl fmt::Display for Phase {
 pub enum HookError {
     /// The command could not be launched at all (e.g. shell or binary missing).
     #[error("could not run {phase}-build hook `{command}`")]
-    #[diagnostic(
-        code(baudelaire::hook::spawn),
-        help("is the command on your PATH?")
-    )]
+    #[diagnostic(code(baudelaire::hook::spawn), help("is the command on your PATH?"))]
     Spawn {
         phase: Phase,
         command: String,
@@ -55,10 +52,7 @@ pub enum HookError {
     /// The command ran but exited non-zero. Its output already streamed to the
     /// terminal, so the diagnostic only needs to name the failure.
     #[error("{phase}-build hook `{command}` failed ({status})")]
-    #[diagnostic(
-        code(baudelaire::hook::status),
-        help("see the command's output above")
-    )]
+    #[diagnostic(code(baudelaire::hook::status), help("see the command's output above"))]
     Failed {
         phase: Phase,
         command: String,

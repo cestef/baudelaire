@@ -21,7 +21,10 @@ fn serve_responds_with_page() {
             serve { open #false; }
         "#,
     );
-    t.write("content/posts/hello.typ", "#frontmatter((title: \"Hi\",))\nHello body");
+    t.write(
+        "content/posts/hello.typ",
+        "#frontmatter((title: \"Hi\",))\nHello body",
+    );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, body) = srv.get("/posts/hello/");
     assert_eq!(code, 200);
@@ -55,12 +58,15 @@ fn serve_rejects_path_traversal() {
 #[test]
 fn serve_404_for_missing() {
     let t = Site::new();
-    t.write("config.kdl", r#"site "S"
+    t.write(
+        "config.kdl",
+        r#"site "S"
         paths {
             content "content"
             dist "public"
         }
-        serve { open #false; }"#);
+        serve { open #false; }"#,
+    );
     t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, _) = srv.get("/nonexistent");
@@ -70,14 +76,20 @@ fn serve_404_for_missing() {
 #[test]
 fn serve_resolves_without_trailing_slash() {
     let t = Site::new();
-    t.write("config.kdl", r#"site "S"
+    t.write(
+        "config.kdl",
+        r#"site "S"
         paths {
             content "content"
             dist "public"
         }
         clean #true
-        serve { open #false; }"#);
-    t.write("content/posts/hello.typ", "#frontmatter((title: \"Hi\",))\nbody");
+        serve { open #false; }"#,
+    );
+    t.write(
+        "content/posts/hello.typ",
+        "#frontmatter((title: \"Hi\",))\nbody",
+    );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, _) = srv.get("/posts/hello");
     assert_eq!(code, 200);
@@ -97,13 +109,19 @@ fn live_reload_script_injected_only_when_watching() {
     // Watching → the SSE client is injected.
     let srv = Serve::start(&t, &[]);
     let (_, body) = srv.get("/");
-    assert!(body.contains("EventSource"), "reload client missing: {body}");
+    assert!(
+        body.contains("EventSource"),
+        "reload client missing: {body}"
+    );
     drop(srv);
 
     // --no-watch → no injection.
     let srv = Serve::start(&t, &["--no-watch"]);
     let (_, body) = srv.get("/");
-    assert!(!body.contains("EventSource"), "reload client should be absent: {body}");
+    assert!(
+        !body.contains("EventSource"),
+        "reload client should be absent: {body}"
+    );
 }
 
 #[test]
@@ -148,16 +166,62 @@ fn sse_stream_pushes_reload_on_change() {
 }
 
 #[test]
+fn config_edit_reloads_and_pushes_reload() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+    );
+    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    let srv = Serve::start(&t, &[]);
+
+    // Open the event stream, then edit only the config file — it sits at the
+    // project root, outside the content/templates/assets watch roots, so this
+    // proves the config file itself is watched and reloads the session.
+    let mut stream = Command::new("curl")
+        .args([
+            "-s",
+            "-N",
+            "--max-time",
+            "10",
+            &format!("http://127.0.0.1:{}/__baudelaire/live", srv.port()),
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("curl");
+    std::thread::sleep(Duration::from_millis(200));
+    t.write(
+        "config.kdl",
+        "site \"S2\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+    );
+
+    let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
+    let pushed = reader
+        .lines()
+        .map_while(Result::ok)
+        .any(|line| line.contains("data: reload"));
+    let _ = stream.kill();
+    let _ = stream.wait();
+    assert!(pushed, "config edit did not trigger a rebuild + reload");
+}
+
+#[test]
 fn serve_serves_index_at_root() {
     let t = Site::new();
-    t.write("config.kdl", r#"site "S"
+    t.write(
+        "config.kdl",
+        r#"site "S"
         paths {
             content "content"
             dist "public"
         }
         clean #true
-        serve { open #false; }"#);
-    t.write("content/index.typ", "#frontmatter((title: \"Home\",))\nwelcome home");
+        serve { open #false; }"#,
+    );
+    t.write(
+        "content/index.typ",
+        "#frontmatter((title: \"Home\",))\nwelcome home",
+    );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, body) = srv.get("/");
     assert_eq!(code, 200);

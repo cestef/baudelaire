@@ -178,7 +178,11 @@ impl GitInfo {
     /// if git is absent, the command fails, or the output is empty. The single
     /// place this crate shells out to git.
     fn run(root: &Path, args: &[&str]) -> Option<String> {
-        let output = Command::new("git").args(args).current_dir(root).output().ok()?;
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .ok()?;
         if !output.status.success() {
             return None;
         }
@@ -223,7 +227,6 @@ impl SiteInfo {
     }
 }
 
-
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.
     pub fn new(config: &Config, mode: Mode) -> Result<Self> {
@@ -248,7 +251,11 @@ impl Project {
             match FEATURES.iter().find(|(n, _)| n == name) {
                 Some((_, feature)) => features.push(*feature),
                 None => {
-                    let valid = FEATURES.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ");
+                    let valid = FEATURES
+                        .iter()
+                        .map(|(n, _)| *n)
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     return Err(crate::error::ConfigError::unknown_feature(name, &valid).into());
                 }
             }

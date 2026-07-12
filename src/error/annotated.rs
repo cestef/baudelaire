@@ -31,11 +31,7 @@ struct Label {
 impl Annotated {
     /// Start a diagnostic with a stable `code`, a headline `message`, and the
     /// `source` text its spans point into.
-    pub fn new(
-        code: &'static str,
-        message: impl Into<String>,
-        source: impl Into<String>,
-    ) -> Self {
+    pub fn new(code: &'static str, message: impl Into<String>, source: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),

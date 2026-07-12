@@ -82,7 +82,11 @@ impl Item {
     }
 
     /// A row with a trailing `(note)`.
-    pub fn noted(url: impl Into<String>, label: impl Into<String>, note: impl Into<String>) -> Self {
+    pub fn noted(
+        url: impl Into<String>,
+        label: impl Into<String>,
+        note: impl Into<String>,
+    ) -> Self {
         Self {
             note: Some(note.into()),
             ..Self::new(url, label)

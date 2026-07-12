@@ -10,7 +10,9 @@ pub enum PublishError {
     #[error("standard.site publishing is not configured")]
     #[diagnostic(
         code(baudelaire::publish::unconfigured),
-        help("add a `publish {{ standard {{ handle \"you.example.com\" }} }}` block to config.kdl")
+        help(
+            "add a `publish {{ standard {{ handle \"you.example.com\" }} }}` block to config.kdl"
+        )
     )]
     Unconfigured,
 
@@ -26,7 +28,9 @@ pub enum PublishError {
     #[error("no {label} supplied for publishing")]
     #[diagnostic(
         code(baudelaire::publish::secret),
-        help("pass `--password`, set its environment variable, or run in a terminal to be prompted")
+        help(
+            "pass `--password`, set its environment variable, or run in a terminal to be prompted"
+        )
     )]
     MissingSecret { label: String },
 
@@ -91,7 +95,6 @@ impl PublishError {
             message: message.into(),
         }
     }
-
 }
 
 impl From<ureq::Error> for PublishError {

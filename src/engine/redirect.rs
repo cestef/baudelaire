@@ -2,8 +2,8 @@
 
 use super::process::{Emit, Processor, Site};
 use super::xml::Xml;
-use crate::ui::Count;
 use crate::error::Result;
+use crate::ui::Count;
 
 /// Emits a redirect stub for every `redirect` old-path in a page's
 /// frontmatter, forwarding it to that page's permalink.
@@ -33,7 +33,13 @@ impl Redirects {
         let mut html = Xml::fragment();
         html.doctype("html");
         html.empty("meta", &[("charset", "utf-8")]);
-        html.empty("meta", &[("http-equiv", "refresh"), ("content", &format!("0; url={target}"))]);
+        html.empty(
+            "meta",
+            &[
+                ("http-equiv", "refresh"),
+                ("content", &format!("0; url={target}")),
+            ],
+        );
         html.empty("link", &[("rel", "canonical"), ("href", target)]);
         html.leaf("title", "Redirecting…");
         html.nest("a", &[("href", target)], |x| x.text("Redirecting…"));

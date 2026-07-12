@@ -26,7 +26,9 @@ impl Transform for Embed {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let inliner = Inliner::new(cx.config, cx.assets);
         doc.root_mut().walk(&mut |element| {
-            element.assets(&[attr::href, attr::src, attr::poster], |value| inliner.inline(value));
+            element.assets(&[attr::href, attr::src, attr::poster], |value| {
+                inliner.inline(value)
+            });
         });
     }
 }
@@ -72,7 +74,11 @@ impl<'a> Inliner<'a> {
         let path = self.dst.join(rest);
         // best-effort: an unreadable asset stays a plain reference
         let bytes = crate::fs::read(&path).ok()?;
-        Some(format!("data:{};base64,{}", Mime::of(&path), base64(&bytes)))
+        Some(format!(
+            "data:{};base64,{}",
+            Mime::of(&path),
+            base64(&bytes)
+        ))
     }
 }
 

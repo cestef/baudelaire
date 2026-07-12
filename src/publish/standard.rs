@@ -84,14 +84,24 @@ impl Publisher for Standard {
         } else {
             // publication record first, so documents can point at it.
             let icon = self.icon(&session)?;
-            session.put_record(PUBLICATION, &Rkey::literal(PUBLICATION_RKEY), &Publication {
-                kind: PUBLICATION.as_str(),
-                name: site.config.site.clone().unwrap_or_else(|| site.config.label().to_owned()),
-                url: base.to_string(),
-                description: None,
-                icon,
-                preferences: Preferences { show_in_discover: self.config.discover },
-            })?;
+            session.put_record(
+                PUBLICATION,
+                &Rkey::literal(PUBLICATION_RKEY),
+                &Publication {
+                    kind: PUBLICATION.as_str(),
+                    name: site
+                        .config
+                        .site
+                        .clone()
+                        .unwrap_or_else(|| site.config.label().to_owned()),
+                    url: base.to_string(),
+                    description: None,
+                    icon,
+                    preferences: Preferences {
+                        show_in_discover: self.config.discover,
+                    },
+                },
+            )?;
         }
 
         self.documents(site, &session, &publication, opts, ui)
@@ -125,7 +135,9 @@ impl Standard {
             }
             .into()),
             None => {
-                ui.advice(DidUnpinned { did: actual.to_string() });
+                ui.advice(DidUnpinned {
+                    did: actual.to_string(),
+                });
                 Ok(())
             }
         }
@@ -193,7 +205,9 @@ impl Standard {
             for path in &undated {
                 ui.skip(path, "no publication date");
             }
-            ui.warn(Undated { count: undated.len() });
+            ui.warn(Undated {
+                count: undated.len(),
+            });
         }
         ui.done(Summary {
             name: self.name(),
@@ -220,11 +234,19 @@ struct Summary<'a> {
 
 impl std::fmt::Display for Summary<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (put, del) = if self.dry_run { ("to send", "to remove") } else { ("sent", "removed") };
+        let (put, del) = if self.dry_run {
+            ("to send", "to remove")
+        } else {
+            ("sent", "removed")
+        };
         let sent = format!("{} {put}", self.sent).green().to_string();
         let same = format!("{} unchanged", self.unchanged).dimmed().to_string();
         let gone = format!("{} {del}", self.removed);
-        let gone = if self.removed > 0 { gone.yellow().to_string() } else { gone.dimmed().to_string() };
+        let gone = if self.removed > 0 {
+            gone.yellow().to_string()
+        } else {
+            gone.dimmed().to_string()
+        };
         write!(f, "{} · {sent} · {same} · {gone}", self.name.cyan().bold())
     }
 }
@@ -236,8 +258,9 @@ trait Fingerprint {
 
 impl<T: Serialize> Fingerprint for T {
     fn fingerprint(&self) -> Result<String> {
-        let bytes = serde_json::to_vec(self)
-            .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
+        let bytes = serde_json::to_vec(self).map_err(|e| {
+            crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e)
+        })?;
         Ok(blake3::hash(&bytes).to_hex().to_string())
     }
 }
@@ -304,7 +327,12 @@ trait Rfc3339 {
 
 impl Rfc3339 for time::Date {
     fn rfc3339(&self) -> String {
-        format!("{:04}-{:02}-{:02}T00:00:00Z", self.year(), u8::from(self.month()), self.day())
+        format!(
+            "{:04}-{:02}-{:02}T00:00:00Z",
+            self.year(),
+            u8::from(self.month()),
+            self.day()
+        )
     }
 }
 
@@ -345,20 +373,33 @@ mod tests {
     }
 
     fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, dry_run: bool) -> String {
-        Summary { name, sent, unchanged, removed, dry_run }.to_string()
+        Summary {
+            name,
+            sent,
+            unchanged,
+            removed,
+            dry_run,
+        }
+        .to_string()
     }
 
     #[test]
     fn summary_names_the_destination_and_counts() {
         let line = summary("standard.site", 3, 1, 2, false);
         assert!(line.contains("standard.site"), "{line}");
-        assert!(line.contains("3 sent") && line.contains("1 unchanged") && line.contains("2 removed"), "{line}");
+        assert!(
+            line.contains("3 sent") && line.contains("1 unchanged") && line.contains("2 removed"),
+            "{line}"
+        );
     }
 
     #[test]
     fn summary_dry_run_phrases_intent() {
         let line = summary("standard.site", 3, 0, 2, true);
-        assert!(line.contains("3 to send") && line.contains("2 to remove"), "{line}");
+        assert!(
+            line.contains("3 to send") && line.contains("2 to remove"),
+            "{line}"
+        );
     }
 
     #[test]
@@ -373,7 +414,10 @@ mod tests {
         let record = Document::from_doc(&sample(Some(date(2026, 1, 2))), &publication).unwrap();
         let value = serde_json::to_value(&record).unwrap();
         assert_eq!(value["$type"], "site.standard.document");
-        assert_eq!(value["site"], "at://did:plc:x/site.standard.publication/self");
+        assert_eq!(
+            value["site"],
+            "at://did:plc:x/site.standard.publication/self"
+        );
         assert_eq!(value["title"], "Hi");
         assert_eq!(value["publishedAt"], "2026-01-02T00:00:00Z");
         assert_eq!(value["path"], "/posts/hi/");
@@ -400,7 +444,9 @@ mod tests {
             url: "https://example.com".into(),
             description: None,
             icon: None,
-            preferences: Preferences { show_in_discover: true },
+            preferences: Preferences {
+                show_in_discover: true,
+            },
         };
         let value = serde_json::to_value(&record).unwrap();
         assert_eq!(value["$type"], "site.standard.publication");

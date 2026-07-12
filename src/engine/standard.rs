@@ -25,10 +25,20 @@ impl Processor for WellKnown {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         // `enabled` guarantees the did is present.
-        let Some(did) = site.config.publish.standard.as_ref().and_then(|s| s.did.as_deref()) else {
+        let Some(did) = site
+            .config
+            .publish
+            .standard
+            .as_ref()
+            .and_then(|s| s.did.as_deref())
+        else {
             return Ok(());
         };
-        let path = site.config.dist.join(".well-known").join(PUBLICATION.as_str());
+        let path = site
+            .config
+            .dist
+            .join(".well-known")
+            .join(PUBLICATION.as_str());
         out.file(&path, &publication_uri(did).to_string())?;
         out.note(format_args!("wrote .well-known/{}", PUBLICATION.as_str()));
         Ok(())

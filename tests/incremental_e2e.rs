@@ -12,12 +12,16 @@ mod common;
 
 use common::Site;
 
-const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
+const CONFIG: &str =
+    "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
 
 #[test]
 fn second_build_reuses_all_pages() {
     let site = Site::with(CONFIG);
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\nalpha",
+    );
     site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
 
     site.build();
@@ -32,7 +36,10 @@ fn second_build_reuses_all_pages() {
 #[test]
 fn corrupt_manifest_warns_and_rebuilds() {
     let site = Site::with(CONFIG);
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\nalpha",
+    );
     site.build();
 
     // A present-but-unparseable manifest must not be mistaken for a fresh cache.
@@ -48,17 +55,26 @@ fn corrupt_manifest_warns_and_rebuilds() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(logs.contains("unreadable cache manifest"), "expected a warning: {logs}");
+    assert!(
+        logs.contains("unreadable cache manifest"),
+        "expected a warning: {logs}"
+    );
 }
 
 #[test]
 fn editing_a_page_rebuilds_only_it() {
     let site = Site::with(CONFIG);
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\nalpha",
+    );
     site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
     site.build();
 
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nALPHA2");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\nALPHA2",
+    );
     let out = site.build();
 
     // One page recompiled, the other reused.
@@ -153,7 +169,10 @@ fn editing_layout_template_rebuilds_dependent_pages() {
         site.output("posts/a/index.html").contains("<section>"),
         "template change did not invalidate the page"
     );
-    assert!(!out.contains("(1 cached)"), "page should have rebuilt: {out}");
+    assert!(
+        !out.contains("(1 cached)"),
+        "page should have rebuilt: {out}"
+    );
 }
 
 #[test]
@@ -249,8 +268,14 @@ fn changing_a_slug_updates_links_from_cached_pages() {
     site.build();
 
     let a = site.output("posts/a/index.html");
-    assert!(a.contains("/posts/bee/"), "a's link was not updated to b's new slug: {a}");
-    assert!(!a.contains("/posts/b/\""), "a still serves b's stale permalink: {a}");
+    assert!(
+        a.contains("/posts/bee/"),
+        "a's link was not updated to b's new slug: {a}"
+    );
+    assert!(
+        !a.contains("/posts/b/\""),
+        "a still serves b's stale permalink: {a}"
+    );
 }
 
 #[test]
@@ -269,20 +294,33 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     );
     site.build();
     let first = site.output("posts/a/index.html");
-    assert!(first.contains("data:image/svg"), "asset should be inlined: {first}");
+    assert!(
+        first.contains("data:image/svg"),
+        "asset should be inlined: {first}"
+    );
 
     site.write("assets/note.svg", "<svg>TWO</svg>");
     let out = site.build();
 
-    assert!(!out.contains("(1 cached)"), "page must rebuild when its embedded asset changes: {out}");
+    assert!(
+        !out.contains("(1 cached)"),
+        "page must rebuild when its embedded asset changes: {out}"
+    );
     // The freshly inlined bytes differ from the original.
-    assert_ne!(first, site.output("posts/a/index.html"), "inlined asset was not refreshed");
+    assert_ne!(
+        first,
+        site.output("posts/a/index.html"),
+        "inlined asset was not refreshed"
+    );
 }
 
 #[test]
 fn no_cache_flag_forces_full_rebuild() {
     let site = Site::with(CONFIG);
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nalpha");
+    site.write(
+        "content/posts/a.typ",
+        "#frontmatter((title: \"A\",))\nalpha",
+    );
     site.build();
 
     let out = site.run(&["--no-cache", "build", "-v"]);

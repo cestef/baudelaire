@@ -47,7 +47,12 @@ impl Xml {
     }
 
     /// Write `<name attrs…>` … `</name>`, its body produced by `content`.
-    pub(super) fn nest(&mut self, name: &str, attrs: &[(&str, &str)], content: impl FnOnce(&mut Xml)) {
+    pub(super) fn nest(
+        &mut self,
+        name: &str,
+        attrs: &[(&str, &str)],
+        content: impl FnOnce(&mut Xml),
+    ) {
         self.write(Event::Start(Self::start(name, attrs)));
         content(self);
         self.write(Event::End(BytesEnd::new(name.to_owned())));

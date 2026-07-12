@@ -17,14 +17,18 @@ use crate::error::warning::BaseUrlMissing;
 pub(super) struct Llms;
 
 impl Processor for Llms {
-
     fn enabled(&self, config: &Config) -> bool {
         config.llms.enabled
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let base =
-            site.warn_missing_base(out, BaseUrlMissing { feature: "llms.txt", effect: "emitted with relative links" })?;
+        let base = site.warn_missing_base(
+            out,
+            BaseUrlMissing {
+                feature: "llms.txt",
+                effect: "emitted with relative links",
+            },
+        )?;
         let mut md = format!("# {}\n", site.config.label());
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");
@@ -48,7 +52,10 @@ impl Llms {
     fn sections(pages: &[Page]) -> Vec<(&str, Vec<&Page>)> {
         let mut sections: Vec<(&str, Vec<&Page>)> = Vec::new();
         for page in pages {
-            match sections.iter_mut().find(|(name, _)| *name == page.collection) {
+            match sections
+                .iter_mut()
+                .find(|(name, _)| *name == page.collection)
+            {
                 Some((_, list)) => list.push(page),
                 None => sections.push((&page.collection, vec![page])),
             }

@@ -64,7 +64,10 @@ mod tests {
         assert_eq!(Slug::parse("Hello World").unwrap().as_str(), "hello-world");
         assert_eq!(Slug::parse("C++ & Rust").unwrap().as_str(), "c-rust");
         assert_eq!(Slug::parse("my_post").unwrap().as_str(), "my-post");
-        assert_eq!(Slug::parse("already-clean").unwrap().as_str(), "already-clean");
+        assert_eq!(
+            Slug::parse("already-clean").unwrap().as_str(),
+            "already-clean"
+        );
         // Non-ASCII is dropped to keep URLs clean without percent-encoding.
         assert_eq!(Slug::parse("café 🎉 page").unwrap().as_str(), "caf-page");
     }

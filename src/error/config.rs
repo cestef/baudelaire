@@ -78,8 +78,17 @@ impl ConfigError {
 
     /// A value of the wrong KDL type (e.g. a string where a boolean was
     /// expected).
-    pub fn type_mismatch(source: &str, expected: &'static str, got: &'static str, span: SourceSpan) -> Self {
-        Self::at(source, ConfigErrorKind::TypeMismatch { expected, got }, span)
+    pub fn type_mismatch(
+        source: &str,
+        expected: &'static str,
+        got: &'static str,
+        span: SourceSpan,
+    ) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::TypeMismatch { expected, got },
+            span,
+        )
     }
 
     /// An integer literal too large to fit the field's type.
@@ -101,7 +110,10 @@ impl ConfigError {
     pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::NegativeCount { field: field.to_owned(), got },
+            ConfigErrorKind::NegativeCount {
+                field: field.to_owned(),
+                got,
+            },
             span,
         )
     }
@@ -116,7 +128,10 @@ impl ConfigError {
     pub fn duplicate_id(source: &str, noun: &'static str, id: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::DuplicateId { noun, id: id.to_owned() },
+            ConfigErrorKind::DuplicateId {
+                noun,
+                id: id.to_owned(),
+            },
             span,
         )
     }
@@ -125,7 +140,10 @@ impl ConfigError {
     pub fn duplicate_entry(source: &str, name: &str, scope: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::DuplicateEntry { name: name.to_owned(), scope: scope.to_owned() },
+            ConfigErrorKind::DuplicateEntry {
+                name: name.to_owned(),
+                scope: scope.to_owned(),
+            },
             span,
         )
     }
@@ -134,7 +152,9 @@ impl ConfigError {
     pub fn unknown_image_format(source: &str, format: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::UnknownImageFormat { format: format.to_owned() },
+            ConfigErrorKind::UnknownImageFormat {
+                format: format.to_owned(),
+            },
             span,
         )
     }
@@ -143,7 +163,9 @@ impl ConfigError {
     pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::FeatureRemoval { name: name.to_owned() },
+            ConfigErrorKind::FeatureRemoval {
+                name: name.to_owned(),
+            },
             span,
         )
     }
@@ -152,7 +174,10 @@ impl ConfigError {
     pub fn unexpected_argument(source: &str, value: &str, node: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
-            ConfigErrorKind::UnexpectedArgument { value: value.to_owned(), node: node.to_owned() },
+            ConfigErrorKind::UnexpectedArgument {
+                value: value.to_owned(),
+                node: node.to_owned(),
+            },
             span,
         )
     }
@@ -273,7 +298,10 @@ pub enum ConfigErrorKind {
 
     #[error("expected {expected}, got {got}")]
     #[diagnostic(code(baudelaire::config::type_mismatch))]
-    TypeMismatch { expected: &'static str, got: &'static str },
+    TypeMismatch {
+        expected: &'static str,
+        got: &'static str,
+    },
 
     #[error("integer {value} is out of range")]
     #[diagnostic(code(baudelaire::config::integer_overflow))]
@@ -362,4 +390,3 @@ pub enum ConfigErrorKind {
     #[diagnostic(transparent)]
     Permalink(#[from] crate::content::PermalinkError),
 }
-

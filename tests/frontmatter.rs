@@ -145,13 +145,17 @@ body
 
 #[test]
 fn malformed_frontmatter_errors() {
-    let err = try_extract("\n#frontmatter((title: \"unterminated))\nbody\n", &config()).unwrap_err();
+    let err =
+        try_extract("\n#frontmatter((title: \"unterminated))\nbody\n", &config()).unwrap_err();
     // The error names the offending file, not just "failed to evaluate".
     assert!(err.to_string().contains("page.typ"), "{err}");
     // ...and the related diagnostic underlines the offending text (a code frame
     // renders), rather than a bare spanless message.
     let rendered = format!("{:?}", miette::Report::new(err));
-    assert!(rendered.contains("╭─"), "expected a source snippet: {rendered}");
+    assert!(
+        rendered.contains("╭─"),
+        "expected a source snippet: {rendered}"
+    );
 }
 
 #[test]
@@ -225,6 +229,12 @@ fn splice_preserves_line_numbers() {
     // A three-line frontmatter call leaves the body's first line at its
     // original line number (blank lines stand in for the removed call).
     let (_, spliced) = extract("#frontmatter((\n  title: \"X\",\n))\nBody line\n");
-    let body_line = spliced.lines().position(|l| l.contains("Body line")).expect("body");
-    assert_eq!(body_line, 3, "body should stay on line 4 (index 3): {spliced:?}");
+    let body_line = spliced
+        .lines()
+        .position(|l| l.contains("Body line"))
+        .expect("body");
+    assert_eq!(
+        body_line, 3,
+        "body should stay on line 4 (index 3): {spliced:?}"
+    );
 }

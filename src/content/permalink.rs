@@ -25,7 +25,10 @@ impl Permalink {
             // this arm is a bug: fail loudly in debug, fall back to the
             // convention rather than panicking mid-build in release.
             Some(Err(e)) => {
-                debug_assert!(false, "permalink template not validated at config parse: {e}");
+                debug_assert!(
+                    false,
+                    "permalink template not validated at config parse: {e}"
+                );
                 Self::convention()
             }
             None => Self::convention(),
@@ -117,16 +120,22 @@ type Placeholder = (&'static str, fn(&PermalinkCtx) -> String);
 const PLACEHOLDERS: &[Placeholder] = &[
     ("slug", |ctx| ctx.slug.clone()),
     ("collection", |ctx| ctx.collection.clone()),
-    ("year", |ctx| ctx.date.map(|d| d.year().to_string()).unwrap_or_default()),
+    ("year", |ctx| {
+        ctx.date.map(|d| d.year().to_string()).unwrap_or_default()
+    }),
     ("month", |ctx| {
         ctx.date
             .map(|d| format!("{:02}", u8::from(d.month())))
             .unwrap_or_default()
     }),
     ("day", |ctx| {
-        ctx.date.map(|d| format!("{:02}", d.day())).unwrap_or_default()
+        ctx.date
+            .map(|d| format!("{:02}", d.day()))
+            .unwrap_or_default()
     }),
-    ("order", |ctx| ctx.order.map(|o| o.to_string()).unwrap_or_default()),
+    ("order", |ctx| {
+        ctx.order.map(|o| o.to_string()).unwrap_or_default()
+    }),
 ];
 
 /// A single segment of a permalink template.

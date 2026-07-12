@@ -27,7 +27,12 @@ impl Transform for Meta {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let tags = Card { config: cx.config, page: cx.page, assets: cx.assets }.tags();
+        let tags = Card {
+            config: cx.config,
+            page: cx.page,
+            assets: cx.assets,
+        }
+        .tags();
         if tags.is_empty() {
             return;
         }
@@ -57,7 +62,11 @@ impl Card<'_> {
         let image = fm.text("image").map(|src| self.absolute(&src));
         let canonical = self.url();
         // A dated page is an article; everything else is a plain website page.
-        let kind = if fm.date.is_some() { "article" } else { "website" };
+        let kind = if fm.date.is_some() {
+            "article"
+        } else {
+            "website"
+        };
 
         let mut tags = Vec::new();
         if let Some(description) = &description {
@@ -89,7 +98,11 @@ impl Card<'_> {
         // Twitter Card.
         tags.push(Self::named(
             "twitter:card",
-            if image.is_some() { "summary_large_image" } else { "summary" },
+            if image.is_some() {
+                "summary_large_image"
+            } else {
+                "summary"
+            },
         ));
         if !title.is_empty() {
             tags.push(Self::named("twitter:title", &title));

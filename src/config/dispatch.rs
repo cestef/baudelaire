@@ -17,7 +17,10 @@ use super::parse::{EntryExt, NodeExt};
 type Rule<T> = (&'static str, fn(&mut T, &KdlNode, &str) -> Result<()>);
 
 /// A `(key, handler)` rule for an attribute-keyed [`Attrs`] scope.
-type Attr<T> = (&'static str, fn(&mut T, &KdlValue, &str, SourceSpan) -> Result<()>);
+type Attr<T> = (
+    &'static str,
+    fn(&mut T, &KdlValue, &str, SourceSpan) -> Result<()>,
+);
 
 /// A node-keyed scope (child nodes matched by name), e.g. the top-level config
 /// or a `serve { ... }` block. The rule table is the single source of truth for
@@ -170,7 +173,10 @@ mod tests {
 
     #[test]
     fn suggests_the_nearest_key_for_a_typo() {
-        assert_eq!(Keys(&["content", "dist"]).nearest("conten"), Some("content"));
+        assert_eq!(
+            Keys(&["content", "dist"]).nearest("conten"),
+            Some("content")
+        );
         assert_eq!(Keys(&["port", "bind"]).nearest("prt"), Some("port"));
     }
 

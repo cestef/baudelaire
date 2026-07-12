@@ -27,10 +27,19 @@ impl TypstSourceDiagnostic {
         file: Option<FileId>,
         world: Arc<dyn World + Send + Sync>,
     ) -> Self {
-        Self { inner, src, file, world }
+        Self {
+            inner,
+            src,
+            file,
+            world,
+        }
     }
 
-    fn labeled(&self, span: impl Into<DiagSpan>, label: Option<&str>) -> Option<miette::LabeledSpan> {
+    fn labeled(
+        &self,
+        span: impl Into<DiagSpan>,
+        label: Option<&str>,
+    ) -> Option<miette::LabeledSpan> {
         let span = span.into();
         // Only spans in the file `src` holds can be measured against its text.
         if span.id() != self.file {
@@ -102,9 +111,11 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .filter_map(|h| self.labeled(h.span, Some(h.v.as_str())));
         // call stack leading to the error, annotated per frame — surfaces which
         // page/template a shared-module error flowed through.
-        let trace = self.inner.trace.iter().filter_map(|frame| {
-            self.labeled(frame.span, Some(&frame.v.to_string()))
-        });
+        let trace = self
+            .inner
+            .trace
+            .iter()
+            .filter_map(|frame| self.labeled(frame.span, Some(&frame.v.to_string())));
         let labels: Vec<_> = main.chain(hints).chain(trace).collect();
         (!labels.is_empty()).then(|| Box::new(labels.into_iter()) as _)
     }

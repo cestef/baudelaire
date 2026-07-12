@@ -21,7 +21,7 @@ use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
 use rolldown::plugin::{
     HookLoadArgs, HookLoadOutput, HookLoadReturn, HookResolveIdArgs, HookResolveIdOutput,
-    HookResolveIdReturn, HookUsage, Plugin, Pluginable, PluginContext, SharedLoadPluginContext,
+    HookResolveIdReturn, HookUsage, Plugin, PluginContext, Pluginable, SharedLoadPluginContext,
 };
 use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinifyOptions};
 use rolldown_common::{ModuleType, Output};
@@ -59,10 +59,7 @@ pub struct Assets<'a> {
 impl<'a> Assets<'a> {
     pub fn new(config: &'a Config) -> Self {
         let src = &config.assets;
-        let name = src
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("assets");
+        let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("assets");
         Self {
             config,
             src,
@@ -93,7 +90,9 @@ impl<'a> Assets<'a> {
             .into_iter()
             .partition(|file| Kind::of(file, self.config) == Kind::Css);
         for file in other {
-            let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
+            let rel = file
+                .strip_prefix(self.src)
+                .expect("Walk yields paths under src");
             let Some(bytes) = self.render(&file, Kind::of(&file, self.config), bundler.as_ref())?
             else {
                 continue;
@@ -101,7 +100,9 @@ impl<'a> Assets<'a> {
             self.emit(rel, &bytes, &mut out)?;
         }
         for file in css {
-            let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
+            let rel = file
+                .strip_prefix(self.src)
+                .expect("Walk yields paths under src");
             let bytes = self.render_css(&file, rel, &out.map)?;
             self.emit(rel, &bytes, &mut out)?;
         }
@@ -179,7 +180,11 @@ impl<'a> Assets<'a> {
     /// resolve against the stylesheet's own directory; absolute ones are already
     /// served URLs.
     fn resolve_css_url(&self, rel: &Path, raw: &str, map: &AssetMap) -> Option<String> {
-        if raw.starts_with("data:") || raw.starts_with('#') || raw.starts_with("//") || raw.contains("://") {
+        if raw.starts_with("data:")
+            || raw.starts_with('#')
+            || raw.starts_with("//")
+            || raw.contains("://")
+        {
             return None;
         }
         let key = if raw.starts_with('/') {
@@ -221,7 +226,11 @@ impl<'a> Assets<'a> {
                 Self::optimize_jpeg(&bytes, optimize.jpeg.as_ref().expect("jpeg enabled"), file)?
             }
         };
-        Ok(if optimized.len() < bytes.len() { optimized } else { bytes })
+        Ok(if optimized.len() < bytes.len() {
+            optimized
+        } else {
+            bytes
+        })
     }
 
     /// Losslessly optimize a PNG with oxipng: recompress and strip chunks per the
@@ -239,7 +248,8 @@ impl<'a> Assets<'a> {
 
     /// Re-encode a JPEG at the configured quality (lossy).
     fn optimize_jpeg(bytes: &[u8], config: &JpegConfig, file: &Path) -> Result<Vec<u8>> {
-        let decoded = image::load_from_memory(bytes).map_err(|e| AssetError::image(file.display(), e))?;
+        let decoded =
+            image::load_from_memory(bytes).map_err(|e| AssetError::image(file.display(), e))?;
         let mut out = Vec::new();
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, config.quality)
             .encode_image(&decoded)
@@ -294,7 +304,10 @@ enum Kind {
 
 impl Kind {
     fn of(file: &Path, config: &Config) -> Self {
-        let ext = file.extension().and_then(|e| e.to_str()).unwrap_or_default();
+        let ext = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
         if ext.eq_ignore_ascii_case("css") {
             return Self::Css;
         }

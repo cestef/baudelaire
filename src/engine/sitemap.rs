@@ -45,7 +45,10 @@ impl Processor for SiteMap {
         let Some(base) = site.base("sitemap", out)? else {
             return Ok(());
         };
-        out.file(&site.config.dist.join(Self::FILE), &Self::render(&base, site.pages))?;
+        out.file(
+            &site.config.dist.join(Self::FILE),
+            &Self::render(&base, site.pages),
+        )?;
         out.note(format_args!("wrote {}", Self::FILE));
         Ok(())
     }

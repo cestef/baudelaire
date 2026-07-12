@@ -17,9 +17,9 @@ pub mod taxonomy;
 
 pub use frontmatter::{Extract, Frontmatter};
 pub use page::{Collection, Page, PageId, discover};
-pub use slug::Slug;
 pub use pagination::Pagination;
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
+pub use slug::Slug;
 pub use taxonomy::Taxonomy;
 
 use crate::config::Config;

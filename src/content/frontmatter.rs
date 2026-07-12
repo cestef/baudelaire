@@ -15,7 +15,9 @@ use crate::error::{ContentError, Result};
 /// so they are added dynamically). The single source both the `from_dict` match
 /// and the typo suggester read — a new key here plus a match arm, or the sync
 /// test fails.
-const KNOWN: &[&str] = &["title", "date", "draft", "slug", "template", "order", "redirect"];
+const KNOWN: &[&str] = &[
+    "title", "date", "draft", "slug", "template", "order", "redirect",
+];
 
 /// Parsed frontmatter for a single page.
 #[derive(Debug, Clone, Default)]
@@ -59,8 +61,11 @@ impl Frontmatter {
             return Ok(None);
         };
         let data = &text[call.args()];
-        let frontmatter =
-            Self::from_dict(crate::content::eval::EvalWorld::dict(data, path)?, path, config)?;
+        let frontmatter = Self::from_dict(
+            crate::content::eval::EvalWorld::dict(data, path)?,
+            path,
+            config,
+        )?;
         Ok(Some(Extract {
             frontmatter,
             body: call.splice(text),
@@ -73,7 +78,11 @@ impl Frontmatter {
     /// collects its terms; a key that is a near-miss of a known one is a typo
     /// error; anything else passes through to `extra`.
     fn from_dict(dict: Dict, path: &Path, config: &Config) -> Result<Self> {
-        let taxonomies: Vec<&str> = config.taxonomies.iter().map(|(_, t)| t.key.as_str()).collect();
+        let taxonomies: Vec<&str> = config
+            .taxonomies
+            .iter()
+            .map(|(_, t)| t.key.as_str())
+            .collect();
         let mut fm = Self::default();
         for (key, val) in dict.iter() {
             let key = key.as_str();
@@ -86,10 +95,13 @@ impl Frontmatter {
                 "order" => fm.order = Some(val.integer(path, key)?),
                 "redirect" => fm.redirect = val.strings(path, key)?,
                 _ if taxonomies.contains(&key) => {
-                    fm.taxonomies.insert(key.to_owned(), val.strings(path, key)?);
+                    fm.taxonomies
+                        .insert(key.to_owned(), val.strings(path, key)?);
                 }
                 _ => match Self::suggest(key, &taxonomies) {
-                    Some(near) => return Err(ContentError::unknown_frontmatter(path, key, &near).into()),
+                    Some(near) => {
+                        return Err(ContentError::unknown_frontmatter(path, key, &near).into());
+                    }
                     None => {
                         fm.extra.insert(key.to_owned(), val.clone());
                     }
@@ -103,7 +115,11 @@ impl Frontmatter {
     /// one (and not itself a real extra key). Reuses the config did-you-mean
     /// over the one known-key set (built-ins plus configured taxonomies).
     fn suggest(key: &str, taxonomies: &[&str]) -> Option<String> {
-        let known: Vec<&str> = KNOWN.iter().copied().chain(taxonomies.iter().copied()).collect();
+        let known: Vec<&str> = KNOWN
+            .iter()
+            .copied()
+            .chain(taxonomies.iter().copied())
+            .collect();
         Keys::of(&known).nearest(key).map(str::to_owned)
     }
 }
@@ -154,7 +170,10 @@ impl Call {
     fn splice(&self, text: &str) -> String {
         // replace the call with as many newlines as it spanned, so body lines keep
         // their original numbers and compile diagnostics point at the real line.
-        let newlines = text[self.range.clone()].bytes().filter(|&b| b == b'\n').count();
+        let newlines = text[self.range.clone()]
+            .bytes()
+            .filter(|&b| b == b'\n')
+            .count();
         let mut out = String::with_capacity(text.len());
         out.push_str(&text[..self.range.start]);
         out.extend(std::iter::repeat_n('\n', newlines));
@@ -187,21 +206,26 @@ impl ValueExt for Value {
     }
 
     fn string(&self, path: &Path, key: &str) -> Result<String> {
-        self.str()
-            .ok_or_else(|| ContentError::frontmatter_field(path, key, "a string", self.kind(), None).into())
+        self.str().ok_or_else(|| {
+            ContentError::frontmatter_field(path, key, "a string", self.kind(), None).into()
+        })
     }
 
     fn boolean(&self, path: &Path, key: &str) -> Result<bool> {
         match self {
             Value::Bool(b) => Ok(*b),
-            _ => Err(ContentError::frontmatter_field(path, key, "a boolean", self.kind(), None).into()),
+            _ => Err(
+                ContentError::frontmatter_field(path, key, "a boolean", self.kind(), None).into(),
+            ),
         }
     }
 
     fn integer(&self, path: &Path, key: &str) -> Result<i64> {
         match self {
             Value::Int(i) => Ok(*i),
-            _ => Err(ContentError::frontmatter_field(path, key, "an integer", self.kind(), None).into()),
+            _ => Err(
+                ContentError::frontmatter_field(path, key, "an integer", self.kind(), None).into(),
+            ),
         }
     }
 

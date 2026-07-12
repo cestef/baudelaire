@@ -57,16 +57,23 @@ impl Options<'_> {
     /// every backend.
     pub fn secret(&self, env: &str, label: &str) -> Result<String> {
         if let Some(secret) = &self.secret {
-            return if secret == "-" { stdin_line() } else { Ok(secret.clone()) };
+            return if secret == "-" {
+                stdin_line()
+            } else {
+                Ok(secret.clone())
+            };
         }
         if let Ok(secret) = std::env::var(env)
             && !secret.is_empty()
         {
             return Ok(secret);
         }
-        self.interaction
-            .secret(label)?
-            .ok_or_else(|| PublishError::MissingSecret { label: label.to_owned() }.into())
+        self.interaction.secret(label)?.ok_or_else(|| {
+            PublishError::MissingSecret {
+                label: label.to_owned(),
+            }
+            .into()
+        })
     }
 
     /// Confirm a mutating action, short-circuiting to `true` under `--yes`.
@@ -225,8 +232,9 @@ impl SkipCache {
 
     /// Persist the cache for `backend`.
     pub fn save(&self, backend: &str) -> Result<()> {
-        let bytes = serde_json::to_vec(self)
-            .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
+        let bytes = serde_json::to_vec(self).map_err(|e| {
+            crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e)
+        })?;
         crate::fs::write_all(Self::path(backend), bytes)
     }
 
@@ -256,7 +264,12 @@ mod tests {
     }
 
     fn options<'a>(secret: Option<String>, stub: &'a Stub) -> Options<'a> {
-        Options { dry_run: false, yes: false, secret, interaction: stub }
+        Options {
+            dry_run: false,
+            yes: false,
+            secret,
+            interaction: stub,
+        }
     }
 
     /// An env var name no test sets, so secret resolution falls past the env step.
@@ -264,32 +277,49 @@ mod tests {
 
     #[test]
     fn secret_prefers_the_cli_value() {
-        let stub = Stub { confirm: true, secret: Some("prompted".into()) };
+        let stub = Stub {
+            confirm: true,
+            secret: Some("prompted".into()),
+        };
         let opts = options(Some("flag".into()), &stub);
         assert_eq!(opts.secret(UNSET, "pw").unwrap(), "flag");
     }
 
     #[test]
     fn secret_falls_back_to_the_prompt() {
-        let stub = Stub { confirm: true, secret: Some("prompted".into()) };
+        let stub = Stub {
+            confirm: true,
+            secret: Some("prompted".into()),
+        };
         let opts = options(None, &stub);
         assert_eq!(opts.secret(UNSET, "pw").unwrap(), "prompted");
     }
 
     #[test]
     fn secret_missing_when_no_source_can_supply_it() {
-        let stub = Stub { confirm: true, secret: None };
+        let stub = Stub {
+            confirm: true,
+            secret: None,
+        };
         let opts = options(None, &stub);
         assert!(matches!(
             opts.secret(UNSET, "pw"),
-            Err(crate::error::BaudelaireErrorKind::Publish(PublishError::MissingSecret { .. }))
+            Err(crate::error::BaudelaireErrorKind::Publish(
+                PublishError::MissingSecret { .. }
+            ))
         ));
     }
 
     #[test]
     fn confirm_short_circuits_under_yes() {
-        let stub = Stub { confirm: false, secret: None };
-        let opts = Options { yes: true, ..options(None, &stub) };
+        let stub = Stub {
+            confirm: false,
+            secret: None,
+        };
+        let opts = Options {
+            yes: true,
+            ..options(None, &stub)
+        };
         assert!(opts.confirm("go?").unwrap());
     }
 

@@ -45,9 +45,16 @@ impl Processor for SearchIndex {
                 SearchFormat::Inverted => corpus.inverted_json(&cfg.stopwords, cfg.min_length)?,
             };
             out.file(&site.config.dist.join(format.file()), &json)?;
-            out.note(format_args!("wrote {} ({} docs)", format.file(), corpus.len()));
+            out.note(format_args!(
+                "wrote {} ({} docs)",
+                format.file(),
+                corpus.len()
+            ));
             if cfg.client {
-                out.file(&site.config.dist.join(format.client_file()), &format.client())?;
+                out.file(
+                    &site.config.dist.join(format.client_file()),
+                    &format.client(),
+                )?;
                 out.note(format_args!("wrote {}", format.client_file()));
             }
         }
@@ -74,7 +81,11 @@ impl Corpus {
                     .flatten()
                     .unwrap_or_default(),
                 tags: if has(SearchField::Tags) {
-                    page.frontmatter.taxonomies.get("tags").cloned().unwrap_or_default()
+                    page.frontmatter
+                        .taxonomies
+                        .get("tags")
+                        .cloned()
+                        .unwrap_or_default()
                 } else {
                     Vec::new()
                 },
@@ -242,7 +253,10 @@ mod tests {
     #[test]
     fn inverted_index_tokenizes_and_maps_terms_to_docs() {
         let corpus = Corpus {
-            documents: vec![doc("Rust", "rust is fast", &[]), doc("Go", "go is fast", &[])],
+            documents: vec![
+                doc("Rust", "rust is fast", &[]),
+                doc("Go", "go is fast", &[]),
+            ],
         };
         let json = corpus.inverted_json(&["is".into()], 2).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();

@@ -87,7 +87,10 @@ pub struct BrokenLinks {
 impl BrokenLinks {
     /// The strict-mode form: a build-failing error.
     pub fn new(links: Vec<Broken>) -> Self {
-        Self { links, severity: Severity::Error }
+        Self {
+            links,
+            severity: Severity::Error,
+        }
     }
 
     /// The lenient form: the identical diagnostic at warning severity, children
@@ -96,14 +99,21 @@ impl BrokenLinks {
         for link in &mut links {
             link.severity = Severity::Warning;
         }
-        Self { links, severity: Severity::Warning }
+        Self {
+            links,
+            severity: Severity::Warning,
+        }
     }
 }
 
 impl fmt::Display for BrokenLinks {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let n = self.links.len();
-        write!(f, "found {n} broken internal link{}", if n == 1 { "" } else { "s" })
+        write!(
+            f,
+            "found {n} broken internal link{}",
+            if n == 1 { "" } else { "s" }
+        )
     }
 }
 

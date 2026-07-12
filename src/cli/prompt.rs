@@ -30,7 +30,11 @@ pub struct Prompt<'a, T> {
 
 impl<'a, T: Clone> Prompt<'a, T> {
     pub fn new(question: &'a str) -> Self {
-        Self { question, options: Vec::new(), default: 0 }
+        Self {
+            question,
+            options: Vec::new(),
+            default: 0,
+        }
     }
 
     /// Add an option. `keys[0]` is its label; every key matches typed input.
@@ -54,7 +58,11 @@ impl<'a, T: Clone> Prompt<'a, T> {
         if !term.is_term() {
             return Ok(self.chosen(self.default));
         }
-        let last = self.options.len().checked_sub(1).expect("Prompt built with no options");
+        let last = self
+            .options
+            .len()
+            .checked_sub(1)
+            .expect("Prompt built with no options");
         let mut selected = self.default;
         loop {
             self.render(&term, selected, false)?;
@@ -73,7 +81,11 @@ impl<'a, T: Clone> Prompt<'a, T> {
                 }
                 Key::Char(c) => {
                     let c = c.to_ascii_lowercase();
-                    if let Some(i) = self.options.iter().position(|o| o.keys.iter().any(|k| k.starts_with(c))) {
+                    if let Some(i) = self
+                        .options
+                        .iter()
+                        .position(|o| o.keys.iter().any(|k| k.starts_with(c)))
+                    {
                         selected = i;
                     }
                 }
@@ -101,8 +113,13 @@ impl<'a, T: Clone> Prompt<'a, T> {
         term.clear_line()?;
         if done {
             let label = self.options[selected].keys[0];
-            let line =
-                format!("{} {} {} {}", "✓".green().bold(), self.question.bold(), "›".dimmed(), label.cyan());
+            let line = format!(
+                "{} {} {} {}",
+                "✓".green().bold(),
+                self.question.bold(),
+                "›".dimmed(),
+                label.cyan()
+            );
             term.write_line(&line)?;
             return Ok(());
         }
@@ -169,7 +186,10 @@ pub struct Input<'a> {
 
 impl<'a> Input<'a> {
     pub fn new(question: &'a str) -> Self {
-        Self { question, default: "" }
+        Self {
+            question,
+            default: "",
+        }
     }
 
     /// The value returned (and shown as a hint) when the answer is left blank.
@@ -188,7 +208,12 @@ impl<'a> Input<'a> {
             anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         } else {
             let hint = format!("({})", self.default);
-            anstream::eprint!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
+            anstream::eprint!(
+                "{} {} {} ",
+                "?".cyan().bold(),
+                self.question.bold(),
+                hint.dimmed()
+            );
         }
         anstream::stderr().flush()?;
         let mut line = String::new();
@@ -196,6 +221,10 @@ impl<'a> Input<'a> {
             eprintln!();
         }
         let answer = line.trim();
-        Ok(if answer.is_empty() { self.default.to_owned() } else { answer.to_owned() })
+        Ok(if answer.is_empty() {
+            self.default.to_owned()
+        } else {
+            answer.to_owned()
+        })
     }
 }

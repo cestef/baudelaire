@@ -139,7 +139,10 @@ impl Text {
     fn find_close(hay: &[u8], from: usize, tag: &[u8]) -> Option<usize> {
         let mut i = from;
         while i + 2 + tag.len() <= hay.len() {
-            if hay[i] == b'<' && hay[i + 1] == b'/' && hay[i + 2..i + 2 + tag.len()].eq_ignore_ascii_case(tag) {
+            if hay[i] == b'<'
+                && hay[i + 1] == b'/'
+                && hay[i + 2..i + 2 + tag.len()].eq_ignore_ascii_case(tag)
+            {
                 return Some(i);
             }
             i += 1;
@@ -158,7 +161,8 @@ impl Text {
         let after = s.as_bytes().get(1..)?;
         ENTITIES.iter().find_map(|&(ch, name)| {
             let n = name.len();
-            (after.len() > n && after[..n] == *name.as_bytes() && after[n] == b';').then_some((ch, n + 2))
+            (after.len() > n && after[..n] == *name.as_bytes() && after[n] == b';')
+                .then_some((ch, n + 2))
         })
     }
 }
