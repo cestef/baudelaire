@@ -8,7 +8,8 @@ use std::path::PathBuf;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, ServeConfig,
+    PngConfig, PngStrip, PublishConfig, RobotsConfig, SearchConfig, SearchField, ServeConfig,
+    StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -40,6 +41,7 @@ impl Default for Config {
             asset: AssetConfig::default(),
             cache: CacheConfig::default(),
             hooks: HooksConfig::default(),
+            publish: PublishConfig::default(),
             serve: ServeConfig::default(),
             profile: None,
             profiles: Default::default(),
@@ -127,7 +129,7 @@ impl Default for SearchConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            dir: PathBuf::from(Config::SCRATCH).join("cache"),
+            dir: Config::scratch("cache"),
             incremental: true,
         }
     }
@@ -142,6 +144,35 @@ impl Default for ServeConfig {
             watch: true,
             include: Vec::new(),
             exclude: Vec::new(),
+        }
+    }
+}
+
+impl Default for StandardConfig {
+    fn default() -> Self {
+        Self {
+            // No handle by convention: presence of a handle is what a backend
+            // checks to know it was configured.
+            handle: String::new(),
+            // Resolved from the session at publish time; only needed in config
+            // to unlock the offline build-time verification artifacts.
+            did: None,
+            // The Bluesky-operated entryway, which also serves as the PDS for
+            // accounts it hosts; custom-PDS users override this.
+            pds: "https://bsky.social".into(),
+            discover: true,
+            icon: None,
+            verify: VerifyConfig::default(),
+        }
+    }
+}
+
+impl Default for VerifyConfig {
+    fn default() -> Self {
+        // Both on: with a `did` set, a site should verify unless it opts out.
+        Self {
+            wellknown: true,
+            links: true,
         }
     }
 }

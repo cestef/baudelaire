@@ -11,6 +11,7 @@ mod image;
 mod links;
 mod meta;
 mod rewrite;
+mod standard;
 mod transform;
 
 pub use asset::AssetMap;

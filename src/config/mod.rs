@@ -72,6 +72,8 @@ pub struct Config {
     pub cache: CacheConfig,
     /// External command hooks run around the build.
     pub hooks: HooksConfig,
+    /// Publishing destinations for the built site.
+    pub publish: PublishConfig,
     /// Dev server options.
     pub serve: ServeConfig,
     /// The active profile name, if one was applied (exposed to pages).
@@ -85,10 +87,28 @@ pub struct Config {
 }
 
 impl Config {
-    /// Root directory for all build scratch state — the cache today, any other
-    /// generated intermediates tomorrow. Single source for the location so it
-    /// stays consistent between defaults and `clean`.
+    /// Root of all machine-local, regenerable build state, one subdirectory per
+    /// subsystem:
+    ///
+    /// ```text
+    /// .baudelaire/
+    ///   cache/    incremental build cache — loss forces a full rebuild
+    ///   publish/  per-backend publish skip-cache — loss forces idempotent re-sends
+    /// ```
+    ///
+    /// Everything here is derivable, never authored: it is gitignored, wiped by
+    /// `clean`, and safe to delete at any time. Single source for the location so
+    /// defaults, `clean`, and each subsystem agree; join a subdir via [`scratch`].
+    ///
+    /// [`scratch`]: Config::scratch
     pub const SCRATCH: &'static str = ".baudelaire";
+
+    /// The path of a named scratch subdirectory (e.g. `cache`, `publish`) — the
+    /// one builder every subsystem uses to locate its local state under
+    /// [`SCRATCH`](Config::SCRATCH).
+    pub fn scratch(sub: &str) -> PathBuf {
+        PathBuf::from(Self::SCRATCH).join(sub)
+    }
 
     /// Human-readable site label for CLI output.
     pub fn label(&self) -> &str {
@@ -204,6 +224,7 @@ impl std::hash::Hash for Config {
             asset,
             cache,
             hooks,
+            publish,
             // Dev-server settings (port, bind, open, watch) never affect
             // generated output, so they must not key the cache — otherwise a
             // `serve` on a custom port would invalidate a `build`'s cache.
@@ -219,8 +240,8 @@ impl std::hash::Hash for Config {
         } = self;
         (site, url, lang, author, content, dist, assets, templates).hash(state);
         (clean, future, sitemap, robots, llms, draft, links, feed, search).hash(state);
-        (inputs, features, collections, taxonomies, html, images, asset, cache, hooks, profile)
-            .hash(state);
+        (inputs, features, collections, taxonomies, html, images).hash(state);
+        (asset, cache, hooks, publish, profile).hash(state);
     }
 }
 
@@ -495,6 +516,47 @@ pub struct HooksConfig {
     pub before: Vec<String>,
     /// Commands run after the site is written to `dist`.
     pub after: Vec<String>,
+}
+
+/// Publishing destinations for the built site. Each backend is an optional
+/// block under `publish { … }`; adding a destination is one field here plus one
+/// backend in [`crate::publish`]. Secrets are never stored here — a backend
+/// reads its credentials from the environment at publish time.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct PublishConfig {
+    /// standard.site (AT Protocol) publishing.
+    pub standard: Option<StandardConfig>,
+}
+
+/// The standard.site (AT Protocol) publishing target.
+#[derive(Debug, Clone, Hash)]
+pub struct StandardConfig {
+    /// Account handle or DID to authenticate as, e.g. `you.bsky.social`.
+    pub handle: String,
+    /// Repository DID (a stable public identifier, not a secret). When set, the
+    /// build emits the standard.site verification artifacts — the `.well-known`
+    /// file and per-page `<link>` tags — offline; publishing checks it against
+    /// the authenticated session.
+    pub did: Option<String>,
+    /// PDS/entryway host to authenticate and write records against.
+    pub pds: String,
+    /// Opt the publication into discovery surfaces.
+    pub discover: bool,
+    /// Publication icon, a path (under the project root) uploaded as a blob.
+    pub icon: Option<PathBuf>,
+    /// Which build-time verification artifacts to emit (requires `did`).
+    pub verify: VerifyConfig,
+}
+
+/// The standard.site domain-verification artifacts the build emits, each
+/// toggleable. Both require a configured `did`; either alone proves the site and
+/// the records belong together, so a site may emit one, the other, or both.
+#[derive(Debug, Clone, Hash)]
+pub struct VerifyConfig {
+    /// Emit `/.well-known/site.standard.publication` (the publication `at://` URI).
+    pub wellknown: bool,
+    /// Inject a per-page `<link rel="site.standard.document">` into dated pages.
+    pub links: bool,
 }
 
 /// Dev server options.

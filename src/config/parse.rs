@@ -6,8 +6,8 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, SearchFormat, ServeConfig,
-    TaxonomyConfig,
+    PngConfig, PngStrip, PublishConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
+    ServeConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
 use crate::error::{ConfigError, Result};
@@ -50,6 +50,7 @@ impl Config {
         ("collections", |c, n, t| { c.collections = n.collections(t)?; Ok(()) }),
         ("taxonomies", |c, n, t| { c.taxonomies = n.taxonomies(t)?; Ok(()) }),
         ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
+        ("publish", |c, n, t| n.publish(&mut c.publish, t)),
         ("serve", |c, n, t| n.serve(&mut c.serve, t)),
         ("profiles", |c, n, t| { c.profiles = n.profiles(t)?; Ok(()) }),
     ]);
@@ -101,6 +102,9 @@ pub(super) trait NodeExt {
     fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()>;
     fn cache(&self, target: &mut CacheConfig, text: &str) -> Result<()>;
     fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()>;
+    fn publish(&self, target: &mut PublishConfig, text: &str) -> Result<()>;
+    fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()>;
+    fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()>;
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()>;
     fn profiles(&self, text: &str) -> Result<Vec<(String, KdlDocument)>>;
 }
@@ -431,6 +435,40 @@ impl NodeExt for KdlNode {
             ("after", |c, n, t| { c.after = n.words(t)?; Ok(()) }),
         ]);
         HOOKS.fill(target, self, text)
+    }
+
+    /// The `publish { … }` parent section: one block per destination backend.
+    fn publish(&self, target: &mut PublishConfig, text: &str) -> Result<()> {
+        const PUBLISH: Block<PublishConfig> =
+            Block(&[("standard", |c, n, t| n.standard(&mut c.standard, t))]);
+        PUBLISH.fill(target, self, text)
+    }
+
+    /// The `standard { … }` block: presence enables the standard.site backend.
+    /// Fills onto the existing config so a profile tuning one key keeps the rest.
+    fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()> {
+        const STANDARD: Block<StandardConfig> = Block(&[
+            ("handle", |c, n, t| { c.handle = n.string(t, 0)?; Ok(()) }),
+            ("did", |c, n, t| { c.did = Some(n.string(t, 0)?); Ok(()) }),
+            ("pds", |c, n, t| { c.pds = n.string(t, 0)?; Ok(()) }),
+            ("discover", |c, n, t| { c.discover = n.boolean(t, 0)?; Ok(()) }),
+            ("icon", |c, n, t| { c.icon = Some(n.string(t, 0)?.into()); Ok(()) }),
+            ("verify", |c, n, t| n.verify(&mut c.verify, t)),
+        ]);
+        let mut cfg = target.take().unwrap_or_default();
+        STANDARD.fill(&mut cfg, self, text)?;
+        *target = Some(cfg);
+        Ok(())
+    }
+
+    /// The `verify { wellknown; links }` block: which build-time verification
+    /// artifacts to emit.
+    fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()> {
+        const VERIFY: Block<VerifyConfig> = Block(&[
+            ("wellknown", |c, n, t| { c.wellknown = n.boolean(t, 0)?; Ok(()) }),
+            ("links", |c, n, t| { c.links = n.boolean(t, 0)?; Ok(()) }),
+        ]);
+        VERIFY.fill(target, self, text)
     }
 
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()> {

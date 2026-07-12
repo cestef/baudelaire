@@ -116,8 +116,10 @@ pub enum Command {
     Check,
     /// Scaffold a new content file.
     New(NewArgs),
-    /// Remove the dist and cache directories.
-    Clean,
+    /// Publish the built site to every configured destination.
+    Publish,
+    /// Remove build output and local build state.
+    Clean(CleanArgs),
     /// Scaffold a new project (config.kdl + dirs).
     Init(InitArgs),
 }
@@ -144,6 +146,55 @@ pub struct ServeArgs {
     /// Disable file watching and live rebuild.
     #[arg(long)]
     pub no_watch: bool,
+}
+
+/// Arguments for `baudelaire clean`. With no target flag every directory is
+/// swept; naming targets narrows it to those, so `clean --cache` forces a
+/// rebuild without discarding publish state.
+#[derive(Args, Debug, Clone)]
+pub struct CleanArgs {
+    /// Remove the build output directory.
+    #[arg(long)]
+    pub dist: bool,
+    /// Remove the incremental build cache.
+    #[arg(long)]
+    pub cache: bool,
+    /// Remove local publish state.
+    #[arg(long)]
+    pub publish: bool,
+}
+
+impl CleanArgs {
+    /// No explicit target means sweep everything.
+    fn all(&self) -> bool {
+        !(self.dist || self.cache || self.publish)
+    }
+
+    /// The directories to remove for this invocation. A full sweep clears the
+    /// output plus the whole scratch root in one step (covering the cache,
+    /// publish state, and any future intermediate); a relocated cache dir lives
+    /// outside that root, so it is named explicitly. A narrowed sweep removes
+    /// only the subdirectories asked for.
+    fn targets(&self, config: &Config) -> Vec<PathBuf> {
+        if self.all() {
+            let mut dirs = vec![config.dist.clone(), PathBuf::from(Config::SCRATCH)];
+            if !config.cache.dir.starts_with(Config::SCRATCH) {
+                dirs.push(config.cache.dir.clone());
+            }
+            return dirs;
+        }
+        let mut dirs = Vec::new();
+        if self.dist {
+            dirs.push(config.dist.clone());
+        }
+        if self.cache {
+            dirs.push(config.cache.dir.clone());
+        }
+        if self.publish {
+            dirs.push(Config::scratch("publish"));
+        }
+        dirs
+    }
 }
 
 /// Arguments for `baudelaire new`.
@@ -250,9 +301,16 @@ pub fn run(cli: Cli) -> Result<()> {
             let config = cli.load_config()?;
             scaffold::new_page(&mut report, &args.target(&config), &config)?;
         }
-        Command::Clean => {
+        Command::Publish => {
             let config = cli.load_config()?;
-            clean(&mut report, &config)?;
+            // Build first, so a publish always reflects the current sources.
+            crate::engine::Engine::new(config.clone(), crate::engine::Mode::Build)?
+                .build(&mut report)?;
+            crate::publish::run(&config, &mut report)?;
+        }
+        Command::Clean(args) => {
+            let config = cli.load_config()?;
+            clean(&mut report, &config, &args)?;
         }
         Command::Init(args) => {
             // A positional directory scaffolds there (`init my-site`); with none,
@@ -303,21 +361,54 @@ impl ServeArgs {
     }
 }
 
-fn clean(report: &mut Report, config: &Config) -> Result<()> {
+fn clean(report: &mut Report, config: &Config, args: &CleanArgs) -> Result<()> {
     report.milestone("cleaning")?;
-    // The scratch root covers the cache; the configured cache dir is also
-    // removed in case it was relocated outside `.baudelaire`.
-    let targets = [
-        config.dist.clone(),
-        PathBuf::from(Config::SCRATCH),
-        config.cache.dir.clone(),
-    ];
-    for dir in &targets {
+    let mut removed = 0;
+    for dir in args.targets(config) {
         if dir.exists() {
             report.muted(format_args!("removing {}", dir.display()))?;
-            crate::fs::remove_dir_all(dir)?;
+            crate::fs::remove_dir_all(&dir)?;
+            removed += 1;
         }
     }
-    report.success("clean complete")?;
+    match removed {
+        0 => report.success("nothing to clean")?,
+        _ => report.success("clean complete")?,
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(dist: bool, cache: bool, publish: bool) -> CleanArgs {
+        CleanArgs { dist, cache, publish }
+    }
+
+    #[test]
+    fn full_sweep_clears_output_and_scratch_root() {
+        let config = Config::default();
+        let targets = args(false, false, false).targets(&config);
+        assert!(targets.contains(&config.dist));
+        assert!(targets.contains(&PathBuf::from(Config::SCRATCH)));
+        // The default cache lives under the scratch root, so it is not named
+        // separately — the root sweep already covers it.
+        assert!(!targets.contains(&config.cache.dir));
+    }
+
+    #[test]
+    fn full_sweep_names_a_relocated_cache() {
+        let mut config = Config::default();
+        config.cache.dir = PathBuf::from("/var/tmp/bd-cache");
+        assert!(args(false, false, false).targets(&config).contains(&config.cache.dir));
+    }
+
+    #[test]
+    fn narrowed_sweep_targets_only_the_named_dirs() {
+        let config = Config::default();
+        assert_eq!(args(false, true, false).targets(&config), vec![config.cache.dir.clone()]);
+        assert_eq!(args(false, false, true).targets(&config), vec![Config::scratch("publish")]);
+        assert_eq!(args(true, false, false).targets(&config), vec![config.dist.clone()]);
+    }
 }

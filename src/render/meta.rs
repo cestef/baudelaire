@@ -31,21 +31,11 @@ impl Transform for Meta {
         if tags.is_empty() {
             return;
         }
-        if let Some(head) = Self::head(doc.root_mut()) {
+        if let Some(head) = super::transform::head(doc.root_mut()) {
             for node in tags {
                 head.children.push(node);
             }
         }
-    }
-}
-
-impl Meta {
-    /// The document `<head>`, a direct child of the root `<html>` element.
-    fn head(root: &mut HtmlElement) -> Option<&mut HtmlElement> {
-        root.children.make_mut().iter_mut().find_map(|node| match node {
-            HtmlNode::Element(el) if el.tag == tag::head => Some(el),
-            _ => None,
-        })
     }
 }
 

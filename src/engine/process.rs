@@ -19,6 +19,7 @@ use super::redirect::Redirects;
 use super::robots::Robots;
 use super::search::SearchIndex;
 use super::sitemap::SiteMap;
+use super::standard::WellKnown;
 
 /// Read-only view of the fully built site handed to every processor.
 pub(super) struct Site<'a> {
@@ -93,6 +94,7 @@ impl Processors {
             Box::new(Llms),
             Box::new(Feeds),
             Box::new(SearchIndex),
+            Box::new(WellKnown),
         ])
     }
 

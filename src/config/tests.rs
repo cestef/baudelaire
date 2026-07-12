@@ -15,6 +15,33 @@ fn empty_uses_defaults() {
 }
 
 #[test]
+fn publish_standard_block_enables_backend_with_defaults() {
+    let cfg = parse("publish {\n  standard {\n    handle \"me.bsky.social\"\n  }\n}\n");
+    let standard = cfg.publish.standard.expect("standard backend configured");
+    assert_eq!(standard.handle, "me.bsky.social");
+    assert_eq!(standard.pds, "https://bsky.social");
+    assert!(standard.discover);
+    assert!(standard.icon.is_none());
+}
+
+#[test]
+fn publish_unset_leaves_no_backend() {
+    assert!(parse("").publish.standard.is_none());
+}
+
+#[test]
+fn publish_standard_did_and_verify_toggles() {
+    let cfg = parse(
+        "publish {\n  standard {\n    handle \"me.example\"\n    did \"did:plc:abc\"\n    verify {\n      links #false\n    }\n  }\n}\n",
+    );
+    let standard = cfg.publish.standard.expect("configured");
+    assert_eq!(standard.did.as_deref(), Some("did:plc:abc"));
+    // Toggled off explicitly; the untouched sibling keeps its default.
+    assert!(!standard.verify.links);
+    assert!(standard.verify.wellknown);
+}
+
+#[test]
 fn scalars() {
     let cfg = parse(
         r#"

@@ -7,6 +7,7 @@ pub mod content;
 pub mod fs;
 pub mod hook;
 pub mod link;
+pub mod publish;
 pub mod scaffold;
 pub mod serialize;
 pub mod serve;
@@ -19,6 +20,7 @@ pub use content::{ContentError, ContentErrorKind};
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks};
+pub use publish::PublishError;
 pub use scaffold::{ScaffoldError, ScaffoldErrorKind};
 pub use serialize::{Artifact, SerializeError};
 pub use serve::{ServeError, ServeErrorKind};
@@ -84,6 +86,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Hook(#[from] crate::error::HookError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Publish(#[from] crate::error::PublishError),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

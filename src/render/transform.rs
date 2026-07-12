@@ -6,7 +6,7 @@
 //! of the DOM pipeline: a new pass is one `impl Transform` plus one line in that
 //! list, each gated on its own config. Even core link resolution is a transform.
 
-use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr};
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::Config;
 use crate::content::Page;
@@ -18,6 +18,7 @@ use super::fingerprint::Fingerprint;
 use super::image::Images;
 use super::meta::Meta;
 use super::rewrite::Links;
+use super::standard::Verify;
 
 /// Per-page context handed to every transform. Transforms run sequentially for
 /// a page, so they share this one mutable accumulator.
@@ -101,6 +102,16 @@ impl ElementExt for HtmlElement {
     }
 }
 
+/// The document `<head>`, a direct child of the root `<html>` — the one place a
+/// transform appends head elements, shared so meta and verification tags find it
+/// the same way.
+pub(super) fn head(root: &mut HtmlElement) -> Option<&mut HtmlElement> {
+    root.children.make_mut().iter_mut().find_map(|node| match node {
+        HtmlNode::Element(el) if el.tag == tag::head => Some(el),
+        _ => None,
+    })
+}
+
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning
 /// [`super::Renderer`] is shared read-only across the parallel compile pool.
 pub(super) trait Transform: Send + Sync {
@@ -122,6 +133,7 @@ impl Transforms {
         Self(vec![
             Box::new(Links),
             Box::new(Meta),
+            Box::new(Verify),
             Box::new(Images),
             Box::new(Embed),
             Box::new(Fingerprint),

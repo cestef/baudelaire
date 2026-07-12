@@ -1287,3 +1287,99 @@ fn colliding_taxonomy_terms_are_rejected() {
     assert!(!out.status.success(), "two terms slugging to `c` must fail the build");
     assert!(String::from_utf8_lossy(&out.stderr).contains("slug to `c`"));
 }
+
+/// A configured `did` makes the build emit the standard.site verification
+/// artifacts offline: the `.well-known` file and a per-page `<link>` on dated
+/// pages. This is the whole build-time contract, exercised end to end.
+#[test]
+fn standard_verify_emits_wellknown_and_link_on_dated_pages() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            paths { content "content" dist "public" }
+            clean #true
+            publish {
+                standard {
+                    handle "me.example"
+                    did "did:plc:test123"
+                }
+            }
+        "#,
+    );
+    site.write(
+        "content/posts/dated.typ",
+        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+    );
+    site.write("content/posts/undated.typ", "#frontmatter((title: \"Undated\",))\nbody");
+
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    let well = fs::read_to_string(site.root.join("public/.well-known/site.standard.publication")).unwrap();
+    assert_eq!(well, "at://did:plc:test123/site.standard.publication/self");
+
+    let dated = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
+    assert!(dated.contains(r#"rel="site.standard.document""#), "{dated}");
+    assert!(dated.contains("at://did:plc:test123/site.standard.document/"), "{dated}");
+
+    // An undated page is not a document, so it carries no backlink.
+    let undated = fs::read_to_string(site.root.join("public/posts/undated/index.html")).unwrap();
+    assert!(!undated.contains("site.standard.document"), "{undated}");
+}
+
+/// Without a `did`, nothing standard.site-related touches the build output.
+#[test]
+fn standard_verify_absent_without_a_did() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            paths { content "content" dist "public" }
+            clean #true
+            publish { standard { handle "me.example" } }
+        "#,
+    );
+    site.write(
+        "content/posts/dated.typ",
+        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+    );
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(!site.root.join("public/.well-known/site.standard.publication").exists());
+    let html = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
+    assert!(!html.contains("site.standard.document"), "{html}");
+}
+
+/// The verification toggles are honored: `verify { wellknown #false }` drops the
+/// file while the per-page link stays.
+#[test]
+fn standard_verify_toggle_suppresses_wellknown_only() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            paths { content "content" dist "public" }
+            clean #true
+            publish {
+                standard {
+                    handle "me.example"
+                    did "did:plc:test123"
+                    verify { wellknown #false }
+                }
+            }
+        "#,
+    );
+    site.write(
+        "content/posts/dated.typ",
+        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+    );
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(!site.root.join("public/.well-known/site.standard.publication").exists());
+    let html = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
+    assert!(html.contains(r#"rel="site.standard.document""#), "{html}");
+}

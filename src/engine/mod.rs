@@ -10,6 +10,7 @@ mod redirect;
 mod robots;
 mod search;
 mod sitemap;
+mod standard;
 pub mod text;
 mod xml;
 
