@@ -28,7 +28,7 @@ impl Processor for Llms {
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");
         }
-        for (collection, pages) in Self::by_collection(site.pages) {
+        for (collection, pages) in Self::sections(site.pages) {
             let _ = write!(md, "\n## {collection}\n\n");
             for page in pages {
                 let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
@@ -43,7 +43,7 @@ impl Processor for Llms {
 impl Llms {
     /// Group pages by collection, preserving first-seen order for both the
     /// sections and the pages within them.
-    fn by_collection(pages: &[Page]) -> Vec<(&str, Vec<&Page>)> {
+    fn sections(pages: &[Page]) -> Vec<(&str, Vec<&Page>)> {
         let mut sections: Vec<(&str, Vec<&Page>)> = Vec::new();
         for page in pages {
             match sections.iter_mut().find(|(name, _)| *name == page.collection) {

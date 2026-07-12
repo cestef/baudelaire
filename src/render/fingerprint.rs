@@ -28,10 +28,9 @@ impl Transform for Fingerprint {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         doc.root_mut().walk(&mut |element| {
-            element.rewrite(&[attr::href, attr::src, attr::content, attr::poster], |value| {
+            element.assets(&[attr::href, attr::src, attr::content, attr::poster], |value| {
                 cx.assets.resolve(value)
             });
-            element.rewrite_srcset(|url| cx.assets.resolve(url));
         });
     }
 }

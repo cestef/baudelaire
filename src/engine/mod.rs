@@ -22,17 +22,16 @@ use typst::syntax::{FileId, Source};
 use typst::{World, compile};
 use typst_html::{HtmlDocument, HtmlOptions};
 
-use crate::cli::output::{Count, PageStatus, Paths, Report};
+use crate::cli::output::{Bytes, Count, PageStatus, Paths, Report};
 use crate::config::Config;
-use crate::content::{Page, Pagination, Taxonomy, discover};
+use crate::content::{Page, plan};
 use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::Layout;
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::fs;
 use crate::error::{
-    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, ContentError, Result,
-    TypstSourceDiagnostic,
+    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
 };
 use crate::graph::{Cache, Deps, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
@@ -61,6 +60,7 @@ struct Summary<'a> {
     cached: usize,
     assets: usize,
     generated: usize,
+    bytes: u64,
     warnings: usize,
     dist: &'a Path,
 }
@@ -76,6 +76,9 @@ impl Summary<'_> {
         }
         if self.generated > 0 {
             parts.push(Count::files(self.generated).to_string());
+        }
+        if self.bytes > 0 {
+            parts.push(Bytes(self.bytes).to_string());
         }
         if self.warnings > 0 {
             parts.push(Count::warnings(self.warnings).to_string());
@@ -113,8 +116,10 @@ impl Engine {
         // pipeline (fingerprint rewriting) and folds into the cache fingerprint,
         // so a re-fingerprinted asset invalidates the pages that reference it.
         report.info("processing assets")?;
-        let (assets, asset_count) = Assets::new(&self.config).process()?;
-        let renderer = Renderer::new(&pages, assets);
+        let assets = Assets::new(&self.config).process()?;
+        let asset_count = assets.count;
+        let asset_bytes = assets.bytes;
+        let renderer = Renderer::new(&pages, assets.map);
         // The render-side cache inputs: asset renames, the link map, and — only
         // when pages inline asset bytes — the embedded asset contents (which the
         // per-page dependency tracker cannot see, since typst never reads them).
@@ -159,26 +164,22 @@ impl Engine {
         for (page, _) in &cached {
             report.page(self.relative(page), PageStatus::Cached)?;
         }
-        // Write every page's HTML in parallel — independent files, no shared
-        // state — so a page-count-heavy site isn't bottlenecked on serial I/O
-        // after the parallel compile.
-        let writes: Vec<(&Path, &str)> = rendered
-            .iter()
-            .map(|r| (r.page.output.as_path(), r.html.as_str()))
-            .chain(cached.iter().map(|(page, html)| (page.output.as_path(), html.as_str())))
-            .collect();
-        writes.par_iter().try_for_each(|(path, html)| fs::write_all(path, html))?;
-
         // Pair every page (freshly rendered and cache-served alike) with its
-        // final HTML. Shared by the cache (to stage HTML blobs) and the
-        // post-build processors (which derive from page text).
+        // final HTML, once: the write pass, the cache blob staging, and the
+        // post-build processors all read this single view.
         let outputs: Vec<(&Page, &str)> = rendered
             .iter()
             .map(|r| (r.page, r.html.as_str()))
             .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
             .collect();
+        // Write every page's HTML in parallel — independent files, no shared
+        // state — so a page-count-heavy site isn't bottlenecked on serial I/O
+        // after the parallel compile.
+        outputs
+            .par_iter()
+            .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
         cache.save(&outputs)?;
-        let generated = {
+        let (generated, generated_bytes) = {
             let site = Site {
                 config: &self.config,
                 pages: &pages,
@@ -186,8 +187,11 @@ impl Engine {
             };
             let mut emitter = Emitter::new(report);
             Processors::builtin().run(&site, &mut emitter)?;
-            emitter.written()
+            (emitter.written(), emitter.bytes())
         };
+        // Total output size: page HTML (fresh and cached alike) + processed
+        // assets + generated files.
+        let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
 
         // `after` hooks run once the whole site is on disk (deploy scripts,
         // post-processors like Pagefind, …).
@@ -199,6 +203,7 @@ impl Engine {
             cached: cached.len(),
             assets: asset_count,
             generated,
+            bytes: page_bytes + asset_bytes + generated_bytes,
             warnings: report.warnings() - warned,
             dist: &self.config.dist,
         }
@@ -227,7 +232,7 @@ impl Engine {
 
     /// Discover eligible pages and print the opening milestone for `action`.
     fn announce(&self, report: &mut Report, action: &str) -> Result<Vec<Page>> {
-        let pages = self.pages()?;
+        let pages = plan(&self.config)?;
         report.milestone(format_args!(
             "{action} {} ({})",
             self.config.label(),
@@ -278,42 +283,6 @@ impl Engine {
             .to_string()
     }
 
-    /// Discover and filter pages eligible for build, plus generated taxonomy
-    /// and paginated index pages built from them.
-    fn pages(&self) -> Result<Vec<Page>> {
-        let collections = discover(&self.config)?;
-        let mut pages: Vec<Page> = collections
-            .iter()
-            .flat_map(|c| c.pages.iter())
-            .filter(|p| p.eligible(&self.config))
-            .cloned()
-            .collect();
-        pages.extend(Taxonomy::pages(&self.config, &pages)?);
-        pages.extend(Pagination::pages(&self.config, &collections));
-        Self::ensure_unique(&pages)?;
-        Ok(pages)
-    }
-
-    /// Reject two pages that resolve to the same permalink — otherwise the
-    /// second silently overwrites the first's output (and clobbers its cache
-    /// entry, which is keyed by source). Catches colliding slugs, a real
-    /// `posts/index.typ` shadowing a paginated `/posts/`, and nested files that
-    /// flatten to one URL.
-    fn ensure_unique(pages: &[Page]) -> Result<()> {
-        let mut seen: std::collections::HashMap<&str, &Page> = std::collections::HashMap::new();
-        for page in pages {
-            if let Some(prev) = seen.insert(&page.permalink, page) {
-                return Err(ContentError::collision(
-                    &page.permalink,
-                    &prev.source.display().to_string(),
-                    &page.source.display().to_string(),
-                )
-                .into());
-            }
-        }
-        Ok(())
-    }
-
     /// The compile input for a page: its (possibly synthetic) source and its
     /// content fingerprint — a hash of the exact text typst compiles, which
     /// covers generated pages whose sources never touch disk. Built once and
@@ -323,7 +292,14 @@ impl Engine {
         let id = FileId::new(rooted);
         let text = match &page.template {
             Some(template) => {
-                Layout::new(&self.config.templates, template, &page.data, &page.body).to_string()
+                let taxonomies = crate::codegen::Value::dict(page.frontmatter.taxonomies.iter().map(
+                    |(name, terms)| {
+                        (name.clone(), crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)))
+                    },
+                ))
+                .to_string();
+                Layout::new(&self.config.templates, template, &page.data, &taxonomies, &page.body)
+                    .to_string()
             }
             None => page.body.clone(),
         };

@@ -278,6 +278,11 @@ impl Project {
     /// fully-cached rebuild.
     fn system_fonts() -> FontStore {
         let mut fonts = FontStore::new();
+        // Typst's embedded defaults (Libertinus, New Computer Modern, DejaVu)
+        // first, then system fonts — so a glyph resolves the same way it does
+        // under `typst` itself, instead of falling back to whatever the system
+        // happens to offer (which can rasterize digits as colour-font images).
+        fonts.extend(typst_kit::fonts::embedded());
         fonts.extend(typst_kit::fonts::system());
         fonts
     }
@@ -318,14 +323,14 @@ impl Project {
     /// dependency set.
     pub fn dependencies<W: World>(&self, world: &Tracked<W>) -> Deps {
         let main = world.main();
-        let files = world
+        world
             .accessed()
             .into_iter()
             .filter(|id| *id != main)
             .filter_map(|id| self.path_of(id))
             .filter_map(|p| crate::fs::canonicalize(p).ok())
-            .collect();
-        Deps::from_paths(files)
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 

@@ -130,6 +130,35 @@ impl<'a, T: Clone> Prompt<'a, T> {
     }
 }
 
+/// A styled hidden-input prompt for secrets — the same `? question` prefix as
+/// [`Input`], but the typed characters never echo. Returns `None` on a
+/// non-terminal (nothing to read) or an empty answer, so a caller can fall back.
+pub struct Secret<'a> {
+    question: &'a str,
+}
+
+impl<'a> Secret<'a> {
+    pub fn new(question: &'a str) -> Self {
+        Self { question }
+    }
+
+    /// Render the prompt and read one hidden line, or `None` when there is no
+    /// terminal to read from or the answer is blank.
+    pub fn ask(&self) -> Result<Option<String>> {
+        let term = Term::stderr();
+        if !term.is_term() {
+            return Ok(None);
+        }
+        // Prompt through anstream so styling strips on a non-terminal and honors
+        // NO_COLOR, matching every other CLI line; read hidden via `Term`.
+        anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
+        anstream::stderr().flush()?;
+        let secret = term.read_secure_line()?;
+        let secret = secret.trim();
+        Ok((!secret.is_empty()).then(|| secret.to_owned()))
+    }
+}
+
 /// A styled free-text prompt with an optional default, shown in parentheses and
 /// returned on an empty answer.
 pub struct Input<'a> {

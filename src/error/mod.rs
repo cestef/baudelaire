@@ -16,14 +16,14 @@ pub mod typ;
 pub use annotated::Annotated;
 pub use asset::AssetError;
 pub use config::{ConfigError, ConfigErrorKind};
-pub use content::{ContentError, ContentErrorKind};
+pub use content::ContentError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks};
 pub use publish::PublishError;
-pub use scaffold::{ScaffoldError, ScaffoldErrorKind};
+pub use scaffold::ScaffoldError;
 pub use serialize::{Artifact, SerializeError};
-pub use serve::{ServeError, ServeErrorKind};
+pub use serve::ServeError;
 pub use typ::TypstSourceDiagnostic;
 
 pub type Result<T, E = BaudelaireErrorKind> = std::result::Result<T, E>;

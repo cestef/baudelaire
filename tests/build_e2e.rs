@@ -593,7 +593,9 @@ fn layout_template_wraps_page_body() {
     );
     let html = fs::read_to_string(site.root.join("public/posts/hello/index.html")).unwrap();
     assert!(html.contains("<article class=\"post\">"), "layout not applied: {html}");
-    assert!(html.contains("<h1>Hi</h1>"), "frontmatter data not passed: {html}");
+    // The heading carries an anchor id (anchors default on); assert the title
+    // text reached the h1 without pinning the exact attributes.
+    assert!(html.contains(">Hi</h1>"), "frontmatter data not passed: {html}");
     assert!(html.contains("Hello body"), "body not embedded: {html}");
 }
 
@@ -1012,7 +1014,7 @@ fn taxonomy_listing_uses_custom_template() {
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/tags/intro/index.html")).unwrap();
     assert!(html.contains("<main class=\"tax\">"), "template not applied: {html}");
-    assert!(html.contains("<h2>Tags: intro</h2>"), "title data missing: {html}");
+    assert!(html.contains(">Tags: intro</h2>"), "title data missing: {html}");
     assert!(html.contains("href=\"/posts/a/\""), "entries data missing: {html}");
     assert!(html.contains("Alpha"), "entry label missing: {html}");
 }
@@ -1382,4 +1384,38 @@ fn standard_verify_toggle_suppresses_wellknown_only() {
     assert!(!site.root.join("public/.well-known/site.standard.publication").exists());
     let html = fs::read_to_string(site.root.join("public/posts/dated/index.html")).unwrap();
     assert!(html.contains(r#"rel="site.standard.document""#), "{html}");
+}
+
+#[test]
+fn headings_get_unique_slug_anchors() {
+    let site = Site::new();
+    site.write("config.kdl", CONFIG);
+    site.write(
+        "content/docs/guide.typ",
+        "#frontmatter((title: \"Guide\",))\n= Guide\n\n== Setup\none\n\n== Setup\ntwo\n",
+    );
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let html = fs::read_to_string(site.root.join("public/docs/guide/index.html")).unwrap();
+    assert!(html.contains(r#"id="guide""#), "{html}");
+    // Two headings sluggging alike are disambiguated, not duplicated.
+    assert!(html.contains(r#"id="setup""#), "{html}");
+    assert!(html.contains(r#"id="setup-2""#), "{html}");
+}
+
+#[test]
+fn anchors_disabled_leaves_headings_bare() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\npaths { content \"content\"; dist \"public\" }\noutput { html { anchors #false } }\n",
+    );
+    site.write(
+        "content/docs/guide.typ",
+        "#frontmatter((title: \"Guide\",))\n== Setup\nbody\n",
+    );
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let html = fs::read_to_string(site.root.join("public/docs/guide/index.html")).unwrap();
+    assert!(!html.contains(r#"id="setup""#), "{html}");
 }

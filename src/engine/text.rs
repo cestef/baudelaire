@@ -10,9 +10,9 @@
 //! chrome (header, sidebar, footer) never pollutes the prose — otherwise every
 //! page would index the same navigation text and search relevance collapses.
 
-/// The predefined HTML/XML entities as `(char, name)` — the single source both
-/// escaping (`char` → `&name;`) and decoding (`&name;` → `char`) read. `amp` is
-/// last so decoding it last leaves a literal like `&amp;lt;` intact.
+/// The predefined HTML/XML entities as `(char, name)`, read when decoding
+/// `&name;` back to its character during extraction. Escaping the other way is
+/// the markup builder's job (`engine/xml.rs`), so there is one escaping surface.
 const ENTITIES: &[(char, &str)] = &[
     ('<', "lt"),
     ('>', "gt"),
@@ -20,21 +20,6 @@ const ENTITIES: &[(char, &str)] = &[
     ('\'', "apos"),
     ('&', "amp"),
 ];
-
-/// Escapes a string for safe inclusion in HTML/XML text or an attribute value.
-pub(super) struct Escaped<'a>(pub(super) &'a str);
-
-impl std::fmt::Display for Escaped<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for c in self.0.chars() {
-            match ENTITIES.iter().find(|(ch, _)| *ch == c) {
-                Some((_, name)) => write!(f, "&{name};")?,
-                None => f.write_str(c.encode_utf8(&mut [0; 4]))?,
-            }
-        }
-        Ok(())
-    }
-}
 
 pub struct Text;
 

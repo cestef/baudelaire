@@ -1,8 +1,10 @@
-//! A small, ergonomic XML document builder over quick-xml.
+//! A small, ergonomic markup builder over quick-xml.
 //!
-//! Wraps quick-xml's event API so the feed and sitemap writers share one
-//! escaping-correct surface — leaf, empty, and nested elements — instead of
-//! each hand-rolling element serialization.
+//! Wraps quick-xml's event API so the feed, sitemap, and redirect-stub writers
+//! share one escaping-correct surface — leaf, empty, and nested elements —
+//! instead of each hand-rolling element serialization. The self-closing void
+//! elements it emits are valid HTML5 too, so the redirect stub builds through
+//! the same escaping path rather than a `format!`.
 //!
 //! The builder is infallible by construction: it serializes into an in-memory
 //! `Vec<u8>` (writes to which cannot fail) and quick-xml only ever emits
@@ -21,11 +23,27 @@ pub(super) struct Xml {
 impl Xml {
     /// Start a document with an `<?xml version="1.0" encoding="UTF-8"?>` decl.
     pub(super) fn document() -> Self {
-        let mut xml = Self {
-            writer: Writer::new_with_indent(Vec::new(), b' ', 2),
-        };
+        let mut xml = Self::fragment();
         xml.write(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
         xml
+    }
+
+    /// A declaration-less document, for markup (like an HTML redirect stub) that
+    /// carries no `<?xml?>` prolog.
+    pub(super) fn fragment() -> Self {
+        Self {
+            writer: Writer::new_with_indent(Vec::new(), b' ', 2),
+        }
+    }
+
+    /// Write a `<!DOCTYPE root>` declaration.
+    pub(super) fn doctype(&mut self, root: &str) {
+        self.write(Event::DocType(BytesText::new(root)));
+    }
+
+    /// Write escaped text at the current position.
+    pub(super) fn text(&mut self, text: &str) {
+        self.write(Event::Text(BytesText::new(text)));
     }
 
     /// Write `<name attrs…>` … `</name>`, its body produced by `content`.

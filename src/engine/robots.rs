@@ -33,7 +33,7 @@ impl Processor for Robots {
                 format_args!("robots.txt sitemap link omitted — no `url` set"),
             )?
         {
-            let _ = writeln!(body, "Sitemap: {}", base.join(format!("/{}", SiteMap::FILE)));
+            let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));
         }
         out.file(&site.config.dist.join("robots.txt"), &body)?;
         out.note(format_args!("wrote robots.txt"))

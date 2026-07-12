@@ -29,6 +29,8 @@ impl Pagination {
 struct Section<'a> {
     id: &'a str,
     template: Option<String>,
+    /// Permalink of page 1 (`config.index`); later pages hang under it.
+    index: Option<String>,
     members: Vec<&'a Page>,
     per_page: usize,
 }
@@ -43,6 +45,7 @@ impl<'a> Section<'a> {
         Self {
             id: &collection.id,
             template: collection.config.list.clone(),
+            index: collection.config.index.clone(),
             members,
             per_page,
         }
@@ -71,10 +74,11 @@ impl<'a> Section<'a> {
             .template(self.template.clone())
     }
 
-    /// Page 1 lives at the collection root; later pages under `page/{n}/`.
+    /// Page 1 lives at the collection root (or the configured `index`, e.g. `/`
+    /// for a blog home); later pages under `page/{n}/`.
     fn url(&self, number: usize) -> String {
         match number {
-            1 => Permalink::join(&[self.id]),
+            1 => self.index.clone().unwrap_or_else(|| Permalink::join(&[self.id])),
             n => Permalink::join(&[self.id, "page", &n.to_string()]),
         }
     }

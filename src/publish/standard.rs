@@ -16,13 +16,15 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
+use owo_colors::OwoColorize;
+
 use crate::atproto::{AtUri, Blob, Did, Nsid, Rkey, Session};
-use crate::cli::output::Report;
+use crate::cli::output::{Count, Report};
 use crate::config::StandardConfig;
 use crate::error::{PublishError, Result};
 use crate::mime::Mime;
 
-use super::{Doc, Publisher, SiteView, SkipCache};
+use super::{Doc, Options, Publisher, SiteView, SkipCache};
 
 /// The lexicon ids, which double as repository collection names. Public so the
 /// build-time verification artifacts (an engine processor for `.well-known`, a
@@ -65,30 +67,33 @@ impl Publisher for Standard {
         "standard.site"
     }
 
-    fn publish(&self, site: &SiteView, report: &mut Report) -> Result<()> {
+    fn publish(&self, site: &SiteView, opts: &Options, report: &mut Report) -> Result<()> {
         if self.config.handle.is_empty() {
             return Err(PublishError::Unconfigured.into());
         }
         let base = site.config.base().ok_or(PublishError::NoUrl)?;
-        let password =
-            std::env::var(PASSWORD_ENV).map_err(|_| PublishError::NoPassword)?;
+        let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
 
         let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
         self.check_did(session.did(), report)?;
         let publication = publication_uri(session.did().as_str());
 
-        // The publication record first, so the documents can point at it.
-        let icon = self.icon(&session)?;
-        session.put_record(PUBLICATION, &Rkey::literal(PUBLICATION_RKEY), &Publication {
-            kind: PUBLICATION.as_str(),
-            name: site.config.site.clone().unwrap_or_else(|| site.config.label().to_owned()),
-            url: base.to_string(),
-            description: None,
-            icon,
-            preferences: Preferences { show_in_discover: self.config.discover },
-        })?;
+        if opts.dry_run {
+            report.info(format_args!("dry run — no records will be written"))?;
+        } else {
+            // The publication record first, so the documents can point at it.
+            let icon = self.icon(&session)?;
+            session.put_record(PUBLICATION, &Rkey::literal(PUBLICATION_RKEY), &Publication {
+                kind: PUBLICATION.as_str(),
+                name: site.config.site.clone().unwrap_or_else(|| site.config.label().to_owned()),
+                url: base.to_string(),
+                description: None,
+                icon,
+                preferences: Preferences { show_in_discover: self.config.discover },
+            })?;
+        }
 
-        self.documents(site, &session, &publication, report)
+        self.documents(site, &session, &publication, opts, report)
     }
 }
 
@@ -136,6 +141,7 @@ impl Standard {
         site: &SiteView,
         session: &Session,
         publication: &AtUri,
+        opts: &Options,
         report: &mut Report,
     ) -> Result<()> {
         let mut cache = SkipCache::load(self.name());
@@ -146,48 +152,98 @@ impl Standard {
             .collect();
 
         let mut desired = BTreeSet::new();
-        let (mut sent, mut unchanged, mut undated) = (0usize, 0usize, 0usize);
+        let (mut sent, mut unchanged) = (0usize, 0usize);
+        let mut undated: Vec<&str> = Vec::new();
         for doc in &site.documents {
             let Some(record) = Document::from_doc(doc, publication) else {
-                undated += 1;
+                undated.push(&doc.path);
                 continue;
             };
             let rkey = Rkey::derived(&doc.path);
             desired.insert(rkey.as_str().to_owned());
-            let fingerprint = fingerprint(&record)?;
+            let fingerprint = record.fingerprint()?;
             if cache.unchanged(rkey.as_str(), &fingerprint) {
                 unchanged += 1;
                 continue;
             }
-            session.put_record(DOCUMENT, &rkey, &record)?;
-            cache.set(rkey.as_str().to_owned(), fingerprint);
+            if !opts.dry_run {
+                session.put_record(DOCUMENT, &rkey, &record)?;
+                cache.set(rkey.as_str().to_owned(), fingerprint);
+            }
             sent += 1;
         }
 
         let mut removed = 0usize;
         for stale in remote.difference(&desired) {
-            session.delete_record(DOCUMENT, &Rkey::parsed(stale))?;
+            if !opts.dry_run {
+                session.delete_record(DOCUMENT, &Rkey::parsed(stale))?;
+            }
             removed += 1;
         }
 
-        cache.retain(&desired);
-        cache.save(self.name())?;
-
-        if undated > 0 {
-            report.warn(format_args!("{undated} undated page(s) skipped (no publication date)"))?;
+        // A dry run computes the plan against the real remote but changes
+        // nothing — locally or otherwise — so the skip-cache is left untouched.
+        if !opts.dry_run {
+            cache.retain(&desired);
+            cache.save(self.name())?;
         }
-        report.success(format_args!(
-            "standard.site: {sent} sent · {unchanged} unchanged · {removed} removed"
-        ))?;
+
+        if !undated.is_empty() {
+            // Each skipped page is listed at verbose; a count always shows.
+            // `skipped` styles the path itself, so pass it plain.
+            for path in &undated {
+                report.skipped(path, "no publication date")?;
+            }
+            report.warn(format_args!(
+                "{} skipped — no publication date",
+                Count::pages(undated.len())
+            ))?;
+        }
+        report.success(Summary {
+            name: self.name(),
+            sent,
+            unchanged,
+            removed,
+            dry_run: opts.dry_run,
+        })?;
         Ok(())
     }
 }
 
+/// A colored one-line publish summary: the destination, then counts styled by
+/// meaning — sent in green (additive), unchanged dimmed (no-op), removed in
+/// yellow when any went (else dimmed). `--dry-run` phrases the verbs as intent.
+/// A [`Display`] newtype like [`Count`], so the styling lives in one place.
+struct Summary<'a> {
+    name: &'a str,
+    sent: usize,
+    unchanged: usize,
+    removed: usize,
+    dry_run: bool,
+}
+
+impl std::fmt::Display for Summary<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (put, del) = if self.dry_run { ("to send", "to remove") } else { ("sent", "removed") };
+        let sent = format!("{} {put}", self.sent).green().to_string();
+        let same = format!("{} unchanged", self.unchanged).dimmed().to_string();
+        let gone = format!("{} {del}", self.removed);
+        let gone = if self.removed > 0 { gone.yellow().to_string() } else { gone.dimmed().to_string() };
+        write!(f, "{} · {sent} · {same} · {gone}", self.name.cyan().bold())
+    }
+}
+
 /// The blake3 fingerprint of a record's serialized form, for the skip-cache.
-fn fingerprint(record: &impl Serialize) -> Result<String> {
-    let bytes = serde_json::to_vec(record)
-        .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
-    Ok(blake3::hash(&bytes).to_hex().to_string())
+trait Fingerprint {
+    fn fingerprint(&self) -> Result<String>;
+}
+
+impl<T: Serialize> Fingerprint for T {
+    fn fingerprint(&self) -> Result<String> {
+        let bytes = serde_json::to_vec(self)
+            .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
+        Ok(blake3::hash(&bytes).to_hex().to_string())
+    }
 }
 
 /// A `site.standard.publication` record.
@@ -236,7 +292,7 @@ impl Document {
             kind: DOCUMENT.as_str(),
             site: publication.clone(),
             title: doc.title.clone(),
-            published_at: rfc3339(date),
+            published_at: date.rfc3339(),
             path: doc.path.clone(),
             description: doc.description.clone(),
             tags: doc.tags.clone(),
@@ -246,13 +302,14 @@ impl Document {
 
 /// A date as an RFC 3339 timestamp at midnight UTC — the format `publishedAt`
 /// requires. Built directly from the fields, so it never fails.
-fn rfc3339(date: time::Date) -> String {
-    format!(
-        "{:04}-{:02}-{:02}T00:00:00Z",
-        date.year(),
-        u8::from(date.month()),
-        date.day()
-    )
+trait Rfc3339 {
+    fn rfc3339(&self) -> String;
+}
+
+impl Rfc3339 for time::Date {
+    fn rfc3339(&self) -> String {
+        format!("{:04}-{:02}-{:02}T00:00:00Z", self.year(), u8::from(self.month()), self.day())
+    }
 }
 
 #[cfg(test)]
@@ -288,7 +345,24 @@ mod tests {
 
     #[test]
     fn rfc3339_is_midnight_utc() {
-        assert_eq!(rfc3339(date(2026, 7, 1)), "2026-07-01T00:00:00Z");
+        assert_eq!(date(2026, 7, 1).rfc3339(), "2026-07-01T00:00:00Z");
+    }
+
+    fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, dry_run: bool) -> String {
+        Summary { name, sent, unchanged, removed, dry_run }.to_string()
+    }
+
+    #[test]
+    fn summary_names_the_destination_and_counts() {
+        let line = summary("standard.site", 3, 1, 2, false);
+        assert!(line.contains("standard.site"), "{line}");
+        assert!(line.contains("3 sent") && line.contains("1 unchanged") && line.contains("2 removed"), "{line}");
+    }
+
+    #[test]
+    fn summary_dry_run_phrases_intent() {
+        let line = summary("standard.site", 3, 0, 2, true);
+        assert!(line.contains("3 to send") && line.contains("2 to remove"), "{line}");
     }
 
     #[test]

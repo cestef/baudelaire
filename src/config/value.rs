@@ -118,7 +118,7 @@ impl ValueExt for KdlValue {
             KdlValue::String(_) => "string",
             KdlValue::Integer(_) => "integer",
             KdlValue::Float(_) => "float",
-            KdlValue::Bool(_) => "bool",
+            KdlValue::Bool(_) => "boolean",
             KdlValue::Null => "null",
         }
     }

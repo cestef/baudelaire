@@ -26,8 +26,7 @@ impl Transform for Embed {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let inliner = Inliner::new(cx.config, cx.assets);
         doc.root_mut().walk(&mut |element| {
-            element.rewrite(&[attr::href, attr::src, attr::poster], |value| inliner.inline(value));
-            element.rewrite_srcset(|url| inliner.inline(url));
+            element.assets(&[attr::href, attr::src, attr::poster], |value| inliner.inline(value));
         });
     }
 }

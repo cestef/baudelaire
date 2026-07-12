@@ -12,7 +12,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{Config, StandardConfig};
 use crate::publish::standard::{DOCUMENT, document_uri};
 
-use super::transform::{Cx, Transform, head};
+use super::transform::{Cx, ElementExt, Transform};
 
 /// The transform that adds each dated page's `site.standard.document` backlink.
 pub(super) struct Verify;
@@ -31,7 +31,7 @@ impl Transform for Verify {
             return;
         };
         let href = document_uri(did, &cx.page.permalink).to_string();
-        if let Some(head) = head(doc.root_mut()) {
+        if let Some(head) = doc.root_mut().head() {
             head.children.push(link(&href));
         }
     }

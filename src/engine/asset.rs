@@ -36,6 +36,15 @@ use crate::render::AssetMap;
 /// 64 bits of blake3 — collision-free in practice for a site's asset set.
 const FINGERPRINT_LEN: usize = 16;
 
+/// The outcome of processing the asset tree: the request→served URL map, the
+/// count of files emitted, and their total byte size.
+#[derive(Default)]
+pub struct Processed {
+    pub map: AssetMap,
+    pub count: usize,
+    pub bytes: u64,
+}
+
 /// The asset pipeline over one site's asset directory.
 pub struct Assets<'a> {
     config: &'a Config,
@@ -64,12 +73,12 @@ impl<'a> Assets<'a> {
 
     /// Process every asset into `dist`, returning the map from original request
     /// URLs to the URLs they are actually served at (only entries renamed by
-    /// fingerprinting appear) and the count of files emitted (partials excluded).
-    pub fn process(&self) -> Result<(AssetMap, usize)> {
-        let mut map = AssetMap::default();
-        let mut count = 0;
+    /// fingerprinting appear), the count of files emitted (partials excluded),
+    /// and their total byte size.
+    pub fn process(&self) -> Result<Processed> {
+        let mut out = Processed::default();
         if !self.src.exists() {
-            return Ok((map, count));
+            return Ok(out);
         }
         // Regenerate the whole tree so stale fingerprinted files never linger.
         if self.dst.exists() {
@@ -89,24 +98,25 @@ impl<'a> Assets<'a> {
             else {
                 continue;
             };
-            self.emit(rel, &bytes, &mut map, &mut count)?;
+            self.emit(rel, &bytes, &mut out)?;
         }
         for file in css {
             let rel = file.strip_prefix(self.src).expect("Walk yields paths under src");
-            let bytes = self.render_css(&file, rel, &map)?;
-            self.emit(rel, &bytes, &mut map, &mut count)?;
+            let bytes = self.render_css(&file, rel, &out.map)?;
+            self.emit(rel, &bytes, &mut out)?;
         }
-        Ok((map, count))
+        Ok(out)
     }
 
     /// Fingerprint (when enabled) and write `bytes` for the asset at `rel`,
     /// recording the request→served URL mapping when the name changed.
-    fn emit(&self, rel: &Path, bytes: &[u8], map: &mut AssetMap, count: &mut usize) -> Result<()> {
-        let out = self.fingerprint(rel, bytes);
-        self.write(&out, bytes)?;
-        *count += 1;
-        if out != rel {
-            map.insert(self.url(rel), self.url(&out));
+    fn emit(&self, rel: &Path, bytes: &[u8], out: &mut Processed) -> Result<()> {
+        let dst = self.fingerprint(rel, bytes);
+        self.write(&dst, bytes)?;
+        out.count += 1;
+        out.bytes += bytes.len() as u64;
+        if dst != rel {
+            out.map.insert(self.url(rel), self.url(&dst));
         }
         Ok(())
     }

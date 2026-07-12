@@ -1,9 +1,7 @@
 //! Redirect stubs: a minimal HTML page that forwards a stale URL to its new one.
 
-use std::fmt;
-
 use super::process::{Emit, Processor, Site};
-use super::text::Escaped;
+use super::xml::Xml;
 use crate::cli::output::Count;
 use crate::error::Result;
 
@@ -16,10 +14,7 @@ impl Processor for Redirects {
         let mut count = 0usize;
         for page in site.pages {
             for old in &page.frontmatter.redirect {
-                out.file(
-                    &site.config.destination(old),
-                    &Redirect::new(&page.permalink).to_string(),
-                )?;
+                out.file(&site.config.destination(old), &Self::stub(&page.permalink))?;
                 count += 1;
             }
         }
@@ -30,29 +25,18 @@ impl Processor for Redirects {
     }
 }
 
-/// A client-side redirect to `target`, rendered as a tiny meta-refresh page
-/// with a canonical link and a manual fallback anchor.
-pub(super) struct Redirect<'a> {
-    target: &'a str,
-}
-
-impl<'a> Redirect<'a> {
-    pub(super) fn new(target: &'a str) -> Self {
-        Self { target }
-    }
-}
-
-impl fmt::Display for Redirect<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let target = Escaped(self.target);
-        write!(
-            f,
-            "<!DOCTYPE html>\n\
-             <meta charset=\"utf-8\">\n\
-             <meta http-equiv=\"refresh\" content=\"0; url={target}\">\n\
-             <link rel=\"canonical\" href=\"{target}\">\n\
-             <title>Redirecting…</title>\n\
-             <a href=\"{target}\">Redirecting…</a>\n"
-        )
+impl Redirects {
+    /// A client-side redirect to `target`: a meta-refresh with a canonical link
+    /// and a manual fallback anchor. Every value is attribute-escaped by the
+    /// markup builder, so no `format!`-built HTML and no bespoke escaper.
+    fn stub(target: &str) -> String {
+        let mut html = Xml::fragment();
+        html.doctype("html");
+        html.empty("meta", &[("charset", "utf-8")]);
+        html.empty("meta", &[("http-equiv", "refresh"), ("content", &format!("0; url={target}"))]);
+        html.empty("link", &[("rel", "canonical"), ("href", target)]);
+        html.leaf("title", "Redirecting…");
+        html.nest("a", &[("href", target)], |x| x.text("Redirecting…"));
+        html.finish()
     }
 }

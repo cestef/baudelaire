@@ -13,6 +13,7 @@ use crate::content::Page;
 
 use super::AssetMap;
 use super::LinkMap;
+use super::anchors::Anchors;
 use super::embed::Embed;
 use super::fingerprint::Fingerprint;
 use super::image::Images;
@@ -38,9 +39,15 @@ pub(super) struct Cx<'a> {
 pub(super) trait ElementExt {
     /// Visit this element, then every descendant element, depth-first.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
+    /// This element's `<head>` child, if it has one — the one place a transform
+    /// appends head elements, so meta and verification tags find it the same way.
+    fn head(&mut self) -> Option<&mut HtmlElement>;
     /// Rewrite each attribute among `keys` that is present: `f` returns the
     /// replacement value, or `None` to leave it as authored.
     fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
+    /// Rewrite every asset-bearing attribute — the `keys` plus `srcset` — through
+    /// `f` in one pass, so an asset-rewriting transform states only its key list.
+    fn assets(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
     /// Rewrite each URL in a `srcset` attribute — a comma-separated list of
     /// `url [descriptor]` candidates — leaving descriptors intact. `f` maps one
     /// URL to its replacement, or `None` to keep it. So `<img srcset>` and
@@ -58,6 +65,13 @@ impl ElementExt for HtmlElement {
         }
     }
 
+    fn head(&mut self) -> Option<&mut HtmlElement> {
+        self.children.make_mut().iter_mut().find_map(|node| match node {
+            HtmlNode::Element(el) if el.tag == tag::head => Some(el),
+            _ => None,
+        })
+    }
+
     fn rewrite(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
         for &key in keys {
             if let Some(value) = self.attrs.get_mut(key)
@@ -66,6 +80,11 @@ impl ElementExt for HtmlElement {
                 *value = new.into();
             }
         }
+    }
+
+    fn assets(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
+        self.rewrite(keys, &mut f);
+        self.rewrite_srcset(&mut f);
     }
 
     fn rewrite_srcset(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
@@ -102,16 +121,6 @@ impl ElementExt for HtmlElement {
     }
 }
 
-/// The document `<head>`, a direct child of the root `<html>` — the one place a
-/// transform appends head elements, shared so meta and verification tags find it
-/// the same way.
-pub(super) fn head(root: &mut HtmlElement) -> Option<&mut HtmlElement> {
-    root.children.make_mut().iter_mut().find_map(|node| match node {
-        HtmlNode::Element(el) if el.tag == tag::head => Some(el),
-        _ => None,
-    })
-}
-
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning
 /// [`super::Renderer`] is shared read-only across the parallel compile pool.
 pub(super) trait Transform: Send + Sync {
@@ -132,6 +141,7 @@ impl Transforms {
         // references remain.
         Self(vec![
             Box::new(Links),
+            Box::new(Anchors),
             Box::new(Meta),
             Box::new(Verify),
             Box::new(Images),

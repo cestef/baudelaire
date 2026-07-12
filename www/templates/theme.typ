@@ -133,6 +133,7 @@
     ("/features/taxonomies/", "Taxonomies"),
     ("/features/pagination/", "Pagination"),
     ("/features/feeds/", "Feeds & sitemap"),
+    ("/features/publishing/", "Publishing"),
     ("/features/meta/", "Meta & images"),
     ("/features/context/", "Build metadata"),
     ("/features/incremental/", "Incremental builds"),

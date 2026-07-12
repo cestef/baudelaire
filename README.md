@@ -11,4 +11,4 @@ cd poem
 baudelaire serve
 ```
 
-See your new website at [localhost:1821](https://localhost:1821)
+See your new website at [localhost:1821](http://localhost:1821)

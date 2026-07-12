@@ -314,3 +314,25 @@ fn hidden_dirs_skipped() {
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].pages.len(), 1);
 }
+
+#[test]
+fn bundle_index_takes_slug_from_its_directory() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "T"
+            paths { content "content" dist "public" }
+            collections { posts "posts/**/*.typ" permalink="/posts/{slug}/" }
+        "#,
+    );
+    // A page bundle: the directory name is the slug, not the `index` filename.
+    site.write("content/posts/ring-buffers/index.typ", "#frontmatter((title: \"RB\",))\nbody");
+    // A flat file keeps its stem.
+    site.write("content/posts/flat.typ", "#frontmatter((title: \"Flat\",))\nbody");
+    let out = site.run(&["build"]);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(site.root.join("public/posts/ring-buffers/index.html").exists(), "bundle dir slug");
+    assert!(site.root.join("public/posts/flat/index.html").exists(), "flat file slug");
+    assert!(!site.root.join("public/posts/index/index.html").exists(), "index must not be the slug");
+}

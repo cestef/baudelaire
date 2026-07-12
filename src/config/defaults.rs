@@ -20,6 +20,7 @@ impl Default for Config {
             lang: "en".into(),
             author: None,
             content: PathBuf::from("content"),
+            index: Some("index".into()),
             dist: PathBuf::from("public"),
             assets: PathBuf::from("assets"),
             templates: PathBuf::from("templates"),
@@ -56,6 +57,7 @@ impl Default for HtmlConfig {
             pretty: true,
             embed: false,
             meta: true,
+            anchors: true,
         }
     }
 }
@@ -187,6 +189,7 @@ impl Default for CollectionConfig {
             template: None,
             paginate: None,
             list: None,
+            index: None,
         }
     }
 }

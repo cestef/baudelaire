@@ -1,50 +1,8 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
-#[error("{kind}")]
-pub struct ServeError {
-    kind: ServeErrorKind,
-}
-
-impl ServeError {
-    pub fn bind(addr: &str, error: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        Self {
-            kind: ServeErrorKind::Bind {
-                addr: addr.to_owned(),
-                error,
-            },
-        }
-    }
-
-    pub fn watcher_init(error: notify::Error) -> Self {
-        Self {
-            kind: ServeErrorKind::WatcherInit(error),
-        }
-    }
-
-    pub fn watch(dir: &std::path::Path, source: notify::Error) -> Self {
-        Self {
-            kind: ServeErrorKind::Watch {
-                dir: dir.display().to_string(),
-                source,
-            },
-        }
-    }
-}
-
-impl miette::Diagnostic for ServeError {
-    fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        self.kind.code()
-    }
-
-    fn help(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        self.kind.help()
-    }
-}
-
 #[derive(Error, Diagnostic, Debug)]
-pub enum ServeErrorKind {
+pub enum ServeError {
     #[error("failed to bind `{addr}`")]
     #[diagnostic(
         code(baudelaire::serve::bind),
@@ -67,6 +25,26 @@ pub enum ServeErrorKind {
         #[source]
         source: notify::Error,
     },
+}
+
+impl ServeError {
+    pub fn bind(addr: &str, error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        Self::Bind {
+            addr: addr.to_owned(),
+            error,
+        }
+    }
+
+    pub fn watcher_init(error: notify::Error) -> Self {
+        Self::WatcherInit(error)
+    }
+
+    pub fn watch(dir: &std::path::Path, source: notify::Error) -> Self {
+        Self::Watch {
+            dir: dir.display().to_string(),
+            source,
+        }
+    }
 }
 
 impl From<ServeError> for crate::error::BaudelaireErrorKind {

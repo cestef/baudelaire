@@ -11,13 +11,15 @@ pub struct Deps {
 }
 
 impl Deps {
-    /// Build from the resolved paths of a compilation's accessed files.
-    pub fn from_paths(files: Vec<PathBuf>) -> Self {
-        Self { files }
-    }
-
     /// The dependency files.
     pub fn files(&self) -> &[PathBuf] {
         &self.files
+    }
+}
+
+impl From<Vec<PathBuf>> for Deps {
+    /// Build from the resolved paths of a compilation's accessed files.
+    fn from(files: Vec<PathBuf>) -> Self {
+        Self { files }
     }
 }

@@ -30,16 +30,31 @@ use crate::mime::Mime;
 ///
 /// CLI flags (`--port`, `--bind`, `--open`, `--no-watch`) are already folded
 /// into `config.serve` by [`crate::cli::ServeArgs::apply`].
-pub(crate) fn run(report: &mut Report, config: &Config, root: &Root) -> Result<()> {
-    Dev { config, report, root }.run()
+pub(crate) fn run<'a>(
+    report: &'a mut Report,
+    config: Config,
+    root: &'a Root,
+    reload: impl FnMut() -> Result<Config> + 'a,
+) -> Result<()> {
+    Dev {
+        config,
+        report,
+        root,
+        reload: Box::new(reload),
+    }
+    .run()
 }
 
 /// Orchestrates a dev-server session: the initial build, the HTTP handler, and
-/// the watch/rebuild loop.
+/// the watch/rebuild loop. Owns its [`Config`] so a change to `config.kdl` can
+/// reload it (via [`Dev::reload`]) without restarting the process.
 struct Dev<'a> {
-    config: &'a Config,
+    config: Config,
     report: &'a mut Report,
     root: &'a Root,
+    /// Re-reads `config.kdl` with the same profile and CLI overrides — invoked
+    /// when the config file changes so edits take effect live.
+    reload: Box<dyn FnMut() -> Result<Config> + 'a>,
 }
 
 impl Dev<'_> {
@@ -77,27 +92,40 @@ impl Dev<'_> {
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
     /// every relevant change.
     fn watch(mut self, live: Live) -> Result<()> {
-        let (tx, rx) = flume::unbounded::<DebounceEventResult>();
-        let filter = Filter::new(self.config, self.root)?;
-        let _watcher = Watcher::new(filter.dirs(), tx)?;
-        self.report.muted("watching for changes")?;
-        for result in rx {
-            self.on_event(result, &live, &filter)?;
+        // Rebuild the watcher whenever `config.kdl` is reloaded, so changes to
+        // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
+        // change still needs a restart — the HTTP server is already bound.)
+        loop {
+            let filter = Filter::new(&self.config, self.root)?;
+            let (tx, rx) = flume::unbounded::<DebounceEventResult>();
+            let _watcher = Watcher::new(filter.dirs(), tx)?;
+            self.report.muted("watching for changes")?;
+            let mut reloaded = false;
+            for result in rx {
+                if self.on_event(result, &live, &filter)? {
+                    reloaded = true;
+                    break;
+                }
+            }
+            if !reloaded {
+                return Ok(());
+            }
         }
-        Ok(())
     }
 
     /// Handle one debounced watcher delivery: rebuild on events, and surface
     /// watcher failures (dropped watches, queue overflow) as warnings instead
     /// of silently discarding them — the server keeps serving either way.
-    fn on_event(&mut self, result: DebounceEventResult, live: &Live, filter: &Filter) -> Result<()> {
+    /// Returns whether `config.kdl` was reloaded (so the caller recreates the
+    /// watcher).
+    fn on_event(&mut self, result: DebounceEventResult, live: &Live, filter: &Filter) -> Result<bool> {
         match result {
             Ok(events) => self.on_change(events, live, filter),
             Err(errors) => {
                 for error in errors {
                     self.report.warn(format_args!("file watcher error: {error}"))?;
                 }
-                Ok(())
+                Ok(false)
             }
         }
     }
@@ -108,7 +136,7 @@ impl Dev<'_> {
         events: Vec<DebouncedEvent>,
         live: &Live,
         filter: &Filter,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         // A single edit can surface as several debounced events (and each event
         // may repeat the path), so dedupe before reporting or we print the file
         // once per raw event.
@@ -120,7 +148,22 @@ impl Dev<'_> {
             .unique()
             .collect();
         if changed.is_empty() {
-            return Ok(());
+            return Ok(false);
+        }
+
+        // A change to the config file reloads it first, so the rebuild — and,
+        // back in `watch`, the recreated watcher — see the new settings. A parse
+        // error keeps the last-good config so the server stays up.
+        let config_changed = changed.iter().any(|p| p.extension().is_some_and(|e| e == "kdl"));
+        if config_changed {
+            match (self.reload)() {
+                Ok(config) => self.config = config,
+                Err(e) => {
+                    self.report.warn("config reload failed (keeping the last good config)")?;
+                    eprintln!("{:?}", miette::Report::from(e));
+                    return Ok(false);
+                }
+            }
         }
 
         // A Vite-style rebuild: a transient status while the build runs, replaced
@@ -147,7 +190,7 @@ impl Dev<'_> {
                 eprintln!("{:?}", miette::Report::from(e));
             }
         }
-        Ok(())
+        Ok(config_changed)
     }
 
     /// A concise label for a rebuild's trigger: the first changed file (relative
@@ -457,9 +500,10 @@ mod tests {
         let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
-            config: &config,
+            config: config.clone(),
             report: &mut report,
             root: &root,
+            reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
             .unwrap();
@@ -476,9 +520,10 @@ mod tests {
         let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
-            config: &config,
+            config: config.clone(),
             report: &mut report,
             root: &root,
+            reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
         assert_eq!(dev.report.warnings(), 0);

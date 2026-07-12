@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::time::{Duration, Instant};
 
 use anstream::AutoStream;
@@ -33,6 +33,7 @@ pub struct Report {
     level: Level,
     started: Option<Instant>,
     warnings: usize,
+    tty: bool,
 }
 
 impl Report {
@@ -46,6 +47,7 @@ impl Report {
             level,
             started: None,
             warnings: 0,
+            tty: std::io::stdout().is_terminal(),
         }
     }
 
@@ -160,11 +162,20 @@ impl Report {
     /// A transient, in-place status line (no newline), overwritten by the next
     /// output. Used by the dev server while a rebuild is running.
     pub fn status(&mut self, detail: impl Display) -> std::io::Result<()> {
-        if self.level == Level::Quiet {
+        // A transient overwrite only makes sense on a terminal; on a pipe it would
+        // leave a stranded line (and the raw cursor escapes) in the log.
+        if self.level == Level::Quiet || !self.tty {
             return Ok(());
         }
         write!(self.out, "\r\x1b[2K  {} {}", "⟳".cyan(), detail.dimmed())?;
         self.out.flush()
+    }
+
+    /// Clears any pending [`Report::status`] line, on a terminal only. On a pipe
+    /// `AutoStream` strips SGR color but not cursor escapes, so emitting them would
+    /// leave literal `^[[2K` in captured logs.
+    fn clear(&self) -> &'static str {
+        if self.tty { "\r\x1b[2K" } else { "" }
     }
 
     /// A dev-server rebuild log line: a wall-clock timestamp, a change glyph, the
@@ -175,7 +186,8 @@ impl Report {
         let elapsed = self.elapsed().map(fmt_dur).unwrap_or_default();
         writeln!(
             self.out,
-            "\r\x1b[2K  {}  {} {}  {} {}",
+            "{}  {}  {} {}  {} {}",
+            self.clear(),
             now().dimmed(),
             "~".green(),
             Paths(&path.to_string()),
@@ -248,6 +260,26 @@ impl Count {
 impl Display for Count {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}{}", self.n, self.noun, if self.n == 1 { "" } else { "s" })
+    }
+}
+
+/// A byte count in binary units — `512 B`, `1.4 MB` — 1024-based with one
+/// decimal above the byte threshold. The single source of size formatting.
+pub struct Bytes(pub u64);
+
+impl Display for Bytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+        let mut size = self.0 as f64;
+        let mut unit = 0;
+        while size >= 1024.0 && unit < UNITS.len() - 1 {
+            size /= 1024.0;
+            unit += 1;
+        }
+        match unit {
+            0 => write!(f, "{} {}", self.0, UNITS[0]),
+            _ => write!(f, "{size:.1} {}", UNITS[unit]),
+        }
     }
 }
 

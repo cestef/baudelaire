@@ -6,161 +6,8 @@ use typst::syntax::DiagSpanKind;
 
 use crate::error::Annotated;
 
-#[derive(Error, Debug)]
-#[error("{kind}")]
-pub struct ContentError {
-    kind: ContentErrorKind,
-}
-
-impl ContentError {
-    pub fn frontmatter_eval(
-        path: &std::path::Path,
-        src: &str,
-        errs: EcoVec<SourceDiagnostic>,
-    ) -> Self {
-        let diags: Vec<_> = errs
-            .into_iter()
-            .map(|e| FrontmatterDiag::new(src, e))
-            .collect();
-        Self {
-            kind: ContentErrorKind::FrontmatterEval {
-                path: path.display().to_string(),
-                src: src.to_owned(),
-                errs: diags,
-            },
-        }
-    }
-
-    /// Lower wax's own span-annotated glob error into an [`Annotated`] so its
-    /// labels point straight at the offending part of the pattern.
-    pub fn bad_glob(pattern: &str, error: wax::BuildError) -> Self {
-        let mut diag = Annotated::new(
-            "baudelaire::content::bad_glob",
-            format!("invalid collection glob `{pattern}`"),
-            pattern.to_owned(),
-        )
-        .help(error.to_string());
-        for location in error.locations() {
-            let (offset, len) = location.span();
-            diag = diag.label(location.to_string(), offset, len);
-        }
-        Self {
-            kind: ContentErrorKind::BadGlob(diag),
-        }
-    }
-
-    pub fn frontmatter_not_dict(src: &str, value: typst::foundations::Value) -> Self {
-        use typst::foundations::Repr;
-        Self {
-            kind: ContentErrorKind::FrontmatterNotDict {
-                src: src.to_owned(),
-                ty: value.ty().long_name(),
-                repr: value.repr().to_string(),
-            },
-        }
-    }
-
-    /// A known frontmatter key whose value has the wrong type — previously
-    /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
-    pub fn frontmatter_field(
-        path: &std::path::Path,
-        key: &str,
-        expected: &'static str,
-        got: &'static str,
-        help: Option<&'static str>,
-    ) -> Self {
-        Self {
-            kind: ContentErrorKind::FrontmatterField {
-                path: path.display().to_string(),
-                key: key.to_owned(),
-                expected,
-                got: got.to_owned(),
-                help: help.map(str::to_owned),
-            },
-        }
-    }
-
-    /// A frontmatter key that is a near-miss of a known one (a typo). Unknown
-    /// keys with no close match pass through to `extra` untouched.
-    pub fn unknown_frontmatter(path: &std::path::Path, key: &str, suggestion: &str) -> Self {
-        Self {
-            kind: ContentErrorKind::UnknownFrontmatterKey {
-                path: path.display().to_string(),
-                key: key.to_owned(),
-                help: format!("did you mean `{suggestion}`?"),
-            },
-        }
-    }
-
-    /// A name (filename stem, frontmatter slug, or taxonomy term) with no
-    /// URL-safe characters.
-    pub fn empty_slug(name: &str) -> Self {
-        Self {
-            kind: ContentErrorKind::EmptySlug { name: name.to_owned() },
-        }
-    }
-
-    /// Two pages resolving to the same permalink (a silent overwrite otherwise).
-    pub fn collision(permalink: &str, first: &str, second: &str) -> Self {
-        Self {
-            kind: ContentErrorKind::Collision {
-                permalink: permalink.to_owned(),
-                first: first.to_owned(),
-                second: second.to_owned(),
-            },
-        }
-    }
-
-    /// Two taxonomy terms slugging to the same URL.
-    pub fn term_collision(taxonomy: &str, slug: &str, first: &str, second: &str) -> Self {
-        Self {
-            kind: ContentErrorKind::TermCollision {
-                taxonomy: taxonomy.to_owned(),
-                slug: slug.to_owned(),
-                first: first.to_owned(),
-                second: second.to_owned(),
-            },
-        }
-    }
-}
-
-impl miette::Diagnostic for ContentError {
-    fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        self.kind.code()
-    }
-
-    fn severity(&self) -> Option<miette::Severity> {
-        self.kind.severity()
-    }
-
-    fn help(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        self.kind.help()
-    }
-
-    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        self.kind.source_code()
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        self.kind.labels()
-    }
-
-    fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
-        self.kind.diagnostic_source()
-    }
-
-    fn related(&self) -> Option<Box<dyn Iterator<Item = &'_ dyn miette::Diagnostic> + '_>> {
-        match &self.kind {
-            ContentErrorKind::FrontmatterEval { errs, .. } => {
-                Some(Box::new(errs.iter().map(|d| d as &dyn miette::Diagnostic)))
-            }
-            _ => None,
-        }
-    }
-}
-
 #[derive(Error, Diagnostic, Debug)]
-pub enum ContentErrorKind {
+pub enum ContentError {
     #[error("failed to evaluate frontmatter in {path}")]
     #[diagnostic(
         code(baudelaire::content::frontmatter_eval),
@@ -239,6 +86,98 @@ pub enum ContentErrorKind {
         first: String,
         second: String,
     },
+}
+
+impl ContentError {
+    pub fn frontmatter_eval(
+        path: &std::path::Path,
+        src: &str,
+        errs: EcoVec<SourceDiagnostic>,
+    ) -> Self {
+        Self::FrontmatterEval {
+            path: path.display().to_string(),
+            src: src.to_owned(),
+            errs: errs.into_iter().map(|e| FrontmatterDiag::new(src, e)).collect(),
+        }
+    }
+
+    /// Lower wax's own span-annotated glob error into an [`Annotated`] so its
+    /// labels point straight at the offending part of the pattern.
+    pub fn bad_glob(pattern: &str, error: wax::BuildError) -> Self {
+        let mut diag = Annotated::new(
+            "baudelaire::content::bad_glob",
+            format!("invalid collection glob `{pattern}`"),
+            pattern.to_owned(),
+        )
+        .help(error.to_string());
+        for location in error.locations() {
+            let (offset, len) = location.span();
+            diag = diag.label(location.to_string(), offset, len);
+        }
+        Self::BadGlob(diag)
+    }
+
+    pub fn frontmatter_not_dict(src: &str, value: typst::foundations::Value) -> Self {
+        use typst::foundations::Repr;
+        Self::FrontmatterNotDict {
+            src: src.to_owned(),
+            ty: value.ty().long_name(),
+            repr: value.repr().to_string(),
+        }
+    }
+
+    /// A known frontmatter key whose value has the wrong type — previously
+    /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
+    pub fn frontmatter_field(
+        path: &std::path::Path,
+        key: &str,
+        expected: &'static str,
+        got: &'static str,
+        help: Option<&'static str>,
+    ) -> Self {
+        Self::FrontmatterField {
+            path: path.display().to_string(),
+            key: key.to_owned(),
+            expected,
+            got: got.to_owned(),
+            help: help.map(str::to_owned),
+        }
+    }
+
+    /// A frontmatter key that is a near-miss of a known one (a typo). Unknown
+    /// keys with no close match pass through to `extra` untouched.
+    pub fn unknown_frontmatter(path: &std::path::Path, key: &str, suggestion: &str) -> Self {
+        Self::UnknownFrontmatterKey {
+            path: path.display().to_string(),
+            key: key.to_owned(),
+            help: format!("did you mean `{suggestion}`?"),
+        }
+    }
+
+    /// A name (filename stem, frontmatter slug, or taxonomy term) with no
+    /// URL-safe characters.
+    pub fn empty_slug(name: &str) -> Self {
+        Self::EmptySlug { name: name.to_owned() }
+    }
+
+    /// Two pages resolving to the same permalink (a silent overwrite otherwise).
+    pub fn collision(permalink: &str, first: &str, second: &str) -> Self {
+        Self::Collision {
+            permalink: permalink.to_owned(),
+            first: first.to_owned(),
+            second: second.to_owned(),
+        }
+    }
+
+    /// Two taxonomy terms slugging to the same URL.
+    pub fn term_collision(taxonomy: &str, slug: &str, first: &str, second: &str) -> Self {
+        Self::TermCollision {
+            taxonomy: taxonomy.to_owned(),
+            slug: slug.to_owned(),
+            first: first.to_owned(),
+            second: second.to_owned(),
+        }
+    }
 }
 
 /// Bridge typst's miette-5 [`SourceDiagnostic`] to our miette-7.

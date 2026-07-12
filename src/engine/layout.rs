@@ -19,16 +19,28 @@ pub(super) struct Layout<'a> {
     file: &'a str,
     /// Frontmatter dict literal, e.g. `(title: "x")`.
     data: &'a str,
+    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))` — passed
+    /// alongside the raw frontmatter so a template reads a page's taxonomy terms
+    /// the same structured way a listing reads an entry's, not by guessing which
+    /// frontmatter keys are taxonomies.
+    taxonomies: &'a str,
     /// Page body markup.
     body: &'a str,
 }
 
 impl<'a> Layout<'a> {
-    pub(super) fn new(dir: &'a Path, file: &'a str, data: &'a str, body: &'a str) -> Self {
+    pub(super) fn new(
+        dir: &'a Path,
+        file: &'a str,
+        data: &'a str,
+        taxonomies: &'a str,
+        body: &'a str,
+    ) -> Self {
         Self {
             dir,
             file,
             data,
+            taxonomies,
             body,
         }
     }
@@ -53,7 +65,11 @@ impl fmt::Display for Layout<'_> {
         // template function is never shadowed by a `page`/`body` binding — even
         // when the template file is itself named `page.typ` or `body.typ`.
         writeln!(f, "#import {}: {} as __layout", Str(&self.import()), self.func())?;
-        writeln!(f, "#show: __body => __layout((frontmatter: {}), __body)", self.data)?;
+        writeln!(
+            f,
+            "#show: __body => __layout((frontmatter: {}, taxonomies: {}), __body)",
+            self.data, self.taxonomies
+        )?;
         f.write_str(self.body)
     }
 }
@@ -68,20 +84,21 @@ mod tests {
             Path::new("templates"),
             "post.typ",
             "(title: \"Hi\")",
+            "(tags: (\"a\",))",
             "body text",
         )
         .to_string();
         assert_eq!(
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"Hi\")), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"Hi\"), taxonomies: (tags: (\"a\",))), __body)\n\
              body text"
         );
     }
 
     #[test]
     fn escapes_paths_that_would_break_the_literal() {
-        let out = Layout::new(Path::new("a\"b"), "x.typ", "()", "").to_string();
+        let out = Layout::new(Path::new("a\"b"), "x.typ", "()", "(:)", "").to_string();
         assert!(out.starts_with("#import \"/a\\\"b/x.typ\": x as __layout\n"));
     }
 
@@ -89,8 +106,8 @@ mod tests {
     fn template_named_page_is_not_shadowed() {
         // Regression: a `page.typ` template must still be callable even though
         // pages carry a `page` dict; the alias makes this collision-proof.
-        let out = Layout::new(Path::new("templates"), "page.typ", "(t: 1)", "b").to_string();
+        let out = Layout::new(Path::new("templates"), "page.typ", "(t: 1)", "(:)", "b").to_string();
         assert!(out.contains(": page as __layout"), "{out}");
-        assert!(out.contains("__layout((frontmatter: (t: 1)), __body)"), "{out}");
+        assert!(out.contains("__layout((frontmatter: (t: 1), taxonomies: (:)), __body)"), "{out}");
     }
 }

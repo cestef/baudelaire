@@ -5,6 +5,7 @@
 //! that shape and lowers it to a synthetic [`Page`] whose body is generated
 //! *typst* (never HTML strings), so it compiles like any other page.
 
+use std::collections::BTreeMap;
 use std::fmt::{self, Write};
 
 use crate::codegen::{Content, Str, Value};
@@ -34,6 +35,9 @@ pub struct Item {
     label: String,
     date: Option<String>,
     note: Option<String>,
+    /// The page's taxonomy terms, keyed by taxonomy (e.g. `tags`, `categories`),
+    /// exposed as-is so a template picks whichever it wants — never flattened.
+    taxonomies: BTreeMap<String, Vec<String>>,
     extra: Value,
 }
 
@@ -44,18 +48,20 @@ impl Item {
             label: label.into(),
             date: None,
             note: None,
+            taxonomies: BTreeMap::new(),
             extra: Value::dict::<&str>([]),
         }
     }
 
     /// The listing row for a page — the single page→item mapping, so every
     /// listing (paginated index, taxonomy term) exposes the same data: link,
-    /// title, display date, and the page's extra frontmatter.
+    /// title, ISO display date, the page's taxonomies, and its extra frontmatter
+    /// (summary, cover image, …).
     pub fn of(page: &Page) -> Self {
         let date = page
             .frontmatter
             .date
-            .map(|d| format!("{} {}, {}", d.month(), d.day(), d.year()));
+            .map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()));
         let extra = Value::dict(
             page.frontmatter
                 .extra
@@ -64,7 +70,15 @@ impl Item {
         );
         Self::new(page.permalink.clone(), page.title())
             .dated(date)
+            .with_taxonomies(page.frontmatter.taxonomies.clone())
             .extra(extra)
+    }
+
+    /// Attach the page's taxonomies, exposed to the template as
+    /// `entry.taxonomies` (a dict of `taxonomy → (terms…)`).
+    pub fn with_taxonomies(mut self, taxonomies: BTreeMap<String, Vec<String>>) -> Self {
+        self.taxonomies = taxonomies;
+        self
     }
 
     /// A row with a trailing `(note)`.
@@ -185,6 +199,12 @@ impl Listing {
                 ("label", Value::str(&item.label)),
                 ("date", Value::opt(item.date.clone())),
                 ("note", Value::opt(item.note.clone())),
+                (
+                    "taxonomies",
+                    Value::dict(item.taxonomies.iter().map(|(name, terms)| {
+                        (name.clone(), Value::array(terms.iter().map(Value::str)))
+                    })),
+                ),
                 ("extra", item.extra.clone()),
             ])
         });

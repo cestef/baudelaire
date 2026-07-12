@@ -4,6 +4,7 @@
 //! ([`typst_html::HtmlDocument`]), never on the serialized string, honoring the
 //! project rule that HTML is never manipulated as text.
 
+mod anchors;
 mod asset;
 mod embed;
 mod fingerprint;

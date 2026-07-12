@@ -30,6 +30,11 @@ pub struct Config {
     pub author: Option<String>,
     /// Content source directory.
     pub content: PathBuf,
+    /// Bundle index basename. A content file with this stem takes its slug from
+    /// its parent directory instead of its filename, so `posts/hello/index.typ`
+    /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
+    /// resources). `None` disables it — every page is keyed by its filename.
+    pub index: Option<String>,
     /// Output (distribution) directory.
     pub dist: PathBuf,
     /// Static passthrough directory.
@@ -148,6 +153,11 @@ impl Config {
             .filter(|segment| !segment.is_empty() && *segment != "..")
             .collect::<Vec<_>>()
             .join("/");
+        // Error pages must sit at a flat `404.html`; under clean URLs a `404/`
+        // directory won't be served as the host's not-found document.
+        if trimmed == "404" {
+            return self.dist.join("404.html");
+        }
         if self.clean {
             self.dist.join(&trimmed).join("index.html")
         } else {
@@ -166,6 +176,12 @@ impl BaseUrl {
     /// Absolute URL for a root-relative path (a permalink or `/file`).
     pub fn join(&self, path: impl AsRef<str>) -> String {
         format!("{}{}", self.0, path.as_ref())
+    }
+
+    /// Absolute URL for a bare output file name sitting at the site root, e.g.
+    /// `sitemap.xml` → `https://site/sitemap.xml`.
+    pub fn file(&self, name: &str) -> String {
+        self.join(format!("/{name}"))
     }
 
     /// Make a root-relative `path` absolute when a base is configured, else
@@ -203,6 +219,7 @@ impl std::hash::Hash for Config {
             lang,
             author,
             content,
+            index,
             dist,
             assets,
             templates,
@@ -238,7 +255,7 @@ impl std::hash::Hash for Config {
             // edit must not invalidate the cache.
             source: _,
         } = self;
-        (site, url, lang, author, content, dist, assets, templates).hash(state);
+        (site, url, lang, author, content, index, dist, assets, templates).hash(state);
         (clean, future, sitemap, robots, llms, draft, links, feed, search).hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, publish, profile).hash(state);
@@ -262,6 +279,9 @@ pub struct CollectionConfig {
     pub paginate: Option<usize>,
     /// Template for the generated paginated index pages.
     pub list: Option<String>,
+    /// Permalink of the paginated index's first page. `None` = `/{id}/`; set to
+    /// `/` to mount a collection's index at the site root (a blog home).
+    pub index: Option<String>,
 }
 
 /// Taxonomy definition.
@@ -379,6 +399,9 @@ pub struct HtmlConfig {
     /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
     /// into each page's `<head>` from frontmatter and config.
     pub meta: bool,
+    /// Give every heading a slug `id` (when it lacks one), so sections are
+    /// deep-linkable and a table of contents can target them.
+    pub anchors: bool,
 }
 
 /// Image handling: markup annotations and build-time optimization. Grouped so

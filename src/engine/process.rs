@@ -114,11 +114,12 @@ impl Processors {
 pub(super) struct Emitter<'a> {
     report: &'a mut Report,
     written: usize,
+    bytes: u64,
 }
 
 impl<'a> Emitter<'a> {
     pub(super) fn new(report: &'a mut Report) -> Self {
-        Self { report, written: 0 }
+        Self { report, written: 0, bytes: 0 }
     }
 
     /// How many files were written — the count of generated outputs for the
@@ -126,12 +127,18 @@ impl<'a> Emitter<'a> {
     pub(super) fn written(&self) -> usize {
         self.written
     }
+
+    /// Total bytes of generated output written, for the build summary.
+    pub(super) fn bytes(&self) -> u64 {
+        self.bytes
+    }
 }
 
 impl Emit for Emitter<'_> {
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
         crate::fs::write_all(path, contents)?;
         self.written += 1;
+        self.bytes += contents.len() as u64;
         Ok(())
     }
 

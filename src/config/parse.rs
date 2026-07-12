@@ -261,6 +261,7 @@ impl NodeExt for KdlNode {
             ("pretty", |c, n, t| { c.pretty = n.boolean(t, 0)?; Ok(()) }),
             ("embed", |c, n, t| { c.embed = n.boolean(t, 0)?; Ok(()) }),
             ("meta", |c, n, t| { c.meta = n.boolean(t, 0)?; Ok(()) }),
+            ("anchors", |c, n, t| { c.anchors = n.boolean(t, 0)?; Ok(()) }),
         ]);
         HTML.fill(target, self, text)
     }
@@ -343,6 +344,7 @@ impl NodeExt for KdlNode {
     fn paths(&self, config: &mut Config, text: &str) -> Result<()> {
         const PATHS: Block<Config> = Block(&[
             ("content", |c, n, t| { c.content = n.string(t, 0)?.into(); Ok(()) }),
+            ("index", |c, n, t| { let s = n.string(t, 0)?; c.index = (!s.is_empty()).then_some(s); Ok(()) }),
             ("dist", |c, n, t| { c.dist = n.string(t, 0)?.into(); Ok(()) }),
             ("assets", |c, n, t| { c.assets = n.string(t, 0)?.into(); Ok(()) }),
             ("templates", |c, n, t| { c.templates = n.string(t, 0)?.into(); Ok(()) }),
@@ -511,6 +513,7 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
             ("list", |c, v, t, s| { c.list = Some(v.as_str(t, s)?); Ok(()) }),
+            ("index", |c, v, t, s| { c.index = Some(v.as_str(t, s)?); Ok(()) }),
         ]);
         let mut cfg = CollectionConfig::default();
         // A leading positional argument is the collection's glob.

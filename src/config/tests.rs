@@ -42,6 +42,14 @@ fn publish_standard_did_and_verify_toggles() {
 }
 
 #[test]
+fn bundle_index_defaults_to_index_and_is_configurable() {
+    assert_eq!(parse("").index.as_deref(), Some("index"));
+    assert_eq!(parse("paths {\n  index \"_index\"\n}").index.as_deref(), Some("_index"));
+    // An empty basename disables bundle slugs.
+    assert_eq!(parse("paths {\n  index \"\"\n}").index, None);
+}
+
+#[test]
 fn scalars() {
     let cfg = parse(
         r#"

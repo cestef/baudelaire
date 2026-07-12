@@ -42,12 +42,12 @@ impl Session {
         let url = format!("{host}/xrpc/com.atproto.server.createSession");
         let body = json!({ "identifier": identifier, "password": password });
         let mut resp = agent.post(&url).send_json(&body)?;
-        let value: Value = read(&mut resp, "com.atproto.server.createSession")?;
+        let value: Value = resp.json("com.atproto.server.createSession")?;
         Ok(Self {
             agent,
             host,
-            did: Did::new(field(&value, "did")?),
-            access: field(&value, "accessJwt")?,
+            did: Did::new(value.field("did")?),
+            access: value.field("accessJwt")?,
         })
     }
 
@@ -65,7 +65,7 @@ impl Session {
             .header("Authorization", self.bearer())
             .header("Content-Type", mime.to_string())
             .send(bytes)?;
-        let value: Value = read(&mut resp, NSID)?;
+        let value: Value = resp.json(NSID)?;
         value
             .get("blob")
             .cloned()
@@ -81,34 +81,22 @@ impl Session {
         record: &impl Serialize,
     ) -> Result<(), PublishError> {
         const NSID: &str = "com.atproto.repo.putRecord";
-        let body = json!({
+        self.post(NSID, &json!({
             "repo": self.did.as_str(),
             "collection": collection.as_str(),
             "rkey": rkey.as_str(),
             "record": record,
-        });
-        let mut resp = self
-            .agent
-            .post(self.xrpc(NSID))
-            .header("Authorization", self.bearer())
-            .send_json(&body)?;
-        read::<Value>(&mut resp, NSID).map(drop)
+        }))
     }
 
     /// Delete the record at `collection/rkey`.
     pub fn delete_record(&self, collection: Nsid, rkey: &Rkey) -> Result<(), PublishError> {
         const NSID: &str = "com.atproto.repo.deleteRecord";
-        let body = json!({
+        self.post(NSID, &json!({
             "repo": self.did.as_str(),
             "collection": collection.as_str(),
             "rkey": rkey.as_str(),
-        });
-        let mut resp = self
-            .agent
-            .post(self.xrpc(NSID))
-            .header("Authorization", self.bearer())
-            .send_json(&body)?;
-        read::<Value>(&mut resp, NSID).map(drop)
+        }))
     }
 
     /// Every record key currently in `collection`, following pagination — the
@@ -130,7 +118,7 @@ impl Session {
                 req = req.query("cursor", cursor);
             }
             let mut resp = req.call()?;
-            let value: Value = read(&mut resp, NSID)?;
+            let value: Value = resp.json(NSID)?;
             for record in value.get("records").and_then(Value::as_array).into_iter().flatten() {
                 if let Some(rkey) = record
                     .get("uri")
@@ -148,6 +136,17 @@ impl Session {
         Ok(rkeys)
     }
 
+    /// POST a JSON `body` to `nsid` with bearer auth, discarding the response —
+    /// the shared spine of the record-mutating calls (put/delete).
+    fn post(&self, nsid: &str, body: &Value) -> Result<(), PublishError> {
+        let mut resp = self
+            .agent
+            .post(self.xrpc(nsid))
+            .header("Authorization", self.bearer())
+            .send_json(body)?;
+        resp.json::<Value>(nsid).map(drop)
+    }
+
     fn xrpc(&self, nsid: &str) -> String {
         format!("{}/xrpc/{nsid}", self.host)
     }
@@ -157,25 +156,33 @@ impl Session {
     }
 }
 
-/// Read a response body as `T`, turning a non-2xx status into a [`PublishError`]
-/// carrying the PDS's own error body.
-fn read<T: serde::de::DeserializeOwned>(
-    resp: &mut ureq::http::Response<ureq::Body>,
-    nsid: &str,
-) -> Result<T, PublishError> {
-    let status = resp.status().as_u16();
-    if !(200..300).contains(&status) {
-        let message = resp.body_mut().read_to_string().unwrap_or_default();
-        return Err(PublishError::xrpc(nsid, status, message));
+/// Read an XRPC response body as `T`, turning a non-2xx status into a
+/// [`PublishError`] carrying the PDS's own error body.
+trait ResponseExt {
+    fn json<T: serde::de::DeserializeOwned>(&mut self, nsid: &str) -> Result<T, PublishError>;
+}
+
+impl ResponseExt for ureq::http::Response<ureq::Body> {
+    fn json<T: serde::de::DeserializeOwned>(&mut self, nsid: &str) -> Result<T, PublishError> {
+        let status = self.status().as_u16();
+        if !(200..300).contains(&status) {
+            let message = self.body_mut().read_to_string().unwrap_or_default();
+            return Err(PublishError::xrpc(nsid, status, message));
+        }
+        Ok(self.body_mut().read_json::<T>()?)
     }
-    Ok(resp.body_mut().read_json::<T>()?)
 }
 
 /// A required string field of a JSON object, else an auth error naming it.
-fn field(value: &Value, key: &str) -> Result<String, PublishError> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| PublishError::auth(format!("session response had no `{key}`")))
+trait ValueExt {
+    fn field(&self, key: &str) -> Result<String, PublishError>;
+}
+
+impl ValueExt for Value {
+    fn field(&self, key: &str) -> Result<String, PublishError> {
+        self.get(key)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| PublishError::auth(format!("session response had no `{key}`")))
+    }
 }

@@ -22,13 +22,13 @@ pub enum PublishError {
     )]
     NoUrl,
 
-    /// The app password was not supplied on the command line or environment.
-    #[error("no app password supplied")]
+    /// A destination's secret was not supplied and could not be prompted for.
+    #[error("no {label} supplied for publishing")]
     #[diagnostic(
-        code(baudelaire::publish::password),
-        help("set the `BAUDELAIRE_ATPROTO_PASSWORD` environment variable or pass `--password`")
+        code(baudelaire::publish::secret),
+        help("pass `--password`, set its environment variable, or run in a terminal to be prompted")
     )]
-    NoPassword,
+    MissingSecret { label: String },
 
     /// Authentication (`createSession`) succeeded at the HTTP layer but the
     /// response was missing or rejected.
@@ -91,6 +91,7 @@ impl PublishError {
             message: message.into(),
         }
     }
+
 }
 
 impl From<ureq::Error> for PublishError {

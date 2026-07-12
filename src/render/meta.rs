@@ -16,7 +16,7 @@ use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
 use super::AssetMap;
-use super::transform::{Cx, Transform};
+use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;
@@ -31,7 +31,7 @@ impl Transform for Meta {
         if tags.is_empty() {
             return;
         }
-        if let Some(head) = super::transform::head(doc.root_mut()) {
+        if let Some(head) = doc.root_mut().head() {
             for node in tags {
                 head.children.push(node);
             }

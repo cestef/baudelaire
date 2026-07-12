@@ -2,6 +2,7 @@
 
 pub mod output;
 pub mod prompt;
+pub mod publish;
 pub mod scaffold;
 pub mod serve;
 
@@ -117,7 +118,7 @@ pub enum Command {
     /// Scaffold a new content file.
     New(NewArgs),
     /// Publish the built site to every configured destination.
-    Publish,
+    Publish(PublishArgs),
     /// Remove build output and local build state.
     Clean(CleanArgs),
     /// Scaffold a new project (config.kdl + dirs).
@@ -146,6 +147,22 @@ pub struct ServeArgs {
     /// Disable file watching and live rebuild.
     #[arg(long)]
     pub no_watch: bool,
+}
+
+/// Arguments for `baudelaire publish`.
+#[derive(Args, Debug, Clone)]
+pub struct PublishArgs {
+    /// Secret (app password / token) for the destination; `-` reads it from
+    /// stdin. Prefer stdin, the environment variable, or the interactive prompt —
+    /// a literal flag can leak into shell history.
+    #[arg(long)]
+    pub password: Option<String>,
+    /// Skip the confirmation prompt.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Report what would change without writing to any destination.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// Arguments for `baudelaire clean`. With no target flag every directory is
@@ -295,18 +312,22 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Serve(args) => {
             let mut config = cli.load_config()?;
             args.apply(&mut config);
-            crate::cli::serve::run(&mut report, &config, &root)?;
+            // Re-reads config.kdl with the same profile + overrides, so the dev
+            // server picks up config edits live.
+            let reload = || -> Result<Config> {
+                let mut config = cli.load_config()?;
+                args.apply(&mut config);
+                Ok(config)
+            };
+            crate::cli::serve::run(&mut report, config, &root, reload)?;
         }
         Command::New(args) => {
             let config = cli.load_config()?;
             scaffold::new_page(&mut report, &args.target(&config), &config)?;
         }
-        Command::Publish => {
+        Command::Publish(args) => {
             let config = cli.load_config()?;
-            // Build first, so a publish always reflects the current sources.
-            crate::engine::Engine::new(config.clone(), crate::engine::Mode::Build)?
-                .build(&mut report)?;
-            crate::publish::run(&config, &mut report)?;
+            publish::run(&mut report, &config, &args)?;
         }
         Command::Clean(args) => {
             let config = cli.load_config()?;

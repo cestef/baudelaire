@@ -55,9 +55,14 @@ impl Page {
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
-        // One slug policy: normalize the frontmatter slug or the file stem, and
-        // reject a name that yields nothing URL-safe rather than emit `//`.
-        let raw = frontmatter.slug.clone().unwrap_or_else(|| stem.slug().to_owned());
+        // One slug policy: an explicit frontmatter slug, else the file stem —
+        // except a bundle index (`posts/hello/index.typ`) takes its parent
+        // directory's name, so the whole directory is one page with colocated
+        // resources. Reject a name that yields nothing URL-safe.
+        let raw = frontmatter
+            .slug
+            .clone()
+            .unwrap_or_else(|| Self::bundle_slug(path, collection, &stem, config));
         let slug = Slug::require(&raw)?.into_string();
         let permalink = Self::permalink(collection, &frontmatter, &slug, config);
         let template = frontmatter
@@ -104,6 +109,19 @@ impl Page {
             collection,
             permalink,
             template,
+        }
+    }
+
+    /// The default slug for a page: its parent directory's name when the file is
+    /// a bundle index (stem equals `config.index`) in a real collection, else
+    /// the file stem. The root `index.typ` keeps its stem, so it still maps to
+    /// `/` rather than to the content directory's name.
+    fn bundle_slug(path: &Path, collection: &str, stem: &Stem, config: &Config) -> String {
+        let is_index = config.index.as_deref().is_some_and(|idx| stem.slug() == idx);
+        let dir = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str());
+        match (is_index && collection != ROOT, dir) {
+            (true, Some(dir)) => dir.to_owned(),
+            _ => stem.slug().to_owned(),
         }
     }
 

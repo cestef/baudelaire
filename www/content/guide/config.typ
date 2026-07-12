@@ -35,7 +35,7 @@ taxonomies {
 }
 
 output {
-  html { pretty #true; meta #true }
+  html { pretty #true; meta #true; anchors #true }
   images { lazy #true; optimize { png; jpeg quality=82 } }
   assets { minify #true; bundle #true; fingerprint #true }
   search { formats "json"; fields "title" "body" "tags" }
@@ -44,8 +44,9 @@ output {
 ```
 
 The `html` block controls the emitted markup (`pretty` formatting, `embed` to
-inline assets as `data:` URIs, `meta` for SEO and social tags); the `images`
-block handles lazy loading and per-format optimization. See
+inline assets as `data:` URIs, `meta` for SEO and social tags, and `anchors` to
+give every heading a slug `id` for deep links); the `images` block handles lazy
+loading and per-format optimization. See
 #link("../features/meta.typ")[meta and images].
 
 Every field has a sensible default, so a minimal `config.kdl` is just

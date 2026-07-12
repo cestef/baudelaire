@@ -188,7 +188,7 @@ impl ConfigError {
         Self {
             text: source.to_owned(),
             span,
-            kind: ConfigErrorKind::Parse(error),
+            kind: ConfigErrorKind::Parse(Box::new(error)),
         }
     }
 }
@@ -236,7 +236,7 @@ impl miette::Diagnostic for ConfigError {
     /// kdl source) as related.
     fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
         match &self.kind {
-            ConfigErrorKind::Parse(e) => Some(e as &dyn miette::Diagnostic),
+            ConfigErrorKind::Parse(e) => Some(e.as_ref() as &dyn miette::Diagnostic),
             _ => None,
         }
     }
@@ -246,7 +246,7 @@ impl miette::Diagnostic for ConfigError {
 pub enum ConfigErrorKind {
     #[error("failed to parse config.kdl")]
     #[diagnostic(code(baudelaire::config::parse))]
-    Parse(kdl::KdlError),
+    Parse(Box<kdl::KdlError>),
 
     #[error("unknown key `{key}` in config.kdl")]
     #[diagnostic(code(baudelaire::config::unknown_key))]
