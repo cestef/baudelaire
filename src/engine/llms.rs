@@ -11,6 +11,7 @@ use super::process::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::Result;
+use crate::error::warning::BaseUrlMissing;
 
 /// Emits `llms.txt` when an `llms` block is configured.
 pub(super) struct Llms;
@@ -23,7 +24,7 @@ impl Processor for Llms {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base =
-            site.warn_missing_base(out, format_args!("llms.txt has no `url` set — links will be relative"))?;
+            site.warn_missing_base(out, BaseUrlMissing { feature: "llms.txt", effect: "emitted with relative links" })?;
         let mut md = format!("# {}\n", site.config.label());
         if let Some(summary) = &site.config.llms.summary {
             let _ = write!(md, "\n> {summary}\n");
@@ -36,7 +37,8 @@ impl Processor for Llms {
             }
         }
         out.file(&site.config.dist.join("llms.txt"), &md)?;
-        out.note(format_args!("wrote llms.txt"))
+        out.note(format_args!("wrote llms.txt"));
+        Ok(())
     }
 }
 

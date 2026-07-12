@@ -19,10 +19,11 @@ use serde::Serialize;
 use owo_colors::OwoColorize;
 
 use crate::atproto::{AtUri, Blob, Did, Nsid, Rkey, Session};
-use crate::cli::output::{Count, Report};
 use crate::config::StandardConfig;
+use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{PublishError, Result};
 use crate::mime::Mime;
+use crate::ui::Ui;
 
 use super::{Doc, Options, Publisher, SiteView, SkipCache};
 
@@ -67,7 +68,7 @@ impl Publisher for Standard {
         "standard.site"
     }
 
-    fn publish(&self, site: &SiteView, opts: &Options, report: &mut Report) -> Result<()> {
+    fn publish(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()> {
         if self.config.handle.is_empty() {
             return Err(PublishError::Unconfigured.into());
         }
@@ -75,13 +76,13 @@ impl Publisher for Standard {
         let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
 
         let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
-        self.check_did(session.did(), report)?;
+        self.check_did(session.did(), ui)?;
         let publication = publication_uri(session.did().as_str());
 
         if opts.dry_run {
-            report.info(format_args!("dry run — no records will be written"))?;
+            ui.detail("dry run — no records will be written");
         } else {
-            // The publication record first, so the documents can point at it.
+            // publication record first, so documents can point at it.
             let icon = self.icon(&session)?;
             session.put_record(PUBLICATION, &Rkey::literal(PUBLICATION_RKEY), &Publication {
                 kind: PUBLICATION.as_str(),
@@ -93,7 +94,7 @@ impl Publisher for Standard {
             })?;
         }
 
-        self.documents(site, &session, &publication, opts, report)
+        self.documents(site, &session, &publication, opts, ui)
     }
 }
 
@@ -115,7 +116,7 @@ impl Standard {
     /// a mismatch means the build emitted verification artifacts for the wrong
     /// identity, so it is fatal; an unset `did` only forgoes those artifacts, so
     /// it is a note pointing at the value to configure.
-    fn check_did(&self, actual: &Did, report: &mut Report) -> Result<()> {
+    fn check_did(&self, actual: &Did, ui: &Ui) -> Result<()> {
         match &self.config.did {
             Some(did) if did == actual.as_str() => Ok(()),
             Some(did) => Err(PublishError::DidMismatch {
@@ -124,9 +125,7 @@ impl Standard {
             }
             .into()),
             None => {
-                report.info(format_args!(
-                    "set `publish.standard.did \"{actual}\"` to emit verification artifacts at build"
-                ))?;
+                ui.advice(DidUnpinned { did: actual.to_string() });
                 Ok(())
             }
         }
@@ -142,7 +141,7 @@ impl Standard {
         session: &Session,
         publication: &AtUri,
         opts: &Options,
-        report: &mut Report,
+        ui: &Ui,
     ) -> Result<()> {
         let mut cache = SkipCache::load(self.name());
         let remote: BTreeSet<String> = session
@@ -189,23 +188,20 @@ impl Standard {
         }
 
         if !undated.is_empty() {
-            // Each skipped page is listed at verbose; a count always shows.
-            // `skipped` styles the path itself, so pass it plain.
+            // Each skipped page is listed at verbose; the typed warning always
+            // carries the count.
             for path in &undated {
-                report.skipped(path, "no publication date")?;
+                ui.skip(path, "no publication date");
             }
-            report.warn(format_args!(
-                "{} skipped — no publication date",
-                Count::pages(undated.len())
-            ))?;
+            ui.warn(Undated { count: undated.len() });
         }
-        report.success(Summary {
+        ui.done(Summary {
             name: self.name(),
             sent,
             unchanged,
             removed,
             dry_run: opts.dry_run,
-        })?;
+        });
         Ok(())
     }
 }

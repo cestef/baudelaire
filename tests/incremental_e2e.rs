@@ -286,11 +286,11 @@ fn no_cache_flag_forces_full_rebuild() {
     site.build();
 
     let out = site.run(&["--no-cache", "build", "-v"]);
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let logs = String::from_utf8_lossy(&out.stderr);
     // A forced full rebuild serves nothing from cache — no page nor the summary
     // mentions caching (the summary omits the cached count when it is zero).
     assert!(
-        !stdout.contains("cached"),
-        "no-cache must rebuild everything: {stdout}"
+        !logs.contains("cached"),
+        "no-cache must rebuild everything: {logs}"
     );
 }

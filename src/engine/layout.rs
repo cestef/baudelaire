@@ -61,9 +61,8 @@ impl<'a> Layout<'a> {
 
 impl fmt::Display for Layout<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Import under an internal alias and pass the data inline, so the
-        // template function is never shadowed by a `page`/`body` binding — even
-        // when the template file is itself named `page.typ` or `body.typ`.
+        // import under an internal alias so the template function is never
+        // shadowed by a `page`/`body` binding — even a `page.typ`/`body.typ`.
         writeln!(f, "#import {}: {} as __layout", Str(&self.import()), self.func())?;
         writeln!(
             f,

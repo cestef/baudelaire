@@ -92,8 +92,7 @@ impl ElementExt for HtmlElement {
             return;
         };
         let mut changed = false;
-        // Comma-separates candidates; splitting on `,` is exact for the asset
-        // URLs we emit (fingerprinted filenames never contain commas).
+        // splitting on `,` is exact for the URLs we emit (hashed names have no commas)
         let rebuilt = value
             .split(',')
             .map(|candidate| {
@@ -136,9 +135,8 @@ pub(super) struct Transforms(Vec<Box<dyn Transform>>);
 
 impl Transforms {
     pub(super) fn builtin() -> Self {
-        // Order matters: resolve links, add meta/image annotations, then inline
-        // embeds (produces `data:` URIs), then fingerprint whatever asset
-        // references remain.
+        // order matters: resolve links, annotate, inline embeds (as `data:` URIs),
+        // then fingerprint whatever refs remain.
         Self(vec![
             Box::new(Links),
             Box::new(Anchors),

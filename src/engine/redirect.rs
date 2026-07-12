@@ -2,7 +2,7 @@
 
 use super::process::{Emit, Processor, Site};
 use super::xml::Xml;
-use crate::cli::output::Count;
+use crate::ui::Count;
 use crate::error::Result;
 
 /// Emits a redirect stub for every `redirect` old-path in a page's
@@ -19,7 +19,7 @@ impl Processor for Redirects {
             }
         }
         if count > 0 {
-            out.note(format_args!("wrote {}", Count::redirects(count)))?;
+            out.note(format_args!("wrote {}", Count::redirects(count)));
         }
         Ok(())
     }

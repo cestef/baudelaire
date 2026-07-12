@@ -15,8 +15,8 @@ use typst_library::routines::SpanMode;
 
 use crate::error::{ContentError, Result};
 
-/// Minimal world for evaluating pure-data frontmatter. No file or font
-/// access - frontmatter must be literal data.
+/// Minimal world for evaluating pure-data frontmatter: no file or font access,
+/// since frontmatter must be literal data.
 pub(super) struct EvalWorld {
     library: std::sync::Arc<LazyHash<Library>>,
     book: std::sync::Arc<LazyHash<typst::text::FontBook>>,
@@ -28,11 +28,9 @@ impl EvalWorld {
     pub(super) fn dict(src: &str, path: &Path) -> Result<Dict> {
         let world = Self::shared();
         let mut sink = Sink::new();
-        // Map each evaluated node's span onto its own byte range in `src`, so a
-        // syntax error underlines the exact offending text of the frontmatter
-        // snippet (an identity map — `src` *is* the text we show as source). The
-        // file id is cosmetic (labels resolve to ranges in `src` directly), so a
-        // best-effort virtual path from the file name is enough.
+        // map each node's span onto its byte range in `src` (identity map — `src`
+        // *is* the source shown) so a syntax error underlines the exact text. the
+        // file id is cosmetic, so a best-effort virtual path from the name suffices.
         let vpath = path
             .file_name()
             .and_then(|name| VirtualPath::new(name.to_string_lossy()).ok())

@@ -9,9 +9,11 @@
 
 use std::process::Command;
 
-use crate::cli::output::Report;
+use tracing::debug;
+
 use crate::config::Config;
 use crate::error::{HookError, HookPhase, Result};
+use crate::ui::Ui;
 
 /// Runs the configured lifecycle hooks.
 pub(super) struct Hooks<'a> {
@@ -24,26 +26,28 @@ impl<'a> Hooks<'a> {
     }
 
     /// Commands run before the build.
-    pub(super) fn before(&self, report: &mut Report) -> Result<()> {
-        self.run(&self.config.hooks.before, HookPhase::Before, report)
+    pub(super) fn before(&self, ui: &Ui) -> Result<()> {
+        self.run(&self.config.hooks.before, HookPhase::Before, ui)
     }
 
     /// Commands run after the site is written.
-    pub(super) fn after(&self, report: &mut Report) -> Result<()> {
-        self.run(&self.config.hooks.after, HookPhase::After, report)
+    pub(super) fn after(&self, ui: &Ui) -> Result<()> {
+        self.run(&self.config.hooks.after, HookPhase::After, ui)
     }
 
-    fn run(&self, commands: &[String], phase: HookPhase, report: &mut Report) -> Result<()> {
+    fn run(&self, commands: &[String], phase: HookPhase, ui: &Ui) -> Result<()> {
         if commands.is_empty() {
             return Ok(());
         }
-        // Hooks run in the project root (the CLI enters it at startup). If it
-        // cannot be resolved — e.g. it was removed underneath us — that is a
-        // typed error, not a silent fallback to an empty path that would make
-        // the shell fail with a baffling message.
+        // hooks run in the project root. if it can't be resolved (e.g. removed
+        // underneath us), that's a typed error, not a silent empty-path fallback
+        // that makes the shell fail with a baffling message.
         let cwd = std::env::current_dir().map_err(|e| HookError::cwd(phase, e))?;
         for command in commands {
-            report.info(format_args!("hook: {command}"))?;
+            // the hook's own stdio streams straight to the terminal, so give it
+            // a dimmed context line first.
+            ui.detail(format_args!("$ {command}"));
+            debug!(%phase, command, "running hook");
             let status = Self::shell()
                 .current_dir(&cwd)
                 .arg(command)
@@ -73,7 +77,7 @@ impl<'a> Hooks<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::output::{Level, Report};
+    use crate::ui::Level;
 
     /// A removed working directory is a typed hook error, not a spawn in `""`.
     /// Safe to chdir: nextest runs each test in its own process.
@@ -85,8 +89,8 @@ mod tests {
 
         let mut config = Config::default();
         config.hooks.before = vec!["true".into()];
-        let mut report = Report::with_level(Level::Silent);
-        let err = Hooks::new(&config).before(&mut report).unwrap_err();
+        let ui = Ui::new(Level::Silent);
+        let err = Hooks::new(&config).before(&ui).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("working directory"), "{msg}");
         assert!(msg.contains("before-build"), "{msg}");

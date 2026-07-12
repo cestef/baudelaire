@@ -48,8 +48,9 @@ impl<'a, T: Clone> Prompt<'a, T> {
     /// Read a choice with the arrow keys: ←/→ (or ↑/↓) move, a letter jumps to a
     /// matching option, Enter confirms, Esc takes the default. Redraws in place.
     /// Without an interactive terminal (piped/CI) it returns the default at once.
+    /// Renders on stderr, like every other CLI line — stdout stays data-only.
     pub fn ask(&self) -> Result<T> {
-        let term = Term::stdout();
+        let term = Term::stderr();
         if !term.is_term() {
             return Ok(self.chosen(self.default));
         }
@@ -149,8 +150,8 @@ impl<'a> Secret<'a> {
         if !term.is_term() {
             return Ok(None);
         }
-        // Prompt through anstream so styling strips on a non-terminal and honors
-        // NO_COLOR, matching every other CLI line; read hidden via `Term`.
+        // through anstream so styling strips on a pipe and honors NO_COLOR like
+        // every other CLI line; read hidden via `Term`.
         anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         anstream::stderr().flush()?;
         let secret = term.read_secure_line()?;
@@ -177,21 +178,22 @@ impl<'a> Input<'a> {
         self
     }
 
-    /// Render the prompt and read one line, returning the trimmed answer or the
-    /// default on an empty line or EOF.
+    /// Render the prompt (on stderr, keeping stdout data-only) and read one
+    /// line, returning the trimmed answer or the default on an empty line or
+    /// EOF.
     pub fn ask(&self) -> Result<String> {
-        // Through anstream so styling strips on a non-terminal and honors
-        // NO_COLOR, like every other CLI line.
+        // through anstream so styling strips on a pipe and honors NO_COLOR like
+        // every other CLI line.
         if self.default.is_empty() {
-            anstream::print!("{} {} ", "?".cyan().bold(), self.question.bold());
+            anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         } else {
             let hint = format!("({})", self.default);
-            anstream::print!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
+            anstream::eprint!("{} {} {} ", "?".cyan().bold(), self.question.bold(), hint.dimmed());
         }
-        anstream::stdout().flush()?;
+        anstream::stderr().flush()?;
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line)? == 0 {
-            println!();
+            eprintln!();
         }
         let answer = line.trim();
         Ok(if answer.is_empty() { self.default.to_owned() } else { answer.to_owned() })

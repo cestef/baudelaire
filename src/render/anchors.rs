@@ -21,9 +21,8 @@ impl Transform for Anchors {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
-        // Ids must be unique within a page, so two headings that slug alike get
-        // `-2`, `-3`, … suffixes. Author-set ids are recorded as we pass them so
-        // a derived id never shadows one.
+        // ids are unique per page: like-slugged headings get `-2`, `-3`, … suffixes.
+        // author-set ids are recorded so a derived id never shadows one.
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         doc.root_mut().walk(&mut |element| {
             if !Self::heading(element.tag) {

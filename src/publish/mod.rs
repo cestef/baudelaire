@@ -14,10 +14,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::cli::output::Report;
 use crate::config::Config;
 use crate::content::{Page, discover};
 use crate::error::{PublishError, Result};
+use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
 
@@ -133,30 +133,30 @@ pub trait Publisher {
 
     /// Publish `site` under `opts`, reporting progress as it goes. Honors
     /// `opts.dry_run` by computing and reporting the plan without writing.
-    fn publish(&self, site: &SiteView, opts: &Options, report: &mut Report) -> Result<()>;
+    fn publish(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()>;
 }
 
 /// Publish to every configured destination in turn. Errors if none is
 /// configured, so `baudelaire publish` on an unconfigured project explains
 /// itself rather than silently doing nothing.
-pub fn run(config: &Config, opts: &Options, report: &mut Report) -> Result<()> {
+pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     let publishers = configured(config);
     if publishers.is_empty() {
         return Err(PublishError::Unconfigured.into());
     }
     let site = view(config)?;
     for publisher in publishers {
-        report.milestone(format_args!(
-            "publishing {} to {}",
-            crate::cli::output::Count::pages(site.documents.len()),
-            publisher.name()
-        ))?;
+        ui.section(format_args!(
+            "{} — {}",
+            publisher.name(),
+            Count::documents(site.documents.len())
+        ));
         // Confirm before any network mutation, unless previewing or `--yes`.
         if !opts.dry_run && !opts.confirm(&format!("publish to {}?", publisher.name()))? {
-            report.info(format_args!("skipped {}", publisher.name()))?;
+            ui.detail(format_args!("skipped {}", publisher.name()));
             continue;
         }
-        publisher.publish(&site, opts, report)?;
+        publisher.publish(&site, opts, ui)?;
     }
     Ok(())
 }

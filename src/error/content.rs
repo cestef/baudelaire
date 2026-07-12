@@ -221,9 +221,8 @@ impl miette::Diagnostic for FrontmatterDiag {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        // Frontmatter is evaluated with `SpanMode::Mapped`, so each diagnostic
-        // carries a raw byte range into `src` (the snippet shown above) — draw
-        // an underline there instead of the whole snippet.
+        // evaluated with `SpanMode::Mapped`, so each diagnostic carries a raw byte
+        // range into `src` — underline there rather than the whole snippet.
         let DiagSpanKind::Range { range, .. } = self.inner.span.get() else {
             return None;
         };

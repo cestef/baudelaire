@@ -10,6 +10,7 @@ pub mod graph;
 pub mod mime;
 pub mod publish;
 pub mod render;
+pub mod ui;
 pub mod world;
 
 pub use error::*;

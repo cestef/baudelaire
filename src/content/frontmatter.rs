@@ -118,9 +118,8 @@ impl Call {
     fn find(source: &Source) -> Option<Self> {
         let root = source.root();
         let markup = root.cast::<Markup>()?;
-        // Only a *leading* call counts: skip leading whitespace, then the first
-        // real expression must be the `#frontmatter(...)` call, else there is
-        // none — a mid-document call is ordinary content, not frontmatter.
+        // only a *leading* call counts: a mid-document `#frontmatter(...)` is
+        // ordinary content. skip whitespace, then the first real expr must be it.
         let mut exprs = markup.exprs();
         let call = loop {
             match exprs.next()? {
@@ -153,9 +152,8 @@ impl Call {
     }
 
     fn splice(&self, text: &str) -> String {
-        // Replace the call with exactly as many newlines as it spanned, so every
-        // body line keeps its original number and compile diagnostics point at
-        // the real line (a single `\n` shifted everything below up by one).
+        // replace the call with as many newlines as it spanned, so body lines keep
+        // their original numbers and compile diagnostics point at the real line.
         let newlines = text[self.range.clone()].bytes().filter(|&b| b == b'\n').count();
         let mut out = String::with_capacity(text.len());
         out.push_str(&text[..self.range.start]);

@@ -90,8 +90,8 @@ fn verbose_shows_per_page_progress() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["-v", "build"]);
     assert!(out.status.success());
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("built"));
+    let logs = String::from_utf8_lossy(&out.stderr);
+    assert!(logs.contains("built"));
 }
 
 #[test]
@@ -100,8 +100,8 @@ fn quiet_suppresses_milestone() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["-q", "build"]);
     assert!(out.status.success());
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(!stdout.contains("building"));
+    let logs = String::from_utf8_lossy(&out.stderr);
+    assert!(!logs.contains("building"));
 }
 
 #[test]
@@ -110,6 +110,7 @@ fn build_reports_timing() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["build"]);
     assert!(out.status.success());
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("ms") || stdout.contains("s)"));
+    // The summary ends `… in 132ms` / `… in 1.24s`.
+    let logs = String::from_utf8_lossy(&out.stderr);
+    assert!(logs.contains(" in ") && (logs.contains("ms") || logs.contains("s")), "{logs}");
 }

@@ -5,11 +5,12 @@ use std::process::Command;
 use owo_colors::OwoColorize;
 
 use crate::cli::Root;
-use crate::cli::output::{Paths, Report};
 use crate::cli::prompt::{Input, Prompt};
 use crate::config::Config;
 use crate::error::Result;
+use crate::error::warning::{ScaffoldExists, VcsFailed, VcsMissing};
 use crate::fs;
+use crate::ui::{Paths, Ui};
 
 /// Declarative scaffold: dirs + files to create under a root.
 struct Scaffold<'a> {
@@ -37,36 +38,27 @@ impl<'a> Scaffold<'a> {
         self
     }
 
-    fn apply(self, report: &mut Report) -> Result<()> {
+    fn apply(self, ui: &Ui) -> Result<()> {
         for dir in &self.dirs {
             let path = self.root.join(dir);
             if !path.exists() {
                 fs::create_dir_all(&path)?;
-                report.muted(format_args!(
-                    "  {} {}",
-                    "+".green(),
-                    Paths(&dir.display().to_string())
-                ))?;
+                ui.detail(format_args!("{} {}", "+".green(), Paths(&dir.display().to_string())));
             }
         }
         for (rel, contents) in &self.files {
             let full = self.root.join(rel);
-            // Never clobber: `init` into an existing project must not
-            // overwrite its config or templates. Existing directories are
-            // fine; existing files are skipped with a warning.
+            // never clobber: `init` into an existing project must not overwrite
+            // its config or templates. existing files are skipped with a warning.
             if full.exists() {
-                report.warn(format_args!("{} exists — skipped", rel.display()))?;
+                ui.warn(ScaffoldExists { path: rel.clone() });
                 continue;
             }
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent)?;
             }
             fs::write(&full, contents)?;
-            report.muted(format_args!(
-                "  {} {}",
-                "+".green(),
-                Paths(&rel.display().to_string())
-            ))?;
+            ui.detail(format_args!("{} {}", "+".green(), Paths(&rel.display().to_string())));
         }
         Ok(())
     }
@@ -96,22 +88,17 @@ impl Config {
 /// for its default site name). `yes` takes every prompt's default without
 /// asking; `vcs` pins a version-control system.
 pub(crate) fn init(
-    report: &mut Report,
+    ui: &Ui,
     target: &Path,
     root: &Root,
     yes: bool,
     vcs: Option<Vcs>,
 ) -> Result<()> {
-    report.milestone(format_args!(
-        "initializing project in {}",
-        Paths(&target.display().to_string())
-    ))?;
-
     let interactive = !yes && std::io::stdin().is_terminal();
     let details = Details::gather(target, root, interactive)?;
     let repo = Repo::wanted(yes, interactive, vcs)?;
     if interactive {
-        report.blank()?;
+        ui.blank();
     }
 
     Scaffold::new(target)
@@ -123,19 +110,19 @@ pub(crate) fn init(
         .file("content/posts/hello.typ", templates::HELLO)
         .file("templates/layout.typ", templates::LAYOUT)
         .file("assets/style.css", templates::STYLE)
-        .apply(report)?;
+        .apply(ui)?;
 
     if let Some(vcs) = repo {
-        Repo::new(target, vcs).setup(report)?;
+        Repo::new(target, vcs).setup(ui)?;
     }
 
-    report.blank()?;
-    report.success("project ready")?;
-    report.muted(format_args!(
+    ui.blank();
+    ui.done(format_args!("project ready in {}", Paths(&target.display().to_string())));
+    ui.detail(format_args!(
         "run {} to build, {} for a live preview",
         "baudelaire build".cyan(),
         "baudelaire serve".cyan()
-    ))?;
+    ));
     Ok(())
 }
 
@@ -203,7 +190,7 @@ impl Details {
 }
 
 /// Scaffold a new content file, inferring collection + template from config.
-pub fn new_page(report: &mut Report, path: &Path, config: &Config) -> Result<()> {
+pub fn new_page(ui: &Ui, path: &Path, config: &Config) -> Result<()> {
     if path.exists() {
         return Err(crate::error::ScaffoldError::already_exists(path).into());
     }
@@ -216,8 +203,8 @@ pub fn new_page(report: &mut Report, path: &Path, config: &Config) -> Result<()>
     let body = templates::render(templates::PAGE, &[("template", &template)]);
     Scaffold::new(path.parent().unwrap_or(Path::new(".")))
         .file(name, body)
-        .apply(report)?;
-    report.success(format_args!("created {}", path.display()))?;
+        .apply(ui)?;
+    ui.done(format_args!("created {}", Paths(&path.display().to_string())));
     Ok(())
 }
 
@@ -289,11 +276,11 @@ impl<'a> Repo<'a> {
     /// Write `.gitignore` and initialize the repository, skipping either step if
     /// it already exists. A missing or failing tool is a warning, not an error:
     /// the project is scaffolded either way.
-    fn setup(&self, report: &mut Report) -> Result<()> {
+    fn setup(&self, ui: &Ui) -> Result<()> {
         let ignore = self.root.join(".gitignore");
         if !ignore.exists() {
             fs::write(&ignore, Self::IGNORE)?;
-            report.muted(format_args!("  {} {}", "+".green(), Paths(".gitignore")))?;
+            ui.detail(format_args!("{} {}", "+".green(), Paths(".gitignore")));
         }
         let (argv, marker) = self.vcs.init();
         if self.root.join(marker).exists() {
@@ -304,19 +291,18 @@ impl<'a> Repo<'a> {
         // prints an "Initialized repo" line and a hint that would clutter the
         // scaffold log. Surface it only if the command actually failed.
         match Command::new(cmd).args(args).current_dir(self.root).output() {
-            Ok(out) if out.status.success() => report.muted(format_args!(
-                "  {} {} repository",
-                "+".green(),
-                self.vcs.label().dimmed()
-            ))?,
-            Ok(out) => {
-                report.warn(format_args!("{cmd} init failed; skipped repository setup"))?;
-                let detail = String::from_utf8_lossy(&out.stderr);
-                if !detail.trim().is_empty() {
-                    report.item(detail.trim())?;
-                }
+            Ok(out) if out.status.success() => {
+                ui.detail(format_args!("{} {} repository", "+".green(), self.vcs.label()));
             }
-            Err(_) => report.warn(format_args!("{cmd} not found; skipped repository setup"))?,
+            Ok(out) => {
+                let detail = String::from_utf8_lossy(&out.stderr);
+                let detail = detail.trim();
+                ui.warn(VcsFailed {
+                    tool: cmd,
+                    detail: (!detail.is_empty()).then(|| detail.to_owned()),
+                });
+            }
+            Err(_) => ui.warn(VcsMissing { tool: cmd }),
         }
         Ok(())
     }

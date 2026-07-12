@@ -23,7 +23,7 @@ impl Transform for Verify {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        // Only dated pages are documents; the gate matches the publisher.
+        // only dated pages are documents; gate matches the publisher
         let (Some(did), true) = (
             standard(cx.config).and_then(|s| s.did.as_deref()),
             cx.page.frontmatter.date.is_some(),

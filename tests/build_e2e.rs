@@ -286,11 +286,11 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
     let out = site.run(&["build"]);
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let logs = String::from_utf8_lossy(&out.stderr);
     // The compact summary line counts assets and generated files, and shows dist.
-    assert!(stdout.contains("1 asset"), "assets counted: {stdout}");
-    assert!(stdout.contains("file"), "generated files counted: {stdout}");
-    assert!(stdout.contains("→ public"), "output dir shown: {stdout}");
+    assert!(logs.contains("1 asset"), "assets counted: {logs}");
+    assert!(logs.contains("file"), "generated files counted: {logs}");
+    assert!(logs.contains("→ public"), "output dir shown: {logs}");
 }
 
 #[test]

@@ -16,13 +16,14 @@ mod xml;
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use rayon::prelude::*;
+use tracing::debug;
 use typst::syntax::{FileId, Source};
 use typst::{World, compile};
 use typst_html::{HtmlDocument, HtmlOptions};
 
-use crate::cli::output::{Bytes, Count, PageStatus, Paths, Report};
 use crate::config::Config;
 use crate::content::{Page, plan};
 use crate::engine::asset::Assets;
@@ -35,6 +36,7 @@ use crate::error::{
 };
 use crate::graph::{Cache, Deps, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
+use crate::ui::{Bytes, Count, Dur, PageStatus, Paths, Timer, Ui};
 use crate::world::{PageWorld, Project, Tracked};
 pub use crate::world::Mode;
 
@@ -52,9 +54,9 @@ pub struct Stats {
 type Prepared = (FileId, String, Hash);
 
 /// The end-of-build summary: one tight result line covering pages (and how many
-/// were cached), assets processed, generated files, any warnings, and the output
-/// directory. Owns its own rendering so [`Engine::build`] only gathers the
-/// numbers. The per-file names stay available at verbose via the emitter notes.
+/// were cached), assets processed, generated files, any warnings, the output
+/// directory, and elapsed time. Owns its own rendering so [`Engine::build`]
+/// only gathers the numbers.
 struct Summary<'a> {
     pages: usize,
     cached: usize,
@@ -63,10 +65,11 @@ struct Summary<'a> {
     bytes: u64,
     warnings: usize,
     dist: &'a Path,
+    elapsed: Duration,
 }
 
 impl Summary<'_> {
-    fn report(&self, report: &mut Report) -> std::io::Result<()> {
+    fn report(&self, ui: &Ui) {
         let mut parts = vec![match self.cached {
             0 => Count::pages(self.pages).to_string(),
             n => format!("{} ({n} cached)", Count::pages(self.pages)),
@@ -83,7 +86,12 @@ impl Summary<'_> {
         if self.warnings > 0 {
             parts.push(Count::warnings(self.warnings).to_string());
         }
-        report.done(format_args!("{} → {}", parts.join(" · "), Paths(&self.dist.display().to_string())))
+        ui.done(format_args!(
+            "built {} → {} in {}",
+            parts.join(" · "),
+            Paths(&self.dist.display().to_string()),
+            Dur(self.elapsed)
+        ));
     }
 }
 
@@ -101,40 +109,40 @@ impl Engine {
 
     /// Build the site incrementally: reuse cached output for unchanged pages,
     /// recompile the rest in parallel, then copy assets.
-    pub fn build(&self, report: &mut Report) -> Result<Stats> {
+    pub fn build(&self, ui: &Ui) -> Result<Stats> {
+        let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
-        let pages = self.announce(report, "building")?;
-        let warned = report.warnings();
+        let pages = plan(&self.config)?;
+        debug!(pages = pages.len(), site = self.config.label(), "planned build");
+        let warned = ui.warnings();
 
-        // `before` hooks run ahead of the asset pipeline, so anything they
-        // generate into `assets/` (e.g. a Tailwind stylesheet) is picked up and
-        // fingerprinted like a first-class asset.
+        // `before` hooks run ahead of the asset pipeline so anything they emit
+        // into `assets/` (e.g. Tailwind output) is fingerprinted like any asset.
         let hooks = Hooks::new(&self.config);
-        hooks.before(report)?;
+        hooks.before(ui)?;
 
-        // Assets are processed next: the resulting URL map feeds the render
-        // pipeline (fingerprint rewriting) and folds into the cache fingerprint,
-        // so a re-fingerprinted asset invalidates the pages that reference it.
-        report.info("processing assets")?;
+        // the asset URL map feeds render-side fingerprint rewriting and folds
+        // into the cache fingerprint, so a re-fingerprinted asset invalidates
+        // the pages that reference it.
         let assets = Assets::new(&self.config).process()?;
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
+        debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let renderer = Renderer::new(&pages, assets.map);
-        // The render-side cache inputs: asset renames, the link map, and — only
-        // when pages inline asset bytes — the embedded asset contents (which the
-        // per-page dependency tracker cannot see, since typst never reads them).
+        // render-side cache inputs: asset renames, the link map, and — only
+        // when pages inline asset bytes — the embedded contents (the per-page
+        // dependency tracker can't see them, since typst never reads them).
         let render = RenderInputs {
             assets: Hash::of(renderer.assets()),
             links: renderer.links(),
             embeds: self.config.html.embed.then(|| Hash::of_dir(&self.config.assets)),
         };
-        let mut cache = Cache::load(&self.config, self.project.context(), &render, report)?;
+        let mut cache = Cache::load(&self.config, self.project.context(), &render, ui)?;
 
-        // Split pages into those the cache can serve verbatim and those needing
-        // a fresh compile. `prepare` produces each page's text + fingerprint
-        // without parsing it — the expensive parse into a typst `Source` is
-        // deferred to `compile`, so a cache hit never pays to parse a page it
-        // will not render.
+        // split cache hits from stale pages. `prepare` produces each page's
+        // text + fingerprint without parsing it — the parse into a typst
+        // `Source` is deferred to `compile`, so a hit never pays to parse a
+        // page it won't render.
         let mut cached: Vec<(&Page, String)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
@@ -146,35 +154,36 @@ impl Engine {
                 Err(e) => stale.push((page, Err(e))),
             }
         }
+        debug!(stale = stale.len(), reused = cached.len(), "cache split");
 
+        let progress = ui.progress("compiling", stale.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = stale
             .into_par_iter()
             .map(|(page, prepared)| {
                 let outcome = prepared
                     .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
+                progress.tick(self.relative(page));
                 (page, outcome)
             })
             .collect();
-        let rendered = self.collect(outcomes, report)?;
-        self.check_links(&rendered, report)?;
+        progress.finish();
+        let rendered = self.collect(outcomes, ui)?;
+        self.check_links(&rendered, ui)?;
 
         for r in &rendered {
             cache.record(r.page, r.fingerprint.clone(), &r.html, &r.deps);
         }
         for (page, _) in &cached {
-            report.page(self.relative(page), PageStatus::Cached)?;
+            ui.page(self.relative(page), PageStatus::Cached);
         }
-        // Pair every page (freshly rendered and cache-served alike) with its
-        // final HTML, once: the write pass, the cache blob staging, and the
-        // post-build processors all read this single view.
+        // pair every page (rendered and cache-served alike) with its final
+        // HTML once: write pass, blob staging, and processors share this view.
         let outputs: Vec<(&Page, &str)> = rendered
             .iter()
             .map(|r| (r.page, r.html.as_str()))
             .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
             .collect();
-        // Write every page's HTML in parallel — independent files, no shared
-        // state — so a page-count-heavy site isn't bottlenecked on serial I/O
-        // after the parallel compile.
+        // write page HTML in parallel — independent files, no shared state.
         outputs
             .par_iter()
             .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
@@ -185,18 +194,17 @@ impl Engine {
                 pages: &pages,
                 outputs: &outputs,
             };
-            let mut emitter = Emitter::new(report);
+            let mut emitter = Emitter::new(ui);
             Processors::builtin().run(&site, &mut emitter)?;
             (emitter.written(), emitter.bytes())
         };
-        // Total output size: page HTML (fresh and cached alike) + processed
-        // assets + generated files.
         let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
 
-        // `after` hooks run once the whole site is on disk (deploy scripts,
-        // post-processors like Pagefind, …).
-        hooks.after(report)?;
+        // `after` hooks run once the whole site is on disk (deploy, Pagefind…).
+        hooks.after(ui)?;
 
+        // Warnings render as a block ahead of the result line, cargo-style.
+        ui.flush();
         let total = rendered.len() + cached.len();
         Summary {
             pages: total,
@@ -204,62 +212,65 @@ impl Engine {
             assets: asset_count,
             generated,
             bytes: page_bytes + asset_bytes + generated_bytes,
-            warnings: report.warnings() - warned,
+            warnings: ui.warnings() - warned,
             dist: &self.config.dist,
+            elapsed: timer.elapsed(),
         }
-        .report(report)?;
+        .report(ui);
         Ok(Stats { pages: total, cached: cached.len() })
     }
 
     /// Compile every page and report diagnostics without writing any output.
-    pub fn check(&self, report: &mut Report) -> Result<Stats> {
-        let pages = self.announce(report, "checking")?;
+    pub fn check(&self, ui: &Ui) -> Result<Stats> {
+        let timer = Timer::start();
+        let pages = plan(&self.config)?;
+        debug!(pages = pages.len(), site = self.config.label(), "planned check");
         let renderer = Renderer::new(&pages, AssetMap::default());
+        let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
             .map(|page| {
                 let outcome = self
                     .prepare(page)
                     .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
+                progress.tick(self.relative(page));
                 (page, outcome)
             })
             .collect();
-        let rendered = self.collect(outcomes, report)?;
-        self.check_links(&rendered, report)?;
-        report.done(format_args!("checked {}", Count::pages(rendered.len())))?;
+        progress.finish();
+        let rendered = self.collect(outcomes, ui)?;
+        self.check_links(&rendered, ui)?;
+        ui.flush();
+        ui.done(format_args!(
+            "checked {} in {}",
+            Count::pages(rendered.len()),
+            Dur(timer.elapsed())
+        ));
         Ok(Stats { pages: rendered.len(), cached: 0 })
     }
 
-    /// Discover eligible pages and print the opening milestone for `action`.
-    fn announce(&self, report: &mut Report, action: &str) -> Result<Vec<Page>> {
-        let pages = plan(&self.config)?;
-        report.milestone(format_args!(
-            "{action} {} ({})",
-            self.config.label(),
-            Count::pages(pages.len())
-        ))?;
-        report.start();
-        Ok(pages)
-    }
-
-    /// Report each compile outcome, returning the rendered pages or — after
-    /// every failure has been reported — an error carrying *all* failed pages'
+    /// Report each compile outcome — page status lines and any typst warnings
+    /// the compiler raised — returning the rendered pages or, after every
+    /// failure has been reported, an error carrying *all* failed pages'
     /// diagnostics (a single failure propagates unchanged).
     fn collect<'a>(
         &self,
         outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,
-        report: &mut Report,
+        ui: &Ui,
     ) -> Result<Vec<Rendered<'a>>> {
         let mut errors = Vec::new();
         let mut rendered = Vec::new();
         for (page, outcome) in outcomes {
             match outcome {
-                Ok(r) => {
-                    report.page(self.relative(page), PageStatus::Built)?;
+                Ok(mut r) => {
+                    ui.page(self.relative(page), PageStatus::Built);
+                    for warning in r.warnings.drain(..) {
+                        ui.warn(warning);
+                    }
                     rendered.push(r);
                 }
                 Err(e) => {
-                    report.page(self.relative(page), PageStatus::Failed)?;
+                    ui.page(self.relative(page), PageStatus::Failed);
                     errors.push(e);
                 }
             }
@@ -303,15 +314,16 @@ impl Engine {
             }
             None => page.body.clone(),
         };
-        // Hash the exact text typst will compile — parsing it into a `Source`
-        // (the costly step) is deferred to `compile`, run only for stale pages.
+        // hash the exact text typst compiles; the parse into a `Source` is
+        // deferred to `compile`, run only for stale pages.
         let fingerprint = Hash::of_bytes(text.as_bytes());
         Ok((id, text, fingerprint))
     }
 
     /// Compile a single page to rendered HTML, applying render post-processing
     /// (link rewriting over the typed DOM) before serialization. Records the
-    /// files typst read so the cache can invalidate the page precisely.
+    /// files typst read so the cache can invalidate the page precisely, and
+    /// keeps typst's own compile warnings so the build can surface them.
     fn compile<'a>(
         &self,
         page: &'a Page,
@@ -320,10 +332,23 @@ impl Engine {
         fingerprint: Hash,
         renderer: &Renderer,
     ) -> Result<Rendered<'a>> {
-        // Parse only now, for a page that is actually being (re)compiled.
+        // parse only now, for a page actually being (re)compiled.
         let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
-        let mut doc = compile::<HtmlDocument>(&world).output.map_err(|errs| {
+        let compiled = compile::<HtmlDocument>(&world);
+        // typst warnings (unknown font families, deprecations…) survive a
+        // successful compile; bridge them like errors so they render with
+        // spans. On failure they are dropped — the errors say more. Typst's
+        // blanket "html export is under active development" notice is filtered:
+        // HTML is this tool's entire output, so it would fire on every page of
+        // every build while telling the author nothing actionable.
+        let warnings = compiled
+            .warnings
+            .into_iter()
+            .filter(|w| !w.message.starts_with("html export is under active development"))
+            .collect();
+        let warnings = self.diagnostics(warnings, page, &source, world.inner());
+        let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
         })?;
         let broken = renderer.rewrite(&mut doc, page, &self.config);
@@ -336,14 +361,16 @@ impl Engine {
             html,
             deps: self.project.dependencies(&world),
             broken,
+            warnings,
         })
     }
 
     /// Report broken internal links found while compiling `rendered`. Under
-    /// `strict_links` any broken link fails the build; otherwise each is a
+    /// `strict_links` any broken link fails the build; otherwise the same
+    /// diagnostic — spans, offending pages and all — is collected as a
     /// warning. Only freshly compiled pages are checked — cached pages kept
     /// their links from when they were built.
-    fn check_links(&self, rendered: &[Rendered], report: &mut Report) -> Result<()> {
+    fn check_links(&self, rendered: &[Rendered], ui: &Ui) -> Result<()> {
         let mut broken = Vec::new();
         for r in rendered {
             for target in &r.broken {
@@ -360,10 +387,7 @@ impl Engine {
         if self.config.links.strict {
             return Err(BrokenLinks::new(broken).into());
         }
-        report.warn(format_args!("{}", Count::links(broken.len())))?;
-        for b in &broken {
-            report.item(format_args!("`{}` in {}", b.target, b.page))?;
-        }
+        ui.warn(BrokenLinks::warning(broken));
         Ok(())
     }
 
@@ -386,9 +410,9 @@ impl Engine {
         let world: Arc<dyn World + Send + Sync> = Arc::new(world.clone());
         errs.into_iter()
             .map(|e| {
-                // Render each diagnostic against the file its span belongs to, so
+                // render each diagnostic against the file its span belongs to, so
                 // an error reaching into a bound template or shared module lands
-                // in the right source instead of overrunning the page text.
+                // in the right source, not overrunning the page text.
                 let file = e.span.id();
                 let named = file
                     .and_then(|id| world.source(id).ok().map(|src| (id, src)))
@@ -409,13 +433,15 @@ impl Engine {
 
 }
 
-/// A compiled page ready to write, with the files its compilation depended on
-/// and the raw targets of any broken internal links it contained.
+/// A compiled page ready to write, with the files its compilation depended on,
+/// the raw targets of any broken internal links it contained, and the warnings
+/// typst raised while compiling it.
 struct Rendered<'a> {
     page: &'a Page,
     fingerprint: Hash,
     html: String,
     deps: Deps,
     broken: Vec<String>,
+    warnings: Vec<TypstSourceDiagnostic>,
 }
 

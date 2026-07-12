@@ -46,6 +46,7 @@ impl Processor for SiteMap {
             return Ok(());
         };
         out.file(&site.config.dist.join(Self::FILE), &Self::render(&base, site.pages))?;
-        out.note(format_args!("wrote {}", Self::FILE))
+        out.note(format_args!("wrote {}", Self::FILE));
+        Ok(())
     }
 }

@@ -4,12 +4,12 @@
 //! shared prompt widgets, so confirmation and secret entry reuse the same
 //! styled prompts as `init` rather than re-implementing them.
 
-use crate::cli::output::Report;
 use crate::cli::prompt::{Prompt, Secret};
 use crate::config::Config;
 use crate::engine::{Engine, Mode};
 use crate::error::Result;
 use crate::publish::{Interaction, Options};
+use crate::ui::Ui;
 
 use super::PublishArgs;
 
@@ -33,8 +33,8 @@ impl Interaction for Tty {
 
 /// Build the site, then publish it. A fresh build first, so a publish always
 /// reflects the current sources.
-pub fn run(report: &mut Report, config: &Config, args: &PublishArgs) -> Result<()> {
-    Engine::new(config.clone(), Mode::Build)?.build(report)?;
+pub fn run(ui: &Ui, config: &Config, args: &PublishArgs) -> Result<()> {
+    Engine::new(config.clone(), Mode::Build)?.build(ui)?;
     let tty = Tty;
     let options = Options {
         dry_run: args.dry_run,
@@ -42,5 +42,5 @@ pub fn run(report: &mut Report, config: &Config, args: &PublishArgs) -> Result<(
         secret: args.password.clone(),
         interaction: &tty,
     };
-    crate::publish::run(config, &options, report)
+    crate::publish::run(config, &options, ui)
 }

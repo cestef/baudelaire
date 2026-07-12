@@ -15,8 +15,7 @@ use crate::error::{ConfigError, Result};
 impl Config {
     pub fn parse(text: &str) -> Result<Self> {
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
-        // Keep the raw text: profile overlay reports errors against it, since
-        // the retained profile nodes carry spans into this very string.
+        // keep the raw text: profile overlay reports errors against it, its nodes carry spans into it
         let mut cfg = Config {
             source: text.to_owned(),
             ..Config::default()
@@ -202,8 +201,7 @@ impl NodeExt for KdlNode {
             .iter()
             .map(|entry| {
                 let raw = entry.value().as_str(text, NodeExt::span(self))?;
-                // A `-` prefix looks like it disables a feature, but nothing
-                // ever subtracts — erroring beats silently *enabling* it.
+                // a `-` prefix reads as "disable", but nothing subtracts — error beats silently enabling
                 if let Some(name) = raw.strip_prefix('-') {
                     return Err(ConfigError::feature_removal(text, name, NodeExt::span(self)).into());
                 }
@@ -236,7 +234,7 @@ impl NodeExt for KdlNode {
                 .iter()
                 .find(|(n, _)| *n == name)
                 .ok_or_else(|| Keys::unknown_value(table, text, &name, span))?;
-            // A repeated entry would silently emit the output twice.
+            // a repeated entry would silently emit the output twice
             if seen.contains(canonical) {
                 return Err(
                     ConfigError::duplicate_entry(text, &name, self.name().value(), span).into(),
@@ -327,7 +325,7 @@ impl NodeExt for KdlNode {
     fn robots(&self, target: &mut RobotsConfig, text: &str) -> Result<()> {
         const ROBOTS: Block<RobotsConfig> =
             Block(&[("disallow", |c, n, t| { c.disallow = n.words(t)?; Ok(()) })]);
-        // Presence of the block enables emission.
+        // presence of the block enables emission
         target.enabled = true;
         ROBOTS.fill(target, self, text)
     }
@@ -335,7 +333,7 @@ impl NodeExt for KdlNode {
     fn llms(&self, target: &mut LlmsConfig, text: &str) -> Result<()> {
         const LLMS: Block<LlmsConfig> =
             Block(&[("summary", |c, n, t| { c.summary = Some(n.string(t, 0)?); Ok(()) })]);
-        // Presence of the block enables emission.
+        // presence of the block enables emission
         target.enabled = true;
         LLMS.fill(target, self, text)
     }
@@ -497,8 +495,8 @@ impl NodeExt for KdlNode {
             ("reverse", |c, v, t, s| { c.reverse = v.boolean(t, s)?; Ok(()) }),
             ("permalink", |c, v, t, s| {
                 let raw = v.as_str(t, s)?;
-                // Validate here so a template typo is a spanned config error,
-                // not a silent fall-back to the convention at page load.
+                // validate here so a template typo is a spanned config error,
+                // not a silent fallback to convention at page load
                 Permalink::parse(&raw).map_err(|e| ConfigError::at(t, e.into(), s))?;
                 c.permalink = Some(raw);
                 Ok(())
@@ -516,7 +514,7 @@ impl NodeExt for KdlNode {
             ("index", |c, v, t, s| { c.index = Some(v.as_str(t, s)?); Ok(()) }),
         ]);
         let mut cfg = CollectionConfig::default();
-        // A leading positional argument is the collection's glob.
+        // a leading positional argument is the collection's glob
         if let Some(glob) = self.entries().first().filter(|e| e.name().is_none()) {
             cfg.glob = Some(glob.value().as_str(text, NodeExt::span(self))?);
         }

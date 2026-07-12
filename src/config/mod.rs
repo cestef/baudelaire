@@ -153,8 +153,7 @@ impl Config {
             .filter(|segment| !segment.is_empty() && *segment != "..")
             .collect::<Vec<_>>()
             .join("/");
-        // Error pages must sit at a flat `404.html`; under clean URLs a `404/`
-        // directory won't be served as the host's not-found document.
+        // 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't served as not-found
         if trimmed == "404" {
             return self.dist.join("404.html");
         }
@@ -242,17 +241,14 @@ impl std::hash::Hash for Config {
             cache,
             hooks,
             publish,
-            // Dev-server settings (port, bind, open, watch) never affect
-            // generated output, so they must not key the cache — otherwise a
-            // `serve` on a custom port would invalidate a `build`'s cache.
+            // dev-server settings never affect output, so they must not key the cache —
+            // else `serve` on a custom port would invalidate a `build`'s cache
             serve: _,
             profile,
-            // Raw, unapplied profile partials. Excluded deliberately: only the
-            // *resolved* config drives the build, and applying a profile mutates
-            // the fields above — so any effective change is already captured.
+            // raw unapplied partials: only the resolved config drives the build, and
+            // applying a profile mutates the fields above, so any change is already captured
             profiles: _,
-            // The raw config text, kept only for error spans. A comment-only
-            // edit must not invalidate the cache.
+            // raw config text, kept only for error spans; a comment-only edit must not bust the cache
             source: _,
         } = self;
         (site, url, lang, author, content, index, dist, assets, templates).hash(state);
@@ -504,10 +500,9 @@ pub struct LlmsConfig {
 
 /// Asset pipeline options. All opt-in — a fresh site copies assets verbatim.
 ///
-/// CSS is minified with lightningcss; JavaScript is bundled and minified with
-/// rolldown (the oxc-based bundler). Note the coupling: JavaScript is only
-/// processed (bundled *and* minified) when [`AssetConfig::bundle`] is set — a
-/// bundler owns the whole JS step. CSS minification is independent of bundling.
+/// CSS is minified with lightningcss, independently of bundling. JavaScript is
+/// only processed (bundled *and* minified, via rolldown) when
+/// [`AssetConfig::bundle`] is set — the bundler owns the whole JS step.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct AssetConfig {
     /// Minify CSS (lightningcss) and, when bundling, JavaScript (rolldown).

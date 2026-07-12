@@ -138,8 +138,7 @@ impl<'a> Assets<'a> {
     /// Process one stylesheet: minify (when enabled) and rewrite its `url()` /
     /// `@import` references to the fingerprinted names recorded in `map`, so a
     /// stylesheet still points at its assets after they are content-hashed.
-    /// Copied verbatim when neither minify nor fingerprint is on — there is
-    /// nothing to transform, so the bytes are left byte-for-byte identical.
+    /// Copied verbatim when neither minify nor fingerprint is on.
     fn render_css(&self, file: &Path, rel: &Path, map: &AssetMap) -> Result<Vec<u8>> {
         if !self.config.asset.minify && !self.config.asset.fingerprint {
             return fs::read(file);
@@ -152,8 +151,7 @@ impl<'a> Assets<'a> {
                 .minify(MinifyOptions::default())
                 .map_err(|e| AssetError::css(file.display(), e))?;
         }
-        // Only fingerprinting renames assets, so only then must `url()` be
-        // rewritten: analyze dependencies to swap each for its hashed name.
+        // only fingerprinting renames assets, so only then rewrite `url()`.
         let analyze = self.config.asset.fingerprint;
         let printed = sheet
             .to_css(PrinterOptions {
@@ -209,9 +207,9 @@ impl<'a> Assets<'a> {
         out
     }
 
-    /// Optimize one image, keeping the smaller of the original and the result —
-    /// re-encoding can occasionally grow an already-tight file, and an optimizer
-    /// must never make things worse.
+    /// Optimize one image, keeping the smaller of the original and the result:
+    /// re-encoding can grow an already-tight file, and an optimizer must never
+    /// make things worse.
     fn optimize(&self, file: &Path, format: ImageFormat) -> Result<Vec<u8>> {
         let bytes = fs::read(file)?;
         let optimize = &self.config.images.optimize;
@@ -429,7 +427,7 @@ impl Plugin for SearchModule {
         _ctx: &PluginContext,
         args: &HookResolveIdArgs<'_>,
     ) -> impl std::future::Future<Output = HookResolveIdReturn> + Send {
-        // Claim our specifiers so rolldown skips filesystem resolution for them.
+        // claim our specifiers so rolldown skips filesystem resolution.
         let resolved = self
             .source(args.specifier)
             .map(|_| HookResolveIdOutput::from_id(args.specifier));

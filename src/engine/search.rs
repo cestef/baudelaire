@@ -45,10 +45,10 @@ impl Processor for SearchIndex {
                 SearchFormat::Inverted => corpus.inverted_json(&cfg.stopwords, cfg.min_length)?,
             };
             out.file(&site.config.dist.join(format.file()), &json)?;
-            out.note(format_args!("wrote {} ({} docs)", format.file(), corpus.len()))?;
+            out.note(format_args!("wrote {} ({} docs)", format.file(), corpus.len()));
             if cfg.client {
                 out.file(&site.config.dist.join(format.client_file()), &format.client())?;
-                out.note(format_args!("wrote {}", format.client_file()))?;
+                out.note(format_args!("wrote {}", format.client_file()));
             }
         }
         Ok(())
@@ -108,8 +108,8 @@ impl Corpus {
                     continue;
                 }
                 let ids = postings.entry(token).or_default();
-                // Tokens of one doc are visited contiguously, so the last id is
-                // enough to keep each posting list duplicate-free.
+                // one doc's tokens are visited contiguously, so checking the last
+                // id keeps each posting list duplicate-free.
                 if ids.last() != Some(&id) {
                     ids.push(id);
                 }

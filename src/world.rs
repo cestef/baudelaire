@@ -240,7 +240,7 @@ impl Project {
             .iter()
             .map(|(k, v)| (Str::from(k.as_str()), v.clone().into_value()))
             .collect();
-        // Reserved namespace exposing build metadata to pages.
+        // reserved namespace exposing build metadata to pages.
         inputs.insert(Str::from("baudelaire"), context.to_value());
 
         let mut features = Vec::new();

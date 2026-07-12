@@ -65,8 +65,7 @@ impl Default for HtmlConfig {
 impl Default for ImagesConfig {
     fn default() -> Self {
         Self {
-            // Lazy loading is a safe, universal win; optimization is opt-in (an
-            // empty `optimize` block) since it re-encodes files and costs time.
+            // lazy loading is a universal win; optimization is opt-in — it re-encodes and costs time
             lazy: true,
             optimize: OptimizeConfig::default(),
         }
@@ -75,8 +74,7 @@ impl Default for ImagesConfig {
 
 impl Default for PngConfig {
     fn default() -> Self {
-        // Preset 2 is a good balance of savings and speed; Safe strips metadata
-        // without touching anything that affects rendering.
+        // preset 2 balances savings and speed; Safe strips only non-rendering metadata
         Self {
             level: 2,
             strip: PngStrip::Safe,
@@ -86,7 +84,7 @@ impl Default for PngConfig {
 
 impl Default for JpegConfig {
     fn default() -> Self {
-        // 82 is a widely used "visually lossless" default.
+        // 82 is a widely used "visually lossless" default
         Self { quality: 82 }
     }
 }
@@ -118,7 +116,7 @@ impl Default for FeedConfig {
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
-            // Opt-in: no index emitted until a format is configured.
+            // opt-in: no index until a format is configured
             formats: Vec::new(),
             fields: vec![SearchField::Title, SearchField::Body, SearchField::Tags],
             stopwords: Vec::new(),
@@ -153,14 +151,11 @@ impl Default for ServeConfig {
 impl Default for StandardConfig {
     fn default() -> Self {
         Self {
-            // No handle by convention: presence of a handle is what a backend
-            // checks to know it was configured.
+            // empty by convention: a backend checks handle presence to know it was configured
             handle: String::new(),
-            // Resolved from the session at publish time; only needed in config
-            // to unlock the offline build-time verification artifacts.
+            // resolved from the session at publish; set in config only to unlock offline verify artifacts
             did: None,
-            // The Bluesky-operated entryway, which also serves as the PDS for
-            // accounts it hosts; custom-PDS users override this.
+            // Bluesky entryway, also the PDS for accounts it hosts; custom-PDS users override
             pds: "https://bsky.social".into(),
             discover: true,
             icon: None,
@@ -171,7 +166,7 @@ impl Default for StandardConfig {
 
 impl Default for VerifyConfig {
     fn default() -> Self {
-        // Both on: with a `did` set, a site should verify unless it opts out.
+        // both on: with a `did` set, a site should verify unless it opts out
         Self {
             wellknown: true,
             links: true,

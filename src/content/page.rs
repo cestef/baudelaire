@@ -55,10 +55,9 @@ impl Page {
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
-        // One slug policy: an explicit frontmatter slug, else the file stem —
-        // except a bundle index (`posts/hello/index.typ`) takes its parent
-        // directory's name, so the whole directory is one page with colocated
-        // resources. Reject a name that yields nothing URL-safe.
+        // explicit frontmatter slug, else the file stem — except a bundle index
+        // (`posts/hello/index.typ`) takes its parent dir name, so the directory is
+        // one page with colocated resources. reject a name yielding nothing URL-safe.
         let raw = frontmatter
             .slug
             .clone()
@@ -260,10 +259,9 @@ impl<'a> Discovery<'a> {
             .into_iter()
             .map(|path| (path, false))
             .collect();
-        // Resolve which collection owns each file first (cheap, serial), then
-        // load + evaluate every page's frontmatter in parallel — the expensive
-        // part. `Page::load` records its collection, so the flat parallel result
-        // regroups losslessly (rayon preserves input order).
+        // resolve owners first (cheap, serial), then load + evaluate frontmatter in
+        // parallel (the expensive part). `Page::load` records its collection, so the
+        // flat result regroups losslessly (rayon preserves input order).
         let assignments = self.assign()?;
         let pages: Vec<Page> = assignments
             .par_iter()

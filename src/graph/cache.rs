@@ -21,7 +21,8 @@ use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::output::Report;
+use crate::error::warning::ManifestUnreadable;
+use crate::ui::Ui;
 use crate::config::Config;
 use crate::content::Page;
 use crate::error::{Artifact, Result, SerializeError};
@@ -97,25 +98,22 @@ impl Cache {
         config: &Config,
         context: &BuildContext,
         render: &RenderInputs,
-        report: &mut Report,
+        ui: &Ui,
     ) -> Result<Self> {
         let dir = config.cache.dir.clone();
         let manifest = dir.join(MANIFEST);
         let prev = match fs::read(&manifest) {
-            // A present-but-unparseable manifest (a torn write, disk corruption,
-            // a manual edit) is not the same as a fresh cache: warn and rebuild
-            // from scratch rather than silently discarding it as "no cache".
+            // a present-but-unparseable manifest (torn write, corruption, manual
+            // edit) isn't a fresh cache: warn and rebuild rather than silently
+            // treat it as "no cache".
             Ok(bytes) => match serde_json::from_slice(&bytes) {
                 Ok(prev) => prev,
                 Err(e) => {
-                    report.warn(format_args!(
-                        "ignoring unreadable cache manifest at {}: {e}",
-                        manifest.display()
-                    ))?;
+                    ui.warn(ManifestUnreadable { path: manifest.clone(), source: e });
                     Manifest::default()
                 }
             },
-            // An absent manifest is the normal first-build case — stay silent.
+            // absent manifest is the normal first-build case — stay silent.
             Err(_) => Manifest::default(),
         };
         let fingerprint = Hash::of(&(config, context, render));
@@ -151,9 +149,8 @@ impl Cache {
             return None;
         }
         let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
-        // Verify the blob against its content address: a torn write (e.g. a
-        // crash mid-save) leaves bytes that no longer match the name claiming
-        // their hash. A mismatch is treated as a miss, not served as HTML.
+        // verify the blob against its content address: a torn write leaves bytes
+        // not matching the name that claims their hash. mismatch is a miss.
         if Hash::of_bytes(html.as_bytes()) != entry.blob {
             return None;
         }
@@ -190,8 +187,8 @@ impl Cache {
             .iter()
             .map(|(page, html)| (Self::key(page), *html))
             .collect();
-        // Collect the blobs that actually need writing (new content only), then
-        // write them in parallel — independent content-addressed files.
+        // collect blobs needing a write (new content only), then write them in
+        // parallel — independent content-addressed files.
         let pending: Vec<(PathBuf, &str)> = self
             .next
             .pages

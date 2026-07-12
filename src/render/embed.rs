@@ -62,18 +62,15 @@ impl<'a> Inliner<'a> {
 
     /// The `data:` URI for a local asset reference, or `None` to leave it as is.
     fn inline(&self, raw: &str) -> Option<String> {
-        // Resolve through the asset map first: a fingerprinted reference points
-        // at its hashed file; an unmapped one is served under its own name.
+        // a fingerprinted ref resolves to its hashed file; unmapped ones keep their name
         let served = self.assets.resolve(raw).unwrap_or_else(|| raw.to_owned());
         let rest = served.strip_prefix(&self.prefix)?;
-        // Reject anything that escapes the assets directory or carries a
-        // query/fragment — those are not plain file references.
+        // reject dir escapes and query/fragment refs — not plain file references
         if rest.contains("..") || rest.contains(['?', '#']) {
             return None;
         }
         let path = self.dst.join(rest);
-        // Best-effort: an unreadable/missing asset is left as a plain reference,
-        // not inlined. Through the facade for consistency.
+        // best-effort: an unreadable asset stays a plain reference
         let bytes = crate::fs::read(&path).ok()?;
         Some(format!("data:{};base64,{}", Mime::of(&path), base64(&bytes)))
     }

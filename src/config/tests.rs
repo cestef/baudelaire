@@ -36,7 +36,7 @@ fn publish_standard_did_and_verify_toggles() {
     );
     let standard = cfg.publish.standard.expect("configured");
     assert_eq!(standard.did.as_deref(), Some("did:plc:abc"));
-    // Toggled off explicitly; the untouched sibling keeps its default.
+    // toggled off explicitly; the untouched sibling keeps its default
     assert!(!standard.verify.links);
     assert!(standard.verify.wellknown);
 }
@@ -45,7 +45,7 @@ fn publish_standard_did_and_verify_toggles() {
 fn bundle_index_defaults_to_index_and_is_configurable() {
     assert_eq!(parse("").index.as_deref(), Some("index"));
     assert_eq!(parse("paths {\n  index \"_index\"\n}").index.as_deref(), Some("_index"));
-    // An empty basename disables bundle slugs.
+    // an empty basename disables bundle slugs
     assert_eq!(parse("paths {\n  index \"\"\n}").index, None);
 }
 
@@ -143,7 +143,7 @@ fn images_optimize_per_format_with_params_and_lax_extensions() {
     assert_eq!(png.level, 4);
     assert_eq!(png.strip, PngStrip::All);
     assert_eq!(opt.jpeg.as_ref().unwrap().quality, 70);
-    // Extension matching is lenient and case-insensitive.
+    // extension matching is lenient and case-insensitive
     assert_eq!(opt.format("PNG"), Some(ImageFormat::Png));
     assert_eq!(opt.format("jpg"), Some(ImageFormat::Jpeg));
     assert_eq!(opt.format("jpeg"), Some(ImageFormat::Jpeg));
@@ -156,7 +156,7 @@ fn images_optimize_defaults_when_empty() {
     let png = cfg.images.optimize.png.as_ref().unwrap();
     assert_eq!(png.level, 2);
     assert_eq!(png.strip, PngStrip::Safe);
-    // An unlisted format stays off.
+    // an unlisted format stays off
     assert!(cfg.images.optimize.jpeg.is_none());
     assert!(cfg.images.lazy, "lazy defaults on");
 }
@@ -246,7 +246,7 @@ fn err_unknown_top_key() {
 fn err_bad_sort_key() {
     let err = Config::parse("collections {\n  posts sort=\"wat\"\n}\n").unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
-    // An unknown enum *value* reads as "unknown value", not "unknown key".
+    // an unknown enum *value* reads as "unknown value", not "unknown key"
     assert!(rendered.contains("unknown value `wat`"), "{rendered}");
     assert!(rendered.contains("order, date, title"), "{rendered}");
 }
@@ -380,7 +380,7 @@ fn err_unknown_permalink_placeholder_is_spanned() {
         "{rendered}"
     );
     assert!(rendered.contains("valid placeholders"), "{rendered}");
-    // The label excerpts config.kdl — the error is spanned at parse time.
+    // the label excerpts config.kdl — the error is spanned at parse time
     assert!(rendered.contains("permalink="), "{rendered}");
 }
 
@@ -398,10 +398,10 @@ fn err_permalink_parent_dir_segment() {
 
 #[test]
 fn err_unexpected_positional_argument() {
-    // Taxonomies take no positional arguments at all.
+    // taxonomies take no positional arguments
     let err = Config::parse("taxonomies {\n  tags \"extra\"\n}\n").unwrap_err();
     assert!(err.to_string().contains("unexpected argument"), "{err}");
-    // Collections consume exactly one (the glob); a second is discarded today.
+    // collections consume exactly one (the glob); a second is discarded today
     let err = Config::parse("collections {\n  posts \"posts/*.typ\" \"extra\"\n}\n").unwrap_err();
     assert!(err.to_string().contains("unexpected argument"), "{err}");
 }

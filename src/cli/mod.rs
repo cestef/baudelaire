@@ -1,6 +1,6 @@
-//! Command-line interface: per-subcommand args, colored output, dispatch.
+//! Command-line interface: per-subcommand args, dispatch, and the wiring of
+//! terminal output ([`crate::ui`]) and debug logging (`tracing`).
 
-pub mod output;
 pub mod prompt;
 pub mod publish;
 pub mod scaffold;
@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 
-use crate::cli::output::{Level, Report};
 use crate::config::Config;
 use crate::error::{FsError, Op, Result};
+use crate::ui::{Level, Ui};
 
 /// The absolute project root: the directory `--root` selected (into which the
 /// process changes so relative config paths resolve under it) or the launch
@@ -98,7 +98,7 @@ pub struct GlobalArgs {
     #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true")]
     pub strict_links: Option<bool>,
 
-    /// Verbose output (-v info, -vv trace).
+    /// Verbose output: per-page progress plus debug logs (-vv for trace logs).
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
@@ -257,16 +257,17 @@ impl Cli {
         Ok(config)
     }
 
+    /// The UI verbosity. `-vv` and beyond only deepen the `tracing` filter
+    /// (see [`crate::ui::trace`]) — the terminal report itself has one
+    /// verbose level.
     fn level(&self) -> Level {
         let g = &self.global;
         if g.quiet {
             Level::Quiet
+        } else if g.verbose > 0 {
+            Level::Verbose
         } else {
-            match g.verbose {
-                0 => Level::Default,
-                1 => Level::Verbose,
-                _ => Level::Trace,
-            }
+            Level::Default
         }
     }
 }
@@ -295,23 +296,36 @@ impl GlobalArgs {
 
 }
 
-/// Dispatch a parsed CLI to the matching engine entrypoint.
+/// Run a parsed CLI: install the debug-log subscriber, dispatch, and flush any
+/// collected warnings — on success and failure alike, so a failed run still
+/// shows what it warned about before dying.
 pub fn run(cli: Cli) -> Result<()> {
-    let mut report = Report::with_level(cli.level());
+    crate::ui::trace::init(cli.global.verbose);
+    let ui = Ui::new(cli.level());
+    let result = dispatch(&cli, &ui);
+    ui.flush();
+    result
+}
+
+/// Dispatch to the matching engine entrypoint.
+fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
     let root = Root::enter(cli.global.root.as_deref())?;
     let command = cli.command.clone().unwrap_or(Command::Build(BuildArgs {}));
     match command {
         Command::Build(_) => {
             let config = cli.load_config()?;
-            crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(&mut report)?;
+            ui.banner(format_args!("building {}", config.label()));
+            crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(ui)?;
         }
         Command::Check => {
             let config = cli.load_config()?;
-            crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(&mut report)?;
+            ui.banner(format_args!("checking {}", config.label()));
+            crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(ui)?;
         }
         Command::Serve(args) => {
             let mut config = cli.load_config()?;
             args.apply(&mut config);
+            ui.banner(format_args!("dev · {}", config.label()));
             // Re-reads config.kdl with the same profile + overrides, so the dev
             // server picks up config edits live.
             let reload = || -> Result<Config> {
@@ -319,25 +333,28 @@ pub fn run(cli: Cli) -> Result<()> {
                 args.apply(&mut config);
                 Ok(config)
             };
-            crate::cli::serve::run(&mut report, config, &root, reload)?;
+            crate::cli::serve::run(ui, config, &root, reload)?;
         }
         Command::New(args) => {
             let config = cli.load_config()?;
-            scaffold::new_page(&mut report, &args.target(&config), &config)?;
+            scaffold::new_page(ui, &args.target(&config), &config)?;
         }
         Command::Publish(args) => {
             let config = cli.load_config()?;
-            publish::run(&mut report, &config, &args)?;
+            ui.banner(format_args!("publishing {}", config.label()));
+            publish::run(ui, &config, &args)?;
         }
         Command::Clean(args) => {
             let config = cli.load_config()?;
-            clean(&mut report, &config, &args)?;
+            ui.banner(format_args!("cleaning {}", config.label()));
+            clean(ui, &config, &args)?;
         }
         Command::Init(args) => {
+            ui.banner("init");
             // A positional directory scaffolds there (`init my-site`); with none,
             // the current directory (already `--root`-adjusted) is used.
             let target = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
-            scaffold::init(&mut report, &target, &root, args.yes, args.vcs)?;
+            scaffold::init(ui, &target, &root, args.yes, args.vcs)?;
         }
     }
     Ok(())
@@ -382,19 +399,18 @@ impl ServeArgs {
     }
 }
 
-fn clean(report: &mut Report, config: &Config, args: &CleanArgs) -> Result<()> {
-    report.milestone("cleaning")?;
+fn clean(ui: &Ui, config: &Config, args: &CleanArgs) -> Result<()> {
     let mut removed = 0;
     for dir in args.targets(config) {
         if dir.exists() {
-            report.muted(format_args!("removing {}", dir.display()))?;
+            ui.detail(format_args!("- {}", dir.display()));
             crate::fs::remove_dir_all(&dir)?;
             removed += 1;
         }
     }
     match removed {
-        0 => report.success("nothing to clean")?,
-        _ => report.success("clean complete")?,
+        0 => ui.done("nothing to clean"),
+        _ => ui.done("clean"),
     }
     Ok(())
 }

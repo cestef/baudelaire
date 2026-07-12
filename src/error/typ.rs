@@ -64,7 +64,10 @@ impl std::error::Error for TypstSourceDiagnostic {}
 
 impl miette::Diagnostic for TypstSourceDiagnostic {
     fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new("typst::error"))
+        Some(Box::new(match self.inner.severity {
+            typst::diag::Severity::Error => "typst::error",
+            typst::diag::Severity::Warning => "typst::warning",
+        }))
     }
 
     fn severity(&self) -> Option<miette::Severity> {
@@ -97,9 +100,8 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .hints
             .iter()
             .filter_map(|h| self.labeled(h.span, Some(h.v.as_str())));
-        // The call stack leading to the error — e.g. "error occurred while
-        // calling function `post`" — annotated at each frame's span. This is
-        // what surfaces which page/template a shared-module error flowed through.
+        // call stack leading to the error, annotated per frame — surfaces which
+        // page/template a shared-module error flowed through.
         let trace = self.inner.trace.iter().filter_map(|frame| {
             self.labeled(frame.span, Some(&frame.v.to_string()))
         });

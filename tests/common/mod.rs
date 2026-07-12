@@ -101,7 +101,8 @@ impl Site {
             "build failed: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        String::from_utf8_lossy(&out.stdout).into_owned()
+        // Human-facing logs (per-page lines, summary) live on stderr.
+        String::from_utf8_lossy(&out.stderr).into_owned()
     }
 
     /// A built page under the default `public` dist.

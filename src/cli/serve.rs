@@ -18,12 +18,13 @@ use tiny_http::{Header, Request, Response, Server};
 use wax::{Glob, Program};
 
 use crate::cli::Root;
-use crate::cli::output::{Level, Paths, Report};
 use crate::config::Config;
 use crate::engine::{Engine, Mode};
+use crate::error::warning::{BrowserOpen, ConfigReload, RebuildFailed, WatchLost};
 use crate::error::{ContentError, Result};
 use crate::error::serve::ServeError;
 use crate::mime::Mime;
+use crate::ui::{Level, Paths, Timer, Ui};
 
 /// Run the dev server: build once, serve `dist`, and (unless `--no-watch`)
 /// watch for changes to rebuild and live-reload browsers.
@@ -31,14 +32,14 @@ use crate::mime::Mime;
 /// CLI flags (`--port`, `--bind`, `--open`, `--no-watch`) are already folded
 /// into `config.serve` by [`crate::cli::ServeArgs::apply`].
 pub(crate) fn run<'a>(
-    report: &'a mut Report,
+    ui: &'a Ui,
     config: Config,
     root: &'a Root,
     reload: impl FnMut() -> Result<Config> + 'a,
 ) -> Result<()> {
     Dev {
         config,
-        report,
+        ui,
         root,
         reload: Box::new(reload),
     }
@@ -50,7 +51,7 @@ pub(crate) fn run<'a>(
 /// reload it (via [`Dev::reload`]) without restarting the process.
 struct Dev<'a> {
     config: Config,
-    report: &'a mut Report,
+    ui: &'a Ui,
     root: &'a Root,
     /// Re-reads `config.kdl` with the same profile and CLI overrides — invoked
     /// when the config file changes so edits take effect live.
@@ -62,23 +63,30 @@ impl Dev<'_> {
         let addr = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&addr).map_err(|e| ServeError::bind(&addr, e))?;
 
-        Engine::new(self.config.clone(), Mode::Serve)?.build(self.report)?;
-        self.report.milestone(format_args!(
-            "serving {} at {}",
-            self.config.label(),
-            format!("http://{addr}").cyan().underline()
-        ))?;
+        Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)?;
+        self.ui.blank();
+        self.ui.arrow("local", format!("http://{addr}/").cyan().underline());
+        self.ui.arrow(
+            "watching",
+            match self.config.serve.watch {
+                true => self.watched().dimmed().to_string(),
+                false => "off (--no-watch)".dimmed().to_string(),
+            },
+        );
+        self.ui.blank();
         if self.config.serve.open {
             // Detached: `open::that` waits for the spawned program to exit, so a
             // browser launched in the foreground would block the watch loop until
             // its window closed. Failing to open a browser is non-fatal — the
             // server is already up — so report it and carry on.
-            if let Err(e) = open::that_detached(format!("http://{addr}")) {
-                self.report.warn(format_args!("could not open browser: {e}"))?;
+            let url = format!("http://{addr}/");
+            if let Err(e) = open::that_detached(&url) {
+                self.ui.warn(BrowserOpen { url, source: e });
+                self.ui.flush();
             }
         }
 
-        let level = self.report.level();
+        let level = self.ui.level();
         if self.config.serve.watch {
             let live = Live::default();
             Handler::new(self.config.dist.clone(), Some(live.clone()), level).spawn(server);
@@ -87,6 +95,18 @@ impl Dev<'_> {
             Handler::new(self.config.dist.clone(), None, level).serve(&server);
             Ok(())
         }
+    }
+
+    /// The watched roots, for the startup banner: the defaults plus any
+    /// `serve.include` globs.
+    fn watched(&self) -> String {
+        let mut parts = vec![
+            self.config.content.display().to_string(),
+            self.config.templates.display().to_string(),
+            self.config.assets.display().to_string(),
+        ];
+        parts.extend(self.config.serve.include.iter().cloned());
+        parts.join(" · ")
     }
 
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
@@ -99,10 +119,15 @@ impl Dev<'_> {
             let filter = Filter::new(&self.config, self.root)?;
             let (tx, rx) = flume::unbounded::<DebounceEventResult>();
             let _watcher = Watcher::new(filter.dirs(), tx)?;
-            self.report.muted("watching for changes")?;
+            tracing::debug!(dirs = ?filter.dirs(), "watcher established");
             let mut reloaded = false;
             for result in rx {
-                if self.on_event(result, &live, &filter)? {
+                let outcome = self.on_event(result, &live, &filter)?;
+                // Render whatever the iteration warned about (watcher trouble,
+                // a failed rebuild) right away — the server runs indefinitely,
+                // so there is no end-of-run flush to wait for.
+                self.ui.flush();
+                if outcome {
                     reloaded = true;
                     break;
                 }
@@ -123,7 +148,7 @@ impl Dev<'_> {
             Ok(events) => self.on_change(events, live, filter),
             Err(errors) => {
                 for error in errors {
-                    self.report.warn(format_args!("file watcher error: {error}"))?;
+                    self.ui.warn(WatchLost { source: error });
                 }
                 Ok(false)
             }
@@ -159,35 +184,36 @@ impl Dev<'_> {
             match (self.reload)() {
                 Ok(config) => self.config = config,
                 Err(e) => {
-                    self.report.warn("config reload failed (keeping the last good config)")?;
-                    eprintln!("{:?}", miette::Report::from(e));
+                    // The parse error rides along as a related diagnostic, so
+                    // the warning renders it in full — spans and all.
+                    self.ui.warn(ConfigReload { errors: vec![e] });
                     return Ok(false);
                 }
             }
         }
 
-        // A Vite-style rebuild: a transient status while the build runs, replaced
-        // by a single timestamped log line. The build's own milestone/summary is
-        // silenced so rebuilds never stack the full block over the initial output.
+        // A vite-style rebuild: a transient status while the build runs, replaced
+        // by a single timestamped log line. The build's own summary is silenced
+        // so rebuilds never stack the full block over the initial output.
         let label = Self::label(&changed, self.root);
-        self.report.status(format_args!("rebuilding {}", Paths(&label)))?;
-        let prior = self.report.level();
-        self.report.set_level(Level::Silent);
-        let result = Engine::new(self.config.clone(), Mode::Serve).and_then(|e| e.build(self.report));
-        self.report.set_level(prior);
+        tracing::debug!(?changed, "rebuilding");
+        self.ui.status(format_args!("rebuilding {}", Paths(&label)));
+        let timer = Timer::start();
+        let prior = self.ui.level();
+        self.ui.set_level(Level::Silent);
+        let result = Engine::new(self.config.clone(), Mode::Serve).and_then(|e| e.build(self.ui));
+        self.ui.set_level(prior);
 
         match result {
             Ok(stats) => {
-                // Report what the rebuild actually recompiled, not the whole site.
-                self.report.event(label, stats.pages - stats.cached)?;
+                // report what the rebuild recompiled, not the whole site.
+                self.ui.event(label, stats.pages - stats.cached, timer.elapsed());
                 live.bump();
             }
             Err(e) => {
-                // Render the full diagnostic — spans, offending page, related
-                // errors — the way the top-level miette handler would, instead
-                // of collapsing it to a one-line `Display`.
-                self.report.warn("rebuild failed")?;
-                eprintln!("{:?}", miette::Report::from(e));
+                // The failure rides along as a related diagnostic — spans,
+                // offending page and all — rendered by the caller's flush.
+                self.ui.warn(RebuildFailed { errors: vec![e] });
             }
         }
         Ok(config_changed)
@@ -218,15 +244,15 @@ impl Dev<'_> {
     }
 }
 
-/// Serves files from `dist`, optionally injecting live reload. Cloned into the
-/// request-handling thread, so it is cheap and `Send`.
-#[derive(Clone)]
+/// Serves files from `dist`, optionally injecting live reload. Moved into the
+/// request-handling thread, so it is `Send` and self-contained.
 struct Handler {
     dist: PathBuf,
     live: Option<Live>,
-    /// The session's verbosity, copied in at construction so per-request
-    /// logging (404s) honors `--quiet` like every other line.
-    level: Level,
+    /// The handler's own [`Ui`] at the session's verbosity, so per-request
+    /// logging (404s) honors `--quiet` like every other line without sharing
+    /// the rebuild loop's writer.
+    ui: Ui,
 }
 
 impl Handler {
@@ -235,7 +261,7 @@ impl Handler {
         // check compares canonical paths (with `..` and symlinks resolved)
         // against a canonical root.
         let dist = crate::fs::canonicalize(&dist).unwrap_or(dist);
-        Self { dist, live, level }
+        Self { dist, live, ui: Ui::new(level) }
     }
 
     /// Run the request loop on its own thread (used while watching, so the main
@@ -288,10 +314,10 @@ impl Handler {
 
     fn respond_404(&self, req: Request, url: &str) {
         let _ = req.respond(Response::empty(404));
-        // A per-request report at the session's level, so `--quiet` silences
-        // these lines too. (It may still interleave with a concurrent rebuild
+        // A per-request line at the session's level, so `--quiet` silences
+        // these too. (It may still interleave with a concurrent rebuild
         // status line; acceptable for now.)
-        let _ = Report::with_level(self.level).muted(format_args!("  {} {}", "✗".red(), url.dimmed()));
+        self.ui.request(404, url);
     }
 
     /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every
@@ -496,18 +522,18 @@ mod tests {
     fn watcher_errors_warn_and_keep_watching() {
         let config = Config::default();
         let root = Root::at(".");
-        let mut report = Report::with_level(Level::Silent);
+        let ui = Ui::new(Level::Silent);
         let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: config.clone(),
-            report: &mut report,
+            ui: &ui,
             root: &root,
             reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
             .unwrap();
-        assert_eq!(dev.report.warnings(), 1);
+        assert_eq!(ui.warnings(), 1);
     }
 
     /// The `Ok` arm still flows into change handling: irrelevant (empty) event
@@ -516,17 +542,17 @@ mod tests {
     fn empty_event_batch_is_a_no_op() {
         let config = Config::default();
         let root = Root::at(".");
-        let mut report = Report::with_level(Level::Silent);
+        let ui = Ui::new(Level::Silent);
         let filter = Filter::new(&config, &root).unwrap();
         let live = Live::default();
         let mut dev = Dev {
             config: config.clone(),
-            report: &mut report,
+            ui: &ui,
             root: &root,
             reload: Box::new(|| Ok(Config::default())),
         };
         dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
-        assert_eq!(dev.report.warnings(), 0);
+        assert_eq!(ui.warnings(), 0);
     }
 
     /// A stream whose client is gone is reaped on the next bump, rather than

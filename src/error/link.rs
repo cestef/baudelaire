@@ -7,7 +7,7 @@
 use std::fmt;
 use std::path::Path;
 
-use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode, SourceSpan};
+use miette::{Diagnostic, LabeledSpan, NamedSource, Severity, SourceCode, SourceSpan};
 
 /// An internal `.typ` link pointing at a page that does not exist.
 #[derive(Debug, Clone)]
@@ -20,6 +20,9 @@ pub struct Broken {
     src: NamedSource<String>,
     /// Byte span of the target within the source, if it could be located.
     span: Option<SourceSpan>,
+    /// Error under `strict_links`, warning otherwise — set by the
+    /// [`BrokenLinks`] constructor so parent and children render alike.
+    severity: Severity,
 }
 
 impl Broken {
@@ -37,6 +40,7 @@ impl Broken {
             target,
             src,
             span,
+            severity: Severity::Error,
         }
     }
 }
@@ -54,6 +58,10 @@ impl Diagnostic for Broken {
         Some(Box::new("baudelaire::links::broken"))
     }
 
+    fn severity(&self) -> Option<Severity> {
+        Some(self.severity)
+    }
+
     fn source_code(&self) -> Option<&dyn SourceCode> {
         self.span.map(|_| &self.src as &dyn SourceCode)
     }
@@ -68,15 +76,27 @@ impl Diagnostic for Broken {
 }
 
 /// The set of broken internal links found in a build. Raised as an error under
-/// `strict_links`; otherwise each is reported as a warning.
+/// `strict_links` ([`BrokenLinks::new`]); otherwise collected as a warning
+/// ([`BrokenLinks::warning`]) with the same spans and detail.
 #[derive(Debug)]
 pub struct BrokenLinks {
     links: Vec<Broken>,
+    severity: Severity,
 }
 
 impl BrokenLinks {
+    /// The strict-mode form: a build-failing error.
     pub fn new(links: Vec<Broken>) -> Self {
-        Self { links }
+        Self { links, severity: Severity::Error }
+    }
+
+    /// The lenient form: the identical diagnostic at warning severity, children
+    /// included.
+    pub fn warning(mut links: Vec<Broken>) -> Self {
+        for link in &mut links {
+            link.severity = Severity::Warning;
+        }
+        Self { links, severity: Severity::Warning }
     }
 }
 
@@ -94,11 +114,21 @@ impl Diagnostic for BrokenLinks {
         Some(Box::new("baudelaire::links::broken"))
     }
 
+    fn severity(&self) -> Option<Severity> {
+        Some(self.severity)
+    }
+
     fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(
-            "every `.typ` link must resolve to an existing page; \
-             pass `--strict-links false` to downgrade these to warnings",
-        ))
+        Some(Box::new(match self.severity {
+            Severity::Error => {
+                "every `.typ` link must resolve to an existing page; \
+                 pass `--strict-links false` to downgrade these to warnings"
+            }
+            _ => {
+                "fix each target, or leave `--strict-links` on to make these \
+                 fail the build"
+            }
+        }))
     }
 
     fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {

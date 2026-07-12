@@ -22,7 +22,7 @@ impl Transform for Images {
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
         doc.root_mut().walk(&mut |element| {
             if element.tag == tag::img {
-                // Only fill in what the author left unspecified.
+                // only fill what the author left unset
                 if element.attrs.get(attr::loading).is_none() {
                     element.attrs.push(attr::loading, "lazy");
                 }

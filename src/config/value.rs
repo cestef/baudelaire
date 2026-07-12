@@ -38,7 +38,7 @@ impl Env {
             out.push_str(&rest[..start]);
             let after = &rest[start + 2..];
             let Some(end) = after.find('}') else {
-                // No closing brace: not a reference — emit verbatim and stop.
+                // no closing brace: not a reference, emit verbatim
                 out.push_str(&rest[start..]);
                 return Ok(out);
             };
@@ -152,8 +152,7 @@ mod tests {
 
     #[test]
     fn env_expands_variables_defaults_and_literals() {
-        // A fixed lookup — no real environment touched, so this is sound under
-        // any test runner.
+        // fixed lookup, no real env touched — sound under any test runner
         let env = |name: &str| (name == "APP_ENV").then(|| "prod".to_owned());
         assert_eq!(Env::expand_with("site-${APP_ENV}", env).unwrap(), "site-prod");
         assert_eq!(Env::expand_with("${MISSING:-fallback}", env).unwrap(), "fallback");

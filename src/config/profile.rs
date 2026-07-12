@@ -8,17 +8,15 @@ use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
     pub fn with_profile(mut self, name: &str) -> Result<Self> {
-        // Take the partials out instead of cloning the whole subtree; they are
-        // restored below once the overlay has been applied.
+        // take the partials out instead of cloning the subtree; restored after overlay
         let profiles = std::mem::take(&mut self.profiles);
         let partial = profiles
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, doc)| doc)
             .ok_or_else(|| ConfigError::missing_profile(name, &profiles))?;
-        // Errors inside the overlay are reported against the *original*
-        // config text — the retained nodes carry spans into it, so labels
-        // point at the actual config.kdl lines.
+        // overlay errors report against the *original* config text — retained nodes
+        // carry spans into it, so labels point at the real config.kdl lines
         let text = self.source.clone();
         for node in partial.nodes() {
             if node.name().value() == "profiles" {
@@ -122,8 +120,7 @@ mod tests {
 
     #[test]
     fn profile_override_preserves_sibling_fields() {
-        // Overriding one field of a nested section must inherit the base's
-        // other fields, not reset them to defaults.
+        // overriding one field of a nested section must inherit the base's others, not reset them
         let cfg = parse(
             r#"
             output {

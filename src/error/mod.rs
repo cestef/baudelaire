@@ -12,6 +12,7 @@ pub mod scaffold;
 pub mod serialize;
 pub mod serve;
 pub mod typ;
+pub mod warning;
 
 pub use annotated::Annotated;
 pub use asset::AssetError;

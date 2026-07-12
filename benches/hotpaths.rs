@@ -14,7 +14,7 @@ use std::path::Path;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use tempfile::TempDir;
 
-use baudelaire::cli::output::{Level, Report};
+use baudelaire::ui::{Level, Ui};
 use baudelaire::config::Config;
 use baudelaire::content::{Page, discover};
 use baudelaire::engine::text::Text;
@@ -119,18 +119,18 @@ fn bench_incremental_build(c: &mut Criterion) {
     // Warm the cache once so the timed rebuilds are all cache hits.
     Engine::new(cfg.clone(), Mode::Build)
         .unwrap()
-        .build(&mut Report::with_level(Level::Silent))
+        .build(&Ui::new(Level::Silent))
         .unwrap();
 
     let mut group = c.benchmark_group("incremental_build");
     group.sample_size(20);
     group.bench_function("rebuild_100_cached", |b| {
         b.iter_batched(
-            || Report::with_level(Level::Silent),
-            |mut report| {
+            || Ui::new(Level::Silent),
+            |ui| {
                 let stats = Engine::new(cfg.clone(), Mode::Build)
                     .unwrap()
-                    .build(&mut report)
+                    .build(&ui)
                     .unwrap();
                 black_box(stats);
             },

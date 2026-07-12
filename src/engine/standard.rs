@@ -30,6 +30,7 @@ impl Processor for WellKnown {
         };
         let path = site.config.dist.join(".well-known").join(PUBLICATION.as_str());
         out.file(&path, &publication_uri(did).to_string())?;
-        out.note(format_args!("wrote .well-known/{}", PUBLICATION.as_str()))
+        out.note(format_args!("wrote .well-known/{}", PUBLICATION.as_str()));
+        Ok(())
     }
 }

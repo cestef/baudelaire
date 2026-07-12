@@ -59,7 +59,7 @@ impl Processor for Feeds {
         let feed = Feed::new(&base, site.config.label(), &dated);
         for kind in &site.config.feed.formats {
             out.file(&site.config.dist.join(kind.file()), &feed.render(*kind)?)?;
-            out.note(format_args!("wrote {}", kind.file()))?;
+            out.note(format_args!("wrote {}", kind.file()));
         }
         Ok(())
     }

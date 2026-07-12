@@ -6,6 +6,7 @@ use super::process::{Emit, Processor, Site};
 use super::sitemap::SiteMap;
 use crate::config::Config;
 use crate::error::Result;
+use crate::error::warning::BaseUrlMissing;
 
 /// Emits a `robots.txt` when a `robots` block is configured: a single
 /// `User-agent: *` group with the configured disallow rules, plus a `Sitemap:`
@@ -30,12 +31,13 @@ impl Processor for Robots {
         if site.config.sitemap
             && let Some(base) = site.warn_missing_base(
                 out,
-                format_args!("robots.txt sitemap link omitted — no `url` set"),
+                BaseUrlMissing { feature: "the robots.txt sitemap link", effect: "omitted" },
             )?
         {
             let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));
         }
         out.file(&site.config.dist.join("robots.txt"), &body)?;
-        out.note(format_args!("wrote robots.txt"))
+        out.note(format_args!("wrote robots.txt"));
+        Ok(())
     }
 }

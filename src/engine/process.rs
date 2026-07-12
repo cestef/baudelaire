@@ -8,10 +8,11 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::cli::output::Report;
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::Result;
+use crate::error::warning::BaseUrlMissing;
+use crate::ui::Ui;
 
 use super::feed::Feeds;
 use super::llms::Llms;
@@ -33,22 +34,22 @@ pub(super) struct Site<'a> {
 impl Site<'_> {
     /// The base URL for a URL-requiring processor — the one warn-and-skip
     /// policy for a missing `url`, naming the `feature` that needs it.
-    pub(super) fn base(&self, feature: &str, out: &mut dyn Emit) -> Result<Option<BaseUrl>> {
-        self.warn_missing_base(out, format_args!("{feature} enabled but no `url` set — skipped"))
+    pub(super) fn base(&self, feature: &'static str, out: &mut dyn Emit) -> Result<Option<BaseUrl>> {
+        self.warn_missing_base(out, BaseUrlMissing { feature, effect: "skipped" })
     }
 
     /// The base URL, warning with `missing` when absent. The single "is a `url`
     /// configured?" check shared by every processor — skip-on-absent callers go
     /// through [`Site::base`]; those that still emit (llms with relative links,
-    /// robots dropping its sitemap line) supply their own message here.
+    /// robots dropping its sitemap line) supply their own consequence here.
     pub(super) fn warn_missing_base(
         &self,
         out: &mut dyn Emit,
-        missing: fmt::Arguments,
+        missing: BaseUrlMissing,
     ) -> Result<Option<BaseUrl>> {
         let base = self.config.base();
         if base.is_none() {
-            out.warn(missing)?;
+            out.warn(missing);
         }
         Ok(base)
     }
@@ -63,10 +64,11 @@ impl Site<'_> {
 pub(super) trait Emit {
     /// Write `contents` to absolute `path`, creating parent directories.
     fn file(&mut self, path: &Path, contents: &str) -> Result<()>;
-    /// A progress line, shown at verbose+ (e.g. `wrote sitemap.xml`).
-    fn note(&mut self, msg: fmt::Arguments) -> Result<()>;
-    /// A warning, always shown (e.g. an enabled feature missing a precondition).
-    fn warn(&mut self, msg: fmt::Arguments) -> Result<()>;
+    /// A progress note (e.g. `wrote sitemap.xml`) — a debug log line in
+    /// production, captured verbatim by test sinks.
+    fn note(&mut self, msg: fmt::Arguments);
+    /// A typed warning: an enabled feature missing its `url` precondition.
+    fn warn(&mut self, warning: BaseUrlMissing);
 }
 
 /// One post-build pass over the site.
@@ -109,17 +111,17 @@ impl Processors {
     }
 }
 
-/// The production [`Emit`] sink: writes through [`crate::fs`] and reports via
-/// [`Report`].
+/// The production [`Emit`] sink: writes through [`crate::fs`], logs notes as
+/// debug events, and collects warnings on the shared [`Ui`].
 pub(super) struct Emitter<'a> {
-    report: &'a mut Report,
+    ui: &'a Ui,
     written: usize,
     bytes: u64,
 }
 
 impl<'a> Emitter<'a> {
-    pub(super) fn new(report: &'a mut Report) -> Self {
-        Self { report, written: 0, bytes: 0 }
+    pub(super) fn new(ui: &'a Ui) -> Self {
+        Self { ui, written: 0, bytes: 0 }
     }
 
     /// How many files were written — the count of generated outputs for the
@@ -142,14 +144,12 @@ impl Emit for Emitter<'_> {
         Ok(())
     }
 
-    fn note(&mut self, msg: fmt::Arguments) -> Result<()> {
-        self.report.info(msg)?;
-        Ok(())
+    fn note(&mut self, msg: fmt::Arguments) {
+        tracing::debug!("{msg}");
     }
 
-    fn warn(&mut self, msg: fmt::Arguments) -> Result<()> {
-        self.report.warn(msg)?;
-        Ok(())
+    fn warn(&mut self, warning: BaseUrlMissing) {
+        self.ui.warn(warning);
     }
 }
 
@@ -173,14 +173,12 @@ mod tests {
             Ok(())
         }
 
-        fn note(&mut self, msg: fmt::Arguments) -> Result<()> {
+        fn note(&mut self, msg: fmt::Arguments) {
             self.notes.push(msg.to_string());
-            Ok(())
         }
 
-        fn warn(&mut self, msg: fmt::Arguments) -> Result<()> {
-            self.warns.push(msg.to_string());
-            Ok(())
+        fn warn(&mut self, warning: BaseUrlMissing) {
+            self.warns.push(warning.to_string());
         }
     }
 
@@ -193,7 +191,8 @@ mod tests {
         }
 
         fn run(&self, _site: &Site, out: &mut dyn Emit) -> Result<()> {
-            out.note(format_args!("ran {}", self.0))
+            out.note(format_args!("ran {}", self.0));
+            Ok(())
         }
     }
 

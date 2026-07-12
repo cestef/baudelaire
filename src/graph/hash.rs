@@ -71,7 +71,7 @@ impl std::hash::Hasher for Blake3Hasher {
         self.0.update(bytes);
     }
 
-    /// Unused: the full blake3 digest is read via `finalize`, not this 64-bit
+    /// Unused: the full digest is read via `finalize`, not this 64-bit
     /// projection. Required by the trait.
     fn finish(&self) -> u64 {
         0

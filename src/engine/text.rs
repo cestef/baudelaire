@@ -45,9 +45,7 @@ impl Text {
     }
 
     /// Strip tags and raw `script`/`style` bodies, decode entities, and collapse
-    /// whitespace — in a single forward pass writing once into the output, with
-    /// no per-entity `replace` passes, per-tag case-folding allocations, or a
-    /// trailing split/join to collapse whitespace.
+    /// whitespace in a single forward pass writing once into the output.
     fn scan(html: &str) -> String {
         let bytes = html.as_bytes();
         let mut out = String::with_capacity(html.len() / 2);
@@ -59,7 +57,7 @@ impl Text {
         while i < bytes.len() {
             match bytes[i] {
                 b'<' => {
-                    // Skip a raw element's body (`<script>`/`<style>`) wholesale.
+                    // skip a raw element's body (`<script>`/`<style>`) wholesale.
                     if let Some(tag) = Self::raw_element(&html[i..])
                         && let Some(close) = Self::find_close(bytes, i + 1, tag.as_bytes())
                     {
@@ -86,7 +84,7 @@ impl Text {
                     i += 1;
                 }
                 _ => {
-                    // Copy a run of plain content at once. Stopping only at ASCII
+                    // copy a run of plain content at once. stopping only at ASCII
                     // markers keeps the slice on a UTF-8 boundary (multi-byte
                     // scalars never contain these bytes).
                     let start = i;
@@ -150,10 +148,9 @@ impl Text {
     }
 
     /// Decode one predefined entity at the start of `s` (which begins with `&`),
-    /// returning the character and the byte length consumed, or `None` when it is
-    /// a bare `&`. Consuming the whole entity in one step means `&amp;lt;` decodes
-    /// to a literal `&lt;` for free — no need to order `&amp;` last as the old
-    /// replace-based decoder did.
+    /// returning the character and the byte length consumed, or `None` for a bare
+    /// `&`. Consuming the whole entity in one step means `&amp;lt;` decodes to a
+    /// literal `&lt;`, without ordering `&amp;` last as a replace-based decoder must.
     fn entity(s: &str) -> Option<(char, usize)> {
         if s.starts_with("&#39;") {
             return Some(('\'', 5));

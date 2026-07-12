@@ -102,8 +102,9 @@ fn default_build_works_no_content() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("built") || stdout.contains("building"));
+    // Human-facing logs live on stderr; stdout stays data-only.
+    let logs = String::from_utf8_lossy(&out.stderr);
+    assert!(logs.contains("built") || logs.contains("building"));
 }
 
 #[test]
