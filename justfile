@@ -21,3 +21,8 @@ test:
     else
         cargo test --workspace
     fi
+
+# Install the binary & create an alias
+install:
+    cargo install --path .
+    ln -sf ~/.cargo/baudelaire ~/.cargo/bl

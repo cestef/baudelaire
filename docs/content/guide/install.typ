@@ -15,11 +15,11 @@ Baudelaire isn't published on #link("https://crates.io/")[crates.io] yet, instal
 cargo install --git https://codeberg.org/cstef/baudelaire
 ```
 
-This builds from source and drops the `baudelaire` binary in `~/.cargo/bin`.
+This builds from source and drops the `baudelaire` binary in `~/.cargo/bin`, it will also be symlinked to `bl` for convenience.
 Confirm it works:
 
 ```sh
-baudelaire --version
+baudelaire --version # or: bl --version
 ```
 
 #callout(kind: "note")[
