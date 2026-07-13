@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use typst::foundations::{Datetime, Dict, Module, Value};
 use typst::syntax::{
     Source,
     ast::{Expr, Markup},
 };
 
+use crate::codegen;
 use crate::config::Config;
 use crate::config::dispatch::Keys;
 use crate::error::{ContentError, Result};
@@ -20,7 +22,13 @@ const KNOWN: &[&str] = &[
 ];
 
 /// Parsed frontmatter for a single page.
-#[derive(Debug, Clone, Default)]
+///
+/// Serializable so discovery can cache it and skip re-evaluating the page's
+/// typst module on an unchanged build. `extra` holds arbitrary frontmatter as
+/// [`codegen::Value`] rather than a raw typst `Value`: it renders to the same
+/// generated source, keeps string content readable for [`Frontmatter::text`],
+/// and — unlike a typst runtime value — round-trips through the cache.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Frontmatter {
     pub title: Option<String>,
     pub date: Option<time::Date>,
@@ -30,14 +38,14 @@ pub struct Frontmatter {
     pub order: Option<i64>,
     pub redirect: Vec<String>,
     pub taxonomies: BTreeMap<String, Vec<String>>,
-    pub extra: BTreeMap<String, Value>,
+    pub extra: BTreeMap<String, codegen::Value>,
 }
 
 impl Frontmatter {
     /// A string value from `extra` (arbitrary frontmatter), if present and a
     /// string — e.g. `description`, `summary`, `image`, `author`.
     pub fn text(&self, key: &str) -> Option<String> {
-        self.extra.get(key).and_then(ValueExt::str)
+        self.extra.get(key).and_then(codegen::Value::as_str).map(str::to_owned)
     }
 
     /// Reject the removed `#frontmatter(…)` call form with a migration error.
@@ -96,7 +104,8 @@ impl Frontmatter {
                         return Err(ContentError::unknown_frontmatter(path, key, &near).into());
                     }
                     None => {
-                        fm.extra.insert(key.to_owned(), val.clone());
+                        fm.extra
+                            .insert(key.to_owned(), codegen::Value::from_typst_data(val));
                     }
                 },
             }

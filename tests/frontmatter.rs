@@ -1,6 +1,6 @@
 mod common;
 
-use baudelaire::content::{Frontmatter, Page};
+use baudelaire::content::{DiscoveryCache, Frontmatter, Page};
 use baudelaire::world::{Mode, Project};
 use common::Site;
 
@@ -23,6 +23,7 @@ fn try_load_with(text: &str, config: &str) -> baudelaire::error::Result<Page> {
         &site.root.join("content/posts/page.typ"),
         &cfg,
         &project,
+        &DiscoveryCache::load(&cfg),
     )
 }
 

@@ -359,6 +359,58 @@ fn editing_an_embedded_asset_invalidates_the_page() {
 }
 
 #[test]
+fn discovery_cache_persisted_and_reused() {
+    // Discovery caches each page's extracted frontmatter so an unchanged rebuild
+    // skips re-evaluating its module. The manifest must be written, and a second
+    // build must produce identical output from it.
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", summary: \"hello\",)\nalpha",
+    );
+    site.build();
+    assert!(
+        site.exists(".baudelaire/cache/discovery.json"),
+        "discovery manifest should be written"
+    );
+
+    let before = site.output("posts/a/index.html");
+    site.build();
+    // Frontmatter served from the discovery cache — output is unchanged.
+    assert_eq!(before, site.output("posts/a/index.html"));
+}
+
+#[test]
+fn frontmatter_from_import_invalidated_on_dep_change() {
+    // A page's frontmatter reads a value from an imported module, so the cached
+    // frontmatter depends on that module. Editing it must re-evaluate the page's
+    // frontmatter — a missed dependency would serve the stale title from cache.
+    let site = Site::with(
+        "site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n",
+    );
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",
+    );
+    site.write("titles.typ", "#let title = \"FIRST\"");
+    site.write(
+        "content/posts/a.typ",
+        "#import \"/titles.typ\": title\n#let frontmatter = (title: title,)\nbody",
+    );
+    site.build();
+    assert!(site.output("posts/a/index.html").contains("FIRST"));
+
+    // Change only the imported module the frontmatter reads from.
+    site.write("titles.typ", "#let title = \"SECOND\"");
+    site.build();
+    assert!(
+        site.output("posts/a/index.html").contains("SECOND"),
+        "frontmatter dependency change did not propagate — the import was not \
+         tracked as a discovery-cache dependency"
+    );
+}
+
+#[test]
 fn no_cache_flag_forces_full_rebuild() {
     let site = Site::with(CONFIG);
     site.write(

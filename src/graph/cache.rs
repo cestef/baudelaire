@@ -25,7 +25,7 @@ use crate::config::Config;
 use crate::content::Page;
 use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::{Deps, Hash};
+use crate::graph::{Deps, FileDigests, Hash};
 use crate::ui::Ui;
 use crate::world::BuildContext;
 
@@ -83,6 +83,10 @@ pub struct Cache {
     config: Hash,
     prev: Manifest,
     next: Manifest,
+    /// Per-build file-hash memo: a dependency shared by many pages (a template,
+    /// a theme module) is hashed once across validation and recording, not once
+    /// per page.
+    digests: FileDigests,
 }
 
 impl Cache {
@@ -129,6 +133,7 @@ impl Cache {
             },
             config: fingerprint,
             prev,
+            digests: FileDigests::default(),
         })
     }
 
@@ -151,7 +156,7 @@ impl Cache {
         if !entry
             .deps
             .iter()
-            .all(|(path, hash)| Hash::of_file(path).as_ref() == Some(hash))
+            .all(|(path, hash)| self.digests.of(path).as_ref() == Some(hash))
         {
             return None;
         }
@@ -173,7 +178,7 @@ impl Cache {
         let deps = deps
             .files()
             .iter()
-            .filter_map(|p| Some((p.clone(), Hash::of_file(p)?)))
+            .filter_map(|p| Some((p.clone(), self.digests.of(p)?)))
             .collect();
         let blob = Hash::of_bytes(html.as_bytes());
         self.next.pages.insert(

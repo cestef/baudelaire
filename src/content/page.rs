@@ -5,6 +5,7 @@ use wax::Glob;
 use wax::prelude::*;
 
 use crate::config::{CollectionConfig, Config, SortKey};
+use crate::content::cache::DiscoveryCache;
 use crate::content::{Frontmatter, Permalink, PermalinkCtx, Slug};
 use crate::error::{ContentError, Result};
 use crate::world::Project;
@@ -85,15 +86,13 @@ impl Page {
         path: &std::path::Path,
         config: &Config,
         project: &Project,
+        cache: &DiscoveryCache,
     ) -> Result<Self> {
-        let source = project.source(path)?;
-        Frontmatter::check(&source, path)?;
-        let module = project.module(&source)?;
-        let (mut frontmatter, data) = match Frontmatter::extract(&module, path, config)? {
-            Some(frontmatter) => (frontmatter, Data::Export),
-            None => (Frontmatter::default(), Data::Empty),
-        };
-        let body = source.text().to_owned();
+        // Loading a page evaluates its typst module to read frontmatter; the
+        // cache skips both the parse and the evaluation for a page whose source
+        // and dependencies are unchanged, returning the body straight from disk.
+        let (mut frontmatter, export, body) = cache.load_page(path, config, project)?;
+        let data = if export { Data::Export } else { Data::Empty };
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
@@ -305,7 +304,10 @@ pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
     if !config.content.exists() {
         return Ok(Vec::new());
     }
-    Discovery::new(config, project).run()
+    let cache = DiscoveryCache::load(config);
+    let collections = Discovery::new(config, project).run(&cache)?;
+    cache.save()?;
+    Ok(collections)
 }
 
 /// Assigns discovered content files to collections — glob-configured
@@ -326,7 +328,7 @@ impl<'a> Discovery<'a> {
         }
     }
 
-    fn run(mut self) -> Result<Vec<Collection>> {
+    fn run(mut self, cache: &DiscoveryCache) -> Result<Vec<Collection>> {
         self.files = Self::gather(&self.config.content)?
             .into_iter()
             .map(|path| (path, false))
@@ -337,7 +339,7 @@ impl<'a> Discovery<'a> {
         let assignments = self.assign()?;
         let pages: Vec<Page> = assignments
             .par_iter()
-            .map(|(id, path)| Page::load(id, path, self.config, self.project))
+            .map(|(id, path)| Page::load(id, path, self.config, self.project, cache))
             .collect::<Result<Vec<_>>>()?;
         let mut groups: Vec<(String, Vec<Page>)> = Vec::new();
         for page in pages {

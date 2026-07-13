@@ -363,6 +363,41 @@ impl Project {
         })
     }
 
+    /// Evaluate a source as a typst module and capture the files the evaluation
+    /// read — the frontmatter's exact dependency set, so discovery can cache the
+    /// extracted frontmatter and re-evaluate only when a dependency changes.
+    /// Like [`Project::module`] but through a [`Tracked`] world; the page's own
+    /// source is excluded from the deps (it is fingerprinted separately).
+    pub fn module_tracked(&self, source: &Source) -> Result<(Module, Deps)> {
+        let world = Tracked::new(self.world_for(source));
+        let mut sink = Sink::new();
+        let traced = Traced::default();
+        let result = typst_eval::eval(
+            (&world as &dyn World).track(),
+            &self.lib,
+            traced.track(),
+            sink.track_mut(),
+            Route::default().track(),
+            source,
+        );
+        match result {
+            Ok(module) => {
+                let deps = self.dependencies(&world);
+                Ok((module, deps))
+            }
+            Err(errs) => {
+                let name = source.id().vpath().get_without_slash().to_string();
+                Err(crate::error::BaudelaireErrorKind::TypstCompile(
+                    TypstSourceDiagnostic::bridge(
+                        errs,
+                        (&name, source.text()),
+                        Arc::new(world.into_inner()),
+                    ),
+                ))
+            }
+        }
+    }
+
     /// Resolve a file id the compiler touched back to its filesystem path.
     pub fn path_of(&self, id: FileId) -> Option<PathBuf> {
         self.files.loader().resolve(id).ok()
@@ -410,6 +445,12 @@ impl<W> Tracked<W> {
     /// The wrapped world.
     pub fn inner(&self) -> &W {
         &self.inner
+    }
+
+    /// Consume the wrapper, returning the wrapped world — for building an owned
+    /// world (e.g. an `Arc`) once tracking is done.
+    pub fn into_inner(self) -> W {
+        self.inner
     }
 
     /// The file ids accessed so far.

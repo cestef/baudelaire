@@ -17,7 +17,7 @@ typst-eval = "0.15"
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
-time = { version = "0.3", features = ["parsing", "formatting"] }
+time = { version = "0.3", features = ["parsing", "formatting", "serde"] }
 itertools = "0.15.0"
 kdl = { version = "6" }
 serde = { version = "1", features = ["derive"] }

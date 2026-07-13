@@ -7,6 +7,7 @@
 
 use std::fmt::{self, Write};
 
+use serde::{Deserialize, Serialize};
 use typst::foundations::Repr;
 
 /// Displays a string as a typst string literal, escaping `"` and `\`.
@@ -33,7 +34,7 @@ impl fmt::Display for Str<'_> {
 /// This is the safe way to pass structured data into generated typst: build a
 /// `Value` tree and render it once, so every string is escaped by the single
 /// [`Str`] path and there is no ad-hoc `format!` per data shape.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
     Str(String),
     Int(i64),
@@ -72,6 +73,26 @@ impl Value {
     /// which is valid typst for data values (strings, numbers, arrays, dicts, …).
     pub fn from_typst(value: &typst::foundations::Value) -> Self {
         Self::Raw(value.repr().to_string())
+    }
+
+    /// Store a typst data value with its string content preserved for strings
+    /// (so it round-trips back to readable text via [`Value::as_str`]) and its
+    /// `repr` for everything else. Renders to the same typst source either way —
+    /// a `Str` is quoted like the string's `repr` — but keeps string frontmatter
+    /// readable rather than opaque source.
+    pub fn from_typst_data(value: &typst::foundations::Value) -> Self {
+        match value {
+            typst::foundations::Value::Str(s) => Self::Str(s.to_string()),
+            other => Self::from_typst(other),
+        }
+    }
+
+    /// The string content, for a `Str` value.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) => Some(s),
+            _ => None,
+        }
     }
 }
 

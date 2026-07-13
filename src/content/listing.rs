@@ -66,7 +66,7 @@ impl Item {
             page.frontmatter
                 .extra
                 .iter()
-                .map(|(key, value)| (key.clone(), Value::from_typst(value))),
+                .map(|(key, value)| (key.clone(), value.clone())),
         );
         Self::new(page.permalink.clone(), page.title())
             .dated(date)
