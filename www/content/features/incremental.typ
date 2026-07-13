@@ -36,7 +36,7 @@ That makes invalidation sharp and predictable:
 
 == The cache
 
-Rendered HTML lives in `.baudelaire/`, stored content-addressed: identical output
+Rendered HTML lives in `.baudelaire/cache/objects/`, stored content-addressed: identical output
 is kept once, and an unchanged page's markup is never rewritten, so the cache
 stays small and writes stay cheap. `build` and `serve` share it, so switching
 between them recompiles nothing.

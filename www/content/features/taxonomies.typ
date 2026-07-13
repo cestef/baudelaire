@@ -20,8 +20,8 @@ automatically. With `index=#true` you get:
 / #raw("/tags/rust/"): a page listing everything tagged `rust`.
 
 Both are ordinary templated pages. They receive the term and its entries as
-structured data and render through your `list` template, so they inherit the site
-layout. The chips under this article link straight into `/tags/`.
+structured data and render through the `template` you bound, so they inherit the
+site layout. The chips under this article link straight into `/tags/`.
 
 Point several taxonomies at different frontmatter keys to group the same content
 more than one way.

@@ -13,8 +13,9 @@ cd my-site
 baudelaire serve
 ```
 
-`init` writes a `config.kdl`, a `content/` tree, a template, and a stylesheet: a
-site that already builds. `serve` compiles it, opens a browser, and watches for
+`init` writes a `config.kdl`, a starter page and post under `content/`, a
+`templates/layout.typ`, and an `assets/style.css` — a site that already builds —
+then offers to set up version control. `serve` compiles it, opens a browser, and watches for
 changes, live-reloading over Server-Sent Events on every save.
 
 == Write a page

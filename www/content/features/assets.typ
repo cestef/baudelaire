@@ -28,7 +28,7 @@ output {
   shaken out. Files whose name starts with `_` are partials: pulled in through
   imports, never emitted on their own.
 / #raw("fingerprint"): Output filenames get a content hash, turning `style.css`
-  into `style.9f3c1a.css`, and every reference in your pages is rewritten to
+  into `style.9f3c1a2b4d6e8f01.css`, and every reference in your pages is rewritten to
   match. Now you can cache assets forever and never serve a stale one.
 
 Image optimization lives in its own #link("meta.typ")[images] block, separate

@@ -15,12 +15,14 @@ a version stamp, a "last built" line, or a commit link in your footer.
 #build.date              // "2026-07-09"
 #build.mode              // "build" | "serve" | "check"
 #build.git.hash          // full commit SHA (slice it for a short form)
-#build.git.rev           // revision number (commit count)
+#build.git.rev           // revision number (commit count), when available
 #build.git.dirty         // uncommitted changes?
 #build.site.title        // your configured site title
 ```
 
-The footer on this page is built from exactly these values. The Typst compiler
+Inside a git repository `git.hash` and `git.dirty` are always set; `git.rev`,
+`git.branch`, `git.tag`, and `git.committed` appear only when git can supply them
+(so guard optional reads). The footer on this page is built from these values. The Typst compiler
 version comes from Typst itself, through the built-in `sys.version`.
 
 == Your own inputs
