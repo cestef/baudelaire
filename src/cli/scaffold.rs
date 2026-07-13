@@ -1,16 +1,20 @@
+use std::fmt::Write as _;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use owo_colors::OwoColorize;
 
-use crate::cli::Root;
+use crate::cli::{NewArgs, Root};
 use crate::cli::prompt::{Input, Prompt};
-use crate::config::Config;
+use crate::codegen::Value;
+use crate::config::{Config, SortKey};
+use crate::content::{Collection, Frontmatter, Page, Slug};
 use crate::error::Result;
-use crate::error::warning::{ScaffoldExists, VcsFailed, VcsMissing};
+use crate::error::warning::{PermalinkTaken, ScaffoldExists, VcsFailed, VcsMissing};
 use crate::fs;
 use crate::ui::{Paths, Ui};
+use crate::world::Project;
 
 /// Declarative scaffold: dirs + files to create under a root.
 struct Scaffold<'a> {
@@ -73,20 +77,23 @@ impl<'a> Scaffold<'a> {
 }
 
 impl Config {
-    /// Infer the collection id from a content path's directory components.
-    fn collection_for(&self, path: &Path) -> String {
-        for seg in path.components() {
-            let name = seg.as_os_str().to_str().unwrap_or("");
-            if self.collection(name).is_some() {
-                return name.to_owned();
-            }
+    /// The collection a content path falls into by convention: the top-level
+    /// directory under the content root. `None` for a file directly under it (a
+    /// root page, which belongs to no collection). Mirrors discovery's
+    /// convention so `new` infers the same collection the build later will.
+    fn collection_for(&self, path: &Path) -> Option<String> {
+        let rel = path.strip_prefix(&self.content).unwrap_or(path);
+        let mut components = rel.components();
+        match (components.next(), components.next()) {
+            (Some(dir), Some(_)) => Some(dir.as_os_str().to_str()?.to_owned()),
+            _ => None,
         }
-        "posts".to_owned()
     }
 
     /// Resolve the template file for a collection, defaulting to `layout.typ`.
-    fn template_for(&self, collection: &str) -> String {
-        self.collection(collection)
+    fn template_for(&self, collection: Option<&str>) -> String {
+        collection
+            .and_then(|c| self.collection(c))
             .and_then(|c| c.template.clone())
             .unwrap_or_else(|| "layout.typ".into())
     }
@@ -194,26 +201,232 @@ impl Details {
     }
 }
 
-/// Scaffold a new content file, inferring collection + template from config.
-pub fn new_page(ui: &Ui, path: &Path, config: &Config) -> Result<()> {
-    if path.exists() {
-        return Err(crate::error::ScaffoldError::already_exists(path).into());
+/// A new content page `new` will scaffold: its target path plus the structure
+/// inferred for it — title from the filename, the ordering field from the
+/// collection (a `date` for a dated collection, the next `order` for an ordered
+/// one), the template, and the permalink it will occupy (with any existing
+/// occupant). The operation is a type, not a free function: [`plan`](Self::plan)
+/// reads the config and existing content to infer, then [`create`](Self::create)
+/// writes. Only standard frontmatter fields are written; content is the author's.
+pub(crate) struct Draft {
+    /// The file to write; a bundle resolves to `<dir>/index.typ`.
+    path: PathBuf,
+    title: String,
+    template: String,
+    date: Option<time::Date>,
+    order: Option<i64>,
+    is_draft: bool,
+    permalink: String,
+    /// The source of an existing page already producing `permalink`, if any.
+    collision: Option<String>,
+    /// Whether to open the created file in `$EDITOR`.
+    open: bool,
+}
+
+impl Draft {
+    /// Infer everything for the page named by `args`, reading the collection
+    /// config and the existing content. Errors if the target already exists.
+    pub(crate) fn plan(args: &NewArgs, config: &Config, project: &Project) -> Result<Self> {
+        let path = args.target(config);
+        if path.exists() {
+            return Err(crate::error::ScaffoldError::already_exists(&path).into());
+        }
+        let collection = config.collection_for(&path);
+        let template = config.template_for(collection.as_deref());
+        // The display name behind the slug: a bundle takes its directory's name.
+        let raw = Self::raw_name(&path, config);
+        let slug = Slug::parse(&raw).map_or_else(|| raw.clone(), Slug::into_string);
+        let title = args.title.clone().unwrap_or_else(|| Self::titleize(&raw));
+
+        // The collection's sort decides which ordering field the page wants: a
+        // frozen `date` for a dated collection, the next `order` for an ordered
+        // one. An unconfigured collection sorts by `order` (the default).
+        let sort = collection
+            .as_deref()
+            .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
+        // Discover once — reused for the next order and the collision check.
+        // A discovery failure (e.g. a broken sibling page) must not block `new`.
+        let discovered = crate::content::discover(config, project).unwrap_or_default();
+
+        let date = match &args.date {
+            Some(input) => Some(Self::parse_date(input)?),
+            None if sort == Some(SortKey::Date) => Some(time::OffsetDateTime::now_utc().date()),
+            None => None,
+        };
+        let order = match (&collection, sort) {
+            (Some(c), Some(SortKey::Order)) => Some(Self::next_order(c, &discovered)),
+            _ => None,
+        };
+
+        let frontmatter = Frontmatter {
+            title: Some(title.clone()),
+            date,
+            order,
+            ..Frontmatter::default()
+        };
+        // A root page (no collection) maps `index` to `/` and every other slug
+        // to `/{slug}/` — `permalink_of` owns that fallback, exactly as the build.
+        let permalink = Page::permalink_of(collection.as_deref(), &frontmatter, &slug, config);
+
+        let output = config.destination(&permalink);
+        let collision = discovered
+            .iter()
+            .flat_map(|c| c.pages.iter())
+            .find(|p| p.output == output && p.source != path)
+            .map(|p| p.source.display().to_string());
+
+        Ok(Self {
+            path,
+            title,
+            template,
+            date,
+            order,
+            is_draft: args.draft.unwrap_or(true),
+            permalink,
+            collision,
+            open: args.open,
+        })
     }
-    let collection = config.collection_for(path);
-    let template = config.template_for(&collection);
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("untitled.typ");
-    let body = templates::render(templates::PAGE, &[("template", &template)]);
-    Scaffold::new(path.parent().unwrap_or(Path::new(".")))
-        .file(name, body)
-        .apply(ui)?;
-    ui.done(format_args!(
-        "created {}",
-        Paths(&path.display().to_string())
-    ));
-    Ok(())
+
+    /// Write the planned page: warn if its permalink is already taken, create
+    /// the file (and any parent dirs), report the path and the URL it lands at,
+    /// and open it in `$EDITOR` when asked.
+    pub(crate) fn create(self, ui: &Ui) -> Result<()> {
+        if let Some(origin) = &self.collision {
+            ui.warn(PermalinkTaken {
+                url: self.permalink.clone(),
+                origin: origin.clone(),
+            });
+        }
+        let name = self
+            .path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("untitled.typ");
+        Scaffold::new(self.path.parent().unwrap_or(Path::new(".")))
+            .file(name, self.body())
+            .apply(ui)?;
+        ui.done(format_args!(
+            "created {} {} {}",
+            Paths(&self.path.display().to_string()),
+            "→".dimmed(),
+            self.permalink.cyan()
+        ));
+        if self.open {
+            Editor::open(&self.path, ui);
+        }
+        Ok(())
+    }
+
+    /// The name behind the page's slug: the file stem, or — for a bundle
+    /// `index` — the directory it lives in, so `posts/hello/index.typ` is titled
+    /// "Hello", not "Index".
+    fn raw_name(path: &Path, config: &Config) -> String {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
+        let index = config.index.as_deref().unwrap_or("index");
+        if stem == index {
+            path.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or(stem)
+                .to_owned()
+        } else {
+            stem.to_owned()
+        }
+    }
+
+    /// De-slugify a filename into a title: split on `-`/`_`/spaces and
+    /// capitalize each word (`my-first-post` → `My First Post`).
+    fn titleize(name: &str) -> String {
+        name.split(['-', '_', ' '])
+            .filter(|w| !w.is_empty())
+            .map(|w| {
+                let mut chars = w.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// The next `order` for a collection: one past the highest already used, or
+    /// 1 for the first page — so a new chapter appends to the end.
+    fn next_order(collection: &str, discovered: &[Collection]) -> i64 {
+        discovered
+            .iter()
+            .filter(|c| c.id == collection)
+            .flat_map(|c| c.pages.iter())
+            .filter_map(|p| p.frontmatter.order)
+            .max()
+            .map_or(1, |highest| highest + 1)
+    }
+
+    fn parse_date(input: &str) -> Result<time::Date> {
+        let bad = || crate::error::ScaffoldError::bad_date(input);
+        let parts: Vec<&str> = input.split('-').collect();
+        let [year, month, day] = parts.as_slice() else {
+            return Err(bad().into());
+        };
+        let year: i32 = year.parse().map_err(|_| bad())?;
+        let month: u8 = month.parse().map_err(|_| bad())?;
+        let month = time::Month::try_from(month).map_err(|_| bad())?;
+        let day: u8 = day.parse().map_err(|_| bad())?;
+        time::Date::from_calendar_date(year, month, day).map_err(|_| bad().into())
+    }
+
+    /// The scaffolded `.typ`: a computed `#let frontmatter = (…)` export plus a
+    /// body stub. Values go through [`Value`] so strings are escaped.
+    fn body(&self) -> String {
+        let mut fields: Vec<(&str, Value)> = vec![("title", Value::str(&self.title))];
+        if let Some(d) = self.date {
+            fields.push((
+                "date",
+                Value::Raw(format!(
+                    "datetime(year: {}, month: {}, day: {})",
+                    d.year(),
+                    u8::from(d.month()),
+                    d.day()
+                )),
+            ));
+        }
+        if let Some(order) = self.order {
+            fields.push(("order", Value::Int(order)));
+        }
+        fields.push(("draft", Value::Bool(self.is_draft)));
+        fields.push(("template", Value::str(&self.template)));
+
+        let mut out = String::from("#let frontmatter = (\n");
+        for (key, value) in &fields {
+            let _ = writeln!(out, "  {key}: {value},");
+        }
+        out.push_str(")\n\nYour content here.\n");
+        out
+    }
+}
+
+/// The user's configured text editor. Namespaces the "open a file in `$EDITOR`"
+/// action, in the unit-struct style of the rest of the codebase.
+struct Editor;
+
+impl Editor {
+    /// Open `path` in `$VISUAL`/`$EDITOR`, best-effort: a missing or failing
+    /// editor is a note, never a failed command.
+    fn open(path: &Path, ui: &Ui) {
+        let editor = std::env::var("VISUAL")
+            .or_else(|_| std::env::var("EDITOR"))
+            .ok()
+            .filter(|e| !e.is_empty());
+        match editor {
+            Some(editor) => {
+                if let Err(e) = Command::new(&editor).arg(path).status() {
+                    ui.detail(format_args!("could not launch `{editor}`: {e}"));
+                }
+            }
+            None => ui.detail(format_args!("set {} to open new files here", "$EDITOR".cyan())),
+        }
+    }
 }
 
 /// A version-control system baudelaire can initialize for a new project. Both
@@ -329,8 +542,6 @@ mod templates {
     pub const HELLO: &str = include_str!("scaffold/hello.typ");
     pub const LAYOUT: &str = include_str!("scaffold/layout.typ");
     pub const STYLE: &str = include_str!("scaffold/style.css");
-    /// New-page template; `{{template}}` is filled by [`render`].
-    pub const PAGE: &str = include_str!("scaffold/page.typ");
 
     /// Substitute `{{key}}` placeholders in a template, in a single left-to-
     /// right pass: a substituted value is never rescanned, so a site name

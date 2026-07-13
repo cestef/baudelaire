@@ -206,6 +206,18 @@ impl Page {
             .is_some_and(|d| d > time::OffsetDateTime::now_utc().date())
     }
 
+    /// The permalink a page will resolve to for a given collection (or a root
+    /// page when `None`) — the single rule shared by discovery and by `new`'s
+    /// preview, so a scaffolded page reports exactly the URL the build produces.
+    pub(crate) fn permalink_of(
+        collection: Option<&str>,
+        fm: &Frontmatter,
+        slug: &str,
+        config: &Config,
+    ) -> String {
+        Self::permalink(collection.unwrap_or(ROOT), fm, slug, config)
+    }
+
     fn permalink(collection: &str, fm: &Frontmatter, slug: &str, config: &Config) -> String {
         if collection == ROOT {
             // The root collection maps straight onto the site root: `index`

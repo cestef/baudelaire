@@ -57,8 +57,48 @@ fn new_scaffolds_content_file() {
     assert!(t.exists("content/posts/my-post.typ"));
     let body = t.read("content/posts/my-post.typ");
     assert!(body.contains("frontmatter"));
-    assert!(body.contains("title: \"Untitled\""));
+    // Title is derived from the filename, not a fixed "Untitled".
+    assert!(body.contains("title: \"My Post\""), "{body}");
     assert!(body.contains("draft: true"));
+    // The permalink the page will occupy is reported.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("/posts/my-post/"), "permalink preview: {stderr}");
+}
+
+#[test]
+fn new_infers_frontmatter_from_the_collection() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"T\"\ncollections {\n  blog sort=\"date\"\n  guide sort=\"order\"\n}\n",
+    );
+    // A dated collection gets today's date stamped; no order field.
+    let blog = t.run(&["new", "blog/launch-day"]);
+    assert!(blog.status.success(), "{}", String::from_utf8_lossy(&blog.stderr));
+    let body = t.read("content/blog/launch-day.typ");
+    assert!(body.contains("title: \"Launch Day\""), "{body}");
+    assert!(body.contains("date: datetime("), "dated collection stamps a date: {body}");
+    assert!(!body.contains("order:"), "dated collection has no order: {body}");
+
+    // An ordered collection gets the next order; first page is 1.
+    t.run(&["new", "guide/intro"]);
+    assert!(t.read("content/guide/intro.typ").contains("order: 1"));
+    t.run(&["new", "guide/second"]);
+    assert!(
+        t.read("content/guide/second.typ").contains("order: 2"),
+        "order increments past existing pages"
+    );
+}
+
+#[test]
+fn new_bundle_creates_index_in_a_directory() {
+    let t = Site::new();
+    t.write("config.kdl", "site \"T\"\n");
+    let out = t.run(&["new", "posts/my-post", "--bundle"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(t.exists("content/posts/my-post/index.typ"), "bundle dir with index.typ");
+    // The bundle takes its title from the directory, not "Index".
+    assert!(t.read("content/posts/my-post/index.typ").contains("title: \"My Post\""));
 }
 
 #[test]

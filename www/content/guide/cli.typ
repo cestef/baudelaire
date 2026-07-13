@@ -16,8 +16,15 @@ to `--config`) and accepts the global flags below.
   `--no-watch`.
 / #raw("baudelaire check"): Compile every page and report broken internal links
   without writing output. A fast CI gate.
-/ #raw("baudelaire new <path>"): Scaffold a content file with starter
-  frontmatter, e.g. `baudelaire new content/posts/hello.typ`.
+/ #raw("baudelaire new <path>"): Scaffold a content file, inferring its
+  structure from the config and existing content: the title from the filename
+  (`my-first-post` → "My First Post"), the ordering field from the collection (a
+  `date` for a `sort="date"` collection, the next `order` for a `sort="order"`
+  one), the template, and the permalink it will occupy — warning if that URL is
+  already taken. A bare name lands under the content directory, so
+  `baudelaire new posts/hello` writes `content/posts/hello.typ`. Flags:
+  `--title`, `--date YYYY-MM-DD`, `--draft <bool>`, `-b/--bundle` (create
+  `<name>/index.typ` for colocated assets), and `-e/--open` (open in `$EDITOR`).
 / #raw("baudelaire init [dir]"): Scaffold a whole project (config, a layout, a
   starter page and post, and a stylesheet) into `dir`, or the current directory.
   It prompts for the site name, author (defaulted from your git config), and

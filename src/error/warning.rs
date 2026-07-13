@@ -22,6 +22,19 @@ pub struct ScaffoldExists {
     pub path: PathBuf,
 }
 
+/// `new` computed a permalink already produced by an existing page.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("`{url}` is already produced by {origin}")]
+#[diagnostic(
+    code(baudelaire::scaffold::permalink_taken),
+    severity(warning),
+    help("give the new page a distinct `slug` in its frontmatter, or place it under a different path")
+)]
+pub struct PermalinkTaken {
+    pub url: String,
+    pub origin: String,
+}
+
 /// The requested version-control tool is not installed.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("`{tool}` not found — repository setup skipped")]

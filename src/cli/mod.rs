@@ -12,7 +12,7 @@ use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
-use crate::error::{FsError, Op, Result};
+use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result};
 use crate::ui::{Level, Ui};
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
@@ -38,6 +38,7 @@ mod group {
     pub const LOGGING: &str = "Logging";
     pub const SERVER: &str = "Server";
     pub const TARGETS: &str = "Targets";
+    pub const CONTENT: &str = "Content";
 }
 
 /// Usage examples appended to the top-level help. owo-colors gates the colour
@@ -128,7 +129,9 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
-/// Arguments shared across all subcommands.
+/// Arguments shared across *every* subcommand — project location and logging.
+/// The build-shaping overrides live in [`BuildOverrides`], flattened only into
+/// the commands that actually build, so `new`/`init`/`clean` help stays clean.
 #[derive(Args, Debug, Clone)]
 pub struct GlobalArgs {
     /// Path to config.kdl.
@@ -143,30 +146,6 @@ pub struct GlobalArgs {
     #[arg(short, long, global = true, help_heading = group::PROJECT)]
     pub profile: Option<String>,
 
-    /// Override the output directory.
-    #[arg(short, long, global = true, help_heading = group::OUTPUT)]
-    pub out: Option<PathBuf>,
-
-    /// Override the base URL.
-    #[arg(long, global = true, help_heading = group::OUTPUT)]
-    pub base_url: Option<String>,
-
-    /// Build draft pages.
-    #[arg(long, global = true, help_heading = group::BUILD)]
-    pub drafts: bool,
-
-    /// Build future-dated pages.
-    #[arg(long, global = true, help_heading = group::BUILD)]
-    pub future: bool,
-
-    /// Skip the cache (full rebuild).
-    #[arg(long, global = true, help_heading = group::BUILD)]
-    pub no_cache: bool,
-
-    /// Error on broken internal links (default true; pass `false` to warn).
-    #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
-    pub strict_links: Option<bool>,
-
     /// Verbose output: per-page progress plus debug logs (-vv for trace logs).
     #[arg(short, long, global = true, action = clap::ArgAction::Count, help_heading = group::LOGGING)]
     pub verbose: u8,
@@ -176,6 +155,36 @@ pub struct GlobalArgs {
     pub quiet: bool,
 }
 
+/// Config overrides that only make sense for a build (`build`, `serve`,
+/// `check`). Flattened per-command rather than made global so scaffolding
+/// commands don't advertise irrelevant `--drafts`/`--no-cache` flags.
+#[derive(Args, Debug, Clone, Default)]
+pub struct BuildOverrides {
+    /// Override the output directory.
+    #[arg(short, long, help_heading = group::OUTPUT)]
+    pub out: Option<PathBuf>,
+
+    /// Override the base URL.
+    #[arg(long, help_heading = group::OUTPUT)]
+    pub base_url: Option<String>,
+
+    /// Build draft pages.
+    #[arg(long, help_heading = group::BUILD)]
+    pub drafts: bool,
+
+    /// Build future-dated pages.
+    #[arg(long, help_heading = group::BUILD)]
+    pub future: bool,
+
+    /// Skip the cache (full rebuild).
+    #[arg(long, help_heading = group::BUILD)]
+    pub no_cache: bool,
+
+    /// Error on broken internal links (default true; pass `false` to warn).
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
+    pub strict_links: Option<bool>,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
     /// Build the site (default when no subcommand given).
@@ -183,7 +192,7 @@ pub enum Command {
     /// Serve the site with a dev server and live rebuild.
     Serve(ServeArgs),
     /// Compile and check links without writing output.
-    Check,
+    Check(CheckArgs),
     /// Scaffold a new content file.
     New(NewArgs),
     /// Publish the built site to every configured destination.
@@ -195,12 +204,25 @@ pub enum Command {
 }
 
 /// Arguments for `baudelaire build`.
+#[derive(Args, Debug, Clone, Default)]
+pub struct BuildArgs {
+    #[command(flatten)]
+    pub overrides: BuildOverrides,
+}
+
+/// Arguments for `baudelaire check`.
 #[derive(Args, Debug, Clone)]
-pub struct BuildArgs {}
+pub struct CheckArgs {
+    #[command(flatten)]
+    pub overrides: BuildOverrides,
+}
 
 /// Arguments for `baudelaire serve`.
 #[derive(Args, Debug, Clone)]
 pub struct ServeArgs {
+    #[command(flatten)]
+    pub overrides: BuildOverrides,
+
     /// Port to listen on (overrides config).
     #[arg(long, help_heading = group::SERVER)]
     pub port: Option<u16>,
@@ -286,8 +308,29 @@ impl CleanArgs {
 /// Arguments for `baudelaire new`.
 #[derive(Args, Debug, Clone)]
 pub struct NewArgs {
-    /// Path for the new content file (e.g. `content/posts/my-post.typ`).
+    /// Path for the new content file (e.g. `posts/my-post` or
+    /// `content/posts/my-post.typ`). A bare name lands under the content dir.
     pub path: PathBuf,
+
+    /// Page title (default: derived from the filename).
+    #[arg(long, help_heading = group::CONTENT)]
+    pub title: Option<String>,
+
+    /// Publication date `YYYY-MM-DD` (default: today, for dated collections).
+    #[arg(long, help_heading = group::CONTENT)]
+    pub date: Option<String>,
+
+    /// Mark the page a draft (default: true; `--draft false` publishes it).
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::CONTENT)]
+    pub draft: Option<bool>,
+
+    /// Create a page bundle (`<name>/index.typ`) for colocated assets.
+    #[arg(short = 'b', long, help_heading = group::CONTENT)]
+    pub bundle: bool,
+
+    /// Open the new file in `$EDITOR` after creating it.
+    #[arg(short = 'e', long, help_heading = group::CONTENT)]
+    pub open: bool,
 }
 
 /// Arguments for `baudelaire init`.
@@ -304,26 +347,30 @@ pub struct InitArgs {
 }
 
 impl Cli {
-    /// Load config from the configured path, apply profile + CLI overrides.
-    pub fn load_config(&self) -> Result<Config> {
-        let g = &self.global;
-        // Only a genuinely missing file is a "config not found"; anything else
-        // (permission denied, a directory, invalid UTF-8) keeps its precise
-        // filesystem diagnostic instead of being misreported.
-        let text = crate::fs::read_to_string(&g.config).map_err(|e| match e {
-            crate::error::BaudelaireErrorKind::Fs(fs)
-                if fs.kind() == std::io::ErrorKind::NotFound =>
-            {
-                crate::error::ConfigError::not_found(&g.config.display().to_string()).into()
-            }
-            other => other,
-        })?;
+    /// The parsed config: read from `--config`, then narrowed by the active
+    /// profile. Build-time overrides ([`BuildOverrides`]) are applied per-command
+    /// by the caller, not here, so `new`/`clean` load the same untouched config.
+    pub fn config(&self) -> Result<Config> {
+        let text = self.read()?;
         let mut config = Config::parse(&text)?;
-        if let Some(profile) = &g.profile {
+        if let Some(profile) = &self.global.profile {
             config = config.with_profile(profile)?;
         }
-        g.apply_overrides(&mut config);
         Ok(config)
+    }
+
+    /// Read the config file, mapping only a genuinely missing file to a
+    /// [`ConfigError::not_found`]. Every other failure (permission denied, a
+    /// directory, invalid UTF-8) keeps its precise [`FsError`] diagnostic rather
+    /// than being flattened into "config not found".
+    fn read(&self) -> Result<String> {
+        let path = &self.global.config;
+        crate::fs::read_to_string(path).map_err(|e| match e {
+            BaudelaireErrorKind::Fs(fs) if fs.kind() == std::io::ErrorKind::NotFound => {
+                ConfigError::not_found(&path.display().to_string()).into()
+            }
+            other => other,
+        })
     }
 
     /// The UI verbosity. `-vv` and beyond only deepen the `tracing` filter
@@ -341,8 +388,8 @@ impl Cli {
     }
 }
 
-impl GlobalArgs {
-    fn apply_overrides(&self, config: &mut Config) {
+impl BuildOverrides {
+    fn apply(&self, config: &mut Config) {
         if let Some(out) = &self.out {
             config.dist = out.clone();
         }
@@ -378,42 +425,50 @@ pub fn run(cli: Cli) -> Result<()> {
 /// Dispatch to the matching engine entrypoint.
 fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
     let root = Root::enter(cli.global.root.as_deref())?;
-    let command = cli.command.clone().unwrap_or(Command::Build(BuildArgs {}));
+    let command = cli
+        .command
+        .clone()
+        .unwrap_or_else(|| Command::Build(BuildArgs::default()));
     match command {
-        Command::Build(_) => {
-            let config = cli.load_config()?;
+        Command::Build(args) => {
+            let mut config = cli.config()?;
+            args.overrides.apply(&mut config);
             ui.banner(format_args!("building {}", config.label()));
             crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(ui)?;
         }
-        Command::Check => {
-            let config = cli.load_config()?;
+        Command::Check(args) => {
+            let mut config = cli.config()?;
+            args.overrides.apply(&mut config);
             ui.banner(format_args!("checking {}", config.label()));
             crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(ui)?;
         }
         Command::Serve(args) => {
-            let mut config = cli.load_config()?;
+            let mut config = cli.config()?;
             args.apply(&mut config);
             ui.banner(format_args!("dev · {}", config.label()));
             // Re-reads config.kdl with the same profile + overrides, so the dev
             // server picks up config edits live.
             let reload = || -> Result<Config> {
-                let mut config = cli.load_config()?;
+                let mut config = cli.config()?;
                 args.apply(&mut config);
                 Ok(config)
             };
             crate::cli::serve::run(ui, config, &root, cli.global.config.clone(), reload)?;
         }
         Command::New(args) => {
-            let config = cli.load_config()?;
-            scaffold::new_page(ui, &args.target(&config), &config)?;
+            let config = cli.config()?;
+            // A project lets `new` read the existing content: next order in an
+            // ordered collection, and permalink collisions.
+            let project = crate::world::Project::new(&config, crate::engine::Mode::Build)?;
+            scaffold::Draft::plan(&args, &config, &project)?.create(ui)?;
         }
         Command::Publish(args) => {
-            let config = cli.load_config()?;
+            let config = cli.config()?;
             ui.banner(format_args!("publishing {}", config.label()));
             publish::run(ui, &config, &args)?;
         }
         Command::Clean(args) => {
-            let config = cli.load_config()?;
+            let config = cli.config()?;
             ui.banner(format_args!("cleaning {}", config.label()));
             clean(ui, &config, &args)?;
         }
@@ -433,12 +488,19 @@ impl NewArgs {
     /// the content directory (unless it already starts with it, so an explicit
     /// `content/posts/foo.typ` is not double-prefixed), and `.typ` is appended
     /// when the name does not already carry it.
-    fn target(&self, config: &Config) -> PathBuf {
+    pub(crate) fn target(&self, config: &Config) -> PathBuf {
         let mut path = if self.path.is_absolute() || self.path.starts_with(&config.content) {
             self.path.clone()
         } else {
             config.content.join(&self.path)
         };
+        // A bundle is a directory holding an `index.typ` (the collection's
+        // configured index name), so images and data can sit beside the page.
+        if self.bundle {
+            path.set_extension("");
+            let index = config.index.as_deref().unwrap_or("index");
+            return path.join(format!("{index}.typ"));
+        }
         if path.extension().is_none_or(|e| e != "typ") {
             let name = path
                 .file_name()
@@ -452,6 +514,7 @@ impl NewArgs {
 
 impl ServeArgs {
     fn apply(&self, config: &mut Config) {
+        self.overrides.apply(config);
         if let Some(port) = self.port {
             config.serve.port = port;
         }
