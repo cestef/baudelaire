@@ -307,14 +307,14 @@ impl Handler {
             return;
         }
         match self.resolve(&url) {
-            Some(file) => self.serve_file(req, &file),
+            Some(file) => self.serve_file(req, &file, 200),
             None => self.respond_404(req, &url),
         }
     }
 
-    /// Serve a file with content-type guessing, injecting the live-reload
-    /// client into HTML when live reload is enabled.
-    fn serve_file(&self, req: Request, path: &Path) {
+    /// Serve a file under `status` with content-type guessing, injecting the
+    /// live-reload client into HTML when live reload is enabled.
+    fn serve_file(&self, req: Request, path: &Path, status: u16) {
         let mime = Mime::of(path);
         // A read failure (a permission error, or the file vanishing between the
         // `exists` check and here during a rebuild) is a 500, never a blank 200.
@@ -325,19 +325,26 @@ impl Handler {
         if self.live.is_some() && mime.html() {
             body.extend_from_slice(Live::SCRIPT.as_bytes());
         }
-        let mut response = Response::from_data(body);
+        let mut response = Response::from_data(body).with_status_code(status);
         if let Ok(header) = Header::from_bytes(b"Content-Type", mime.header().as_bytes()) {
             response = response.with_header(header);
         }
         let _ = req.respond(response);
     }
 
+    /// Respond with the site's own not-found page when it emits one — the same
+    /// file a static host serves for unmatched URLs — else an empty 404.
     fn respond_404(&self, req: Request, url: &str) {
-        let _ = req.respond(Response::empty(404));
         // A per-request line at the session's level, so `--quiet` silences
         // these too. (It may still interleave with a concurrent rebuild
         // status line; acceptable for now.)
         self.ui.request(404, url);
+        match self.within(&self.dist.join(crate::config::Config::NOT_FOUND)) {
+            Some(page) => self.serve_file(req, &page, 404),
+            None => {
+                let _ = req.respond(Response::empty(404));
+            }
+        }
     }
 
     /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every
