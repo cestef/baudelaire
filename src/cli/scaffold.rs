@@ -153,9 +153,9 @@ struct Details {
 }
 
 impl Details {
-    /// explicit `dir`: use it as is, derive site name from its last component & skip the site name prompt
-    /// no `dir` + interactive: prompt for the site name; that name becomes the target directory
-    /// no `dir` + non-interactive: fall back to `"my-site"` as both site name & target directory
+    /// explicit `dir`: derive site name from last component, skip site name prompt
+    /// no `dir` + interactive: prompt for site name; that name becomes the target directory
+    /// no `dir` + non-interactive (--yes / CI): scaffold into `.`, derive name from cwd
     fn gather(dir: Option<&Path>, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
         let author = Self::git_author().unwrap_or_default();
 
@@ -175,18 +175,27 @@ impl Details {
                 Ok((d.to_path_buf(), Self { site, author, url }))
             }
             None => {
-                let (site, author, url) = if interactive {
+                if interactive {
                     let site = Input::new("Site name").default("my-site").ask()?;
                     let author = Input::new("Author").default(&author).ask()?;
                     let url = Input::new("Base URL")
                         .default("https://example.com")
                         .ask()?;
-                    (site, author, url)
+                    let target = PathBuf::from(&site);
+                    Ok((target, Self { site, author, url }))
                 } else {
-                    ("my-site".into(), author, "https://example.com".into())
-                };
-                let target = PathBuf::from(&site);
-                Ok((target, Self { site, author, url }))
+                    // non-interactive / CI: preserve old behavior & scaffold into the current directory & derive the site name from it
+                    let dot = Path::new(".");
+                    let site = Self::dir_name(dot, root);
+                    Ok((
+                        dot.to_path_buf(),
+                        Self {
+                            site,
+                            author,
+                            url: "https://example.com".into(),
+                        },
+                    ))
+                }
             }
         }
     }
