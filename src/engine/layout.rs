@@ -29,6 +29,27 @@ pub(super) enum Body<'a> {
     Inline(&'a str),
 }
 
+/// The data a layout template receives as its first argument: the
+/// `(frontmatter:, taxonomies:, nav:, sections:)` dict passed to the template
+/// function. Grouping these keeps [`Layout`] to the few things that locate the
+/// template and page, rather than one field per dict entry.
+pub(super) struct Context<'a> {
+    /// Where the page's frontmatter dict comes from.
+    pub data: Bind<'a>,
+    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))` — passed
+    /// alongside the frontmatter so a template reads a page's taxonomy terms
+    /// the same structured way a listing reads an entry's, not by guessing which
+    /// frontmatter keys are taxonomies.
+    pub taxonomies: &'a str,
+    /// Prev/next sibling links as a dict literal, e.g.
+    /// `(prev: (url: "…", title: "…"), next: none)` — exposed to the template as
+    /// `page.nav` for older/newer navigation.
+    pub nav: &'a str,
+    /// The site's content collections as an array literal — exposed to the
+    /// template as `page.sections`, the single source a site nav is built from.
+    pub sections: &'a str,
+}
+
 /// A synthetic typst module that applies a layout template to a page,
 /// passing the page's frontmatter as data. Renders (via [`fmt::Display`]) to
 /// compilable typst source.
@@ -40,13 +61,8 @@ pub(super) struct Layout<'a> {
     /// Project-root-absolute virtual path of the page (`/content/posts/a.typ`);
     /// what [`Bind::Import`] and [`Body::Include`] resolve against.
     page: &'a str,
-    /// Frontmatter expression handed to the template.
-    data: Bind<'a>,
-    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))` — passed
-    /// alongside the frontmatter so a template reads a page's taxonomy terms
-    /// the same structured way a listing reads an entry's, not by guessing which
-    /// frontmatter keys are taxonomies.
-    taxonomies: &'a str,
+    /// The dict handed to the template function.
+    context: Context<'a>,
     body: Body<'a>,
 }
 
@@ -55,16 +71,14 @@ impl<'a> Layout<'a> {
         dir: &'a Path,
         file: &'a str,
         page: &'a str,
-        data: Bind<'a>,
-        taxonomies: &'a str,
+        context: Context<'a>,
         body: Body<'a>,
     ) -> Self {
         Self {
             dir,
             file,
             page,
-            data,
-            taxonomies,
+            context,
             body,
         }
     }
@@ -93,7 +107,13 @@ impl fmt::Display for Layout<'_> {
             Str(&self.import()),
             self.func()
         )?;
-        let data: &dyn fmt::Display = match &self.data {
+        let Context {
+            data,
+            taxonomies,
+            nav,
+            sections,
+        } = &self.context;
+        let frontmatter: &dyn fmt::Display = match data {
             Bind::Import => {
                 writeln!(f, "#import {}: frontmatter as __data", Str(self.page))?;
                 &"__data"
@@ -102,8 +122,7 @@ impl fmt::Display for Layout<'_> {
         };
         writeln!(
             f,
-            "#show: __body => __layout((frontmatter: {}, taxonomies: {}), __body)",
-            data, self.taxonomies
+            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, sections: {sections}), __body)"
         )?;
         match &self.body {
             Body::Include => write!(f, "#include {}", Str(self.page)),
@@ -122,8 +141,12 @@ mod tests {
             Path::new("templates"),
             "post.typ",
             "/content/posts/a.typ",
-            Bind::Import,
-            "(tags: (\"a\",))",
+            Context {
+                data: Bind::Import,
+                taxonomies: "(tags: (\"a\",))",
+                nav: "(prev: none, next: none)",
+                sections: "()",
+            },
             Body::Include,
         )
         .to_string();
@@ -131,7 +154,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",))), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), sections: ()), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -142,15 +165,19 @@ mod tests {
             Path::new("templates"),
             "list.typ",
             "/content/tags/x.typ",
-            Bind::Literal("(title: \"X\")"),
-            "(:)",
+            Context {
+                data: Bind::Literal("(title: \"X\")"),
+                taxonomies: "(:)",
+                nav: "(prev: none, next: none)",
+                sections: "()",
+            },
             Body::Inline("listing body"),
         )
         .to_string();
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:)), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), sections: ()), __body)\n\
              listing body"
         );
     }
@@ -161,8 +188,12 @@ mod tests {
             Path::new("a\"b"),
             "x.typ",
             "/content/x.typ",
-            Bind::Literal("(:)"),
-            "(:)",
+            Context {
+                data: Bind::Literal("(:)"),
+                taxonomies: "(:)",
+                nav: "(prev: none, next: none)",
+                sections: "()",
+            },
             Body::Include,
         )
         .to_string();
@@ -177,14 +208,20 @@ mod tests {
             Path::new("templates"),
             "page.typ",
             "/content/b.typ",
-            Bind::Literal("(t: 1)"),
-            "(:)",
+            Context {
+                data: Bind::Literal("(t: 1)"),
+                taxonomies: "(:)",
+                nav: "(prev: none, next: none)",
+                sections: "()",
+            },
             Body::Inline("b"),
         )
         .to_string();
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
-            out.contains("__layout((frontmatter: (t: 1), taxonomies: (:)), __body)"),
+            out.contains(
+                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), sections: ()), __body)"
+            ),
             "{out}"
         );
     }

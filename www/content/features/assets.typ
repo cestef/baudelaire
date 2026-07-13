@@ -1,4 +1,5 @@
 #let frontmatter = (
+  order: 2,
   title: "Asset pipeline",
   tags: ("feature", "assets"),
 )

@@ -15,7 +15,7 @@ pub mod slug;
 pub mod taxonomy;
 
 pub use frontmatter::Frontmatter;
-pub use page::{Collection, Data, Page, PageId, discover};
+pub use page::{Collection, Data, Page, PageId, Sibling, Siblings, discover};
 pub use pagination::Pagination;
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use slug::Slug;
@@ -30,12 +30,26 @@ use crate::world::Project;
 /// point the engine calls — all page-set assembly lives here, not in the engine.
 pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
     let collections = discover(config, project)?;
-    let mut pages: Vec<Page> = collections
-        .iter()
-        .flat_map(|c| c.pages.iter())
-        .filter(|p| p.eligible(config))
-        .cloned()
-        .collect();
+    // Within each collection, the eligible pages sit in the collection's sort
+    // order; adjacent ones become each other's prev/next siblings (a blog's
+    // older/newer links). Computed per collection so navigation never crosses a
+    // boundary, and before taxonomy/pagination pages join the set.
+    let mut pages: Vec<Page> = Vec::new();
+    for collection in &collections {
+        let eligible: Vec<&Page> = collection
+            .pages
+            .iter()
+            .filter(|p| p.eligible(config))
+            .collect();
+        for (i, page) in eligible.iter().enumerate() {
+            let mut page = (*page).clone();
+            page.siblings = page::Siblings {
+                prev: i.checked_sub(1).map(|j| eligible[j].sibling()),
+                next: eligible.get(i + 1).map(|n| n.sibling()),
+            };
+            pages.push(page);
+        }
+    }
     pages.extend(Taxonomy::pages(config, &pages)?);
     pages.extend(Pagination::pages(config, &collections));
     unique(&pages, config)?;

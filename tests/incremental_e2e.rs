@@ -89,6 +89,43 @@ fn editing_a_page_rebuilds_only_it() {
 }
 
 #[test]
+fn retitling_a_page_invalidates_its_sibling() {
+    // A page's prev/next links carry its neighbour's title, baked into the
+    // neighbour's layout wrapper. Retitling one must therefore rebuild the
+    // sibling whose nav points at it — otherwise its "next" link goes stale.
+    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", order: 1,)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\", order: 2,)\nbeta",
+    );
+    site.build();
+    assert!(site.output("posts/a/index.html").contains("B"));
+
+    // Retitle b; a's next-link title must follow.
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"BEE\", order: 2,)\nbeta",
+    );
+    let out = site.build();
+    assert!(
+        site.output("posts/a/index.html").contains("BEE"),
+        "sibling nav should reflect the neighbour's new title"
+    );
+    assert!(
+        !out.contains("(1 cached)"),
+        "retitling b must recompile a (its sibling nav changed): {out}"
+    );
+}
+
+#[test]
 fn editing_transitive_import_invalidates_page() {
     // a imports b, b imports c. Editing only c must rebuild a — proving the
     // transitive dependency was captured.

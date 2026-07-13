@@ -114,36 +114,36 @@
   )
 ]
 
-#let sidebar = html.elem(
-  "nav",
-  attrs: (class: "sidebar", id: "sidebar", "aria-label": "Documentation"),
-)[
-  #nav-group("Guide", (
-    ("/guide/install/", "Install"),
-    ("/guide/quickstart/", "Quickstart"),
-    ("/guide/config/", "Configuration"),
-    ("/guide/cli/", "CLI reference"),
-    ("/guide/highlighting/", "Syntax highlighting"),
-    ("/guide/deploy/", "Deploying"),
-  ))
-  #nav-group("Features", (
-    ("/features/search/", "Search"),
-    ("/features/assets/", "Asset pipeline"),
-    ("/features/hooks/", "Build hooks"),
-    ("/features/taxonomies/", "Taxonomies"),
-    ("/features/pagination/", "Pagination"),
-    ("/features/feeds/", "Feeds & sitemap"),
-    ("/features/publishing/", "Publishing"),
-    ("/features/meta/", "Meta & images"),
-    ("/features/context/", "Build metadata"),
-    ("/features/incremental/", "Incremental builds"),
-    ("/features/redirects/", "Redirects"),
-  ))
-  #nav-group("More", (
-    ("/blog/", "Blog"),
-    ("/tags/", "Tags"),
-  ))
-]
+// The doc collections shown in the sidebar, as `(id, display title)`. Their
+// pages — and their order — come from `page.sections` (the build's own view of
+// the site), so the sidebar can never drift from the content or from the
+// prev/next pager, which read the same source.
+#let _doc-groups = (("guide", "Guide"), ("features", "Features"))
+
+#let sidebar(sections) = {
+  // `sections` is an array of `(id, pages: ((url, title), …))` in each
+  // collection's sort order.
+  let by-id = (:)
+  for section in sections {
+    by-id.insert(section.id, section.pages)
+  }
+  html.elem(
+    "nav",
+    attrs: (class: "sidebar", id: "sidebar", "aria-label": "Documentation"),
+    {
+      for (id, title) in _doc-groups {
+        let pages = by-id.at(id, default: ())
+        if pages.len() > 0 {
+          nav-group(title, pages.map(p => (p.url, p.title)))
+        }
+      }
+      nav-group("More", (
+        ("/blog/", "Blog"),
+        ("/tags/", "Tags"),
+      ))
+    },
+  )
+}
 
 #let site-footer = {
   let meta = ()
@@ -194,7 +194,7 @@
   },
 )
 
-#let shell(title, main, tags: ()) = {
+#let shell(title, main, tags: (), sections: ()) = {
   set document(title: title)
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
@@ -203,7 +203,7 @@
   html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg"))
   site-header
   html.elem("div", attrs: (class: "layout"))[
-    #sidebar
+    #sidebar(sections)
     #html.elem("main", attrs: (class: "content", id: "main"))[
       #html.elem("article")[
         #html.elem("h1", title)

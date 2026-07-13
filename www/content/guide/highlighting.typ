@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Syntax highlighting",
-  order: 6,
+  order: 5,
   tags: ("guide", "reference"),
 )
 #import "/templates/theme.typ": callout

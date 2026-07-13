@@ -33,4 +33,4 @@
       if nav.next != none { link-to(nav.next, "Next") }
     })
   }
-})
+}, sections: page.sections)

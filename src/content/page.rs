@@ -24,6 +24,23 @@ pub enum Data {
     Generated(String),
 }
 
+/// A link to a neighbouring page: its URL and display title. Exposed to
+/// templates as `page.nav.prev`/`page.nav.next` for prev/next navigation.
+#[derive(Debug, Clone, Default)]
+pub struct Sibling {
+    pub url: String,
+    pub title: String,
+}
+
+/// The previous and next pages within a page's collection, in the collection's
+/// sort order — the "older/newer post" links of a blog. Empty for pages with no
+/// neighbour and for generated listings.
+#[derive(Debug, Clone, Default)]
+pub struct Siblings {
+    pub prev: Option<Sibling>,
+    pub next: Option<Sibling>,
+}
+
 /// Stable identifier for a page within the site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PageId(pub String);
@@ -54,6 +71,9 @@ pub struct Page {
     pub output: PathBuf,
     /// Resolved layout template file (frontmatter, else collection default).
     pub template: Option<String>,
+    /// Prev/next pages within this page's collection, assigned by
+    /// [`crate::content::plan`]. Empty until then, and for generated listings.
+    pub siblings: Siblings,
 }
 
 impl Page {
@@ -131,6 +151,16 @@ impl Page {
             collection,
             permalink,
             template,
+            siblings: Siblings::default(),
+        }
+    }
+
+    /// This page as a neighbour link — its URL and display title — for a
+    /// sibling's prev/next navigation.
+    pub(super) fn sibling(&self) -> Sibling {
+        Sibling {
+            url: self.permalink.clone(),
+            title: self.title().to_owned(),
         }
     }
 

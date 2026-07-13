@@ -155,10 +155,16 @@ impl Engine {
         // text + fingerprint without parsing it — the parse into a typst
         // `Source` is deferred to `compile`, so a hit never pays to parse a
         // page it won't render.
+        // the site's section listing, exposed to every template as
+        // `page.sections`; identical for all pages, so built once. Part of each
+        // page's wrapper text → a title/url change refingerprints every page
+        // that embeds the nav (correct: the sidebar renders on all of them).
+        let sections = Self::sections(&pages);
+
         let mut cached: Vec<(&Page, String)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
-            match self.prepare(page) {
+            match self.prepare(page, &sections) {
                 Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
                     Some(html) => cached.push((page, html)),
                     None => stale.push((page, Ok((id, text, fingerprint)))),
@@ -245,12 +251,13 @@ impl Engine {
             "planned check"
         );
         let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
+        let sections = Self::sections(&pages);
         let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
             .map(|page| {
                 let outcome = self
-                    .prepare(page)
+                    .prepare(page, &sections)
                     .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
                 progress.tick(self.relative(page));
                 (page, outcome)
@@ -323,7 +330,7 @@ impl Engine {
     /// listings, which have no file, inline their body — and only their
     /// wrapper text needs fingerprinting. Built once and shared by the cache
     /// check and the compile.
-    fn prepare(&self, page: &Page) -> Result<Prepared> {
+    fn prepare(&self, page: &Page, sections: &str) -> Result<Prepared> {
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
@@ -338,6 +345,10 @@ impl Engine {
                 )
             }))
             .to_string();
+        // prev/next sibling links, exposed to the template as `page.nav`. Part of
+        // the wrapper text, so a neighbour's addition, removal, or retitling
+        // refingerprints this page and rebuilds it — the cache stays correct.
+        let nav = Self::nav(&page.siblings).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
             Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
@@ -348,19 +359,60 @@ impl Engine {
                 Body::Inline(&page.body),
             ),
         };
-        let text = Layout::new(
-            &self.config.templates,
-            template,
-            &vpath,
-            bind,
-            &taxonomies,
-            body,
-        )
-        .to_string();
+        let context = layout::Context {
+            data: bind,
+            taxonomies: &taxonomies,
+            nav: &nav,
+            sections,
+        };
+        let text = Layout::new(&self.config.templates, template, &vpath, context, body).to_string();
         // hash the exact text typst compiles; the parse into a `Source` is
         // deferred to `compile`, run only for stale pages.
         let fingerprint = Hash::of_bytes(text.as_bytes());
         Ok((id, text, fingerprint))
+    }
+
+    /// The site's content collections as an ordered typst array, exposed to
+    /// every template as `page.sections` — the single source a site nav
+    /// (sidebar, breadcrumbs) is built from, so it can never drift from the
+    /// pages themselves. Each collection is `(id: "guide", pages: ((url:,
+    /// title:), …))`, in the collection's own sort order; generated listing
+    /// pages (taxonomy indexes, paginated indexes) are excluded — only authored
+    /// content. Identical for every page, so it is computed once per build.
+    fn sections(pages: &[Page]) -> String {
+        use crate::codegen::Value;
+        // Group content pages by collection, preserving first-seen order —
+        // `plan` already emits them per collection in sort order.
+        let mut groups: Vec<(&str, Vec<Value>)> = Vec::new();
+        for page in pages {
+            if matches!(page.data, Data::Generated(_)) {
+                continue;
+            }
+            let entry = Value::dict([
+                ("url", Value::str(&page.permalink)),
+                ("title", Value::str(page.title())),
+            ]);
+            match groups.iter_mut().find(|(id, _)| *id == page.collection) {
+                Some((_, list)) => list.push(entry),
+                None => groups.push((&page.collection, vec![entry])),
+            }
+        }
+        Value::array(groups.into_iter().map(|(id, entries)| {
+            Value::dict([("id", Value::str(id)), ("pages", Value::Array(entries))])
+        }))
+        .to_string()
+    }
+
+    /// The prev/next sibling links as a typst dict value:
+    /// `(prev: (url: …, title: …), next: none)`. Each link is a dict or `none`,
+    /// so a template reads `page.nav.prev.url` / `page.nav.next` uniformly.
+    fn nav(siblings: &crate::content::Siblings) -> crate::codegen::Value {
+        use crate::codegen::Value;
+        let link = |s: &Option<crate::content::Sibling>| match s {
+            Some(s) => Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))]),
+            None => Value::None,
+        };
+        Value::dict([("prev", link(&siblings.prev)), ("next", link(&siblings.next))])
     }
 
     /// A page's project-root-absolute virtual path (`/content/posts/a.typ`) —

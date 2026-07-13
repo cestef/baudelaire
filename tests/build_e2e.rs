@@ -313,6 +313,102 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
 }
 
 #[test]
+fn prev_next_siblings_exposed_to_the_template() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n",
+    );
+    // A template that renders `page.nav` prev/next as rel-tagged links.
+    site.write(
+        "templates/post.typ",
+        r#"#let post(page, body) = html.elem("html", html.elem("body", {
+  body
+  if page.nav.prev != none { html.elem("a", attrs: (rel: "prev", href: page.nav.prev.url), page.nav.prev.title) }
+  if page.nav.next != none { html.elem("a", attrs: (rel: "next", href: page.nav.next.url), page.nav.next.title) }
+}))
+"#,
+    );
+    // Default collection sort is `order`; three pages in a known sequence.
+    for (slug, order, title) in [("a", 1, "First"), ("b", 2, "Second"), ("c", 3, "Third")] {
+        site.write(
+            &format!("content/posts/{slug}.typ"),
+            &format!("#let frontmatter = (title: \"{title}\", order: {order},)\nbody {slug}"),
+        );
+    }
+    let out = site.run(&["build"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // The first page has only a next; the middle has both; the last only a prev.
+    let first = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
+    assert!(!first.contains("rel=\"prev\""), "{first}");
+    assert!(
+        first.contains("rel=\"next\" href=\"/posts/b/\"") && first.contains("Second"),
+        "{first}"
+    );
+
+    let middle = fs::read_to_string(site.root.join("public/posts/b/index.html")).unwrap();
+    assert!(
+        middle.contains("rel=\"prev\" href=\"/posts/a/\"") && middle.contains("First"),
+        "{middle}"
+    );
+    assert!(
+        middle.contains("rel=\"next\" href=\"/posts/c/\"") && middle.contains("Third"),
+        "{middle}"
+    );
+
+    let last = fs::read_to_string(site.root.join("public/posts/c/index.html")).unwrap();
+    assert!(
+        last.contains("rel=\"prev\" href=\"/posts/b/\"") && last.contains("Second"),
+        "{last}"
+    );
+    assert!(!last.contains("rel=\"next\""), "{last}");
+}
+
+#[test]
+fn sections_expose_the_ordered_page_set_to_templates() {
+    // `page.sections` lets a template build a site nav (sidebar) from the same
+    // ordered page set that drives prev/next — one source of truth.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\nclean #true\n",
+    );
+    // Render every section id and its pages' titles, in order, as a flat trail.
+    site.write(
+        "templates/page.typ",
+        r#"#let page(page, body) = html.elem("html", html.elem("body", {
+  body
+  for section in page.sections {
+    for entry in section.pages {
+      html.elem("span", attrs: (class: "nav"), section.id + ":" + entry.title)
+    }
+  }
+}))
+"#,
+    );
+    for (slug, order, title) in [("b", 2, "Second"), ("a", 1, "First"), ("c", 3, "Third")] {
+        site.write(
+            &format!("content/guide/{slug}.typ"),
+            &format!("#let frontmatter = (title: \"{title}\", order: {order},)\nbody"),
+        );
+    }
+    assert!(site.run(&["build"]).status.success());
+    let html = fs::read_to_string(site.root.join("public/guide/a/index.html")).unwrap();
+    // Pages appear in the collection's sort order, not filesystem order.
+    let trail: Vec<_> = html.match_indices("guide:").map(|(i, _)| i).collect();
+    let first = html.find("guide:First").unwrap();
+    let second = html.find("guide:Second").unwrap();
+    let third = html.find("guide:Third").unwrap();
+    assert_eq!(trail.len(), 3, "all three pages listed: {html}");
+    assert!(first < second && second < third, "ordered by `order`: {html}");
+}
+
+#[test]
 fn meta_tags_injected_from_frontmatter_and_config() {
     let site = Site::new();
     site.write("config.kdl", "site \"S\"\nurl \"https://s.example\"\n");
