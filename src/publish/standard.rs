@@ -173,7 +173,9 @@ impl Standard {
             let rkey = Rkey::derived(&doc.path);
             desired.insert(rkey.as_str().to_owned());
             let fingerprint = record.fingerprint()?;
-            if cache.unchanged(rkey.as_str(), &fingerprint) {
+            // The cache alone is not authority: a record deleted on the PDS
+            // out-of-band must be re-sent even if its fingerprint still matches.
+            if remote.contains(rkey.as_str()) && cache.unchanged(rkey.as_str(), &fingerprint) {
                 unchanged += 1;
                 continue;
             }

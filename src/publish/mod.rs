@@ -57,11 +57,19 @@ impl Options<'_> {
     /// every backend.
     pub fn secret(&self, env: &str, label: &str) -> Result<String> {
         if let Some(secret) = &self.secret {
-            return if secret == "-" {
-                stdin_line()
-            } else {
-                Ok(secret.clone())
-            };
+            if secret != "-" {
+                return Ok(secret.clone());
+            }
+            // A closed or blank stdin is "no secret", not an empty password —
+            // matches the env and prompt branches, which both reject empty.
+            let line = stdin_line()?;
+            if line.is_empty() {
+                return Err(PublishError::MissingSecret {
+                    label: label.to_owned(),
+                }
+                .into());
+            }
+            return Ok(line);
         }
         if let Ok(secret) = std::env::var(env)
             && !secret.is_empty()
@@ -182,7 +190,8 @@ fn configured(config: &Config) -> Vec<Box<dyn Publisher>> {
 /// content pages are included — generated index and taxonomy pages are site
 /// navigation, not publishable documents.
 fn view(config: &Config) -> Result<SiteView<'_>> {
-    let collections = discover(config)?;
+    let project = crate::world::Project::new(config, crate::world::Mode::Build)?;
+    let collections = discover(config, &project)?;
     let documents = collections
         .iter()
         .flat_map(|c| c.pages.iter())
