@@ -80,12 +80,15 @@ impl Corpus {
                     .then(|| page.frontmatter.title.clone())
                     .flatten()
                     .unwrap_or_default(),
+                // every configured taxonomy's terms, not a hardcoded key — a
+                // site classifying by `topics` indexes just as well as `tags`.
                 tags: if has(SearchField::Tags) {
                     page.frontmatter
                         .taxonomies
-                        .get("tags")
+                        .values()
+                        .flatten()
                         .cloned()
-                        .unwrap_or_default()
+                        .collect()
                 } else {
                     Vec::new()
                 },

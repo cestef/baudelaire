@@ -22,14 +22,17 @@ impl Transform for Anchors {
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
         // ids are unique per page: like-slugged headings get `-2`, `-3`, … suffixes.
-        // author-set ids are recorded so a derived id never shadows one.
+        // Every authored id is collected up front — on any element, anywhere in
+        // the document — so a derived id never collides with one, regardless of
+        // which comes first in the walk.
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         doc.root_mut().walk(&mut |element| {
-            if !Self::heading(element.tag) {
-                return;
-            }
             if let Some(id) = element.attrs.get(attr::id) {
                 seen.insert(id.to_string());
+            }
+        });
+        doc.root_mut().walk(&mut |element| {
+            if !Self::heading(element.tag) || element.attrs.get(attr::id).is_some() {
                 return;
             }
             if let Some(slug) = Slug::parse(&Self::text(element)) {

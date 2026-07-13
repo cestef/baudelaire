@@ -196,9 +196,11 @@ impl Cache {
             .iter()
             .map(|(page, html)| (Self::key(page), *html))
             .collect();
-        // collect blobs needing a write (new content only), then write them in
-        // parallel — independent content-addressed files.
-        let pending: Vec<(PathBuf, &str)> = self
+        // collect blobs needing a write (new content only), keyed by path so
+        // two pages sharing identical markup stage one write — a duplicate
+        // would race itself in the parallel pass — then write them in
+        // parallel: independent content-addressed files.
+        let pending: BTreeMap<PathBuf, &str> = self
             .next
             .pages
             .iter()
