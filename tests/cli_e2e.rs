@@ -33,6 +33,26 @@ fn root_flag_builds_from_that_directory() {
 }
 
 #[test]
+fn help_groups_global_flags_and_shows_examples() {
+    let sb = Site::new();
+    let out = sb.run(&["--help"]);
+    assert!(out.status.success());
+    let help = String::from_utf8_lossy(&out.stdout);
+    // Global flags cluster under concern headings rather than one long list.
+    for heading in ["Project:", "Output:", "Build:", "Logging:", "Examples:"] {
+        assert!(help.contains(heading), "missing `{heading}` in help:\n{help}");
+    }
+    // Grouped flags land under their heading; the examples block is present.
+    assert!(help.contains("--drafts"), "help lists build flags");
+    assert!(
+        help.contains("baudelaire serve --open"),
+        "help shows an example invocation"
+    );
+    // Piped output must not leak raw ANSI escapes.
+    assert!(!help.contains('\x1b'), "no escape codes when not a TTY");
+}
+
+#[test]
 fn clean_removes_dist_and_cache() {
     let sb = Site::new();
     sb.write("config.kdl", "site \"T\"\npaths {\n  dist \"public\"\n}\n");

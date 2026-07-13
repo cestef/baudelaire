@@ -8,11 +8,69 @@ pub mod serve;
 
 use std::path::{Path, PathBuf};
 
+use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
 use crate::error::{FsError, Op, Result};
 use crate::ui::{Level, Ui};
+
+/// Help colouring, matched to the terminal UI palette: cyan for structure
+/// (section headers, usage), green for the literals you type (commands and
+/// flags), and dimmed `<VALUE>` placeholders — so a glance separates the words
+/// to type from the slots to fill.
+const HELP_STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Cyan.on_default().bold())
+    .usage(AnsiColor::Cyan.on_default().bold())
+    .literal(AnsiColor::Green.on_default().bold())
+    .placeholder(AnsiColor::White.on_default().dimmed())
+    .valid(AnsiColor::Green.on_default())
+    .invalid(AnsiColor::Yellow.on_default())
+    .error(AnsiColor::Red.on_default().bold());
+
+/// Help-heading names, so the shared global flags cluster by concern instead of
+/// piling into one long `Options` list. Single source, referenced by every
+/// grouped `#[arg(help_heading = …)]`.
+mod group {
+    pub const PROJECT: &str = "Project";
+    pub const OUTPUT: &str = "Output";
+    pub const BUILD: &str = "Build";
+    pub const LOGGING: &str = "Logging";
+    pub const SERVER: &str = "Server";
+    pub const TARGETS: &str = "Targets";
+}
+
+/// Usage examples appended to the top-level help. owo-colors gates the colour
+/// on the stdout stream itself (`if_supports_color`), so escapes never leak when
+/// piped or under `NO_COLOR` — the same policy [`crate::ui`] uses.
+fn examples() -> String {
+    use owo_colors::{OwoColorize, Stream::Stdout};
+    use std::fmt::Write;
+    // One example row: the command in green (the "literal you type" accent), then
+    // its description at a fixed column. Padding is computed from the *visible*
+    // length, so the ANSI escapes don't skew the alignment.
+    let row = |out: &mut String, command: &str, desc: &str| {
+        let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
+        // Column wide enough for the longest command, with a two-space gutter.
+        let pad = " ".repeat(33usize.saturating_sub(command.len()).max(2));
+        let _ = writeln!(out, "  {colored}{pad}{desc}");
+    };
+    let mut s = format!(
+        "{}\n",
+        "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
+    );
+    row(&mut s, "baudelaire", "Build the site from ./config.kdl");
+    row(&mut s, "baudelaire serve --open", "Start the dev server, open a browser");
+    row(&mut s, "baudelaire new posts/hello", "Scaffold content/posts/hello.typ");
+    row(&mut s, "baudelaire --profile prod build", "Build with the prod profile");
+    row(&mut s, "baudelaire clean --cache", "Drop the incremental cache");
+    let _ = write!(
+        s,
+        "\nRun {} for command-specific options.",
+        "baudelaire <command> --help".if_supports_color(Stdout, |t| t.green().bold().to_string())
+    );
+    s
+}
 
 /// The absolute project root: the directory `--root` selected (into which the
 /// process changes so relative config paths resolve under it) or the launch
@@ -49,9 +107,19 @@ impl Root {
     }
 }
 
-/// Baudelaire - a Typst-native static site generator.
+/// Baudelaire — a Typst-native static site generator.
 #[derive(Parser, Debug)]
-#[command(name = "baudelaire", version, about)]
+#[command(
+    name = "baudelaire",
+    version,
+    about,
+    long_about = "Baudelaire compiles a Typst content tree into a static site — incremental \
+                  builds, a live-reload dev server, feeds, search, taxonomies, and more, all \
+                  driven by Typst templates rather than HTML string templating.",
+    styles = HELP_STYLES,
+    after_help = examples(),
+    subcommand_value_name = "COMMAND",
+)]
 pub struct Cli {
     #[command(flatten)]
     pub global: GlobalArgs,
@@ -64,47 +132,47 @@ pub struct Cli {
 #[derive(Args, Debug, Clone)]
 pub struct GlobalArgs {
     /// Path to config.kdl.
-    #[arg(short, long, global = true, default_value = "config.kdl")]
+    #[arg(short, long, global = true, default_value = "config.kdl", help_heading = group::PROJECT)]
     pub config: PathBuf,
 
     /// Project root directory.
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, help_heading = group::PROJECT)]
     pub root: Option<PathBuf>,
 
     /// Named profile to apply (e.g. `dev`, `prod`).
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, help_heading = group::PROJECT)]
     pub profile: Option<String>,
 
     /// Override the output directory.
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, help_heading = group::OUTPUT)]
     pub out: Option<PathBuf>,
 
     /// Override the base URL.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = group::OUTPUT)]
     pub base_url: Option<String>,
 
     /// Build draft pages.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = group::BUILD)]
     pub drafts: bool,
 
     /// Build future-dated pages.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = group::BUILD)]
     pub future: bool,
 
     /// Skip the cache (full rebuild).
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = group::BUILD)]
     pub no_cache: bool,
 
     /// Error on broken internal links (default true; pass `false` to warn).
-    #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true")]
+    #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
     pub strict_links: Option<bool>,
 
     /// Verbose output: per-page progress plus debug logs (-vv for trace logs).
-    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    #[arg(short, long, global = true, action = clap::ArgAction::Count, help_heading = group::LOGGING)]
     pub verbose: u8,
 
     /// Quiet output.
-    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    #[arg(short, long, global = true, conflicts_with = "verbose", help_heading = group::LOGGING)]
     pub quiet: bool,
 }
 
@@ -134,19 +202,19 @@ pub struct BuildArgs {}
 #[derive(Args, Debug, Clone)]
 pub struct ServeArgs {
     /// Port to listen on (overrides config).
-    #[arg(long)]
+    #[arg(long, help_heading = group::SERVER)]
     pub port: Option<u16>,
 
     /// Address to bind (overrides config).
-    #[arg(long)]
+    #[arg(long, help_heading = group::SERVER)]
     pub bind: Option<String>,
 
     /// Open browser on start.
-    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::SERVER)]
     pub open: Option<bool>,
 
     /// Disable file watching and live rebuild.
-    #[arg(long)]
+    #[arg(long, help_heading = group::SERVER)]
     pub no_watch: bool,
 }
 
@@ -172,13 +240,13 @@ pub struct PublishArgs {
 #[derive(Args, Debug, Clone)]
 pub struct CleanArgs {
     /// Remove the build output directory.
-    #[arg(long)]
+    #[arg(long, help_heading = group::TARGETS)]
     pub dist: bool,
     /// Remove the incremental build cache.
-    #[arg(long)]
+    #[arg(long, help_heading = group::TARGETS)]
     pub cache: bool,
     /// Remove local publish state.
-    #[arg(long)]
+    #[arg(long, help_heading = group::TARGETS)]
     pub publish: bool,
 }
 
