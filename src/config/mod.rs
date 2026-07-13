@@ -108,6 +108,11 @@ impl Config {
     /// [`scratch`]: Config::scratch
     pub const SCRATCH: &'static str = ".baudelaire";
 
+    /// The not-found page's output file. Flat at the dist root — the name
+    /// static hosts serve for unmatched URLs — and what the dev server falls
+    /// back to; single source for both.
+    pub const NOT_FOUND: &'static str = "404.html";
+
     /// The path of a named scratch subdirectory (e.g. `cache`, `publish`) — the
     /// one builder every subsystem uses to locate its local state under
     /// [`SCRATCH`](Config::SCRATCH).
@@ -136,6 +141,22 @@ impl Config {
             .map(|(_, c)| c)
     }
 
+    /// The served name of the assets directory — its final path segment, and
+    /// the leading segment of every asset URL. The single derivation shared by
+    /// the asset pipeline and the embed transform.
+    pub fn asset_name(&self) -> &str {
+        self.assets
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("assets")
+    }
+
+    /// The processed assets directory under `dist` — where the pipeline writes
+    /// and the embed transform reads.
+    pub fn asset_dist(&self) -> PathBuf {
+        self.dist.join(self.asset_name())
+    }
+
     /// The file a URL path is written to under `dist`, honoring clean URLs.
     /// Single source for the URL→file mapping, shared by page output and
     /// redirect stubs.
@@ -155,7 +176,7 @@ impl Config {
             .join("/");
         // 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't served as not-found
         if trimmed == "404" {
-            return self.dist.join("404.html");
+            return self.dist.join(Self::NOT_FOUND);
         }
         if self.clean {
             self.dist.join(&trimmed).join("index.html")
@@ -327,6 +348,7 @@ pub struct FeedConfig {
 pub enum FeedKind {
     Rss,
     Atom,
+    Json,
 }
 
 impl FeedKind {
@@ -335,6 +357,7 @@ impl FeedKind {
         match self {
             Self::Rss => "rss.xml",
             Self::Atom => "atom.xml",
+            Self::Json => "feed.json",
         }
     }
 }

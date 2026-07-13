@@ -50,14 +50,9 @@ struct Inliner<'a> {
 
 impl<'a> Inliner<'a> {
     fn new(config: &Config, assets: &'a AssetMap) -> Self {
-        let name = config
-            .assets
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("assets");
         Self {
-            dst: config.dist.join(name),
-            prefix: format!("/{name}/"),
+            dst: config.asset_dist(),
+            prefix: format!("/{}/", config.asset_name()),
             assets,
         }
     }

@@ -14,6 +14,7 @@
 //! and the original→final URL mapping recorded so references can be rewritten.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ use crate::config::{Config, ImageFormat, JpegConfig, PngConfig, PngStrip, Search
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::graph::Hash;
-use crate::render::AssetMap;
+use crate::render::{AssetMap, Tail};
 
 /// Length of the hex fingerprint spliced into asset filenames. 16 hex chars =
 /// 64 bits of blake3 — collision-free in practice for a site's asset set.
@@ -58,13 +59,11 @@ pub struct Assets<'a> {
 
 impl<'a> Assets<'a> {
     pub fn new(config: &'a Config) -> Self {
-        let src = &config.assets;
-        let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("assets");
         Self {
             config,
-            src,
-            dst: config.dist.join(name),
-            prefix: format!("/{name}"),
+            src: &config.assets,
+            dst: config.asset_dist(),
+            prefix: format!("/{}", config.asset_name()),
         }
     }
 
@@ -85,7 +84,9 @@ impl<'a> Assets<'a> {
         // Two passes: every non-CSS asset is fingerprinted first so a stylesheet
         // can rewrite its `url()` references to the final (hashed) names. A CSS
         // file processed before its referenced image would otherwise emit a
-        // `url()` pointing at a name that no longer exists in `dist`.
+        // `url()` pointing at a name that no longer exists in `dist`. CSS files
+        // themselves are then ordered so an imported sheet is fingerprinted
+        // before any sheet that references it.
         let (css, other): (Vec<_>, Vec<_>) = Walk::files(self.src)?
             .into_iter()
             .partition(|file| Kind::of(file, self.config) == Kind::Css);
@@ -99,7 +100,7 @@ impl<'a> Assets<'a> {
             };
             self.emit(rel, &bytes, &mut out)?;
         }
-        for file in css {
+        for file in self.order_css(css) {
             let rel = file
                 .strip_prefix(self.src)
                 .expect("Walk yields paths under src");
@@ -176,10 +177,19 @@ impl<'a> Assets<'a> {
     }
 
     /// The fingerprinted URL for a `url()` reference written in the stylesheet at
-    /// `rel`, or `None` when it is external or unmapped. Relative references
+    /// `rel`, or `None` when it is external or unmapped. Any `?query` /
+    /// `#fragment` tail is preserved across the rewrite.
+    fn resolve_css_url(&self, rel: &Path, raw: &str, map: &AssetMap) -> Option<String> {
+        let key = self.css_key(rel, raw)?;
+        let mapped = map.resolve(&key)?;
+        Some(format!("{mapped}{}", Tail::of(raw).tail))
+    }
+
+    /// The asset-map key (served URL, no tail) for a reference written in the
+    /// stylesheet at `rel`, or `None` when it is external. Relative references
     /// resolve against the stylesheet's own directory; absolute ones are already
     /// served URLs.
-    fn resolve_css_url(&self, rel: &Path, raw: &str, map: &AssetMap) -> Option<String> {
+    fn css_key(&self, rel: &Path, raw: &str) -> Option<String> {
         if raw.starts_with("data:")
             || raw.starts_with('#')
             || raw.starts_with("//")
@@ -187,13 +197,92 @@ impl<'a> Assets<'a> {
         {
             return None;
         }
-        let key = if raw.starts_with('/') {
-            raw.to_owned()
+        let path = Tail::of(raw).path;
+        Some(if path.starts_with('/') {
+            path.to_owned()
         } else {
             let dir = rel.parent().unwrap_or_else(|| Path::new(""));
-            self.url(&Self::normalize(&dir.join(raw)))
+            self.url(&Self::normalize(&dir.join(path)))
+        })
+    }
+
+    /// Order stylesheets so a sheet referenced by another (`@import` /
+    /// `url(*.css)`) is processed — and thus fingerprinted — before its
+    /// importer, whose rewrite needs the imported sheet's final name. Import
+    /// cycles have no satisfying order; their members keep input order and any
+    /// cross-references fall back to the original (unmapped) names.
+    fn order_css(&self, files: Vec<PathBuf>) -> Vec<PathBuf> {
+        if !self.config.asset.fingerprint || files.len() < 2 {
+            return files;
+        }
+        let key_of = |file: &Path| {
+            self.url(
+                file.strip_prefix(self.src)
+                    .expect("Walk yields paths under src"),
+            )
         };
-        map.resolve(&key)
+        let all: BTreeSet<String> = files.iter().map(|f| key_of(f)).collect();
+        let mut remaining: Vec<(PathBuf, Vec<String>)> = files
+            .into_iter()
+            .map(|file| {
+                let deps = self
+                    .css_deps(&file)
+                    .into_iter()
+                    .filter(|dep| all.contains(dep))
+                    .collect();
+                (file, deps)
+            })
+            .collect();
+        let mut ordered = Vec::new();
+        let mut done: BTreeSet<String> = BTreeSet::new();
+        while !remaining.is_empty() {
+            let (ready, rest): (Vec<_>, Vec<_>) = remaining
+                .into_iter()
+                .partition(|(_, deps)| deps.iter().all(|dep| done.contains(dep)));
+            if ready.is_empty() {
+                ordered.extend(rest.into_iter().map(|(file, _)| file));
+                break;
+            }
+            for (file, _) in ready {
+                done.insert(key_of(&file));
+                ordered.push(file);
+            }
+            remaining = rest;
+        }
+        ordered
+    }
+
+    /// The asset-map keys of stylesheets referenced by `file`. Unreadable or
+    /// unparseable input yields no deps — the error surfaces in `render_css`.
+    fn css_deps(&self, file: &Path) -> Vec<String> {
+        let rel = file
+            .strip_prefix(self.src)
+            .expect("Walk yields paths under src");
+        let Ok(code) = fs::read_to_string(file) else {
+            return Vec::new();
+        };
+        let Ok(sheet) = StyleSheet::parse(&code, ParserOptions::default()) else {
+            return Vec::new();
+        };
+        let Ok(printed) = sheet.to_css(PrinterOptions {
+            analyze_dependencies: Some(DependencyOptions::default()),
+            ..PrinterOptions::default()
+        }) else {
+            return Vec::new();
+        };
+        printed
+            .dependencies
+            .into_iter()
+            .flatten()
+            .filter_map(|dep| {
+                let url = match dep {
+                    Dependency::Url(dep) => dep.url,
+                    Dependency::Import(dep) => dep.url,
+                };
+                let key = self.css_key(rel, &url)?;
+                key.to_ascii_lowercase().ends_with(".css").then_some(key)
+            })
+            .collect()
     }
 
     /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
@@ -246,10 +335,13 @@ impl<'a> Assets<'a> {
             .map_err(|e| AssetError::image(file.display(), e).into())
     }
 
-    /// Re-encode a JPEG at the configured quality (lossy).
+    /// Re-encode a JPEG at the configured quality (lossy). The re-encode strips
+    /// EXIF — including the Orientation tag — so that rotation is baked into
+    /// the pixels first, or camera photos would come out sideways.
     fn optimize_jpeg(bytes: &[u8], config: &JpegConfig, file: &Path) -> Result<Vec<u8>> {
         let decoded =
             image::load_from_memory(bytes).map_err(|e| AssetError::image(file.display(), e))?;
+        let decoded = super::exif::Orientation::of_jpeg(bytes).upright(decoded);
         let mut out = Vec::new();
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, config.quality)
             .encode_image(&decoded)
@@ -311,7 +403,11 @@ impl Kind {
         if ext.eq_ignore_ascii_case("css") {
             return Self::Css;
         }
-        if config.asset.bundle && matches!(ext, "js" | "mjs" | "ts") {
+        if config.asset.bundle
+            && ["js", "mjs", "ts"]
+                .iter()
+                .any(|js| ext.eq_ignore_ascii_case(js))
+        {
             let partial = file
                 .file_name()
                 .and_then(|n| n.to_str())
