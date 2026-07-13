@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "CLI reference",
-  order: 4,
+  order: 5,
   tags: ("guide", "reference"),
 )
 

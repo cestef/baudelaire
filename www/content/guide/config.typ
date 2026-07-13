@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Configuration",
-  order: 3,
+  order: 4,
   tags: ("guide", "reference"),
 )
 #import "/templates/theme.typ": callout

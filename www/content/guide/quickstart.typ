@@ -38,7 +38,8 @@ data loading, not just prose.
 
 The file's location decides its collection and URL. `content/posts/hello.typ`
 joins the `posts` collection and, with clean URLs on, is served at
-`/posts/hello/`.
+`/posts/hello/`. For every key frontmatter understands, see
+#link("frontmatter.typ")[frontmatter].
 
 == Build for production
 
