@@ -38,4 +38,4 @@ content model, clean URLs, feeds, and a build cache.
 ))
 
 This entire site is built with Baudelaire. The source lives in
-#link("https://codeberg.org/cstef/baudelaire")[the repository] under `www/`.
+#link("https://codeberg.org/cstef/baudelaire")[the repository] under `docs/`.
