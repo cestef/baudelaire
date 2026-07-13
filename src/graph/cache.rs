@@ -257,12 +257,7 @@ impl Cache {
     /// Remove object files not referenced by the next manifest. Best-effort:
     /// the cache is regenerable, so a housekeeping failure never fails a build.
     fn prune(&self) {
-        let live: BTreeSet<String> = self
-            .next
-            .pages
-            .values()
-            .map(|e| e.blob.hex())
-            .collect();
+        let live: BTreeSet<String> = self.next.pages.values().map(|e| e.blob.hex()).collect();
         let root = self.dir.join(OBJECTS);
         let Ok(shards) = fs::read_dir(&root) else {
             return;

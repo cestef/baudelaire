@@ -28,7 +28,9 @@ pub struct ScaffoldExists {
 #[diagnostic(
     code(baudelaire::scaffold::permalink_taken),
     severity(warning),
-    help("give the new page a distinct `slug` in its frontmatter, or place it under a different path")
+    help(
+        "give the new page a distinct `slug` in its frontmatter, or place it under a different path"
+    )
 )]
 pub struct PermalinkTaken {
     pub url: String,

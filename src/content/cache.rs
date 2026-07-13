@@ -109,7 +109,9 @@ impl DiscoveryCache {
     ) -> Result<(Frontmatter, bool, String)> {
         // Fast path: unchanged source and dependencies reuse the stored
         // frontmatter with no typst parse or evaluation at all.
-        if self.enabled && let Some(body) = decode(&crate::fs::read(path)?) {
+        if self.enabled
+            && let Some(body) = decode(&crate::fs::read(path)?)
+        {
             let hash = Hash::of_bytes(body.as_bytes());
             if let Some(entry) = self.reuse(path, hash) {
                 return Ok((entry.frontmatter, entry.export, body));
@@ -158,7 +160,10 @@ impl DiscoveryCache {
         {
             return None;
         }
-        self.next.lock().pages.insert(path.to_owned(), entry.clone());
+        self.next
+            .lock()
+            .pages
+            .insert(path.to_owned(), entry.clone());
         Some(entry.clone())
     }
 
@@ -178,8 +183,8 @@ impl DiscoveryCache {
         }
         let mut manifest = std::mem::take(&mut *self.next.lock());
         manifest.salt = Some(self.salt);
-        let json = serde_json::to_vec(&manifest)
-            .map_err(|e| SerializeError::new(Artifact::Cache, e))?;
+        let json =
+            serde_json::to_vec(&manifest).map_err(|e| SerializeError::new(Artifact::Cache, e))?;
         crate::fs::create_dir_all(&self.dir)?;
         crate::fs::write(self.dir.join(MANIFEST), &json)?;
         Ok(())
@@ -189,7 +194,11 @@ impl DiscoveryCache {
     /// set of configured taxonomy keys (which keys are collected as taxonomies
     /// rather than passed through to `extra`).
     fn salt(config: &Config) -> Hash {
-        let keys: Vec<&str> = config.taxonomies.iter().map(|(_, t)| t.key.as_str()).collect();
+        let keys: Vec<&str> = config
+            .taxonomies
+            .iter()
+            .map(|(_, t)| t.key.as_str())
+            .collect();
         Hash::of(&keys)
     }
 }

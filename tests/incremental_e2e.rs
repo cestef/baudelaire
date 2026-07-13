@@ -93,7 +93,8 @@ fn retitling_a_page_invalidates_its_sibling() {
     // A page's prev/next links carry its neighbour's title, baked into the
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
     // sibling whose nav points at it — otherwise its "next" link goes stale.
-    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
+    let site =
+        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
@@ -385,9 +386,8 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     // A page's frontmatter reads a value from an imported module, so the cached
     // frontmatter depends on that module. Editing it must re-evaluate the page's
     // frontmatter — a missed dependency would serve the stale title from cache.
-    let site = Site::with(
-        "site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n",
-    );
+    let site =
+        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",

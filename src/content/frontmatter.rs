@@ -45,7 +45,10 @@ impl Frontmatter {
     /// A string value from `extra` (arbitrary frontmatter), if present and a
     /// string — e.g. `description`, `summary`, `image`, `author`.
     pub fn text(&self, key: &str) -> Option<String> {
-        self.extra.get(key).and_then(codegen::Value::as_str).map(str::to_owned)
+        self.extra
+            .get(key)
+            .and_then(codegen::Value::as_str)
+            .map(str::to_owned)
     }
 
     /// Reject the removed `#frontmatter(…)` call form with a migration error.

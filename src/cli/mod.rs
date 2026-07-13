@@ -61,10 +61,26 @@ fn examples() -> String {
         "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
     );
     row(&mut s, "baudelaire", "Build the site from ./config.kdl");
-    row(&mut s, "baudelaire serve --open", "Start the dev server, open a browser");
-    row(&mut s, "baudelaire new posts/hello", "Scaffold content/posts/hello.typ");
-    row(&mut s, "baudelaire --profile prod build", "Build with the prod profile");
-    row(&mut s, "baudelaire clean --cache", "Drop the incremental cache");
+    row(
+        &mut s,
+        "baudelaire serve --open",
+        "Start the dev server, open a browser",
+    );
+    row(
+        &mut s,
+        "baudelaire new posts/hello",
+        "Scaffold content/posts/hello.typ",
+    );
+    row(
+        &mut s,
+        "baudelaire --profile prod build",
+        "Build with the prod profile",
+    );
+    row(
+        &mut s,
+        "baudelaire clean --cache",
+        "Drop the incremental cache",
+    );
     let _ = write!(
         s,
         "\nRun {} for command-specific options.",

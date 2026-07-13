@@ -41,7 +41,10 @@ fn help_groups_global_flags_and_shows_examples() {
     // Global flags cluster under concern headings rather than one long list.
     // Build-shaping flags live on the build-like subcommands, not the top level.
     for heading in ["Project:", "Logging:", "Examples:"] {
-        assert!(help.contains(heading), "missing `{heading}` in help:\n{help}");
+        assert!(
+            help.contains(heading),
+            "missing `{heading}` in help:\n{help}"
+        );
     }
     // The examples block is present.
     assert!(
@@ -56,9 +59,15 @@ fn help_groups_global_flags_and_shows_examples() {
     assert!(build.status.success());
     let build_help = String::from_utf8_lossy(&build.stdout);
     for heading in ["Output:", "Build:"] {
-        assert!(build_help.contains(heading), "missing `{heading}` in build help:\n{build_help}");
+        assert!(
+            build_help.contains(heading),
+            "missing `{heading}` in build help:\n{build_help}"
+        );
     }
-    assert!(build_help.contains("--drafts"), "build help lists build flags");
+    assert!(
+        build_help.contains("--drafts"),
+        "build help lists build flags"
+    );
 }
 
 #[test]

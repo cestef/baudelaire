@@ -405,7 +405,10 @@ fn sections_expose_the_ordered_page_set_to_templates() {
     let second = html.find("guide:Second").unwrap();
     let third = html.find("guide:Third").unwrap();
     assert_eq!(trail.len(), 3, "all three pages listed: {html}");
-    assert!(first < second && second < third, "ordered by `order`: {html}");
+    assert!(
+        first < second && second < third,
+        "ordered by `order`: {html}"
+    );
 }
 
 #[test]
@@ -942,7 +945,10 @@ fn pagination_prefix_is_configurable() {
         "custom prefix path"
     );
     let a1 = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
-    assert!(a1.contains("href=\"/a/p/2/\""), "next points at /a/p/2/: {a1}");
+    assert!(
+        a1.contains("href=\"/a/p/2/\""),
+        "next points at /a/p/2/: {a1}"
+    );
 
     // Empty prefix: /b/2/, no `page` segment.
     assert!(

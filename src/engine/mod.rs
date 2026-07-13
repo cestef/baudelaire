@@ -412,7 +412,10 @@ impl Engine {
             Some(s) => Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))]),
             None => Value::None,
         };
-        Value::dict([("prev", link(&siblings.prev)), ("next", link(&siblings.next))])
+        Value::dict([
+            ("prev", link(&siblings.prev)),
+            ("next", link(&siblings.next)),
+        ])
     }
 
     /// A page's project-root-absolute virtual path (`/content/posts/a.typ`) —

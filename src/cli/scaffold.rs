@@ -5,8 +5,8 @@ use std::process::Command;
 
 use owo_colors::OwoColorize;
 
-use crate::cli::{NewArgs, Root};
 use crate::cli::prompt::{Input, Prompt};
+use crate::cli::{NewArgs, Root};
 use crate::codegen::Value;
 use crate::config::{Config, SortKey};
 use crate::content::{Collection, Frontmatter, Page, Slug};
@@ -424,7 +424,10 @@ impl Editor {
                     ui.detail(format_args!("could not launch `{editor}`: {e}"));
                 }
             }
-            None => ui.detail(format_args!("set {} to open new files here", "$EDITOR".cyan())),
+            None => ui.detail(format_args!(
+                "set {} to open new files here",
+                "$EDITOR".cyan()
+            )),
         }
     }
 }
