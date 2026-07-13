@@ -305,6 +305,10 @@ pub struct CollectionConfig {
     /// Permalink of the paginated index's first page. `None` = `/{id}/`; set to
     /// `/` to mount a collection's index at the site root (a blog home).
     pub index: Option<String>,
+    /// Path segment before a paginated page number: `/{id}/{prefix}/{n}/`.
+    /// Defaults to `page` (`/blog/page/2/`); an empty string drops the segment
+    /// entirely (`/blog/2/`).
+    pub prefix: String,
 }
 
 /// Taxonomy definition.

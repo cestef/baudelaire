@@ -185,6 +185,7 @@ impl Default for CollectionConfig {
             paginate: None,
             list: None,
             index: None,
+            prefix: "page".into(),
         }
     }
 }

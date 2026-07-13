@@ -1,10 +1,23 @@
 #let frontmatter = (
-  title: "Pagination",
+  order: 5,
+  title: "Listings & pagination",
   tags: ("feature", "content"),
 )
 
-Long collections split into numbered index pages. Set `paginate` on a collection
-and give it a `list` template:
+Give a collection a `list` template and Baudelaire generates an index page at
+`/{collection}/` listing its members:
+
+```kdl
+collections {
+  features sort="order" list="list.typ"
+}
+```
+
+That single page holds every member — no pagination. This site's
+#link("/features/")[features index] is exactly this: one page, all features, in
+`order`.
+
+Add `paginate = N` when a collection is long enough to split:
 
 ```kdl
 collections {
@@ -12,8 +25,21 @@ collections {
 }
 ```
 
-Baudelaire then generates `/blog/`, `/blog/page/2/`, `/blog/page/3/`, and so on,
-each listing five entries with previous and next links.
+Now Baudelaire generates `/blog/`, `/blog/page/2/`, `/blog/page/3/`, and so on,
+each listing five entries with previous and next links. Pagination is just the
+splitting modifier on top of a listing — the same `list` template renders both.
+
+The `page` segment in the URL is configurable per collection with `prefix`:
+
+```kdl
+collections {
+  blog paginate=5 prefix="p"    // → /blog/p/2/
+  news paginate=5 prefix=""     // → /news/2/
+}
+```
+
+An empty `prefix` drops the segment entirely, numbering pages directly under the
+collection.
 
 The `list` template receives the page's entries and its navigation as structured
 data, not HTML:

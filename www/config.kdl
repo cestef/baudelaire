@@ -14,7 +14,7 @@ clean #true
 
 collections {
   guide sort="order" template="page.typ"
-  features sort="order" template="page.typ" paginate=6 list="list.typ"
+  features sort="order" template="page.typ" list="list.typ"
   blog sort="date" reverse=#true template="page.typ" paginate=5 list="list.typ"
 }
 

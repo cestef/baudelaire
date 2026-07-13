@@ -705,6 +705,10 @@ impl NodeExt for KdlNode {
                 c.index = Some(v.as_str(t, s)?);
                 Ok(())
             }),
+            ("prefix", |c, v, t, s| {
+                c.prefix = v.as_str(t, s)?;
+                Ok(())
+            }),
         ]);
         let mut cfg = CollectionConfig::default();
         // a leading positional argument is the collection's glob

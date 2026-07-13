@@ -920,6 +920,87 @@ fn pagination_splits_collection_into_index_pages() {
 }
 
 #[test]
+fn pagination_prefix_is_configurable() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nclean #true\ncollections {\n  a sort=\"title\" paginate=2 prefix=\"p\"\n  b sort=\"title\" paginate=2 prefix=\"\"\n}\n",
+    );
+    for c in ["a", "b"] {
+        for (i, name) in ["x", "y", "z"].iter().enumerate() {
+            site.write(
+                &format!("content/{c}/{name}.typ"),
+                &format!("#let frontmatter = (title: \"P{i}\", slug: \"{name}\",)\nbody"),
+            );
+        }
+    }
+    assert!(site.run(&["build"]).status.success());
+
+    // Custom prefix: /a/p/2/.
+    assert!(
+        site.root.join("public/a/p/2/index.html").exists(),
+        "custom prefix path"
+    );
+    let a1 = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
+    assert!(a1.contains("href=\"/a/p/2/\""), "next points at /a/p/2/: {a1}");
+
+    // Empty prefix: /b/2/, no `page` segment.
+    assert!(
+        site.root.join("public/b/2/index.html").exists(),
+        "empty prefix drops the segment"
+    );
+    assert!(
+        !site.root.join("public/b/page/2/index.html").exists(),
+        "no default page segment"
+    );
+    let b1 = fs::read_to_string(site.root.join("public/b/index.html")).unwrap();
+    assert!(b1.contains("href=\"/b/2/\""), "next points at /b/2/: {b1}");
+}
+
+#[test]
+fn list_without_paginate_makes_a_single_index() {
+    // A `list` template with no `paginate` yields one index page holding every
+    // member — no `page/2/`, no prev/next nav.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nclean #true\ncollections {\n  posts sort=\"title\" list=\"list.typ\"\n}\n",
+    );
+    // A listing template that renders every entry's URL.
+    site.write(
+        "templates/list.typ",
+        r#"#let list(page, body) = html.elem("html", html.elem("body", {
+  for entry in page.frontmatter.entries {
+    html.elem("a", attrs: (href: entry.url), entry.label)
+  }
+}))
+"#,
+    );
+    for (i, name) in ["a", "b", "c", "d", "e"].iter().enumerate() {
+        site.write(
+            &format!("content/posts/{name}.typ"),
+            &format!("#let frontmatter = (title: \"P{i}\", slug: \"{name}\",)\nbody"),
+        );
+    }
+    assert!(site.run(&["build"]).status.success());
+
+    let index = fs::read_to_string(site.root.join("public/posts/index.html")).unwrap();
+    // All five members on one page.
+    for name in ["a", "b", "c", "d", "e"] {
+        assert!(
+            index.contains(&format!("href=\"/posts/{name}/\"")),
+            "index lists {name}: {index}"
+        );
+    }
+    // No pagination artifacts.
+    assert!(!index.contains("page/2"), "no next link: {index}");
+    assert!(
+        !site.root.join("public/posts/page/2/index.html").exists(),
+        "no second page generated"
+    );
+}
+
+#[test]
 fn sitemap_and_rss_emitted_when_url_set() {
     let site = Site::new();
     site.write(
