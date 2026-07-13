@@ -154,7 +154,7 @@ fn drafts_flag_builds_drafts() {
         "content/posts/draft.typ",
         "#let frontmatter = (title: \"D\", draft: true,)\ndraft body text",
     );
-    let out = site.run(&["--drafts", "build"]);
+    let out = site.run(&["build", "--drafts"]);
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -185,7 +185,7 @@ fn draft_suffix_marks_and_strips_slug() {
     assert!(site.run(&["build"]).status.success());
     assert!(!site.root.join("public/posts/wip/index.html").exists());
     // ...but built with --drafts, and the `.draft` suffix is stripped from the slug.
-    assert!(site.run(&["--drafts", "build"]).status.success());
+    assert!(site.run(&["build", "--drafts"]).status.success());
     assert!(site.root.join("public/posts/wip/index.html").exists());
 }
 
@@ -708,7 +708,7 @@ fn broken_internal_link_warns_when_not_strict() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nSee #link(\"missing.typ\")[gone].",
     );
-    let out = site.run(&["--strict-links", "false", "build"]);
+    let out = site.run(&["build", "--strict-links", "false"]);
     assert!(
         out.status.success(),
         "non-strict build should succeed: {}",

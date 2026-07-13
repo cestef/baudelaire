@@ -39,17 +39,26 @@ fn help_groups_global_flags_and_shows_examples() {
     assert!(out.status.success());
     let help = String::from_utf8_lossy(&out.stdout);
     // Global flags cluster under concern headings rather than one long list.
-    for heading in ["Project:", "Output:", "Build:", "Logging:", "Examples:"] {
+    // Build-shaping flags live on the build-like subcommands, not the top level.
+    for heading in ["Project:", "Logging:", "Examples:"] {
         assert!(help.contains(heading), "missing `{heading}` in help:\n{help}");
     }
-    // Grouped flags land under their heading; the examples block is present.
-    assert!(help.contains("--drafts"), "help lists build flags");
+    // The examples block is present.
     assert!(
         help.contains("baudelaire serve --open"),
         "help shows an example invocation"
     );
     // Piped output must not leak raw ANSI escapes.
     assert!(!help.contains('\x1b'), "no escape codes when not a TTY");
+
+    // Build-shaping overrides are grouped under `build --help`, not global help.
+    let build = sb.run(&["build", "--help"]);
+    assert!(build.status.success());
+    let build_help = String::from_utf8_lossy(&build.stdout);
+    for heading in ["Output:", "Build:"] {
+        assert!(build_help.contains(heading), "missing `{heading}` in build help:\n{build_help}");
+    }
+    assert!(build_help.contains("--drafts"), "build help lists build flags");
 }
 
 #[test]
