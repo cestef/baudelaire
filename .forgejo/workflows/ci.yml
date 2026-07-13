@@ -12,23 +12,19 @@ env:
   # crates (and their tests/benches) strict — the same bar as local `clippy`.
   RUSTFLAGS: -D warnings
   RUST_BACKTRACE: 1
+  # Incremental compilation is useless on a fresh CI checkout and bloats the
+  # cache; disabling it speeds builds and keeps the cache entry small.
+  CARGO_INCREMENTAL: 0
+  # CI never opens a debugger — skip debuginfo to cut compile time and shrink
+  # `target` (backtraces still carry function names via RUST_BACKTRACE).
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
   check:
     runs-on: linux-any
     steps:
       - uses: actions/checkout@v4
-
-      - name: cargo cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: rust toolchain
         run: |
@@ -39,6 +35,15 @@ jobs:
             export PATH="$HOME/.cargo/bin:$PATH"
           fi
           rustup show active-toolchain || rustup toolchain install
+
+      # Swatinem/rust-cache prunes `target` to just dependency artifacts and
+      # trims the registry, so the entry stays small enough to survive
+      # Codeberg's shared-runner cache eviction. It keys on Cargo.lock + rustc,
+      # so it must run *after* the toolchain is installed.
+      - name: cargo cache
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

@@ -11,6 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   build:
@@ -31,17 +32,6 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: cargo cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: release-${{ matrix.target }}-
-
       - name: rust toolchain
         shell: bash
         run: |
@@ -53,6 +43,13 @@ jobs:
           fi
           rustup show active-toolchain || rustup toolchain install
           rustup target add ${{ matrix.target }}
+
+      # Keyed on Cargo.lock + rustc, so it runs after the toolchain install.
+      # Each matrix row has its own arch/target, so give it a per-target key.
+      - name: cargo cache
+        uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Tar the binary and emit a matching checksum.
