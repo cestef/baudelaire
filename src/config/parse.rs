@@ -490,7 +490,11 @@ impl NodeExt for KdlNode {
 
     fn feed(&self, target: &mut FeedConfig, text: &str) -> Result<()> {
         /// Feed formats as `(name, kind)` — single source for parsing + errors.
-        const FORMATS: &[(&str, FeedKind)] = &[("rss", FeedKind::Rss), ("atom", FeedKind::Atom)];
+        const FORMATS: &[(&str, FeedKind)] = &[
+            ("rss", FeedKind::Rss),
+            ("atom", FeedKind::Atom),
+            ("json", FeedKind::Json),
+        ];
         const FEED: Block<FeedConfig> = Block(&[
             ("formats", |c, n, t| {
                 c.formats = n.mapped(t, FORMATS)?;

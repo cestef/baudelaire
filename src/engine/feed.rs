@@ -1,5 +1,6 @@
-//! Syndication feeds: RSS 2.0 and Atom 1.0 from one page set.
+//! Syndication feeds: RSS 2.0, Atom 1.0, and JSON Feed 1.1 from one page set.
 
+use serde::Serialize;
 use time::OffsetDateTime;
 use time::format_description::well_known::{Rfc2822, Rfc3339};
 
@@ -7,10 +8,10 @@ use super::process::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config, FeedKind};
 use crate::content::Page;
 use crate::engine::xml::Xml;
-use crate::error::{FeedDateError, Result};
+use crate::error::{Artifact, FeedDateError, Result, SerializeError};
 
 /// The timestamp behavior each feed standard mandates: RSS wants RFC 2822
-/// `pubDate`s, Atom RFC 3339 `updated`s. An inherent extension here (rather
+/// `pubDate`s, Atom and JSON Feed RFC 3339. An inherent extension here (rather
 /// than in config) because only the feed writer cares how a kind formats time.
 impl FeedKind {
     /// Format a moment as this feed standard requires. Fallible: the formats
@@ -19,7 +20,7 @@ impl FeedKind {
     fn timestamp(self, moment: OffsetDateTime) -> Result<String, time::error::Format> {
         match self {
             Self::Rss => moment.format(&Rfc2822),
-            Self::Atom => moment.format(&Rfc3339),
+            Self::Atom | Self::Json => moment.format(&Rfc3339),
         }
     }
 
@@ -27,7 +28,7 @@ impl FeedKind {
     fn standard(self) -> &'static str {
         match self {
             Self::Rss => "RFC 2822",
-            Self::Atom => "RFC 3339",
+            Self::Atom | Self::Json => "RFC 3339",
         }
     }
 }
@@ -77,17 +78,27 @@ impl<'a> Feed<'a> {
         Self { base, title, items }
     }
 
-    /// Serialize to XML in the requested format. Item timestamps are rendered
-    /// up front — the only fallible step — so the XML building itself stays
+    /// Serialize in the requested format. Item timestamps are rendered up
+    /// front — for XML the only fallible step, so the building itself stays
     /// infallible.
     pub(super) fn render(&self, kind: FeedKind) -> Result<String> {
         let stamps = self.stamps(kind)?;
-        let mut xml = Xml::document();
         match kind {
-            FeedKind::Rss => self.rss(&mut xml, &stamps),
-            FeedKind::Atom => self.atom(&mut xml, &stamps),
+            FeedKind::Rss => Ok(self.xml(Self::rss, &stamps)),
+            FeedKind::Atom => Ok(self.xml(Self::atom, &stamps)),
+            FeedKind::Json => self.json(&stamps),
         }
-        Ok(xml.finish())
+    }
+
+    /// An XML document written by one format's channel writer.
+    fn xml(
+        &self,
+        write: fn(&Self, &mut Xml, &[Option<String>]),
+        stamps: &[Option<String>],
+    ) -> String {
+        let mut xml = Xml::document();
+        write(self, &mut xml, stamps);
+        xml.finish()
     }
 
     fn home(&self) -> String {
@@ -145,6 +156,31 @@ impl<'a> Feed<'a> {
         });
     }
 
+    /// The JSON Feed 1.1 document (https://jsonfeed.org/version/1.1).
+    fn json(&self, stamps: &[Option<String>]) -> Result<String> {
+        let feed = JsonFeed {
+            version: "https://jsonfeed.org/version/1.1",
+            title: self.title,
+            home_page_url: self.home(),
+            feed_url: self.base.join(format!("/{}", FeedKind::Json.file())),
+            items: self
+                .items
+                .iter()
+                .zip(stamps)
+                .map(|(page, stamp)| {
+                    let link = self.link(page);
+                    JsonItem {
+                        id: link.clone(),
+                        url: link,
+                        title: page.frontmatter.title.as_deref(),
+                        date_published: stamp.as_deref(),
+                    }
+                })
+                .collect(),
+        };
+        serde_json::to_string(&feed).map_err(|e| SerializeError::new(Artifact::Feed, e).into())
+    }
+
     /// Every item's date rendered in `kind`'s timestamp format (as UTC
     /// midnight), position-aligned with `items`; `None` for undated pages. A
     /// date the format cannot represent is an error, not a silently missing
@@ -166,4 +202,27 @@ impl<'a> Feed<'a> {
             })
             .transpose()
     }
+}
+
+/// The JSON Feed 1.1 top-level object — just the required members plus the
+/// item list; optional members are omitted, not emitted empty.
+#[derive(Serialize)]
+struct JsonFeed<'a> {
+    version: &'static str,
+    title: &'a str,
+    home_page_url: String,
+    feed_url: String,
+    items: Vec<JsonItem<'a>>,
+}
+
+/// One JSON Feed item. `id` doubles as the canonical `url`, mirroring the
+/// `guid`/`link` pairing in the XML formats.
+#[derive(Serialize)]
+struct JsonItem<'a> {
+    id: String,
+    url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date_published: Option<&'a str>,
 }

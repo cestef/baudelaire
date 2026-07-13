@@ -17,6 +17,8 @@ pub enum Artifact {
     SearchIndex,
     /// A publish backend's skip-cache.
     PublishCache,
+    /// A JSON Feed.
+    Feed,
 }
 
 impl std::fmt::Display for Artifact {
@@ -25,6 +27,7 @@ impl std::fmt::Display for Artifact {
             Self::Cache => "build cache",
             Self::SearchIndex => "search index",
             Self::PublishCache => "publish cache",
+            Self::Feed => "JSON feed",
         })
     }
 }
