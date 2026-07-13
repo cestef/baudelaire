@@ -52,7 +52,12 @@ impl<'a> Section<'a> {
     }
 
     fn build(&self, config: &Config, out: &mut Vec<Page>) {
-        let chunks: Vec<&[&Page]> = self.members.chunks(self.per_page).collect();
+        let mut chunks: Vec<&[&Page]> = self.members.chunks(self.per_page).collect();
+        // A memberless collection still gets its page-1 index: nav links point
+        // at it, and an empty listing beats a 404.
+        if chunks.is_empty() {
+            chunks.push(&[]);
+        }
         for (index, chunk) in chunks.iter().enumerate() {
             out.push(self.page(index + 1, chunk, chunks.len()).into_page(config));
         }

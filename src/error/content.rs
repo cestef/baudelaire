@@ -1,38 +1,21 @@
 use miette::Diagnostic;
 use thiserror::Error;
-use typst::diag::SourceDiagnostic;
-use typst::ecow::EcoVec;
-use typst::syntax::DiagSpanKind;
 
 use crate::error::Annotated;
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum ContentError {
-    #[error("failed to evaluate frontmatter in {path}")]
-    #[diagnostic(
-        code(baudelaire::content::frontmatter_eval),
-        help("frontmatter must be a typst dict literal of plain data")
-    )]
-    FrontmatterEval {
-        path: String,
-        #[source_code]
-        src: String,
-        #[related]
-        errs: Vec<FrontmatterDiag>,
-    },
-
     #[error(transparent)]
     #[diagnostic(transparent)]
     BadGlob(Annotated),
 
-    #[error("frontmatter must be a dictionary, but got a {ty}: {repr}")]
+    #[error("`frontmatter` in {path} must be a dictionary, but is a {ty}: {repr}")]
     #[diagnostic(
         code(baudelaire::content::frontmatter_not_dict),
-        help("wrap the frontmatter fields in `(key: value, ...)`")
+        help("export the fields as a dict: `#let frontmatter = (key: value, ...)`")
     )]
     FrontmatterNotDict {
-        #[source_code]
-        src: String,
+        path: String,
         ty: &'static str,
         repr: String,
     },
@@ -47,6 +30,20 @@ pub enum ContentError {
         #[help]
         help: Option<String>,
     },
+
+    #[error("{path} declares frontmatter with the removed `#frontmatter(…)` call")]
+    #[diagnostic(
+        code(baudelaire::content::frontmatter_call),
+        help("export it instead: `#let frontmatter = (title: \"…\")`")
+    )]
+    FrontmatterCall { path: String },
+
+    #[error("{path} declares `#let frontmatter` without a value")]
+    #[diagnostic(
+        code(baudelaire::content::frontmatter_uninit),
+        help("give it a dict: `#let frontmatter = (title: \"…\")`")
+    )]
+    FrontmatterUninit { path: String },
 
     #[error("unknown frontmatter key `{key}` in {path}")]
     #[diagnostic(code(baudelaire::content::unknown_frontmatter_key))]
@@ -64,13 +61,15 @@ pub enum ContentError {
     )]
     EmptySlug { name: String },
 
-    #[error("`{first}` and `{second}` both resolve to `{permalink}`")]
+    #[error("`{first}` and `{second}` both write `{target}`")]
     #[diagnostic(
         code(baudelaire::content::collision),
-        help("two pages cannot share a URL — rename one, or set a distinct `slug`/`permalink`")
+        help(
+            "two outputs cannot share a file — rename one, set a distinct `slug`/`permalink`, or drop the clashing `redirect`"
+        )
     )]
     Collision {
-        permalink: String,
+        target: String,
         first: String,
         second: String,
     },
@@ -89,21 +88,6 @@ pub enum ContentError {
 }
 
 impl ContentError {
-    pub fn frontmatter_eval(
-        path: &std::path::Path,
-        src: &str,
-        errs: EcoVec<SourceDiagnostic>,
-    ) -> Self {
-        Self::FrontmatterEval {
-            path: path.display().to_string(),
-            src: src.to_owned(),
-            errs: errs
-                .into_iter()
-                .map(|e| FrontmatterDiag::new(src, e))
-                .collect(),
-        }
-    }
-
     /// Lower wax's own span-annotated glob error into an [`Annotated`] so its
     /// labels point straight at the offending part of the pattern.
     pub fn bad_glob(pattern: &str, error: wax::BuildError) -> Self {
@@ -120,10 +104,10 @@ impl ContentError {
         Self::BadGlob(diag)
     }
 
-    pub fn frontmatter_not_dict(src: &str, value: typst::foundations::Value) -> Self {
+    pub fn frontmatter_not_dict(path: &std::path::Path, value: &typst::foundations::Value) -> Self {
         use typst::foundations::Repr;
         Self::FrontmatterNotDict {
-            src: src.to_owned(),
+            path: path.display().to_string(),
             ty: value.ty().long_name(),
             repr: value.repr().to_string(),
         }
@@ -157,6 +141,13 @@ impl ContentError {
         }
     }
 
+    /// The pre-export `#frontmatter(…)` call form, pointed at the binding syntax.
+    pub fn frontmatter_call(path: &std::path::Path) -> Self {
+        Self::FrontmatterCall {
+            path: path.display().to_string(),
+        }
+    }
+
     /// A name (filename stem, frontmatter slug, or taxonomy term) with no
     /// URL-safe characters.
     pub fn empty_slug(name: &str) -> Self {
@@ -165,10 +156,10 @@ impl ContentError {
         }
     }
 
-    /// Two pages resolving to the same permalink (a silent overwrite otherwise).
-    pub fn collision(permalink: &str, first: &str, second: &str) -> Self {
+    /// Two outputs resolving to the same file (a silent overwrite otherwise).
+    pub fn collision(target: &str, first: &str, second: &str) -> Self {
         Self::Collision {
-            permalink: permalink.to_owned(),
+            target: target.to_owned(),
             first: first.to_owned(),
             second: second.to_owned(),
         }
@@ -182,61 +173,6 @@ impl ContentError {
             first: first.to_owned(),
             second: second.to_owned(),
         }
-    }
-}
-
-/// Bridge typst's miette-5 [`SourceDiagnostic`] to our miette-7.
-#[derive(Debug, Clone)]
-pub struct FrontmatterDiag {
-    src: String,
-    inner: SourceDiagnostic,
-}
-
-impl FrontmatterDiag {
-    fn new(src: &str, inner: SourceDiagnostic) -> Self {
-        Self {
-            src: src.to_owned(),
-            inner,
-        }
-    }
-}
-
-impl std::fmt::Display for FrontmatterDiag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner.message)
-    }
-}
-
-impl std::error::Error for FrontmatterDiag {}
-
-impl miette::Diagnostic for FrontmatterDiag {
-    fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new("typst::frontmatter"))
-    }
-
-    fn severity(&self) -> Option<miette::Severity> {
-        Some(match self.inner.severity {
-            typst::diag::Severity::Error => miette::Severity::Error,
-            typst::diag::Severity::Warning => miette::Severity::Warning,
-        })
-    }
-
-    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        Some(&self.src as &dyn miette::SourceCode)
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        // evaluated with `SpanMode::Mapped`, so each diagnostic carries a raw byte
-        // range into `src` — underline there rather than the whole snippet.
-        let DiagSpanKind::Range { range, .. } = self.inner.span.get() else {
-            return None;
-        };
-        let label = miette::LabeledSpan::new(
-            Some(self.inner.message.to_string()),
-            range.start,
-            range.len(),
-        );
-        Some(Box::new(std::iter::once(label)))
     }
 }
 

@@ -53,10 +53,11 @@ pub struct Renderer {
 
 impl Renderer {
     /// Build a renderer that resolves links across `pages` and rewrites asset
-    /// references through `assets` (the processed-asset URL map).
-    pub fn new(pages: &[Page], assets: AssetMap) -> Self {
+    /// references through `assets` (the processed-asset URL map). `root` is the
+    /// typst project root absolute link paths resolve against.
+    pub fn new(pages: &[Page], assets: AssetMap, root: &std::path::Path) -> Self {
         Self {
-            links: LinkMap::new(pages),
+            links: LinkMap::new(pages, root),
             assets,
             transforms: Transforms::builtin(),
         }

@@ -23,11 +23,15 @@ pub enum Link {
 #[derive(Debug, Default)]
 pub struct LinkMap {
     by_source: HashMap<PathBuf, String>,
+    /// The typst project root: absolute link paths (`/posts/hello.typ`)
+    /// resolve against it, mirroring typst's own path convention.
+    root: PathBuf,
 }
 
 impl LinkMap {
-    /// Index every page by the canonical path of its source file.
-    pub fn new(pages: &[Page]) -> Self {
+    /// Index every page by the canonical path of its source file. `root` is
+    /// the typst project root absolute references resolve against.
+    pub fn new(pages: &[Page], root: &Path) -> Self {
         let by_source = pages
             .iter()
             .filter_map(|p| {
@@ -37,7 +41,10 @@ impl LinkMap {
                 ))
             })
             .collect();
-        Self { by_source }
+        Self {
+            by_source,
+            root: root.to_path_buf(),
+        }
     }
 
     /// A stable fingerprint of every source→permalink mapping. Folded into the
@@ -62,8 +69,16 @@ impl LinkMap {
         if !split.path.ends_with(".typ") {
             return Link::Passthrough;
         }
-        let base = from.parent().unwrap_or_else(|| Path::new("."));
-        match crate::fs::canonicalize(base.join(split.path))
+        // Typst path semantics: absolute paths are project-root-relative,
+        // relative ones resolve against the linking file's directory.
+        let target = match split.path.strip_prefix('/') {
+            Some(rooted) => self.root.join(rooted),
+            None => from
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(split.path),
+        };
+        match crate::fs::canonicalize(target)
             .ok()
             .and_then(|canon| self.by_source.get(&canon))
         {
