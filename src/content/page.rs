@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use wax::Glob;
 use wax::prelude::*;
+use wax::Glob;
 
 use crate::config::{CollectionConfig, Config, SortKey};
 use crate::content::cache::DiscoveryCache;
@@ -14,7 +14,7 @@ use crate::world::Project;
 /// of where a page's data (and body) live.
 #[derive(Debug, Clone)]
 pub enum Data {
-    /// A real file exporting `#let frontmatter = (…)`: the layout wrapper
+    /// A real file exporting `#let frontmatter = (..)`: the layout wrapper
     /// imports the export and `#include`s the file.
     Export,
     /// A real file with no export: the wrapper passes an empty dict and

@@ -11,8 +11,8 @@
 //! UTF-8, so neither writing events nor recovering the final string has a
 //! reachable error path. Both invariants are documented on the `expect`s.
 
-use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::Writer;
 
 /// An in-progress XML document. Every text and attribute value is escaped by
 /// quick-xml, so callers pass raw strings.
@@ -46,7 +46,7 @@ impl Xml {
         self.write(Event::Text(BytesText::new(text)));
     }
 
-    /// Write `<name attrs…>` … `</name>`, its body produced by `content`.
+    /// Write `<name attrs..>` .. `</name>`, its body produced by `content`.
     pub(super) fn nest(
         &mut self,
         name: &str,
@@ -65,7 +65,7 @@ impl Xml {
         self.write(Event::End(BytesEnd::new(name.to_owned())));
     }
 
-    /// Write a self-closing `<name attrs… />`.
+    /// Write a self-closing `<name attrs.. />`.
     pub(super) fn empty(&mut self, name: &str, attrs: &[(&str, &str)]) {
         self.write(Event::Empty(Self::start(name, attrs)));
     }

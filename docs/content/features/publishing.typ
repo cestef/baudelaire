@@ -62,7 +62,7 @@ baudelaire publish
 ```
 
 #callout(kind: "warn")[
-  A password on the command line as `--password xxxx-…` is visible in your shell
+  A password on the command line as `--password xxxx-..` is visible in your shell
   history and the process list. Prefer the environment variable or `--password -`
   in any shared or automated environment.
 ]
@@ -98,7 +98,7 @@ required:
 publish {
   standard {
     handle "you.bsky.social"
-    did "did:plc:abc123…"
+    did "did:plc:abc123.."
     verify {
       wellknown #true   // /.well-known/site.standard.publication
       links #true       // per-page <link rel="site.standard.document">

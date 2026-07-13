@@ -1,7 +1,7 @@
 //! Build warnings and advice: precise, typed diagnostics that never stop a run.
 //!
 //! Same discipline as the error types — every warning is its own struct with a
-//! `baudelaire::…` code, typed fields, and a `help`, rendered by miette with
+//! `baudelaire::..` code, typed fields, and a `help`, rendered by miette with
 //! `Severity::Warning` (yellow) so it reads like an error report without being
 //! one. Informational notes use `Severity::Advice`. Collected through
 //! [`crate::ui::Ui::warn`] and rendered together at the end of the run.
@@ -126,7 +126,7 @@ pub struct ManifestUnreadable {
 )]
 pub struct BaseUrlMissing {
     pub feature: &'static str,
-    /// What happened instead: `skipped`, `emitted with relative links`, …
+    /// What happened instead: `skipped`, `emitted with relative links`, ..
     pub effect: &'static str,
 }
 

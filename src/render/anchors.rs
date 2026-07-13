@@ -1,11 +1,11 @@
 //! Gives every heading a slug `id`, so sections are deep-linkable.
 //!
-//! When `html { anchors true }` is set (the default), each `<h1>`…`<h6>` without
+//! When `html { anchors true }` is set (the default), each `<h1>`..`<h6>` without
 //! an explicit `id` gets one derived from its text (the same slug rule as page
 //! URLs). An author-set `id` is always left untouched. A heading whose text has
 //! no URL-safe characters is skipped rather than given an empty anchor.
 
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
+use typst_html::{attr, tag, HtmlDocument, HtmlElement, HtmlNode, HtmlTag};
 
 use crate::config::Config;
 use crate::content::Slug;
@@ -21,7 +21,7 @@ impl Transform for Anchors {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
-        // ids are unique per page: like-slugged headings get `-2`, `-3`, … suffixes.
+        // ids are unique per page: like-slugged headings get `-2`, `-3`, .. suffixes.
         // Every authored id is collected up front — on any element, anywhere in
         // the document — so a derived id never collides with one, regardless of
         // which comes first in the walk.
@@ -44,7 +44,7 @@ impl Transform for Anchors {
 }
 
 impl Anchors {
-    /// Whether `tag` is one of `<h1>`…`<h6>`.
+    /// Whether `tag` is one of `<h1>`..`<h6>`.
     fn heading(tag: HtmlTag) -> bool {
         [tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag::h6].contains(&tag)
     }
@@ -66,7 +66,7 @@ impl Anchors {
     }
 
     /// An element's visible text, concatenating descendant text nodes — enough to
-    /// slug a heading whose content is styled inline (`<code>`, `<em>`, …).
+    /// slug a heading whose content is styled inline (`<code>`, `<em>`, ..).
     fn text(element: &HtmlElement) -> String {
         let mut out = String::new();
         Self::gather(element, &mut out);

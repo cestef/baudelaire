@@ -56,7 +56,7 @@ impl Item {
     /// The listing row for a page — the single page→item mapping, so every
     /// listing (paginated index, taxonomy term) exposes the same data: link,
     /// title, ISO display date, the page's taxonomies, and its extra frontmatter
-    /// (summary, cover image, …).
+    /// (summary, cover image, ..).
     pub fn of(page: &Page) -> Self {
         let date = page
             .frontmatter
@@ -75,7 +75,7 @@ impl Item {
     }
 
     /// Attach the page's taxonomies, exposed to the template as
-    /// `entry.taxonomies` (a dict of `taxonomy → (terms…)`).
+    /// `entry.taxonomies` (a dict of `taxonomy → (terms..)`).
     pub fn with_taxonomies(mut self, taxonomies: BTreeMap<String, Vec<String>>) -> Self {
         self.taxonomies = taxonomies;
         self
@@ -195,7 +195,7 @@ impl Listing {
     }
 
     /// The listing as a typst [`Value`], exposed to a bound template as
-    /// `page.frontmatter`: `(title, entries: ((url, label, note), …), nav)`.
+    /// `page.frontmatter`: `(title, entries: ((url, label, note), ..), nav)`.
     fn data(&self) -> Value {
         let entries = self.items.iter().map(|item| {
             Value::dict([

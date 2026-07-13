@@ -51,7 +51,7 @@ pub fn document_uri(did: &str, path: &str) -> AtUri {
     AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
 }
 
-/// The standard.site backend, configured from a `publish { standard { … } }`
+/// The standard.site backend, configured from a `publish { standard { .. } }`
 /// block.
 pub struct Standard {
     config: StandardConfig,
@@ -362,11 +362,9 @@ mod tests {
             publication_uri("did:plc:x").to_string(),
             "at://did:plc:x/site.standard.publication/self"
         );
-        assert!(
-            document_uri("did:plc:x", "/a/")
-                .to_string()
-                .starts_with("at://did:plc:x/site.standard.document/")
-        );
+        assert!(document_uri("did:plc:x", "/a/")
+            .to_string()
+            .starts_with("at://did:plc:x/site.standard.document/"));
     }
 
     #[test]

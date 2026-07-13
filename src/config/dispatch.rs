@@ -127,7 +127,7 @@ impl Keys<'_> {
         ConfigError::unknown_value(text, value, Keys(&names).help(value, "values"), span).into()
     }
 
-    /// "did you mean …? valid `noun`: …" help for an unrecognized name, reused
+    /// "did you mean ..? valid `noun`: .." help for an unrecognized name, reused
     /// wherever a name set drives validity (dispatch keys, profile names).
     pub(super) fn help(&self, unknown: &str, noun: &str) -> String {
         let mut help = match self.nearest(unknown) {

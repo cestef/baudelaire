@@ -4,13 +4,13 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use typst::foundations::{Datetime, Dict, Module, Value};
 use typst::syntax::{
-    Source,
     ast::{Expr, Markup},
+    Source,
 };
 
 use crate::codegen;
-use crate::config::Config;
 use crate::config::dispatch::Keys;
+use crate::config::Config;
 use crate::error::{ContentError, Result};
 
 /// The recognized scalar/list frontmatter keys (taxonomy keys are configured,
@@ -51,7 +51,7 @@ impl Frontmatter {
             .map(str::to_owned)
     }
 
-    /// Reject the removed `#frontmatter(…)` call form with a migration error.
+    /// Reject the removed `#frontmatter(..)` call form with a migration error.
     /// A syntax-tree check, run *before* evaluation — the call no longer
     /// evaluates (`frontmatter` is undefined), and "unknown variable" would
     /// say nothing about the new syntax.
@@ -63,7 +63,7 @@ impl Frontmatter {
     }
 
     /// Read a page's frontmatter from its evaluated module's `frontmatter`
-    /// export (`#let frontmatter = (…)`). Returns `None` when the module
+    /// export (`#let frontmatter = (..)`). Returns `None` when the module
     /// exports none. `path` names the file in errors; `config` supplies the
     /// taxonomy keys to recognize.
     pub fn extract(module: &Module, path: &Path, config: &Config) -> Result<Option<Self>> {
@@ -129,7 +129,7 @@ impl Frontmatter {
     }
 }
 
-/// Whether the source opens with the pre-export `#frontmatter(…)` call form —
+/// Whether the source opens with the pre-export `#frontmatter(..)` call form —
 /// recognized in the syntax tree purely to point migration at the binding
 /// syntax (the call itself no longer evaluates: `frontmatter` is undefined).
 fn legacy_call(source: &Source) -> bool {

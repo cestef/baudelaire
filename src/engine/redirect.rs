@@ -41,8 +41,8 @@ impl Redirects {
             ],
         );
         html.empty("link", &[("rel", "canonical"), ("href", target)]);
-        html.leaf("title", "Redirecting…");
-        html.nest("a", &[("href", target)], |x| x.text("Redirecting…"));
+        html.leaf("title", "Redirecting..");
+        html.nest("a", &[("href", target)], |x| x.text("Redirecting.."));
         html.finish()
     }
 }

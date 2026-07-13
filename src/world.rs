@@ -4,7 +4,6 @@ use std::sync::{Arc, LazyLock};
 
 use time::OffsetDateTime;
 use typst::{
-    Feature, Features, Library, LibraryExt, World,
     comemo::Track,
     diag::{FileError, FileResult},
     engine::{Route, Sink, Traced},
@@ -12,6 +11,7 @@ use typst::{
     syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot},
     text::{Font, FontBook},
     utils::LazyHash,
+    Feature, Features, Library, LibraryExt, World,
 };
 use typst_kit::{
     downloader::SystemDownloader,
@@ -339,7 +339,7 @@ impl Project {
 
     /// Evaluate a source as a typst module — the compiler's own memoized
     /// evaluation, so a later compile of the same file reuses it. A module's
-    /// scope carries the page's exports (`#let frontmatter = …`); its errors
+    /// scope carries the page's exports (`#let frontmatter = ..`); its errors
     /// carry real file spans.
     pub fn module(&self, source: &Source) -> Result<Module> {
         let world = self.world_for(source);
@@ -421,7 +421,7 @@ impl Project {
 
 /// A [`World`] wrapper that records every file the compiler reads, yielding a
 /// compilation's exact dependency set — transitive imports, data loaders
-/// (`json`, `csv`, …), and assets alike.
+/// (`json`, `csv`, ..), and assets alike.
 ///
 /// This works even though the underlying world is comemo-memoized and shared
 /// across pages: comemo validates a cached result by re-calling the tracked

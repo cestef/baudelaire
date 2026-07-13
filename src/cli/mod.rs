@@ -30,7 +30,7 @@ const HELP_STYLES: Styles = Styles::styled()
 
 /// Help-heading names, so the shared global flags cluster by concern instead of
 /// piling into one long `Options` list. Single source, referenced by every
-/// grouped `#[arg(help_heading = …)]`.
+/// grouped `#[arg(help_heading = ..)]`.
 mod group {
     pub const PROJECT: &str = "Project";
     pub const OUTPUT: &str = "Output";
@@ -586,11 +586,9 @@ mod tests {
     fn full_sweep_names_a_relocated_cache() {
         let mut config = Config::default();
         config.cache.dir = PathBuf::from("/var/tmp/bd-cache");
-        assert!(
-            args(false, false, false)
-                .targets(&config)
-                .contains(&config.cache.dir)
-        );
+        assert!(args(false, false, false)
+            .targets(&config)
+            .contains(&config.cache.dir));
     }
 
     #[test]

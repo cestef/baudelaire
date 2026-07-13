@@ -121,7 +121,7 @@
 #let _doc-groups = (("guide", "Guide"), ("features", "Features"))
 
 #let sidebar(sections) = {
-  // `sections` is an array of `(id, pages: ((url, title), …))` in each
+  // `sections` is an array of `(id, pages: ((url, title), ..))` in each
   // collection's sort order.
   let by-id = (:)
   for section in sections {

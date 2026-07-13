@@ -6,7 +6,7 @@ use thiserror::Error;
 /// A failure while publishing standard.site records to a PDS.
 #[derive(Debug, Error, Diagnostic)]
 pub enum PublishError {
-    /// No `publish { standard { … } }` block, or it lacks a handle.
+    /// No `publish { standard { .. } }` block, or it lacks a handle.
     #[error("standard.site publishing is not configured")]
     #[diagnostic(
         code(baudelaire::publish::unconfigured),

@@ -31,17 +31,17 @@ pub enum ContentError {
         help: Option<String>,
     },
 
-    #[error("{path} declares frontmatter with the removed `#frontmatter(…)` call")]
+    #[error("{path} declares frontmatter with the removed `#frontmatter(..)` call")]
     #[diagnostic(
         code(baudelaire::content::frontmatter_call),
-        help("export it instead: `#let frontmatter = (title: \"…\")`")
+        help("export it instead: `#let frontmatter = (title: \"..\")`")
     )]
     FrontmatterCall { path: String },
 
     #[error("{path} declares `#let frontmatter` without a value")]
     #[diagnostic(
         code(baudelaire::content::frontmatter_uninit),
-        help("give it a dict: `#let frontmatter = (title: \"…\")`")
+        help("give it a dict: `#let frontmatter = (title: \"..\")`")
     )]
     FrontmatterUninit { path: String },
 
@@ -141,7 +141,7 @@ impl ContentError {
         }
     }
 
-    /// The pre-export `#frontmatter(…)` call form, pointed at the binding syntax.
+    /// The pre-export `#frontmatter(..)` call form, pointed at the binding syntax.
     pub fn frontmatter_call(path: &std::path::Path) -> Self {
         Self::FrontmatterCall {
             path: path.display().to_string(),

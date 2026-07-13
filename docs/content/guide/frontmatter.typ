@@ -10,7 +10,7 @@ in another language.
 
 == The binding
 
-Frontmatter is a top-level `#let frontmatter = (…)` export. The build reads that
+Frontmatter is a top-level `#let frontmatter = (..)` export. The build reads that
 one binding from the page's evaluated module; everything after it is the body.
 
 ```typ
@@ -24,9 +24,9 @@ one binding from the page's evaluated module; everything after it is the body.
 Because Typst evaluates it, the value is a dict like any other, so it can be computed, e.g. a title derived from a filename, a date from `sys.inputs`, or fields pulled from a loaded data file.
 
 #callout(kind: "warn")[
-  The older `#frontmatter(…)` *call* form was removed. A page that still uses it
+  The older `#frontmatter(..)` *call* form was removed. A page that still uses it
   fails with a migration error pointing at the binding: export a dict with
-  `#let frontmatter = (title: "…")`
+  `#let frontmatter = (title: "...")`
 ]
 
 == Recognized keys

@@ -1,7 +1,6 @@
 #let frontmatter = (
   title: "Install",
   order: 1,
-  tags: ("guide",),
 )
 #import "/templates/theme.typ": callout
 
@@ -10,8 +9,10 @@ is built in, so there is nothing else to install.
 
 == With cargo
 
+Baudelaire isn't published on #link("https://crates.io/")[crates.io] yet, install it directly from the git repo:
+
 ```sh
-cargo install baudelaire
+cargo install --git https://codeberg.org/cstef/baudelaire
 ```
 
 This builds from source and drops the `baudelaire` binary in `~/.cargo/bin`.

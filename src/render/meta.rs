@@ -10,13 +10,13 @@
 //! these tags cannot be authored in a layout — appending them to the parsed DOM
 //! here is the single place they can be added for every page at once.
 
-use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
+use typst_html::{attr, tag, HtmlAttr, HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
-use super::AssetMap;
 use super::transform::{Cx, ElementExt, Transform};
+use super::AssetMap;
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;
@@ -133,12 +133,12 @@ impl Card<'_> {
         BaseUrl::resolve(self.config.base().as_ref(), &src)
     }
 
-    /// A `<meta name="…" content="…">` tag.
+    /// A `<meta name=".." content="..">` tag.
     fn named(name: &str, content: &str) -> HtmlNode {
         Self::meta(attr::name, name, content)
     }
 
-    /// A `<meta property="…" content="…">` tag (OpenGraph).
+    /// A `<meta property=".." content="..">` tag (OpenGraph).
     fn property(property: &str, content: &str) -> HtmlNode {
         Self::meta(HtmlAttr::constant("property"), property, content)
     }
@@ -150,7 +150,7 @@ impl Card<'_> {
         HtmlNode::Element(el)
     }
 
-    /// A `<link rel="canonical" href="…">` tag.
+    /// A `<link rel="canonical" href="..">` tag.
     fn canonical(href: &str) -> HtmlNode {
         let mut el = HtmlElement::new(tag::link);
         el.attrs.push(attr::rel, "canonical");

@@ -1,7 +1,7 @@
 // Shared page layout, bound to pages through `template` in their frontmatter or
 // the collection config. It receives the page (with its `.frontmatter`) and the
 // rendered `body`, and returns the full markup. typst-html wraps this in
-// html/head/body automatically, so `set document(title: …)` sets the title.
+// html/head/body automatically, so `set document(title: ..)` sets the title.
 
 #let build = sys.inputs.at("baudelaire", default: (:))
 #let site = build.at("site", default: (:))

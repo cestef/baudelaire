@@ -17,7 +17,7 @@ baudelaire serve
 
 == Write a page
 
-A page is a `.typ` file under `content/`. Front matter is a module export (`#let frontmatter = (…)`) and the rest of the file is the body. Because it is evaluated by Typst itself, it can be computed, not just a literal dict:
+A page is a `.typ` file under `content/`. Front matter is a module export (`#let frontmatter = (...)`) and the rest of the file is the body. Because it is evaluated by Typst itself, it can be computed, not just a literal dict:
 
 ```typ
 #let frontmatter = (
