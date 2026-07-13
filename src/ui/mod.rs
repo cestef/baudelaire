@@ -145,11 +145,24 @@ impl Ui {
     /// A result line: `✓ built 24 pages … in 132ms`. Shown even at `--quiet`
     /// (it is the final result); only [`Level::Silent`] suppresses it.
     pub fn done(&self, msg: impl Display) {
+        self.done_inner(msg, true);
+    }
+
+    /// like [`done`](Self::done) but without the leading indent (perfectionism alignment issues)
+    pub fn done_plain(&self, msg: impl Display) {
+        self.done_inner(msg, false);
+    }
+
+    fn done_inner(&self, msg: impl Display, indent: bool) {
         let mut s = self.state.lock();
         if s.level < Level::Quiet {
             return;
         }
-        let _ = writeln!(s.out, "  {} {}", "✓".green().bold(), msg);
+        if indent {
+            let _ = writeln!(s.out, "  {} {}", "✓".green().bold(), msg);
+        } else {
+            let _ = writeln!(s.out, "{} {}", "✓".green().bold(), msg);
+        }
     }
 
     /// Muted secondary detail, indented under the current stage (default+).

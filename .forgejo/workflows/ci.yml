@@ -45,6 +45,10 @@ jobs:
         with:
           shared-key: ci
 
+      # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
+      - name: fmt
+        run: cargo fmt --all --check
+
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
