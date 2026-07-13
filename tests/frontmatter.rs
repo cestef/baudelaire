@@ -1,39 +1,46 @@
-use std::path::Path;
+mod common;
 
-use baudelaire::config::Config;
-use baudelaire::content::Frontmatter;
-use typst::syntax::Source;
+use baudelaire::content::{Frontmatter, Page};
+use baudelaire::world::{Mode, Project};
+use common::Site;
 
-/// A config declaring the `tags` and `series` taxonomies most fixtures use —
-/// taxonomy keys are recognized from config, not hard-coded.
-fn config() -> Config {
-    Config::parse("taxonomies {\n  tags\n  series\n}\n").expect("config")
+/// Load `text` as a page in a site declaring the `tags` and `series`
+/// taxonomies (taxonomy keys are recognized from config, not hard-coded) —
+/// frontmatter is the page module's `frontmatter` export, so extraction goes
+/// through real module evaluation.
+fn try_load(text: &str) -> baudelaire::error::Result<Page> {
+    try_load_with(text, "site \"T\"\ntaxonomies {\n  tags\n  series\n}\n")
 }
 
-fn try_extract(text: &str, config: &Config) -> baudelaire::error::Result<Option<Frontmatter>> {
-    let src = Source::detached(text);
-    Ok(Frontmatter::extract(&src, Path::new("page.typ"), config)?.map(|e| e.frontmatter))
+fn try_load_with(text: &str, config: &str) -> baudelaire::error::Result<Page> {
+    let site = Site::new();
+    site.write("config.kdl", config);
+    site.write("content/posts/page.typ", text);
+    let cfg = site.config();
+    let project = Project::new(&cfg, Mode::Build)?;
+    Page::load(
+        "posts",
+        &site.root.join("content/posts/page.typ"),
+        &cfg,
+        &project,
+    )
 }
 
-fn extract(text: &str) -> (Frontmatter, String) {
-    let src = Source::detached(text);
-    let e = Frontmatter::extract(&src, Path::new("page.typ"), &config())
-        .expect("extract")
-        .expect("has frontmatter");
-    (e.frontmatter, e.body)
+fn extract(text: &str) -> Frontmatter {
+    try_load(text).expect("load").frontmatter
 }
 
 #[test]
 fn extracts_scalar_fields() {
-    let (fm, _) = extract(
+    let fm = extract(
         r#"
-#frontmatter((
+#let frontmatter = (
   title: "Hello World",
   draft: false,
   slug: "hello-world",
   template: "post.typ",
   order: 3,
-))
+)
 #html.frame[Body]
 "#,
     );
@@ -46,11 +53,11 @@ fn extracts_scalar_fields() {
 
 #[test]
 fn extracts_date() {
-    let (fm, _) = extract(
+    let fm = extract(
         r#"
-#frontmatter((
+#let frontmatter = (
   date: datetime(year: 2024, month: 1, day: 15),
-))
+)
 body
 "#,
     );
@@ -62,12 +69,12 @@ body
 
 #[test]
 fn extracts_taxonomy_lists() {
-    let (fm, _) = extract(
+    let fm = extract(
         r#"
-#frontmatter((
+#let frontmatter = (
   tags: ("intro", "typst"),
   series: ("build",),
-))
+)
 body
 "#,
     );
@@ -83,11 +90,11 @@ body
 
 #[test]
 fn extracts_redirect_list() {
-    let (fm, _) = extract(
+    let fm = extract(
         r#"
-#frontmatter((
+#let frontmatter = (
   redirect: ("/old", "/older"),
-))
+)
 body
 "#,
     );
@@ -96,13 +103,13 @@ body
 
 #[test]
 fn extra_keys_passed_through() {
-    let (fm, _) = extract(
+    let fm = extract(
         r#"
-#frontmatter((
+#let frontmatter = (
   title: "X",
   custom: "hello",
   count: 42,
-))
+)
 body
 "#,
     );
@@ -112,32 +119,36 @@ body
 }
 
 #[test]
-fn splices_out_frontmatter_call() {
-    let (_, spliced) = extract(
+fn frontmatter_is_computed_like_any_export() {
+    // The export is evaluated by typst itself — it can use bindings, string
+    // ops, whatever the language offers, not just a literal dict.
+    let fm = extract(
         r#"
-#frontmatter((
-  title: "X",
-))
-#html.frame[Body]
+#let series = "build"
+#let frontmatter = (
+  title: "Part 2 — " + series,
+  series: (series,),
+)
+body
 "#,
     );
-    assert!(!spliced.contains("frontmatter"));
-    assert!(spliced.contains("Body"));
+    assert_eq!(fm.title.as_deref(), Some("Part 2 — build"));
+    assert_eq!(
+        fm.taxonomies.get("series").unwrap(),
+        &vec!["build".to_string()]
+    );
 }
 
 #[test]
-fn no_frontmatter_returns_none() {
-    assert!(try_extract("just body", &config()).expect("ok").is_none());
+fn no_frontmatter_returns_defaults() {
+    let page = try_load("just body").expect("load");
+    assert!(page.frontmatter.title.is_none());
+    assert!(!page.frontmatter.draft);
 }
 
 #[test]
 fn empty_frontmatter_defaults() {
-    let (fm, _) = extract(
-        r#"
-#frontmatter((:))
-body
-"#,
-    );
+    let fm = extract("#let frontmatter = (:)\nbody\n");
     assert_eq!(fm.title, None);
     assert!(!fm.draft);
     assert!(fm.taxonomies.is_empty());
@@ -145,13 +156,11 @@ body
 
 #[test]
 fn malformed_frontmatter_errors() {
-    let err =
-        try_extract("\n#frontmatter((title: \"unterminated))\nbody\n", &config()).unwrap_err();
-    // The error names the offending file, not just "failed to evaluate".
-    assert!(err.to_string().contains("page.typ"), "{err}");
-    // ...and the related diagnostic underlines the offending text (a code frame
-    // renders), rather than a bare spanless message.
+    let err = try_load("\n#let frontmatter = (title: \"unterminated)\nbody\n").unwrap_err();
+    // The eval diagnostics carry real spans: the report renders a code frame
+    // against the page file, not a bare spanless message.
     let rendered = format!("{:?}", miette::Report::new(err));
+    assert!(rendered.contains("page.typ"), "{rendered}");
     assert!(
         rendered.contains("╭─"),
         "expected a source snippet: {rendered}"
@@ -160,34 +169,31 @@ fn malformed_frontmatter_errors() {
 
 #[test]
 fn non_dict_frontmatter_errors() {
-    assert!(try_extract("\n#frontmatter(\"not a dict\")\nbody\n", &config()).is_err());
+    let err = try_load("\n#let frontmatter = \"not a dict\"\nbody\n").unwrap_err();
+    assert!(err.to_string().contains("dictionary"), "{err}");
 }
 
 #[test]
-fn body_after_frontmatter_preserved() {
-    let (_, spliced) = extract(
-        r#"
-#frontmatter((title: "X"))
-First line
-Second line
-"#,
-    );
-    assert!(spliced.contains("First line"));
-    assert!(spliced.contains("Second line"));
+fn legacy_call_form_is_a_migration_error() {
+    // The pre-export `#frontmatter(...)` call is a precise error pointing at
+    // the binding syntax — never a generic "unknown variable".
+    let err = try_load("#frontmatter((title: \"X\"))\nbody\n").unwrap_err();
+    let rendered = format!("{:?}", miette::Report::new(err));
+    assert!(rendered.contains("#let frontmatter = "), "{rendered}");
 }
 
 #[test]
 fn wrong_typed_known_keys_error() {
-    // Previously these were silently dropped (`title: 3` vanished, a string
-    // `draft`/`date` became false/none). Now each is a precise error.
+    // A known key with a wrong-typed value is a precise error, never silently
+    // dropped (`title: 3` vanishing, a string `draft` becoming false).
     for bad in [
-        "#frontmatter((title: 3))",
-        "#frontmatter((draft: \"yes\"))",
-        "#frontmatter((date: \"2024-01-01\"))",
-        "#frontmatter((order: \"first\"))",
-        "#frontmatter((tags: \"solo\"))",
+        "#let frontmatter = (title: 3)",
+        "#let frontmatter = (draft: \"yes\")",
+        "#let frontmatter = (date: \"2024-01-01\")",
+        "#let frontmatter = (order: \"first\")",
+        "#let frontmatter = (tags: \"solo\")",
     ] {
-        let err = try_extract(bad, &config()).unwrap_err();
+        let err = try_load(bad).unwrap_err();
         assert!(
             err.to_string().contains("must be"),
             "expected a type error for `{bad}`, got: {err}"
@@ -197,7 +203,7 @@ fn wrong_typed_known_keys_error() {
 
 #[test]
 fn typo_key_is_suggested() {
-    let err = try_extract("#frontmatter((titel: \"X\"))", &config()).unwrap_err();
+    let err = try_load("#let frontmatter = (titel: \"X\")").unwrap_err();
     let rendered = format!("{:?}", miette::Report::new(err));
     assert!(rendered.contains("did you mean `title`"), "{rendered}");
 }
@@ -206,35 +212,21 @@ fn typo_key_is_suggested() {
 fn configured_taxonomy_key_is_recognized() {
     // A taxonomy keyed on a non-default name must populate `taxonomies`, not
     // silently land in `extra`.
-    let config = Config::parse("taxonomies {\n  categories\n}\n").expect("config");
-    let fm = try_extract("#frontmatter((categories: (\"rust\", \"cli\")))", &config)
-        .expect("ok")
-        .expect("frontmatter");
+    let page = try_load_with(
+        "#let frontmatter = (categories: (\"rust\", \"cli\"))",
+        "site \"T\"\ntaxonomies {\n  categories\n}\n",
+    )
+    .expect("load");
     assert_eq!(
-        fm.taxonomies.get("categories").unwrap(),
+        page.frontmatter.taxonomies.get("categories").unwrap(),
         &vec!["rust".to_string(), "cli".to_string()]
     );
 }
 
 #[test]
-fn mid_document_frontmatter_is_not_extracted() {
-    // A `#frontmatter(...)` that is not the leading expression is ordinary
-    // content, left in the body.
-    let none = try_extract("Some intro.\n\n#frontmatter((title: \"X\"))\n", &config()).expect("ok");
-    assert!(none.is_none());
-}
-
-#[test]
-fn splice_preserves_line_numbers() {
-    // A three-line frontmatter call leaves the body's first line at its
-    // original line number (blank lines stand in for the removed call).
-    let (_, spliced) = extract("#frontmatter((\n  title: \"X\",\n))\nBody line\n");
-    let body_line = spliced
-        .lines()
-        .position(|l| l.contains("Body line"))
-        .expect("body");
-    assert_eq!(
-        body_line, 3,
-        "body should stay on line 4 (index 3): {spliced:?}"
-    );
+fn export_anywhere_in_the_module_counts() {
+    // Real module semantics: any top-level `#let frontmatter` is the page's
+    // export, wherever it appears in the file.
+    let fm = extract("Some intro.\n\n#let frontmatter = (title: \"X\")\n");
+    assert_eq!(fm.title.as_deref(), Some("X"));
 }

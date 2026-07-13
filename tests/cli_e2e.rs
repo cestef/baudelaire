@@ -1,6 +1,12 @@
 mod common;
 
 use baudelaire::content::discover;
+use baudelaire::world::{Mode, Project};
+/// A [`Project`] for a test config — module evaluation needs the real world.
+fn project(cfg: &baudelaire::config::Config) -> Project {
+    Project::new(cfg, Mode::Build).expect("project")
+}
+
 use common::{Site, free_port, wait_for_port};
 
 #[test]
@@ -13,7 +19,7 @@ fn root_flag_builds_from_that_directory() {
     );
     sb.write(
         "site/content/index.typ",
-        "#frontmatter((title: \"H\",))\nhome",
+        "#let frontmatter = (title: \"H\",)\nhome",
     );
     let out = sb.run(&["--root", "site", "build"]);
     assert!(
@@ -160,10 +166,10 @@ fn discover_with_collection_override() {
     );
     sb.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nbody",
+        "#let frontmatter = (title: \"Hi\",)\nbody",
     );
     let cfg = sb.config();
-    let cols = discover(&cfg).unwrap();
+    let cols = discover(&cfg, &project(&cfg)).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 1);
     assert_eq!(posts.pages[0].permalink, "/blog/hello/");

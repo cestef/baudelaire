@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Build metadata",
   tags: ("feature",),
-))
+)
 #import "/templates/theme.typ": callout
 
 Every page can read facts about the build from `sys.inputs.baudelaire`: the

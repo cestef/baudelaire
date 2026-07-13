@@ -1,16 +1,16 @@
-#frontmatter((
+#let frontmatter = (
   title: "Redirects",
   tags: ("feature",),
-))
+)
 
 When you move a page, leave a redirect behind so old links keep working. List
 the old paths in a page's frontmatter:
 
 ```typ
-#frontmatter((
+#let frontmatter = (
   title: "Configuration",
   redirect: ("/old/config/", "/setup/"),
-))
+)
 ```
 
 Baudelaire writes a small HTML stub at each old path that forwards to this page's

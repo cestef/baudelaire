@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Build hooks",
   tags: ("feature", "assets"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Baudelaire embeds its own CSS minifier and JavaScript bundler, but sometimes you

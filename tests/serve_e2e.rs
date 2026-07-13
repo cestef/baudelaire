@@ -23,7 +23,7 @@ fn serve_responds_with_page() {
     );
     t.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nHello body",
+        "#let frontmatter = (title: \"Hi\",)\nHello body",
     );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, body) = srv.get("/posts/hello/");
@@ -44,7 +44,10 @@ fn serve_rejects_path_traversal() {
         clean #true
         serve { open #false; }"#,
     );
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
     // A secret sibling of `dist`, inside the project root but outside the
     // served tree. `config.kdl` itself is such a file.
     let srv = Serve::start(&t, &["--no-watch"]);
@@ -67,10 +70,42 @@ fn serve_404_for_missing() {
         }
         serve { open #false; }"#,
     );
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, _) = srv.get("/nonexistent");
     assert_eq!(code, 404);
+}
+
+#[test]
+fn serve_falls_back_to_the_site_404_page() {
+    // A site emitting a `404.html` gets it served for unmatched URLs — with
+    // the 404 status intact — matching what a static host would do.
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        r#"site "S"
+        paths {
+            content "content"
+            dist "public"
+        }
+        clean #true
+        serve { open #false; }"#,
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    t.write(
+        "content/404.typ",
+        "#let frontmatter = (title: \"Nope\",)\nnothing here, friend",
+    );
+    let srv = Serve::start(&t, &["--no-watch"]);
+    let (code, body) = srv.get("/nonexistent");
+    assert_eq!(code, 404);
+    assert!(body.contains("nothing here, friend"), "{body}");
 }
 
 #[test]
@@ -88,7 +123,7 @@ fn serve_resolves_without_trailing_slash() {
     );
     t.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nbody",
+        "#let frontmatter = (title: \"Hi\",)\nbody",
     );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, _) = srv.get("/posts/hello");
@@ -104,7 +139,10 @@ fn live_reload_script_injected_only_when_watching() {
         "config.kdl",
         "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
     );
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
 
     // Watching → the SSE client is injected.
     let srv = Serve::start(&t, &[]);
@@ -131,7 +169,10 @@ fn sse_stream_pushes_reload_on_change() {
         "config.kdl",
         "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
     );
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nv1");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nv1",
+    );
     let srv = Serve::start(&t, &[]);
 
     // Open the event stream in the background. `--max-time` only guards against
@@ -150,7 +191,10 @@ fn sse_stream_pushes_reload_on_change() {
 
     // Give the stream a moment to connect, then trigger a rebuild.
     std::thread::sleep(Duration::from_millis(200));
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nv2");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nv2",
+    );
 
     // Read until the reload event, then stop — don't wait out the whole stream
     // (an SSE connection stays open, so `wait_with_output` would block for the
@@ -172,7 +216,10 @@ fn config_edit_reloads_and_pushes_reload() {
         "config.kdl",
         "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
     );
-    t.write("content/index.typ", "#frontmatter((title: \"H\",))\nhome");
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
     let srv = Serve::start(&t, &[]);
 
     // Open the event stream, then edit only the config file — it sits at the
@@ -220,7 +267,7 @@ fn serve_serves_index_at_root() {
     );
     t.write(
         "content/index.typ",
-        "#frontmatter((title: \"Home\",))\nwelcome home",
+        "#let frontmatter = (title: \"Home\",)\nwelcome home",
     );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, body) = srv.get("/");

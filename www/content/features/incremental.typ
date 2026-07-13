@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Incremental builds",
   tags: ("feature", "performance"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Edit one page in a thousand and Baudelaire recompiles one page. The rest are

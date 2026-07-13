@@ -1,13 +1,28 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use typst::syntax::Source;
 use wax::Glob;
 use wax::prelude::*;
 
 use crate::config::{CollectionConfig, Config, SortKey};
 use crate::content::{Frontmatter, Permalink, PermalinkCtx, Slug};
 use crate::error::{ContentError, Result};
+use crate::world::Project;
+
+/// How a page's frontmatter reaches its layout template — the single encoding
+/// of where a page's data (and body) live.
+#[derive(Debug, Clone)]
+pub enum Data {
+    /// A real file exporting `#let frontmatter = (…)`: the layout wrapper
+    /// imports the export and `#include`s the file.
+    Export,
+    /// A real file with no export: the wrapper passes an empty dict and
+    /// `#include`s the file.
+    Empty,
+    /// A generated listing with no file: the wrapper inlines this dict literal
+    /// (built by [`crate::codegen::Value`]) together with the generated body.
+    Generated(String),
+}
 
 /// Stable identifier for a page within the site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -32,8 +47,8 @@ pub struct Page {
     pub source: PathBuf,
     pub frontmatter: Frontmatter,
     pub body: String,
-    /// The frontmatter argument dict literal, passed to a layout template.
-    pub data: String,
+    /// How this page's frontmatter reaches a layout template.
+    pub data: Data,
     pub collection: String,
     pub permalink: String,
     pub output: PathBuf,
@@ -42,16 +57,23 @@ pub struct Page {
 }
 
 impl Page {
-    /// Load and parse a single `.typ` file into a [`Page`].
-    pub fn load(collection: &str, path: &std::path::Path, config: &Config) -> Result<Self> {
-        let text = crate::fs::read_to_string(path)?;
-        let src = Source::detached(&text);
-        let (mut frontmatter, body, data) = match Frontmatter::extract(&src, path, config)? {
-            Some(e) => (e.frontmatter, e.body, e.data),
-            // An empty typst dict is `(:)` — `()` is the empty *array*, which a
-            // template's `data.frontmatter.at(..)` cannot index.
-            None => (Frontmatter::default(), text, "(:)".to_owned()),
+    /// Load a single `.typ` file into a [`Page`]: evaluate it as a typst
+    /// module (the compiler's own memoized evaluation) and read its
+    /// `frontmatter` export.
+    pub fn load(
+        collection: &str,
+        path: &std::path::Path,
+        config: &Config,
+        project: &Project,
+    ) -> Result<Self> {
+        let source = project.source(path)?;
+        Frontmatter::check(&source, path)?;
+        let module = project.module(&source)?;
+        let (mut frontmatter, data) = match Frontmatter::extract(&module, path, config)? {
+            Some(frontmatter) => (frontmatter, Data::Export),
+            None => (Frontmatter::default(), Data::Empty),
         };
+        let body = source.text().to_owned();
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
@@ -93,7 +115,7 @@ impl Page {
         source: PathBuf,
         frontmatter: Frontmatter,
         body: String,
-        data: String,
+        data: Data,
         collection: String,
         permalink: String,
         template: Option<String>,
@@ -237,25 +259,27 @@ const ROOT: &str = "_root";
 /// pattern matches, wherever it lives. Files no glob claims fall back to
 /// convention: one in a subdirectory joins a collection named after that top
 /// directory; one directly under `content/` joins `_root` (mapped to `/`).
-pub fn discover(config: &Config) -> Result<Vec<Collection>> {
+pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
     if !config.content.exists() {
         return Ok(Vec::new());
     }
-    Discovery::new(config).run()
+    Discovery::new(config, project).run()
 }
 
 /// Assigns discovered content files to collections — glob-configured
 /// collections first, then convention for whatever remains.
 struct Discovery<'a> {
     config: &'a Config,
+    project: &'a Project,
     /// Every content file, paired with whether a collection has claimed it.
     files: Vec<(PathBuf, bool)>,
 }
 
 impl<'a> Discovery<'a> {
-    fn new(config: &'a Config) -> Self {
+    fn new(config: &'a Config, project: &'a Project) -> Self {
         Self {
             config,
+            project,
             files: Vec::new(),
         }
     }
@@ -271,7 +295,7 @@ impl<'a> Discovery<'a> {
         let assignments = self.assign()?;
         let pages: Vec<Page> = assignments
             .par_iter()
-            .map(|(id, path)| Page::load(id, path, self.config))
+            .map(|(id, path)| Page::load(id, path, self.config, self.project))
             .collect::<Result<Vec<_>>>()?;
         let mut groups: Vec<(String, Vec<Page>)> = Vec::new();
         for page in pages {

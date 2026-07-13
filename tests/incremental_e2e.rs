@@ -20,9 +20,12 @@ fn second_build_reuses_all_pages() {
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nalpha",
+        "#let frontmatter = (title: \"A\",)\nalpha",
     );
-    site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
 
     site.build();
     let second = site.build();
@@ -38,7 +41,7 @@ fn corrupt_manifest_warns_and_rebuilds() {
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nalpha",
+        "#let frontmatter = (title: \"A\",)\nalpha",
     );
     site.build();
 
@@ -66,14 +69,17 @@ fn editing_a_page_rebuilds_only_it() {
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nalpha",
+        "#let frontmatter = (title: \"A\",)\nalpha",
     );
-    site.write("content/posts/b.typ", "#frontmatter((title: \"B\",))\nbeta");
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
     site.build();
 
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nALPHA2",
+        "#let frontmatter = (title: \"A\",)\nALPHA2",
     );
     let out = site.build();
 
@@ -92,7 +98,7 @@ fn editing_transitive_import_invalidates_page() {
     site.write("b.typ", "#import \"/c.typ\": value\n#let msg = value");
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#import \"/b.typ\": msg\n#msg",
+        "#let frontmatter = (title: \"A\",)\n#import \"/b.typ\": msg\n#msg",
     );
     site.build();
     assert!(site.output("posts/a/index.html").contains("ORIGINAL"));
@@ -121,11 +127,11 @@ fn shared_module_tracked_for_every_page() {
     site.write("shared.typ", "#let v = \"V1\"");
     site.write(
         "content/posts/x.typ",
-        "#frontmatter((title: \"X\",))\n#import \"/shared.typ\": v\n#v",
+        "#let frontmatter = (title: \"X\",)\n#import \"/shared.typ\": v\n#v",
     );
     site.write(
         "content/posts/y.typ",
-        "#frontmatter((title: \"Y\",))\n#import \"/shared.typ\": v\n#v",
+        "#let frontmatter = (title: \"Y\",)\n#import \"/shared.typ\": v\n#v",
     );
     site.build();
     assert!(site.output("posts/x/index.html").contains("V1"));
@@ -155,7 +161,7 @@ fn editing_layout_template_rebuilds_dependent_pages() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", template: \"post.typ\",))\nalpha",
+        "#let frontmatter = (title: \"A\", template: \"post.typ\",)\nalpha",
     );
     site.build();
     assert!(site.output("posts/a/index.html").contains("<main>"));
@@ -188,11 +194,11 @@ fn generated_pages_are_cached() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", tags: (\"x\",),))\nalpha",
+        "#let frontmatter = (title: \"A\", tags: (\"x\",),)\nalpha",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\", tags: (\"x\",),))\nbeta",
+        "#let frontmatter = (title: \"B\", tags: (\"x\",),)\nbeta",
     );
 
     site.build();
@@ -216,17 +222,17 @@ fn retitling_invalidates_taxonomy_listing() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", tags: (\"x\",),))\nalpha",
+        "#let frontmatter = (title: \"A\", tags: (\"x\",),)\nalpha",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\", tags: (\"x\",),))\nbeta",
+        "#let frontmatter = (title: \"B\", tags: (\"x\",),)\nbeta",
     );
     site.build();
 
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"AA\", tags: (\"x\",),))\nalpha",
+        "#let frontmatter = (title: \"AA\", tags: (\"x\",),)\nalpha",
     );
     let out = site.build();
 
@@ -234,10 +240,11 @@ fn retitling_invalidates_taxonomy_listing() {
         site.output("tags/x/index.html").contains("AA"),
         "term listing did not pick up the new title"
     );
-    // Only the tags/x listing rebuilds. Page a itself is template-less, so its
-    // HTML never embedded the title and stays cached; tags/index shows unchanged
-    // per-term counts and stays cached; page b is untouched.
-    assert!(out.contains("(3 cached)"), "expected 3 cached: {out}");
+    // Page a rebuilds (the `#let frontmatter` export is part of its compiled
+    // source — the page can render its own metadata) and so does the tags/x
+    // listing that embeds the title. tags/index shows unchanged per-term counts
+    // and stays cached; page b is untouched.
+    assert!(out.contains("(2 cached)"), "expected 2 cached: {out}");
 }
 
 #[test]
@@ -248,11 +255,11 @@ fn changing_a_slug_updates_links_from_cached_pages() {
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#link(\"b.typ\")[to b]",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[to b]",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\", slug: \"b\",))\nbeta",
+        "#let frontmatter = (title: \"B\", slug: \"b\",)\nbeta",
     );
     site.build();
     assert!(
@@ -263,7 +270,7 @@ fn changing_a_slug_updates_links_from_cached_pages() {
     // Give b a new slug → new permalink.
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\", slug: \"bee\",))\nbeta",
+        "#let frontmatter = (title: \"B\", slug: \"bee\",)\nbeta",
     );
     site.build();
 
@@ -290,7 +297,7 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     site.write("assets/note.svg", "<svg>ONE</svg>");
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#html.elem(\"img\", attrs: (src: \"/assets/note.svg\"))",
+        "#let frontmatter = (title: \"A\",)\n#html.elem(\"img\", attrs: (src: \"/assets/note.svg\"))",
     );
     site.build();
     let first = site.output("posts/a/index.html");
@@ -319,7 +326,7 @@ fn no_cache_flag_forces_full_rebuild() {
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nalpha",
+        "#let frontmatter = (title: \"A\",)\nalpha",
     );
     site.build();
 

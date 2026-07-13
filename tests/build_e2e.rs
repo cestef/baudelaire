@@ -3,6 +3,12 @@ mod common;
 use std::fs;
 
 use baudelaire::content::discover;
+use baudelaire::world::{Mode, Project};
+/// A [`Project`] for a test config — module evaluation needs the real world.
+fn project(cfg: &baudelaire::config::Config) -> Project {
+    Project::new(cfg, Mode::Build).expect("project")
+}
+
 use common::{CONFIG, Site};
 
 #[test]
@@ -21,7 +27,7 @@ fn builds_simple_page_to_html() {
     );
     site.write(
         "content/posts/hello.typ",
-        r#"#frontmatter((title: "Hello",))
+        r#"#let frontmatter = (title: "Hello",)
 Hello, world!
 "#,
     );
@@ -53,7 +59,7 @@ fn builds_multiple_pages_in_parallel() {
     for i in 0..8 {
         site.write(
             &format!("content/posts/p{i}.typ"),
-            &format!("#frontmatter((title: \"P{i}\",))\nPage {i}"),
+            &format!("#let frontmatter = (title: \"P{i}\",)\nPage {i}"),
         );
     }
     let out = site.run(&["build"]);
@@ -86,7 +92,7 @@ fn flat_urls_produce_html_files() {
     );
     site.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nbody text",
+        "#let frontmatter = (title: \"Hi\",)\nbody text",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -114,11 +120,11 @@ fn drafts_skipped_by_default() {
     );
     site.write(
         "content/posts/draft.typ",
-        "#frontmatter((title: \"D\", draft: true,))\ndraft body text",
+        "#let frontmatter = (title: \"D\", draft: true,)\ndraft body text",
     );
     site.write(
         "content/posts/real.typ",
-        "#frontmatter((title: \"R\",))\nreal body text",
+        "#let frontmatter = (title: \"R\",)\nreal body text",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -146,7 +152,7 @@ fn drafts_flag_builds_drafts() {
     );
     site.write(
         "content/posts/draft.typ",
-        "#frontmatter((title: \"D\", draft: true,))\ndraft body text",
+        "#let frontmatter = (title: \"D\", draft: true,)\ndraft body text",
     );
     let out = site.run(&["--drafts", "build"]);
     assert!(
@@ -173,7 +179,7 @@ fn draft_suffix_marks_and_strips_slug() {
     );
     site.write(
         "content/posts/wip.draft.typ",
-        "#frontmatter((title: \"W\",))\nwork in progress",
+        "#let frontmatter = (title: \"W\",)\nwork in progress",
     );
     // Skipped by default (suffix implies draft)...
     assert!(site.run(&["build"]).status.success());
@@ -198,7 +204,7 @@ fn check_compiles_without_writing() {
     );
     site.write(
         "content/posts/ok.typ",
-        "#frontmatter((title: \"OK\",))\nfine",
+        "#let frontmatter = (title: \"OK\",)\nfine",
     );
     let out = site.run(&["check"]);
     assert!(
@@ -265,7 +271,10 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
         "templates/page.typ",
         "#let pad = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n#let page(meta, body) = html.elem(\"html\", html.elem(\"body\", { body; nope_undefined }))\n",
     );
-    site.write("content/pages/a.typ", "#frontmatter((title: \"A\",))\nhi");
+    site.write(
+        "content/pages/a.typ",
+        "#let frontmatter = (title: \"A\",)\nhi",
+    );
     let out = site.run(&["build"]);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -289,7 +298,7 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
         "site \"T\"\nurl \"https://x.example\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  search { formats \"json\" }\n}\n",
     );
     site.write("assets/style.css", "body { color: red; }");
-    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     let out = site.run(&["build"]);
     assert!(
         out.status.success(),
@@ -309,7 +318,7 @@ fn meta_tags_injected_from_frontmatter_and_config() {
     site.write("config.kdl", "site \"S\"\nurl \"https://s.example\"\n");
     site.write(
         "content/post.typ",
-        "#frontmatter((title: \"Hello\", summary: \"A short summary.\"))\nbody",
+        "#let frontmatter = (title: \"Hello\", summary: \"A short summary.\")\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
@@ -346,7 +355,7 @@ fn og_image_is_fingerprinted_and_absolute() {
     site.write_bytes("assets/pic.png", include_bytes!("fixtures/bloated.png"));
     site.write(
         "content/post.typ",
-        "#frontmatter((title: \"Hi\", image: \"/assets/pic.png\"))\nbody",
+        "#let frontmatter = (title: \"Hi\", image: \"/assets/pic.png\")\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
@@ -371,7 +380,7 @@ fn meta_tags_omitted_when_disabled() {
     );
     site.write(
         "content/post.typ",
-        "#frontmatter((title: \"Hi\", summary: \"s\"))\nbody",
+        "#let frontmatter = (title: \"Hi\", summary: \"s\")\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/post/index.html")).unwrap();
@@ -385,7 +394,7 @@ fn optimize_losslessly_shrinks_png_assets() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  images { optimize { png } }\n}\n",
     );
-    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     // A PNG bloated with strippable metadata and a stored (uncompressed) IDAT.
     let png = include_bytes!("fixtures/bloated.png");
     site.write_bytes("assets/pic.png", png);
@@ -409,7 +418,7 @@ fn optimize_reencodes_jpeg_with_lax_extension() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  images { optimize { jpeg quality=70 } }\n}\n",
     );
-    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     // A high-quality JPEG shrinks when re-encoded at quality 70. The `.jpg`
     // extension must match the `jpeg` format leniently.
     let jpg = include_bytes!("fixtures/big.jpg");
@@ -432,7 +441,7 @@ fn images_get_lazy_loading_attributes() {
     site.write("config.kdl", "site \"S\"\n");
     site.write(
         "content/p.typ",
-        "#frontmatter((title: \"P\"))\n#html.elem(\"img\", attrs: (src: \"/photo.png\"))",
+        "#let frontmatter = (title: \"P\")\n#html.elem(\"img\", attrs: (src: \"/photo.png\"))",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/p/index.html")).unwrap();
@@ -456,7 +465,7 @@ fn copies_assets_to_dist() {
     );
     site.write(
         "content/posts/p.typ",
-        "#frontmatter((title: \"P\",))\nbody text",
+        "#let frontmatter = (title: \"P\",)\nbody text",
     );
     site.write("assets/style.css", "body { color: red; }");
     site.write("assets/img/logo.png", "fake-png");
@@ -486,11 +495,11 @@ fn nested_dirs_traverse_and_build() {
     );
     site.write(
         "content/posts/2024/jan.typ",
-        "#frontmatter((title: \"Jan\",))\nJanuary",
+        "#let frontmatter = (title: \"Jan\",)\nJanuary",
     );
     site.write(
         "content/posts/2024/feb.typ",
-        "#frontmatter((title: \"Feb\",))\nFebruary",
+        "#let frontmatter = (title: \"Feb\",)\nFebruary",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -498,7 +507,7 @@ fn nested_dirs_traverse_and_build() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let cols = discover(&site.config()).unwrap();
+    let cols = discover(&site.config(), &project(&site.config())).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 2);
 }
@@ -522,7 +531,7 @@ fn custom_permalink_template_output() {
     );
     site.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nbody text",
+        "#let frontmatter = (title: \"Hi\",)\nbody text",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -549,11 +558,11 @@ fn internal_typ_links_rewritten_to_permalinks() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nSee #link(\"b.typ\")[B] and #link(\"https://example.com\")[ext].",
+        "#let frontmatter = (title: \"A\",)\nSee #link(\"b.typ\")[B] and #link(\"https://example.com\")[ext].",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\",))\nB body",
+        "#let frontmatter = (title: \"B\",)\nB body",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -581,7 +590,7 @@ fn broken_internal_link_fails_strict_build() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nSee #link(\"missing.typ\")[gone].",
+        "#let frontmatter = (title: \"A\",)\nSee #link(\"missing.typ\")[gone].",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -601,7 +610,7 @@ fn broken_internal_link_warns_when_not_strict() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\nSee #link(\"missing.typ\")[gone].",
+        "#let frontmatter = (title: \"A\",)\nSee #link(\"missing.typ\")[gone].",
     );
     let out = site.run(&["--strict-links", "false", "build"]);
     assert!(
@@ -633,7 +642,7 @@ fn layout_template_wraps_page_body() {
     );
     site.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\", template: \"post.typ\",))\nHello body",
+        "#let frontmatter = (title: \"Hi\", template: \"post.typ\",)\nHello body",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -678,7 +687,7 @@ fn layout_template_default_from_collection() {
     // No `template` in frontmatter — inherited from the collection default.
     site.write(
         "content/posts/hello.typ",
-        "#frontmatter((title: \"Hi\",))\nbody here",
+        "#let frontmatter = (title: \"Hi\",)\nbody here",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -702,7 +711,7 @@ fn frontmatter_redirects_emit_stub_pages() {
     );
     site.write(
         "content/posts/new.typ",
-        "#frontmatter((title: \"New\", slug: \"new\", redirect: (\"/old\", \"/legacy/post\"),))\nbody",
+        "#let frontmatter = (title: \"New\", slug: \"new\", redirect: (\"/old\", \"/legacy/post\"),)\nbody",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -741,11 +750,11 @@ fn taxonomy_index_and_term_pages_generated() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"Alpha\", slug: \"a\", tags: (\"intro\", \"rust\"),))\na",
+        "#let frontmatter = (title: \"Alpha\", slug: \"a\", tags: (\"intro\", \"rust\"),)\na",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"Beta\", slug: \"b\", tags: (\"intro\",),))\nb",
+        "#let frontmatter = (title: \"Beta\", slug: \"b\", tags: (\"intro\",),)\nb",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -789,7 +798,7 @@ fn pagination_splits_collection_into_index_pages() {
     for (i, name) in ["a", "b", "c", "d", "e"].iter().enumerate() {
         site.write(
             &format!("content/posts/{name}.typ"),
-            &format!("#frontmatter((title: \"P{i}\", slug: \"{name}\",))\nbody"),
+            &format!("#let frontmatter = (title: \"P{i}\", slug: \"{name}\",)\nbody"),
         );
     }
     let out = site.run(&["build"]);
@@ -823,7 +832,7 @@ fn sitemap_and_rss_emitted_when_url_set() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", slug: \"a\", date: datetime(year: 2024, month: 1, day: 2),))\nbody",
+        "#let frontmatter = (title: \"A\", slug: \"a\", date: datetime(year: 2024, month: 1, day: 2),)\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let sitemap = fs::read_to_string(site.root.join("public/sitemap.xml")).unwrap();
@@ -846,7 +855,7 @@ fn atom_feed_when_configured() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", slug: \"a\", date: datetime(year: 2024, month: 1, day: 2),))\nbody",
+        "#let frontmatter = (title: \"A\", slug: \"a\", date: datetime(year: 2024, month: 1, day: 2),)\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let atom = fs::read_to_string(site.root.join("public/atom.xml")).unwrap();
@@ -854,6 +863,37 @@ fn atom_feed_when_configured() {
     assert!(atom.contains("<entry>"), "{atom}");
     // Only the configured format is emitted.
     assert!(!site.root.join("public/rss.xml").exists());
+}
+
+#[test]
+fn json_feed_when_configured() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  feed {\n    formats \"json\"\n  }\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", slug: \"a\", date: datetime(year: 2024, month: 1, day: 2),)\nbody",
+    );
+    assert!(site.run(&["build"]).status.success());
+    let feed = fs::read_to_string(site.root.join("public/feed.json")).unwrap();
+    assert!(feed.contains("https://jsonfeed.org/version/1.1"), "{feed}");
+    assert!(
+        feed.contains("\"url\":\"https://example.com/posts/a/\""),
+        "{feed}"
+    );
+    assert!(
+        feed.contains("\"date_published\":\"2024-01-02T00:00:00Z\""),
+        "{feed}"
+    );
+    assert!(
+        feed.contains("\"feed_url\":\"https://example.com/feed.json\""),
+        "{feed}"
+    );
+    // Only the configured format is emitted.
+    assert!(!site.root.join("public/rss.xml").exists());
+    assert!(!site.root.join("public/atom.xml").exists());
 }
 
 #[test]
@@ -865,7 +905,7 @@ fn search_indexes_emitted_for_each_configured_format() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"Alpha\", slug: \"a\", tags: (\"intro\",),))\nThe quick brown fox",
+        "#let frontmatter = (title: \"Alpha\", slug: \"a\", tags: (\"intro\",),)\nThe quick brown fox",
     );
     assert!(site.run(&["build"]).status.success(), "build failed",);
 
@@ -911,7 +951,7 @@ fn search_client_bundles_into_a_user_entry_via_virtual_module() {
         "assets/main.js",
         "import { mountSearch } from \"baudelaire:search\";\nmountSearch({ hotkey: \"k\" });\n",
     );
-    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     assert!(site.run(&["build"]).status.success(), "build failed",);
     // rolldown resolves the virtual specifier and inlines the palette into the
     // user's own bundle (no separate fetch of a generated file).
@@ -932,7 +972,10 @@ fn no_search_index_without_configured_formats() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
     );
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nbody",
+    );
     assert!(site.run(&["build"]).status.success());
     assert!(!site.root.join("public/search.json").exists());
     assert!(!site.root.join("public/search-index.json").exists());
@@ -948,7 +991,7 @@ fn embed_inlines_local_assets_as_data_uris() {
     site.write("assets/style.css", "body{color:red}");
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
+        "#let frontmatter = (title: \"A\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
     );
     assert!(site.run(&["build"]).status.success(), "build failed",);
     let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
@@ -974,7 +1017,7 @@ fn embed_inlines_processed_not_source_bytes() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
+        "#let frontmatter = (title: \"A\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
     let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
@@ -1002,7 +1045,10 @@ fn robots_txt_emitted_when_block_present() {
         "config.kdl",
         "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  robots {\n    disallow \"/private/\"\n  }\n}\n",
     );
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nbody",
+    );
     assert!(site.run(&["build"]).status.success());
     let robots = fs::read_to_string(site.root.join("public/robots.txt")).unwrap();
     assert!(robots.contains("User-agent: *"), "{robots}");
@@ -1020,7 +1066,10 @@ fn no_robots_txt_without_block() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
     );
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nbody",
+    );
     assert!(site.run(&["build"]).status.success());
     assert!(!site.root.join("public/robots.txt").exists());
 }
@@ -1034,7 +1083,7 @@ fn build_context_exposed_via_sys_inputs() {
     );
     site.write(
         "content/posts/v.typ",
-        "#frontmatter((title: \"V\", slug: \"v\",))\nversion=#sys.inputs.baudelaire.version site=#sys.inputs.baudelaire.site.title mode=#sys.inputs.baudelaire.mode",
+        "#let frontmatter = (title: \"V\", slug: \"v\",)\nversion=#sys.inputs.baudelaire.version site=#sys.inputs.baudelaire.site.title mode=#sys.inputs.baudelaire.mode",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/posts/v/index.html")).unwrap();
@@ -1055,7 +1104,7 @@ fn llms_txt_indexes_pages_by_collection() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"Alpha\", slug: \"a\",))\nbody",
+        "#let frontmatter = (title: \"Alpha\", slug: \"a\",)\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let llms = fs::read_to_string(site.root.join("public/llms.txt")).unwrap();
@@ -1077,7 +1126,7 @@ fn no_feed_or_sitemap_without_url() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", date: datetime(year: 2024, month: 1, day: 2),))\nbody",
+        "#let frontmatter = (title: \"A\", date: datetime(year: 2024, month: 1, day: 2),)\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     assert!(!site.root.join("public/sitemap.xml").exists());
@@ -1098,7 +1147,7 @@ fn taxonomy_listing_uses_custom_template() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"Alpha\", slug: \"a\", tags: (\"intro\",),))\nbody",
+        "#let frontmatter = (title: \"Alpha\", slug: \"a\", tags: (\"intro\",),)\nbody",
     );
     assert!(site.run(&["build"]).status.success());
     let html = fs::read_to_string(site.root.join("public/tags/intro/index.html")).unwrap();
@@ -1148,7 +1197,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
     site.write("assets/style.css", "body{color:red}");
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
+        "#let frontmatter = (title: \"A\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
     // The original name is gone; a content-hashed one replaces it.
@@ -1173,7 +1222,7 @@ fn css_url_references_are_fingerprinted() {
     );
     site.write("assets/style.css", "body{background:url(bg.png)}");
     site.write("assets/bg.png", "PNGDATA");
-    site.write("content/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     assert!(site.run(&["build"]).status.success(), "build failed");
     let names = site.files("public/assets");
     let bg = names
@@ -1207,7 +1256,7 @@ fn srcset_urls_are_fingerprinted() {
     site.write("assets/b.png", "BBB");
     site.write(
         "content/a.typ",
-        "#frontmatter((title: \"A\",))\n#html.elem(\"img\", attrs: (srcset: \"/assets/a.png 1x, /assets/b.png 2x\"))",
+        "#let frontmatter = (title: \"A\",)\n#html.elem(\"img\", attrs: (srcset: \"/assets/a.png 1x, /assets/b.png 2x\"))",
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
     let names = site.files("public/assets");
@@ -1242,7 +1291,10 @@ fn minify_compacts_css() {
         "assets/style.css",
         "/* a comment */\nbody {\n  color: red;\n}\n",
     );
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nbody",
+    );
     assert!(site.run(&["build"]).status.success(), "build failed");
     let css = fs::read_to_string(site.root.join("public/assets/style.css")).unwrap();
     assert!(!css.contains("/*"), "comment stripped: {css}");
@@ -1262,7 +1314,10 @@ fn bundle_inlines_js_imports_and_drops_partials() {
         "assets/main.js",
         "import { hi } from './_util.js';\nconsole.log(hi());\n",
     );
-    site.write("content/posts/a.typ", "#frontmatter((title: \"A\",))\nbody");
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nbody",
+    );
     assert!(site.run(&["build"]).status.success(), "build failed");
     let names = site.files("public/assets");
     assert!(
@@ -1288,7 +1343,7 @@ fn cache_stores_html_in_object_store_not_manifest() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"Unique Marker\",))\nDistinct Body Text",
+        "#let frontmatter = (title: \"Unique Marker\",)\nDistinct Body Text",
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
     // The manifest is metadata only — page markup lives in the object store.
@@ -1329,7 +1384,10 @@ fn hooks_run_before_and_after_the_build() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nhooks {\n  before \"echo b > hook-before.txt\"\n  after \"echo a > hook-after.txt\"\n}\n",
     );
-    site.write("content/index.typ", "#frontmatter((title: \"H\",))\nbody");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nbody",
+    );
     let out = site.run(&["build"]);
     assert!(
         out.status.success(),
@@ -1350,7 +1408,7 @@ fn a_failing_hook_fails_the_build() {
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nhooks {\n  before \"exit 7\"\n}\n",
     );
-    site.write("content/index.typ", "#frontmatter((title: \"H\",))\nb");
+    site.write("content/index.typ", "#let frontmatter = (title: \"H\",)\nb");
     let out = site.run(&["build"]);
     assert!(
         !out.status.success(),
@@ -1374,7 +1432,7 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     );
     site.write(
         "content/index.typ",
-        "#frontmatter((title: \"H\",))\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/gen.css\"))",
+        "#let frontmatter = (title: \"H\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/gen.css\"))",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1404,11 +1462,11 @@ fn duplicate_permalinks_are_rejected() {
     site.write("config.kdl", CONFIG);
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", slug: \"same\",))\na",
+        "#let frontmatter = (title: \"A\", slug: \"same\",)\na",
     );
     site.write(
         "content/posts/b.typ",
-        "#frontmatter((title: \"B\", slug: \"same\",))\nb",
+        "#let frontmatter = (title: \"B\", slug: \"same\",)\nb",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1417,7 +1475,7 @@ fn duplicate_permalinks_are_rejected() {
     );
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.contains("resolve to") && err.contains("a.typ") && err.contains("b.typ"),
+        err.contains("both write") && err.contains("a.typ") && err.contains("b.typ"),
         "{err}"
     );
 }
@@ -1428,7 +1486,7 @@ fn a_slug_with_no_url_safe_characters_is_rejected() {
     site.write("config.kdl", CONFIG);
     site.write(
         "content/posts/p.typ",
-        "#frontmatter((title: \"P\", slug: \"🎉\",))\np",
+        "#let frontmatter = (title: \"P\", slug: \"🎉\",)\np",
     );
     let out = site.run(&["build"]);
     assert!(!out.status.success(), "an empty slug must fail the build");
@@ -1445,7 +1503,7 @@ fn colliding_taxonomy_terms_are_rejected() {
     );
     site.write(
         "content/posts/a.typ",
-        "#frontmatter((title: \"A\", tags: (\"C++\", \"C--\"),))\na",
+        "#let frontmatter = (title: \"A\", tags: (\"C++\", \"C--\"),)\na",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1477,11 +1535,11 @@ fn standard_verify_emits_wellknown_and_link_on_dated_pages() {
     );
     site.write(
         "content/posts/dated.typ",
-        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+        "#let frontmatter = (title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2))\nbody",
     );
     site.write(
         "content/posts/undated.typ",
-        "#frontmatter((title: \"Undated\",))\nbody",
+        "#let frontmatter = (title: \"Undated\",)\nbody",
     );
 
     let out = site.run(&["build"]);
@@ -1525,7 +1583,7 @@ fn standard_verify_absent_without_a_did() {
     );
     site.write(
         "content/posts/dated.typ",
-        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+        "#let frontmatter = (title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2))\nbody",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1565,7 +1623,7 @@ fn standard_verify_toggle_suppresses_wellknown_only() {
     );
     site.write(
         "content/posts/dated.typ",
-        "#frontmatter((title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2)))\nbody",
+        "#let frontmatter = (title: \"Dated\", date: datetime(year: 2026, month: 1, day: 2))\nbody",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1589,7 +1647,7 @@ fn headings_get_unique_slug_anchors() {
     site.write("config.kdl", CONFIG);
     site.write(
         "content/docs/guide.typ",
-        "#frontmatter((title: \"Guide\",))\n= Guide\n\n== Setup\none\n\n== Setup\ntwo\n",
+        "#let frontmatter = (title: \"Guide\",)\n= Guide\n\n== Setup\none\n\n== Setup\ntwo\n",
     );
     let out = site.run(&["build"]);
     assert!(
@@ -1613,7 +1671,7 @@ fn anchors_disabled_leaves_headings_bare() {
     );
     site.write(
         "content/docs/guide.typ",
-        "#frontmatter((title: \"Guide\",))\n== Setup\nbody\n",
+        "#let frontmatter = (title: \"Guide\",)\n== Setup\nbody\n",
     );
     let out = site.run(&["build"]);
     assert!(

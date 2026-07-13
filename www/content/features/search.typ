@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Search",
   tags: ("feature", "search"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Baudelaire builds a search index from your rendered pages, so search runs on a

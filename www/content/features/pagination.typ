@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Pagination",
   tags: ("feature", "content"),
-))
+)
 
 Long collections split into numbered index pages. Set `paginate` on a collection
 and give it a `list` template:

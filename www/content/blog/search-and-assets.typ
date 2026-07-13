@@ -1,9 +1,9 @@
-#frontmatter((
+#let frontmatter = (
   title: "Search and a real asset pipeline",
   date: datetime(year: 2026, month: 7, day: 8),
   tags: ("blog", "release"),
   summary: "Client-side search with no service, plus CSS minification and JavaScript bundling through rolldown, all in a single binary.",
-))
+)
 #import "/templates/theme.typ": callout
 
 Two features landed that make Baudelaire feel complete for a documentation site:

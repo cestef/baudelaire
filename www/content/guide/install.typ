@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "Install",
   order: 1,
   tags: ("guide",),
-))
+)
 #import "/templates/theme.typ": callout
 
 Baudelaire is a single binary with no runtime dependencies. The Typst compiler

@@ -2,14 +2,34 @@
 //!
 //! This is typst *code* generation, not HTML templating: the synthetic module
 //! imports the template function and applies it document-wide via a show rule,
-//! so the template itself produces the DOM. No HTML is ever assembled as text.
+//! so the template itself produces the DOM. No HTML is ever assembled as text —
+//! and a real page's source is never touched either: its frontmatter arrives as
+//! a module *import* of the page's own `frontmatter` export, and its body via
+//! `#include`. Only generated listings (which have no file) inline anything.
 
 use std::fmt;
 use std::path::Path;
 
 use crate::codegen::Str;
 
-/// A synthetic typst module that wraps a page's body in its layout template,
+/// Where a page's frontmatter dict comes from, as an expression in the
+/// synthetic module.
+pub(super) enum Bind<'a> {
+    /// Import the page module's own `frontmatter` export.
+    Import,
+    /// A dict literal: `(:)` for exportless pages, generated data for listings.
+    Literal(&'a str),
+}
+
+/// The page content the template wraps.
+pub(super) enum Body<'a> {
+    /// `#include` the real page file — its source compiles as authored.
+    Include,
+    /// Generated markup, inlined (listings have no file to include).
+    Inline(&'a str),
+}
+
+/// A synthetic typst module that applies a layout template to a page,
 /// passing the page's frontmatter as data. Renders (via [`fmt::Display`]) to
 /// compilable typst source.
 pub(super) struct Layout<'a> {
@@ -17,28 +37,32 @@ pub(super) struct Layout<'a> {
     dir: &'a Path,
     /// Template file within `dir` (e.g. `post.typ`).
     file: &'a str,
-    /// Frontmatter dict literal, e.g. `(title: "x")`.
-    data: &'a str,
+    /// Project-root-absolute virtual path of the page (`/content/posts/a.typ`);
+    /// what [`Bind::Import`] and [`Body::Include`] resolve against.
+    page: &'a str,
+    /// Frontmatter expression handed to the template.
+    data: Bind<'a>,
     /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))` — passed
-    /// alongside the raw frontmatter so a template reads a page's taxonomy terms
+    /// alongside the frontmatter so a template reads a page's taxonomy terms
     /// the same structured way a listing reads an entry's, not by guessing which
     /// frontmatter keys are taxonomies.
     taxonomies: &'a str,
-    /// Page body markup.
-    body: &'a str,
+    body: Body<'a>,
 }
 
 impl<'a> Layout<'a> {
     pub(super) fn new(
         dir: &'a Path,
         file: &'a str,
-        data: &'a str,
+        page: &'a str,
+        data: Bind<'a>,
         taxonomies: &'a str,
-        body: &'a str,
+        body: Body<'a>,
     ) -> Self {
         Self {
             dir,
             file,
+            page,
             data,
             taxonomies,
             body,
@@ -61,20 +85,30 @@ impl<'a> Layout<'a> {
 
 impl fmt::Display for Layout<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // import under an internal alias so the template function is never
-        // shadowed by a `page`/`body` binding — even a `page.typ`/`body.typ`.
+        // import under internal aliases so the template function and the data
+        // are never shadowed by a page binding — even a `page.typ`/`body.typ`.
         writeln!(
             f,
             "#import {}: {} as __layout",
             Str(&self.import()),
             self.func()
         )?;
+        let data: &dyn fmt::Display = match &self.data {
+            Bind::Import => {
+                writeln!(f, "#import {}: frontmatter as __data", Str(self.page))?;
+                &"__data"
+            }
+            Bind::Literal(dict) => dict,
+        };
         writeln!(
             f,
             "#show: __body => __layout((frontmatter: {}, taxonomies: {}), __body)",
-            self.data, self.taxonomies
+            data, self.taxonomies
         )?;
-        f.write_str(self.body)
+        match &self.body {
+            Body::Include => write!(f, "#include {}", Str(self.page)),
+            Body::Inline(markup) => f.write_str(markup),
+        }
     }
 }
 
@@ -83,26 +117,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn binds_body_to_template_function() {
+    fn imports_the_export_and_includes_the_page() {
         let out = Layout::new(
             Path::new("templates"),
             "post.typ",
-            "(title: \"Hi\")",
+            "/content/posts/a.typ",
+            Bind::Import,
             "(tags: (\"a\",))",
-            "body text",
+            Body::Include,
         )
         .to_string();
         assert_eq!(
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"Hi\"), taxonomies: (tags: (\"a\",))), __body)\n\
-             body text"
+             #import \"/content/posts/a.typ\": frontmatter as __data\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",))), __body)\n\
+             #include \"/content/posts/a.typ\""
+        );
+    }
+
+    #[test]
+    fn inlines_generated_listings() {
+        let out = Layout::new(
+            Path::new("templates"),
+            "list.typ",
+            "/content/tags/x.typ",
+            Bind::Literal("(title: \"X\")"),
+            "(:)",
+            Body::Inline("listing body"),
+        )
+        .to_string();
+        assert_eq!(
+            out,
+            "#import \"/templates/list.typ\": list as __layout\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:)), __body)\n\
+             listing body"
         );
     }
 
     #[test]
     fn escapes_paths_that_would_break_the_literal() {
-        let out = Layout::new(Path::new("a\"b"), "x.typ", "()", "(:)", "").to_string();
+        let out = Layout::new(
+            Path::new("a\"b"),
+            "x.typ",
+            "/content/x.typ",
+            Bind::Literal("(:)"),
+            "(:)",
+            Body::Include,
+        )
+        .to_string();
         assert!(out.starts_with("#import \"/a\\\"b/x.typ\": x as __layout\n"));
     }
 
@@ -110,7 +173,15 @@ mod tests {
     fn template_named_page_is_not_shadowed() {
         // Regression: a `page.typ` template must still be callable even though
         // pages carry a `page` dict; the alias makes this collision-proof.
-        let out = Layout::new(Path::new("templates"), "page.typ", "(t: 1)", "(:)", "b").to_string();
+        let out = Layout::new(
+            Path::new("templates"),
+            "page.typ",
+            "/content/b.typ",
+            Bind::Literal("(t: 1)"),
+            "(:)",
+            Body::Inline("b"),
+        )
+        .to_string();
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains("__layout((frontmatter: (t: 1), taxonomies: (:)), __body)"),

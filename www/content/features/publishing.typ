@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Publishing",
   tags: ("feature", "publishing"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Baudelaire can push a built site to an external destination with `baudelaire

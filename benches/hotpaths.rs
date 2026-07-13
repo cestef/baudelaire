@@ -16,6 +16,12 @@ use tempfile::TempDir;
 
 use baudelaire::config::Config;
 use baudelaire::content::{Page, discover};
+use baudelaire::world::Project;
+/// A [`Project`] for a test config — module evaluation needs the real world.
+fn project(cfg: &baudelaire::config::Config) -> Project {
+    Project::new(cfg, Mode::Build).expect("project")
+}
+
 use baudelaire::engine::text::Text;
 use baudelaire::engine::{Engine, Mode};
 use baudelaire::render::LinkMap;
@@ -46,7 +52,7 @@ fn mksite(dir: &Path, n: usize) -> Config {
             })
             .collect();
         let body = format!(
-            "#frontmatter((title: \"Page {i}\", date: datetime(year: 2024, month: 1, day: {}), tags: (\"t{}\", \"t{}\",)))\n\
+            "#let frontmatter = (title: \"Page {i}\", date: datetime(year: 2024, month: 1, day: {}), tags: (\"t{}\", \"t{}\",))\n\
              #import \"/content/_shared.typ\": badge\n\
              #badge(\"hi {i}\")\n\
              Lorem ipsum dolor sit amet {i}, consectetur adipiscing elit.\n{links}",
@@ -105,12 +111,12 @@ fn bench_text_extract(c: &mut Criterion) {
 fn bench_link_classify(c: &mut Criterion) {
     let dir = TempDir::new().unwrap();
     let cfg = mksite(dir.path(), 50);
-    let pages: Vec<Page> = discover(&cfg)
+    let pages: Vec<Page> = discover(&cfg, &project(&cfg))
         .unwrap()
         .into_iter()
         .flat_map(|col| col.pages)
         .collect();
-    let map = LinkMap::new(&pages);
+    let map = LinkMap::new(&pages, dir.path());
     let from = pages[0].source.clone();
     // Many links, deliberately hitting the same targets repeatedly (nav/cross-refs).
     let links: Vec<String> = (0..200).map(|k| format!("p{}.typ", k % 50)).collect();

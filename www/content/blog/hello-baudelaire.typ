@@ -1,9 +1,9 @@
-#frontmatter((
+#let frontmatter = (
   title: "Why I built a Typst site generator",
   date: datetime(year: 2026, month: 6, day: 20),
   tags: ("blog", "typst"),
   summary: "Markdown runs out of road fast. Typst already has functions, imports, math, and data loading, so why not build a site generator on it?",
-))
+)
 
 I like writing in Typst. It has functions, imports, math, and data loading, the
 things Markdown makes you bolt on with a template engine and a dozen plugins. But

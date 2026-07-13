@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "Quickstart",
   order: 2,
   tags: ("guide",),
-))
+)
 #import "/templates/theme.typ": callout
 
 Scaffold a project, then build and preview it:
@@ -19,15 +19,17 @@ changes, live-reloading over Server-Sent Events on every save.
 
 == Write a page
 
-A page is a `.typ` file under `content/`. Frontmatter is a call to the built-in
-`frontmatter` function; everything after it is the body:
+A page is a `.typ` file under `content/`. Frontmatter is a module export — a
+top-level `#let frontmatter = (…)` binding — and the rest of the file is the
+body. Because it is evaluated by Typst itself, it can be computed, not just a
+literal dict:
 
 ```typ
-#frontmatter((
+#let frontmatter = (
   title: "Hello",
   date: datetime(year: 2026, month: 7, day: 9),
   tags: ("intro",),
-))
+)
 
 This is *real Typst*. You have functions, math $x^2$, and
 data loading, not just prose.

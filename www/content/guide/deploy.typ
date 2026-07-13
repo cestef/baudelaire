@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "Deploying",
   order: 5,
   tags: ("guide",),
-))
+)
 #import "/templates/theme.typ": callout
 
 `baudelaire build` writes a plain folder of static files to `public/`. There is

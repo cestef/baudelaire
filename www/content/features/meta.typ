@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Meta & images",
   tags: ("feature", "seo"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Baudelaire enriches the HTML it emits: every page gets SEO and social meta tags
@@ -38,12 +38,12 @@ and the site config:
 Set the source fields in a page's frontmatter:
 
 ```typ
-#frontmatter((
+#let frontmatter = (
   title: "Launch day",
   summary: "Everything new in this release.",
   image: "/assets/launch.png",
   author: "Ada",
-))
+)
 ```
 
 A root-relative `image` (or a page's `url`) is made absolute against the site

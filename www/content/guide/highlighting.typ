@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "Syntax highlighting",
   order: 6,
   tags: ("guide", "reference"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Fenced code blocks are highlighted by Typst itself. Register a language once with

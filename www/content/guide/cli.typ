@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "CLI reference",
   order: 4,
   tags: ("guide", "reference"),
-))
+)
 
 Every command reads `config.kdl` from the current directory (or the path given
 to `--config`) and accepts the global flags below.

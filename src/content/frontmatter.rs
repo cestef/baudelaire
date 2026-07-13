@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use typst::foundations::{Datetime, Dict, Value};
+use typst::foundations::{Datetime, Dict, Module, Value};
 use typst::syntax::{
-    LinkedNode, Source,
-    ast::{AstNode, Expr, Markup},
+    Source,
+    ast::{Expr, Markup},
 };
 
 use crate::config::Config;
@@ -33,18 +33,6 @@ pub struct Frontmatter {
     pub extra: BTreeMap<String, Value>,
 }
 
-/// The result of extracting frontmatter from a source file.
-pub struct Extract {
-    /// The parsed frontmatter.
-    pub frontmatter: Frontmatter,
-    /// The source with the `#frontmatter(...)` call spliced out, so the
-    /// remainder compiles cleanly.
-    pub body: String,
-    /// The frontmatter argument dict literal (e.g. `(title: "x")`), reused
-    /// verbatim to pass page data into a layout template.
-    pub data: String,
-}
-
 impl Frontmatter {
     /// A string value from `extra` (arbitrary frontmatter), if present and a
     /// string — e.g. `description`, `summary`, `image`, `author`.
@@ -52,25 +40,30 @@ impl Frontmatter {
         self.extra.get(key).and_then(ValueExt::str)
     }
 
-    /// Extract frontmatter from a source file. Returns `None` when the file has
-    /// no leading `#frontmatter(...)` call. `path` names the file in errors;
-    /// `config` supplies the taxonomy keys to recognize.
-    pub fn extract(source: &Source, path: &Path, config: &Config) -> Result<Option<Extract>> {
-        let text = source.text();
-        let Some(call) = Call::find(source) else {
+    /// Reject the removed `#frontmatter(…)` call form with a migration error.
+    /// A syntax-tree check, run *before* evaluation — the call no longer
+    /// evaluates (`frontmatter` is undefined), and "unknown variable" would
+    /// say nothing about the new syntax.
+    pub fn check(source: &Source, path: &Path) -> Result<()> {
+        match legacy_call(source) {
+            true => Err(ContentError::frontmatter_call(path).into()),
+            false => Ok(()),
+        }
+    }
+
+    /// Read a page's frontmatter from its evaluated module's `frontmatter`
+    /// export (`#let frontmatter = (…)`). Returns `None` when the module
+    /// exports none. `path` names the file in errors; `config` supplies the
+    /// taxonomy keys to recognize.
+    pub fn extract(module: &Module, path: &Path, config: &Config) -> Result<Option<Self>> {
+        let Some(binding) = module.scope().get("frontmatter") else {
             return Ok(None);
         };
-        let data = &text[call.args()];
-        let frontmatter = Self::from_dict(
-            crate::content::eval::EvalWorld::dict(data, path)?,
-            path,
-            config,
-        )?;
-        Ok(Some(Extract {
-            frontmatter,
-            body: call.splice(text),
-            data: data.to_owned(),
-        }))
+        let value = binding.read();
+        let Value::Dict(dict) = value else {
+            return Err(ContentError::frontmatter_not_dict(path, value).into());
+        };
+        Self::from_dict(dict.clone(), path, config).map(Some)
     }
 
     /// Interpret the evaluated frontmatter dict. A known key with a wrong-typed
@@ -124,62 +117,22 @@ impl Frontmatter {
     }
 }
 
-/// A located `#frontmatter(...)` call within a source file.
-struct Call {
-    range: std::ops::Range<usize>,
-    args: std::ops::Range<usize>,
-}
-
-impl Call {
-    fn find(source: &Source) -> Option<Self> {
-        let root = source.root();
-        let markup = root.cast::<Markup>()?;
-        // only a *leading* call counts: a mid-document `#frontmatter(...)` is
-        // ordinary content. skip whitespace, then the first real expr must be it.
-        let mut exprs = markup.exprs();
-        let call = loop {
-            match exprs.next()? {
-                Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_) => continue,
-                Expr::FuncCall(c) if Self::is_frontmatter(&c) => break c,
-                _ => return None,
+/// Whether the source opens with the pre-export `#frontmatter(…)` call form —
+/// recognized in the syntax tree purely to point migration at the binding
+/// syntax (the call itself no longer evaluates: `frontmatter` is undefined).
+fn legacy_call(source: &Source) -> bool {
+    let Some(markup) = source.root().cast::<Markup>() else {
+        return false;
+    };
+    markup
+        .exprs()
+        .find(|e| !matches!(e, Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_)))
+        .is_some_and(|first| match first {
+            Expr::FuncCall(call) => {
+                matches!(call.callee(), Expr::Ident(ident) if ident.get() == "frontmatter")
             }
-        };
-        let linked = LinkedNode::new(root);
-        let call_node = linked.find(call.to_untyped().span())?;
-        let args_node = linked.find(call.args().to_untyped().span())?;
-        let mut range = call_node.range();
-        // include the leading `#` that triggered the code expression
-        let text = source.text();
-        if range.start > 0 && text.as_bytes().get(range.start - 1) == Some(&b'#') {
-            range.start -= 1;
-        }
-        Some(Self {
-            range,
-            args: args_node.range(),
+            _ => false,
         })
-    }
-
-    fn is_frontmatter(call: &typst::syntax::ast::FuncCall) -> bool {
-        matches!(call.callee(), Expr::Ident(ident) if ident.get() == "frontmatter")
-    }
-
-    fn args(&self) -> std::ops::Range<usize> {
-        self.args.clone()
-    }
-
-    fn splice(&self, text: &str) -> String {
-        // replace the call with as many newlines as it spanned, so body lines keep
-        // their original numbers and compile diagnostics point at the real line.
-        let newlines = text[self.range.clone()]
-            .bytes()
-            .filter(|&b| b == b'\n')
-            .count();
-        let mut out = String::with_capacity(text.len());
-        out.push_str(&text[..self.range.start]);
-        out.extend(std::iter::repeat_n('\n', newlines));
-        out.push_str(&text[self.range.end..]);
-        out
-    }
 }
 
 /// Typed accessors over an evaluated frontmatter [`Value`]. The `path`/`key`
@@ -245,16 +198,17 @@ impl ValueExt for Value {
     }
 
     fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>> {
+        // a wrong-typed *element* is an error too — never silently dropped,
+        // same as every scalar accessor here.
+        let wrong = |kind| {
+            ContentError::frontmatter_field(path, key, "a list of strings", kind, None).into()
+        };
         match self {
-            Value::Array(arr) => Ok(arr.iter().filter_map(ValueExt::str).collect()),
-            _ => Err(ContentError::frontmatter_field(
-                path,
-                key,
-                "a list of strings",
-                self.kind(),
-                None,
-            )
-            .into()),
+            Value::Array(arr) => arr
+                .iter()
+                .map(|v| v.str().ok_or_else(|| wrong(v.kind())))
+                .collect(),
+            _ => Err(wrong(self.kind())),
         }
     }
 

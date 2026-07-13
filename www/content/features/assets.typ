@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Asset pipeline",
   tags: ("feature", "assets"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Files in your `assets/` directory can be minified, bundled, and fingerprinted on

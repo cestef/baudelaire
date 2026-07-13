@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Baudelaire",
   template: "page.typ",
-))
+)
 #import "/templates/theme.typ": cards, lucide
 
 #html.elem("p", attrs: (class: "lead"))[

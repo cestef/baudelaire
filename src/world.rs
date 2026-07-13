@@ -5,8 +5,10 @@ use std::sync::{Arc, LazyLock};
 use time::OffsetDateTime;
 use typst::{
     Feature, Features, Library, LibraryExt, World,
-    diag::FileResult,
-    foundations::{Bytes, Datetime, Dict, IntoValue, Str, Value},
+    comemo::Track,
+    diag::{FileError, FileResult},
+    engine::{Route, Sink, Traced},
+    foundations::{Bytes, Datetime, Dict, IntoValue, Module, Str, Value},
     syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot},
     text::{Font, FontBook},
     utils::LazyHash,
@@ -19,7 +21,7 @@ use typst_kit::{
 };
 
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{Result, TypstSourceDiagnostic};
 use crate::graph::Deps;
 
 const USER_AGENT: &str = concat!("baudelaire/", env!("CARGO_PKG_VERSION"));
@@ -320,6 +322,47 @@ impl Project {
         Ok(RootedPath::new(VirtualRoot::Project, vpath))
     }
 
+    /// The parsed source of a project file, loaded through the shared file
+    /// store — discovery and compilation read one parse.
+    pub fn source(&self, path: &Path) -> Result<Source> {
+        let id = FileId::new(self.virtualize(path)?);
+        self.files.source(id).map_err(|e| {
+            let kind = match &e {
+                FileError::NotFound(_) => std::io::ErrorKind::NotFound,
+                FileError::AccessDenied => std::io::ErrorKind::PermissionDenied,
+                _ => std::io::ErrorKind::Other,
+            };
+            crate::error::FsError::new(crate::error::Op::Read, path, std::io::Error::new(kind, e))
+                .into()
+        })
+    }
+
+    /// Evaluate a source as a typst module — the compiler's own memoized
+    /// evaluation, so a later compile of the same file reuses it. A module's
+    /// scope carries the page's exports (`#let frontmatter = …`); its errors
+    /// carry real file spans.
+    pub fn module(&self, source: &Source) -> Result<Module> {
+        let world = self.world_for(source);
+        let mut sink = Sink::new();
+        let traced = Traced::default();
+        typst_eval::eval(
+            (&world as &dyn World).track(),
+            &self.lib,
+            traced.track(),
+            sink.track_mut(),
+            Route::default().track(),
+            source,
+        )
+        .map_err(|errs| {
+            let name = source.id().vpath().get_without_slash().to_string();
+            crate::error::BaudelaireErrorKind::TypstCompile(TypstSourceDiagnostic::bridge(
+                errs,
+                (&name, source.text()),
+                Arc::new(world),
+            ))
+        })
+    }
+
     /// Resolve a file id the compiler touched back to its filesystem path.
     pub fn path_of(&self, id: FileId) -> Option<PathBuf> {
         self.files.loader().resolve(id).ok()
@@ -460,8 +503,13 @@ impl World for PageWorld {
     }
 
     fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
-        let offset =
-            offset.and_then(|o| time::UtcOffset::from_whole_seconds(o.seconds() as i32).ok())?;
+        // No offset defaults to UTC — the same clock the build context stamps —
+        // rather than `None`, which typst reports as "unable to determine
+        // current date" on every offset-less `datetime.today()` call.
+        let offset = match offset {
+            Some(o) => time::UtcOffset::from_whole_seconds(o.seconds() as i32).ok()?,
+            None => time::UtcOffset::UTC,
+        };
         let dt = self.project.now.checked_to_offset(offset)?;
         Some(Datetime::Date(dt.date()))
     }

@@ -1,7 +1,7 @@
-#frontmatter((
+#let frontmatter = (
   title: "Taxonomies",
   tags: ("feature", "content"),
-))
+)
 
 A taxonomy groups pages by a shared frontmatter list: tags, categories, a series.
 Declare one and Baudelaire generates the index pages for it.

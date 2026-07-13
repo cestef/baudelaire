@@ -35,6 +35,31 @@ impl TypstSourceDiagnostic {
         }
     }
 
+    /// Bridge a batch of typst diagnostics, resolving each against the file its
+    /// span belongs to (a bound template, a shared module, the page itself) so
+    /// the snippet always matches the span. Spanless diagnostics fall back to
+    /// the `fallback` name and text. The single conversion the engine and
+    /// content discovery share.
+    pub fn bridge(
+        errs: impl IntoIterator<Item = SourceDiagnostic>,
+        fallback: (&str, &str),
+        world: Arc<dyn World + Send + Sync>,
+    ) -> Vec<Self> {
+        errs.into_iter()
+            .map(|e| {
+                let file = e.span.id();
+                let src = file
+                    .and_then(|id| world.source(id).ok().map(|src| (id, src)))
+                    .map(|(id, src)| {
+                        let name = id.vpath().get_without_slash().to_string();
+                        NamedSource::new(name, src.text().to_owned())
+                    })
+                    .unwrap_or_else(|| NamedSource::new(fallback.0, fallback.1.to_owned()));
+                Self::new(e, src, file, world.clone())
+            })
+            .collect()
+    }
+
     fn labeled(
         &self,
         span: impl Into<DiagSpan>,

@@ -1,6 +1,7 @@
 //! Build pipeline: discover → compile → render → write, parallelized via rayon.
 
 mod asset;
+mod exif;
 mod feed;
 mod hook;
 mod layout;
@@ -20,15 +21,15 @@ use std::time::Duration;
 
 use rayon::prelude::*;
 use tracing::debug;
-use typst::syntax::{FileId, Source};
-use typst::{World, compile};
+use typst::compile;
+use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::config::Config;
-use crate::content::{Page, plan};
+use crate::content::{Data, Page, plan};
 use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
-use crate::engine::layout::Layout;
+use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::error::{
     BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
@@ -112,7 +113,7 @@ impl Engine {
     pub fn build(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
-        let pages = plan(&self.config)?;
+        let pages = plan(&self.config, &self.project)?;
         debug!(
             pages = pages.len(),
             site = self.config.label(),
@@ -132,18 +133,21 @@ impl Engine {
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
-        let renderer = Renderer::new(&pages, assets.map);
+        let renderer = Renderer::new(&pages, assets.map, self.project.root());
         // render-side cache inputs: asset renames, the link map, and — only
         // when pages inline asset bytes — the embedded contents (the per-page
         // dependency tracker can't see them, since typst never reads them).
         let render = RenderInputs {
             assets: Hash::of(renderer.assets()),
             links: renderer.links(),
+            // hash the *processed* asset tree — what Embed actually inlines: a
+            // bundle's bytes can change through imports outside the source
+            // assets dir (../lib, node_modules), which a source-dir hash misses.
             embeds: self
                 .config
                 .html
                 .embed
-                .then(|| Hash::of_dir(&self.config.assets)),
+                .then(|| Hash::of_dir(&self.config.asset_dist())),
         };
         let mut cache = Cache::load(&self.config, self.project.context(), &render, ui)?;
 
@@ -234,13 +238,13 @@ impl Engine {
     /// Compile every page and report diagnostics without writing any output.
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        let pages = plan(&self.config)?;
+        let pages = plan(&self.config, &self.project)?;
         debug!(
             pages = pages.len(),
             site = self.config.label(),
             "planned check"
         );
-        let renderer = Renderer::new(&pages, AssetMap::default());
+        let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
         let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
@@ -313,40 +317,66 @@ impl Engine {
     }
 
     /// The compile input for a page: its (possibly synthetic) source and its
-    /// content fingerprint — a hash of the exact text typst compiles, which
-    /// covers generated pages whose sources never touch disk. Built once and
-    /// shared by the cache check and the compile.
+    /// content fingerprint — a hash of the exact text typst compiles. A real
+    /// page's body reaches the compiler through `#include` (a tracked file
+    /// read, so the dependency cache covers its edits); only generated
+    /// listings, which have no file, inline their body — and only their
+    /// wrapper text needs fingerprinting. Built once and shared by the cache
+    /// check and the compile.
     fn prepare(&self, page: &Page) -> Result<Prepared> {
         let rooted = self.project.virtualize(&page.source)?;
-        let id = FileId::new(rooted);
-        let text = match &page.template {
-            Some(template) => {
-                let taxonomies = crate::codegen::Value::dict(
-                    page.frontmatter.taxonomies.iter().map(|(name, terms)| {
-                        (
-                            name.clone(),
-                            crate::codegen::Value::array(
-                                terms.iter().map(crate::codegen::Value::str),
-                            ),
-                        )
-                    }),
-                )
-                .to_string();
-                Layout::new(
-                    &self.config.templates,
-                    template,
-                    &page.data,
-                    &taxonomies,
-                    &page.body,
-                )
-                .to_string()
-            }
-            None => page.body.clone(),
+        let Some(template) = &page.template else {
+            let text = page.body.clone();
+            let fingerprint = Hash::of_bytes(text.as_bytes());
+            return Ok((FileId::new(rooted), text, fingerprint));
         };
+        let taxonomies =
+            crate::codegen::Value::dict(page.frontmatter.taxonomies.iter().map(|(name, terms)| {
+                (
+                    name.clone(),
+                    crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)),
+                )
+            }))
+            .to_string();
+        let vpath = Self::rooted_str(&rooted);
+        let (id, bind, body) = match &page.data {
+            Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
+            Data::Empty => (Self::wrapper(&rooted), Bind::Literal("(:)"), Body::Include),
+            Data::Generated(dict) => (
+                FileId::new(rooted.clone()),
+                Bind::Literal(dict),
+                Body::Inline(&page.body),
+            ),
+        };
+        let text = Layout::new(
+            &self.config.templates,
+            template,
+            &vpath,
+            bind,
+            &taxonomies,
+            body,
+        )
+        .to_string();
         // hash the exact text typst compiles; the parse into a `Source` is
         // deferred to `compile`, run only for stale pages.
         let fingerprint = Hash::of_bytes(text.as_bytes());
         Ok((id, text, fingerprint))
+    }
+
+    /// A page's project-root-absolute virtual path (`/content/posts/a.typ`) —
+    /// what the wrapper's `#import`/`#include` literals resolve against.
+    fn rooted_str(rooted: &RootedPath) -> String {
+        format!("/{}", rooted.vpath().get_without_slash())
+    }
+
+    /// The synthetic wrapper's file id: a sibling of the page (so relative
+    /// template imports resolve the same way), but distinct from it, so the
+    /// wrapper can `#include` the real file without shadowing it as `main`.
+    fn wrapper(rooted: &RootedPath) -> FileId {
+        let name = format!("{}@layout", rooted.vpath().get_without_slash());
+        let vpath = VirtualPath::new(&name)
+            .expect("a page vpath with a suffix stays a valid relative vpath");
+        FileId::new(RootedPath::new(VirtualRoot::Project, vpath))
     }
 
     /// Compile a single page to rendered HTML, applying render post-processing
@@ -439,28 +469,11 @@ impl Engine {
         source: &Source,
         world: &PageWorld,
     ) -> Vec<TypstSourceDiagnostic> {
-        let world: Arc<dyn World + Send + Sync> = Arc::new(world.clone());
-        errs.into_iter()
-            .map(|e| {
-                // render each diagnostic against the file its span belongs to, so
-                // an error reaching into a bound template or shared module lands
-                // in the right source, not overrunning the page text.
-                let file = e.span.id();
-                let named = file
-                    .and_then(|id| world.source(id).ok().map(|src| (id, src)))
-                    .map(|(id, src)| {
-                        let name = id.vpath().get_without_slash().to_string();
-                        miette::NamedSource::new(name, src.text().to_owned())
-                    })
-                    .unwrap_or_else(|| {
-                        miette::NamedSource::new(
-                            page.source.display().to_string(),
-                            source.text().to_owned(),
-                        )
-                    });
-                TypstSourceDiagnostic::new(e, named, file, world.clone())
-            })
-            .collect()
+        TypstSourceDiagnostic::bridge(
+            errs,
+            (&page.source.display().to_string(), source.text()),
+            Arc::new(world.clone()),
+        )
     }
 }
 

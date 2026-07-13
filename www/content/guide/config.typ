@@ -1,8 +1,8 @@
-#frontmatter((
+#let frontmatter = (
   title: "Configuration",
   order: 3,
   tags: ("guide", "reference"),
-))
+)
 #import "/templates/theme.typ": callout
 
 Configuration lives in one `config.kdl` file at the project root, written in
