@@ -25,4 +25,4 @@ test:
 # Install the binary & create an alias
 install:
     cargo install --path .
-    ln -sf ~/.cargo/baudelaire ~/.cargo/bl
+    ln -sf "${CARGO_HOME:-$HOME/.cargo}/bin/baudelaire" "${CARGO_HOME:-$HOME/.cargo}/bin/bau"

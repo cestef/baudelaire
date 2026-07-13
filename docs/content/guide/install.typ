@@ -12,15 +12,17 @@ is built in, so there is nothing else to install.
 Baudelaire isn't published on #link("https://crates.io/")[crates.io] yet, install it directly from the git repo:
 
 ```sh
-cargo install --git https://codeberg.org/cstef/baudelaire
+just install
 ```
 
 This builds from source and drops the `baudelaire` binary in `~/.cargo/bin`, it will also be symlinked to `bl` for convenience.
 Confirm it works:
 
 ```sh
-baudelaire --version # or: bl --version
+baudelaire --version # or: bau --version
 ```
+
+prefer it short? `alias my_alias=baudelaire`, e.g. `alias bl=baudelaire`
 
 #callout(kind: "note")[
   Fonts come from your system. On a slim server or CI image, install a font
