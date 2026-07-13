@@ -2,17 +2,24 @@
 
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A blake3 content hash, compared to decide whether a cached artifact is
 /// still valid.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Hash(String);
+///
+/// Stored as the raw 32-byte digest, not its hex string: comparison (the hot
+/// path — every cache probe) is a fixed 32-byte memcmp with no allocation, and
+/// the 64-char hex form is materialized only when a hash is used as a filename
+/// or written to the manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Hash([u8; 32]);
 
 impl Hash {
-    /// The hex digest as a string slice — used as a content-addressed filename.
-    pub fn hex(&self) -> &str {
-        &self.0
+    /// The hex digest, materialized on demand — used as a content-addressed
+    /// filename. Allocates; the raw bytes drive equality, so hot-path compares
+    /// never call this.
+    pub fn hex(&self) -> String {
+        blake3::Hash::from(self.0).to_hex().to_string()
     }
 
     /// Hash a file's bytes, or `None` if it can't be read.
@@ -22,7 +29,7 @@ impl Hash {
 
     /// Hash arbitrary bytes.
     pub fn of_bytes(bytes: &[u8]) -> Self {
-        Self(blake3::hash(bytes).to_hex().to_string())
+        Self(blake3::hash(bytes).into())
     }
 
     /// Fingerprint any [`std::hash::Hash`] value with blake3 — used to hash
@@ -31,7 +38,7 @@ impl Hash {
     pub fn of<T: std::hash::Hash>(value: &T) -> Self {
         let mut hasher = Blake3Hasher(blake3::Hasher::new());
         value.hash(&mut hasher);
-        Self(hasher.0.finalize().to_hex().to_string())
+        Self(hasher.0.finalize().into())
     }
 
     /// A content fingerprint of every file under `dir`, sorted by relative path
@@ -63,6 +70,23 @@ impl Hash {
                 out.push((rel, hash));
             }
         }
+    }
+}
+
+/// Serialized as its hex string, so the on-disk manifest stays human-readable
+/// (and unchanged from when the digest was stored as a `String`).
+impl Serialize for Hash {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let hex = <&str>::deserialize(deserializer)?;
+        blake3::Hash::from_hex(hex)
+            .map(|h| Self(h.into()))
+            .map_err(serde::de::Error::custom)
     }
 }
 

@@ -189,7 +189,7 @@ impl Engine {
         self.check_links(&rendered, ui)?;
 
         for r in &rendered {
-            cache.record(r.page, r.fingerprint.clone(), &r.html, &r.deps);
+            cache.record(r.page, r.fingerprint, &r.html, &r.deps);
         }
         for (page, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);

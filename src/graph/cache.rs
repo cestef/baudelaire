@@ -124,7 +124,7 @@ impl Cache {
             dir,
             enabled: config.cache.incremental,
             next: Manifest {
-                config: Some(fingerprint.clone()),
+                config: Some(fingerprint),
                 pages: BTreeMap::new(),
             },
             config: fingerprint,
@@ -256,7 +256,7 @@ impl Cache {
             .next
             .pages
             .values()
-            .map(|e| e.blob.hex().to_owned())
+            .map(|e| e.blob.hex())
             .collect();
         let root = self.dir.join(OBJECTS);
         let Ok(shards) = fs::read_dir(&root) else {
