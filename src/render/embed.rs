@@ -1,7 +1,7 @@
 //! Inlines local assets referenced by a page as `data:` URIs.
 //!
 //! When `html { embed true }` is set, root-relative asset links (`href`/`src`
-//! pointing at `/<assets>/…`) are replaced with a self-contained `data:` URI so
+//! pointing at `/<assets>/..`) are replaced with a self-contained `data:` URI so
 //! the page carries its own CSS/images/fonts. Best-effort: anything that is not
 //! a resolvable local asset (external URLs, missing files) is left as authored.
 

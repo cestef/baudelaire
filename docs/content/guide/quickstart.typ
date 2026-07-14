@@ -1,7 +1,6 @@
 #let frontmatter = (
   title: "Quickstart",
   order: 2,
-  tags: ("guide",),
 )
 #import "/templates/theme.typ": callout
 
@@ -13,17 +12,12 @@ cd my-site
 baudelaire serve
 ```
 
-`init` writes a `config.kdl`, a starter page and post under `content/`, a
-`templates/layout.typ`, and an `assets/style.css` — a site that already builds —
-then offers to set up version control. `serve` compiles it, opens a browser, and watches for
-changes, live-reloading over Server-Sent Events on every save.
+`init` writes a `config.kdl`, a starter page post under `content/`, a
+`templates/layout.typ`, and an `assets/style.css`. `baudelaire serve` compiles & watches changes. Live-reloading happenns over Server-Sent Events on every save.
 
 == Write a page
 
-A page is a `.typ` file under `content/`. Frontmatter is a module export — a
-top-level `#let frontmatter = (…)` binding — and the rest of the file is the
-body. Because it is evaluated by Typst itself, it can be computed, not just a
-literal dict:
+A page is a `.typ` file under `content/`. Front matter is a module export (`#let frontmatter = (…)`) and the rest of the file is the body. Because it is evaluated by Typst itself, it can be computed, not just a literal dict:
 
 ```typ
 #let frontmatter = (
@@ -47,14 +41,9 @@ joins the `posts` collection and, with clean URLs on, is served at
 baudelaire build
 ```
 
-The finished site lands in `public/`, ready to upload anywhere. Builds are
-incremental: unchanged pages come from cache, so a rebuild only touches what you
-edited.
+The finished site lands in `public/`, which you can directly hook up to cloudflare, netlify, vercel, github pages you name it. A rebuild only touches what you edited, unchanged pages come from cache.
 
 #callout(kind: "tip")[
   `baudelaire check` compiles every page and reports broken internal links
   without writing any output. Handy in CI.
 ]
-
-Next: shape the site in #link("config.typ")[configuration], or jump to
-#link("../features/search.typ")[search].

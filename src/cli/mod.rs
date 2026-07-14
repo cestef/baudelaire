@@ -490,10 +490,7 @@ fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
         }
         Command::Init(args) => {
             ui.banner("init");
-            // A positional directory scaffolds there (`init my-site`); with none,
-            // the current directory (already `--root`-adjusted) is used.
-            let target = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
-            scaffold::init(ui, &target, &root, args.yes, args.vcs)?;
+            scaffold::init(ui, args.dir.as_deref(), &root, args.yes, args.vcs)?;
         }
     }
     Ok(())

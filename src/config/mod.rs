@@ -423,7 +423,7 @@ pub enum SearchField {
 pub struct HtmlConfig {
     /// Pretty-print HTML.
     pub pretty: bool,
-    /// Inline local assets (`/assets/…` refs) as `data:` URIs.
+    /// Inline local assets (`/assets/..` refs) as `data:` URIs.
     pub embed: bool,
     /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
     /// into each page's `<head>` from frontmatter and config.
@@ -434,7 +434,7 @@ pub struct HtmlConfig {
 }
 
 /// Image handling: markup annotations and build-time optimization. Grouped so
-/// every image setting lives in one `images { … }` block.
+/// every image setting lives in one `images { .. }` block.
 #[derive(Debug, Clone, Hash)]
 pub struct ImagesConfig {
     /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
@@ -444,7 +444,7 @@ pub struct ImagesConfig {
 }
 
 /// Build-time image optimization, per format. A format is enabled by naming it
-/// in the `optimize { … }` block (`png`, `jpeg`); an absent format is left
+/// in the `optimize { .. }` block (`png`, `jpeg`); an absent format is left
 /// untouched. Each format carries its own tuning.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct OptimizeConfig {
@@ -570,7 +570,7 @@ pub struct HooksConfig {
 }
 
 /// Publishing destinations for the built site. Each backend is an optional
-/// block under `publish { … }`; adding a destination is one field here plus one
+/// block under `publish { .. }`; adding a destination is one field here plus one
 /// backend in [`crate::publish`]. Secrets are never stored here — a backend
 /// reads its credentials from the environment at publish time.
 #[derive(Debug, Clone, Hash, Default)]

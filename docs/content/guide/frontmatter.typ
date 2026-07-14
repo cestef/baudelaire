@@ -1,11 +1,10 @@
 #let frontmatter = (
   title: "Frontmatter",
   order: 3,
-  tags: ("guide", "reference"),
 )
 #import "/templates/theme.typ": callout
 
-Every page carries a little metadata: its title, its date, the template that
+Every page carries a little metadata: its title, its date & the template that
 wraps it. In Baudelaire that metadata is a Typst binding, not a separate header
 in another language.
 
@@ -20,39 +19,31 @@ one binding from the page's evaluated module; everything after it is the body.
   date: datetime(year: 2026, month: 7, day: 9),
   tags: ("intro",),
 )
-
-This is *real Typst*. The frontmatter is a normal dict, so it can be
-computed — a title from a filename, a date from #raw("sys.inputs") — not just a
-literal.
 ```
 
-Because Typst evaluates it, the value is a dictionary like any other: you can
-build it with a function, pull fields from a loaded data file, or read an input.
-There is no second syntax to learn.
+Because Typst evaluates it, the value is a dict like any other, so it can be computed, e.g. a title derived from a filename, a date from `sys.inputs`, or fields pulled from a loaded data file.
 
 #callout(kind: "warn")[
   The older `#frontmatter(…)` *call* form was removed. A page that still uses it
   fails with a migration error pointing at the binding: export a dict with
-  `#let frontmatter = (title: "…")`.
+  `#let frontmatter = (title: "…")`
 ]
 
 == Recognized keys
 
-These keys have meaning to the build. Every one is optional.
-
-/ #raw("title"): The page title (a string). Used in the `<title>`, headings,
+/ #raw("title:str"): The page title (a string). Used in the `<title>`, headings,
   navigation, feeds, and social tags.
-/ #raw("date"): A Typst `datetime`. A page joins its
+/ #raw("date:datetime"): A Typst `datetime`. A page joins its
   #link("../features/feeds.typ")[feeds] and sorts in a `sort="date"` collection
   only when it has one. Write it as `datetime(year: 2026, month: 7, day: 9)`.
-/ #raw("draft"): A boolean. Draft pages are skipped unless you pass `--drafts`
+/ #raw("draft:bool"): Draft pages are skipped unless you pass `--drafts`
   (or a profile turns them on).
-/ #raw("slug"): Override the URL slug, otherwise derived from the filename.
-/ #raw("template"): The template that wraps this page, overriding the
+/ #raw("slug:str"): Override the URL slug, otherwise derived from the filename.
+/ #raw("template:str"): The template that wraps this page, overriding the
   collection's default.
-/ #raw("order"): An integer sort key for a `sort="order"` collection (the guide
+/ #raw("order:int"): An integer sort key for a `sort="order"` collection (the guide
   chapters here use it).
-/ #raw("redirect"): One old path, or a list of them, to forward to this page.
+/ #raw("redirect:array<str>"): One old path, or a list of them, to forward to this page.
   See #link("../features/redirects.typ")[redirects].
 
 Values are typed: a key with the wrong type is a hard error naming the file and
@@ -95,5 +86,5 @@ field.
 #callout(kind: "note")[
   A key that is a near-miss of a recognized one — `titel`, `tag`, `redirects` —
   is treated as a typo and reported with a "did you mean?" suggestion rather than
-  silently passed through. Genuinely new keys still flow to extra.
+  silently passed through.
 ]

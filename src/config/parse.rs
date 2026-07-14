@@ -83,7 +83,7 @@ impl Config {
 }
 
 /// Typed accessors over a [`KdlNode`], plus the parent-section builders that map
-/// a `{ … }` block onto its config struct. Shared with [`super::dispatch`],
+/// a `{ .. }` block onto its config struct. Shared with [`super::dispatch`],
 /// which needs [`NodeExt::span`] and [`NodeExt::block`].
 pub(super) trait NodeExt {
     fn span(&self) -> SourceSpan;
@@ -94,7 +94,7 @@ pub(super) trait NodeExt {
     fn count(&self, text: &str, idx: usize) -> Result<usize>;
     fn port(&self, text: &str, idx: usize) -> Result<u16>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
-    /// The node's `{ … }` children parsed as `(id, item)` pairs, erroring on a
+    /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
     /// duplicate id — the single dedup rule for collections, taxonomies, and
     /// profiles, where a repeated id would otherwise silently lose one side.
     fn unique<T>(
@@ -307,7 +307,7 @@ impl NodeExt for KdlNode {
         HTML.fill(target, self, text)
     }
 
-    /// The `images { lazy; optimize { … } }` section.
+    /// The `images { lazy; optimize { .. } }` section.
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()> {
         const IMAGES: Block<ImagesConfig> = Block(&[
             ("lazy", |c, n, t| {
@@ -405,7 +405,7 @@ impl NodeExt for KdlNode {
         LLMS.fill(target, self, text)
     }
 
-    /// The `paths { … }` parent section: directory layout knobs.
+    /// The `paths { .. }` parent section: directory layout knobs.
     fn paths(&self, config: &mut Config, text: &str) -> Result<()> {
         const PATHS: Block<Config> = Block(&[
             ("content", |c, n, t| {
@@ -433,7 +433,7 @@ impl NodeExt for KdlNode {
         PATHS.fill(config, self, text)
     }
 
-    /// The `typst { … }` parent section: typst engine knobs.
+    /// The `typst { .. }` parent section: typst engine knobs.
     fn typst(&self, config: &mut Config, text: &str) -> Result<()> {
         const TYPST: Block<Config> = Block(&[
             ("features", |c, n, t| {
@@ -448,7 +448,7 @@ impl NodeExt for KdlNode {
         TYPST.fill(config, self, text)
     }
 
-    /// The `output { … }` parent section: everything the build emits.
+    /// The `output { .. }` parent section: everything the build emits.
     fn output(&self, config: &mut Config, text: &str) -> Result<()> {
         const OUTPUT: Block<Config> = Block(&[
             ("html", |c, n, t| n.html(&mut c.html, t)),
@@ -576,14 +576,14 @@ impl NodeExt for KdlNode {
         HOOKS.fill(target, self, text)
     }
 
-    /// The `publish { … }` parent section: one block per destination backend.
+    /// The `publish { .. }` parent section: one block per destination backend.
     fn publish(&self, target: &mut PublishConfig, text: &str) -> Result<()> {
         const PUBLISH: Block<PublishConfig> =
             Block(&[("standard", |c, n, t| n.standard(&mut c.standard, t))]);
         PUBLISH.fill(target, self, text)
     }
 
-    /// The `standard { … }` block: presence enables the standard.site backend.
+    /// The `standard { .. }` block: presence enables the standard.site backend.
     /// Fills onto the existing config so a profile tuning one key keeps the rest.
     fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()> {
         const STANDARD: Block<StandardConfig> = Block(&[

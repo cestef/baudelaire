@@ -59,7 +59,7 @@
   {
     lucide("search", size: 16)
     html.elem("span", attrs: (class: "search-trigger-label"), "Search")
-    html.elem("kbd", attrs: (class: "search-trigger-key"), "⌘K")
+    html.elem("kbd", attrs: (class: "search-trigger-key"), "/")
   },
 )
 

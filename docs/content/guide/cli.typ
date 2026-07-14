@@ -1,7 +1,6 @@
 #let frontmatter = (
   title: "CLI reference",
   order: 5,
-  tags: ("guide", "reference"),
 )
 
 Every command reads `config.kdl` from the current directory (or the path given

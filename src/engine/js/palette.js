@@ -38,7 +38,7 @@ const snippetOf = (body, terms) => {
   }
   if (at < 0) return body.slice(0, 150);
   const [start, end] = [Math.max(0, at - 60), Math.min(body.length, at + 120)];
-  return (start ? "…" : "") + body.slice(start, end) + (end < body.length ? "…" : "");
+  return (start ? ".." : "") + body.slice(start, end) + (end < body.length ? ".." : "");
 };
 
 // One hit as a list item. Its section, title, and (when present) snippet are the

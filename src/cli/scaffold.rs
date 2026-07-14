@@ -99,18 +99,18 @@ impl Config {
     }
 }
 
-/// Scaffold a new project into `target` (resolved against the project `root`
-/// for its default site name). `yes` takes every prompt's default without
-/// asking; `vcs` pins a version-control system.
-pub(crate) fn init(ui: &Ui, target: &Path, root: &Root, yes: bool, vcs: Option<Vcs>) -> Result<()> {
+/// scaffold a new project where `dir` is the explicit positional argument, if any
+/// when `None` & interactive, the user is prompted for a site name which
+/// doubles as the target directory. `yes` skips prompts; `vcs` pins the vcs
+pub(crate) fn init(ui: &Ui, dir: Option<&Path>, root: &Root, yes: bool, vcs: Option<Vcs>) -> Result<()> {
     let interactive = !yes && std::io::stdin().is_terminal();
-    let details = Details::gather(target, root, interactive)?;
+    let (target, details) = Details::gather(dir, root, interactive)?;
     let repo = Repo::wanted(yes, interactive, vcs)?;
     if interactive {
         ui.blank();
     }
 
-    Scaffold::new(target)
+    Scaffold::new(&target)
         .dir("content")
         .dir("assets")
         .dir("templates")
@@ -122,11 +122,11 @@ pub(crate) fn init(ui: &Ui, target: &Path, root: &Root, yes: bool, vcs: Option<V
         .apply(ui)?;
 
     if let Some(vcs) = repo {
-        Repo::new(target, vcs).setup(ui)?;
+        Repo::new(&target, vcs).setup(ui)?;
     }
 
     ui.blank();
-    ui.done(format_args!(
+    ui.done_plain(format_args!(
         "project ready in {}",
         Paths(&target.display().to_string())
     ));
@@ -147,23 +147,40 @@ struct Details {
 }
 
 impl Details {
-    fn gather(target: &Path, root: &Root, interactive: bool) -> Result<Self> {
-        let name = Self::dir_name(target, root);
+    /// explicit `dir`: derive site name from last component, skip site name prompt
+    /// no `dir` + interactive: prompt for site name; that name becomes the target directory
+    /// no `dir` + non-interactive (--yes / CI): scaffold into `.`, derive name from cwd
+    fn gather(dir: Option<&Path>, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
         let author = Self::git_author().unwrap_or_default();
-        if !interactive {
-            return Ok(Self {
-                site: name,
-                author,
-                url: "https://example.com".into(),
-            });
+
+        match dir {
+            Some(d) => {
+                let site = Self::dir_name(d, root);
+                let (author, url) = if interactive {
+                    (
+                        Input::new("Author").default(&author).ask()?,
+                        Input::new("Base URL").default("https://example.com").ask()?,
+                    )
+                } else {
+                    (author, "https://example.com".into())
+                };
+                Ok((d.to_path_buf(), Self { site, author, url }))
+            }
+            None => {
+                if interactive {
+                    let site = Input::new("Site name").default("my-site").ask()?;
+                    let author = Input::new("Author").default(&author).ask()?;
+                    let url = Input::new("Base URL").default("https://example.com").ask()?;
+                    let target = PathBuf::from(&site);
+                    Ok((target, Self { site, author, url }))
+                } else {
+                    // non-interactive / CI: preserve old behavior & scaffold into the current directory & derive the site name from it
+                    let dot = Path::new(".");
+                    let site = Self::dir_name(dot, root);
+                    Ok((dot.to_path_buf(), Self { site, author, url: "https://example.com".into() }))
+                }
+            }
         }
-        Ok(Self {
-            site: Input::new("Site name").default(&name).ask()?,
-            author: Input::new("Author").default(&author).ask()?,
-            url: Input::new("Base URL")
-                .default("https://example.com")
-                .ask()?,
-        })
     }
 
     /// The scaffolded `config.kdl`, its placeholders filled in.
@@ -178,9 +195,7 @@ impl Details {
         )
     }
 
-    /// A sensible default site name from the target directory's own name. A
-    /// bare `.` resolves against the project root, so it yields the launch
-    /// directory's name rather than an empty string.
+    /// A sensible default site name from the target directory's last component.
     fn dir_name(target: &Path, root: &Root) -> String {
         root.join(target)
             .file_name()
