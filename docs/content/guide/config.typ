@@ -46,7 +46,7 @@ The `html` block controls the emitted markup (`pretty` formatting, `embed` to
 inline assets as `data:` URIs, `meta` for SEO and social tags, and `anchors` to
 give every heading a slug `id` for deep links); the `images` block handles lazy
 loading and per-format optimization. See
-#link("…/features/meta.typ")[meta and images].
+#link("../features/meta.typ")[meta and images].
 
 Every field has a sensible default, so a minimal `config.kdl` is just
 `site "My Site"`. The rest overrides only what you name.
@@ -55,14 +55,14 @@ Every field has a sensible default, so a minimal `config.kdl` is just
 
 / #raw("paths"): Where content, output, assets, and templates live.
 / #raw("collections"): Per-group sorting, permalinks, pagination, and the
-  default template. See #link("…/features/pagination.typ")[pagination].
+  default template. See #link("../features/pagination.typ")[pagination].
 / #raw("taxonomies"): Group pages by a frontmatter list such as `tags`. See
-  #link("…/features/taxonomies.typ")[taxonomies].
+  #link("../features/taxonomies.typ")[taxonomies].
 / #raw("output"): Everything the build emits: HTML options, the
-  #link("…/features/assets.typ")[asset pipeline], #link("…/features/search.typ")[search],
-  #link("…/features/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
+  #link("../features/assets.typ")[asset pipeline], #link("../features/search.typ")[search],
+  #link("../features/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
 / #raw("hooks"): Run external tools around the build. See
-  #link("…/features/hooks.typ")[build hooks].
+  #link("../features/hooks.typ")[build hooks].
 
 #callout(kind: "note")[
   A misspelled key is a hard error with a "did you mean?" suggestion: the parser
