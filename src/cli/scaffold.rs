@@ -102,7 +102,13 @@ impl Config {
 /// scaffold a new project where `dir` is the explicit positional argument, if any
 /// when `None` & interactive, the user is prompted for a site name which
 /// doubles as the target directory. `yes` skips prompts; `vcs` pins the vcs
-pub(crate) fn init(ui: &Ui, dir: Option<&Path>, root: &Root, yes: bool, vcs: Option<Vcs>) -> Result<()> {
+pub(crate) fn init(
+    ui: &Ui,
+    dir: Option<&Path>,
+    root: &Root,
+    yes: bool,
+    vcs: Option<Vcs>,
+) -> Result<()> {
     let interactive = !yes && std::io::stdin().is_terminal();
     let (target, details) = Details::gather(dir, root, interactive)?;
     let repo = Repo::wanted(yes, interactive, vcs)?;
@@ -159,7 +165,9 @@ impl Details {
                 let (author, url) = if interactive {
                     (
                         Input::new("Author").default(&author).ask()?,
-                        Input::new("Base URL").default("https://example.com").ask()?,
+                        Input::new("Base URL")
+                            .default("https://example.com")
+                            .ask()?,
                     )
                 } else {
                     (author, "https://example.com".into())
@@ -170,14 +178,23 @@ impl Details {
                 if interactive {
                     let site = Input::new("Site name").default("my-site").ask()?;
                     let author = Input::new("Author").default(&author).ask()?;
-                    let url = Input::new("Base URL").default("https://example.com").ask()?;
+                    let url = Input::new("Base URL")
+                        .default("https://example.com")
+                        .ask()?;
                     let target = PathBuf::from(&site);
                     Ok((target, Self { site, author, url }))
                 } else {
                     // non-interactive / CI: preserve old behavior & scaffold into the current directory & derive the site name from it
                     let dot = Path::new(".");
                     let site = Self::dir_name(dot, root);
-                    Ok((dot.to_path_buf(), Self { site, author, url: "https://example.com".into() }))
+                    Ok((
+                        dot.to_path_buf(),
+                        Self {
+                            site,
+                            author,
+                            url: "https://example.com".into(),
+                        },
+                    ))
                 }
             }
         }
