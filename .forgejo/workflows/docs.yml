@@ -1,12 +1,12 @@
 name: Docs
 
-# The documentation site lives in `www/` and is built by baudelaire itself —
-# the site is its own dogfood. Build the binary, run it over `www/`, deploy.
+# The documentation site lives in `docs/` and is built by baudelaire itself —
+# the site is its own dogfood. Build the binary, run it over `docs/`, deploy.
 on:
   push:
     branches: [main]
     paths:
-      - "www/**"
+      - "docs/**"
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -45,12 +45,12 @@ jobs:
         run: cargo build --release
 
       - name: build docs site
-        working-directory: www
+        working-directory: docs
         run: ../target/release/baudelaire build
 
       - uses: https://codeberg.org/cstef/bloom/deploy@main
         with:
-          path: www/public
+          path: docs/public
           service: baudelaire
           host: ${{ secrets.DEPLOY_HOST }}
           user: ${{ secrets.DEPLOY_USER }}
