@@ -22,7 +22,7 @@ env:
 
 jobs:
   check:
-    runs-on: linux-any
+    runs-on: linux-any-large
     steps:
       - uses: actions/checkout@v4
 
