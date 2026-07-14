@@ -24,6 +24,12 @@ impl AssetMap {
         self.map.insert(from, to);
     }
 
+    /// The recorded `request → served` pairs, for exposing the map to client JS
+    /// (the `baudelaire:assets` virtual module).
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.map.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
     /// Resolve a raw `href`/`src` to its processed URL, preserving any trailing
     /// `#fragment` / `?query`. `None` if the reference is not a mapped asset.
     pub fn resolve(&self, raw: &str) -> Option<String> {

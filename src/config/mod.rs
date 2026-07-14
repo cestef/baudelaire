@@ -37,8 +37,11 @@ pub struct Config {
     pub index: Option<String>,
     /// Output (distribution) directory.
     pub dist: PathBuf,
-    /// Static passthrough directory.
+    /// Asset pipeline source directory (minified, bundled, fingerprinted).
     pub assets: PathBuf,
+    /// Static passthrough directory: copied verbatim to the `dist` root — no
+    /// processing, no fingerprint, no URL prefix.
+    pub r#static: PathBuf,
     /// Layout / template directory.
     pub templates: PathBuf,
     /// Generate directory-per-page URLs (`foo.typ` → `foo/index.html`).
@@ -61,6 +64,9 @@ pub struct Config {
     pub search: SearchConfig,
     /// Typst `sys.inputs` entries.
     pub inputs: Vec<(String, String)>,
+    /// Build-time constants exposed to client JS through the `baudelaire:config`
+    /// virtual module: arbitrary JSON scalars keyed by name.
+    pub client: Vec<(String, serde_json::Value)>,
     /// Typst features to enable (e.g. `html`).
     pub features: Vec<String>,
     /// Collection overrides keyed by id.
@@ -242,6 +248,7 @@ impl std::hash::Hash for Config {
             index,
             dist,
             assets,
+            r#static,
             templates,
             clean,
             future,
@@ -253,6 +260,7 @@ impl std::hash::Hash for Config {
             feed,
             search,
             inputs,
+            client,
             features,
             collections,
             taxonomies,
@@ -273,7 +281,7 @@ impl std::hash::Hash for Config {
             source: _,
         } = self;
         (
-            site, url, lang, author, content, index, dist, assets, templates,
+            site, url, lang, author, content, index, dist, assets, r#static, templates,
         )
             .hash(state);
         (
@@ -282,6 +290,11 @@ impl std::hash::Hash for Config {
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, publish, profile).hash(state);
+        // `serde_json::Value` isn't `Hash`; its serialization is a faithful,
+        // deterministic stand-in for the cache fingerprint.
+        serde_json::to_string(client)
+            .unwrap_or_default()
+            .hash(state);
     }
 }
 

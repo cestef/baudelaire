@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 9,
+  order: 10,
   title: "Meta & images",
   tags: ("feature", "seo"),
 )

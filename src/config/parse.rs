@@ -72,6 +72,10 @@ impl Config {
             c.taxonomies = n.taxonomies(t)?;
             Ok(())
         }),
+        ("client", |c, n, t| {
+            c.client = n.client(t)?;
+            Ok(())
+        }),
         ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
         ("publish", |c, n, t| n.publish(&mut c.publish, t)),
         ("serve", |c, n, t| n.serve(&mut c.serve, t)),
@@ -107,6 +111,7 @@ pub(super) trait NodeExt {
     fn typst(&self, config: &mut Config, text: &str) -> Result<()>;
     fn output(&self, config: &mut Config, text: &str) -> Result<()>;
     fn inputs(&self, text: &str) -> Result<Vec<(String, String)>>;
+    fn client(&self, text: &str) -> Result<Vec<(String, serde_json::Value)>>;
     fn features(&self, text: &str) -> Result<Vec<String>>;
     fn words(&self, text: &str) -> Result<Vec<String>>;
     fn mapped<T: Copy>(&self, text: &str, table: &[(&'static str, T)]) -> Result<Vec<T>>;
@@ -214,6 +219,18 @@ impl NodeExt for KdlNode {
             .nodes()
             .iter()
             .map(|child| Ok((child.name().value().to_owned(), child.string(text, 0)?)))
+            .collect()
+    }
+
+    fn client(&self, text: &str) -> Result<Vec<(String, serde_json::Value)>> {
+        let children = self.block(text)?;
+        children
+            .nodes()
+            .iter()
+            .map(|child| {
+                let value = child.arg(text, 0)?.json(text, NodeExt::span(child))?;
+                Ok((child.name().value().to_owned(), value))
+            })
             .collect()
     }
 
@@ -423,6 +440,10 @@ impl NodeExt for KdlNode {
             }),
             ("assets", |c, n, t| {
                 c.assets = n.string(t, 0)?.into();
+                Ok(())
+            }),
+            ("static", |c, n, t| {
+                c.r#static = n.string(t, 0)?.into();
                 Ok(())
             }),
             ("templates", |c, n, t| {

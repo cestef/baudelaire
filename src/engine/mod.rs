@@ -12,6 +12,7 @@ mod robots;
 mod search;
 mod sitemap;
 mod standard;
+mod statics;
 pub mod text;
 mod xml;
 
@@ -31,6 +32,7 @@ use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
+use crate::engine::statics::Static;
 use crate::error::{
     BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
 };
@@ -62,6 +64,7 @@ struct Summary<'a> {
     pages: usize,
     cached: usize,
     assets: usize,
+    statics: usize,
     generated: usize,
     bytes: u64,
     warnings: usize,
@@ -77,6 +80,9 @@ impl Summary<'_> {
         }];
         if self.assets > 0 {
             parts.push(Count::assets(self.assets).to_string());
+        }
+        if self.statics > 0 {
+            parts.push(Count::statics(self.statics).to_string());
         }
         if self.generated > 0 {
             parts.push(Count::files(self.generated).to_string());
@@ -113,6 +119,14 @@ impl Engine {
     pub fn build(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
+        // Copy the static tree first, so a generated page or asset at the same
+        // output path overwrites it — static is the lowest-priority source.
+        let statics = Static::new(&self.config).copy()?;
+        debug!(
+            count = statics.count,
+            bytes = statics.bytes,
+            "static copied"
+        );
         let pages = plan(&self.config, &self.project)?;
         debug!(
             pages = pages.len(),
@@ -129,7 +143,7 @@ impl Engine {
         // the asset URL map feeds render-side fingerprint rewriting and folds
         // into the cache fingerprint, so a re-fingerprinted asset invalidates
         // the pages that reference it.
-        let assets = Assets::new(&self.config).process()?;
+        let assets = Assets::new(&self.config, &pages).process()?;
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
@@ -228,8 +242,9 @@ impl Engine {
             pages: total,
             cached: cached.len(),
             assets: asset_count,
+            statics: statics.count,
             generated,
-            bytes: page_bytes + asset_bytes + generated_bytes,
+            bytes: page_bytes + asset_bytes + generated_bytes + statics.bytes,
             warnings: ui.warnings() - warned,
             dist: &self.config.dist,
             elapsed: timer.elapsed(),

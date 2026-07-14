@@ -2,6 +2,30 @@
 name = "baudelaire"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+description = "A Typst-native static site generator: write pages in Typst, get incremental builds, live reload, feeds, search, taxonomies, and an asset pipeline."
+authors = ["cstef <root@cstef.dev>"]
+license = "MIT OR Apache-2.0"
+repository = "https://codeberg.org/cstef/baudelaire"
+homepage = "https://baudelaire.dev"
+documentation = "https://baudelaire.dev"
+readme = "README.md"
+keywords = ["typst", "static-site-generator", "ssg", "website", "cli"]
+categories = ["command-line-utilities", "web-programming"]
+exclude = ["/docs", "/.forgejo", "/public", "/.jj", "/.claude", "/install.sh"]
+
+# Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
+# target to its codeberg tarball. Falls back to a source build otherwise.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/{ version }/baudelaire-{ target-family }-{ arch }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "baudelaire"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-x86_64.tar.gz"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64.tar.gz"
 
 [dependencies]
 typst = { version = "0.15" }

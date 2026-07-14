@@ -22,7 +22,6 @@ test:
         cargo test --workspace
     fi
 
-# Install the binary & create an alias
+# Build and install the binary from this checkout (contributors).
 install:
     cargo install --path .
-    ln -sf "${CARGO_HOME:-$HOME/.cargo}/bin/baudelaire" "${CARGO_HOME:-$HOME/.cargo}/bin/bau"

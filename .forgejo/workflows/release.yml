@@ -86,11 +86,16 @@ jobs:
         run: |
           mkdir -p release
           find dist -mindepth 2 -type f -exec mv -t release {} +
+          # Ship the installer alongside the tarballs, with its own checksum, so
+          # a pinned `install.sh` can be fetched and verified from the release.
+          cp install.sh release/
+          ( cd release && sha256sum install.sh > install.sh.sha256 )
           ls -la release
 
       - name: release notes
         run: |
           set -euo pipefail
+          VERSION="${{ inputs.tag || github.ref_name }}"
           bin_size() {
             local tarball="release/$1"
             [ -f "$tarball" ] || { echo "?"; return; }
@@ -106,7 +111,18 @@ jobs:
           cat > release-notes.md <<EOF
           ## Install
 
-          Grab a tarball below, extract, and put \`baudelaire\` on your \`PATH\`:
+          Prebuilt binary (Linux x86_64 / aarch64), checksum-verified. Fetch the
+          script, skim it, then run it:
+
+          \`\`\`bash
+          curl -fsSL https://baudelaire.dev/install.sh -o install.sh
+          less install.sh          # read before you run
+          sh install.sh            # PREFIX= to change dir, VERSION=${VERSION} to pin
+          \`\`\`
+
+          Prefer Cargo? \`cargo binstall baudelaire\` pulls these same tarballs.
+
+          Or install by hand from the tarballs below:
 
           \`\`\`bash
           tar -xzf baudelaire-linux-x86_64.tar.gz
@@ -120,7 +136,7 @@ jobs:
           | \`baudelaire-linux-x86_64\` | ${SIZE_X86} |
           | \`baudelaire-linux-aarch64\` | ${SIZE_ARM} |
 
-          Each tarball ships with a matching \`.sha256\`. Verify with:
+          Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
           \`\`\`bash
           sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256

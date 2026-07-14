@@ -5,6 +5,16 @@ fn parse(text: &str) -> Config {
 }
 
 #[test]
+fn client_block_parses_json_scalars() {
+    let cfg = parse("client {\n  env \"prod\"\n  retries 3\n  ratio 0.5\n  beta #true\n}\n");
+    let map: std::collections::BTreeMap<_, _> = cfg.client.iter().cloned().collect();
+    assert_eq!(map["env"], serde_json::json!("prod"));
+    assert_eq!(map["retries"], serde_json::json!(3));
+    assert_eq!(map["ratio"], serde_json::json!(0.5));
+    assert_eq!(map["beta"], serde_json::json!(true));
+}
+
+#[test]
 fn empty_uses_defaults() {
     let cfg = parse("");
     assert_eq!(cfg.lang, "en");
@@ -194,6 +204,7 @@ fn nested_parent_sections() {
         paths {
           content "src"
           dist "out"
+          static "public-files"
         }
         output {
           sitemap #false
@@ -208,7 +219,9 @@ fn nested_parent_sections() {
     );
     assert_eq!(cfg.content.to_str(), Some("src"));
     assert_eq!(cfg.dist.to_str(), Some("out"));
+    assert_eq!(cfg.r#static.to_str(), Some("public-files"));
     assert!(!cfg.sitemap);
+    assert!(cfg.client.is_empty());
     assert!(cfg.robots.enabled);
     assert_eq!(cfg.robots.disallow, vec!["/private/".to_owned()]);
     assert!(cfg.llms.enabled);

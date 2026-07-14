@@ -7,32 +7,55 @@
 Baudelaire is a single binary with no runtime dependencies. The Typst compiler
 is built in, so there is nothing else to install.
 
-== With cargo
+== Prebuilt binary
 
-Baudelaire isn't published on #link("https://crates.io/")[crates.io] yet, install it directly from the git repo:
+The quickest path, no Rust toolchain needed. Prebuilt binaries are published
+for Linux `x86_64` and `aarch64`. The installer downloads the release tarball,
+verifies its checksum, and drops `baudelaire` in `~/.local/bin`.
 
-```sh
-just install
-```
-
-This builds from source and drops the `baudelaire` binary in `~/.cargo/bin`, it will also be symlinked to `bl` for convenience.
-Confirm it works:
+It is deliberately readable, so fetch it, skim it, then run it:
 
 ```sh
-baudelaire --version # or: bau --version
+curl -fsSL https://baudelaire.dev/install.sh -o install.sh
+less install.sh          # read before you run
+sh install.sh
 ```
 
-prefer it short? `alias my_alias=baudelaire`, e.g. `alias bl=baudelaire`
+Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release.
 
 #callout(kind: "note")[
   Fonts come from your system. On a slim server or CI image, install a font
   package such as `fonts-dejavu` so Typst has something to render with.
 ]
 
-== From a release
+== With cargo
 
-Prebuilt binaries for Linux, macOS, and Windows are attached to every
-#link("https://codeberg.org/cstef/baudelaire/releases")[release]. Download
-the archive for your platform, extract it, and put the binary on your `PATH`.
+If you have a Rust toolchain, Cargo can install it three ways:
+
+```sh
+cargo binstall baudelaire     # prebuilt tarball, no compile
+cargo install baudelaire      # build from crates.io
+cargo install --git https://codeberg.org/cstef/baudelaire   # build from git
+```
+
+`cargo binstall` pulls the same release tarballs as the installer script;
+`cargo install` builds from source (slower, but works on any platform Rust
+targets).
+
+== From a checkout
+
+Working on baudelaire itself? Build and install from the repo:
+
+```sh
+just install
+```
+
+== Confirm it works
+
+```sh
+baudelaire --version
+```
+
+Prefer it short? Add an alias in your shell: `alias bl=baudelaire`.
 
 Next: #link("quickstart.typ")[the quickstart].

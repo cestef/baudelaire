@@ -110,6 +110,7 @@ impl Dev<'_> {
             self.config.content.display().to_string(),
             self.config.templates.display().to_string(),
             self.config.assets.display().to_string(),
+            self.config.r#static.display().to_string(),
             self.config_path.display().to_string(),
         ];
         parts.extend(self.config.serve.include.iter().cloned());
@@ -480,6 +481,7 @@ impl Watcher {
 struct Filter {
     root: PathBuf,
     assets: PathBuf,
+    statics: PathBuf,
     /// The session's config file, absolute (canonical when it resolves), so a
     /// changed path can be tested for "is this *my* config" — a sibling `.kdl`
     /// in the same directory must not reload the session.
@@ -495,10 +497,13 @@ impl Filter {
         let root = root.path().to_path_buf();
         let assets =
             crate::fs::canonicalize(&config.assets).unwrap_or_else(|_| root.join(&config.assets));
+        let statics = crate::fs::canonicalize(&config.r#static)
+            .unwrap_or_else(|_| root.join(&config.r#static));
         let mut watches = vec![
             (config.content.clone(), Recursive),
             (config.templates.clone(), Recursive),
             (config.assets.clone(), Recursive),
+            (config.r#static.clone(), Recursive),
         ];
         // Watch the config file via its parent directory, non-recursively —
         // editors commonly save by rename-over, which drops a watch pinned to
@@ -531,6 +536,7 @@ impl Filter {
         Ok(Self {
             root,
             assets,
+            statics,
             config: config_file,
             watches,
             include,
@@ -577,6 +583,7 @@ impl Filter {
         self.is_config(path)
             || path.extension().is_some_and(|e| e == "typ")
             || path.starts_with(&self.assets)
+            || path.starts_with(&self.statics)
     }
 }
 

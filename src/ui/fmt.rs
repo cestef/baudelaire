@@ -41,6 +41,13 @@ impl Count {
         Self { n, noun: "file" }
     }
 
+    pub fn statics(n: usize) -> Self {
+        Self {
+            n,
+            noun: "static file",
+        }
+    }
+
     pub fn warnings(n: usize) -> Self {
         Self { n, noun: "warning" }
     }

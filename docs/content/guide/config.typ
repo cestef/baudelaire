@@ -20,6 +20,7 @@ paths {
   content "content"
   dist "public"
   assets "assets"
+  static "static"
   templates "templates"
 }
 
@@ -53,7 +54,12 @@ Every field has a sensible default, so a minimal `config.kdl` is just
 
 == The blocks
 
-/ #raw("paths"): Where content, output, assets, and templates live.
+/ #raw("paths"): Where content, output, assets, templates, and the `static`
+  passthrough directory live. Files under `static/` are copied verbatim to the
+  output root — no processing, no fingerprint — for a `robots.txt` override,
+  `.well-known/`, a `CNAME`, or an `install.sh`.
+/ #raw("client"): Build-time constants exposed to client JavaScript through the
+  #link("../features/js-modules.typ")[#raw("baudelaire:config")] virtual module.
 / #raw("collections"): Per-group sorting, permalinks, pagination, and the
   default template. See #link("../features/pagination.typ")[pagination].
 / #raw("taxonomies"): Group pages by a frontmatter list such as `tags`. See

@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 3,
+  order: 4,
   title: "Build hooks",
   tags: ("feature", "assets"),
 )

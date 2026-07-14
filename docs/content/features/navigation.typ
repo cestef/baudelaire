@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 6,
+  order: 7,
   title: "Prev / next navigation",
   tags: ("feature",),
 )
