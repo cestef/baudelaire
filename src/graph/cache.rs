@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! manifest.json          # small: config fingerprint + per-page metadata
-//! objects/ab/abcd…       # rendered HTML, content-addressed by blob hash
+//! objects/ab/abcd..       # rendered HTML, content-addressed by blob hash
 //! ```
 //!
 //! The manifest holds only metadata — hashes, dependency edges, output paths,

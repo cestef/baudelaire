@@ -39,9 +39,9 @@ pub enum Value {
     Str(String),
     Int(i64),
     Bool(bool),
-    /// A typst array `(a, b, …)`.
+    /// A typst array `(a, b, ..)`.
     Array(Vec<Value>),
-    /// A typst dictionary `(key: value, …)`. Non-identifier keys are quoted, so
+    /// A typst dictionary `(key: value, ..)`. Non-identifier keys are quoted, so
     /// arbitrary frontmatter keys are safe.
     Dict(Vec<(String, Value)>),
     /// A pre-formed, already-valid typst expression, emitted verbatim. Used to
@@ -70,7 +70,7 @@ impl Value {
     }
 
     /// Carry a typst runtime value into generated source via its own `repr`,
-    /// which is valid typst for data values (strings, numbers, arrays, dicts, …).
+    /// which is valid typst for data values (strings, numbers, arrays, dicts, ..).
     pub fn from_typst(value: &typst::foundations::Value) -> Self {
         Self::Raw(value.repr().to_string())
     }

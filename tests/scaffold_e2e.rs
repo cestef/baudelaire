@@ -24,7 +24,7 @@ fn init_config_is_valid() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let cfg = t.read("config.kdl");
     // The site name is templated from the directory, and every placeholder is
-    // filled (no `{{…}}` left behind).
+    // filled (no `{{..}}` left behind).
     assert!(cfg.contains("site \""), "has a site name: {cfg}");
     assert!(!cfg.contains("{{"), "placeholders filled: {cfg}");
     assert!(cfg.contains("clean #true"));
@@ -173,7 +173,7 @@ fn build_reports_timing() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["build"]);
     assert!(out.status.success());
-    // The summary ends `… in 132ms` / `… in 1.24s`.
+    // The summary ends `.. in 132ms` / `.. in 1.24s`.
     let logs = String::from_utf8_lossy(&out.stderr);
     assert!(
         logs.contains(" in ") && (logs.contains("ms") || logs.contains("s")),

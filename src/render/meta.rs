@@ -133,12 +133,12 @@ impl Card<'_> {
         BaseUrl::resolve(self.config.base().as_ref(), &src)
     }
 
-    /// A `<meta name="…" content="…">` tag.
+    /// A `<meta name=".." content="..">` tag.
     fn named(name: &str, content: &str) -> HtmlNode {
         Self::meta(attr::name, name, content)
     }
 
-    /// A `<meta property="…" content="…">` tag (OpenGraph).
+    /// A `<meta property=".." content="..">` tag (OpenGraph).
     fn property(property: &str, content: &str) -> HtmlNode {
         Self::meta(HtmlAttr::constant("property"), property, content)
     }
@@ -150,7 +150,7 @@ impl Card<'_> {
         HtmlNode::Element(el)
     }
 
-    /// A `<link rel="canonical" href="…">` tag.
+    /// A `<link rel="canonical" href="..">` tag.
     fn canonical(href: &str) -> HtmlNode {
         let mut el = HtmlElement::new(tag::link);
         el.attrs.push(attr::rel, "canonical");

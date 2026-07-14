@@ -218,7 +218,7 @@ impl Engine {
         };
         let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
 
-        // `after` hooks run once the whole site is on disk (deploy, Pagefind…).
+        // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
 
         // Warnings render as a block ahead of the result line, cargo-style.
@@ -376,7 +376,7 @@ impl Engine {
     /// every template as `page.sections` — the single source a site nav
     /// (sidebar, breadcrumbs) is built from, so it can never drift from the
     /// pages themselves. Each collection is `(id: "guide", pages: ((url:,
-    /// title:), …))`, in the collection's own sort order; generated listing
+    /// title:), ..))`, in the collection's own sort order; generated listing
     /// pages (taxonomy indexes, paginated indexes) are excluded — only authored
     /// content. Identical for every page, so it is computed once per build.
     fn sections(pages: &[Page]) -> String {
@@ -404,7 +404,7 @@ impl Engine {
     }
 
     /// The prev/next sibling links as a typst dict value:
-    /// `(prev: (url: …, title: …), next: none)`. Each link is a dict or `none`,
+    /// `(prev: (url: .., title: ..), next: none)`. Each link is a dict or `none`,
     /// so a template reads `page.nav.prev.url` / `page.nav.next` uniformly.
     fn nav(siblings: &crate::content::Siblings) -> crate::codegen::Value {
         use crate::codegen::Value;
@@ -450,7 +450,7 @@ impl Engine {
         let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
         let compiled = compile::<HtmlDocument>(&world);
-        // typst warnings (unknown font families, deprecations…) survive a
+        // typst warnings (unknown font families, deprecations..) survive a
         // successful compile; bridge them like errors so they render with
         // spans. On failure they are dropped — the errors say more. Typst's
         // blanket "html export is under active development" notice is filtered:

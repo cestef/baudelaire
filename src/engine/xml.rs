@@ -46,7 +46,7 @@ impl Xml {
         self.write(Event::Text(BytesText::new(text)));
     }
 
-    /// Write `<name attrs…>` … `</name>`, its body produced by `content`.
+    /// Write `<name attrs..>` .. `</name>`, its body produced by `content`.
     pub(super) fn nest(
         &mut self,
         name: &str,
@@ -65,7 +65,7 @@ impl Xml {
         self.write(Event::End(BytesEnd::new(name.to_owned())));
     }
 
-    /// Write a self-closing `<name attrs… />`.
+    /// Write a self-closing `<name attrs.. />`.
     pub(super) fn empty(&mut self, name: &str, attrs: &[(&str, &str)]) {
         self.write(Event::Empty(Self::start(name, attrs)));
     }

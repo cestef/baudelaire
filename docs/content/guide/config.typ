@@ -118,7 +118,7 @@ make editing pleasant:
 / Slashdash: prefix any node with `/-` to comment it out whole. `/-search { }`
   turns search off without deleting your settings, which beats commenting every
   line.
-/ Raw and multi-line strings: `#"…"#` and `"""` let a hook command or a summary
+/ Raw and multi-line strings: `#".."#` and `"""` let a hook command or a summary
   hold quotes and newlines with no escaping.
 
 ```kdl

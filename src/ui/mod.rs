@@ -142,7 +142,7 @@ impl Ui {
         let _ = writeln!(s.out, "\n  {} {}", "◆".cyan().bold(), msg.bold());
     }
 
-    /// A result line: `✓ built 24 pages … in 132ms`. Shown even at `--quiet`
+    /// A result line: `✓ built 24 pages .. in 132ms`. Shown even at `--quiet`
     /// (it is the final result); only [`Level::Silent`] suppresses it.
     pub fn done(&self, msg: impl Display) {
         self.done_inner(msg, true);
@@ -183,7 +183,7 @@ impl Ui {
         let _ = writeln!(s.out, "    {} {}", "↳".dimmed(), msg);
     }
 
-    /// A vite-style pointer line: `➜ local  http://…`. Labels align across
+    /// A vite-style pointer line: `➜ local  http://..`. Labels align across
     /// consecutive arrows (padded to the widest expected label).
     pub fn arrow(&self, label: &str, value: impl Display) {
         let mut s = self.state.lock();

@@ -42,7 +42,7 @@ pub(super) struct Context<'a> {
     /// frontmatter keys are taxonomies.
     pub taxonomies: &'a str,
     /// Prev/next sibling links as a dict literal, e.g.
-    /// `(prev: (url: "…", title: "…"), next: none)` — exposed to the template as
+    /// `(prev: (url: "..", title: ".."), next: none)` — exposed to the template as
     /// `page.nav` for older/newer navigation.
     pub nav: &'a str,
     /// The site's content collections as an array literal — exposed to the

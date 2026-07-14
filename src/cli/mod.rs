@@ -30,7 +30,7 @@ const HELP_STYLES: Styles = Styles::styled()
 
 /// Help-heading names, so the shared global flags cluster by concern instead of
 /// piling into one long `Options` list. Single source, referenced by every
-/// grouped `#[arg(help_heading = …)]`.
+/// grouped `#[arg(help_heading = ..)]`.
 mod group {
     pub const PROJECT: &str = "Project";
     pub const OUTPUT: &str = "Output";

@@ -31,12 +31,12 @@ impl Config {
 }
 
 impl ConfigError {
-    /// A profile name that matches nothing in `profiles { … }`, its help
+    /// A profile name that matches nothing in `profiles { .. }`, its help
     /// listing (and nearest-matching) the names that are configured.
     pub fn missing_profile(name: &str, profiles: &[(String, KdlDocument)]) -> ConfigError {
         let names: Vec<&str> = profiles.iter().map(|(n, _)| n.as_str()).collect();
         let help = if names.is_empty() {
-            "no profiles are configured; add a `profiles { … }` block to config.kdl".to_owned()
+            "no profiles are configured; add a `profiles { .. }` block to config.kdl".to_owned()
         } else {
             Keys(&names).help(name, "profiles")
         };

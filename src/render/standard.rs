@@ -1,7 +1,7 @@
 //! Injects the per-page standard.site verification `<link>` into dated pages.
 //!
 //! When `publish.standard` carries a `did` and `verify.links` is on, every dated
-//! page gets `<link rel="site.standard.document" href="at://…">` in its `<head>`,
+//! page gets `<link rel="site.standard.document" href="at://..">` in its `<head>`,
 //! letting an AppView confirm the page and its record belong together. The URI —
 //! and the key scheme behind it — comes from [`crate::publish::standard`], the
 //! single source of the record shapes, so the build names exactly what the
@@ -42,7 +42,7 @@ fn standard(config: &Config) -> Option<&StandardConfig> {
     config.publish.standard.as_ref()
 }
 
-/// A `<link rel="site.standard.document" href="…">` node.
+/// A `<link rel="site.standard.document" href="..">` node.
 fn link(href: &str) -> HtmlNode {
     let mut el = HtmlElement::new(tag::link);
     el.attrs.push(attr::rel, DOCUMENT.as_str());

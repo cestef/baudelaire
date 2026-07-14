@@ -2,7 +2,7 @@
 //!
 //! A collection that configures a `list` template or a `paginate = N` count
 //! gets a generated index [`Listing`] at `/{collection}/`. With `paginate` its
-//! members are chunked across `/{collection}/`, `/{collection}/page/2/`, … each
+//! members are chunked across `/{collection}/`, `/{collection}/page/2/`, .. each
 //! with prev/next navigation; without it, all members sit on the single index
 //! page. A collection that configures neither gets no index at all.
 

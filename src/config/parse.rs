@@ -319,7 +319,7 @@ impl NodeExt for KdlNode {
         IMAGES.fill(target, self, text)
     }
 
-    /// The `optimize { png [level=…] [strip=…]; jpeg [quality=…] }` block: each
+    /// The `optimize { png [level=..] [strip=..]; jpeg [quality=..] }` block: each
     /// child names a format (leniently — `jpg`/`jpeg` both work) and enables it,
     /// with optional per-format tuning as attributes. Fills onto the existing
     /// per-format config so a profile tuning one attribute keeps its siblings.

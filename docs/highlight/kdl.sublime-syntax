@@ -67,7 +67,7 @@ contexts:
     - match: '[-+]?[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][-+]?[0-9]+)?'
       scope: constant.numeric.decimal.kdl
 
-  # A parenthesised type annotation: `(u8)`, `(date)`, `(regex)`, …
+  # A parenthesised type annotation: `(u8)`, `(date)`, `(regex)`, ..
   type-annotation:
     - match: '(\()([^)]*)(\))'
       captures:
@@ -100,7 +100,7 @@ contexts:
 
   # ---- Strings ------------------------------------------------------------
   strings:
-    # Raw multi-line: #"""…"""#
+    # Raw multi-line: #""".."""#
     - match: '#+"""'
       scope: punctuation.definition.string.begin.kdl
       push:
@@ -108,7 +108,7 @@ contexts:
         - match: '"""#+'
           scope: punctuation.definition.string.end.kdl
           pop: true
-    # Multi-line: """…"""
+    # Multi-line: """.."""
     - match: '"""'
       scope: punctuation.definition.string.begin.kdl
       push:
@@ -118,7 +118,7 @@ contexts:
         - match: '"""'
           scope: punctuation.definition.string.end.kdl
           pop: true
-    # Raw: #"…"#
+    # Raw: #".."#
     - match: '#+"'
       scope: punctuation.definition.string.begin.kdl
       push:
@@ -126,7 +126,7 @@ contexts:
         - match: '"#+'
           scope: punctuation.definition.string.end.kdl
           pop: true
-    # Quoted: "…"
+    # Quoted: ".."
     - match: '"'
       scope: punctuation.definition.string.begin.kdl
       push:

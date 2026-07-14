@@ -51,7 +51,7 @@ pub fn document_uri(did: &str, path: &str) -> AtUri {
     AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
 }
 
-/// The standard.site backend, configured from a `publish { standard { … } }`
+/// The standard.site backend, configured from a `publish { standard { .. } }`
 /// block.
 pub struct Standard {
     config: StandardConfig,

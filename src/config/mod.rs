@@ -385,7 +385,7 @@ pub struct SearchConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SearchFormat {
     /// A flat document list (`search.json`) — pair with any client library
-    /// (Fuse.js, MiniSearch, …), which builds its own index at runtime.
+    /// (Fuse.js, MiniSearch, ..), which builds its own index at runtime.
     Json,
     /// A prebuilt inverted index (`search.inverted.json`): server-side tokenized
     /// so the client looks up terms directly instead of scanning every doc.

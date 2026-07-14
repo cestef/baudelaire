@@ -408,7 +408,7 @@ impl Draft {
         time::Date::from_calendar_date(year, month, day).map_err(|_| bad().into())
     }
 
-    /// The scaffolded `.typ`: a computed `#let frontmatter = (…)` export plus a
+    /// The scaffolded `.typ`: a computed `#let frontmatter = (..)` export plus a
     /// body stub. Values go through [`Value`] so strings are escaped.
     fn body(&self) -> String {
         let mut fields: Vec<(&str, Value)> = vec![("title", Value::str(&self.title))];

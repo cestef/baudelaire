@@ -8,9 +8,9 @@
 //!
 //! - [`SearchFormat::Json`] → `search.json`: a flat array of documents
 //!   `[{ "url", "title", "tags", "body" }]`. Feed it to any client library
-//!   (Fuse.js, MiniSearch, …) that indexes at runtime.
+//!   (Fuse.js, MiniSearch, ..) that indexes at runtime.
 //! - [`SearchFormat::Inverted`] → `search.inverted.json`: a prebuilt index
-//!   `{ "documents": [{ "url", "title" }], "postings": { term: [docId…] } }`.
+//!   `{ "documents": [{ "url", "title" }], "postings": { term: [docId..] } }`.
 //!   The server does the tokenizing; the client resolves a query by looking up
 //!   its terms and intersecting the posting lists.
 //!
