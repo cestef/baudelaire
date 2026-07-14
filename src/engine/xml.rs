@@ -11,8 +11,8 @@
 //! UTF-8, so neither writing events nor recovering the final string has a
 //! reachable error path. Both invariants are documented on the `expect`s.
 
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 /// An in-progress XML document. Every text and attribute value is escaped by
 /// quick-xml, so callers pass raw strings.

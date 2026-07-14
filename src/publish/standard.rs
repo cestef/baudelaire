@@ -362,9 +362,11 @@ mod tests {
             publication_uri("did:plc:x").to_string(),
             "at://did:plc:x/site.standard.publication/self"
         );
-        assert!(document_uri("did:plc:x", "/a/")
-            .to_string()
-            .starts_with("at://did:plc:x/site.standard.document/"));
+        assert!(
+            document_uri("did:plc:x", "/a/")
+                .to_string()
+                .starts_with("at://did:plc:x/site.standard.document/")
+        );
     }
 
     #[test]

@@ -4,13 +4,13 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use typst::foundations::{Datetime, Dict, Module, Value};
 use typst::syntax::{
-    ast::{Expr, Markup},
     Source,
+    ast::{Expr, Markup},
 };
 
 use crate::codegen;
-use crate::config::dispatch::Keys;
 use crate::config::Config;
+use crate::config::dispatch::Keys;
 use crate::error::{ContentError, Result};
 
 /// The recognized scalar/list frontmatter keys (taxonomy keys are configured,

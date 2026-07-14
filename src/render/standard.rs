@@ -7,10 +7,10 @@
 //! single source of the record shapes, so the build names exactly what the
 //! publisher writes.
 
-use typst_html::{attr, tag, HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{Config, StandardConfig};
-use crate::publish::standard::{document_uri, DOCUMENT};
+use crate::publish::standard::{DOCUMENT, document_uri};
 
 use super::transform::{Cx, ElementExt, Transform};
 

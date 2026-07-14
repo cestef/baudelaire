@@ -118,9 +118,10 @@ fn new_bundle_creates_index_in_a_directory() {
         "bundle dir with index.typ"
     );
     // The bundle takes its title from the directory, not "Index".
-    assert!(t
-        .read("content/posts/my-post/index.typ")
-        .contains("title: \"My Post\""));
+    assert!(
+        t.read("content/posts/my-post/index.typ")
+            .contains("title: \"My Post\"")
+    );
 }
 
 #[test]

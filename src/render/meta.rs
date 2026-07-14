@@ -10,13 +10,13 @@
 //! these tags cannot be authored in a layout — appending them to the parsed DOM
 //! here is the single place they can be added for every page at once.
 
-use typst_html::{attr, tag, HtmlAttr, HtmlDocument, HtmlElement, HtmlNode};
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
-use super::transform::{Cx, ElementExt, Transform};
 use super::AssetMap;
+use super::transform::{Cx, ElementExt, Transform};
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;

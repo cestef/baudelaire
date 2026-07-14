@@ -1,9 +1,9 @@
 use kdl::KdlDocument;
 use miette::SourceSpan;
 
+use crate::config::Config;
 use crate::config::dispatch::Keys;
 use crate::config::parse::NodeExt;
-use crate::config::Config;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {

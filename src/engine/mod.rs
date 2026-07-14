@@ -26,7 +26,7 @@ use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::config::Config;
-use crate::content::{plan, Data, Page};
+use crate::content::{Data, Page, plan};
 use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::{Bind, Body, Layout};

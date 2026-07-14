@@ -586,9 +586,11 @@ mod tests {
     fn full_sweep_names_a_relocated_cache() {
         let mut config = Config::default();
         config.cache.dir = PathBuf::from("/var/tmp/bd-cache");
-        assert!(args(false, false, false)
-            .targets(&config)
-            .contains(&config.cache.dir));
+        assert!(
+            args(false, false, false)
+                .targets(&config)
+                .contains(&config.cache.dir)
+        );
     }
 
     #[test]

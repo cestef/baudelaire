@@ -4,6 +4,7 @@ use std::sync::{Arc, LazyLock};
 
 use time::OffsetDateTime;
 use typst::{
+    Feature, Features, Library, LibraryExt, World,
     comemo::Track,
     diag::{FileError, FileResult},
     engine::{Route, Sink, Traced},
@@ -11,7 +12,6 @@ use typst::{
     syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot},
     text::{Font, FontBook},
     utils::LazyHash,
-    Feature, Features, Library, LibraryExt, World,
 };
 use typst_kit::{
     downloader::SystemDownloader,

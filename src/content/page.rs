@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use wax::prelude::*;
 use wax::Glob;
+use wax::prelude::*;
 
 use crate::config::{CollectionConfig, Config, SortKey};
 use crate::content::cache::DiscoveryCache;

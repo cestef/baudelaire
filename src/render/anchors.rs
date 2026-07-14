@@ -5,7 +5,7 @@
 //! URLs). An author-set `id` is always left untouched. A heading whose text has
 //! no URL-safe characters is skipped rather than given an empty anchor.
 
-use typst_html::{attr, tag, HtmlDocument, HtmlElement, HtmlNode, HtmlTag};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
 use crate::config::Config;
 use crate::content::Slug;
