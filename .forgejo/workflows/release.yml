@@ -115,7 +115,7 @@ jobs:
           script, skim it, then run it:
 
           \`\`\`bash
-          curl -fsSL https://baudelaire.dev/install.sh -o install.sh
+          curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
           less install.sh          # read before you run
           sh install.sh            # PREFIX= to change dir, VERSION=${VERSION} to pin
           \`\`\`
