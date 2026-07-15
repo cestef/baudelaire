@@ -111,7 +111,7 @@ pub(super) trait NodeExt {
     fn typst(&self, config: &mut Config, text: &str) -> Result<()>;
     fn output(&self, config: &mut Config, text: &str) -> Result<()>;
     fn inputs(&self, text: &str) -> Result<Vec<(String, String)>>;
-    fn client(&self, text: &str) -> Result<Vec<(String, serde_json::Value)>>;
+    fn client(&self, text: &str) -> Result<Vec<(String, crate::codegen::Value)>>;
     fn features(&self, text: &str) -> Result<Vec<String>>;
     fn words(&self, text: &str) -> Result<Vec<String>>;
     fn mapped<T: Copy>(&self, text: &str, table: &[(&'static str, T)]) -> Result<Vec<T>>;
@@ -222,13 +222,13 @@ impl NodeExt for KdlNode {
             .collect()
     }
 
-    fn client(&self, text: &str) -> Result<Vec<(String, serde_json::Value)>> {
+    fn client(&self, text: &str) -> Result<Vec<(String, crate::codegen::Value)>> {
         let children = self.block(text)?;
         children
             .nodes()
             .iter()
             .map(|child| {
-                let value = child.arg(text, 0)?.json(text, NodeExt::span(child))?;
+                let value = child.arg(text, 0)?.scalar(text, NodeExt::span(child))?;
                 Ok((child.name().value().to_owned(), value))
             })
             .collect()

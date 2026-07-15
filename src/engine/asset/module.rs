@@ -14,10 +14,10 @@ use rolldown::plugin::{
     HookResolveIdReturn, HookUsage, Plugin, PluginContext, SharedLoadPluginContext,
 };
 use rolldown_common::ModuleType;
-use serde_json::{Value, json};
 
+use crate::codegen::{Js, Value};
 use crate::config::{Config, SearchFormat};
-use crate::content::{Data, Page};
+use crate::content::{Data, Page, Section};
 use crate::render::AssetMap;
 
 /// The read-only build data every virtual module generates from: the config, the
@@ -108,23 +108,32 @@ struct Esm;
 
 impl Esm {
     /// A module exporting `value` as default and each valid-identifier key of it
-    /// (when it is an object) as a named const.
+    /// (when it is a dict) as a named const.
     fn object(value: &Value) -> String {
         let mut out = String::new();
-        if let Value::Object(map) = value {
-            for (key, item) in map {
+        if let Value::Dict(pairs) = value {
+            for (key, item) in pairs {
                 if Self::ident(key) {
-                    out.push_str(&format!("export const {key} = {item};\n"));
+                    out.push_str("export const ");
+                    out.push_str(key);
+                    out.push_str(" = ");
+                    item.render::<Js>(&mut out);
+                    out.push_str(";\n");
                 }
             }
         }
-        out.push_str(&format!("export default {value};\n"));
+        out.push_str("export default ");
+        value.render::<Js>(&mut out);
+        out.push_str(";\n");
         out
     }
 
     /// A module with a single default export of `value`.
     fn value(value: &Value) -> String {
-        format!("export default {value};\n")
+        let mut out = String::from("export default ");
+        value.render::<Js>(&mut out);
+        out.push_str(";\n");
+        out
     }
 
     /// Whether `s` is a safe, non-reserved JS identifier for a named export.
@@ -174,13 +183,13 @@ struct Site;
 impl Module for Site {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
         let c = cx.config;
-        let data = json!({
-            "title": c.site,
-            "url": c.url,
-            "lang": c.lang,
-            "author": c.author,
-            "version": env!("CARGO_PKG_VERSION"),
-        });
+        let data = Value::dict([
+            ("title", Value::opt(c.site.clone())),
+            ("url", Value::opt(c.url.clone())),
+            ("lang", Value::str(&c.lang)),
+            ("author", Value::opt(c.author.clone())),
+            ("version", Value::str(env!("CARGO_PKG_VERSION"))),
+        ]);
         vec![("baudelaire:site".into(), Esm::object(&data))]
     }
 }
@@ -191,7 +200,7 @@ struct Settings;
 
 impl Module for Settings {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let data = Value::Object(cx.config.client.iter().cloned().collect());
+        let data = Value::dict(cx.config.client.iter().cloned());
         vec![("baudelaire:config".into(), Esm::object(&data))]
     }
 }
@@ -203,16 +212,12 @@ struct Assets;
 
 impl Module for Assets {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let map: serde_json::Map<String, Value> = cx
-            .assets
-            .iter()
-            .map(|(from, to)| (from.to_owned(), Value::String(to.to_owned())))
-            .collect();
-        let map = Value::Object(map);
+        let map = Value::dict(cx.assets.iter().map(|(from, to)| (from, Value::str(to))));
         let src = format!(
-            "const map = {map};\n\
+            "const map = {};\n\
              export function url(path) {{ return map[path] ?? path; }}\n\
-             export default map;\n"
+             export default map;\n",
+            map.to::<Js>()
         );
         vec![("baudelaire:assets".into(), src)]
     }
@@ -224,54 +229,36 @@ struct Pages;
 
 impl Module for Pages {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let pages: Vec<Value> = cx
+        let pages = cx
             .pages
             .iter()
             .filter(|p| !matches!(p.data, Data::Generated(_)))
             .map(|page| {
-                let taxonomies: serde_json::Map<String, Value> = page
-                    .frontmatter
-                    .taxonomies
-                    .iter()
-                    .map(|(key, terms)| (key.clone(), json!(terms)))
-                    .collect();
-                json!({
-                    "url": page.permalink,
-                    "title": page.title(),
-                    "collection": page.collection,
-                    "date": page.frontmatter.date.map(Iso::date),
-                    "taxonomies": taxonomies,
-                })
-            })
-            .collect();
-        vec![("baudelaire:pages".into(), Esm::value(&Value::Array(pages)))]
+                let taxonomies =
+                    Value::dict(page.frontmatter.taxonomies.iter().map(|(key, terms)| {
+                        (key.clone(), Value::array(terms.iter().map(Value::str)))
+                    }));
+                Value::dict([
+                    ("url", Value::str(&page.permalink)),
+                    ("title", Value::str(page.title())),
+                    ("collection", Value::str(&page.collection)),
+                    ("date", Value::opt(page.frontmatter.date.map(Iso::date))),
+                    ("taxonomies", taxonomies),
+                ])
+            });
+        vec![("baudelaire:pages".into(), Esm::value(&Value::array(pages)))]
     }
 }
 
-/// `baudelaire:sections`: the site's collections as an ordered list of `{ id,
-/// pages: [{ url, title }] }` — the same grouping templates get as
-/// `page.sections`, for building menus and command palettes client-side.
+/// `baudelaire:sections`: the site's section tree — `{ id, pages: [{ url, title
+/// }], children: [...] }` per content directory, nested — exactly what templates
+/// get as `page.sections`, for building menus and command palettes client-side.
 struct Sections;
 
 impl Module for Sections {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let mut groups: Vec<(&str, Vec<Value>)> = Vec::new();
-        for page in cx.pages {
-            if matches!(page.data, Data::Generated(_)) {
-                continue;
-            }
-            let entry = json!({ "url": page.permalink, "title": page.title() });
-            match groups.iter_mut().find(|(id, _)| *id == page.collection) {
-                Some((_, list)) => list.push(entry),
-                None => groups.push((&page.collection, vec![entry])),
-            }
-        }
-        let data = Value::Array(
-            groups
-                .into_iter()
-                .map(|(id, pages)| json!({ "id": id, "pages": pages }))
-                .collect(),
-        );
+        let tree = Section::tree(cx.pages, cx.config);
+        let data = Value::array(tree.iter().map(|s| s.value()));
         vec![("baudelaire:sections".into(), Esm::value(&data))]
     }
 }

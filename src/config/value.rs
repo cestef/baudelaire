@@ -70,10 +70,12 @@ pub(super) trait ValueExt {
     /// unknown name with a nearest-match hint — the single-value counterpart of
     /// `NodeExt::mapped`, so the table drives both parsing and error help.
     fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T>;
-    /// Any KDL scalar as a JSON value, for build-time constants passed straight
-    /// through to client JS (`baudelaire:config`). Strings expand `${VAR}` like
-    /// every other config string; a float that is not finite is an error.
-    fn json(&self, text: &str, span: SourceSpan) -> Result<serde_json::Value>;
+    /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
+    /// straight through to client JS (`baudelaire:config`). Strings expand
+    /// `${VAR}` like every other config string; a non-finite float is an error.
+    ///
+    /// [`codegen::Value`]: crate::codegen::Value
+    fn scalar(&self, text: &str, span: SourceSpan) -> Result<crate::codegen::Value>;
 }
 
 impl ValueExt for KdlValue {
@@ -133,16 +135,19 @@ impl ValueExt for KdlValue {
         )
     }
 
-    fn json(&self, text: &str, span: SourceSpan) -> Result<serde_json::Value> {
-        use serde_json::Value;
+    fn scalar(&self, text: &str, span: SourceSpan) -> Result<crate::codegen::Value> {
+        use crate::codegen::Value;
         Ok(match self {
-            KdlValue::String(_) => Value::String(self.as_str(text, span)?),
-            KdlValue::Integer(_) => self.integer(text, span)?.into(),
-            KdlValue::Float(f) => serde_json::Number::from_f64(*f)
-                .map(Value::Number)
-                .ok_or_else(|| ConfigError::type_mismatch(text, "finite number", "float", span))?,
+            KdlValue::String(_) => Value::str(self.as_str(text, span)?),
+            KdlValue::Integer(_) => Value::Int(self.integer(text, span)?),
+            KdlValue::Float(f) if f.is_finite() => Value::Float(*f),
+            KdlValue::Float(_) => {
+                return Err(
+                    ConfigError::type_mismatch(text, "finite number", "float", span).into(),
+                );
+            }
             KdlValue::Bool(b) => Value::Bool(*b),
-            KdlValue::Null => Value::Null,
+            KdlValue::Null => Value::None,
         })
     }
 

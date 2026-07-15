@@ -114,6 +114,25 @@
   )
 ]
 
+// Title-case a directory name for display: `storage` -> `Storage`.
+#let _titlecase(s) = if s == "" { s } else { upper(s.slice(0, count: 1)) + s.slice(1) }
+
+// Render a section from `page.sections` recursively: its direct-page links,
+// then each child directory as a nested subgroup. `page.sections` is a tree of
+// `(id, pages: ((url, title), ..), children: (..))` mirroring `content/`.
+#let nav-section(title, section, sub: false) = html.elem(
+  "div",
+  attrs: (class: if sub { "nav-group nav-sub" } else { "nav-group" }),
+)[
+  #html.elem("p", attrs: (class: "nav-title"), title)
+  #if section.pages.len() > 0 {
+    html.elem("ul", for p in section.pages { html.elem("li", link-to(p.url, p.title)) })
+  }
+  #for child in section.children {
+    nav-section(_titlecase(child.id), child, sub: true)
+  }
+]
+
 // The doc collections shown in the sidebar, as `(id, display title)`. Their
 // pages — and their order — come from `page.sections` (the build's own view of
 // the site), so the sidebar can never drift from the content or from the
@@ -121,20 +140,20 @@
 #let _doc-groups = (("guide", "Guide"), ("features", "Features"))
 
 #let sidebar(sections) = {
-  // `sections` is an array of `(id, pages: ((url, title), ..))` in each
-  // collection's sort order.
+  // `sections` is a tree: `(id, pages: ((url, title), ..), children: (..))`,
+  // one node per `content/` directory, in each collection's sort order.
   let by-id = (:)
   for section in sections {
-    by-id.insert(section.id, section.pages)
+    by-id.insert(section.id, section)
   }
   html.elem(
     "nav",
     attrs: (class: "sidebar", id: "sidebar", "aria-label": "Documentation"),
     {
       for (id, title) in _doc-groups {
-        let pages = by-id.at(id, default: ())
-        if pages.len() > 0 {
-          nav-group(title, pages.map(p => (p.url, p.title)))
+        let section = by-id.at(id, default: none)
+        if section != none and (section.pages.len() > 0 or section.children.len() > 0) {
+          nav-section(title, section)
         }
       }
       nav-group("More", (

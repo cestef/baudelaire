@@ -27,7 +27,7 @@ use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::config::Config;
-use crate::content::{Data, Page, plan};
+use crate::content::{Data, Page, Section, plan};
 use crate::engine::asset::Assets;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::{Bind, Body, Layout};
@@ -173,7 +173,7 @@ impl Engine {
         // `page.sections`; identical for all pages, so built once. Part of each
         // page's wrapper text → a title/url change refingerprints every page
         // that embeds the nav (correct: the sidebar renders on all of them).
-        let sections = Self::sections(&pages);
+        let sections = self.sections(&pages);
 
         let mut cached: Vec<(&Page, String)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
@@ -266,7 +266,7 @@ impl Engine {
             "planned check"
         );
         let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
-        let sections = Self::sections(&pages);
+        let sections = self.sections(&pages);
         let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
@@ -387,34 +387,19 @@ impl Engine {
         Ok((id, text, fingerprint))
     }
 
-    /// The site's content collections as an ordered typst array, exposed to
-    /// every template as `page.sections` — the single source a site nav
-    /// (sidebar, breadcrumbs) is built from, so it can never drift from the
-    /// pages themselves. Each collection is `(id: "guide", pages: ((url:,
-    /// title:), ..))`, in the collection's own sort order; generated listing
-    /// pages (taxonomy indexes, paginated indexes) are excluded — only authored
-    /// content. Identical for every page, so it is computed once per build.
-    fn sections(pages: &[Page]) -> String {
-        use crate::codegen::Value;
-        // Group content pages by collection, preserving first-seen order —
-        // `plan` already emits them per collection in sort order.
-        let mut groups: Vec<(&str, Vec<Value>)> = Vec::new();
-        for page in pages {
-            if matches!(page.data, Data::Generated(_)) {
-                continue;
-            }
-            let entry = Value::dict([
-                ("url", Value::str(&page.permalink)),
-                ("title", Value::str(page.title())),
-            ]);
-            match groups.iter_mut().find(|(id, _)| *id == page.collection) {
-                Some((_, list)) => list.push(entry),
-                None => groups.push((&page.collection, vec![entry])),
-            }
-        }
-        Value::array(groups.into_iter().map(|(id, entries)| {
-            Value::dict([("id", Value::str(id)), ("pages", Value::Array(entries))])
-        }))
+    /// The site's [`Section`] tree serialized as a typst array, exposed to every
+    /// template as `page.sections` — the single source a site nav (sidebar,
+    /// breadcrumbs) is built from, so it can never drift from the pages. Each
+    /// node is `(id, pages: ((url, title), ..), children: (..))`, one per
+    /// content directory; generated listings are excluded. The same tree backs
+    /// the `baudelaire:sections` JS module. Identical for every page, so it is
+    /// computed once per build.
+    fn sections(&self, pages: &[Page]) -> String {
+        crate::codegen::Value::array(
+            Section::tree(pages, &self.config)
+                .iter()
+                .map(Section::value),
+        )
         .to_string()
     }
 

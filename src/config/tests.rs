@@ -6,12 +6,13 @@ fn parse(text: &str) -> Config {
 
 #[test]
 fn client_block_parses_json_scalars() {
+    use crate::codegen::Value;
     let cfg = parse("client {\n  env \"prod\"\n  retries 3\n  ratio 0.5\n  beta #true\n}\n");
     let map: std::collections::BTreeMap<_, _> = cfg.client.iter().cloned().collect();
-    assert_eq!(map["env"], serde_json::json!("prod"));
-    assert_eq!(map["retries"], serde_json::json!(3));
-    assert_eq!(map["ratio"], serde_json::json!(0.5));
-    assert_eq!(map["beta"], serde_json::json!(true));
+    assert_eq!(map["env"], Value::str("prod"));
+    assert_eq!(map["retries"], Value::Int(3));
+    assert_eq!(map["ratio"], Value::Float(0.5));
+    assert_eq!(map["beta"], Value::Bool(true));
 }
 
 #[test]

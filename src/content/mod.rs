@@ -12,6 +12,7 @@ pub mod listing;
 pub mod page;
 pub mod pagination;
 pub mod permalink;
+pub mod section;
 pub mod slug;
 pub mod taxonomy;
 
@@ -20,6 +21,7 @@ pub use frontmatter::Frontmatter;
 pub use page::{Collection, Data, Page, PageId, Sibling, Siblings, discover};
 pub use pagination::Pagination;
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
+pub use section::Section;
 pub use slug::Slug;
 pub use taxonomy::Taxonomy;
 

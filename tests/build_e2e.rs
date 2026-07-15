@@ -412,6 +412,58 @@ fn sections_expose_the_ordered_page_set_to_templates() {
 }
 
 #[test]
+fn nested_content_dirs_build_a_section_tree() {
+    // A subdirectory under a collection becomes a nested child section, so a
+    // template can render a multi-level sidebar straight from `page.sections`.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\nclean #true\n",
+    );
+    // Emit each section's id + direct-page titles, then one level of children.
+    site.write(
+        "templates/page.typ",
+        r#"#let page(page, body) = html.elem("html", html.elem("body", {
+  for s in page.sections {
+    html.elem("span", "S:" + s.id)
+    for p in s.pages { html.elem("span", "P:" + s.id + "/" + p.title) }
+    for c in s.children {
+      html.elem("span", "C:" + s.id + ">" + c.id)
+      for p in c.pages { html.elem("span", "P:" + c.id + "/" + p.title) }
+    }
+  }
+}))
+"#,
+    );
+    site.write(
+        "content/guide/intro.typ",
+        "#let frontmatter = (title: \"Intro\", order: 1,)\nbody",
+    );
+    site.write(
+        "content/guide/advanced/deep.typ",
+        "#let frontmatter = (title: \"Deep\", order: 2,)\nbody",
+    );
+    assert!(
+        site.run(&["build"]).status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&site.run(&["build"]).stderr)
+    );
+    let html = fs::read_to_string(site.root.join("public/guide/intro/index.html")).unwrap();
+    assert!(html.contains("S:guide"), "top section: {html}");
+    assert!(html.contains("P:guide/Intro"), "direct page: {html}");
+    assert!(
+        html.contains("C:guide>advanced"),
+        "nested child section: {html}"
+    );
+    assert!(
+        html.contains("P:advanced/Deep"),
+        "page under the child: {html}"
+    );
+    // The nested page is NOT also a direct child of guide.
+    assert!(!html.contains("P:guide/Deep"), "not double-listed: {html}");
+}
+
+#[test]
 fn meta_tags_injected_from_frontmatter_and_config() {
     let site = Site::new();
     site.write("config.kdl", "site \"S\"\nurl \"https://s.example\"\n");

@@ -65,8 +65,8 @@ pub struct Config {
     /// Typst `sys.inputs` entries.
     pub inputs: Vec<(String, String)>,
     /// Build-time constants exposed to client JS through the `baudelaire:config`
-    /// virtual module: arbitrary JSON scalars keyed by name.
-    pub client: Vec<(String, serde_json::Value)>,
+    /// virtual module: arbitrary scalars keyed by name.
+    pub client: Vec<(String, crate::codegen::Value)>,
     /// Typst features to enable (e.g. `html`).
     pub features: Vec<String>,
     /// Collection overrides keyed by id.

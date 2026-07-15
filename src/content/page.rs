@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use rayon::prelude::*;
 use wax::Glob;
@@ -168,18 +168,40 @@ impl Page {
     /// the file stem. The root `index.typ` keeps its stem, so it still maps to
     /// `/` rather than to the content directory's name.
     fn bundle_slug(path: &Path, collection: &str, stem: &Stem, config: &Config) -> String {
-        let is_index = config
-            .index
-            .as_deref()
-            .is_some_and(|idx| stem.slug() == idx);
         let dir = path
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str());
-        match (is_index && collection != ROOT, dir) {
+        match (stem.is_index(config) && collection != ROOT, dir) {
             (true, Some(dir)) => dir.to_owned(),
             _ => stem.slug().to_owned(),
         }
+    }
+
+    /// The chain of section names this page nests under, from its location in
+    /// the content tree — the basis for a nested nav. `content/guide/cli.typ`
+    /// yields `[guide]`; `content/guide/advanced/deep.typ` yields
+    /// `[guide, advanced]`. A bundle index (`posts/hello/index.typ`) owns its
+    /// final directory as its slug, so that directory is dropped and the page
+    /// nests under its parent (`[posts]`).
+    pub(crate) fn section_path(&self, config: &Config) -> Vec<String> {
+        let rel = self
+            .source
+            .strip_prefix(&config.content)
+            .unwrap_or(&self.source);
+        let mut dirs: Vec<String> = rel
+            .parent()
+            .into_iter()
+            .flat_map(Path::components)
+            .filter_map(|c| match c {
+                Component::Normal(name) => name.to_str().map(str::to_owned),
+                _ => None,
+            })
+            .collect();
+        if Stem::of(&self.source, &config.draft.suffix).is_index(config) {
+            dirs.pop();
+        }
+        dirs
     }
 
     /// Display title: frontmatter `title`, else the page id. The single
@@ -281,6 +303,15 @@ impl<'a> Stem<'a> {
 
     fn is_draft(&self) -> bool {
         !self.suffix.is_empty() && self.raw.ends_with(self.suffix)
+    }
+
+    /// Whether this stem names a bundle index (`config.index`), so the file's
+    /// parent directory supplies the slug rather than the file name.
+    fn is_index(&self, config: &Config) -> bool {
+        config
+            .index
+            .as_deref()
+            .is_some_and(|idx| self.slug() == idx)
     }
 
     fn slug(&self) -> &str {
