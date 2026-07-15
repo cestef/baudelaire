@@ -173,7 +173,11 @@ mod tests {
 
         let err = Links.run(&site, &ui).unwrap_err();
         assert!(matches!(err, BaudelaireErrorKind::BrokenLinks(_)));
-        assert_eq!(ui.warnings(), 0, "a strict failure is an error, not a warning");
+        assert_eq!(
+            ui.warnings(),
+            0,
+            "a strict failure is an error, not a warning"
+        );
     }
 
     #[test]

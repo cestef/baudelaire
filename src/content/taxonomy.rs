@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::config::{Config, TaxonomyConfig};
+use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Titlecase};
 use crate::content::{Page, Permalink, Slug};
 use crate::error::{ContentError, Result};
@@ -14,14 +15,14 @@ use crate::error::{ContentError, Result};
 /// Builds the taxonomy index pages for a site.
 pub struct Taxonomy;
 
-impl Taxonomy {
+impl Generate for Taxonomy {
     /// Generate index + term pages for every configured taxonomy that requests
-    /// an index, drawing terms from `pages`' frontmatter.
-    pub fn pages(config: &Config, pages: &[Page]) -> Result<Vec<Page>> {
+    /// an index, drawing terms from the planned pages' frontmatter.
+    fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
-        for (name, cfg) in &config.taxonomies {
+        for (name, cfg) in &ctx.config.taxonomies {
             if cfg.index {
-                Group::new(name, cfg, pages).build(config, &mut out)?;
+                Group::new(name, cfg, ctx.pages).build(ctx.config, &mut out)?;
             }
         }
         Ok(out)

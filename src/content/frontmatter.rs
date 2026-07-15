@@ -13,12 +13,43 @@ use crate::config::Config;
 use crate::config::dispatch::Keys;
 use crate::error::{ContentError, Result};
 
-/// The recognized scalar/list frontmatter keys (taxonomy keys are configured,
-/// so they are added dynamically). The single source both the `from_dict` match
-/// and the typo suggester read — a new key here plus a match arm, or the sync
-/// test fails.
-const KNOWN: &[&str] = &[
-    "title", "date", "draft", "slug", "template", "order", "redirect",
+/// A frontmatter field parser: reads the evaluated value into its slot on `fm`,
+/// naming `path`/`key` on a type mismatch (never silently dropped).
+type Field = fn(fm: &mut Frontmatter, value: &Value, path: &Path, key: &str) -> Result<()>;
+
+/// The recognized built-in frontmatter keys and how each parses — the single
+/// source of truth for both dispatch and the typo suggester, so a new key is one
+/// row here and the two can't drift (taxonomy keys are configured, so they are
+/// recognized dynamically, not listed). Mirrors `config::dispatch`'s tables.
+const FIELDS: &[(&str, Field)] = &[
+    ("title", |fm, v, p, k| {
+        fm.title = Some(v.string(p, k)?);
+        Ok(())
+    }),
+    ("date", |fm, v, p, k| {
+        fm.date = Some(v.date(p, k)?);
+        Ok(())
+    }),
+    ("draft", |fm, v, p, k| {
+        fm.draft = v.boolean(p, k)?;
+        Ok(())
+    }),
+    ("slug", |fm, v, p, k| {
+        fm.slug = Some(v.string(p, k)?);
+        Ok(())
+    }),
+    ("template", |fm, v, p, k| {
+        fm.template = Some(v.string(p, k)?);
+        Ok(())
+    }),
+    ("order", |fm, v, p, k| {
+        fm.order = Some(v.integer(p, k)?);
+        Ok(())
+    }),
+    ("redirect", |fm, v, p, k| {
+        fm.redirect = v.strings(p, k)?;
+        Ok(())
+    }),
 ];
 
 /// Parsed frontmatter for a single page.
@@ -90,19 +121,13 @@ impl Frontmatter {
         let mut fm = Self::default();
         for (key, val) in dict.iter() {
             let key = key.as_str();
-            match key {
-                "title" => fm.title = Some(val.string(path, key)?),
-                "date" => fm.date = Some(val.date(path, key)?),
-                "draft" => fm.draft = val.boolean(path, key)?,
-                "slug" => fm.slug = Some(val.string(path, key)?),
-                "template" => fm.template = Some(val.string(path, key)?),
-                "order" => fm.order = Some(val.integer(path, key)?),
-                "redirect" => fm.redirect = val.strings(path, key)?,
-                _ if taxonomies.contains(&key) => {
+            match FIELDS.iter().find(|(name, _)| *name == key) {
+                Some((_, parse)) => parse(&mut fm, val, path, key)?,
+                None if taxonomies.contains(&key) => {
                     fm.taxonomies
                         .insert(key.to_owned(), val.strings(path, key)?);
                 }
-                _ => match Self::suggest(key, &taxonomies) {
+                None => match Self::suggest(key, &taxonomies) {
                     Some(near) => {
                         return Err(ContentError::unknown_frontmatter(path, key, &near).into());
                     }
@@ -119,9 +144,9 @@ impl Frontmatter {
     /// one (and not itself a real extra key). Reuses the config did-you-mean
     /// over the one known-key set (built-ins plus configured taxonomies).
     fn suggest(key: &str, taxonomies: &[&str]) -> Option<String> {
-        let known: Vec<&str> = KNOWN
+        let known: Vec<&str> = FIELDS
             .iter()
-            .copied()
+            .map(|(name, _)| *name)
             .chain(taxonomies.iter().copied())
             .collect();
         Keys::of(&known).nearest(key).map(str::to_owned)

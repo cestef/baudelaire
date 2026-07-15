@@ -7,23 +7,26 @@
 //! page. A collection that configures neither gets no index at all.
 
 use crate::config::Config;
+use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Nav, Titlecase};
 use crate::content::{Collection, Page, Permalink};
+use crate::error::Result;
 
 /// Builds collection index pages (paginated when the collection sets a count).
 pub struct Pagination;
 
-impl Pagination {
+impl Generate for Pagination {
     /// Generate index pages for every collection that asks for one — via a
     /// `list` template or a `paginate` count — over its build-eligible members.
-    pub fn pages(config: &Config, collections: &[Collection]) -> Vec<Page> {
+    /// Never fails; the `Result` satisfies the shared [`Generate`] signature.
+    fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
-        for collection in collections {
-            if let Some(section) = Section::of(collection, config) {
-                section.build(config, &mut out);
+        for collection in ctx.collections {
+            if let Some(section) = Section::of(collection, ctx.config) {
+                section.build(ctx.config, &mut out);
             }
         }
-        out
+        Ok(out)
     }
 }
 

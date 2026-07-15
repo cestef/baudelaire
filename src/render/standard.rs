@@ -9,7 +9,7 @@
 
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
-use crate::config::{Config, StandardConfig};
+use crate::config::Config;
 use crate::publish::standard::{DOCUMENT, document_uri};
 
 use super::transform::{Cx, ElementExt, Transform};
@@ -19,13 +19,13 @@ pub(super) struct Verify;
 
 impl Transform for Verify {
     fn enabled(&self, config: &Config) -> bool {
-        standard(config).is_some_and(|s| s.did.is_some() && s.verify.links)
+        config.verify_did(|v| v.links).is_some()
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        // only dated pages are documents; gate matches the publisher
+        // only dated pages are documents; the did gate matches the publisher
         let (Some(did), true) = (
-            standard(cx.config).and_then(|s| s.did.as_deref()),
+            cx.config.verify_did(|v| v.links),
             cx.page.frontmatter.date.is_some(),
         ) else {
             return;
@@ -35,11 +35,6 @@ impl Transform for Verify {
             head.children.push(link(&href));
         }
     }
-}
-
-/// The configured standard.site backend, if any.
-fn standard(config: &Config) -> Option<&StandardConfig> {
-    config.publish.standard.as_ref()
 }
 
 /// A `<link rel="site.standard.document" href="..">` node.

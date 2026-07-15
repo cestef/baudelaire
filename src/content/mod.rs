@@ -9,6 +9,7 @@
 pub mod cache;
 pub mod date;
 pub mod frontmatter;
+mod generate;
 pub mod listing;
 pub mod page;
 pub mod pagination;
@@ -56,8 +57,14 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
             pages.push(page);
         }
     }
-    pages.extend(Taxonomy::pages(config, &pages)?);
-    pages.extend(Pagination::pages(config, &collections));
+    // Synthetic pages (taxonomy indexes, paginated listings) derive from the
+    // content snapshot above; each generator runs against the same `pages`.
+    let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
+        config,
+        pages: &pages,
+        collections: &collections,
+    })?;
+    pages.extend(generated);
     unique(&pages, config)?;
     Ok(pages)
 }

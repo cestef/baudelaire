@@ -145,6 +145,19 @@ impl Config {
             .map(|url| BaseUrl(url.trim_end_matches('/').to_owned()))
     }
 
+    /// The DID a `standard.site` verification artifact should reference, present
+    /// only when the backend is configured *with* a `did` and the artifact's
+    /// `verify` flag is on — `artifact` selects that flag (e.g. `|v| v.links`).
+    /// The single gate the render transform and the well-known processor share,
+    /// so both agree on when an artifact is emitted and neither re-checks the
+    /// `did` after gating.
+    pub(crate) fn verify_did(&self, artifact: impl Fn(&VerifyConfig) -> bool) -> Option<&str> {
+        let standard = self.publish.standard.as_ref()?;
+        artifact(&standard.verify)
+            .then_some(standard.did.as_deref())
+            .flatten()
+    }
+
     /// Look up a collection override by id.
     pub fn collection(&self, id: &str) -> Option<&CollectionConfig> {
         self.collections

@@ -16,22 +16,12 @@ pub(super) struct WellKnown;
 
 impl Processor for WellKnown {
     fn enabled(&self, config: &Config) -> bool {
-        config
-            .publish
-            .standard
-            .as_ref()
-            .is_some_and(|s| s.did.is_some() && s.verify.wellknown)
+        config.verify_did(|v| v.wellknown).is_some()
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        // `enabled` guarantees the did is present.
-        let Some(did) = site
-            .config
-            .publish
-            .standard
-            .as_ref()
-            .and_then(|s| s.did.as_deref())
-        else {
+        // Same gate as `enabled`, re-read to bind the did (never `None` here).
+        let Some(did) = site.config.verify_did(|v| v.wellknown) else {
             return Ok(());
         };
         let path = site

@@ -210,19 +210,14 @@ impl Engine {
         }
         debug!(stale = stale.len(), reused = cached.len(), "cache split");
 
-        let progress = ui.progress("compiling", stale.len());
-        let outcomes: Vec<(&Page, Result<Rendered>)> = stale
-            .into_par_iter()
-            .map(|(page, prepared)| {
-                let outcome =
-                    prepared.and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
-                progress.tick(self.relative(page));
-                (page, outcome)
-            })
-            .collect();
-        progress.finish();
-        let rendered = self.collect(outcomes, ui)?;
-        self.validate(&rendered, ui)?;
+        // Compile only the stale pages (already prepared during the cache
+        // split); cached pages keep the HTML they were built with.
+        let rendered = self.render_pages("compiling", stale, ui, |(page, prepared)| {
+            (
+                page,
+                prepared.and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer)),
+            )
+        })?;
 
         for r in &rendered {
             cache.record(r.page, r.fingerprint, &r.html, &r.deps);
@@ -312,20 +307,14 @@ impl Engine {
         );
         let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
         let sections = crate::codegen::Typst(&self.sections(&pages)).to_string();
-        let progress = ui.progress("checking", pages.len());
-        let outcomes: Vec<(&Page, Result<Rendered>)> = pages
-            .par_iter()
-            .map(|page| {
-                let outcome = self
-                    .prepare(page, &sections)
-                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer));
-                progress.tick(self.relative(page));
-                (page, outcome)
-            })
-            .collect();
-        progress.finish();
-        let rendered = self.collect(outcomes, ui)?;
-        self.validate(&rendered, ui)?;
+        // Prepare + compile every page inline (no cache split, no output).
+        let rendered = self.render_pages("checking", pages.iter().collect(), ui, |page| {
+            (
+                page,
+                self.prepare(page, &sections)
+                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer)),
+            )
+        })?;
         ui.flush();
         ui.done(format_args!(
             "checked {} in {}",
@@ -342,6 +331,34 @@ impl Engine {
     /// the compiler raised — returning the rendered pages or, after every
     /// failure has been reported, an error carrying *all* failed pages'
     /// diagnostics (a single failure propagates unchanged).
+    /// Compile a batch of pages in parallel and reduce to their rendered
+    /// outputs: a progress bar, a rayon map producing one `(page, outcome)` per
+    /// item, then [`Engine::collect`] (status lines + diagnostics) and
+    /// [`Engine::validate`] (link checks). The shared spine of `build` (over the
+    /// stale subset, already prepared) and `check` (every page, prepared inline);
+    /// `outcome` supplies the only difference — how one item renders.
+    fn render_pages<'a, T: Send>(
+        &self,
+        label: &'static str,
+        items: Vec<T>,
+        ui: &Ui,
+        outcome: impl Fn(T) -> (&'a Page, Result<Rendered<'a>>) + Sync,
+    ) -> Result<Vec<Rendered<'a>>> {
+        let progress = ui.progress(label, items.len());
+        let outcomes: Vec<(&Page, Result<Rendered>)> = items
+            .into_par_iter()
+            .map(|item| {
+                let (page, out) = outcome(item);
+                progress.tick(self.relative(page));
+                (page, out)
+            })
+            .collect();
+        progress.finish();
+        let rendered = self.collect(outcomes, ui)?;
+        self.validate(&rendered, ui)?;
+        Ok(rendered)
+    }
+
     fn collect<'a>(
         &self,
         outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,

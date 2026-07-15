@@ -288,17 +288,41 @@ pub struct CleanArgs {
     pub publish: bool,
 }
 
+/// One nameable `clean` target: the flag that selects it and the directories it
+/// removes. THE single source of what `clean` can sweep — a new target is one
+/// row here plus its flag on [`CleanArgs`]; `all` and the narrowed `targets`
+/// both derive from this table.
+struct CleanTarget {
+    selected: fn(&CleanArgs) -> bool,
+    dirs: fn(&Config) -> Vec<PathBuf>,
+}
+
+const CLEAN_TARGETS: &[CleanTarget] = &[
+    CleanTarget {
+        selected: |a| a.dist,
+        dirs: |c| vec![c.dist.clone()],
+    },
+    CleanTarget {
+        selected: |a| a.cache,
+        dirs: |c| vec![c.cache.dir.clone()],
+    },
+    CleanTarget {
+        selected: |a| a.publish,
+        dirs: |_| vec![Config::scratch("publish")],
+    },
+];
+
 impl CleanArgs {
     /// No explicit target means sweep everything.
     fn all(&self) -> bool {
-        !(self.dist || self.cache || self.publish)
+        CLEAN_TARGETS.iter().all(|t| !(t.selected)(self))
     }
 
     /// The directories to remove for this invocation. A full sweep clears the
     /// output plus the whole scratch root in one step (covering the cache,
     /// publish state, and any future intermediate); a relocated cache dir lives
     /// outside that root, so it is named explicitly. A narrowed sweep removes
-    /// only the subdirectories asked for.
+    /// only the [`CLEAN_TARGETS`] whose flags were set.
     fn targets(&self, config: &Config) -> Vec<PathBuf> {
         if self.all() {
             let mut dirs = vec![config.dist.clone(), PathBuf::from(Config::SCRATCH)];
@@ -307,17 +331,11 @@ impl CleanArgs {
             }
             return dirs;
         }
-        let mut dirs = Vec::new();
-        if self.dist {
-            dirs.push(config.dist.clone());
-        }
-        if self.cache {
-            dirs.push(config.cache.dir.clone());
-        }
-        if self.publish {
-            dirs.push(Config::scratch("publish"));
-        }
-        dirs
+        CLEAN_TARGETS
+            .iter()
+            .filter(|t| (t.selected)(self))
+            .flat_map(|t| (t.dirs)(config))
+            .collect()
     }
 }
 
@@ -438,62 +456,131 @@ pub fn run(cli: Cli) -> Result<()> {
     result
 }
 
-/// Dispatch to the matching engine entrypoint.
+/// Dispatch to the matching subcommand. Each command owns its wiring in a
+/// [`Run`] impl; this only picks the variant (defaulting to `build`) and hands
+/// it the shared [`Cx`].
 fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
     let root = Root::enter(cli.global.root.as_deref())?;
     let command = cli
         .command
         .clone()
         .unwrap_or_else(|| Command::Build(BuildArgs::default()));
-    match command {
-        Command::Build(args) => {
-            let mut config = cli.config()?;
-            args.overrides.apply(&mut config);
-            ui.banner(format_args!("building {}", config.label()));
-            crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(ui)?;
-        }
-        Command::Check(args) => {
-            let mut config = cli.config()?;
-            args.overrides.apply(&mut config);
-            ui.banner(format_args!("checking {}", config.label()));
-            crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(ui)?;
-        }
-        Command::Serve(args) => {
-            let mut config = cli.config()?;
-            args.apply(&mut config);
-            ui.banner(format_args!("dev · {}", config.label()));
-            // Re-reads config.kdl with the same profile + overrides, so the dev
-            // server picks up config edits live.
-            let reload = || -> Result<Config> {
-                let mut config = cli.config()?;
-                args.apply(&mut config);
-                Ok(config)
-            };
-            crate::cli::serve::run(ui, config, &root, cli.global.config.clone(), reload)?;
-        }
-        Command::New(args) => {
-            let config = cli.config()?;
-            // A project lets `new` read the existing content: next order in an
-            // ordered collection, and permalink collisions.
-            let project = crate::world::Project::new(&config, crate::engine::Mode::Build)?;
-            scaffold::Draft::plan(&args, &config, &project)?.create(ui)?;
-        }
-        Command::Publish(args) => {
-            let config = cli.config()?;
-            ui.banner(format_args!("publishing {}", config.label()));
-            publish::run(ui, &config, &args)?;
-        }
-        Command::Clean(args) => {
-            let config = cli.config()?;
-            ui.banner(format_args!("cleaning {}", config.label()));
-            clean(ui, &config, &args)?;
-        }
-        Command::Init(args) => {
-            ui.banner("init");
-            scaffold::init(ui, args.dir.as_deref(), &root, args.yes, args.vcs)?;
+    command.run(&Cx {
+        cli,
+        ui,
+        root: &root,
+    })
+}
+
+/// The shared context a subcommand runs against: the parsed CLI (for config +
+/// global flags), the terminal UI, and the entered project root.
+struct Cx<'a> {
+    cli: &'a Cli,
+    ui: &'a Ui,
+    root: &'a Root,
+}
+
+impl Cx<'_> {
+    /// Load config and announce the run — the shared front matter of every
+    /// command that operates on an existing project.
+    fn announced(&self, verb: &str) -> Result<Config> {
+        let config = self.cli.config()?;
+        self.ui.banner(format_args!("{verb} {}", config.label()));
+        Ok(config)
+    }
+
+    /// [`Cx::announced`] plus the build-shaping overrides — the front matter of
+    /// the build-shaped commands (`build`, `check`). Overrides never touch the
+    /// site name, so applying them after the banner leaves its text unchanged.
+    fn configured(&self, overrides: &BuildOverrides, verb: &str) -> Result<Config> {
+        let mut config = self.announced(verb)?;
+        overrides.apply(&mut config);
+        Ok(config)
+    }
+}
+
+/// One CLI subcommand's behavior. Each args struct implements it, so a new
+/// subcommand is a `Command` variant, an `impl Run`, and one delegating arm.
+trait Run {
+    fn run(&self, cx: &Cx) -> Result<()>;
+}
+
+impl Command {
+    /// Delegate to the selected subcommand's [`Run`] impl.
+    fn run(&self, cx: &Cx) -> Result<()> {
+        match self {
+            Command::Build(args) => args.run(cx),
+            Command::Serve(args) => args.run(cx),
+            Command::Check(args) => args.run(cx),
+            Command::New(args) => args.run(cx),
+            Command::Publish(args) => args.run(cx),
+            Command::Clean(args) => args.run(cx),
+            Command::Init(args) => args.run(cx),
         }
     }
-    Ok(())
+}
+
+impl Run for BuildArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.configured(&self.overrides, "building")?;
+        crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(cx.ui)?;
+        Ok(())
+    }
+}
+
+impl Run for CheckArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.configured(&self.overrides, "checking")?;
+        crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
+        Ok(())
+    }
+}
+
+impl Run for ServeArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let mut config = cx.cli.config()?;
+        self.apply(&mut config);
+        cx.ui.banner(format_args!("dev · {}", config.label()));
+        // Re-reads config.kdl with the same profile + overrides, so the dev
+        // server picks up config edits live.
+        let reload = || -> Result<Config> {
+            let mut config = cx.cli.config()?;
+            self.apply(&mut config);
+            Ok(config)
+        };
+        crate::cli::serve::run(cx.ui, config, cx.root, cx.cli.global.config.clone(), reload)
+    }
+}
+
+impl Run for NewArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.cli.config()?;
+        // A project lets `new` read the existing content: next order in an
+        // ordered collection, and permalink collisions.
+        let project = crate::world::Project::new(&config, crate::engine::Mode::Build)?;
+        scaffold::Draft::plan(self, &config, &project)?.create(cx.ui)
+    }
+}
+
+impl Run for PublishArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.announced("publishing")?;
+        publish::run(cx.ui, &config, self)
+    }
+}
+
+impl Run for CleanArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.announced("cleaning")?;
+        clean(cx.ui, &config, self)
+    }
+}
+
+impl Run for InitArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        cx.ui.banner("init");
+        scaffold::init(cx.ui, self.dir.as_deref(), cx.root, self.yes, self.vcs)
+    }
 }
 
 impl NewArgs {
