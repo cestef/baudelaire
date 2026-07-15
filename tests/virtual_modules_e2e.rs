@@ -1,5 +1,6 @@
 //! The `baudelaire:*` virtual JS modules: a user entry imports one and rolldown
 //! inlines the generated data into the bundle.
+#![cfg(feature = "js")]
 
 mod common;
 

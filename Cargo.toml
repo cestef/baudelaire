@@ -27,15 +27,35 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-x86_64.tar.g
 [package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64.tar.gz"
 
+[features]
+default = ["embedded-fonts", "js", "css", "images"]
+
+# Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
+# the binary — ~9 MiB. Off means text renders only with fonts found on the host,
+# so keep it on for portable builds (CI, containers) that lack those fonts.
+embedded-fonts = ["typst-kit/embedded-fonts"]
+
+# JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
+# the `baudelaire:*` virtual modules) — ~2.5 MiB of oxc/rolldown/tokio. Off means
+# `.js` files are copied verbatim by the asset pipeline instead of bundled.
+js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
+
+# CSS minification and `url()`/`@import` fingerprint rewriting via lightningcss —
+# ~3.2 MiB. Off means `.css` files are copied verbatim (no minify, no rewrite).
+css = ["dep:lightningcss"]
+
+# Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
+# EXIF-orientation baking (image). Off means PNG/JPEG assets are copied verbatim.
+# Note: `<img>` lazy/async annotation is attribute-only and stays on regardless.
+images = ["dep:oxipng", "dep:image"]
+
 [dependencies]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
-typst-library = { version = "0.15" }
 typst-kit = { version = "0.15", features = [
   "system-files",
   "system-downloader",
   "scan-fonts",
-  "embedded-fonts",
 ] }
 typst-eval = "0.15"
 miette = { version = "7", features = ["fancy"] }
@@ -58,16 +78,24 @@ notify = "8"
 notify-debouncer-full = "0.7"
 tiny_http = "0.12"
 open = "5"
-lightningcss = "1.0.0-alpha.71"
-rolldown = "1"
-tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread"] }
-rolldown_common = "1"
+lightningcss = { version = "1.0.0-alpha.71", optional = true }
+rolldown = { version = "1", optional = true }
+tokio = { version = "1.52.3", features = [
+  "rt",
+  "rt-multi-thread",
+], optional = true }
+rolldown_common = { version = "1", optional = true }
 oxipng = { version = "10.1.1", default-features = false, features = [
   "parallel",
-] }
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+], optional = true }
+image = { version = "0.25", default-features = false, features = [
+  "jpeg",
+], optional = true }
 console = "0.16"
-ureq = { version = "3", features = ["json"] }
+ureq = { version = "3", default-features = false, features = [
+  "json",
+  "native-tls",
+] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 indicatif = { version = "0.18.6", features = ["rayon"] }
@@ -102,3 +130,15 @@ unsafe_code = "deny"
 [lints.clippy]
 dbg_macro = "warn"
 todo = "warn"
+
+# Size-optimized release. `opt-level = "s"` + thin LTO + a single codegen unit
+# lets the linker drop dead code across the ~500-crate tree; `strip` removes
+# ~15 MiB of symbol/debug tables and `panic = "abort"` another ~4 MiB of unwind
+# tables. Cargo force-unwinds the test/bench profiles, so `cargo bench` (criterion
+# needs unwinding) keeps working without an override here.
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

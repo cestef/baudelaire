@@ -311,6 +311,9 @@ impl Project {
         // first, then system fonts — so a glyph resolves the same way it does
         // under `typst` itself, instead of falling back to whatever the system
         // happens to offer (which can rasterize digits as colour-font images).
+        // Without the `embedded-fonts` feature the defaults are not bundled, so
+        // resolution depends entirely on what the host provides.
+        #[cfg(feature = "embedded-fonts")]
         fonts.extend(typst_kit::fonts::embedded());
         fonts.extend(typst_kit::fonts::system());
         fonts

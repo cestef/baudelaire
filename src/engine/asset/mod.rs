@@ -12,23 +12,34 @@
 //! [`Phase::Late`] handlers (stylesheets) run second, rewriting their `url()` /
 //! `@import` references to the final hashed names now in the map.
 
+#[cfg(feature = "css")]
 mod css;
+#[cfg(feature = "images")]
 mod image;
+#[cfg(feature = "js")]
 mod js;
+#[cfg(feature = "js")]
 mod module;
 
-use std::path::{Component, Path, PathBuf};
+#[cfg(feature = "css")]
+use std::path::Component;
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
+#[cfg(feature = "js")]
 use crate::content::Page;
 use crate::error::Result;
 use crate::fs;
 use crate::graph::Hash;
 use crate::render::AssetMap;
 
+#[cfg(feature = "css")]
 use css::Stylesheet;
+#[cfg(feature = "images")]
 use image::Raster;
+#[cfg(feature = "js")]
 use js::{Js, Script};
+#[cfg(feature = "js")]
 use module::ModuleCx;
 
 /// Length of the hex fingerprint spliced into asset filenames. 16 hex chars =
@@ -53,6 +64,7 @@ pub struct Processed {
 enum Phase {
     Early,
     Late,
+    #[cfg(feature = "js")]
     Bundle,
 }
 
@@ -61,10 +73,23 @@ enum Phase {
 /// [`AssetMap`] is passed to [`Handler::render`] separately, so the pipeline can
 /// keep mutating it between calls.
 struct Ctx<'a> {
+    /// The site config — read by the css and image handlers for their options.
+    #[cfg(any(feature = "css", feature = "images"))]
     config: &'a Config,
-    src: &'a Path,
     prefix: &'a str,
+    /// The stylesheet handler's extra context. Grouped into one value so [`Ctx`]
+    /// carries a single css-gated field, mirroring [`JsCtx`] on [`Assets`].
+    #[cfg(feature = "css")]
+    css: CssCtx<'a>,
+    #[cfg(feature = "js")]
     bundler: Option<&'a Js>,
+}
+
+/// The css handler's slice of the render context: the source asset root, used to
+/// resolve `@import` ordering and `url()` keys relative to each sheet.
+#[cfg(feature = "css")]
+struct CssCtx<'a> {
+    src: &'a Path,
 }
 
 impl Ctx<'_> {
@@ -76,6 +101,7 @@ impl Ctx<'_> {
 
     /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
     /// (the assets live under `dist`, so there is nothing to canonicalize).
+    #[cfg(feature = "css")]
     fn normalize(path: &Path) -> PathBuf {
         let mut out = PathBuf::new();
         for component in path.components() {
@@ -92,11 +118,15 @@ impl Ctx<'_> {
 }
 
 /// The lowercase-comparable extension of a path, or `""` when it has none.
-/// A private extension trait so the handlers share one spelling of it.
+/// A private extension trait so the handlers share one spelling of it. Only the
+/// css/js/image handlers claim by extension, so it is absent from a copy-only
+/// (all-features-off) build.
+#[cfg(any(feature = "css", feature = "js", feature = "images"))]
 pub(super) trait PathExt {
     fn ext(&self) -> &str;
 }
 
+#[cfg(any(feature = "css", feature = "js", feature = "images"))]
 impl PathExt for Path {
     fn ext(&self) -> &str {
         self.extension()
@@ -133,11 +163,15 @@ trait Handler {
 }
 
 /// The registered handlers, in claim priority — [`Verbatim`] is last because it
-/// claims every file.
-fn builtin() -> [Box<dyn Handler>; 4] {
-    [
+/// claims every file. [`Script`] is present only under the `js` feature; without
+/// it, `.js` files fall through to [`Verbatim`] and are copied unbundled.
+fn builtin() -> Vec<Box<dyn Handler>> {
+    vec![
+        #[cfg(feature = "css")]
         Box::new(Stylesheet),
+        #[cfg(feature = "js")]
         Box::new(Script),
+        #[cfg(feature = "images")]
         Box::new(Raster),
         Box::new(Verbatim),
     ]
@@ -163,18 +197,29 @@ impl Handler for Verbatim {
     }
 }
 
+/// The site data the JS bundler needs to serve its `baudelaire:*` virtual
+/// modules, captured up front and combined with the finalized [`AssetMap`] at
+/// bundle time. Bundled into one value so [`Assets`] carries a single js-gated
+/// field rather than a feature-varying constructor arity.
+#[cfg(feature = "js")]
+pub struct JsCtx<'a> {
+    /// The planned pages, exposed to `baudelaire:pages` / `:taxonomies` / `:feed`.
+    pub pages: &'a [Page],
+    /// The `sys.inputs.baudelaire` value, so `baudelaire:site` / `:config` serve
+    /// the same build context sub-trees the templates get (not a rebuild).
+    pub context: &'a crate::codegen::Value,
+    /// The section tree value, so `baudelaire:sections` reuses what
+    /// `page.sections` already built instead of recomputing it.
+    pub sections: &'a crate::codegen::Value,
+}
+
 /// The asset pipeline over one site's asset directory.
 pub struct Assets<'a> {
     config: &'a Config,
-    /// The planned pages, exposed to the `baudelaire:pages` / `:taxonomies` /
-    /// `:feed` virtual modules a bundle can import.
-    pages: &'a [Page],
-    /// The `sys.inputs.baudelaire` value, so `baudelaire:site` / `:config` serve
-    /// the same build context sub-trees the templates get (not a rebuild).
-    context: &'a crate::codegen::Value,
-    /// The section tree value, so `baudelaire:sections` reuses what
-    /// `page.sections` already built instead of recomputing it.
-    sections: &'a crate::codegen::Value,
+    /// The site data the JS bundler serves through its `baudelaire:*` virtual
+    /// modules — present only under the `js` feature, since nothing else reads it.
+    #[cfg(feature = "js")]
+    js: JsCtx<'a>,
     /// Source asset directory (`config.assets`).
     src: &'a Path,
     /// Destination directory under `dist`, named after `src` (e.g. `dist/assets`).
@@ -184,17 +229,11 @@ pub struct Assets<'a> {
 }
 
 impl<'a> Assets<'a> {
-    pub fn new(
-        config: &'a Config,
-        pages: &'a [Page],
-        context: &'a crate::codegen::Value,
-        sections: &'a crate::codegen::Value,
-    ) -> Self {
+    pub fn new(config: &'a Config, #[cfg(feature = "js")] js: JsCtx<'a>) -> Self {
         Self {
             config,
-            pages,
-            context,
-            sections,
+            #[cfg(feature = "js")]
+            js,
             src: &config.assets,
             dst: config.asset_dist(),
             prefix: format!("/{}", config.asset_name()),
@@ -223,7 +262,7 @@ impl<'a> Assets<'a> {
         }
         // Early then Late — non-bundle phases run without a bundler, so their
         // fingerprint renames land in the map before anything reads it.
-        let ctx = self.ctx(None);
+        let ctx = self.ctx();
         for phase in [Phase::Early, Phase::Late] {
             for (handler, bucket) in handlers.iter().zip(&mut buckets) {
                 if handler.phase() == phase && !bucket.is_empty() {
@@ -233,39 +272,52 @@ impl<'a> Assets<'a> {
         }
         // Bundle phase last: build the bundler now that the map is final, so a
         // `baudelaire:assets` import resolves every asset processed above.
-        let bundling = handlers
-            .iter()
-            .zip(&buckets)
-            .any(|(h, b)| h.phase() == Phase::Bundle && !b.is_empty());
-        if bundling {
-            let js = {
-                let cx = ModuleCx {
-                    config: self.config,
-                    pages: self.pages,
-                    assets: &out.map,
-                    context: self.context,
-                    sections: self.sections,
+        #[cfg(feature = "js")]
+        {
+            let bundling = handlers
+                .iter()
+                .zip(&buckets)
+                .any(|(h, b)| h.phase() == Phase::Bundle && !b.is_empty());
+            if bundling {
+                let js = {
+                    let cx = ModuleCx {
+                        config: self.config,
+                        pages: self.js.pages,
+                        assets: &out.map,
+                        context: self.js.context,
+                        sections: self.js.sections,
+                    };
+                    Js::new(&cx)
                 };
-                Js::new(&cx)
-            };
-            let ctx = self.ctx(Some(&js));
-            for (handler, bucket) in handlers.iter().zip(&mut buckets) {
-                if handler.phase() == Phase::Bundle && !bucket.is_empty() {
-                    self.run(handler.as_ref(), std::mem::take(bucket), &ctx, &mut out)?;
+                let ctx = Ctx {
+                    #[cfg(any(feature = "css", feature = "images"))]
+                    config: self.config,
+                    prefix: &self.prefix,
+                    #[cfg(feature = "css")]
+                    css: CssCtx { src: self.src },
+                    bundler: Some(&js),
+                };
+                for (handler, bucket) in handlers.iter().zip(&mut buckets) {
+                    if handler.phase() == Phase::Bundle && !bucket.is_empty() {
+                        self.run(handler.as_ref(), std::mem::take(bucket), &ctx, &mut out)?;
+                    }
                 }
             }
         }
         Ok(out)
     }
 
-    /// A render context borrowing this pipeline's config/paths, with `bundler`
-    /// present only for the bundle phase.
-    fn ctx<'c>(&'c self, bundler: Option<&'c Js>) -> Ctx<'c> {
+    /// A render context borrowing this pipeline's config/paths. The bundle phase
+    /// (js feature) builds its own [`Ctx`] with the bundler attached.
+    fn ctx(&self) -> Ctx<'_> {
         Ctx {
+            #[cfg(any(feature = "css", feature = "images"))]
             config: self.config,
-            src: self.src,
             prefix: &self.prefix,
-            bundler,
+            #[cfg(feature = "css")]
+            css: CssCtx { src: self.src },
+            #[cfg(feature = "js")]
+            bundler: None,
         }
     }
 

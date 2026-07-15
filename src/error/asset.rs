@@ -12,6 +12,7 @@ use thiserror::Error;
 #[derive(Debug, Error, Diagnostic)]
 pub enum AssetError {
     /// lightningcss could not parse or print the stylesheet.
+    #[cfg(feature = "css")]
     #[error("failed to minify CSS asset `{path}`")]
     #[diagnostic(code(baudelaire::asset::css))]
     Css {
@@ -21,6 +22,7 @@ pub enum AssetError {
     },
 
     /// rolldown could not bundle the JavaScript entry.
+    #[cfg(feature = "js")]
     #[error("failed to bundle JavaScript asset `{path}`")]
     #[diagnostic(code(baudelaire::asset::js))]
     Js {
@@ -30,6 +32,7 @@ pub enum AssetError {
     },
 
     /// oxipng could not optimize the PNG.
+    #[cfg(feature = "images")]
     #[error("failed to optimize image asset `{path}`")]
     #[diagnostic(code(baudelaire::asset::image))]
     Image {
@@ -40,6 +43,7 @@ pub enum AssetError {
 }
 
 impl AssetError {
+    #[cfg(feature = "css")]
     pub fn css(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Css {
             path: path.to_string(),
@@ -47,6 +51,7 @@ impl AssetError {
         }
     }
 
+    #[cfg(feature = "js")]
     pub fn js(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Js {
             path: path.to_string(),
@@ -54,6 +59,7 @@ impl AssetError {
         }
     }
 
+    #[cfg(feature = "images")]
     pub fn image(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Image {
             path: path.to_string(),

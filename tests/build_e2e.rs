@@ -557,6 +557,7 @@ fn meta_tags_omitted_when_disabled() {
     assert!(!html.contains("og:title"), "meta disabled: {html}");
 }
 
+#[cfg(feature = "images")]
 #[test]
 fn optimize_losslessly_shrinks_png_assets() {
     let site = Site::new();
@@ -581,6 +582,7 @@ fn optimize_losslessly_shrinks_png_assets() {
     assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "output is a PNG");
 }
 
+#[cfg(feature = "images")]
 #[test]
 fn optimize_reencodes_jpeg_with_lax_extension() {
     let site = Site::new();
@@ -1210,6 +1212,7 @@ fn search_indexes_emitted_for_each_configured_format() {
     );
 }
 
+#[cfg(feature = "js")]
 #[test]
 fn search_client_bundles_into_a_user_entry_via_virtual_module() {
     let site = Site::new();
@@ -1273,6 +1276,7 @@ fn embed_inlines_local_assets_as_data_uris() {
     );
 }
 
+#[cfg(feature = "css")]
 #[test]
 fn embed_inlines_processed_not_source_bytes() {
     let site = Site::new();
@@ -1483,6 +1487,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
     assert!(!html.contains("href=\"/assets/style.css\""), "{html}");
 }
 
+#[cfg(feature = "css")]
 #[test]
 fn css_url_references_are_fingerprinted() {
     let site = Site::new();
@@ -1550,6 +1555,7 @@ fn srcset_urls_are_fingerprinted() {
     );
 }
 
+#[cfg(feature = "css")]
 #[test]
 fn minify_compacts_css() {
     let site = Site::new();
@@ -1572,6 +1578,7 @@ fn minify_compacts_css() {
     assert!(css.contains("red"), "declaration kept: {css}");
 }
 
+#[cfg(feature = "js")]
 #[test]
 fn bundle_inlines_js_imports_and_drops_partials() {
     let site = Site::new();

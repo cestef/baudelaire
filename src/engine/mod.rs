@@ -1,6 +1,7 @@
 //! Build pipeline: discover → compile → render → write, parallelized via rayon.
 
 mod asset;
+#[cfg(feature = "images")]
 mod exif;
 mod feed;
 mod hook;
@@ -30,6 +31,8 @@ use typst_html::{HtmlDocument, HtmlOptions};
 use crate::config::Config;
 use crate::content::{Data, Page, Section, plan};
 use crate::engine::asset::Assets;
+#[cfg(feature = "js")]
+use crate::engine::asset::JsCtx;
 use crate::engine::hook::Hooks;
 use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
@@ -145,12 +148,24 @@ impl Engine {
         // feed templates (`page.sections`, `sys.inputs`) AND the `baudelaire:*`
         // JS modules, which reuse these rather than recompute them.
         let sections = self.sections(&pages);
+        // The codegen `Value` view of the build context exists only to feed the
+        // `baudelaire:*` JS modules; Typst reads `sys.inputs` from the raw context.
+        #[cfg(feature = "js")]
         let context = crate::codegen::Value::from(self.project.context());
 
         // the asset URL map feeds render-side fingerprint rewriting and folds
         // into the cache fingerprint, so a re-fingerprinted asset invalidates
         // the pages that reference it.
-        let assets = Assets::new(&self.config, &pages, &context, &sections).process()?;
+        let assets = Assets::new(
+            &self.config,
+            #[cfg(feature = "js")]
+            JsCtx {
+                pages: &pages,
+                context: &context,
+                sections: &sections,
+            },
+        )
+        .process()?;
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");

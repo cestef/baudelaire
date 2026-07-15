@@ -224,6 +224,7 @@ impl SearchFormat {
 
     /// The composable module source (engine + palette, no auto-mount) served to
     /// bundlers through the `baudelaire:search` virtual module.
+    #[cfg(feature = "js")]
     pub(crate) fn module(self) -> String {
         format!("{}\n{PALETTE}", self.engine())
     }

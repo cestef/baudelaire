@@ -123,7 +123,7 @@ impl Stylesheet {
         }
         let key_of = |file: &Path| {
             ctx.url(
-                file.strip_prefix(ctx.src)
+                file.strip_prefix(ctx.css.src)
                     .expect("Walk yields paths under src"),
             )
         };
@@ -161,7 +161,7 @@ impl Stylesheet {
     /// unparseable input yields no deps — the error surfaces in `transform`.
     fn deps(file: &Path, ctx: &Ctx) -> Vec<String> {
         let rel = file
-            .strip_prefix(ctx.src)
+            .strip_prefix(ctx.css.src)
             .expect("Walk yields paths under src");
         let Ok(code) = fs::read_to_string(file) else {
             return Vec::new();
