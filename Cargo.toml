@@ -1,8 +1,8 @@
 [package]
 name = "baudelaire"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.95"
 description = "A Typst-native static site generator: write pages in Typst, get incremental builds, live reload, feeds, search, taxonomies, and an asset pipeline."
 authors = ["cstef <root@cstef.dev>"]
 license = "MIT OR Apache-2.0"
@@ -62,7 +62,9 @@ lightningcss = "1.0.0-alpha.71"
 rolldown = "1"
 tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread"] }
 rolldown_common = "1"
-oxipng = { version = "10.1.1", default-features = false, features = ["parallel"] }
+oxipng = { version = "10.1.1", default-features = false, features = [
+  "parallel",
+] }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 console = "0.16"
 ureq = { version = "3", features = ["json"] }
