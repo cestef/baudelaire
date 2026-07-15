@@ -25,10 +25,7 @@ pub struct Prune<'a> {
 impl<'a> Prune<'a> {
     /// Prune `dist`, keeping the asset tree and the build cache untouched.
     pub fn new(dist: &'a Path, asset_dist: &Path, cache: &Path) -> Self {
-        let protected = [asset_dist, cache]
-            .into_iter()
-            .map(fs::canonical)
-            .collect();
+        let protected = [asset_dist, cache].into_iter().map(fs::canonical).collect();
         Self { dist, protected }
     }
 

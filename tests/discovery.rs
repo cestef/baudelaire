@@ -202,10 +202,7 @@ fn page_without_frontmatter_loads() {
 #[test]
 fn clean_urls_output_path() {
     let site = Site::new();
-    site.write(
-        "config.kdl",
-        "site \"T\"\npaths {\n  dist \"public\"\n}",
-    );
+    site.write("config.kdl", "site \"T\"\npaths {\n  dist \"public\"\n}");
     site.write(
         "content/posts/hello.typ",
         &frontmatter_post("Hello", "hello", "year: 2024, month: 1, day: 1", &[]),

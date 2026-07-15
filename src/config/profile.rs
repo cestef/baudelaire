@@ -196,7 +196,8 @@ mod tests {
 
     #[test]
     fn profile_overlay_error_points_at_original_config_text() {
-        let text = "site \"x\"\nprofiles {\n  dev {\n    output {\n      clean \"yes\"\n    }\n  }\n}\n";
+        let text =
+            "site \"x\"\nprofiles {\n  dev {\n    output {\n      clean \"yes\"\n    }\n  }\n}\n";
         let err = parse(text).with_profile("dev").expect_err("bad boolean");
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(

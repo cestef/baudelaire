@@ -4,8 +4,8 @@
 use kdl::KdlValue;
 use miette::SourceSpan;
 
-use crate::config::{SortKey, UrlStyle};
 use crate::config::dispatch::Keys;
+use crate::config::{SortKey, UrlStyle};
 use crate::error::{ConfigError, Result};
 
 /// A `${VAR}` reference whose variable is unset and which carries no

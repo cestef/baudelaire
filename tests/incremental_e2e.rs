@@ -14,8 +14,7 @@ use std::fs;
 
 use common::Site;
 
-const CONFIG: &str =
-    "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
+const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
 
 #[test]
 fn second_build_reuses_all_pages() {
@@ -95,8 +94,7 @@ fn retitling_a_page_invalidates_its_sibling() {
     // A page's prev/next links carry its neighbour's title, baked into the
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
     // sibling whose nav points at it — otherwise its "next" link goes stale.
-    let site =
-        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
+    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
@@ -388,8 +386,7 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     // A page's frontmatter reads a value from an imported module, so the cached
     // frontmatter depends on that module. Editing it must re-evaluate the page's
     // frontmatter — a missed dependency would serve the stale title from cache.
-    let site =
-        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
+    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",
@@ -538,11 +535,15 @@ fn changed_site_url_refreshes_canonical_on_rebuild() {
     );
     site.build();
     assert!(
-        site.output("posts/a/index.html").contains("https://one.example/posts/a/"),
+        site.output("posts/a/index.html")
+            .contains("https://one.example/posts/a/"),
         "first build did not emit the configured canonical"
     );
 
-    site.write("config.kdl", &format!("{base}url \"https://two.example\"\n"));
+    site.write(
+        "config.kdl",
+        &format!("{base}url \"https://two.example\"\n"),
+    );
     site.build();
     let html = site.output("posts/a/index.html");
     assert!(
@@ -565,7 +566,10 @@ fn pruning_spares_assets_and_static_files() {
     site.write("assets/app.css", "body{color:red}");
     site.write("static/CNAME", "example.com");
     site.build();
-    assert!(site.exists("public/CNAME"), "static file missing after build");
+    assert!(
+        site.exists("public/CNAME"),
+        "static file missing after build"
+    );
     assert!(!site.files("public/assets").is_empty(), "asset missing");
 
     // A no-op rebuild must not sweep away the asset tree or static passthrough.
@@ -624,7 +628,10 @@ fn flat_urls_still_prune_on_rename() {
     )
     .unwrap();
     site.build();
-    assert!(site.exists("public/posts/new.html"), "new flat output missing");
+    assert!(
+        site.exists("public/posts/new.html"),
+        "new flat output missing"
+    );
     assert!(
         !site.exists("public/posts/old.html"),
         "old flat output not pruned"
