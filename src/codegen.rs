@@ -1,15 +1,19 @@
-//! One structured value, rendered to many target languages.
+//! One structured value, rendered to several targets.
 //!
-//! Baudelaire passes data across two boundaries: into generated **Typst**
-//! source (layout binding, taxonomy pages, `page.sections`) and into generated
-//! **JavaScript** (the `baudelaire:*` virtual modules). Both start from the same
-//! [`Value`] tree; a [`Format`] says how each primitive looks in one language,
-//! and [`Value::render`] walks the tree once, writing the result. Adding a
-//! target is a new `Format` impl — nothing about the data changes.
+//! Baudelaire moves data across three boundaries: into generated **Typst**
+//! source (layout binding, taxonomy pages, `page.sections`), into generated
+//! **JavaScript** (the `baudelaire:*` virtual modules), and into a Typst
+//! **runtime** value (`sys.inputs`). All start from one [`Value`] tree:
 //!
-//! Every string is escaped by the format (never by ad-hoc `format!`), so a
-//! value can neither break out of a Typst string literal nor produce invalid
-//! JavaScript.
+//! - source in a target language → wrap in the [`Typst`] or [`Js`] display
+//!   adapter (`Typst(&value).to_string()`), which name the target explicitly
+//!   rather than overloading `Display` on the data;
+//! - a runtime Typst value → `typst::foundations::Value::from(&value)`;
+//! - a Typst value read back → `Value::from(&typst_value)`.
+//!
+//! Every string is escaped by its [`Format`], so a value can neither break out
+//! of a Typst string literal nor produce invalid JavaScript. Add a target by
+//! implementing `Format` and pairing it with a one-line display adapter.
 
 use std::fmt::{self, Write};
 
@@ -36,9 +40,9 @@ impl fmt::Display for Str<'_> {
     }
 }
 
-/// A structured value built in Rust and rendered to a target language through a
-/// [`Format`]. The single safe way to move data into generated Typst or
-/// JavaScript: build a `Value` tree and render it once.
+/// A structured value built in Rust, rendered to a target language through a
+/// [`Format`] (via the [`Typst`] / [`Js`] adapters) or converted to a Typst
+/// runtime value. The single safe way to move data into generated code.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Str(String),
@@ -52,7 +56,7 @@ pub enum Value {
     Dict(Vec<(String, Value)>),
     /// A pre-formed expression in the *target's* own syntax, emitted verbatim.
     /// Carries a Typst runtime value's [`repr`](typst::foundations::Value::repr)
-    /// unchanged; it is Typst-only and renders as `null` in any other target.
+    /// unchanged; it is Typst-only and becomes `null` / `none` elsewhere.
     Raw(String),
     None,
 }
@@ -79,22 +83,6 @@ impl Value {
         Self::Dict(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
-    /// Carry a Typst runtime value into generated source via its own `repr`,
-    /// which is valid Typst for data values (strings, numbers, arrays, dicts).
-    pub fn from_typst(value: &typst::foundations::Value) -> Self {
-        Self::Raw(value.repr().to_string())
-    }
-
-    /// Like [`from_typst`](Value::from_typst) but keeps a string's content
-    /// readable (so it round-trips through [`as_str`](Value::as_str)) instead of
-    /// its quoted `repr`. Renders identically either way.
-    pub fn from_typst_data(value: &typst::foundations::Value) -> Self {
-        match value {
-            typst::foundations::Value::Str(s) => Self::Str(s.to_string()),
-            other => Self::from_typst(other),
-        }
-    }
-
     /// The string content, for a `Str` value.
     pub fn as_str(&self) -> Option<&str> {
         match self {
@@ -103,7 +91,8 @@ impl Value {
         }
     }
 
-    /// Render this value into `out` in the target language `F`.
+    /// Render into `out` in the target language `F`. The [`Typst`] and [`Js`]
+    /// display adapters drive this; call it directly only to add a new target.
     pub fn render<F: Format>(&self, out: &mut String) {
         match self {
             Self::Str(s) => F::string(s, out),
@@ -145,26 +134,45 @@ impl Value {
             }
         }
     }
+}
 
-    /// This value rendered to a fresh `String` in the target language `F`.
-    pub fn to<F: Format>(&self) -> String {
-        let mut out = String::new();
-        self.render::<F>(&mut out);
-        out
+/// Read a Typst runtime value into a [`Value`], keeping a string's content
+/// readable (so it round-trips through [`as_str`](Value::as_str)) and carrying
+/// everything else as its `repr`.
+impl From<&typst::foundations::Value> for Value {
+    fn from(value: &typst::foundations::Value) -> Self {
+        match value {
+            typst::foundations::Value::Str(s) => Self::Str(s.to_string()),
+            other => Self::Raw(other.repr().to_string()),
+        }
     }
 }
 
-/// `Display` renders Typst source — the default, so `value.to_string()` is Typst.
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.to::<Typst>())
+/// A [`Value`] as a Typst runtime value, for injection into `sys.inputs`. A
+/// [`Raw`](Value::Raw) expression has no runtime equivalent and becomes `none`.
+impl From<&Value> for typst::foundations::Value {
+    fn from(value: &Value) -> Self {
+        use typst::foundations::{Array, Dict, IntoValue, Str as TypstStr};
+        match value {
+            Value::Str(s) => s.clone().into_value(),
+            Value::Int(n) => (*n).into_value(),
+            Value::Float(n) => (*n).into_value(),
+            Value::Bool(b) => (*b).into_value(),
+            Value::None | Value::Raw(_) => Self::None,
+            Value::Array(items) => items.iter().map(Self::from).collect::<Array>().into_value(),
+            Value::Dict(pairs) => pairs
+                .iter()
+                .map(|(key, value)| (TypstStr::from(key.as_str()), Self::from(value)))
+                .collect::<Dict>()
+                .into_value(),
+        }
     }
 }
 
-/// A target language a [`Value`] renders to: the delimiters it brackets
-/// sequences and mappings with, and how it writes a string, a key, and a
-/// verbatim expression. Everything else (numbers, booleans) is shared, so a
-/// format is a handful of constants and three tiny methods.
+/// A target language a [`Value`] renders to: the brackets around sequences and
+/// mappings, and how it writes a string, a key, and a verbatim expression.
+/// Numbers and booleans render the same everywhere, so a format is a few
+/// constants and three small methods.
 pub trait Format {
     /// The literal for [`Value::None`].
     const NONE: &'static str;
@@ -190,9 +198,9 @@ pub trait Format {
 }
 
 /// Generated Typst source: parenthesised arrays/dicts, bare identifier keys.
-pub struct Typst;
+struct TypstFmt;
 
-impl Format for Typst {
+impl Format for TypstFmt {
     const NONE: &'static str = "none";
     const ARRAY: (&'static str, &'static str) = ("(", ")");
     const ARRAY_TRAILING: &'static str = ", ";
@@ -219,9 +227,9 @@ impl Format for Typst {
 
 /// A JavaScript expression: bracketed arrays, always-quoted object keys, strings
 /// escaped by `serde_json` (the JSON string grammar is a strict JS subset).
-pub struct Js;
+struct JsFmt;
 
-impl Format for Js {
+impl Format for JsFmt {
     const NONE: &'static str = "null";
     const ARRAY: (&'static str, &'static str) = ("[", "]");
     const ARRAY_TRAILING: &'static str = "";
@@ -241,6 +249,28 @@ impl Format for Js {
     }
 }
 
+/// Displays a [`Value`] as Typst source: `Typst(&value).to_string()`.
+pub struct Typst<'a>(pub &'a Value);
+
+impl fmt::Display for Typst<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = String::new();
+        self.0.render::<TypstFmt>(&mut out);
+        f.write_str(&out)
+    }
+}
+
+/// Displays a [`Value`] as a JavaScript expression: `Js(&value).to_string()`.
+pub struct Js<'a>(pub &'a Value);
+
+impl fmt::Display for Js<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = String::new();
+        self.0.render::<JsFmt>(&mut out);
+        f.write_str(&out)
+    }
+}
+
 /// Displays a string as Typst *content* that renders literally — `#"..."` — so
 /// user text can never inject markup.
 pub struct Content<'a>(pub &'a str);
@@ -253,7 +283,7 @@ impl fmt::Display for Content<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Js, Str, Value};
+    use super::{Js, Str, Typst, Value};
 
     #[test]
     fn escapes_quotes_and_backslashes() {
@@ -275,7 +305,7 @@ mod tests {
     #[test]
     fn renders_valid_typst() {
         assert_eq!(
-            sample().to_string(),
+            Typst(&sample()).to_string(),
             "(title: \"A \\\"B\\\"\", n: 3, ok: true, items: (\"x\", ), missing: none, empty: (:))"
         );
     }
@@ -283,7 +313,7 @@ mod tests {
     #[test]
     fn renders_valid_javascript() {
         assert_eq!(
-            sample().to::<Js>(),
+            Js(&sample()).to_string(),
             "{\"title\": \"A \\\"B\\\"\", \"n\": 3, \"ok\": true, \"items\": [\"x\"], \"missing\": null, \"empty\": {}}"
         );
     }
@@ -293,7 +323,13 @@ mod tests {
         // A space is not a valid Typst identifier (a hyphen is), so Typst quotes
         // it; JavaScript quotes every key.
         let v = Value::dict([("a b", Value::Int(1))]);
-        assert_eq!(v.to_string(), "(\"a b\": 1)");
-        assert_eq!(v.to::<Js>(), "{\"a b\": 1}");
+        assert_eq!(Typst(&v).to_string(), "(\"a b\": 1)");
+        assert_eq!(Js(&v).to_string(), "{\"a b\": 1}");
+    }
+
+    #[test]
+    fn round_trips_a_typst_string_value() {
+        let typst = typst::foundations::Value::Str("hi".into());
+        assert_eq!(Value::from(&typst).as_str(), Some("hi"));
     }
 }

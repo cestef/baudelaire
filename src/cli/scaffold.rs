@@ -431,7 +431,7 @@ impl Draft {
 
         let mut out = String::from("#let frontmatter = (\n");
         for (key, value) in &fields {
-            let _ = writeln!(out, "  {key}: {value},");
+            let _ = writeln!(out, "  {key}: {},", crate::codegen::Typst(value));
         }
         out.push_str(")\n\nYour content here.\n");
         out

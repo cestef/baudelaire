@@ -464,6 +464,28 @@ fn nested_content_dirs_build_a_section_tree() {
 }
 
 #[test]
+fn client_constants_reach_templates_via_sys_inputs() {
+    // The `client { }` block feeds both the JS module and `sys.inputs`, so a
+    // page can read its build-time constants directly.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nclient {\n  analytics \"plausible\"\n  revalidate 3600\n}\nclean #true\n",
+    );
+    site.write(
+        "content/a.typ",
+        "#let frontmatter = (title: \"A\",)\nTracker: #sys.inputs.baudelaire.client.analytics, every #sys.inputs.baudelaire.client.revalidate",
+    );
+    assert!(
+        site.run(&["build"]).status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&site.run(&["build"]).stderr)
+    );
+    let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
+    assert!(html.contains("Tracker: plausible, every 3600"), "{html}");
+}
+
+#[test]
 fn meta_tags_injected_from_frontmatter_and_config() {
     let site = Site::new();
     site.write("config.kdl", "site \"S\"\nurl \"https://s.example\"\n");

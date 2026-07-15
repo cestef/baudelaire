@@ -36,6 +36,11 @@ one.
   collection, date, taxonomies }`.
 / #raw("baudelaire:sections"): the collections, grouped as `{ id, pages: [...]
   }` — what templates get as `page.sections`.
+/ #raw("baudelaire:taxonomies"): each taxonomy's terms mapped to the pages that
+  carry them, e.g. `{ tags: { rust: [{ url, title }], .. } }` — for tag
+  filtering or a term cloud.
+/ #raw("baudelaire:feed"): the most recent dated pages as `{ url, title, date
+  }`, newest first, for a "latest posts" widget.
 / #raw("baudelaire:search"): the search-palette client. See
   #link("search.typ")[search].
 
@@ -57,7 +62,9 @@ import { analytics, revalidate } from "baudelaire:config";
 ```
 
 Use it for settings you would otherwise hard-code, or read from the environment
-at runtime.
+at runtime. The same constants reach templates at
+`sys.inputs.baudelaire.client`, so server-side Typst and client-side JavaScript
+read one source.
 
 #callout(kind: "note")[
   A `baudelaire:assets` import sees every image, stylesheet, and copied asset,

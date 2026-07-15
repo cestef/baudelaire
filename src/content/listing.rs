@@ -186,7 +186,7 @@ impl Listing {
             self.body(),
             // A bound template receives this structured data as `page.frontmatter`;
             // without one, the default body renders and this is unused.
-            crate::content::Data::Generated(self.data().to_string()),
+            crate::content::Data::Generated(crate::codegen::Typst(&self.data()).to_string()),
             self.section.clone(),
             self.permalink.clone(),
             self.template.clone(),

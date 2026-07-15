@@ -107,8 +107,7 @@ impl Frontmatter {
                         return Err(ContentError::unknown_frontmatter(path, key, &near).into());
                     }
                     None => {
-                        fm.extra
-                            .insert(key.to_owned(), codegen::Value::from_typst_data(val));
+                        fm.extra.insert(key.to_owned(), codegen::Value::from(val));
                     }
                 },
             }

@@ -20,6 +20,7 @@ use typst_kit::{
     packages::SystemPackages,
 };
 
+use crate::codegen;
 use crate::config::Config;
 use crate::error::{Result, TypstSourceDiagnostic};
 use crate::graph::Deps;
@@ -79,6 +80,9 @@ pub struct BuildContext {
     profile: Option<String>,
     git: Option<GitInfo>,
     site: SiteInfo,
+    /// The `client { }` constants, also exposed to templates at
+    /// `sys.inputs.baudelaire.client` (mirroring the `baudelaire:config` module).
+    client: codegen::Value,
 }
 
 /// Feeds the cache fingerprint. `mode` is deliberately excluded: it is
@@ -95,6 +99,9 @@ impl std::hash::Hash for BuildContext {
             profile,
             git,
             site,
+            // client constants already fold into the cache via `Config`'s own
+            // hash, so hashing them here too would only double-count.
+            client: _,
         } = self;
         (version, date, profile, git, site).hash(state);
     }
@@ -138,23 +145,30 @@ impl BuildContext {
                 lang: config.lang.clone(),
                 author: config.author.clone(),
             },
+            client: codegen::Value::dict(config.client.iter().cloned()),
         }
     }
+}
 
-    /// The typst value placed at `sys.inputs.baudelaire`.
-    fn to_value(&self) -> Value {
-        let mut dict = Dict::new();
-        dict.insert(Str::from("version"), self.version.into_value());
-        dict.insert(Str::from("date"), self.date.clone().into_value());
-        dict.insert(Str::from("mode"), self.mode.as_str().into_value());
-        if let Some(profile) = &self.profile {
-            dict.insert(Str::from("profile"), profile.clone().into_value());
+/// The dictionary placed at `sys.inputs.baudelaire`, built once as a
+/// [`codegen::Value`] and converted to a Typst runtime value at injection.
+impl From<&BuildContext> for codegen::Value {
+    fn from(cx: &BuildContext) -> Self {
+        use codegen::Value;
+        let mut fields = vec![
+            ("version", Value::str(cx.version)),
+            ("date", Value::str(&cx.date)),
+            ("mode", Value::str(cx.mode.as_str())),
+        ];
+        if let Some(profile) = &cx.profile {
+            fields.push(("profile", Value::str(profile)));
         }
-        if let Some(git) = &self.git {
-            dict.insert(Str::from("git"), git.to_value());
+        if let Some(git) = &cx.git {
+            fields.push(("git", git.into()));
         }
-        dict.insert(Str::from("site"), self.site.to_value());
-        dict.into_value()
+        fields.push(("site", (&cx.site).into()));
+        fields.push(("client", cx.client.clone()));
+        Value::dict(fields)
     }
 }
 
@@ -191,41 +205,44 @@ impl GitInfo {
         let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         (!text.is_empty()).then_some(text)
     }
+}
 
-    fn to_value(&self) -> Value {
-        let mut dict = Dict::new();
-        dict.insert(Str::from("hash"), self.hash.clone().into_value());
-        if let Some(rev) = &self.rev {
-            dict.insert(Str::from("rev"), rev.clone().into_value());
+impl From<&GitInfo> for codegen::Value {
+    fn from(git: &GitInfo) -> Self {
+        use codegen::Value;
+        let mut fields = vec![("hash", Value::str(&git.hash))];
+        if let Some(rev) = &git.rev {
+            fields.push(("rev", Value::str(rev)));
         }
-        if let Some(branch) = &self.branch {
-            dict.insert(Str::from("branch"), branch.clone().into_value());
+        if let Some(branch) = &git.branch {
+            fields.push(("branch", Value::str(branch)));
         }
-        if let Some(tag) = &self.tag {
-            dict.insert(Str::from("tag"), tag.clone().into_value());
+        if let Some(tag) = &git.tag {
+            fields.push(("tag", Value::str(tag)));
         }
-        if let Some(committed) = &self.committed {
-            dict.insert(Str::from("committed"), committed.clone().into_value());
+        if let Some(committed) = &git.committed {
+            fields.push(("committed", Value::str(committed)));
         }
-        dict.insert(Str::from("dirty"), self.dirty.into_value());
-        dict.into_value()
+        fields.push(("dirty", Value::Bool(git.dirty)));
+        Value::dict(fields)
     }
 }
 
-impl SiteInfo {
-    fn to_value(&self) -> Value {
-        let mut dict = Dict::new();
-        if let Some(title) = &self.title {
-            dict.insert(Str::from("title"), title.clone().into_value());
+impl From<&SiteInfo> for codegen::Value {
+    fn from(site: &SiteInfo) -> Self {
+        use codegen::Value;
+        let mut fields: Vec<(&str, Value)> = Vec::new();
+        if let Some(title) = &site.title {
+            fields.push(("title", Value::str(title)));
         }
-        if let Some(url) = &self.url {
-            dict.insert(Str::from("url"), url.clone().into_value());
+        if let Some(url) = &site.url {
+            fields.push(("url", Value::str(url)));
         }
-        dict.insert(Str::from("lang"), self.lang.clone().into_value());
-        if let Some(author) = &self.author {
-            dict.insert(Str::from("author"), author.clone().into_value());
+        fields.push(("lang", Value::str(&site.lang)));
+        if let Some(author) = &site.author {
+            fields.push(("author", Value::str(author)));
         }
-        dict.into_value()
+        Value::dict(fields)
     }
 }
 
@@ -246,7 +263,10 @@ impl Project {
             .map(|(k, v)| (Str::from(k.as_str()), v.clone().into_value()))
             .collect();
         // reserved namespace exposing build metadata to pages.
-        inputs.insert(Str::from("baudelaire"), context.to_value());
+        inputs.insert(
+            Str::from("baudelaire"),
+            Value::from(&codegen::Value::from(&context)),
+        );
 
         let mut features = Vec::new();
         for name in &config.features {

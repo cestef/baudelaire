@@ -352,18 +352,18 @@ impl Engine {
             let fingerprint = Hash::of_bytes(text.as_bytes());
             return Ok((FileId::new(rooted), text, fingerprint));
         };
+        let taxonomies = page.frontmatter.taxonomies.iter().map(|(name, terms)| {
+            (
+                name.clone(),
+                crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)),
+            )
+        });
         let taxonomies =
-            crate::codegen::Value::dict(page.frontmatter.taxonomies.iter().map(|(name, terms)| {
-                (
-                    name.clone(),
-                    crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)),
-                )
-            }))
-            .to_string();
+            crate::codegen::Typst(&crate::codegen::Value::dict(taxonomies)).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
         // refingerprints this page and rebuilds it — the cache stays correct.
-        let nav = Self::nav(&page.siblings).to_string();
+        let nav = crate::codegen::Typst(&Self::nav(&page.siblings)).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
             Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
@@ -395,12 +395,12 @@ impl Engine {
     /// the `baudelaire:sections` JS module. Identical for every page, so it is
     /// computed once per build.
     fn sections(&self, pages: &[Page]) -> String {
-        crate::codegen::Value::array(
+        let tree = crate::codegen::Value::array(
             Section::tree(pages, &self.config)
                 .iter()
                 .map(Section::value),
-        )
-        .to_string()
+        );
+        crate::codegen::Typst(&tree).to_string()
     }
 
     /// The prev/next sibling links as a typst dict value:

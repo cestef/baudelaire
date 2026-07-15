@@ -131,6 +131,55 @@ fn sections_module_groups_by_collection() {
     assert!(js.contains("One"), "page title inlined: {js}");
 }
 
+#[test]
+fn taxonomies_module_maps_terms_to_pages() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        &config("taxonomies { tags }\noutput { assets { bundle #true } }"),
+    );
+    site.write(
+        "assets/main.js",
+        "import taxonomies from \"baudelaire:taxonomies\";\nglobalThis.T = taxonomies;\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"Alpha\", tags: (\"rust\", \"web\"))\nx",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"Beta\", tags: (\"rust\",))\nx",
+    );
+    let js = bundle(&site);
+    assert!(js.contains("rust"), "term inlined: {js}");
+    assert!(
+        js.contains("Alpha") && js.contains("Beta"),
+        "pages inlined: {js}"
+    );
+}
+
+#[test]
+fn feed_module_lists_recent_dated_pages_newest_first() {
+    let site = Site::new();
+    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write(
+        "assets/main.js",
+        "import feed from \"baudelaire:feed\";\nglobalThis.F = feed;\n",
+    );
+    site.write(
+        "content/posts/old.typ",
+        "#let frontmatter = (title: \"Older\", date: datetime(year: 2024, month: 1, day: 1))\nx",
+    );
+    site.write(
+        "content/posts/new.typ",
+        "#let frontmatter = (title: \"Newer\", date: datetime(year: 2026, month: 6, day: 1))\nx",
+    );
+    let js = bundle(&site);
+    let newer = js.find("Newer").expect("newer listed");
+    let older = js.find("Older").expect("older listed");
+    assert!(newer < older, "newest first: {js}");
+}
+
 /// The sole emitted file under `public/assets` with extension `ext`. Read by
 /// uniqueness, not by guessing its fingerprint — the entry's hash depends on the
 /// bundler's output, which the test can't reproduce.

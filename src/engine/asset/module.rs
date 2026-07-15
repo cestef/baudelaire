@@ -5,7 +5,7 @@
 //! from the registry in [`builtin`]. Adding a module is one impl and one line.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::sync::Arc;
 
@@ -36,7 +36,7 @@ trait Module {
 }
 
 /// The registered virtual modules.
-fn builtin() -> [Box<dyn Module>; 6] {
+fn builtin() -> [Box<dyn Module>; 8] {
     [
         Box::new(Search),
         Box::new(Site),
@@ -44,6 +44,8 @@ fn builtin() -> [Box<dyn Module>; 6] {
         Box::new(Assets),
         Box::new(Pages),
         Box::new(Sections),
+        Box::new(Taxonomies),
+        Box::new(Feed),
     ]
 }
 
@@ -114,26 +116,17 @@ impl Esm {
         if let Value::Dict(pairs) = value {
             for (key, item) in pairs {
                 if Self::ident(key) {
-                    out.push_str("export const ");
-                    out.push_str(key);
-                    out.push_str(" = ");
-                    item.render::<Js>(&mut out);
-                    out.push_str(";\n");
+                    out.push_str(&format!("export const {key} = {};\n", Js(item)));
                 }
             }
         }
-        out.push_str("export default ");
-        value.render::<Js>(&mut out);
-        out.push_str(";\n");
+        out.push_str(&format!("export default {};\n", Js(value)));
         out
     }
 
     /// A module with a single default export of `value`.
     fn value(value: &Value) -> String {
-        let mut out = String::from("export default ");
-        value.render::<Js>(&mut out);
-        out.push_str(";\n");
-        out
+        format!("export default {};\n", Js(value))
     }
 
     /// Whether `s` is a safe, non-reserved JS identifier for a named export.
@@ -217,7 +210,7 @@ impl Module for Assets {
             "const map = {};\n\
              export function url(path) {{ return map[path] ?? path; }}\n\
              export default map;\n",
-            map.to::<Js>()
+            Js(&map)
         );
         vec![("baudelaire:assets".into(), src)]
     }
@@ -260,6 +253,67 @@ impl Module for Sections {
         let tree = Section::tree(cx.pages, cx.config);
         let data = Value::array(tree.iter().map(|s| s.value()));
         vec![("baudelaire:sections".into(), Esm::value(&data))]
+    }
+}
+
+/// `baudelaire:taxonomies`: each taxonomy's terms mapped to the pages that carry
+/// them — `{ tags: { rust: [{ url, title }], .. }, .. }` — for client-side tag
+/// filtering and term clouds.
+struct Taxonomies;
+
+impl Module for Taxonomies {
+    fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
+        // taxonomy → term → pages, sorted for deterministic output.
+        let mut taxos: BTreeMap<&str, BTreeMap<&str, Vec<Value>>> = BTreeMap::new();
+        for page in cx
+            .pages
+            .iter()
+            .filter(|p| !matches!(p.data, Data::Generated(_)))
+        {
+            let link = Value::dict([
+                ("url", Value::str(&page.permalink)),
+                ("title", Value::str(page.title())),
+            ]);
+            for (taxonomy, terms) in &page.frontmatter.taxonomies {
+                let by_term = taxos.entry(taxonomy).or_default();
+                for term in terms {
+                    by_term.entry(term).or_default().push(link.clone());
+                }
+            }
+        }
+        let data = Value::dict(taxos.into_iter().map(|(taxonomy, terms)| {
+            let terms = Value::dict(
+                terms
+                    .into_iter()
+                    .map(|(term, links)| (term, Value::Array(links))),
+            );
+            (taxonomy, terms)
+        }));
+        vec![("baudelaire:taxonomies".into(), Esm::value(&data))]
+    }
+}
+
+/// `baudelaire:feed`: the most recent dated pages as `{ url, title, date }`,
+/// newest first, capped at the feed's configured `limit` — for a "latest posts"
+/// widget without fetching a feed file.
+struct Feed;
+
+impl Module for Feed {
+    fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
+        let mut dated: Vec<&Page> = cx
+            .pages
+            .iter()
+            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.frontmatter.date.is_some())
+            .collect();
+        dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
+        let items = dated.into_iter().take(cx.config.feed.limit).map(|page| {
+            Value::dict([
+                ("url", Value::str(&page.permalink)),
+                ("title", Value::str(page.title())),
+                ("date", Value::opt(page.frontmatter.date.map(Iso::date))),
+            ])
+        });
+        vec![("baudelaire:feed".into(), Esm::value(&Value::array(items)))]
     }
 }
 
