@@ -22,10 +22,10 @@ jobs:
       matrix:
         include:
           - name: linux-x86_64
-            runner: linux-amd64
+            runner: linux-amd64-large
             target: x86_64-unknown-linux-gnu
           - name: linux-aarch64
-            runner: linux-arm64
+            runner: linux-arm64-large
             target: aarch64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
