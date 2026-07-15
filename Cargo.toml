@@ -10,7 +10,7 @@ repository = "https://codeberg.org/cstef/baudelaire"
 homepage = "https://baudelaire.cstef.dev"
 documentation = "https://baudelaire.cstef.dev"
 readme = "README.md"
-keywords = ["typst", "static-site-generator", "ssg", "website", "cli"]
+keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = ["/docs", "/.forgejo", "/public", "/.jj", "/.claude", "/install.sh"]
 
