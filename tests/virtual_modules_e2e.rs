@@ -29,7 +29,7 @@ fn bundle(site: &Site) -> String {
 
 fn config(extra: &str) -> String {
     format!(
-        "site \"T\"\nurl \"https://ex.com\"\nauthor \"Ada\"\npaths {{\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}}\nclean #true\n{extra}\n"
+        "site \"T\"\nurl \"https://ex.com\"\nauthor \"Ada\"\npaths {{\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}}\n{extra}\n"
     )
 }
 

@@ -25,6 +25,7 @@ impl Default for Config {
             assets: PathBuf::from("assets"),
             r#static: PathBuf::from("static"),
             templates: PathBuf::from("templates"),
+            urls: UrlStyle::default(),
             clean: true,
             future: false,
             sitemap: true,
@@ -189,6 +190,23 @@ impl Default for CollectionConfig {
             index: None,
             prefix: "page".into(),
         }
+    }
+}
+
+/// How page permalinks map onto output files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum UrlStyle {
+    /// Directory-per-page: `foo.typ` → `foo/index.html`, served at `/foo/`.
+    #[default]
+    Clean,
+    /// Flat files: `foo.typ` → `foo.html`, served at `/foo.html`.
+    Flat,
+}
+
+impl UrlStyle {
+    /// Whether this style produces directory-per-page (clean) URLs.
+    pub fn is_clean(self) -> bool {
+        matches!(self, UrlStyle::Clean)
     }
 }
 

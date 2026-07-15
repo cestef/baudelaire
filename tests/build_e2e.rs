@@ -22,7 +22,6 @@ fn builds_simple_page_to_html() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -53,7 +52,6 @@ fn builds_multiple_pages_in_parallel() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     for i in 0..8 {
@@ -87,7 +85,9 @@ fn flat_urls_produce_html_files() {
                 content "content"
                 dist "public"
             }
-            clean #false
+            output {
+                urls "flat"
+            }
         "#,
     );
     site.write(
@@ -115,7 +115,6 @@ fn drafts_skipped_by_default() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -147,7 +146,6 @@ fn drafts_flag_builds_drafts() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -174,7 +172,6 @@ fn draft_suffix_marks_and_strips_slug() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -317,7 +314,7 @@ fn prev_next_siblings_exposed_to_the_template() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n",
+        "site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n",
     );
     // A template that renders `page.nav` prev/next as rel-tagged links.
     site.write(
@@ -376,7 +373,7 @@ fn sections_expose_the_ordered_page_set_to_templates() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\nclean #true\n",
+        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\n",
     );
     // Render every section id and its pages' titles, in order, as a flat trail.
     site.write(
@@ -418,7 +415,7 @@ fn nested_content_dirs_build_a_section_tree() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\nclean #true\n",
+        "site \"T\"\ncollections {\n  guide sort=\"order\" template=\"page.typ\"\n}\n",
     );
     // Emit each section's id + direct-page titles, then one level of children.
     site.write(
@@ -470,7 +467,7 @@ fn client_constants_reach_templates_via_sys_inputs() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nclient {\n  analytics \"plausible\"\n  revalidate 3600\n}\nclean #true\n",
+        "site \"T\"\nclient {\n  analytics \"plausible\"\n  revalidate 3600\n}\n",
     );
     site.write(
         "content/a.typ",
@@ -663,7 +660,6 @@ fn nested_dirs_traverse_and_build() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -696,7 +692,6 @@ fn custom_permalink_template_output() {
                 content "content"
                 dist "public"
             }
-            clean #true
             collections {
               posts permalink="/blog/{slug}/"
             }
@@ -726,7 +721,6 @@ fn internal_typ_links_rewritten_to_permalinks() {
                 content "content"
                 dist "public"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -759,7 +753,7 @@ fn broken_internal_link_fails_strict_build() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -779,7 +773,7 @@ fn broken_internal_link_warns_when_not_strict() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -806,7 +800,6 @@ fn layout_template_wraps_page_body() {
                 dist "public"
                 templates "templates"
             }
-            clean #true
         "#,
     );
     site.write(
@@ -880,7 +873,7 @@ fn frontmatter_redirects_emit_stub_pages() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/new.typ",
@@ -915,7 +908,6 @@ fn taxonomy_index_and_term_pages_generated() {
                 content "content"
                 dist "public"
             }
-            clean #true
             taxonomies {
               tags index=#true
             }
@@ -962,7 +954,6 @@ fn pagination_splits_collection_into_index_pages() {
                 content "content"
                 dist "public"
             }
-            clean #true
             collections {
               posts sort="title" paginate=2
             }
@@ -1001,7 +992,7 @@ fn pagination_prefix_is_configurable() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nclean #true\ncollections {\n  a sort=\"title\" paginate=2 prefix=\"p\"\n  b sort=\"title\" paginate=2 prefix=\"\"\n}\n",
+        "site \"T\"\ncollections {\n  a sort=\"title\" paginate=2 prefix=\"p\"\n  b sort=\"title\" paginate=2 prefix=\"\"\n}\n",
     );
     for c in ["a", "b"] {
         for (i, name) in ["x", "y", "z"].iter().enumerate() {
@@ -1044,7 +1035,7 @@ fn list_without_paginate_makes_a_single_index() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nclean #true\ncollections {\n  posts sort=\"title\" list=\"list.typ\"\n}\n",
+        "site \"T\"\ncollections {\n  posts sort=\"title\" list=\"list.typ\"\n}\n",
     );
     // A listing template that renders every entry's URL.
     site.write(
@@ -1085,7 +1076,7 @@ fn sitemap_and_rss_emitted_when_url_set() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1111,7 +1102,7 @@ fn feed_titles_fall_back_to_the_page_id() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\nclean #true\noutput {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\noutput {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}\n",
     );
     site.write(
         "content/posts/untitled.typ",
@@ -1130,7 +1121,7 @@ fn atom_feed_when_configured() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  feed {\n    formats \"atom\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  feed {\n    formats \"atom\"\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1149,7 +1140,7 @@ fn json_feed_when_configured() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  feed {\n    formats \"json\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  feed {\n    formats \"json\"\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1180,7 +1171,7 @@ fn search_indexes_emitted_for_each_configured_format() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\ntaxonomies {\n  tags\n}\noutput {\n  search {\n    formats \"json\" \"inverted\"\n    stopwords \"the\"\n    client #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ntaxonomies {\n  tags\n}\noutput {\n  search {\n    formats \"json\" \"inverted\"\n    stopwords \"the\"\n    client #true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1224,7 +1215,7 @@ fn search_client_bundles_into_a_user_entry_via_virtual_module() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets { bundle #true }\n  search { formats \"json\" }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets { bundle #true }\n  search { formats \"json\" }\n}\n",
     );
     site.write(
         "assets/main.js",
@@ -1249,7 +1240,7 @@ fn no_search_index_without_configured_formats() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1265,7 +1256,7 @@ fn embed_inlines_local_assets_as_data_uris() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  html {\n    embed #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  html {\n    embed #true\n  }\n}\n",
     );
     site.write("assets/style.css", "body{color:red}");
     site.write(
@@ -1287,7 +1278,7 @@ fn embed_inlines_processed_not_source_bytes() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  html { embed #true }\n  assets { minify #true }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  html { embed #true }\n  assets { minify #true }\n}\n",
     );
     // A comment survives only in the raw source; minification drops it.
     site.write(
@@ -1322,7 +1313,7 @@ fn robots_txt_emitted_when_block_present() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  robots {\n    disallow \"/private/\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  robots {\n    disallow \"/private/\"\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1343,7 +1334,7 @@ fn no_robots_txt_without_block() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1358,7 +1349,7 @@ fn build_context_exposed_via_sys_inputs() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/v.typ",
@@ -1379,7 +1370,7 @@ fn llms_txt_indexes_pages_by_collection() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\noutput {\n  llms {\n    summary \"A test site.\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  llms {\n    summary \"A test site.\"\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1401,7 +1392,7 @@ fn no_feed_or_sitemap_without_url() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1417,7 +1408,7 @@ fn taxonomy_listing_uses_custom_template() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\ntaxonomies {\n  tags index=#true template=\"tag.typ\"\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ntaxonomies {\n  tags index=#true template=\"tag.typ\"\n}\n",
     );
     // The template controls the page from the structured listing data.
     site.write(
@@ -1471,7 +1462,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets {\n    fingerprint #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets {\n    fingerprint #true\n  }\n}\n",
     );
     site.write("assets/style.css", "body{color:red}");
     site.write(
@@ -1497,7 +1488,7 @@ fn css_url_references_are_fingerprinted() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets { fingerprint #true }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
     );
     site.write("assets/style.css", "body{background:url(bg.png)}");
     site.write("assets/bg.png", "PNGDATA");
@@ -1529,7 +1520,7 @@ fn srcset_urls_are_fingerprinted() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets { fingerprint #true }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
     );
     site.write("assets/a.png", "AAA");
     site.write("assets/b.png", "BBB");
@@ -1564,7 +1555,7 @@ fn minify_compacts_css() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets {\n    minify #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets {\n    minify #true\n  }\n}\n",
     );
     site.write(
         "assets/style.css",
@@ -1586,7 +1577,7 @@ fn bundle_inlines_js_imports_and_drops_partials() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\noutput {\n  assets {\n    bundle #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets {\n    bundle #true\n  }\n}\n",
     );
     site.write("assets/_util.js", "export function hi() { return 42; }\n");
     site.write(
@@ -1618,7 +1609,7 @@ fn cache_stores_html_in_object_store_not_manifest() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1707,7 +1698,7 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nclean #true\nhooks {\n  before \"mkdir -p assets && printf 'body{color:red}' > assets/gen.css\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nhooks {\n  before \"mkdir -p assets && printf 'body{color:red}' > assets/gen.css\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
     );
     site.write(
         "content/index.typ",
@@ -1777,7 +1768,7 @@ fn colliding_taxonomy_terms_are_rejected() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
          taxonomies {\n  tags index=#true\n}\n",
     );
     site.write(
@@ -1803,7 +1794,6 @@ fn standard_verify_emits_wellknown_and_link_on_dated_pages() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            clean #true
             publish {
                 standard {
                     handle "me.example"
@@ -1856,7 +1846,6 @@ fn standard_verify_absent_without_a_did() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            clean #true
             publish { standard { handle "me.example" } }
         "#,
     );
@@ -1890,7 +1879,6 @@ fn standard_verify_toggle_suppresses_wellknown_only() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            clean #true
             publish {
                 standard {
                     handle "me.example"

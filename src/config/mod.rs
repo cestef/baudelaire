@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use kdl::KdlDocument;
 
-pub use defaults::SortKey;
+pub use defaults::{SortKey, UrlStyle};
 
 /// Top-level site configuration.
 #[derive(Debug, Clone)]
@@ -44,7 +44,13 @@ pub struct Config {
     pub r#static: PathBuf,
     /// Layout / template directory.
     pub templates: PathBuf,
-    /// Generate directory-per-page URLs (`foo.typ` → `foo/index.html`).
+    /// How permalinks map onto output files: clean (directory-per-page) or flat
+    /// (`.html`). Set under `output { urls "clean" | "flat" }`.
+    pub urls: UrlStyle,
+    /// Remove orphaned outputs from `dist` on each build — files a previous
+    /// build wrote that this one no longer produces (a deleted page, a renamed
+    /// permalink, a dropped taxonomy term). The asset tree and build cache are
+    /// never touched. Set under `output { clean #true | #false }`.
     pub clean: bool,
     /// Build future-dated posts.
     pub future: bool,
@@ -184,7 +190,7 @@ impl Config {
         if trimmed == "404" {
             return self.dist.join(Self::NOT_FOUND);
         }
-        if self.clean {
+        if self.urls.is_clean() {
             self.dist.join(&trimmed).join("index.html")
         } else {
             self.dist.join(format!("{trimmed}.html"))
@@ -250,6 +256,7 @@ impl std::hash::Hash for Config {
             assets,
             r#static,
             templates,
+            urls,
             clean,
             future,
             sitemap,
@@ -285,7 +292,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            clean, future, sitemap, robots, llms, draft, links, feed, search,
+            urls, clean, future, sitemap, robots, llms, draft, links, feed, search,
         )
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);

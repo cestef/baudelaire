@@ -1,7 +1,7 @@
 #!/bin/sh
 # Baudelaire installer — a prebuilt, checksum-verified binary onto your PATH.
 # No Rust needed. Read it before you run it:
-#   curl -fsSL https://baudelaire.dev/install.sh | less
+#   curl -fsSL https://baudelaire.cstef.dev/install.sh | less
 #
 # Knobs:  VERSION=v0.1.0   PREFIX=/usr/local/bin   sh install.sh
 set -eu

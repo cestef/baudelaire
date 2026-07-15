@@ -6,7 +6,7 @@
 //! Runs before the asset pipeline and page writes, so a generated file at the
 //! same output path wins — static is the lowest-priority source.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::engine::asset::Walk;
@@ -21,10 +21,13 @@ pub struct Static<'a> {
 
 /// The outcome of a static copy: files written this build and their byte size.
 /// Files skipped as already-current do not count — an unchanged tree reports 0.
+/// `paths` lists every destination the static tree owns (copied or skipped), so
+/// the prune pass keeps them.
 #[derive(Default)]
 pub struct Copied {
     pub count: usize,
     pub bytes: u64,
+    pub paths: Vec<PathBuf>,
 }
 
 impl<'a> Static<'a> {
@@ -51,6 +54,7 @@ impl<'a> Static<'a> {
                 .expect("Walk yields paths under src");
             let dst = self.dist.join(rel);
             let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+            out.paths.push(dst.clone());
             if Self::current(&file, &dst) {
                 continue;
             }

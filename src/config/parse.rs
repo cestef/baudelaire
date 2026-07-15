@@ -51,10 +51,6 @@ impl Config {
             Ok(())
         }),
         ("paths", |c, n, t| n.paths(c, t)),
-        ("clean", |c, n, t| {
-            c.clean = n.boolean(t, 0)?;
-            Ok(())
-        }),
         ("future", |c, n, t| {
             c.future = n.boolean(t, 0)?;
             Ok(())
@@ -472,6 +468,14 @@ impl NodeExt for KdlNode {
     /// The `output { .. }` parent section: everything the build emits.
     fn output(&self, config: &mut Config, text: &str) -> Result<()> {
         const OUTPUT: Block<Config> = Block(&[
+            ("urls", |c, n, t| {
+                c.urls = n.arg(t, 0)?.urls(t, NodeExt::span(n))?;
+                Ok(())
+            }),
+            ("clean", |c, n, t| {
+                c.clean = n.boolean(t, 0)?;
+                Ok(())
+            }),
             ("html", |c, n, t| n.html(&mut c.html, t)),
             ("images", |c, n, t| n.images(&mut c.images, t)),
             ("assets", |c, n, t| n.assets(&mut c.asset, t)),

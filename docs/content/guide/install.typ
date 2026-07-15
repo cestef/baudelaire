@@ -2,7 +2,6 @@
   title: "Install",
   order: 1,
 )
-#import "/templates/theme.typ": callout
 
 Baudelaire is a single binary with no runtime dependencies. The Typst compiler
 is built in, so there is nothing else to install.
@@ -16,17 +15,12 @@ verifies its checksum, and drops `baudelaire` in `~/.local/bin`.
 It is deliberately readable, so fetch it, skim it, then run it:
 
 ```sh
-curl -fsSL https://baudelaire.dev/install.sh -o install.sh
+curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
 less install.sh          # read before you run
 sh install.sh
 ```
 
 Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release.
-
-#callout(kind: "note")[
-  Fonts come from your system. On a slim server or CI image, install a font
-  package such as `fonts-dejavu` so Typst has something to render with.
-]
 
 == With cargo
 

@@ -19,6 +19,7 @@ fn client_block_parses_json_scalars() {
 fn empty_uses_defaults() {
     let cfg = parse("");
     assert_eq!(cfg.lang, "en");
+    assert_eq!(cfg.urls, crate::config::UrlStyle::Clean);
     assert!(cfg.clean);
     assert!(cfg.html.pretty);
     assert_eq!(cfg.serve.port, 1821);
@@ -71,7 +72,6 @@ fn scalars() {
         url "https://example.net"
         lang "fr"
         author "Claude"
-        clean #false
         future #true
     "#,
     );
@@ -79,7 +79,6 @@ fn scalars() {
     assert_eq!(cfg.url.as_deref(), Some("https://example.net"));
     assert_eq!(cfg.lang, "fr");
     assert_eq!(cfg.author.as_deref(), Some("Claude"));
-    assert!(!cfg.clean);
     assert!(cfg.future);
 }
 
@@ -282,17 +281,35 @@ fn err_missing_children() {
 
 #[test]
 fn bare_flag_node_enables() {
-    let cfg = parse("clean");
-    assert!(cfg.clean);
+    // A bare flag node inside a block enables; the top-level default is on too.
+    assert!(parse("").clean);
+    assert!(parse("output {\n  clean\n}").clean);
+    assert!(!parse("output {\n  clean #false\n}").clean);
 }
 
 #[test]
 fn err_boolean_type() {
-    let err = Config::parse("clean \"yes\"").unwrap_err();
+    let err = Config::parse("output {\n  clean \"yes\"\n}").unwrap_err();
     assert!(
         err.to_string().contains("expected boolean, got string"),
         "{err}"
     );
+}
+
+#[test]
+fn url_style_parsed_from_output_block() {
+    use crate::config::UrlStyle;
+    assert_eq!(parse("output {\n  urls \"clean\"\n}").urls, UrlStyle::Clean);
+    assert_eq!(parse("output {\n  urls \"flat\"\n}").urls, UrlStyle::Flat);
+}
+
+#[test]
+fn err_unknown_url_style() {
+    let err = Config::parse("output {\n  urls \"pretty\"\n}").unwrap_err();
+    let rendered = format!("{:?}", miette::Report::from(err));
+    // The value table drives the "did you mean" hint, listing the valid styles.
+    assert!(rendered.contains("unknown value `pretty`"), "{rendered}");
+    assert!(rendered.contains("clean, flat"), "{rendered}");
 }
 
 #[test]

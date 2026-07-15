@@ -24,8 +24,6 @@ paths {
   templates "templates"
 }
 
-clean #true
-
 collections {
   posts sort="date" reverse=#true paginate=10 template="post.typ"
 }
@@ -35,6 +33,8 @@ taxonomies {
 }
 
 output {
+  urls "clean"
+  clean #true
   html { pretty #true; meta #true; anchors #true }
   images { lazy #true; optimize { png; jpeg quality=82 } }
   assets { minify #true; bundle #true; fingerprint #true }
@@ -64,8 +64,11 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   default template. See #link("../features/content/pagination.typ")[pagination].
 / #raw("taxonomies"): Group pages by a frontmatter list such as `tags`. See
   #link("../features/content/taxonomies.typ")[taxonomies].
-/ #raw("output"): Everything the build emits: HTML options, the
-  #link("../features/assets/assets.typ")[asset pipeline], #link("../features/discovery/search.typ")[search],
+/ #raw("output"): Everything the build emits: the URL style (`urls "clean"` for
+  directory-per-page permalinks, `urls "flat"` for `.html` files), whether to
+  sweep orphaned files from the output directory (`clean`, on by default), HTML
+  options, the #link("../features/assets/assets.typ")[asset pipeline],
+  #link("../features/discovery/search.typ")[search],
   #link("../features/discovery/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
 / #raw("hooks"): Run external tools around the build. See
   #link("../features/assets/hooks.typ")[build hooks].
@@ -128,7 +131,7 @@ inputs, and more.
 The config is plain #link("https://kdl.dev")[KDL 2.0], and a few of its features
 make editing pleasant:
 
-/ Optional quotes: simple values need no quotes. `sort=date`, `clean #true`, and
+/ Optional quotes: simple values need no quotes. `sort=date`, `future #true`, and
   `template=post.typ` all work; reach for quotes only when a value has spaces or
   punctuation, like a URL.
 / Slashdash: prefix any node with `/-` to comment it out whole. `/-search { }`

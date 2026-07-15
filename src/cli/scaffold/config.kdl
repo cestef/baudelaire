@@ -10,8 +10,6 @@ paths {
   templates "templates"
 }
 
-clean #true
-
 typst {
   features "+html"
 }
@@ -25,6 +23,10 @@ taxonomies {
 }
 
 output {
+  urls "clean"
+  // Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
+  clean #true
+
   html {
     pretty #true
     meta #true

@@ -1,5 +1,5 @@
 site "Baudelaire"
-url "https://baudelaire.dev"
+url "https://baudelaire.cstef.dev"
 author "cstef"
 lang "en"
 
@@ -10,8 +10,6 @@ paths {
   templates "templates"
   static "static"
 }
-
-clean #true
 
 // Build-time constants handed to client JavaScript through the
 // `baudelaire:config` virtual module. The config page renders this very block
@@ -32,6 +30,14 @@ taxonomies {
 }
 
 output {
+  // Directory-per-page permalinks (`/guide/` not `/guide.html`). Use "flat"
+  // for `.html` files instead.
+  urls "clean"
+
+  // Sweep orphaned files (a deleted page, a renamed permalink, a dropped
+  // taxonomy term) out of the output directory on every build.
+  clean #true
+
   html {
     pretty #true
   }

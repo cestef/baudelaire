@@ -4,7 +4,7 @@
 use kdl::KdlValue;
 use miette::SourceSpan;
 
-use crate::config::SortKey;
+use crate::config::{SortKey, UrlStyle};
 use crate::config::dispatch::Keys;
 use crate::error::{ConfigError, Result};
 
@@ -66,6 +66,7 @@ pub(super) trait ValueExt {
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
+    fn urls(&self, text: &str, span: SourceSpan) -> Result<UrlStyle>;
     /// Map a string value through a `(name, value)` table, erroring on an
     /// unknown name with a nearest-match hint — the single-value counterpart of
     /// `NodeExt::mapped`, so the table drives both parsing and error help.
@@ -132,6 +133,14 @@ impl ValueExt for KdlValue {
                 ("date", SortKey::Date),
                 ("title", SortKey::Title),
             ],
+        )
+    }
+
+    fn urls(&self, text: &str, span: SourceSpan) -> Result<UrlStyle> {
+        self.one(
+            text,
+            span,
+            &[("clean", UrlStyle::Clean), ("flat", UrlStyle::Flat)],
         )
     }
 

@@ -10,7 +10,6 @@ const CONFIG: &str = r#"
         dist "public"
         static "static"
     }
-    clean #true
 "#;
 
 fn built(site: &Site) {

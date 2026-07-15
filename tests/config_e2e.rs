@@ -14,7 +14,6 @@ fn fixture_config() -> &'static str {
           dist "public"
         }
 
-        clean #true
 
         typst {
           inputs {

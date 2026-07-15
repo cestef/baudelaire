@@ -15,7 +15,7 @@ fn root_flag_builds_from_that_directory() {
     // The site lives in a subdirectory; we invoke from the sandbox root.
     sb.write(
         "site/config.kdl",
-        "site \"R\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n",
+        "site \"R\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     sb.write(
         "site/content/index.typ",

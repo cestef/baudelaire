@@ -10,10 +10,12 @@
 
 mod common;
 
+use std::fs;
+
 use common::Site;
 
 const CONFIG: &str =
-    "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n";
+    "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
 
 #[test]
 fn second_build_reuses_all_pages() {
@@ -94,7 +96,7 @@ fn retitling_a_page_invalidates_its_sibling() {
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
     // sibling whose nav points at it — otherwise its "next" link goes stale.
     let site =
-        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
+        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
@@ -227,7 +229,7 @@ fn generated_pages_are_cached() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
          taxonomies {\n  tags index=#true\n}\n",
     );
     site.write(
@@ -255,7 +257,7 @@ fn retitling_invalidates_taxonomy_listing() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\n\
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
          taxonomies {\n  tags index=#true\n}\n",
     );
     site.write(
@@ -330,7 +332,7 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     // the asset must still rebuild the page (its inlined copy is now stale).
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n\
-         clean #true\noutput {\n  html {\n    embed #true\n  }\n}\n",
+         output {\n  html {\n    embed #true\n  }\n}\n",
     );
     site.write("assets/note.svg", "<svg>ONE</svg>");
     site.write(
@@ -387,7 +389,7 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     // frontmatter depends on that module. Editing it must re-evaluate the page's
     // frontmatter — a missed dependency would serve the stale title from cache.
     let site =
-        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\nclean #true\n");
+        Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",
@@ -426,5 +428,205 @@ fn no_cache_flag_forces_full_rebuild() {
     assert!(
         !logs.contains("cached"),
         "no-cache must rebuild everything: {logs}"
+    );
+}
+
+// ---- Stale-output pruning -------------------------------------------------
+//
+// A build must not only write the current outputs — it must remove the ones a
+// previous build wrote that no longer belong (a deleted page, a renamed
+// permalink, a taxonomy term whose last page dropped it). Otherwise `dist`
+// only grows and keeps serving files no source maps to. These lock in that
+// pruning across the ways an output can be orphaned.
+
+#[test]
+fn deleted_page_is_pruned_from_dist() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.build();
+    assert!(site.exists("public/posts/b/index.html"));
+
+    // Remove one source and rebuild: its output must not linger.
+    fs::remove_file(site.path("content/posts/b.typ")).unwrap();
+    site.build();
+    assert!(
+        site.exists("public/posts/a/index.html"),
+        "surviving page was wrongly pruned"
+    );
+    assert!(
+        !site.exists("public/posts/b/index.html"),
+        "deleted page's output was not pruned"
+    );
+    // The emptied directory should be gone too, not left as a husk.
+    assert!(!site.exists("public/posts/b"), "empty dir left behind");
+}
+
+#[test]
+fn renamed_page_prunes_the_old_permalink() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/old.typ",
+        "#let frontmatter = (title: \"P\",)\nbody",
+    );
+    site.build();
+    assert!(site.exists("public/posts/old/index.html"));
+
+    // Rename the source (slug → permalink), which moves the output.
+    fs::rename(
+        site.path("content/posts/old.typ"),
+        site.path("content/posts/new.typ"),
+    )
+    .unwrap();
+    site.build();
+    assert!(
+        site.exists("public/posts/new/index.html"),
+        "renamed page's new output missing"
+    );
+    assert!(
+        !site.exists("public/posts/old/index.html"),
+        "old permalink was not pruned after rename"
+    );
+}
+
+#[test]
+fn dropped_taxonomy_term_prunes_its_index() {
+    // The exact shape of the original bug: a term page lingering after no page
+    // carries the term anymore.
+    let config = format!("{CONFIG}taxonomies {{\n  tags index=#true\n}}\n");
+    let site = Site::with(&config);
+    site.write(
+        "content/a.typ",
+        "#let frontmatter = (title: \"A\", tags: (\"keep\", \"drop\"))\nhi",
+    );
+    site.build();
+    assert!(site.exists("public/tags/keep/index.html"));
+    assert!(site.exists("public/tags/drop/index.html"));
+
+    // The page keeps `keep` but loses `drop`; the `drop` term page must vanish.
+    site.write(
+        "content/a.typ",
+        "#let frontmatter = (title: \"A\", tags: (\"keep\",))\nhi",
+    );
+    site.build();
+    assert!(
+        site.exists("public/tags/keep/index.html"),
+        "surviving term wrongly pruned"
+    );
+    assert!(
+        !site.exists("public/tags/drop/index.html"),
+        "orphaned taxonomy term page was not pruned"
+    );
+}
+
+#[test]
+fn changed_site_url_refreshes_canonical_on_rebuild() {
+    // Regression for the sibling failure mode: a config change that only the
+    // render pass sees (the base `url`, baked into canonical/og:url) must
+    // invalidate cached pages, not serve their stale absolute links.
+    let base = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
+    let site = Site::with(&format!("{base}url \"https://one.example\"\n"));
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.build();
+    assert!(
+        site.output("posts/a/index.html").contains("https://one.example/posts/a/"),
+        "first build did not emit the configured canonical"
+    );
+
+    site.write("config.kdl", &format!("{base}url \"https://two.example\"\n"));
+    site.build();
+    let html = site.output("posts/a/index.html");
+    assert!(
+        html.contains("https://two.example/posts/a/"),
+        "canonical did not update after the url changed: cache served stale meta"
+    );
+    assert!(
+        !html.contains("https://one.example"),
+        "stale canonical from the old url survived the rebuild"
+    );
+}
+
+#[test]
+fn pruning_spares_assets_and_static_files() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write("assets/app.css", "body{color:red}");
+    site.write("static/CNAME", "example.com");
+    site.build();
+    assert!(site.exists("public/CNAME"), "static file missing after build");
+    assert!(!site.files("public/assets").is_empty(), "asset missing");
+
+    // A no-op rebuild must not sweep away the asset tree or static passthrough.
+    site.build();
+    assert!(
+        site.exists("public/CNAME"),
+        "static passthrough wrongly pruned"
+    );
+    assert!(
+        !site.files("public/assets").is_empty(),
+        "asset tree wrongly pruned"
+    );
+}
+
+#[test]
+fn clean_false_disables_pruning() {
+    // The prune is opt-out: with `clean #false` an orphaned output survives, for
+    // users who manage `dist/` by hand.
+    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  clean #false\n}\n";
+    let site = Site::with(config);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.build();
+    assert!(site.exists("public/posts/b/index.html"));
+
+    fs::remove_file(site.path("content/posts/b.typ")).unwrap();
+    site.build();
+    assert!(
+        site.exists("public/posts/b/index.html"),
+        "clean #false must leave orphaned outputs in place"
+    );
+}
+
+#[test]
+fn flat_urls_still_prune_on_rename() {
+    // Pruning is independent of URL style: a renamed page under flat URLs must
+    // still drop its old `.html` output.
+    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  urls \"flat\"\n}\n";
+    let site = Site::with(config);
+    site.write(
+        "content/posts/old.typ",
+        "#let frontmatter = (title: \"P\",)\nbody",
+    );
+    site.build();
+    assert!(site.exists("public/posts/old.html"));
+
+    fs::rename(
+        site.path("content/posts/old.typ"),
+        site.path("content/posts/new.typ"),
+    )
+    .unwrap();
+    site.build();
+    assert!(site.exists("public/posts/new.html"), "new flat output missing");
+    assert!(
+        !site.exists("public/posts/old.html"),
+        "old flat output not pruned"
     );
 }

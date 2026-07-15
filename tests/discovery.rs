@@ -75,7 +75,6 @@ fn discovers_collections_and_pages() {
                 content "content"
                 dist "public"
             }
-            clean #true
             collections {
               posts "posts/**/*.typ" sort="date"
             }
@@ -157,7 +156,7 @@ fn invalid_glob_reports_error() {
 #[test]
 fn page_loads_frontmatter_and_body() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\nclean #true");
+    site.write("config.kdl", "site \"T\"");
     site.write(
         "content/posts/hello.typ",
         &frontmatter_post("Hello", "hello", "year: 2024, month: 1, day: 1", &[]),
@@ -205,7 +204,7 @@ fn clean_urls_output_path() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nclean #true\npaths {\n  dist \"public\"\n}",
+        "site \"T\"\npaths {\n  dist \"public\"\n}",
     );
     site.write(
         "content/posts/hello.typ",
@@ -229,7 +228,7 @@ fn flat_urls_output_path() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nclean #false\npaths {\n  dist \"public\"\n}",
+        "site \"T\"\noutput {\n  urls \"flat\"\n}\npaths {\n  dist \"public\"\n}",
     );
     site.write(
         "content/posts/hello.typ",
@@ -255,7 +254,6 @@ fn custom_permalink_template() {
         "config.kdl",
         r#"
             site "T"
-            clean #true
             paths {
                 dist "public"
             }
@@ -288,7 +286,7 @@ fn custom_permalink_template() {
 #[test]
 fn slug_falls_back_to_filename() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\nclean #true");
+    site.write("config.kdl", "site \"T\"");
     site.write(
         "content/posts/my-post.typ",
         "#let frontmatter = (title: \"X\",)\nbody",
@@ -357,7 +355,7 @@ fn missing_content_dir_returns_empty() {
 #[test]
 fn nested_dirs_traversed() {
     let site = Site::new();
-    site.write("config.kdl", "site \"T\"\nclean #true");
+    site.write("config.kdl", "site \"T\"");
     site.write(
         "content/posts/2024/jan.typ",
         "#let frontmatter = (title: \"Jan\",)\nbody",

@@ -17,7 +17,6 @@ fn serve_responds_with_page() {
                 content "content"
                 dist "public"
             }
-            clean #true
             serve { open #false; }
         "#,
     );
@@ -41,7 +40,6 @@ fn serve_rejects_path_traversal() {
             content "content"
             dist "public"
         }
-        clean #true
         serve { open #false; }"#,
     );
     t.write(
@@ -91,7 +89,6 @@ fn serve_falls_back_to_the_site_404_page() {
             content "content"
             dist "public"
         }
-        clean #true
         serve { open #false; }"#,
     );
     t.write(
@@ -118,7 +115,6 @@ fn serve_resolves_without_trailing_slash() {
             content "content"
             dist "public"
         }
-        clean #true
         serve { open #false; }"#,
     );
     t.write(
@@ -137,7 +133,7 @@ fn live_reload_script_injected_only_when_watching() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
     );
     t.write(
         "content/index.typ",
@@ -167,7 +163,7 @@ fn sse_stream_pushes_reload_on_change() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
     );
     t.write(
         "content/index.typ",
@@ -214,7 +210,7 @@ fn config_edit_reloads_and_pushes_reload() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
     );
     t.write(
         "content/index.typ",
@@ -239,7 +235,7 @@ fn config_edit_reloads_and_pushes_reload() {
     std::thread::sleep(Duration::from_millis(200));
     t.write(
         "config.kdl",
-        "site \"S2\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nclean #true\nserve { open #false; }",
+        "site \"S2\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
     );
 
     let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
@@ -262,7 +258,6 @@ fn serve_serves_index_at_root() {
             content "content"
             dist "public"
         }
-        clean #true
         serve { open #false; }"#,
     );
     t.write(

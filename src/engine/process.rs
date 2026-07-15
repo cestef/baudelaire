@@ -6,7 +6,7 @@
 //! one `impl Processor` plus one line in that list.
 
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
@@ -125,36 +125,42 @@ impl Processors {
 /// debug events, and collects warnings on the shared [`Ui`].
 pub(super) struct Emitter<'a> {
     ui: &'a Ui,
-    written: usize,
     bytes: u64,
+    /// Every generated file written this build, so the prune pass keeps them.
+    paths: Vec<PathBuf>,
 }
 
 impl<'a> Emitter<'a> {
     pub(super) fn new(ui: &'a Ui) -> Self {
         Self {
             ui,
-            written: 0,
             bytes: 0,
+            paths: Vec::new(),
         }
     }
 
     /// How many files were written — the count of generated outputs for the
     /// build summary (feeds, sitemap, search index, and so on).
     pub(super) fn written(&self) -> usize {
-        self.written
+        self.paths.len()
     }
 
     /// Total bytes of generated output written, for the build summary.
     pub(super) fn bytes(&self) -> u64 {
         self.bytes
     }
+
+    /// The generated files written this build, for the prune pass.
+    pub(super) fn paths(&self) -> &[PathBuf] {
+        &self.paths
+    }
 }
 
 impl Emit for Emitter<'_> {
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
         crate::fs::write_all(path, contents)?;
-        self.written += 1;
         self.bytes += contents.len() as u64;
+        self.paths.push(path.to_path_buf());
         Ok(())
     }
 

@@ -8,7 +8,7 @@ A static site generator where everything is just [Typst](https://typst.app).
 script, skim it, then run it:
 
 ```sh
-curl -fsSL https://baudelaire.dev/install.sh -o install.sh
+curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
 less install.sh          # read before you run
 sh install.sh
 ```

@@ -7,6 +7,7 @@ mod hook;
 mod layout;
 mod llms;
 mod process;
+mod prune;
 mod redirect;
 mod robots;
 mod search;
@@ -16,7 +17,7 @@ mod statics;
 pub mod text;
 mod xml;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -226,7 +227,7 @@ impl Engine {
             .par_iter()
             .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
         cache.save(&outputs)?;
-        let (generated, generated_bytes) = {
+        let (generated, generated_bytes, generated_paths) = {
             let site = Site {
                 config: &self.config,
                 pages: &pages,
@@ -234,9 +235,32 @@ impl Engine {
             };
             let mut emitter = Emitter::new(ui);
             Processors::builtin().run(&site, &mut emitter)?;
-            (emitter.written(), emitter.bytes())
+            (emitter.written(), emitter.bytes(), emitter.paths().to_vec())
         };
         let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
+
+        // Drop orphaned outputs from earlier builds (a removed page or taxonomy
+        // term, a renamed permalink) so `dist` never serves stale files. Gated
+        // on `clean` so a user managing `dist` by hand can opt out. The keep-set
+        // is every file this build produced — page HTML, static passthrough,
+        // generated files; the asset tree the pipeline already regenerates
+        // wholesale, so the prune skips it. Runs before `after` hooks, whose
+        // outputs (Pagefind..) aren't ours to prune.
+        if self.config.clean {
+            let keep: Vec<PathBuf> = outputs
+                .iter()
+                .map(|(page, _)| page.output.clone())
+                .chain(statics.paths.iter().cloned())
+                .chain(generated_paths)
+                .collect();
+            let pruned = prune::Prune::new(
+                &self.config.dist,
+                &self.config.asset_dist(),
+                &self.config.cache.dir,
+            )
+            .run(&keep)?;
+            debug!(pruned, "orphaned outputs removed");
+        }
 
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
