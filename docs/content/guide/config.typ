@@ -47,7 +47,7 @@ The `html` block controls the emitted markup (`pretty` formatting, `embed` to
 inline assets as `data:` URIs, `meta` for SEO and social tags, and `anchors` to
 give every heading a slug `id` for deep links); the `images` block handles lazy
 loading and per-format optimization. See
-#link("../features/meta.typ")[meta and images].
+#link("../features/discovery/meta.typ")[meta and images].
 
 Every field has a sensible default, so a minimal `config.kdl` is just
 `site "My Site"`. The rest overrides only what you name.
@@ -59,20 +59,30 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   output root — no processing, no fingerprint — for a `robots.txt` override,
   `.well-known/`, a `CNAME`, or an `install.sh`.
 / #raw("client"): Build-time constants exposed to client JavaScript through the
-  #link("../features/js-modules.typ")[#raw("baudelaire:config")] virtual module.
+  #link("../features/assets/js-modules.typ")[#raw("baudelaire:config")] virtual module.
 / #raw("collections"): Per-group sorting, permalinks, pagination, and the
-  default template. See #link("../features/pagination.typ")[pagination].
+  default template. See #link("../features/content/pagination.typ")[pagination].
 / #raw("taxonomies"): Group pages by a frontmatter list such as `tags`. See
-  #link("../features/taxonomies.typ")[taxonomies].
+  #link("../features/content/taxonomies.typ")[taxonomies].
 / #raw("output"): Everything the build emits: HTML options, the
-  #link("../features/assets.typ")[asset pipeline], #link("../features/search.typ")[search],
-  #link("../features/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
+  #link("../features/assets/assets.typ")[asset pipeline], #link("../features/discovery/search.typ")[search],
+  #link("../features/discovery/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
 / #raw("hooks"): Run external tools around the build. See
-  #link("../features/hooks.typ")[build hooks].
+  #link("../features/assets/hooks.typ")[build hooks].
 
 #callout(kind: "note")[
   A misspelled key is a hard error with a "did you mean?" suggestion: the parser
   knows every valid key, so typos never silently do nothing.
+]
+
+== The client block, live
+
+This site's own `client { }` block, read straight from the
+#link("../features/assets/js-modules.typ")[#raw("baudelaire:config")] module and
+printed by a few lines of script — the same object your bundle would import:
+
+#html.elem("pre", attrs: (class: "config-live", "data-config": ""))[
+  #html.elem("code", "// enable JavaScript to load baudelaire:config")
 ]
 
 == Profiles

@@ -59,7 +59,7 @@ gets a clean, valid set.
 ]
 
 A social `image` that points at a local asset is rewritten to its
-#link("assets.typ")[fingerprinted] URL and made absolute, so crawlers fetch the
+#link("../assets/assets.typ")[fingerprinted] URL and made absolute, so crawlers fetch the
 cache-busted file.
 
 == Images

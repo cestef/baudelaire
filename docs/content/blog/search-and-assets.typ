@@ -11,14 +11,14 @@ client-side search and an asset pipeline.
 
 == Search, without a service
 
-Turn on #link("../features/search.typ")[search] and the build writes a static
+Turn on #link("../features/discovery/search.typ")[search] and the build writes a static
 JSON index. No account, no third-party script. The search box on this site is the
 whole feature, running on that file. Prefer a prebuilt inverted index for a
 smaller payload? Ask for that format instead.
 
 == Minify, bundle, fingerprint
 
-The #link("../features/assets.typ")[asset pipeline] runs your CSS through
+The #link("../features/assets/assets.typ")[asset pipeline] runs your CSS through
 Lightning CSS and your JavaScript through rolldown, the same oxc-based bundler
 that powers Vite's next generation, then content-hashes the filenames and
 rewrites every reference to match.
@@ -30,4 +30,4 @@ rewrites every reference to match.
 
 The cache was rebuilt around this too: rendered HTML is now content-addressed, so
 identical output is stored once and unchanged pages are never rewritten. Details
-in #link("../features/incremental.typ")[incremental builds].
+in #link("../features/build/incremental.typ")[incremental builds].

@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 9,
+  order: 4,
   title: "Redirects",
   tags: ("feature",),
 )

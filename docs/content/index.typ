@@ -2,7 +2,7 @@
   title: "Baudelaire",
   template: "page.typ",
 )
-#import "/templates/theme.typ": cards, lucide
+#import "/templates/theme.typ": cards, lucide, link-to
 
 #html.elem("p", attrs: (class: "lead"))[
   A static site generator that speaks #link("https://typst.app")[Typst]. Write
@@ -30,12 +30,20 @@ content model, clean URLs, feeds, and a build cache.
 
 #cards((
   ("guide/quickstart.typ", "zap", "Quickstart", "Scaffold, build, and serve in three commands."),
-  ("features/search.typ", "search", "Search", "A flat index and a command palette, from one config block."),
-  ("features/assets.typ", "package", "Asset pipeline", "Minify CSS, bundle JS, and fingerprint filenames."),
-  ("features/taxonomies.typ", "tag", "Taxonomies", "Group pages by tag with generated index pages."),
-  ("features/feeds.typ", "rss", "Feeds & sitemap", "RSS, Atom, and sitemap.xml from your dated pages."),
+  ("features/discovery/search.typ", "search", "Search", "A flat index and a command palette, from one config block."),
+  ("features/assets/assets.typ", "package", "Asset pipeline", "Minify CSS, bundle JS, and fingerprint filenames."),
+  ("features/content/taxonomies.typ", "tag", "Taxonomies", "Group pages by tag with generated index pages."),
+  ("features/discovery/feeds.typ", "rss", "Feeds & sitemap", "RSS, Atom, and sitemap.xml from your dated pages."),
   ("guide/config.typ", "sliders", "Configuration", "Everything the build reads, in one KDL file."),
 ))
+
+== Latest writing
+
+// Populated client-side from the build's own `baudelaire:feed` module (no
+// fetch, no second source of truth). The link is the no-JS fallback.
+#html.elem("div", attrs: (class: "recent", "data-recent": ""))[
+  #link-to("/blog/", "Read the blog →")
+]
 
 This entire site is built with Baudelaire. The source lives in
 #link("https://codeberg.org/cstef/baudelaire")[the repository] under `docs/`.

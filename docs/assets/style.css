@@ -181,6 +181,7 @@ button,
 .icon-btn {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 2.15rem;
   height: 2.15rem;
   padding: 0;
@@ -415,17 +416,65 @@ button,
   color: var(--muted);
 }
 
-/* Nested subsections: indented, with a lighter, smaller heading. */
+/* Nested subsections: indented and collapsible via <details>. The left rule
+   turns into an active trail marker; the summary is the toggle. */
 .nav-sub {
-  margin: 0.35rem 0 0.35rem 0.7rem;
+  margin: 0.15rem 0 0.15rem 0.35rem;
   padding-left: 0.7rem;
   border-left: 1px solid var(--rule);
 }
 
-.nav-sub > .nav-title {
-  margin-bottom: 0.3rem;
-  font-size: 0.62rem;
+.nav-sub > summary.nav-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 5px;
+  font-size: 0.64rem;
   letter-spacing: 0.09em;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+/* Suppress the browser's default disclosure triangle in every engine. */
+.nav-sub > summary::-webkit-details-marker,
+.nav-sub > summary::marker {
+  display: none;
+  content: "";
+}
+
+.nav-sub > summary:hover,
+.nav-sub > summary:focus-visible {
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  outline: none;
+}
+
+.nav-sub > summary .icon {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.16s ease;
+}
+
+.nav-sub[open] > summary .icon {
+  transform: rotate(90deg);
+}
+
+.nav-sub-body {
+  padding-top: 0.15rem;
+}
+
+/* Highlight the subsection that holds the current page (set by nav.js). */
+.nav-sub.is-active {
+  border-left-color: var(--wine);
+}
+
+.nav-sub.is-active > summary.nav-title {
+  color: var(--wine-ink);
 }
 
 .sidebar ul {
@@ -456,7 +505,6 @@ button,
 .sidebar li a[aria-current="page"] {
   background: var(--wine-soft);
   color: var(--wine-ink);
-  border-left-color: var(--wine);
   font-weight: 600;
 }
 
@@ -736,6 +784,72 @@ th {
 
 .cta .icon {
   display: inline-block;
+}
+
+/* ---- Recent-writing widget (baudelaire:feed) ---------------------------- */
+.recent-list {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.recent-list li {
+  margin: 0;
+}
+
+.recent-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.25rem;
+  border-bottom: 1px solid var(--rule);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.recent-link:hover {
+  text-decoration: none;
+  color: var(--wine-ink);
+}
+
+.recent-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.recent-link:hover .recent-title {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.recent-date {
+  flex: none;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Live config widget (baudelaire:config) ----------------------------- */
+.config-live {
+  position: relative;
+  border-left: 3px solid var(--wine);
+}
+
+.config-live::before {
+  content: "live";
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--wine);
 }
 
 /* Listing pages */

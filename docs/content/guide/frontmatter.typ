@@ -34,7 +34,7 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
 / #raw("title:str"): The page title (a string). Used in the `<title>`, headings,
   navigation, feeds, and social tags.
 / #raw("date:datetime"): A Typst `datetime`. A page joins its
-  #link("../features/feeds.typ")[feeds] and sorts in a `sort="date"` collection
+  #link("../features/discovery/feeds.typ")[feeds] and sorts in a `sort="date"` collection
   only when it has one. Write it as `datetime(year: 2026, month: 7, day: 9)`.
 / #raw("draft:bool"): Draft pages are skipped unless you pass `--drafts`
   (or a profile turns them on).
@@ -44,7 +44,7 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
 / #raw("order:int"): An integer sort key for a `sort="order"` collection (the guide
   chapters here use it).
 / #raw("redirect:array<str>"): One old path, or a list of them, to forward to this page.
-  See #link("../features/redirects.typ")[redirects].
+  See #link("../features/content/redirects.typ")[redirects].
 
 Values are typed: a key with the wrong type is a hard error naming the file and
 field, never a silent drop. `title: 3` or `tags: "intro"` (a bare string where a
@@ -63,14 +63,14 @@ collects a list of terms:
 ```
 
 With `taxonomies { tags }` configured, `tags` groups the page under each term.
-See #link("../features/taxonomies.typ")[taxonomies].
+See #link("../features/content/taxonomies.typ")[taxonomies].
 
 == Everything else
 
 Unknown keys are not errors — they pass through as *extra* frontmatter, yours to
 read in a template. `description`, `summary`, `image`, and `author` are common
 ones the build itself reads when present (for
-#link("../features/meta.typ")[meta and social tags]):
+#link("../features/discovery/meta.typ")[meta and social tags]):
 
 ```typ
 #let frontmatter = (

@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 2,
+  order: 5,
   title: "Asset pipeline",
   tags: ("feature", "assets"),
 )
@@ -31,7 +31,7 @@ output {
   into `style.9f3c1a2b4d6e8f01.css`, and every reference in your pages is rewritten to
   match. Now you can cache assets forever and never serve a stale one.
 
-Image optimization lives in its own #link("meta.typ")[images] block, separate
+Image optimization lives in its own #link("../discovery/meta.typ")[images] block, separate
 from these switches.
 
 #callout(kind: "note")[
@@ -67,7 +67,7 @@ client code references a hashed asset by its logical path.
 
 Some files must reach the output root untouched: a `robots.txt` override,
 `.well-known/`, a `CNAME`, an `install.sh`. Put them in the `static/` directory
-(configured under #link("../guide/config.typ")[`paths`]) and they are copied
+(configured under #link("../../guide/config.typ")[`paths`]) and they are copied
 verbatim to the site root — no minify, no bundle, no fingerprint, no prefix. A
 generated page at the same path wins, so `static/` is the lowest-priority source.
 

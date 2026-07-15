@@ -16,6 +16,7 @@
   moon: (("path", (d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z")),),
   menu: (("path", (d: "M4 12h16")), ("path", (d: "M4 6h16")), ("path", (d: "M4 18h16"))),
   "arrow-right": (("path", (d: "M5 12h14")), ("path", (d: "m12 5 7 7-7 7"))),
+  "chevron-right": (("path", (d: "m9 18 6-6-6-6")),),
   zap: (("path", (d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z")),),
   package: (
     ("path", (d: "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z")),
@@ -120,18 +121,36 @@
 // Render a section from `page.sections` recursively: its direct-page links,
 // then each child directory as a nested subgroup. `page.sections` is a tree of
 // `(id, pages: ((url, title), ..), children: (..))` mirroring `content/`.
-#let nav-section(title, section, sub: false) = html.elem(
-  "div",
-  attrs: (class: if sub { "nav-group nav-sub" } else { "nav-group" }),
-)[
-  #html.elem("p", attrs: (class: "nav-title"), title)
-  #if section.pages.len() > 0 {
-    html.elem("ul", for p in section.pages { html.elem("li", link-to(p.url, p.title)) })
+// Top-level groups are static headings; nested subsections render as native
+// `<details>` so they collapse without any script. They ship closed; JS opens
+// the section holding the current page and restores any the reader expanded.
+#let nav-section(title, section, sub: false) = {
+  let body = {
+    if section.pages.len() > 0 {
+      html.elem("ul", for p in section.pages { html.elem("li", link-to(p.url, p.title)) })
+    }
+    for child in section.children {
+      nav-section(_titlecase(child.id), child, sub: true)
+    }
   }
-  #for child in section.children {
-    nav-section(_titlecase(child.id), child, sub: true)
+  if sub {
+    html.elem("details", attrs: (
+      class: "nav-group nav-sub",
+      "data-nav-section": section.id,
+    ))[
+      #html.elem("summary", attrs: (class: "nav-title"), {
+        html.elem("span", title)
+        lucide("chevron-right", size: 14)
+      })
+      #html.elem("div", attrs: (class: "nav-sub-body"), body)
+    ]
+  } else {
+    html.elem("div", attrs: (class: "nav-group"))[
+      #html.elem("p", attrs: (class: "nav-title"), title)
+      #body
+    ]
   }
-]
+}
 
 // The doc collections shown in the sidebar, as `(id, display title)`. Their
 // pages — and their order — come from `page.sections` (the build's own view of

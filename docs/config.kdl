@@ -13,6 +13,14 @@ paths {
 
 clean #true
 
+// Build-time constants handed to client JavaScript through the
+// `baudelaire:config` virtual module. The config page renders this very block
+// live from that module — dogfooding the define-style injection.
+client {
+  repo "https://codeberg.org/cstef/baudelaire"
+  edits #true
+}
+
 collections {
   guide sort="order" template="page.typ"
   features sort="order" template="page.typ" list="list.typ"

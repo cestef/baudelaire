@@ -6,10 +6,8 @@
   <string>Baudelaire tokens</string>
   <key>settings</key>
   <array>
-    <!-- Colors here are arbitrary SENTINELS, not real colors: each scope gets a
-         unique hex that Typst bakes into the inline style. style.css matches on
-         that hex and swaps in a real, theme-aware `var(--sx-*)`, so the actual
-         palette lives in CSS and adapts to light/dark. -->
+    <!-- Marker hexes, not a real palette: Typst bakes each one inline, and
+         style.css matches it to swap in a themeable var(--sx-*). -->
     <dict>
       <key>settings</key>
       <dict>

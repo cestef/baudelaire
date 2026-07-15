@@ -48,5 +48,5 @@ right absolute links:
 baudelaire build --base-url "https://preview.example.com"
 ```
 
-Because builds are #link("../features/incremental.typ")[incremental], caching
+Because builds are #link("../features/build/incremental.typ")[incremental], caching
 the `.baudelaire/` directory between CI runs makes rebuilds near-instant.

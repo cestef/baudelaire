@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 3,
+  order: 6,
   title: "JS virtual modules",
   tags: ("feature", "assets"),
 )
@@ -26,7 +26,7 @@ one.
 
 / #raw("baudelaire:site"): `title`, `url`, `lang`, `author`, and `version` —
   the values templates also read from `sys.inputs.baudelaire`. See
-  #link("context.typ")[build context].
+  #link("../build/context.typ")[build context].
 / #raw("baudelaire:config"): your own constants, from the `client` block below.
 / #raw("baudelaire:assets"): the map from a request path to its fingerprinted
   URL, and a `url(path)` helper that returns the hashed name (or the path
@@ -42,7 +42,7 @@ one.
 / #raw("baudelaire:feed"): the most recent dated pages as `{ url, title, date
   }`, newest first, for a "latest posts" widget.
 / #raw("baudelaire:search"): the search-palette client. See
-  #link("search.typ")[search].
+  #link("../discovery/search.typ")[search].
 
 == Client constants
 
