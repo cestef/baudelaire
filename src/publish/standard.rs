@@ -20,9 +20,9 @@ use owo_colors::OwoColorize;
 
 use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
 use crate::config::{BaseUrl, StandardConfig};
-use crate::graph::{Fingerprint, Hash};
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{PublishError, Result};
+use crate::graph::{Fingerprint, Hash};
 use crate::mime::Mime;
 use crate::ui::Ui;
 
@@ -295,7 +295,6 @@ impl std::fmt::Display for Summary<'_> {
     }
 }
 
-
 /// A `site.standard.publication` record.
 #[derive(Serialize)]
 struct Publication {
@@ -445,7 +444,10 @@ mod tests {
 
     #[test]
     fn rfc3339_is_midnight_utc() {
-        assert_eq!(Rfc3339(date(2026, 7, 1)).to_string(), "2026-07-01T00:00:00Z");
+        assert_eq!(
+            Rfc3339(date(2026, 7, 1)).to_string(),
+            "2026-07-01T00:00:00Z"
+        );
     }
 
     fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, preview: bool) -> String {
