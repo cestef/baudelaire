@@ -71,7 +71,9 @@ Publish the built site to every configured destination.
 / #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
   environment variable over a literal flag.
 / #raw("-y, --yes"): Skip the confirmation prompt.
-/ #raw("--dry-run"): Report what would change without writing.
+/ #raw("--dry-run"): Report what a real publish would send and remove, without
+  writing. Needs no password — it diffs against the live repository over public
+  reads.
 
 === init \[dir\]
 

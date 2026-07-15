@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use owo_colors::OwoColorize;
 
-use crate::atproto::{AtUri, Blob, Did, Nsid, Rkey, Session};
+use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
 use crate::config::StandardConfig;
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{PublishError, Result};
@@ -73,38 +73,45 @@ impl Publisher for Standard {
             return Err(PublishError::Unconfigured.into());
         }
         let base = site.config.base().ok_or(PublishError::NoUrl)?;
-        let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
 
+        // A dry run only reads — `listRecords` is a public XRPC — so it resolves
+        // the repo without a password and diffs against the live records,
+        // writing nothing.
+        if opts.dry_run {
+            ui.detail("dry run — no records will be written");
+            let repo = self.resolve()?;
+            self.check_did(repo.did(), ui)?;
+            let publication = publication_uri(repo.did().as_str());
+            return self.documents(site, &repo, None, &publication, opts, ui);
+        }
+
+        let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
         let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
         self.check_did(session.did(), ui)?;
         let publication = publication_uri(session.did().as_str());
 
-        if opts.dry_run {
-            ui.detail("dry run — no records will be written");
-        } else {
-            // publication record first, so documents can point at it.
-            let icon = self.icon(&session)?;
-            session.put_record(
-                PUBLICATION,
-                &Rkey::literal(PUBLICATION_RKEY),
-                &Publication {
-                    kind: PUBLICATION.as_str(),
-                    name: site
-                        .config
-                        .site
-                        .clone()
-                        .unwrap_or_else(|| site.config.label().to_owned()),
-                    url: base.to_string(),
-                    description: None,
-                    icon,
-                    preferences: Preferences {
-                        show_in_discover: self.config.discover,
-                    },
+        // publication record first, so documents can point at it.
+        let icon = self.icon(&session)?;
+        session.put_record(
+            PUBLICATION,
+            &Rkey::literal(PUBLICATION_RKEY),
+            &Publication {
+                kind: PUBLICATION.as_str(),
+                name: site
+                    .config
+                    .site
+                    .clone()
+                    .unwrap_or_else(|| site.config.label().to_owned()),
+                url: base.to_string(),
+                description: None,
+                icon,
+                preferences: Preferences {
+                    show_in_discover: self.config.discover,
                 },
-            )?;
-        }
+            },
+        )?;
 
-        self.documents(site, &session, &publication, opts, ui)
+        self.documents(site, session.repo(), Some(&session), &publication, opts, ui)
     }
 }
 
@@ -120,6 +127,15 @@ impl Standard {
             source,
         })?;
         Ok(Some(session.upload_blob(&bytes, Mime::of(path))?))
+    }
+
+    /// Resolve the target repository's DID from its handle without
+    /// authenticating, for a dry run — the public `resolveHandle` call. Feeding
+    /// the resolved DID to [`check_did`] reconciles it against any configured
+    /// `did` exactly as the authenticated path does, so a mismatch is caught in
+    /// a dry run too.
+    fn resolve(&self) -> Result<Repo> {
+        Ok(Repo::resolve(&self.config.pds, &self.config.handle)?)
     }
 
     /// Reconcile the configured `did` with the one the session authenticated as:
@@ -150,13 +166,14 @@ impl Standard {
     fn documents(
         &self,
         site: &SiteView,
-        session: &Session,
+        repo: &Repo,
+        writer: Option<&Session>,
         publication: &AtUri,
         opts: &Options,
         ui: &Ui,
     ) -> Result<()> {
         let mut cache = SkipCache::load(self.name());
-        let remote: BTreeSet<String> = session
+        let remote: BTreeSet<String> = repo
             .list_rkeys(DOCUMENT)?
             .into_iter()
             .map(|rkey| rkey.as_str().to_owned())
@@ -179,7 +196,7 @@ impl Standard {
                 unchanged += 1;
                 continue;
             }
-            if !opts.dry_run {
+            if let Some(session) = writer {
                 session.put_record(DOCUMENT, &rkey, &record)?;
                 cache.set(rkey.as_str().to_owned(), fingerprint);
             }
@@ -188,7 +205,7 @@ impl Standard {
 
         let mut removed = 0usize;
         for stale in remote.difference(&desired) {
-            if !opts.dry_run {
+            if let Some(session) = writer {
                 session.delete_record(DOCUMENT, &Rkey::parsed(stale))?;
             }
             removed += 1;

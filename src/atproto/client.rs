@@ -17,95 +17,53 @@ use super::id::{Did, Nsid, Rkey};
 #[derive(Debug, Clone, Serialize)]
 pub struct Blob(Value);
 
-/// An authenticated session against a single PDS host.
-pub struct Session {
+/// An agent that surfaces 4xx/5xx as ordinary responses, not transport errors,
+/// so an XRPC error body can be read and surfaced instead of swallowed.
+fn agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into()
+}
+
+/// A read-only handle to a repository on a PDS: its host and DID, plus a shared
+/// agent. Every read (`listRecords`) is a public XRPC call needing no auth, so a
+/// `--dry-run` can diff against the live repo without a password. A [`Session`]
+/// wraps one of these with an access token to gain the mutating calls.
+pub struct Repo {
     agent: ureq::Agent,
     /// The PDS/entryway base, e.g. `https://bsky.social`, without a trailing `/`.
     host: String,
-    /// The repository DID that authenticated — the source of truth for identity,
-    /// overriding any configured guess.
+    /// The repository DID identifying whose records to read.
     did: Did,
-    /// The bearer access token.
-    access: String,
 }
 
-impl Session {
-    /// Authenticate to `host` with a handle (or DID) and app password.
-    pub fn login(host: &str, identifier: &str, password: &str) -> Result<Self, PublishError> {
-        // The PDS returns 4xx/5xx as ordinary responses, not transport errors,
-        // so the XRPC error body can be read and surfaced.
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .build()
-            .into();
+impl Repo {
+    /// Resolve `identifier` (a handle or a DID) to a repo reader on `host`. A DID
+    /// is taken as-is; a handle is resolved through the public `resolveHandle`
+    /// call, so no credentials are needed.
+    pub fn resolve(host: &str, identifier: &str) -> Result<Self, PublishError> {
         let host = host.trim_end_matches('/').to_owned();
-        let url = format!("{host}/xrpc/com.atproto.server.createSession");
-        let body = json!({ "identifier": identifier, "password": password });
-        let mut resp = agent.post(&url).send_json(&body)?;
-        let value: Value = resp.json("com.atproto.server.createSession")?;
-        Ok(Self {
-            agent,
-            host,
-            did: Did::new(value.field("did")?),
-            access: value.field("accessJwt")?,
-        })
+        let agent = agent();
+        let did = if identifier.starts_with("did:") {
+            Did::new(identifier)
+        } else {
+            const NSID: &str = "com.atproto.identity.resolveHandle";
+            let url = format!("{host}/xrpc/{NSID}");
+            let mut resp = agent.get(&url).query("handle", identifier).call()?;
+            Did::new(resp.json::<Value>(NSID)?.field("did")?)
+        };
+        Ok(Self { agent, host, did })
     }
 
-    /// The authenticated repository DID.
+    /// The repository DID.
     pub fn did(&self) -> &Did {
         &self.did
     }
 
-    /// Upload `bytes` (of type `mime`) as a blob and return its reference.
-    pub fn upload_blob(&self, bytes: &[u8], mime: Mime) -> Result<Blob, PublishError> {
-        const NSID: &str = "com.atproto.repo.uploadBlob";
-        let mut resp = self
-            .agent
-            .post(self.xrpc(NSID))
-            .header("Authorization", self.bearer())
-            .header("Content-Type", mime.to_string())
-            .send(bytes)?;
-        let value: Value = resp.json(NSID)?;
-        value.get("blob").cloned().map(Blob).ok_or_else(|| {
-            PublishError::xrpc(NSID, resp.status().as_u16(), "response had no `blob`")
-        })
-    }
-
-    /// Create or replace a record at `collection/rkey`.
-    pub fn put_record(
-        &self,
-        collection: Nsid,
-        rkey: &Rkey,
-        record: &impl Serialize,
-    ) -> Result<(), PublishError> {
-        const NSID: &str = "com.atproto.repo.putRecord";
-        self.post(
-            NSID,
-            &json!({
-                "repo": self.did.as_str(),
-                "collection": collection.as_str(),
-                "rkey": rkey.as_str(),
-                "record": record,
-            }),
-        )
-    }
-
-    /// Delete the record at `collection/rkey`.
-    pub fn delete_record(&self, collection: Nsid, rkey: &Rkey) -> Result<(), PublishError> {
-        const NSID: &str = "com.atproto.repo.deleteRecord";
-        self.post(
-            NSID,
-            &json!({
-                "repo": self.did.as_str(),
-                "collection": collection.as_str(),
-                "rkey": rkey.as_str(),
-            }),
-        )
-    }
-
     /// Every record key currently in `collection`, following pagination — the
     /// remote source of truth a publisher diffs against, so a removed page's
-    /// record is deleted and nothing is orphaned.
+    /// record is deleted and nothing is orphaned. A public read: no auth.
     pub fn list_rkeys(&self, collection: Nsid) -> Result<Vec<Rkey>, PublishError> {
         const NSID: &str = "com.atproto.repo.listRecords";
         let mut rkeys = Vec::new();
@@ -114,7 +72,6 @@ impl Session {
             let mut req = self
                 .agent
                 .get(self.xrpc(NSID))
-                .header("Authorization", self.bearer())
                 .query("repo", self.did.as_str())
                 .query("collection", collection.as_str())
                 .query("limit", "100");
@@ -145,19 +102,107 @@ impl Session {
         Ok(rkeys)
     }
 
+    fn xrpc(&self, nsid: &str) -> String {
+        format!("{}/xrpc/{nsid}", self.host)
+    }
+}
+
+/// An authenticated session against a single PDS host: a [`Repo`] plus the
+/// bearer token that unlocks the record-mutating calls.
+pub struct Session {
+    repo: Repo,
+    /// The bearer access token.
+    access: String,
+}
+
+impl Session {
+    /// Authenticate to `host` with a handle (or DID) and app password.
+    pub fn login(host: &str, identifier: &str, password: &str) -> Result<Self, PublishError> {
+        let agent = agent();
+        let host = host.trim_end_matches('/').to_owned();
+        let url = format!("{host}/xrpc/com.atproto.server.createSession");
+        let body = json!({ "identifier": identifier, "password": password });
+        let mut resp = agent.post(&url).send_json(&body)?;
+        let value: Value = resp.json("com.atproto.server.createSession")?;
+        Ok(Self {
+            repo: Repo {
+                agent,
+                host,
+                did: Did::new(value.field("did")?),
+            },
+            access: value.field("accessJwt")?,
+        })
+    }
+
+    /// The authenticated repository DID — the source of truth for identity,
+    /// overriding any configured guess.
+    pub fn did(&self) -> &Did {
+        self.repo.did()
+    }
+
+    /// The read-only view of the authenticated repository, for diffing.
+    pub fn repo(&self) -> &Repo {
+        &self.repo
+    }
+
+    /// Upload `bytes` (of type `mime`) as a blob and return its reference.
+    pub fn upload_blob(&self, bytes: &[u8], mime: Mime) -> Result<Blob, PublishError> {
+        const NSID: &str = "com.atproto.repo.uploadBlob";
+        let mut resp = self
+            .repo
+            .agent
+            .post(self.repo.xrpc(NSID))
+            .header("Authorization", self.bearer())
+            .header("Content-Type", mime.to_string())
+            .send(bytes)?;
+        let value: Value = resp.json(NSID)?;
+        value.get("blob").cloned().map(Blob).ok_or_else(|| {
+            PublishError::xrpc(NSID, resp.status().as_u16(), "response had no `blob`")
+        })
+    }
+
+    /// Create or replace a record at `collection/rkey`.
+    pub fn put_record(
+        &self,
+        collection: Nsid,
+        rkey: &Rkey,
+        record: &impl Serialize,
+    ) -> Result<(), PublishError> {
+        const NSID: &str = "com.atproto.repo.putRecord";
+        self.post(
+            NSID,
+            &json!({
+                "repo": self.did().as_str(),
+                "collection": collection.as_str(),
+                "rkey": rkey.as_str(),
+                "record": record,
+            }),
+        )
+    }
+
+    /// Delete the record at `collection/rkey`.
+    pub fn delete_record(&self, collection: Nsid, rkey: &Rkey) -> Result<(), PublishError> {
+        const NSID: &str = "com.atproto.repo.deleteRecord";
+        self.post(
+            NSID,
+            &json!({
+                "repo": self.did().as_str(),
+                "collection": collection.as_str(),
+                "rkey": rkey.as_str(),
+            }),
+        )
+    }
+
     /// POST a JSON `body` to `nsid` with bearer auth, discarding the response —
     /// the shared spine of the record-mutating calls (put/delete).
     fn post(&self, nsid: &str, body: &Value) -> Result<(), PublishError> {
         let mut resp = self
+            .repo
             .agent
-            .post(self.xrpc(nsid))
+            .post(self.repo.xrpc(nsid))
             .header("Authorization", self.bearer())
             .send_json(body)?;
         resp.json::<Value>(nsid).map(drop)
-    }
-
-    fn xrpc(&self, nsid: &str) -> String {
-        format!("{}/xrpc/{nsid}", self.host)
     }
 
     fn bearer(&self) -> String {

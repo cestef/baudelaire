@@ -80,12 +80,12 @@ baudelaire publish --yes       # skip the confirmation
 
 The remote is the source of truth. Each run puts new or changed records, skips
 unchanged ones, and deletes document records whose page no longer exists, so
-nothing is orphaned. A dry run still authenticates and lists the remote to
-compute an accurate plan — it just writes nothing.
+nothing is orphaned. A dry run lists the remote to compute an accurate plan —
+it just writes nothing.
 
 #callout(kind: "note")[
-  `--dry-run` needs the app password too: it diffs against your live repository
-  to tell you exactly what a real publish would send and remove.
+  `--dry-run` needs no app password: it diffs against your live repository over
+  public reads to tell you exactly what a real publish would send and remove.
 ]
 
 == Domain verification
@@ -108,7 +108,8 @@ publish {
 ```
 
 Both artifacts prove the site and the records belong together; a site may emit
-one, the other, or both. When `did` is set, `publish` also checks it against the
-authenticated session and refuses a mismatch, so you never publish under the
-wrong identity. Don't know your DID yet? Run `publish` once without it — the
-output prints the value to configure.
+one, the other, or both. When `did` is set, `publish` resolves your handle and
+refuses a mismatch, so you never publish under the wrong identity — and
+`--dry-run` runs the same check, catching a misconfigured `did` before you ever
+authenticate. Don't know your DID yet? Run `publish --dry-run` without it — the
+output prints the value to configure, no password required.

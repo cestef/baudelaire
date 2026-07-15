@@ -6,5 +6,5 @@
 pub mod client;
 pub mod id;
 
-pub use client::{Blob, Session};
+pub use client::{Blob, Repo, Session};
 pub use id::{AtUri, Did, Nsid, Rkey};
