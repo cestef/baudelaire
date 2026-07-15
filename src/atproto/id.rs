@@ -6,7 +6,7 @@ use std::fmt;
 use serde::{Serialize, Serializer};
 
 /// A repository DID (decentralized identifier), e.g. `did:plc:abc123`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Did(String);
 
 impl Did {
@@ -27,7 +27,7 @@ impl fmt::Display for Did {
 
 /// A namespaced identifier: a lexicon id, which doubles as the name of the
 /// repository collection its records live in (e.g. `site.standard.document`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Nsid(&'static str);
 
 impl Nsid {
@@ -103,7 +103,7 @@ impl fmt::Display for Rkey {
 
 /// An `at://did/collection/rkey` reference to a single record. Serializes as its
 /// canonical string form, the shape records use to point at one another.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AtUri {
     did: Did,
     collection: Nsid,

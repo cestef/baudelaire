@@ -9,4 +9,4 @@ mod hash;
 pub use cache::{Cache, RenderInputs};
 pub use deps::Deps;
 pub use digest::FileDigests;
-pub use hash::Hash;
+pub use hash::{Fingerprint, Hash};

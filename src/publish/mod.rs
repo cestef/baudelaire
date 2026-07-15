@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::content::{Page, discover};
 use crate::error::{PublishError, Result};
+use crate::graph::Hash;
 use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
@@ -210,7 +211,7 @@ fn view(config: &Config) -> Result<SiteView<'_>> {
 /// because a local cache went missing.
 #[derive(Default, Serialize, Deserialize)]
 pub struct SkipCache {
-    hashes: BTreeMap<String, String>,
+    hashes: BTreeMap<String, Hash>,
 }
 
 impl SkipCache {
@@ -224,12 +225,12 @@ impl SkipCache {
     }
 
     /// Whether `id` was last sent with this exact `fingerprint`.
-    pub fn unchanged(&self, id: &str, fingerprint: &str) -> bool {
-        self.hashes.get(id).is_some_and(|seen| seen == fingerprint)
+    pub fn unchanged(&self, id: &str, fingerprint: &Hash) -> bool {
+        self.hashes.get(id) == Some(fingerprint)
     }
 
     /// Record that `id` now holds content of `fingerprint`.
-    pub fn set(&mut self, id: String, fingerprint: String) {
+    pub fn set(&mut self, id: String, fingerprint: Hash) {
         self.hashes.insert(id, fingerprint);
     }
 
@@ -254,7 +255,7 @@ impl SkipCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Interaction, Options, PublishError, Result, SkipCache};
+    use super::{Hash, Interaction, Options, PublishError, Result, SkipCache};
 
     /// A headless [`Interaction`] for tests: a fixed confirmation answer and an
     /// optional prompt secret.
@@ -334,20 +335,22 @@ mod tests {
 
     #[test]
     fn skip_cache_matches_only_the_recorded_fingerprint() {
+        let (h, other) = (Hash::of_bytes(b"h"), Hash::of_bytes(b"other"));
         let mut cache = SkipCache::default();
-        assert!(!cache.unchanged("k", "h"));
-        cache.set("k".into(), "h".into());
-        assert!(cache.unchanged("k", "h"));
-        assert!(!cache.unchanged("k", "other"));
+        assert!(!cache.unchanged("k", &h));
+        cache.set("k".into(), h);
+        assert!(cache.unchanged("k", &h));
+        assert!(!cache.unchanged("k", &other));
     }
 
     #[test]
     fn skip_cache_retain_drops_removed_records() {
+        let (one, two) = (Hash::of_bytes(b"1"), Hash::of_bytes(b"2"));
         let mut cache = SkipCache::default();
-        cache.set("keep".into(), "1".into());
-        cache.set("gone".into(), "2".into());
+        cache.set("keep".into(), one);
+        cache.set("gone".into(), two);
         cache.retain(&["keep".to_owned()].into_iter().collect());
-        assert!(cache.unchanged("keep", "1"));
-        assert!(!cache.unchanged("gone", "2"));
+        assert!(cache.unchanged("keep", &one));
+        assert!(!cache.unchanged("gone", &two));
     }
 }

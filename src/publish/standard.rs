@@ -20,6 +20,7 @@ use owo_colors::OwoColorize;
 
 use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
 use crate::config::{BaseUrl, StandardConfig};
+use crate::graph::{Fingerprint, Hash};
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{PublishError, Result};
 use crate::mime::Mime;
@@ -154,7 +155,7 @@ impl Standard {
             let record = Document::new(doc, publication, date);
             let rkey = Rkey::derived(&doc.path);
             desired.insert(rkey.as_str().to_owned());
-            let digest = fingerprint(&record)?;
+            let digest = record.fingerprint();
             // The cache alone is not authority: a record deleted on the PDS
             // out-of-band must be re-sent even if its fingerprint still matches.
             if remote.contains(rkey.as_str()) && cache.unchanged(rkey.as_str(), &digest) {
@@ -294,12 +295,6 @@ impl std::fmt::Display for Summary<'_> {
     }
 }
 
-/// The blake3 fingerprint of a `record`'s serialized form, for the skip-cache.
-fn fingerprint(record: &impl Serialize) -> Result<String> {
-    let bytes = serde_json::to_vec(record)
-        .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
-    Ok(blake3::hash(&bytes).to_hex().to_string())
-}
 
 /// A `site.standard.publication` record.
 #[derive(Serialize)]
@@ -344,7 +339,7 @@ struct Preferences {
 }
 
 /// A `site.standard.document` record.
-#[derive(Serialize)]
+#[derive(Serialize, Hash)]
 struct Document {
     #[serde(rename = "$type")]
     kind: &'static str,
@@ -357,6 +352,14 @@ struct Document {
     description: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
+}
+
+impl Fingerprint for Document {
+    /// The record's structural digest, keyed into the skip-cache so an unchanged
+    /// document is not re-sent.
+    fn fingerprint(&self) -> Hash {
+        Hash::of(self)
+    }
 }
 
 impl Document {

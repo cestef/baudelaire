@@ -18,6 +18,8 @@ mod transform;
 pub use asset::AssetMap;
 pub use links::LinkMap;
 
+use crate::graph::Fingerprint;
+
 /// A raw `href`/`src` split at its `#fragment` / `?query` boundary — the one
 /// parsing rule for URL tails, shared by link and asset resolution.
 pub(crate) struct Tail<'a> {

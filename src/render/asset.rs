@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::graph::{Fingerprint, Hash};
+
 /// Maps an asset's authored request path (`/assets/style.css`) to the URL it is
 /// actually served at (`/assets/style.<hash>.css`). Identity for assets whose
 /// name is unchanged (minify-only, no fingerprint) — those need no rewrite and
@@ -16,6 +18,14 @@ use std::collections::BTreeMap;
 #[derive(Debug, Default, Clone, Hash)]
 pub struct AssetMap {
     map: BTreeMap<String, String>,
+}
+
+impl Fingerprint for AssetMap {
+    /// The map's content digest, folded into the build cache so pages rebuild
+    /// when an asset is re-fingerprinted. Deterministic via the ordered map.
+    fn fingerprint(&self) -> Hash {
+        Hash::of(self)
+    }
 }
 
 impl AssetMap {

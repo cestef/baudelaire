@@ -73,6 +73,18 @@ impl Hash {
     }
 }
 
+/// A value that can fingerprint itself into a [`Hash`], for cache invalidation.
+///
+/// One shared vocabulary for "the content digest of this thing" — a page-link
+/// map, the processed-asset map, a publishable record. Every implementor folds
+/// its digest into some cache and re-derives dependent work when it changes, so
+/// they all speak in [`Hash`] and compose the same way. Implement it, don't call
+/// [`Hash::of`] ad-hoc, when a type has a canonical fingerprint of its own.
+pub trait Fingerprint {
+    /// This value's content fingerprint. Stable across runs for equal content.
+    fn fingerprint(&self) -> Hash;
+}
+
 /// Serialized as its hex string, so the on-disk manifest stays human-readable
 /// (and unchanged from when the digest was stored as a `String`).
 impl Serialize for Hash {

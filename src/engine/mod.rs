@@ -38,7 +38,7 @@ use crate::error::{
     BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
 };
 use crate::fs;
-use crate::graph::{Cache, Deps, Hash, RenderInputs};
+use crate::graph::{Cache, Deps, Fingerprint, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
 use crate::ui::{Bytes, Count, Dur, PageStatus, Paths, Timer, Ui};
 pub use crate::world::Mode;
@@ -159,7 +159,7 @@ impl Engine {
         // when pages inline asset bytes — the embedded contents (the per-page
         // dependency tracker can't see them, since typst never reads them).
         let render = RenderInputs {
-            assets: Hash::of(renderer.assets()),
+            assets: renderer.assets().fingerprint(),
             links: renderer.links(),
             // hash the *processed* asset tree — what Embed actually inlines: a
             // bundle's bytes can change through imports outside the source
