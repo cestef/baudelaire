@@ -91,6 +91,15 @@ impl Value {
         }
     }
 
+    /// The value under `key`, for a `Dict` — so a consumer can serve a sub-tree
+    /// of a larger value (a JS module exposing part of the build context).
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match self {
+            Self::Dict(pairs) => pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+
     /// Render into `out` in the target language `F`. The [`Typst`] and [`Js`]
     /// display adapters drive this; call it directly only to add a new target.
     pub fn render<F: Format>(&self, out: &mut String) {

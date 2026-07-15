@@ -7,6 +7,7 @@
 //! listings, taxonomy, and pagination.
 
 pub mod cache;
+pub mod date;
 pub mod frontmatter;
 pub mod listing;
 pub mod page;
@@ -17,6 +18,7 @@ pub mod slug;
 pub mod taxonomy;
 
 pub use cache::DiscoveryCache;
+pub use date::Iso;
 pub use frontmatter::Frontmatter;
 pub use page::{Collection, Data, Page, PageId, Sibling, Siblings, discover};
 pub use pagination::Pagination;

@@ -134,7 +134,7 @@ impl BuildContext {
     /// Detect build metadata for the site rooted at `root`.
     fn detect(root: &Path, now: OffsetDateTime, config: &Config, mode: Mode) -> Self {
         Self {
-            version: env!("CARGO_PKG_VERSION"),
+            version: crate::VERSION,
             date: now.date().to_string(),
             mode,
             profile: config.profile.clone(),

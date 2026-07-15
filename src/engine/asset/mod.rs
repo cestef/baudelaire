@@ -166,9 +166,15 @@ impl Handler for Verbatim {
 /// The asset pipeline over one site's asset directory.
 pub struct Assets<'a> {
     config: &'a Config,
-    /// The planned pages, exposed to the `baudelaire:pages` / `:sections`
-    /// virtual modules a bundle can import.
+    /// The planned pages, exposed to the `baudelaire:pages` / `:taxonomies` /
+    /// `:feed` virtual modules a bundle can import.
     pages: &'a [Page],
+    /// The `sys.inputs.baudelaire` value, so `baudelaire:site` / `:config` serve
+    /// the same build context sub-trees the templates get (not a rebuild).
+    context: &'a crate::codegen::Value,
+    /// The section tree value, so `baudelaire:sections` reuses what
+    /// `page.sections` already built instead of recomputing it.
+    sections: &'a crate::codegen::Value,
     /// Source asset directory (`config.assets`).
     src: &'a Path,
     /// Destination directory under `dist`, named after `src` (e.g. `dist/assets`).
@@ -178,10 +184,17 @@ pub struct Assets<'a> {
 }
 
 impl<'a> Assets<'a> {
-    pub fn new(config: &'a Config, pages: &'a [Page]) -> Self {
+    pub fn new(
+        config: &'a Config,
+        pages: &'a [Page],
+        context: &'a crate::codegen::Value,
+        sections: &'a crate::codegen::Value,
+    ) -> Self {
         Self {
             config,
             pages,
+            context,
+            sections,
             src: &config.assets,
             dst: config.asset_dist(),
             prefix: format!("/{}", config.asset_name()),
@@ -230,6 +243,8 @@ impl<'a> Assets<'a> {
                     config: self.config,
                     pages: self.pages,
                     assets: &out.map,
+                    context: self.context,
+                    sections: self.sections,
                 };
                 Js::new(&cx)
             };

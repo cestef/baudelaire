@@ -140,10 +140,16 @@ impl Engine {
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
 
+        // Build the section tree and the `sys.inputs.baudelaire` value once: both
+        // feed templates (`page.sections`, `sys.inputs`) AND the `baudelaire:*`
+        // JS modules, which reuse these rather than recompute them.
+        let sections = self.sections(&pages);
+        let context = crate::codegen::Value::from(self.project.context());
+
         // the asset URL map feeds render-side fingerprint rewriting and folds
         // into the cache fingerprint, so a re-fingerprinted asset invalidates
         // the pages that reference it.
-        let assets = Assets::new(&self.config, &pages).process()?;
+        let assets = Assets::new(&self.config, &pages, &context, &sections).process()?;
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
@@ -169,11 +175,11 @@ impl Engine {
         // text + fingerprint without parsing it — the parse into a typst
         // `Source` is deferred to `compile`, so a hit never pays to parse a
         // page it won't render.
-        // the site's section listing, exposed to every template as
-        // `page.sections`; identical for all pages, so built once. Part of each
-        // page's wrapper text → a title/url change refingerprints every page
-        // that embeds the nav (correct: the sidebar renders on all of them).
-        let sections = self.sections(&pages);
+        // the section tree as wrapper text: exposed to every template as
+        // `page.sections`, and part of each page's wrapper → a title/url change
+        // refingerprints every page that embeds the nav (correct: the sidebar
+        // renders on all of them).
+        let sections = crate::codegen::Typst(&sections).to_string();
 
         let mut cached: Vec<(&Page, String)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
@@ -266,7 +272,7 @@ impl Engine {
             "planned check"
         );
         let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
-        let sections = self.sections(&pages);
+        let sections = crate::codegen::Typst(&self.sections(&pages)).to_string();
         let progress = ui.progress("checking", pages.len());
         let outcomes: Vec<(&Page, Result<Rendered>)> = pages
             .par_iter()
@@ -352,14 +358,7 @@ impl Engine {
             let fingerprint = Hash::of_bytes(text.as_bytes());
             return Ok((FileId::new(rooted), text, fingerprint));
         };
-        let taxonomies = page.frontmatter.taxonomies.iter().map(|(name, terms)| {
-            (
-                name.clone(),
-                crate::codegen::Value::array(terms.iter().map(crate::codegen::Value::str)),
-            )
-        });
-        let taxonomies =
-            crate::codegen::Typst(&crate::codegen::Value::dict(taxonomies)).to_string();
+        let taxonomies = crate::codegen::Typst(&page.taxonomies()).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
         // refingerprints this page and rebuilds it — the cache stays correct.
@@ -387,20 +386,17 @@ impl Engine {
         Ok((id, text, fingerprint))
     }
 
-    /// The site's [`Section`] tree serialized as a typst array, exposed to every
-    /// template as `page.sections` — the single source a site nav (sidebar,
-    /// breadcrumbs) is built from, so it can never drift from the pages. Each
-    /// node is `(id, pages: ((url, title), ..), children: (..))`, one per
-    /// content directory; generated listings are excluded. The same tree backs
-    /// the `baudelaire:sections` JS module. Identical for every page, so it is
-    /// computed once per build.
-    fn sections(&self, pages: &[Page]) -> String {
-        let tree = crate::codegen::Value::array(
+    /// The site's [`Section`] tree as a value: exposed to every template as
+    /// `page.sections` (the single source a site nav is built from, so it can't
+    /// drift from the pages) and reused by the `baudelaire:sections` JS module.
+    /// Each node is `(id, pages: ((url, title), ..), children: (..))`, one per
+    /// content directory; generated listings are excluded.
+    fn sections(&self, pages: &[Page]) -> crate::codegen::Value {
+        crate::codegen::Value::array(
             Section::tree(pages, &self.config)
                 .iter()
                 .map(Section::value),
-        );
-        crate::codegen::Typst(&tree).to_string()
+        )
     }
 
     /// The prev/next sibling links as a typst dict value:

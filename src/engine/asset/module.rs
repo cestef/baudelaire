@@ -17,15 +17,19 @@ use rolldown_common::ModuleType;
 
 use crate::codegen::{Js, Value};
 use crate::config::{Config, SearchFormat};
-use crate::content::{Data, Page, Section};
+use crate::content::{Data, Iso, Page};
 use crate::render::AssetMap;
 
-/// The read-only build data every virtual module generates from: the config, the
-/// planned pages, and the finalized asset URL map.
+/// The read-only build data every virtual module generates from.
 pub(super) struct ModuleCx<'a> {
     pub config: &'a Config,
     pub pages: &'a [Page],
     pub assets: &'a AssetMap,
+    /// The `sys.inputs.baudelaire` value — `baudelaire:site` / `:config` serve
+    /// its sub-trees, so Typst and JS read one build context.
+    pub context: &'a Value,
+    /// The section tree value, already built for `page.sections`.
+    pub sections: &'a Value,
 }
 
 /// One provider of `baudelaire:*` virtual modules.
@@ -175,15 +179,16 @@ struct Site;
 
 impl Module for Site {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let c = cx.config;
-        let data = Value::dict([
-            ("title", Value::opt(c.site.clone())),
-            ("url", Value::opt(c.url.clone())),
-            ("lang", Value::str(&c.lang)),
-            ("author", Value::opt(c.author.clone())),
-            ("version", Value::str(env!("CARGO_PKG_VERSION"))),
-        ]);
-        vec![("baudelaire:site".into(), Esm::object(&data))]
+        // The build context's `site` sub-tree plus its `version` — the same
+        // value that feeds `sys.inputs`, not a rebuild from config.
+        let mut fields = match cx.context.get("site") {
+            Some(Value::Dict(pairs)) => pairs.clone(),
+            _ => Vec::new(),
+        };
+        if let Some(version) = cx.context.get("version") {
+            fields.push(("version".to_owned(), version.clone()));
+        }
+        vec![("baudelaire:site".into(), Esm::object(&Value::Dict(fields)))]
     }
 }
 
@@ -193,7 +198,13 @@ struct Settings;
 
 impl Module for Settings {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let data = Value::dict(cx.config.client.iter().cloned());
+        // The build context's `client` sub-tree — same source as
+        // `sys.inputs.baudelaire.client`.
+        let data = cx
+            .context
+            .get("client")
+            .cloned()
+            .unwrap_or_else(|| Value::dict::<&str>([]));
         vec![("baudelaire:config".into(), Esm::object(&data))]
     }
 }
@@ -227,16 +238,15 @@ impl Module for Pages {
             .iter()
             .filter(|p| !matches!(p.data, Data::Generated(_)))
             .map(|page| {
-                let taxonomies =
-                    Value::dict(page.frontmatter.taxonomies.iter().map(|(key, terms)| {
-                        (key.clone(), Value::array(terms.iter().map(Value::str)))
-                    }));
                 Value::dict([
                     ("url", Value::str(&page.permalink)),
                     ("title", Value::str(page.title())),
                     ("collection", Value::str(&page.collection)),
-                    ("date", Value::opt(page.frontmatter.date.map(Iso::date))),
-                    ("taxonomies", taxonomies),
+                    (
+                        "date",
+                        Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
+                    ),
+                    ("taxonomies", page.taxonomies()),
                 ])
             });
         vec![("baudelaire:pages".into(), Esm::value(&Value::array(pages)))]
@@ -250,9 +260,8 @@ struct Sections;
 
 impl Module for Sections {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let tree = Section::tree(cx.pages, cx.config);
-        let data = Value::array(tree.iter().map(|s| s.value()));
-        vec![("baudelaire:sections".into(), Esm::value(&data))]
+        // Reuse the tree already built for `page.sections`.
+        vec![("baudelaire:sections".into(), Esm::value(cx.sections))]
     }
 }
 
@@ -300,29 +309,18 @@ struct Feed;
 
 impl Module for Feed {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let mut dated: Vec<&Page> = cx
-            .pages
-            .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.frontmatter.date.is_some())
-            .collect();
-        dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
-        let items = dated.into_iter().take(cx.config.feed.limit).map(|page| {
-            Value::dict([
-                ("url", Value::str(&page.permalink)),
-                ("title", Value::str(page.title())),
-                ("date", Value::opt(page.frontmatter.date.map(Iso::date))),
-            ])
-        });
+        let items = Page::recent(cx.pages, cx.config.feed.limit)
+            .into_iter()
+            .map(|page| {
+                Value::dict([
+                    ("url", Value::str(&page.permalink)),
+                    ("title", Value::str(page.title())),
+                    (
+                        "date",
+                        Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
+                    ),
+                ])
+            });
         vec![("baudelaire:feed".into(), Esm::value(&Value::array(items)))]
-    }
-}
-
-/// ISO-8601 date formatting for the page data modules, matching the display
-/// dates listings emit.
-struct Iso;
-
-impl Iso {
-    fn date(d: time::Date) -> String {
-        format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
     }
 }

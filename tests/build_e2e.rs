@@ -1104,6 +1104,28 @@ fn sitemap_and_rss_emitted_when_url_set() {
 }
 
 #[test]
+fn feed_titles_fall_back_to_the_page_id() {
+    // A dated page with no frontmatter `title` must still get its id-based
+    // display title in feeds — the same fallback the rest of the site uses,
+    // not an empty <title>.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nurl \"https://example.com\"\nclean #true\noutput {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}\n",
+    );
+    site.write(
+        "content/posts/untitled.typ",
+        "#let frontmatter = (date: datetime(year: 2024, month: 1, day: 2),)\nbody",
+    );
+    assert!(site.run(&["build"]).status.success());
+    let rss = fs::read_to_string(site.root.join("public/rss.xml")).unwrap();
+    assert!(rss.contains("<title>posts/untitled</title>"), "{rss}");
+    let atom = fs::read_to_string(site.root.join("public/atom.xml")).unwrap();
+    assert!(atom.contains("<title>posts/untitled</title>"), "{atom}");
+    assert!(!atom.contains("<title></title>"), "no empty title: {atom}");
+}
+
+#[test]
 fn atom_feed_when_configured() {
     let site = Site::new();
     site.write(

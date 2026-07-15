@@ -210,6 +210,32 @@ impl Page {
         self.frontmatter.title.as_deref().unwrap_or(&self.id.0)
     }
 
+    /// This page's taxonomies as the `(name: (term, ..))` value templates get as
+    /// `page.taxonomies` — the single serialization shared with the
+    /// `baudelaire:pages` module, so their shapes can't drift.
+    pub fn taxonomies(&self) -> crate::codegen::Value {
+        use crate::codegen::Value;
+        Value::dict(
+            self.frontmatter
+                .taxonomies
+                .iter()
+                .map(|(name, terms)| (name.clone(), Value::array(terms.iter().map(Value::str)))),
+        )
+    }
+
+    /// The most recent dated pages, newest first, capped at `limit`: authored
+    /// content carrying a date. The single "recent posts" selection shared by
+    /// the syndication feeds and the `baudelaire:feed` module.
+    pub fn recent(pages: &[Page], limit: usize) -> Vec<&Page> {
+        let mut dated: Vec<&Page> = pages
+            .iter()
+            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.frontmatter.date.is_some())
+            .collect();
+        dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
+        dated.truncate(limit);
+        dated
+    }
+
     /// Whether this page builds under the current draft/future config — the
     /// one eligibility predicate, shared by the engine and page generators.
     pub fn eligible(&self, config: &Config) -> bool {

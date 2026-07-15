@@ -46,13 +46,7 @@ impl Processor for Feeds {
         let Some(base) = site.base("feeds", out)? else {
             return Ok(());
         };
-        let mut dated: Vec<&Page> = site
-            .pages
-            .iter()
-            .filter(|p| p.frontmatter.date.is_some())
-            .collect();
-        dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
-        dated.truncate(site.config.feed.limit);
+        let dated = Page::recent(site.pages, site.config.feed.limit);
         if dated.is_empty() {
             return Ok(());
         }
@@ -118,9 +112,7 @@ impl<'a> Feed<'a> {
                 for (page, stamp) in self.items.iter().zip(stamps) {
                     xml.nest("item", &[], |xml| {
                         let link = self.link(page);
-                        if let Some(title) = &page.frontmatter.title {
-                            xml.leaf("title", title);
-                        }
+                        xml.leaf("title", page.title());
                         xml.leaf("link", &link);
                         xml.leaf("guid", &link);
                         if let Some(stamp) = stamp {
@@ -145,7 +137,7 @@ impl<'a> Feed<'a> {
             for (page, stamp) in self.items.iter().zip(stamps) {
                 xml.nest("entry", &[], |xml| {
                     let link = self.link(page);
-                    xml.leaf("title", page.frontmatter.title.as_deref().unwrap_or(""));
+                    xml.leaf("title", page.title());
                     xml.leaf("id", &link);
                     xml.empty("link", &[("href", &link)]);
                     if let Some(stamp) = stamp {
@@ -172,7 +164,7 @@ impl<'a> Feed<'a> {
                     JsonItem {
                         id: link.clone(),
                         url: link,
-                        title: page.frontmatter.title.as_deref(),
+                        title: Some(page.title()),
                         date_published: stamp.as_deref(),
                     }
                 })

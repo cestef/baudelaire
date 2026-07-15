@@ -329,12 +329,7 @@ trait Rfc3339 {
 
 impl Rfc3339 for time::Date {
     fn rfc3339(&self) -> String {
-        format!(
-            "{:04}-{:02}-{:02}T00:00:00Z",
-            self.year(),
-            u8::from(self.month()),
-            self.day()
-        )
+        format!("{}T00:00:00Z", crate::content::Iso(*self))
     }
 }
 

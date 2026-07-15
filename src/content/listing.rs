@@ -61,7 +61,7 @@ impl Item {
         let date = page
             .frontmatter
             .date
-            .map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()));
+            .map(|d| crate::content::Iso(d).to_string());
         let extra = Value::dict(
             page.frontmatter
                 .extra

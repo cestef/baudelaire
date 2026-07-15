@@ -14,3 +14,8 @@ pub mod ui;
 pub mod world;
 
 pub use error::*;
+
+/// The crate version, the single source for every place that surfaces it: the
+/// CLI banner, the HTTP user agent, `sys.inputs.baudelaire.version`, and the
+/// `baudelaire:site` module.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
