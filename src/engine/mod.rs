@@ -1,6 +1,7 @@
 //! Build pipeline: discover → compile → render → write, parallelized via rayon.
 
 mod asset;
+mod check;
 #[cfg(feature = "images")]
 mod exif;
 mod feed;
@@ -33,13 +34,12 @@ use crate::content::{Data, Page, Section, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
+use crate::engine::check::{CheckedPage, Checks, Compiled};
 use crate::engine::hook::Hooks;
 use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::engine::statics::Static;
-use crate::error::{
-    BaudelaireErrorKind, Broken, BrokenLinks, BuildFailed, Result, TypstSourceDiagnostic,
-};
+use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{Cache, Deps, Fingerprint, Hash, RenderInputs};
 use crate::render::{AssetMap, Renderer};
@@ -222,7 +222,7 @@ impl Engine {
             .collect();
         progress.finish();
         let rendered = self.collect(outcomes, ui)?;
-        self.check_links(&rendered, ui)?;
+        self.validate(&rendered, ui)?;
 
         for r in &rendered {
             cache.record(r.page, r.fingerprint, &r.html, &r.deps);
@@ -325,7 +325,7 @@ impl Engine {
             .collect();
         progress.finish();
         let rendered = self.collect(outcomes, ui)?;
-        self.check_links(&rendered, ui)?;
+        self.validate(&rendered, ui)?;
         ui.flush();
         ui.done(format_args!(
             "checked {} in {}",
@@ -517,30 +517,26 @@ impl Engine {
         })
     }
 
-    /// Report broken internal links found while compiling `rendered`. Under
-    /// `strict_links` any broken link fails the build; otherwise the same
-    /// diagnostic — spans, offending pages and all — is collected as a
-    /// warning. Only freshly compiled pages are checked — cached pages kept
-    /// their links from when they were built.
-    fn check_links(&self, rendered: &[Rendered], ui: &Ui) -> Result<()> {
-        let mut broken = Vec::new();
-        for r in rendered {
-            for target in &r.broken {
-                broken.push(Broken::new(
-                    self.relative(r.page),
-                    target.clone(),
-                    &r.page.source,
-                ));
-            }
-        }
-        if broken.is_empty() {
-            return Ok(());
-        }
-        if self.config.links.strict {
-            return Err(BrokenLinks::new(broken).into());
-        }
-        ui.warn(BrokenLinks::warning(broken));
-        Ok(())
+    /// Run the post-render validation passes over the freshly compiled pages.
+    /// Maps each [`Rendered`] into the decoupled [`Compiled`] view and hands it
+    /// to the [`Checks`] registry; the passes themselves live in [`check`].
+    /// Cached pages are omitted — they kept their links from when they built.
+    fn validate(&self, rendered: &[Rendered], ui: &Ui) -> Result<()> {
+        let pages: Vec<CheckedPage> = rendered
+            .iter()
+            .map(|r| CheckedPage {
+                label: self.relative(r.page),
+                source: &r.page.source,
+                broken: &r.broken,
+            })
+            .collect();
+        Checks::builtin().run(
+            &Compiled {
+                config: &self.config,
+                pages: &pages,
+            },
+            ui,
+        )
     }
 
     fn html_options(&self) -> HtmlOptions {
