@@ -52,16 +52,23 @@ jobs:
           shared-key: release-${{ matrix.target }}
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
-      # needed. Tar the binary and emit a matching checksum.
+      # needed. Two flavors per target: the default `full` binary and a `slim`
+      # one (`--no-default-features`: system fonts, assets copied verbatim). Each
+      # is tarred with a matching checksum; slim carries a `-slim` suffix.
       - name: build
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --release --target ${{ matrix.target }}
-          out="baudelaire-${{ matrix.name }}.tar.gz"
-          tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
-          sha256sum "$out" > "$out.sha256"
-          ls -la "$out" "$out.sha256"
+          package() {  # $1 = asset suffix, rest = extra cargo flags
+            local suffix="$1"; shift
+            cargo build --release --target ${{ matrix.target }} "$@"
+            local out="baudelaire-${{ matrix.name }}${suffix}.tar.gz"
+            tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
+            sha256sum "$out" > "$out.sha256"
+            ls -la "$out" "$out.sha256"
+          }
+          package ""
+          package "-slim" --no-default-features
 
       - uses: actions/upload-artifact@v3
         with:
@@ -69,6 +76,8 @@ jobs:
           path: |
             baudelaire-${{ matrix.name }}.tar.gz
             baudelaire-${{ matrix.name }}.tar.gz.sha256
+            baudelaire-${{ matrix.name }}-slim.tar.gz
+            baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
   release:
     needs: build
@@ -107,6 +116,8 @@ jobs:
           }
           SIZE_X86=$(bin_size "baudelaire-linux-x86_64.tar.gz")
           SIZE_ARM=$(bin_size "baudelaire-linux-aarch64.tar.gz")
+          SIZE_X86_SLIM=$(bin_size "baudelaire-linux-x86_64-slim.tar.gz")
+          SIZE_ARM_SLIM=$(bin_size "baudelaire-linux-aarch64-slim.tar.gz")
 
           cat > release-notes.md <<EOF
           ## Install
@@ -120,7 +131,9 @@ jobs:
           sh install.sh            # PREFIX= to change dir, VERSION=${VERSION} to pin
           \`\`\`
 
-          Prefer Cargo? \`cargo binstall baudelaire\` pulls these same tarballs.
+          Want the smaller binary? \`FLAVOR=slim sh install.sh\`.
+
+          Prefer Cargo? \`cargo binstall baudelaire\` pulls the full tarballs.
 
           Or install by hand from the tarballs below:
 
@@ -131,10 +144,18 @@ jobs:
 
           ## Builds
 
+          Two flavors per target. **full** is the default — everything built in.
+          **slim** drops the bundled fonts and the CSS/JS/image pipelines, so it
+          renders with system fonts only and copies \`.css\`/\`.js\`/images verbatim
+          (no minify, bundle, or optimize). Pick slim when your host has the fonts
+          and you run your own asset tooling.
+
           | Artifact | Size |
           |----------|------|
           | \`baudelaire-linux-x86_64\` | ${SIZE_X86} |
+          | \`baudelaire-linux-x86_64-slim\` | ${SIZE_X86_SLIM} |
           | \`baudelaire-linux-aarch64\` | ${SIZE_ARM} |
+          | \`baudelaire-linux-aarch64-slim\` | ${SIZE_ARM_SLIM} |
 
           Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
