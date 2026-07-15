@@ -19,7 +19,7 @@ use serde::Serialize;
 use owo_colors::OwoColorize;
 
 use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
-use crate::config::StandardConfig;
+use crate::config::{BaseUrl, StandardConfig};
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{PublishError, Result};
 use crate::mime::Mime;
@@ -74,48 +74,40 @@ impl Publisher for Standard {
         }
         let base = site.config.base().ok_or(PublishError::NoUrl)?;
 
-        // A dry run only reads — `listRecords` is a public XRPC — so it resolves
-        // the repo without a password and diffs against the live records,
-        // writing nothing.
-        if opts.dry_run {
-            ui.detail("dry run — no records will be written");
-            let repo = self.resolve()?;
-            self.check_did(repo.did(), ui)?;
-            let publication = publication_uri(repo.did().as_str());
-            return self.documents(site, &repo, None, &publication, opts, ui);
+        let target = self.connect(opts, ui)?;
+        if let Some(advice) = reconcile(self.config.did.as_deref(), target.did())? {
+            ui.advice(advice);
+        }
+        let publication = publication_uri(target.did().as_str());
+
+        // The publication record comes first, so documents can point at it — a
+        // preview only diffs, so it writes nothing here.
+        if let Target::Live(session) = &target {
+            let record = Publication::new(site, &base, self.icon(session)?, self.config.discover);
+            session.put_record(PUBLICATION, &Rkey::literal(PUBLICATION_RKEY), &record)?;
         }
 
-        let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
-        let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
-        self.check_did(session.did(), ui)?;
-        let publication = publication_uri(session.did().as_str());
-
-        // publication record first, so documents can point at it.
-        let icon = self.icon(&session)?;
-        session.put_record(
-            PUBLICATION,
-            &Rkey::literal(PUBLICATION_RKEY),
-            &Publication {
-                kind: PUBLICATION.as_str(),
-                name: site
-                    .config
-                    .site
-                    .clone()
-                    .unwrap_or_else(|| site.config.label().to_owned()),
-                url: base.to_string(),
-                description: None,
-                icon,
-                preferences: Preferences {
-                    show_in_discover: self.config.discover,
-                },
-            },
-        )?;
-
-        self.documents(site, session.repo(), Some(&session), &publication, opts, ui)
+        self.reconcile_documents(site, &target, &publication, ui)
     }
 }
 
 impl Standard {
+    /// Connect to the publish target. A dry run resolves a read-only [`Repo`]
+    /// from the handle without credentials (`listRecords` and `resolveHandle`
+    /// are public XRPC); a real run authenticates a writable [`Session`] with the
+    /// app password. Either way the resolved DID flows through [`reconcile`], so
+    /// the identity check is the same on both paths.
+    fn connect(&self, opts: &Options, ui: &Ui) -> Result<Target> {
+        if opts.dry_run {
+            ui.detail("dry run — no records will be written");
+            let repo = Repo::resolve(&self.config.pds, &self.config.handle)?;
+            return Ok(Target::Preview(repo));
+        }
+        let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
+        let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
+        Ok(Target::Live(session))
+    }
+
     /// Upload the configured publication icon as a blob, if any. The path is
     /// resolved against the project root (the process cwd during a publish).
     fn icon(&self, session: &Session) -> Result<Option<Blob>> {
@@ -129,51 +121,21 @@ impl Standard {
         Ok(Some(session.upload_blob(&bytes, Mime::of(path))?))
     }
 
-    /// Resolve the target repository's DID from its handle without
-    /// authenticating, for a dry run — the public `resolveHandle` call. Feeding
-    /// the resolved DID to [`check_did`] reconciles it against any configured
-    /// `did` exactly as the authenticated path does, so a mismatch is caught in
-    /// a dry run too.
-    fn resolve(&self) -> Result<Repo> {
-        Ok(Repo::resolve(&self.config.pds, &self.config.handle)?)
-    }
-
-    /// Reconcile the configured `did` with the one the session authenticated as:
-    /// a mismatch means the build emitted verification artifacts for the wrong
-    /// identity, so it is fatal; an unset `did` only forgoes those artifacts, so
-    /// it is a note pointing at the value to configure.
-    fn check_did(&self, actual: &Did, ui: &Ui) -> Result<()> {
-        match &self.config.did {
-            Some(did) if did == actual.as_str() => Ok(()),
-            Some(did) => Err(PublishError::DidMismatch {
-                configured: did.clone(),
-                actual: actual.to_string(),
-            }
-            .into()),
-            None => {
-                ui.advice(DidUnpinned {
-                    did: actual.to_string(),
-                });
-                Ok(())
-            }
-        }
-    }
-
     /// Reconcile the site's dated pages with the document records in the repo:
     /// put new/changed records, skip unchanged, and delete records whose page is
     /// gone. Undated pages are not documents (standard.site requires a
-    /// publication date) and are reported as skipped.
-    fn documents(
+    /// publication date) and are reported as skipped. A preview [`Target`] runs
+    /// the same diff but writes nothing.
+    fn reconcile_documents(
         &self,
         site: &SiteView,
-        repo: &Repo,
-        writer: Option<&Session>,
+        target: &Target,
         publication: &AtUri,
-        opts: &Options,
         ui: &Ui,
     ) -> Result<()> {
         let mut cache = SkipCache::load(self.name());
-        let remote: BTreeSet<String> = repo
+        let remote: BTreeSet<String> = target
+            .repo()
             .list_rkeys(DOCUMENT)?
             .into_iter()
             .map(|rkey| rkey.as_str().to_owned())
@@ -183,37 +145,40 @@ impl Standard {
         let (mut sent, mut unchanged) = (0usize, 0usize);
         let mut undated: Vec<&str> = Vec::new();
         for doc in &site.documents {
-            let Some(record) = Document::from_doc(doc, publication) else {
+            // Undated pages are not documents — standard.site requires a
+            // `publishedAt` — so they are skipped and reported.
+            let Some(date) = doc.date else {
                 undated.push(&doc.path);
                 continue;
             };
+            let record = Document::new(doc, publication, date);
             let rkey = Rkey::derived(&doc.path);
             desired.insert(rkey.as_str().to_owned());
-            let fingerprint = record.fingerprint()?;
+            let digest = fingerprint(&record)?;
             // The cache alone is not authority: a record deleted on the PDS
             // out-of-band must be re-sent even if its fingerprint still matches.
-            if remote.contains(rkey.as_str()) && cache.unchanged(rkey.as_str(), &fingerprint) {
+            if remote.contains(rkey.as_str()) && cache.unchanged(rkey.as_str(), &digest) {
                 unchanged += 1;
                 continue;
             }
-            if let Some(session) = writer {
+            if let Some(session) = target.writer() {
                 session.put_record(DOCUMENT, &rkey, &record)?;
-                cache.set(rkey.as_str().to_owned(), fingerprint);
+                cache.set(rkey.as_str().to_owned(), digest);
             }
             sent += 1;
         }
 
         let mut removed = 0usize;
         for stale in remote.difference(&desired) {
-            if let Some(session) = writer {
+            if let Some(session) = target.writer() {
                 session.delete_record(DOCUMENT, &Rkey::parsed(stale))?;
             }
             removed += 1;
         }
 
-        // A dry run computes the plan against the real remote but changes
+        // A preview computes the plan against the real remote but changes
         // nothing — locally or otherwise — so the skip-cache is left untouched.
-        if !opts.dry_run {
+        if !target.is_preview() {
             cache.retain(&desired);
             cache.save(self.name())?;
         }
@@ -233,9 +198,68 @@ impl Standard {
             sent,
             unchanged,
             removed,
-            dry_run: opts.dry_run,
+            preview: target.is_preview(),
         });
         Ok(())
+    }
+}
+
+/// The repository a publish acts on, and how. A dry run gets a read-only
+/// [`Repo`] resolved without credentials; a real run gets an authenticated
+/// [`Session`] that can also write. Bundling each mode with its capability makes
+/// an illegal combination — writing during a preview — unrepresentable, and
+/// leaves one reconcile path to serve both.
+enum Target {
+    /// A dry run: read the live records, write nothing.
+    Preview(Repo),
+    /// An authenticated run: read and write.
+    Live(Session),
+}
+
+impl Target {
+    /// The read view, for diffing against the live records.
+    fn repo(&self) -> &Repo {
+        match self {
+            Self::Preview(repo) => repo,
+            Self::Live(session) => session.repo(),
+        }
+    }
+
+    /// The repository DID identifying whose records this run reconciles.
+    fn did(&self) -> &Did {
+        self.repo().did()
+    }
+
+    /// The writer, present only for a live run — a preview writes nothing.
+    fn writer(&self) -> Option<&Session> {
+        match self {
+            Self::Live(session) => Some(session),
+            Self::Preview(_) => None,
+        }
+    }
+
+    /// Whether this run only previews the plan.
+    fn is_preview(&self) -> bool {
+        matches!(self, Self::Preview(_))
+    }
+}
+
+/// Reconcile the configured `did` pin against the identity a publish `resolved`.
+/// A pin that disagrees is fatal — the build emitted verification artifacts for
+/// the wrong account. No pin is fine, but the resolved DID comes back as
+/// [`DidUnpinned`] advice so the user can pin it and get those artifacts;
+/// `Ok(None)` means the pin held. Pure — the caller surfaces the advice — so it
+/// is testable without a `Ui` or a network.
+fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, PublishError> {
+    match pin {
+        Some(did) if did == resolved.as_str() => Ok(None),
+        Some(did) => Err(PublishError::DidMismatch {
+            configured: did.to_owned(),
+            actual: resolved.to_string(),
+        }),
+        None => Ok(Some(DidUnpinned {
+            did: resolved.to_string(),
+        })),
     }
 }
 
@@ -248,12 +272,12 @@ struct Summary<'a> {
     sent: usize,
     unchanged: usize,
     removed: usize,
-    dry_run: bool,
+    preview: bool,
 }
 
 impl std::fmt::Display for Summary<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (put, del) = if self.dry_run {
+        let (put, del) = if self.preview {
             ("to send", "to remove")
         } else {
             ("sent", "removed")
@@ -270,18 +294,11 @@ impl std::fmt::Display for Summary<'_> {
     }
 }
 
-/// The blake3 fingerprint of a record's serialized form, for the skip-cache.
-trait Fingerprint {
-    fn fingerprint(&self) -> Result<String>;
-}
-
-impl<T: Serialize> Fingerprint for T {
-    fn fingerprint(&self) -> Result<String> {
-        let bytes = serde_json::to_vec(self).map_err(|e| {
-            crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e)
-        })?;
-        Ok(blake3::hash(&bytes).to_hex().to_string())
-    }
+/// The blake3 fingerprint of a `record`'s serialized form, for the skip-cache.
+fn fingerprint(record: &impl Serialize) -> Result<String> {
+    let bytes = serde_json::to_vec(record)
+        .map_err(|e| crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e))?;
+    Ok(blake3::hash(&bytes).to_hex().to_string())
 }
 
 /// A `site.standard.publication` record.
@@ -296,6 +313,27 @@ struct Publication {
     #[serde(skip_serializing_if = "Option::is_none")]
     icon: Option<Blob>,
     preferences: Preferences,
+}
+
+impl Publication {
+    /// The site's publication record. The display name falls back to the site's
+    /// label when `site` is unset.
+    fn new(site: &SiteView, base: &BaseUrl, icon: Option<Blob>, discover: bool) -> Self {
+        Self {
+            kind: PUBLICATION.as_str(),
+            name: site
+                .config
+                .site
+                .clone()
+                .unwrap_or_else(|| site.config.label().to_owned()),
+            url: base.to_string(),
+            description: None,
+            icon,
+            preferences: Preferences {
+                show_in_discover: discover,
+            },
+        }
+    }
 }
 
 /// Publication-level reader preferences.
@@ -322,31 +360,29 @@ struct Document {
 }
 
 impl Document {
-    /// Build a document record from a neutral [`Doc`], or `None` when the page
-    /// has no date — standard.site requires `publishedAt`.
-    fn from_doc(doc: &Doc, publication: &AtUri) -> Option<Self> {
-        let date = doc.date?;
-        Some(Self {
+    /// A document record for a `doc` published on `date`, under `publication`.
+    /// The caller filters undated pages — standard.site requires `publishedAt`.
+    fn new(doc: &Doc, publication: &AtUri, date: time::Date) -> Self {
+        Self {
             kind: DOCUMENT.as_str(),
             site: publication.clone(),
             title: doc.title.clone(),
-            published_at: date.rfc3339(),
+            published_at: Rfc3339(date).to_string(),
             path: doc.path.clone(),
             description: doc.description.clone(),
             tags: doc.tags.clone(),
-        })
+        }
     }
 }
 
 /// A date as an RFC 3339 timestamp at midnight UTC — the format `publishedAt`
-/// requires. Built directly from the fields, so it never fails.
-trait Rfc3339 {
-    fn rfc3339(&self) -> String;
-}
+/// requires. A [`Display`] adapter over [`Iso`](crate::content::Iso), so it
+/// formats on demand without allocating a field.
+struct Rfc3339(time::Date);
 
-impl Rfc3339 for time::Date {
-    fn rfc3339(&self) -> String {
-        format!("{}T00:00:00Z", crate::content::Iso(*self))
+impl std::fmt::Display for Rfc3339 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}T00:00:00Z", crate::content::Iso(self.0))
     }
 }
 
@@ -369,6 +405,29 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_accepts_a_matching_pin() {
+        assert!(
+            reconcile(Some("did:plc:x"), &Did::new("did:plc:x"))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn reconcile_rejects_a_mismatched_pin() {
+        assert!(matches!(
+            reconcile(Some("did:plc:x"), &Did::new("did:plc:y")),
+            Err(PublishError::DidMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn reconcile_advises_pinning_when_unset() {
+        let advice = reconcile(None, &Did::new("did:plc:x")).unwrap();
+        assert_eq!(advice.unwrap().did, "did:plc:x");
+    }
+
+    #[test]
     fn uris_have_the_canonical_shape() {
         assert_eq!(
             publication_uri("did:plc:x").to_string(),
@@ -383,16 +442,16 @@ mod tests {
 
     #[test]
     fn rfc3339_is_midnight_utc() {
-        assert_eq!(date(2026, 7, 1).rfc3339(), "2026-07-01T00:00:00Z");
+        assert_eq!(Rfc3339(date(2026, 7, 1)).to_string(), "2026-07-01T00:00:00Z");
     }
 
-    fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, dry_run: bool) -> String {
+    fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, preview: bool) -> String {
         Summary {
             name,
             sent,
             unchanged,
             removed,
-            dry_run,
+            preview,
         }
         .to_string()
     }
@@ -417,15 +476,9 @@ mod tests {
     }
 
     #[test]
-    fn undated_page_is_not_a_document() {
-        let publication = publication_uri("did:plc:x");
-        assert!(Document::from_doc(&sample(None), &publication).is_none());
-    }
-
-    #[test]
     fn document_serializes_to_the_lexicon_shape() {
         let publication = publication_uri("did:plc:x");
-        let record = Document::from_doc(&sample(Some(date(2026, 1, 2))), &publication).unwrap();
+        let record = Document::new(&sample(None), &publication, date(2026, 1, 2));
         let value = serde_json::to_value(&record).unwrap();
         assert_eq!(value["$type"], "site.standard.document");
         assert_eq!(
@@ -442,10 +495,11 @@ mod tests {
     #[test]
     fn document_omits_absent_optionals() {
         let publication = publication_uri("did:plc:x");
-        let mut doc = sample(Some(date(2026, 1, 2)));
+        let mut doc = sample(None);
         doc.description = None;
         doc.tags.clear();
-        let value = serde_json::to_value(Document::from_doc(&doc, &publication).unwrap()).unwrap();
+        let value =
+            serde_json::to_value(Document::new(&doc, &publication, date(2026, 1, 2))).unwrap();
         assert!(value.get("description").is_none());
         assert!(value.get("tags").is_none());
     }
