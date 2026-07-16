@@ -10,9 +10,16 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0
+  CARGO_INCREMENTAL: 0 # sccache can't cache incremental
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
+  # sccache -> Cloudflare R2: shared compiler cache that survives ephemeral runners.
+  RUSTC_WRAPPER: sccache
+  SCCACHE_BUCKET: baudelaire-sccache
+  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  SCCACHE_REGION: auto
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   check:
@@ -37,14 +44,9 @@ jobs:
             sudo apt-get install -y --no-install-recommends mold
           }
 
-      # Swatinem/rust-cache prunes `target` to just dependency artifacts and
-      # trims the registry, so the entry stays small enough to survive
-      # Codeberg's shared-runner cache eviction. It keys on Cargo.lock + rustc,
-      # so it must run *after* the toolchain is installed.
-      - name: cargo cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
+      # After the toolchain: the wrapper must exist before any cargo runs.
+      - name: sccache
+        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
 
       # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
@@ -78,3 +80,7 @@ jobs:
       - name: memory diagnostics
         if: failure()
         run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

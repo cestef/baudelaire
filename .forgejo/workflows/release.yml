@@ -12,6 +12,13 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # sccache -> R2; see ci.yml. Keys on target+rustflags, so matrix rows share one bucket.
+  RUSTC_WRAPPER: sccache
+  SCCACHE_BUCKET: baudelaire-sccache
+  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  SCCACHE_REGION: auto
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   build:
@@ -67,12 +74,8 @@ jobs:
             apk add --no-cache musl-dev gcc perl make
           fi
 
-      # Keyed on Cargo.lock + rustc, so it runs after the toolchain install.
-      # Each matrix row has its own arch/target, so give it a per-target key.
-      - name: cargo cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-        with:
-          shared-key: release-${{ matrix.target }}
+      - name: sccache
+        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`

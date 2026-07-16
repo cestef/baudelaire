@@ -17,6 +17,13 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
   RUSTFLAGS: -C link-arg=-fuse-ld=mold
+  # sccache -> R2; see ci.yml.
+  RUSTC_WRAPPER: sccache
+  SCCACHE_BUCKET: baudelaire-sccache
+  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  SCCACHE_REGION: auto
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   ship:
@@ -41,10 +48,8 @@ jobs:
             sudo apt-get install -y --no-install-recommends mold
           }
 
-      - name: cargo cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-        with:
-          shared-key: docs
+      - name: sccache
+        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
 
       - name: build baudelaire
         run: cargo build
