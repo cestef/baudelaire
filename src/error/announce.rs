@@ -76,7 +76,9 @@ pub enum AnnounceError {
     #[error("XRPC `{nsid}` did not stop paginating after {pages} pages")]
     #[diagnostic(
         code(baudelaire::announce::pagination),
-        help("the PDS keeps returning a pagination cursor; check that `pds` points at a real server")
+        help(
+            "the PDS keeps returning a pagination cursor; check that `pds` points at a real server"
+        )
     )]
     Pagination { nsid: String, pages: usize },
 }

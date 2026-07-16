@@ -219,7 +219,11 @@ impl SearchFormat {
 
     /// The standalone generated client: engine + palette UI + auto-mount.
     fn client(self, base: &str) -> String {
-        format!("{}{}\n{PALETTE}{AUTO_MOUNT}", Self::prelude(base), self.engine())
+        format!(
+            "{}{}\n{PALETTE}{AUTO_MOUNT}",
+            Self::prelude(base),
+            self.engine()
+        )
     }
 
     /// The composable module source (engine + palette, no auto-mount) served to

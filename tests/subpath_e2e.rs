@@ -94,10 +94,16 @@ fn search_client_carries_the_base() {
     let site = subsite();
     site.build();
     let js = site.output("search.js");
-    assert!(js.contains("const BASE = \"/docs\""), "no BASE in client: {js}");
+    assert!(
+        js.contains("const BASE = \"/docs\""),
+        "no BASE in client: {js}"
+    );
     // The index data stays canonical; the client applies the base.
     let json = site.output("search.json");
-    assert!(json.contains("\"/posts/hello/\""), "index url not canonical: {json}");
+    assert!(
+        json.contains("\"/posts/hello/\""),
+        "index url not canonical: {json}"
+    );
 }
 
 #[test]
@@ -111,7 +117,10 @@ fn root_hosting_leaves_urls_untouched() {
     );
     site.build();
     let html = site.output("posts/hello/index.html");
-    assert!(html.contains("href=\"/manual/\""), "root link mangled: {html}");
+    assert!(
+        html.contains("href=\"/manual/\""),
+        "root link mangled: {html}"
+    );
 }
 
 #[test]
