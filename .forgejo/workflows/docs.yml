@@ -55,6 +55,7 @@ jobs:
 
       - uses: https://codeberg.org/git-pages/action@v2
         with:
-          site: https://cstef.codeberg.page/baudelaire/
+          site: https://baudelaire.cstef.dev/
+          server: codeberg.page
           token: ${{ forge.token }}
           source: docs/public/
