@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+  RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   RUST_BACKTRACE: 1
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
@@ -29,6 +29,13 @@ jobs:
             export PATH="$HOME/.cargo/bin:$PATH"
           fi
           rustup show active-toolchain || rustup toolchain install
+
+      - name: linker (mold)
+        run: |
+          command -v mold >/dev/null || {
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends mold
+          }
 
       # Swatinem/rust-cache prunes `target` to just dependency artifacts and
       # trims the registry, so the entry stays small enough to survive
@@ -68,8 +75,6 @@ jobs:
       - name: nextest
         run: cargo nextest run --workspace --no-tests warn
 
-      # A build OOM-kill (exit 137 / signal 9) is otherwise invisible from the
-      # job log; oom_kill > 0 in memory.events names the culprit.
       - name: memory diagnostics
         if: failure()
         run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
