@@ -10,16 +10,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0 # sccache can't cache incremental
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
-  # sccache -> Cloudflare R2: shared compiler cache that survives ephemeral runners.
-  RUSTC_WRAPPER: sccache
-  SCCACHE_BUCKET: baudelaire-sccache
-  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-  SCCACHE_REGION: auto
-  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   check:
@@ -27,26 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: rust toolchain
-        run: |
-          if ! command -v rustup >/dev/null; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --default-toolchain none --profile minimal
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.cargo/bin:$PATH"
-          fi
-          rustup show active-toolchain || rustup toolchain install
-
-      - name: linker (mold)
-        run: |
-          command -v mold >/dev/null || {
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends mold
-          }
-
-      # After the toolchain: the wrapper must exist before any cargo runs.
-      - name: sccache
-        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
+      - uses: https://codeberg.org/cstef/actions/rust@main
+      - uses: https://codeberg.org/cstef/actions/mold@main
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: https://codeberg.org/cstef/actions/sccache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
@@ -55,27 +37,16 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: install nextest
-        run: |
-          if ! command -v cargo-nextest >/dev/null; then
-            case "$(uname -m)" in
-              aarch64|arm64) slug=linux-arm-musl ;;
-              x86_64|amd64)  slug=linux-musl ;;
-              *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
-            esac
-            mkdir -p ~/.cargo/bin
-            curl -fsSL "https://get.nexte.st/latest/$slug" \
-              | tar -xz -C ~/.cargo/bin cargo-nextest
-          fi
-
       # The serve/embed end-to-end tests shell out to `curl` and `base64`.
       - name: test prerequisites
         run: |
           command -v curl >/dev/null || { echo "curl is required"; exit 1; }
           command -v base64 >/dev/null || { echo "base64 is required"; exit 1; }
 
-      - name: nextest
-        run: cargo nextest run --workspace --no-tests warn
+      - uses: https://codeberg.org/cstef/actions/nextest@main
+        with:
+          run: "true"
+          args: --workspace --no-tests warn
 
       - name: memory diagnostics
         if: failure()

@@ -11,14 +11,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
-  # sccache -> R2; see ci.yml. Keys on target+rustflags, so matrix rows share one bucket.
-  RUSTC_WRAPPER: sccache
-  SCCACHE_BUCKET: baudelaire-sccache
-  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-  SCCACHE_REGION: auto
-  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   build:
@@ -47,17 +39,9 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: rust toolchain
-        shell: bash
-        run: |
-          if ! command -v rustup >/dev/null; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --default-toolchain none --profile minimal
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.cargo/bin:$PATH"
-          fi
-          rustup show active-toolchain || rustup toolchain install
-          rustup target add ${{ matrix.target }}
+      - uses: https://codeberg.org/cstef/actions/rust@main
+        with:
+          targets: ${{ matrix.target }}
 
       # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
@@ -74,8 +58,12 @@ jobs:
             apk add --no-cache musl-dev gcc perl make
           fi
 
-      - name: sccache
-        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
+      - uses: https://codeberg.org/cstef/actions/sccache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`

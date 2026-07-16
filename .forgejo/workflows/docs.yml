@@ -14,16 +14,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
   RUSTFLAGS: -C link-arg=-fuse-ld=mold
-  # sccache -> R2; see ci.yml.
-  RUSTC_WRAPPER: sccache
-  SCCACHE_BUCKET: baudelaire-sccache
-  SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-  SCCACHE_REGION: auto
-  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   ship:
@@ -31,25 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: rust toolchain
-        run: |
-          if ! command -v rustup >/dev/null; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --default-toolchain none --profile minimal
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.cargo/bin:$PATH"
-          fi
-          rustup show active-toolchain || rustup toolchain install
-
-      - name: linker (mold)
-        run: |
-          command -v mold >/dev/null || {
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends mold
-          }
-
-      - name: sccache
-        uses: https://github.com/mozilla-actions/sccache-action@v0.0.10
+      - uses: https://codeberg.org/cstef/actions/rust@main
+      - uses: https://codeberg.org/cstef/actions/mold@main
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: https://codeberg.org/cstef/actions/sccache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       - name: build baudelaire
         run: cargo build
