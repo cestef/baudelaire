@@ -416,12 +416,12 @@ button,
   color: var(--muted);
 }
 
-/* Nested subsections: indented and collapsible via <details>. The left rule
-   turns into an active trail marker; the summary is the toggle. */
+/* A collapsible subsection reads as one more nav row: its <summary> matches the
+   page links beside it (same size, weight, and colour) and only its children are
+   indented under a trail rule. So a group can freely mix plain page links and
+   expandable subsections without the subsection sticking out as a heading. */
 .nav-sub {
-  margin: 0.15rem 0 0.15rem 0.35rem;
-  padding-left: 0.7rem;
-  border-left: 1px solid var(--rule);
+  margin: 0.05rem 0;
 }
 
 .nav-sub>summary.nav-title {
@@ -430,10 +430,13 @@ button,
   justify-content: space-between;
   gap: 0.4rem;
   margin: 0;
-  padding: 0.32rem 0.45rem;
+  padding: 0.28rem 0.7rem;
   border-radius: 5px;
-  font-size: 0.64rem;
-  letter-spacing: 0.09em;
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-soft);
   cursor: pointer;
   user-select: none;
   list-style: none;
@@ -464,17 +467,21 @@ button,
   transform: rotate(90deg);
 }
 
+/* Children indent under a left rule that doubles as the active-trail marker. */
 .nav-sub-body {
-  padding-top: 0.15rem;
+  margin: 0.1rem 0 0.25rem 0.35rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid var(--rule);
 }
 
 /* Highlight the subsection that holds the current page (set by nav.js). */
-.nav-sub.is-active {
-  border-left-color: var(--wine);
-}
-
 .nav-sub.is-active>summary.nav-title {
   color: var(--wine-ink);
+  font-weight: 600;
+}
+
+.nav-sub.is-active>.nav-sub-body {
+  border-left-color: var(--wine);
 }
 
 .sidebar ul {
