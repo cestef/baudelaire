@@ -1,7 +1,7 @@
 //! The SSH transport: one authenticated connection with an open SFTP session,
 //! and the remote directory it reconciles into.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use russh::client::{self, Handle};
 use russh::{ChannelMsg, Disconnect};
@@ -9,7 +9,7 @@ use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
 
 use super::auth::Auth;
-use super::hosts::Client;
+use super::hosts::{Client, Rejected};
 use crate::config::SshConfig;
 use crate::deploy::Digests;
 use crate::error::{DeployError, Result};
@@ -26,9 +26,16 @@ impl Session {
     /// Connect, verify the host key, authenticate, and open the SFTP subsystem.
     pub async fn connect(config: &SshConfig, user: &str, opts: &Options<'_>) -> Result<Self> {
         let rc = Arc::new(client::Config::default());
-        let mut handle = client::connect(rc, (config.host.as_str(), config.port), Client::new(config))
+        // The handler records a changed-key rejection here, since it can only
+        // return a bool; a plain connection failure otherwise stays generic.
+        let rejected = Arc::new(Mutex::new(None));
+        let client = Client::new(config, rejected.clone());
+        let mut handle = client::connect(rc, (config.host.as_str(), config.port), client)
             .await
-            .map_err(|e| DeployError::connect(&config.host, e))?;
+            .map_err(|e| match *rejected.lock().unwrap() {
+                Some(Rejected::Changed) => DeployError::host_key_changed(&config.host),
+                None => DeployError::connect(&config.host, e),
+            })?;
         Auth::new(config, opts).run(&mut handle, user).await?;
 
         let channel = handle.channel_open_session().await.map_err(|e| DeployError::connect(&config.host, e))?;

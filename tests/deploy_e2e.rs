@@ -15,7 +15,7 @@ use std::thread;
 
 use baudelaire::config::{Config, S3Config};
 use baudelaire::deploy;
-use baudelaire::error::Result as BResult;
+use baudelaire::error::{BaudelaireErrorKind, DeployError, Result as BResult};
 use baudelaire::remote::{Interaction, Options};
 use baudelaire::ui::{Level, Ui};
 
@@ -451,6 +451,42 @@ fn ssh_deploy_uploads_new_files_and_deletes_orphans() {
     assert_eq!(store.get("posts/a.html").map(Vec::as_slice), Some(&b"post a"[..]));
     assert!(store.contains_key("style.css"));
     assert!(!store.contains_key("orphan.html"), "orphan should be deleted");
+}
+
+/// Point `$HOME` at `dir` so the ssh backend reads `dir/.ssh/known_hosts`.
+#[allow(unsafe_code)]
+fn set_home(dir: &std::path::Path) {
+    // SAFETY: nextest runs each test in its own process, so the environment is
+    // unshared and this cannot race another thread.
+    unsafe { std::env::set_var("HOME", dir) }
+}
+
+#[test]
+fn ssh_refuses_a_changed_host_key() {
+    let site = Site::new();
+    dist(&site);
+    let store: SftpStore = Arc::new(Mutex::new(BTreeMap::new()));
+    let port = spawn_ssh(store.clone(), String::new());
+
+    // A known_hosts that records a *different* key for this host:port, so the
+    // server's ephemeral key reads as changed — the man-in-the-middle guard.
+    set_home(&site.root);
+    let other = PrivateKey::random(&mut Rng, Algorithm::Ed25519).unwrap();
+    site.write(
+        ".ssh/known_hosts",
+        &format!("[127.0.0.1]:{port} {}\n", other.public_key().to_openssh().unwrap()),
+    );
+
+    let mut config = ssh_config(&site, port);
+    config.deploy.ssh.as_mut().unwrap().strict = true;
+    let headless = Headless;
+    let err = deploy::run(&config, &options(false, &headless), &silent()).unwrap_err();
+
+    assert!(
+        matches!(err, BaudelaireErrorKind::Deploy(DeployError::HostKeyChanged { .. })),
+        "expected a changed-host-key error, got {err:?}"
+    );
+    assert!(store.lock().unwrap().is_empty(), "a refused host uploads nothing");
 }
 
 #[test]

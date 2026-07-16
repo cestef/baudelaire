@@ -52,6 +52,17 @@ pub enum DeployError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    /// The server presented a different host key than the one recorded in
+    /// `known_hosts` — the man-in-the-middle guard.
+    #[error("the host key for `{host}` has changed")]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::host_key),
+        help(
+            "this may be a man-in-the-middle attack, or the server was legitimately rebuilt. If you trust the change, remove the old key with `ssh-keygen -R {host}` and retry, or set `strict #false` to skip verification"
+        )
+    )]
+    HostKeyChanged { host: String },
+
     /// The server rejected authentication for the user.
     #[error("ssh authentication as `{user}` failed")]
     #[diagnostic(
@@ -87,6 +98,11 @@ impl DeployError {
             operation,
             message: source.to_string(),
         }
+    }
+
+    /// The host key changed for `host`.
+    pub fn host_key_changed(host: impl Into<String>) -> Self {
+        Self::HostKeyChanged { host: host.into() }
     }
 }
 
