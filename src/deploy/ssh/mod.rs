@@ -16,8 +16,8 @@ mod session;
 
 use tokio::runtime::Builder;
 
-use super::sigv4::sha256_hex;
-use super::{Backend, Digests, Dist, done, plan, report};
+use super::sigv4::Signer;
+use super::{Backend, Digests, Dist, Plan};
 use crate::config::SshConfig;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
@@ -46,9 +46,8 @@ impl Ssh {
     /// Reconcile the remote directory with `dist` over one connection.
     async fn sync(&self, dist: &Dist, local: &Digests, opts: &Options<'_>, ui: &Ui) -> Result<()> {
         let session = Session::connect(&self.config, &self.user(), opts).await?;
-        let remote = session.digests().await?;
-        let plan = plan(local, &remote, self.config.delete);
-        report(ui, &plan, opts.dry_run);
+        let plan = Plan::compute(local, &session.digests().await?, self.config.delete);
+        plan.preview(ui, opts.dry_run);
         if opts.dry_run {
             session.close().await;
             return Ok(());
@@ -62,7 +61,7 @@ impl Ssh {
             ui.item(format_args!("✕ {key}"));
         }
         session.close().await;
-        done(ui, format_args!("{}:{}", self.config.host, self.config.path), &plan);
+        plan.done(ui, format_args!("{}:{}", self.config.host, self.config.path));
         Ok(())
     }
 }
@@ -75,7 +74,7 @@ impl Backend for Ssh {
     fn run(&self, dist: &Dist, opts: &Options<'_>, ui: &Ui) -> Result<()> {
         // Hashing is blocking (file reads); do it up front, then drive the async
         // network exchange on a private runtime so async never leaks outward.
-        let local = dist.digests(sha256_hex)?;
+        let local = dist.digests(Signer::sha256_hex)?;
         let runtime = Builder::new_current_thread()
             .enable_all()
             .build()

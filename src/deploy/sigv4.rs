@@ -37,9 +37,9 @@ impl Signer<'_> {
     pub fn sign(&self, req: &Request) -> String {
         let (canonical, headers) = self.canonical(req);
         let scope = self.scope();
-        let to_sign =
-            join(&["AWS4-HMAC-SHA256", self.timestamp, &scope, &sha256_hex(canonical.as_bytes())]);
-        let signature = hex(&hmac(&self.key(), to_sign.as_bytes()));
+        let to_sign = ["AWS4-HMAC-SHA256", self.timestamp, &scope, &Self::sha256_hex(canonical.as_bytes())]
+            .join("\n");
+        let signature = Self::hex(&Self::hmac(&self.key(), to_sign.as_bytes()));
         format!(
             "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
             self.access_key,
@@ -51,14 +51,13 @@ impl Signer<'_> {
     /// sorted by lowercase name.
     fn canonical(&self, req: &Request) -> (String, String) {
         let mut headers = vec![("host", req.host.to_owned()), ("x-amz-date", self.timestamp.to_owned())];
-        headers.extend(req.headers.iter().map(|(name, value)| (*name, collapse(value))));
+        headers.extend(req.headers.iter().map(|(name, value)| (*name, Self::collapse(value))));
         headers.sort_by_key(|(name, _)| name.to_lowercase());
 
         let names = headers.iter().map(|(name, _)| name.to_lowercase()).collect::<Vec<_>>().join(";");
         let rows: String =
             headers.iter().map(|(name, value)| format!("{}:{value}\n", name.to_lowercase())).collect();
-        let canonical =
-            join(&[req.method, req.uri, req.query, &rows, &names, req.payload_hash]);
+        let canonical = [req.method, req.uri, req.query, &rows, &names, req.payload_hash].join("\n");
         (canonical, names)
     }
 
@@ -73,45 +72,40 @@ impl Signer<'_> {
         let seed = format!("AWS4{}", self.secret_key);
         [self.date(), self.region, self.service, "aws4_request"]
             .into_iter()
-            .fold(seed.into_bytes(), |key, part| hmac(&key, part.as_bytes()))
+            .fold(seed.into_bytes(), |key, part| Self::hmac(&key, part.as_bytes()))
     }
 
     /// The `YYYYMMDD` date, sliced from the timestamp.
     fn date(&self) -> &str {
         &self.timestamp[..8]
     }
-}
 
-/// The lowercase hex SHA-256 of `data` — the value S3 wants in
-/// `x-amz-content-sha256`, and the digest used throughout signing.
-pub fn sha256_hex(data: &[u8]) -> String {
-    hex(&Sha256::digest(data))
-}
+    /// The lowercase hex SHA-256 of `data` — the value S3 wants in
+    /// `x-amz-content-sha256`, and the digest used throughout signing.
+    pub fn sha256_hex(data: &[u8]) -> String {
+        Self::hex(&Sha256::digest(data))
+    }
 
-/// HMAC-SHA256 of `message` under `key`.
-fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
-}
+    /// Lowercase, zero-padded hex. Shared with the S3 backend's ETag comparison.
+    pub(super) fn hex(bytes: &[u8]) -> String {
+        use std::fmt::Write;
+        bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
+            let _ = write!(out, "{byte:02x}");
+            out
+        })
+    }
 
-/// Lowercase, zero-padded hex. Shared with the S3 backend's ETag comparison.
-pub(super) fn hex(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
-        let _ = write!(out, "{byte:02x}");
-        out
-    })
-}
+    /// HMAC-SHA256 of `message` under `key`.
+    fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
+        let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
+        mac.update(message);
+        mac.finalize().into_bytes().to_vec()
+    }
 
-/// Newline-join — the separator every SigV4 string uses.
-fn join(parts: &[&str]) -> String {
-    parts.join("\n")
-}
-
-/// Trim and collapse internal whitespace runs to single spaces, per the spec.
-fn collapse(value: &str) -> String {
-    value.split_whitespace().collect::<Vec<_>>().join(" ")
+    /// Trim and collapse internal whitespace runs to single spaces, per the spec.
+    fn collapse(value: &str) -> String {
+        value.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
 }
 
 #[cfg(test)]
@@ -139,7 +133,7 @@ mod tests {
 
     #[test]
     fn sha256_of_empty_is_the_known_constant() {
-        assert_eq!(sha256_hex(b""), EMPTY);
+        assert_eq!(Signer::sha256_hex(b""), EMPTY);
     }
 
     #[test]
@@ -162,7 +156,7 @@ mod tests {
         );
         // the suite publishes the hash of the canonical request (its string-to-sign line)
         assert_eq!(
-            sha256_hex(canonical.as_bytes()),
+            Signer::sha256_hex(canonical.as_bytes()),
             "bb579772317eb040ac9ed261061d46c1f17a8133879d6129b6e1c25292927e63"
         );
         assert_eq!(
@@ -228,11 +222,11 @@ mod tests {
 
     #[test]
     fn hex_is_zero_padded_lowercase() {
-        assert_eq!(hex(&[0x00, 0x0f, 0xff, 0xa0]), "000fffa0");
+        assert_eq!(Signer::hex(&[0x00, 0x0f, 0xff, 0xa0]), "000fffa0");
     }
 
     #[test]
     fn collapse_trims_and_squeezes_runs() {
-        assert_eq!(collapse("  a   b  c "), "a b c");
+        assert_eq!(Signer::collapse("  a   b  c "), "a b c");
     }
 }

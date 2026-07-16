@@ -43,9 +43,9 @@ impl Options<'_> {
             }
             // A closed or blank stdin is "no secret", not an empty password —
             // matches the env and prompt branches, which both reject empty.
-            let line = stdin_line()?;
+            let line = Self::stdin_line()?;
             if line.is_empty() {
-                return Err(missing(label));
+                return Err(Self::missing(label));
             }
             return Ok(line);
         }
@@ -54,7 +54,7 @@ impl Options<'_> {
         {
             return Ok(secret);
         }
-        self.interaction.secret(label)?.ok_or_else(|| missing(label))
+        self.interaction.secret(label)?.ok_or_else(|| Self::missing(label))
     }
 
     /// Confirm a mutating action, short-circuiting to `true` under `--yes`.
@@ -64,20 +64,21 @@ impl Options<'_> {
         }
         self.interaction.confirm(prompt)
     }
-}
 
-fn missing(label: &str) -> crate::error::BaudelaireErrorKind {
-    RemoteError::MissingSecret { label: label.to_owned() }.into()
-}
+    /// The "no secret could be found" error for `label`.
+    fn missing(label: &str) -> crate::error::BaudelaireErrorKind {
+        RemoteError::MissingSecret { label: label.to_owned() }.into()
+    }
 
-/// Read one line from stdin as a secret — the conventional `-` value for a
-/// secret flag, for piping without exposing it in argv. The trailing newline is
-/// stripped; the rest is taken verbatim.
-fn stdin_line() -> Result<String> {
-    use std::io::BufRead;
-    let mut line = String::new();
-    std::io::stdin().lock().read_line(&mut line)?;
-    Ok(line.trim_end_matches(['\r', '\n']).to_owned())
+    /// Read one line from stdin as a secret — the conventional `-` value for a
+    /// secret flag, for piping without exposing it in argv. The trailing newline
+    /// is stripped; the rest is taken verbatim.
+    fn stdin_line() -> Result<String> {
+        use std::io::BufRead;
+        let mut line = String::new();
+        std::io::stdin().lock().read_line(&mut line)?;
+        Ok(line.trim_end_matches(['\r', '\n']).to_owned())
+    }
 }
 
 #[cfg(test)]

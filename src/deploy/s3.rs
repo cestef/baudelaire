@@ -4,7 +4,7 @@
 //! longer produces.
 //!
 //! The moving parts are kept pure and tested — key encoding, the listing parse,
-//! and the upload/delete [`plan`] — while the `ureq` calls stay a thin shell
+//! and the upload/delete [`Plan`] — while the `ureq` calls stay a thin shell
 //! around them. Change detection is stateless: S3 returns each object's ETag,
 //! which for a single-part upload is the hex MD5 of its bytes, so a local file
 //! whose MD5 matches the remote ETag is skipped without any local record.
@@ -14,8 +14,8 @@ use std::collections::BTreeMap;
 use md5::{Digest, Md5};
 use time::OffsetDateTime;
 
-use super::sigv4::{self, Request, Signer};
-use super::{Backend, Dist, done, plan, report};
+use super::sigv4::{Request, Signer};
+use super::{Backend, Dist, Plan};
 use crate::config::S3Config;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
@@ -44,14 +44,13 @@ impl Backend for S3 {
         // The access key id is an identifier, read straight from the environment;
         // the secret key flows through the shared resolver so `--password`, stdin,
         // and the interactive prompt all work.
-        let access_key = credential(ACCESS_KEY_ENV)?;
+        let access_key = Self::credential(ACCESS_KEY_ENV)?;
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(&self.config, access_key, secret_key);
 
-        let local = dist.digests(md5_hex)?;
-        let remote = bucket.list()?;
-        let plan = plan(&local, &remote, self.config.delete);
-        report(ui, &plan, opts.dry_run);
+        let local = dist.digests(Bucket::etag)?;
+        let plan = Plan::compute(&local, &bucket.list()?, self.config.delete);
+        plan.preview(ui, opts.dry_run);
         if opts.dry_run {
             return Ok(());
         }
@@ -64,17 +63,19 @@ impl Backend for S3 {
             bucket.delete(key)?;
             ui.item(format_args!("✕ {key}"));
         }
-        done(ui, &self.config.bucket, &plan);
+        plan.done(ui, &self.config.bucket);
         Ok(())
     }
 }
 
-/// Read a required credential from the environment, erroring with the variable's
-/// name when it is unset or empty.
-fn credential(var: &str) -> Result<String> {
-    match std::env::var(var) {
-        Ok(value) if !value.is_empty() => Ok(value),
-        _ => Err(DeployError::MissingCredentials { var: var.to_owned() }.into()),
+impl S3 {
+    /// Read a required credential from the environment, erroring with the
+    /// variable's name when it is unset or empty.
+    fn credential(var: &str) -> Result<String> {
+        match std::env::var(var) {
+            Ok(value) if !value.is_empty() => Ok(value),
+            _ => Err(DeployError::MissingCredentials { var: var.to_owned() }.into()),
+        }
     }
 }
 
@@ -143,8 +144,9 @@ impl Bucket {
             if let Some(token) = &token {
                 query.push(("continuation-token", token.clone()));
             }
-            let body = self.send("GET", &format!("{}/", self.root), &canonical_query(&query), &[])?;
-            let listing = parse_listing(&body)?;
+            let body =
+                self.send("GET", &format!("{}/", self.root), &Self::canonical_query(&query), &[])?;
+            let listing = Listing::parse(&body)?;
             out.extend(listing.objects.into_iter().map(|(key, etag)| (self.relative(key), etag)));
             match listing.next {
                 Some(next) => token = Some(next),
@@ -171,7 +173,7 @@ impl Bucket {
     /// The signing URI for an object at relative `key`: the root, the prefix, and
     /// the URI-encoded key.
     fn object(&self, key: &str) -> String {
-        format!("{}/{}", self.root, encode(&object_key(&self.prefix, key), true))
+        format!("{}/{}", self.root, Self::encode(&Self::object_key(&self.prefix, key), true))
     }
 
     /// Strip the configured prefix from a listed object key, so the whole client
@@ -236,8 +238,8 @@ impl Bucket {
 
     /// Sign a request, returning the header trio to attach.
     fn authorize(&self, method: &str, uri: &str, query: &str, body: &[u8]) -> Authorization {
-        let timestamp = amz_timestamp(OffsetDateTime::now_utc());
-        let payload_hash = sigv4::sha256_hex(body);
+        let timestamp = Self::timestamp(OffsetDateTime::now_utc());
+        let payload_hash = Signer::sha256_hex(body);
         let signer = Signer {
             access_key: &self.access_key,
             secret_key: &self.secret_key,
@@ -293,76 +295,87 @@ struct Listing {
     next: Option<String>,
 }
 
-/// The object key for a dist-relative path under `prefix`: forward-slashed, no
-/// leading slash, prefix folded in.
-fn object_key(prefix: &str, path: &str) -> String {
-    let path = path.replace('\\', "/");
-    let path = path.trim_start_matches('/');
-    if prefix.is_empty() {
-        path.to_owned()
-    } else {
-        format!("{prefix}/{path}")
-    }
-}
-
-/// Percent-encode per the S3 signing rules: unreserved bytes pass through,
-/// everything else becomes uppercase `%XX`. A path keeps its `/` separators; a
-/// query component encodes them too.
-fn encode(value: &str, keep_slash: bool) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
-            b'/' if keep_slash => out.push('/'),
-            _ => out.push_str(&format!("%{byte:02X}")),
+/// Wire-format helpers — key normalization, encoding, and the values a request
+/// signs with. Kept as associated functions so they stay pure and testable while
+/// living under the client they serve.
+impl Bucket {
+    /// The object key for a dist-relative path under `prefix`: forward-slashed,
+    /// no leading slash, prefix folded in.
+    fn object_key(prefix: &str, path: &str) -> String {
+        let path = path.replace('\\', "/");
+        let path = path.trim_start_matches('/');
+        if prefix.is_empty() {
+            path.to_owned()
+        } else {
+            format!("{prefix}/{path}")
         }
     }
-    out
+
+    /// Percent-encode per the S3 signing rules: unreserved bytes pass through,
+    /// everything else becomes uppercase `%XX`. A path keeps its `/` separators;
+    /// a query component encodes them too.
+    fn encode(value: &str, keep_slash: bool) -> String {
+        let mut out = String::with_capacity(value.len());
+        for byte in value.bytes() {
+            match byte {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    out.push(byte as char)
+                }
+                b'/' if keep_slash => out.push('/'),
+                _ => out.push_str(&format!("%{byte:02X}")),
+            }
+        }
+        out
+    }
+
+    /// Canonical query string: each name and value URI-encoded, sorted by name.
+    fn canonical_query(params: &[(&str, String)]) -> String {
+        let mut params: Vec<(String, String)> = params
+            .iter()
+            .map(|(name, value)| (Self::encode(name, false), Self::encode(value, false)))
+            .collect();
+        params.sort();
+        params.iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("&")
+    }
+
+    /// The ETag S3 assigns a single-part upload: the lowercase hex MD5 of `bytes`.
+    fn etag(bytes: &[u8]) -> String {
+        Signer::hex(&Md5::digest(bytes))
+    }
+
+    /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`.
+    fn timestamp(now: OffsetDateTime) -> String {
+        let (year, month, day) = (now.year(), now.month() as u8, now.day());
+        let (hour, minute, second) = (now.hour(), now.minute(), now.second());
+        format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
+    }
 }
 
-/// Canonical query string: each name and value URI-encoded, sorted by name.
-fn canonical_query(params: &[(&str, String)]) -> String {
-    let mut params: Vec<(String, String)> =
-        params.iter().map(|(name, value)| (encode(name, false), encode(value, false))).collect();
-    params.sort();
-    params.iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("&")
-}
+impl Listing {
+    /// Parse a ListObjectsV2 XML response into its objects and continuation token.
+    fn parse(xml: &str) -> Result<Listing> {
+        let document = roxmltree::Document::parse(xml)
+            .map_err(|e| DeployError::Listing { message: e.to_string() })?;
+        let text = |node: roxmltree::Node, tag: &str| {
+            node.children().find(|c| c.has_tag_name(tag)).and_then(|c| c.text()).map(str::to_owned)
+        };
+        let objects = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Contents"))
+            .filter_map(|node| Some((text(node, "Key")?, Self::unquote(&text(node, "ETag")?).to_owned())))
+            .collect();
+        let next = document
+            .descendants()
+            .find(|node| node.has_tag_name("NextContinuationToken"))
+            .and_then(|node| node.text())
+            .map(str::to_owned);
+        Ok(Listing { objects, next })
+    }
 
-/// Parse a ListObjectsV2 XML response into its objects and continuation token.
-fn parse_listing(xml: &str) -> Result<Listing> {
-    let document = roxmltree::Document::parse(xml)
-        .map_err(|e| DeployError::Listing { message: e.to_string() })?;
-    let text = |node: roxmltree::Node, tag: &str| {
-        node.children().find(|c| c.has_tag_name(tag)).and_then(|c| c.text()).map(str::to_owned)
-    };
-    let objects = document
-        .descendants()
-        .filter(|node| node.has_tag_name("Contents"))
-        .filter_map(|node| Some((text(node, "Key")?, unquote(&text(node, "ETag")?).to_owned())))
-        .collect();
-    let next = document
-        .descendants()
-        .find(|node| node.has_tag_name("NextContinuationToken"))
-        .and_then(|node| node.text())
-        .map(str::to_owned);
-    Ok(Listing { objects, next })
-}
-
-/// Strip the surrounding quotes S3 wraps an ETag in.
-fn unquote(etag: &str) -> &str {
-    etag.trim_matches('"')
-}
-
-/// Lowercase hex MD5 — the ETag S3 assigns a single-part upload.
-fn md5_hex(bytes: &[u8]) -> String {
-    sigv4::hex(&Md5::digest(bytes))
-}
-
-/// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`.
-fn amz_timestamp(now: OffsetDateTime) -> String {
-    let (year, month, day) = (now.year(), now.month() as u8, now.day());
-    let (hour, minute, second) = (now.hour(), now.minute(), now.second());
-    format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
+    /// Strip the surrounding quotes S3 wraps an ETag in.
+    fn unquote(etag: &str) -> &str {
+        etag.trim_matches('"')
+    }
 }
 
 #[cfg(test)]
@@ -423,25 +436,25 @@ mod tests {
 
     #[test]
     fn object_key_normalizes() {
-        assert_eq!(object_key("", "posts/a.html"), "posts/a.html");
-        assert_eq!(object_key("", "/posts/a.html"), "posts/a.html");
-        assert_eq!(object_key("site", "posts/a.html"), "site/posts/a.html");
-        assert_eq!(object_key("site", "a\\b.html"), "site/a/b.html");
+        assert_eq!(Bucket::object_key("", "posts/a.html"), "posts/a.html");
+        assert_eq!(Bucket::object_key("", "/posts/a.html"), "posts/a.html");
+        assert_eq!(Bucket::object_key("site", "posts/a.html"), "site/posts/a.html");
+        assert_eq!(Bucket::object_key("site", "a\\b.html"), "site/a/b.html");
     }
 
     #[test]
     fn encode_keeps_slashes_when_asked_and_escapes_the_rest() {
-        assert_eq!(encode("posts/a-b_c.html", true), "posts/a-b_c.html");
-        assert_eq!(encode("a b.html", true), "a%20b.html");
-        assert_eq!(encode("caf\u{e9}.html", true), "caf%C3%A9.html");
-        assert_eq!(encode("a+b&c.html", true), "a%2Bb%26c.html");
+        assert_eq!(Bucket::encode("posts/a-b_c.html", true), "posts/a-b_c.html");
+        assert_eq!(Bucket::encode("a b.html", true), "a%20b.html");
+        assert_eq!(Bucket::encode("caf\u{e9}.html", true), "caf%C3%A9.html");
+        assert_eq!(Bucket::encode("a+b&c.html", true), "a%2Bb%26c.html");
         // A query component encodes the slash too.
-        assert_eq!(encode("a/b", false), "a%2Fb");
+        assert_eq!(Bucket::encode("a/b", false), "a%2Fb");
     }
 
     #[test]
     fn canonical_query_sorts_and_encodes() {
-        let query = canonical_query(&[
+        let query = Bucket::canonical_query(&[
             ("prefix", "a/b c".into()),
             ("list-type", "2".into()),
         ]);
@@ -450,7 +463,7 @@ mod tests {
 
     #[test]
     fn md5_matches_the_known_empty_vector() {
-        assert_eq!(md5_hex(b""), "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(Bucket::etag(b""), "d41d8cd98f00b204e9800998ecf8427e");
     }
 
     #[test]
@@ -462,7 +475,7 @@ mod tests {
               <Contents><Key>b/c.css</Key><ETag>"def456"</ETag><Size>20</Size></Contents>
               <NextContinuationToken>TOKEN==</NextContinuationToken>
             </ListBucketResult>"#;
-        let listing = parse_listing(xml).unwrap();
+        let listing = Listing::parse(xml).unwrap();
         assert_eq!(
             listing.objects,
             vec![("a.html".into(), "abc123".into()), ("b/c.css".into(), "def456".into())]
@@ -473,7 +486,7 @@ mod tests {
     #[test]
     fn listing_without_token_ends() {
         let xml = "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>";
-        let listing = parse_listing(xml).unwrap();
+        let listing = Listing::parse(xml).unwrap();
         assert!(listing.objects.is_empty());
         assert_eq!(listing.next, None);
     }
@@ -481,6 +494,6 @@ mod tests {
     #[test]
     fn amz_timestamp_formats_utc() {
         let t = OffsetDateTime::from_unix_timestamp(1_440_938_160).unwrap(); // 2015-08-30T12:36:00Z
-        assert_eq!(amz_timestamp(t), "20150830T123600Z");
+        assert_eq!(Bucket::timestamp(t), "20150830T123600Z");
     }
 }

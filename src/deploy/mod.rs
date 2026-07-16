@@ -41,9 +41,22 @@ impl Dist {
     /// Walk `root` into the set of relative file paths, following subdirectories.
     fn scan(root: &Path) -> Result<Self> {
         let mut files = Vec::new();
-        collect(root, root, &mut files)?;
+        Self::walk(root, root, &mut files)?;
         files.sort();
         Ok(Self { root: root.to_owned(), files })
+    }
+
+    /// Append every file under `dir` to `out`, as a path relative to `base` with
+    /// forward slashes — recursing into subdirectories.
+    fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
+        for path in crate::fs::read_dir(dir)? {
+            if path.is_dir() {
+                Self::walk(base, &path, out)?;
+            } else if let Ok(rel) = path.strip_prefix(base) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        Ok(())
     }
 
     /// Read one file's bytes by its relative path.
@@ -57,19 +70,6 @@ impl Dist {
     pub fn digests(&self, hash: impl Fn(&[u8]) -> String) -> Result<Digests> {
         self.files.iter().map(|rel| Ok((rel.clone(), hash(&self.read(rel)?)))).collect()
     }
-}
-
-/// Append every file under `dir` to `out`, as a path relative to `base` with
-/// forward slashes — recursing into subdirectories.
-fn collect(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
-    for path in crate::fs::read_dir(dir)? {
-        if path.is_dir() {
-            collect(base, &path, out)?;
-        } else if let Ok(rel) = path.strip_prefix(base) {
-            out.push(rel.to_string_lossy().replace('\\', "/"));
-        }
-    }
-    Ok(())
 }
 
 /// A file destination the built site can be deployed to.
@@ -117,7 +117,7 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
 }
 
 /// What a reconcile will do to the remote — shared by every [`Backend`], which
-/// hashes its files, lists the remote, and diffs the two through [`plan`].
+/// hashes its files, lists the remote, and diffs the two through [`Plan::compute`].
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     /// Keys to upload (new or changed).
@@ -128,44 +128,46 @@ pub struct Plan {
     pub unchanged: usize,
 }
 
-/// Diff local digests against remote digests, both keyed by dist-relative path.
-/// A file uploads when its digest differs from the remote's (or it is new); an
-/// entry deletes when the build no longer produces it and `delete` is on;
-/// everything else is unchanged. The digest algorithm is the backend's choice —
-/// this only compares the strings.
-pub fn plan(local: &Digests, remote: &Digests, delete: bool) -> Plan {
-    let mut out = Plan::default();
-    for (key, digest) in local {
-        match remote.get(key) {
-            Some(other) if other.eq_ignore_ascii_case(digest) => out.unchanged += 1,
-            _ => out.uploads.push(key.clone()),
+impl Plan {
+    /// Diff local digests against remote digests, both keyed by dist-relative
+    /// path. A file uploads when its digest differs from the remote's (or it is
+    /// new); an entry deletes when the build no longer produces it and `delete`
+    /// is on; everything else is unchanged. The digest algorithm is the backend's
+    /// choice — this only compares the strings.
+    pub fn compute(local: &Digests, remote: &Digests, delete: bool) -> Plan {
+        let mut out = Plan::default();
+        for (key, digest) in local {
+            match remote.get(key) {
+                Some(other) if other.eq_ignore_ascii_case(digest) => out.unchanged += 1,
+                _ => out.uploads.push(key.clone()),
+            }
         }
+        if delete {
+            out.deletes = remote.keys().filter(|key| !local.contains_key(*key)).cloned().collect();
+        }
+        out
     }
-    if delete {
-        out.deletes = remote.keys().filter(|key| !local.contains_key(*key)).cloned().collect();
+
+    /// Announce the plan: a one-line summary, prefixed on a dry run so the preview
+    /// reads as a preview.
+    fn preview(&self, ui: &Ui, dry_run: bool) {
+        let lead = if dry_run { "dry run — would deploy " } else { "" };
+        ui.detail(format_args!(
+            "{lead}{} to upload, {} to delete, {} unchanged",
+            Count::files(self.uploads.len()),
+            Count::files(self.deletes.len()),
+            self.unchanged
+        ));
     }
-    out
-}
 
-/// Report a reconcile plan: a one-line summary, prefixed on a dry run so the
-/// preview reads as a preview. Shared by the backends.
-fn report(ui: &Ui, plan: &Plan, dry_run: bool) {
-    let lead = if dry_run { "dry run — would deploy " } else { "" };
-    ui.detail(format_args!(
-        "{lead}{} to upload, {} to delete, {} unchanged",
-        Count::files(plan.uploads.len()),
-        Count::files(plan.deletes.len()),
-        plan.unchanged
-    ));
-}
-
-/// Report a completed reconcile against `target`. Shared by the backends.
-fn done(ui: &Ui, target: impl std::fmt::Display, plan: &Plan) {
-    ui.done(format_args!(
-        "deployed to {target} — {} uploaded, {} deleted",
-        plan.uploads.len(),
-        plan.deletes.len()
-    ));
+    /// Announce the completed reconcile against `target`.
+    fn done(&self, ui: &Ui, target: impl std::fmt::Display) {
+        ui.done(format_args!(
+            "deployed to {target} — {} uploaded, {} deleted",
+            self.uploads.len(),
+            self.deletes.len()
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -201,7 +203,7 @@ mod tests {
     fn plan_uploads_new_and_changed_skips_matching() {
         let local = digests(&[("new.html", "aa"), ("same.html", "bb"), ("changed.html", "cc")]);
         let remote = digests(&[("same.html", "bb"), ("changed.html", "old")]);
-        let plan = plan(&local, &remote, true);
+        let plan = Plan::compute(&local, &remote, true);
         assert_eq!(plan.uploads, vec!["changed.html".to_string(), "new.html".to_string()]);
         assert_eq!(plan.unchanged, 1);
     }
@@ -211,17 +213,17 @@ mod tests {
         let local = digests(&[("keep.html", "k")]);
         let remote = digests(&[("keep.html", "k"), ("gone.html", "g")]);
 
-        let with_delete = plan(&local, &remote, true);
+        let with_delete = Plan::compute(&local, &remote, true);
         assert_eq!(with_delete.deletes, vec!["gone.html".to_string()]);
         assert_eq!(with_delete.unchanged, 1);
 
-        assert!(plan(&local, &remote, false).deletes.is_empty());
+        assert!(Plan::compute(&local, &remote, false).deletes.is_empty());
     }
 
     #[test]
     fn plan_compares_digests_case_insensitively() {
         let local = digests(&[("a.html", "abcdef")]);
         let remote = digests(&[("a.html", "ABCDEF")]);
-        assert_eq!(plan(&local, &remote, true).unchanged, 1);
+        assert_eq!(Plan::compute(&local, &remote, true).unchanged, 1);
     }
 }
