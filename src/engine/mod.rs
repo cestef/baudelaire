@@ -1,4 +1,4 @@
-//! Build pipeline: discover → compile → render → write, parallelized via rayon.
+//! Build pipeline: discover -> compile -> render -> write, parallelized via rayon.
 
 mod asset;
 mod check;
@@ -55,8 +55,8 @@ pub struct Stats {
     pub cached: usize,
 }
 
-/// A page reduced to what the cache check needs — its `FileId`, the exact text
-/// typst will compile, and that text's fingerprint — before the costly parse
+/// A page reduced to what the cache check needs: its `FileId`, the exact text
+/// typst will compile, and that text's fingerprint, before the costly parse
 /// into a `Source` (deferred to [`Engine::compile`], run only for stale pages).
 type Prepared = (FileId, String, Hash);
 
@@ -78,31 +78,46 @@ struct Summary<'a> {
 
 impl Summary<'_> {
     fn report(&self, ui: &Ui) {
-        let mut parts = vec![match self.cached {
-            0 => Count::pages(self.pages).to_string(),
-            n => format!("{} ({n} cached)", Count::pages(self.pages)),
-        }];
+        use owo_colors::OwoColorize;
+
+        // Headline: what built and how long, terse enough to stand alone at
+        // `--quiet`. Values are bold, their labels dimmed, so the eye lands on
+        // the numbers. The breakdown and output path demote to tree sub-lines.
+        ui.done(format_args!(
+            "built {} {} {}",
+            Count::pages(self.pages).styled(),
+            "in".dimmed(),
+            Dur(self.elapsed).bold(),
+        ));
+
+        // Each metric styles by kind: reused pages recede (fully dimmed, nothing
+        // happened), fresh work keeps bold numbers, warnings turn yellow.
+        let mut parts = Vec::new();
+        if self.cached > 0 {
+            parts.push(format!("{} cached", self.cached).dimmed().to_string());
+        }
         if self.assets > 0 {
-            parts.push(Count::assets(self.assets).to_string());
+            parts.push(Count::assets(self.assets).styled().to_string());
         }
         if self.statics > 0 {
-            parts.push(Count::statics(self.statics).to_string());
+            parts.push(Count::statics(self.statics).styled().to_string());
         }
         if self.generated > 0 {
-            parts.push(Count::files(self.generated).to_string());
+            parts.push(Count::files(self.generated).styled().to_string());
         }
         if self.bytes > 0 {
-            parts.push(Bytes(self.bytes).to_string());
+            parts.push(Bytes(self.bytes).styled().to_string());
         }
         if self.warnings > 0 {
-            parts.push(Count::warnings(self.warnings).to_string());
+            parts.push(Count::warnings(self.warnings).yellow().to_string());
         }
-        ui.done(format_args!(
-            "built {} → {} in {}",
-            parts.join(" · "),
-            Paths(&self.dist.display().to_string()),
-            Dur(self.elapsed)
-        ));
+
+        let mut rows = Vec::new();
+        if !parts.is_empty() {
+            rows.push(parts.join(&" · ".dimmed().to_string()));
+        }
+        rows.push(Paths(&self.dist.display().to_string()).to_string());
+        ui.tree(&rows);
     }
 }
 
@@ -124,7 +139,7 @@ impl Engine {
         let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
         // Copy the static tree first, so a generated page or asset at the same
-        // output path overwrites it — static is the lowest-priority source.
+        // output path overwrites it; static is the lowest-priority source.
         let statics = Static::new(&self.config).copy()?;
         debug!(
             count = statics.count,
@@ -170,13 +185,13 @@ impl Engine {
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let renderer = Renderer::new(&pages, assets.map, self.project.root());
-        // render-side cache inputs: asset renames, the link map, and — only
-        // when pages inline asset bytes — the embedded contents (the per-page
+        // render-side cache inputs: asset renames, the link map, and, only
+        // when pages inline asset bytes, the embedded contents (the per-page
         // dependency tracker can't see them, since typst never reads them).
         let render = RenderInputs {
             assets: renderer.assets().fingerprint(),
             links: renderer.links(),
-            // hash the *processed* asset tree — what Embed actually inlines: a
+            // hash the *processed* asset tree, what Embed actually inlines: a
             // bundle's bytes can change through imports outside the source
             // assets dir (../lib, node_modules), which a source-dir hash misses.
             embeds: self
@@ -198,11 +213,11 @@ impl Engine {
         let mut cache = Cache::load(&self.config, &render, tracked.clone(), ui)?;
 
         // split cache hits from stale pages. `prepare` produces each page's
-        // text + fingerprint without parsing it — the parse into a typst
+        // text + fingerprint without parsing it; the parse into a typst
         // `Source` is deferred to `compile`, so a hit never pays to parse a
         // page it won't render.
         // the section tree as wrapper text: exposed to every template as
-        // `page.sections`, and part of each page's wrapper → a title/url change
+        // `page.sections`, and part of each page's wrapper, so a title/url change
         // refingerprints every page that embeds the nav (correct: the sidebar
         // renders on all of them).
         let sections = crate::codegen::Typst(&sections).to_string();
@@ -244,7 +259,7 @@ impl Engine {
             .map(|r| (r.page, r.html.as_str()))
             .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
             .collect();
-        // write page HTML in parallel — independent files, no shared state.
+        // write page HTML in parallel: independent files, no shared state.
         outputs
             .par_iter()
             .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
@@ -264,7 +279,7 @@ impl Engine {
         // Drop orphaned outputs from earlier builds (a removed page or taxonomy
         // term, a renamed permalink) so `dist` never serves stale files. Gated
         // on `clean` so a user managing `dist` by hand can opt out. The keep-set
-        // is every file this build produced — page HTML, static passthrough,
+        // is every file this build produced: page HTML, static passthrough,
         // generated files; the asset tree the pipeline already regenerates
         // wholesale, so the prune skips it. Runs before `after` hooks, whose
         // outputs (Pagefind..) aren't ours to prune.
@@ -346,8 +361,8 @@ impl Engine {
         })
     }
 
-    /// Report each compile outcome — page status lines and any typst warnings
-    /// the compiler raised — returning the rendered pages or, after every
+    /// Report each compile outcome (page status lines and any typst warnings
+    /// the compiler raised), returning the rendered pages or, after every
     /// failure has been reported, an error carrying *all* failed pages'
     /// diagnostics (a single failure propagates unchanged).
     /// Compile a batch of pages in parallel and reduce to their rendered
@@ -355,7 +370,7 @@ impl Engine {
     /// item, then [`Engine::collect`] (status lines + diagnostics) and
     /// [`Engine::validate`] (link checks). The shared spine of `build` (over the
     /// stale subset, already prepared) and `check` (every page, prepared inline);
-    /// `outcome` supplies the only difference — how one item renders.
+    /// `outcome` supplies the only difference: how one item renders.
     fn render_pages<'a, T: Send>(
         &self,
         label: &'static str,
@@ -420,10 +435,10 @@ impl Engine {
     }
 
     /// The compile input for a page: its (possibly synthetic) source and its
-    /// content fingerprint — a hash of the exact text typst compiles. A real
+    /// content fingerprint: a hash of the exact text typst compiles. A real
     /// page's body reaches the compiler through `#include` (a tracked file
     /// read, so the dependency cache covers its edits); only generated
-    /// listings, which have no file, inline their body — and only their
+    /// listings, which have no file, inline their body, and only their
     /// wrapper text needs fingerprinting. Built once and shared by the cache
     /// check and the compile.
     fn prepare(&self, page: &Page, sections: &str) -> Result<Prepared> {
@@ -436,7 +451,7 @@ impl Engine {
         let taxonomies = crate::codegen::Typst(&page.taxonomies()).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
-        // refingerprints this page and rebuilds it — the cache stays correct.
+        // refingerprints this page and rebuilds it: the cache stays correct.
         let nav = crate::codegen::Typst(&Self::nav(&page.siblings)).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
@@ -489,7 +504,7 @@ impl Engine {
         ])
     }
 
-    /// A page's project-root-absolute virtual path (`/content/posts/a.typ`) —
+    /// A page's project-root-absolute virtual path (`/content/posts/a.typ`):
     /// what the wrapper's `#import`/`#include` literals resolve against.
     fn rooted_str(rooted: &RootedPath) -> String {
         format!("/{}", rooted.vpath().get_without_slash())
@@ -524,7 +539,7 @@ impl Engine {
         let compiled = compile::<HtmlDocument>(&world);
         // typst warnings (unknown font families, deprecations..) survive a
         // successful compile; bridge them like errors so they render with
-        // spans. On failure they are dropped — the errors say more. Typst's
+        // spans. On failure they are dropped: the errors say more. Typst's
         // blanket "html export is under active development" notice is filtered:
         // HTML is this tool's entire output, so it would fire on every page of
         // every build while telling the author nothing actionable.
@@ -546,7 +561,7 @@ impl Engine {
         })?;
         let deps = self.project.dependencies(&world);
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
-        // its own source and every `.typ` it depends on — the fine-grained
+        // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.
         let reads = analyzer.reads(&source, &deps);
         Ok(Rendered {
@@ -563,7 +578,7 @@ impl Engine {
     /// Run the post-render validation passes over the freshly compiled pages.
     /// Maps each [`Rendered`] into the decoupled [`Compiled`] view and hands it
     /// to the [`Checks`] registry; the passes themselves live in [`check`].
-    /// Cached pages are omitted — they kept their links from when they built.
+    /// Cached pages are omitted: they kept their links from when they built.
     fn validate(&self, rendered: &[Rendered], ui: &Ui) -> Result<()> {
         let pages: Vec<CheckedPage> = rendered
             .iter()

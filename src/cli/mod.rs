@@ -18,7 +18,7 @@ use crate::ui::{Level, Ui};
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
 /// (section headers, usage), green for the literals you type (commands and
-/// flags), and dimmed `<VALUE>` placeholders — so a glance separates the words
+/// flags), and dimmed `<VALUE>` placeholders, so a glance separates the words
 /// to type from the slots to fill.
 const HELP_STYLES: Styles = Styles::styled()
     .header(AnsiColor::Cyan.on_default().bold())
@@ -44,7 +44,7 @@ mod group {
 
 /// Usage examples appended to the top-level help. owo-colors gates the colour
 /// on the stdout stream itself (`if_supports_color`), so escapes never leak when
-/// piped or under `NO_COLOR` — the same policy [`crate::ui`] uses.
+/// piped or under `NO_COLOR`: the same policy [`crate::ui`] uses.
 fn examples() -> String {
     use owo_colors::{OwoColorize, Stream::Stdout};
     use std::fmt::Write;
@@ -98,8 +98,8 @@ pub(crate) struct Root(PathBuf);
 
 impl Root {
     /// Enter and capture the project root. A `--root` argument changes the
-    /// process cwd — the single side effect that makes every relative path in
-    /// the config resolve under the chosen directory — then the absolute root
+    /// process cwd (the single side effect that makes every relative path in
+    /// the config resolve under the chosen directory), then the absolute root
     /// is read once, here, and passed by value everywhere else.
     fn enter(dir: Option<&Path>) -> Result<Self> {
         if let Some(dir) = dir {
@@ -125,13 +125,13 @@ impl Root {
     }
 }
 
-/// Baudelaire — a Typst-native static site generator.
+/// Baudelaire: a Typst-native static site generator.
 #[derive(Parser, Debug)]
 #[command(
     name = "baudelaire",
     version,
     about,
-    long_about = "Baudelaire compiles a Typst content tree into a static site — incremental \
+    long_about = "Baudelaire compiles a Typst content tree into a static site: incremental \
                   builds, a live-reload dev server, feeds, search, taxonomies, and more, all \
                   driven by Typst templates rather than HTML string templating.",
     styles = HELP_STYLES,
@@ -146,7 +146,7 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
-/// Arguments shared across *every* subcommand — project location and logging.
+/// Arguments shared across *every* subcommand: project location and logging.
 /// The build-shaping overrides live in [`BuildOverrides`], flattened only into
 /// the commands that actually build, so `new`/`init`/`clean` help stays clean.
 #[derive(Args, Debug, Clone)]
@@ -263,7 +263,7 @@ pub struct ServeArgs {
 #[derive(Args, Debug, Clone)]
 pub struct AnnounceArgs {
     /// Secret (app password / token) for the destination; `-` reads it from
-    /// stdin. Prefer stdin, the environment variable, or the interactive prompt —
+    /// stdin. Prefer stdin, the environment variable, or the interactive prompt:
     /// a literal flag can leak into shell history.
     #[arg(long)]
     pub password: Option<String>,
@@ -280,7 +280,7 @@ pub struct AnnounceArgs {
 pub struct DeployArgs {
     /// Secret for the destination (S3 secret access key, or SSH password/key
     /// passphrase); `-` reads it from stdin. Prefer stdin, the backend's
-    /// environment variable, or the interactive prompt — a literal flag can leak
+    /// environment variable, or the interactive prompt: a literal flag can leak
     /// into shell history.
     #[arg(long)]
     pub secret: Option<String>,
@@ -309,7 +309,7 @@ pub struct CleanArgs {
 }
 
 /// One nameable `clean` target: the flag that selects it and the directories it
-/// removes. THE single source of what `clean` can sweep — a new target is one
+/// removes. THE single source of what `clean` can sweep: a new target is one
 /// row here plus its flag on [`CleanArgs`]; `all` and the narrowed `targets`
 /// both derive from this table.
 struct CleanTarget {
@@ -428,7 +428,7 @@ impl Cli {
     }
 
     /// The UI verbosity. `-vv` and beyond only deepen the `tracing` filter
-    /// (see [`crate::ui::trace`]) — the terminal report itself has one
+    /// (see [`crate::ui::trace`]): the terminal report itself has one
     /// verbose level.
     fn level(&self) -> Level {
         let g = &self.global;
@@ -466,7 +466,7 @@ impl BuildOverrides {
 }
 
 /// Run a parsed CLI: install the debug-log subscriber, dispatch, and flush any
-/// collected warnings — on success and failure alike, so a failed run still
+/// collected warnings, on success and failure alike, so a failed run still
 /// shows what it warned about before dying.
 pub fn run(cli: Cli) -> Result<()> {
     crate::ui::trace::init(cli.global.verbose);
@@ -501,7 +501,7 @@ struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    /// Load config and announce the run — the shared front matter of every
+    /// Load config and announce the run: the shared front matter of every
     /// command that operates on an existing project.
     fn announced(&self, verb: &str) -> Result<Config> {
         let config = self.cli.config()?;
@@ -509,7 +509,7 @@ impl Cx<'_> {
         Ok(config)
     }
 
-    /// [`Cx::announced`] plus the build-shaping overrides — the front matter of
+    /// [`Cx::announced`] plus the build-shaping overrides: the front matter of
     /// the build-shaped commands (`build`, `check`). Overrides never touch the
     /// site name, so applying them after the banner leaves its text unchanged.
     fn configured(&self, overrides: &BuildOverrides, verb: &str) -> Result<Config> {
@@ -561,7 +561,15 @@ impl Run for ServeArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let mut config = cx.cli.config()?;
         self.apply(&mut config);
-        cx.ui.banner(format_args!("dev · {}", config.label()));
+        // Prefix the site name with the active profile, if one was requested.
+        use owo_colors::OwoColorize;
+        match cx.cli.global.profile.as_deref() {
+            Some(profile) => {
+                cx.ui
+                    .banner(format_args!("{} · {}", profile.cyan().bold(), config.label()))
+            }
+            None => cx.ui.banner(format_args!("{}", config.label())),
+        }
         // Re-reads config.kdl with the same profile + overrides, so the dev
         // server picks up config edits live.
         let reload = || -> Result<Config> {
@@ -693,7 +701,7 @@ mod tests {
         assert!(targets.contains(&config.dist));
         assert!(targets.contains(&PathBuf::from(Config::SCRATCH)));
         // The default cache lives under the scratch root, so it is not named
-        // separately — the root sweep already covers it.
+        // separately: the root sweep already covers it.
         assert!(!targets.contains(&config.cache.dir));
     }
 

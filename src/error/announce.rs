@@ -52,7 +52,7 @@ pub enum AnnounceError {
         source: Box<ureq::Error>,
     },
 
-    /// The configured `did` does not match the account that authenticated — the
+    /// The configured `did` does not match the account that authenticated: the
     /// build would have emitted verification artifacts for the wrong identity.
     #[error("configured did `{configured}` does not match the authenticated account `{actual}`")]
     #[diagnostic(

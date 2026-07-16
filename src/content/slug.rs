@@ -1,4 +1,4 @@
-//! URL-safe slugs — the single normalization rule for every URL segment, so
+//! URL-safe slugs, the single normalization rule for every URL segment, so
 //! page slugs (from a filename or frontmatter) and taxonomy terms cannot drift
 //! into two different policies.
 
@@ -16,7 +16,7 @@ pub struct Slug(String);
 
 impl Slug {
     /// Normalize `raw` into a slug, or `None` when nothing URL-safe survives
-    /// (e.g. `"!!!"` or `""`) — the caller turns that into a precise error.
+    /// (e.g. `"!!!"` or `""`), the caller turns that into a precise error.
     pub fn parse(raw: &str) -> Option<Self> {
         let mut out = String::with_capacity(raw.len());
         let mut pending_dash = false;

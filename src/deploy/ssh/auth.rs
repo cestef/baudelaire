@@ -16,7 +16,7 @@ use crate::config::SshConfig;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
 
-/// Environment variable for the SSH secret — a password (no key), or the
+/// Environment variable for the SSH secret: a password (no key), or the
 /// passphrase of an encrypted key.
 pub const PASSWORD_ENV: &str = "BAUDELAIRE_SSH_PASSWORD";
 

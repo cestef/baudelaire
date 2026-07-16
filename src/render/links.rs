@@ -29,9 +29,9 @@ pub struct LinkMap {
 }
 
 impl Fingerprint for LinkMap {
-    /// A stable fingerprint of every source→permalink mapping. Folded into the
+    /// A stable fingerprint of every source-to-permalink mapping. Folded into the
     /// build cache so a page whose permalink changed invalidates the cached
-    /// pages that might link to it — link resolution is render-side and so is
+    /// pages that might link to it: link resolution is render-side and so is
     /// invisible to the per-page dependency tracker, which never sees a link
     /// target's source. Coarse (any permalink change rebuilds every page), but
     /// permalink changes are rare and this mirrors how the asset map is folded

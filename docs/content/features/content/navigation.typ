@@ -5,7 +5,7 @@
 )
 
 Every content page knows its neighbours. Within a collection, the pages sit in
-the collection's sort order — ordered guide chapters, dated blog posts — and
+the collection's sort order (ordered guide chapters, dated blog posts) and
 each one is handed links to the page before and after it. No configuration: the
 data is always there for a layout template to use.
 
@@ -31,7 +31,7 @@ collection's own #link("../guide/config/")[`sort`] and `reverse` settings, so a
 `sort="order"` guide links chapter to chapter.
 
 Navigation never crosses a collection boundary, and drafts or future-dated pages
-that were filtered out are skipped — the sibling links only ever point at pages
+that were filtered out are skipped: the sibling links only ever point at pages
 that were actually built.
 
 This site uses it: the pager under every guide chapter and blog post is exactly
@@ -39,7 +39,7 @@ this `page.nav`.
 
 == The whole site, in order
 
-The same build view is available as `page.sections` — every content
+The same build view is available as `page.sections`: every content
 collection, in its sort order, as `(id, pages)` where each page is
 `(url, title)`:
 
@@ -56,7 +56,7 @@ collection, in its sort order, as `(id, pages)` where each page is
 }
 ```
 
-Generated listing pages (taxonomy and pagination indexes) are left out — only
+Generated listing pages (taxonomy and pagination indexes) are left out: only
 authored content appears. This is how the sidebar on the left is built: it is
 not a hand-kept list, so it can never drift from the pages or from the prev/next
 pager, which both read from the same ordered set. Reorder a collection's `sort`,

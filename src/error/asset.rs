@@ -1,8 +1,8 @@
 //! Precise asset-pipeline errors.
 //!
-//! A minifier or bundler failure names *which* asset and *what* step failed —
+//! A minifier or bundler failure names *which* asset and *what* step failed:
 //! `failed to minify CSS asset `assets/app.css`` with the underlying tool's
-//! message as the actionable hint — rather than being folded into a generic I/O
+//! message as the actionable hint, rather than being folded into a generic I/O
 //! error.
 
 use miette::Diagnostic;

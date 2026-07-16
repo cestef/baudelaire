@@ -71,7 +71,7 @@ impl Rkey {
 
     /// A deterministic 13-character key derived from `input` (FNV-1a, top bit
     /// cleared, base32-sortable). A pure function of the input, so the same
-    /// source always maps to the same record — republishing updates in place
+    /// source always maps to the same record: republishing updates in place
     /// instead of duplicating.
     pub fn derived(input: &str) -> Self {
         let mut hash = OFFSET;

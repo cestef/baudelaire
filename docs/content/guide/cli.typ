@@ -41,7 +41,7 @@ the browser. Also accepts the #link(<build-flags>)[build flags].
 
 === check
 
-Compile every page and report broken internal links without writing output — a
+Compile every page and report broken internal links without writing output: a
 fast CI gate. Accepts the #link(<build-flags>)[build flags].
 
 === new \<path>
@@ -52,10 +52,10 @@ content. A bare name lands under the content directory, so
 
 What it infers:
 
-- The title from the filename (`my-first-post` → "My First Post").
+- The title from the filename (`my-first-post` becomes "My First Post").
 - The ordering field from the collection: a `date` for a `sort="date"`
   collection, the next `order` for a `sort="order"` one.
-- The template and the permalink the page will occupy — warning if that URL is
+- The template and the permalink the page will occupy, warning if that URL is
   already taken.
 
 / #raw("--title <text>"): Override the inferred title.
@@ -66,7 +66,7 @@ What it infers:
 
 === announce
 
-Announce the site's metadata to the configured destination — an
+Announce the site's metadata to the configured destination: an
 atproto/#link("https://standard.site")[standard.site] publication plus one
 document record per dated page. It announces the site; it does not upload the
 built files (see #link("deploy/overview.typ")[Deploying] for that). Builds first, then
@@ -76,13 +76,13 @@ reconciles the remote records with your pages.
   environment variable over a literal flag.
 / #raw("-y, --yes"): Skip the confirmation prompt.
 / #raw("--dry-run"): Report what a real announce would send and remove, without
-  writing. Needs no password — it diffs against the live repository over public
+  writing. Needs no password: it diffs against the live repository over public
   reads.
 
 === init \[dir\]
 
-Scaffold a whole project — config, a layout, a starter page and post, and a
-stylesheet — into `dir`, or the current directory. It prompts for the site
+Scaffold a whole project (config, a layout, a starter page and post, and a
+stylesheet) into `dir`, or the current directory. It prompts for the site
 name, author (defaulted from your git config), and base URL, then offers to set
 up version control with a `.gitignore`.
 
@@ -112,7 +112,7 @@ Accepted by every command.
 
 == Build flags <build-flags>
 
-Config overrides accepted by the commands that build — `build`, `serve`, and
+Config overrides accepted by the commands that build: `build`, `serve`, and
 `check`.
 
 / #raw("--out <dir>"): Override the output directory.

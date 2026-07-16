@@ -182,7 +182,7 @@ fn feed_module_lists_recent_dated_pages_newest_first() {
 }
 
 /// The sole emitted file under `public/assets` with extension `ext`. Read by
-/// uniqueness, not by guessing its fingerprint — the entry's hash depends on the
+/// uniqueness, not by guessing its fingerprint: the entry's hash depends on the
 /// bundler's output, which the test can't reproduce.
 fn entry(site: &Site, ext: &str) -> String {
     let mut found: Vec<_> = site

@@ -1,7 +1,7 @@
 //! A small, ergonomic markup builder over quick-xml.
 //!
 //! Wraps quick-xml's event API so the feed, sitemap, and redirect-stub writers
-//! share one escaping-correct surface — leaf, empty, and nested elements —
+//! share one escaping-correct surface (leaf, empty, and nested elements)
 //! instead of each hand-rolling element serialization. The self-closing void
 //! elements it emits are valid HTML5 too, so the redirect stub builds through
 //! the same escaping path rather than a `format!`.

@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::content::{Frontmatter, Page, PageId};
 
 /// Displays a lowercase section id as a title by capitalizing its first letter
-/// (`tags` → `Tags`) — the single display rule for generated listing titles,
+/// (`tags` -> `Tags`), the single display rule for generated listing titles,
 /// in the `Display`-newtype style of `cli::output::Paths`.
 pub struct Titlecase<'a>(pub &'a str);
 
@@ -36,7 +36,7 @@ pub struct Item {
     date: Option<String>,
     note: Option<String>,
     /// The page's taxonomy terms, keyed by taxonomy (e.g. `tags`, `categories`),
-    /// exposed as-is so a template picks whichever it wants — never flattened.
+    /// exposed as-is so a template picks whichever it wants, never flattened.
     taxonomies: BTreeMap<String, Vec<String>>,
     extra: Value,
 }
@@ -53,7 +53,7 @@ impl Item {
         }
     }
 
-    /// The listing row for a page — the single page→item mapping, so every
+    /// The listing row for a page, the single page->item mapping, so every
     /// listing (paginated index, taxonomy term) exposes the same data: link,
     /// title, ISO display date, the page's taxonomies, and its extra frontmatter
     /// (summary, cover image, ..).
@@ -75,7 +75,7 @@ impl Item {
     }
 
     /// Attach the page's taxonomies, exposed to the template as
-    /// `entry.taxonomies` (a dict of `taxonomy → (terms..)`).
+    /// `entry.taxonomies` (a dict of `taxonomy -> (terms..)`).
     pub fn with_taxonomies(mut self, taxonomies: BTreeMap<String, Vec<String>>) -> Self {
         self.taxonomies = taxonomies;
         self
@@ -122,7 +122,7 @@ impl Nav {
 
 /// A generated page listing links under a title.
 pub struct Listing {
-    /// Owning section id — the synthetic source directory and [`PageId`] prefix.
+    /// Owning section id, the synthetic source directory and [`PageId`] prefix.
     section: String,
     /// Unique slug within the section (source filename + page id).
     slug: String,

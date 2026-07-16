@@ -25,7 +25,7 @@ pub(super) struct ModuleCx<'a> {
     pub config: &'a Config,
     pub pages: &'a [Page],
     pub assets: &'a AssetMap,
-    /// The `sys.inputs.baudelaire` value — `baudelaire:site` / `:config` serve
+    /// The `sys.inputs.baudelaire` value: `baudelaire:site` / `:config` serve
     /// its sub-trees, so Typst and JS read one build context.
     pub context: &'a Value,
     /// The section tree value, already built for `page.sections`.
@@ -34,7 +34,7 @@ pub(super) struct ModuleCx<'a> {
 
 /// One provider of `baudelaire:*` virtual modules.
 trait Module {
-    /// The `specifier → ES-module source` pairs this module serves. Most return
+    /// The `specifier -> ES-module source` pairs this module serves. Most return
     /// one; [`Search`] serves a family (bare plus per-format).
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)>;
 }
@@ -53,7 +53,7 @@ fn builtin() -> [Box<dyn Module>; 8] {
     ]
 }
 
-/// The one rolldown plugin serving every virtual module: a flat `specifier →
+/// The one rolldown plugin serving every virtual module: a flat `specifier ->
 /// source` table built once from [`builtin`] against the site context.
 #[derive(Debug)]
 pub(super) struct Virtual {
@@ -179,7 +179,7 @@ struct Site;
 
 impl Module for Site {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // The build context's `site` sub-tree plus its `version` — the same
+        // The build context's `site` sub-tree plus its `version`: the same
         // value that feeds `sys.inputs`, not a rebuild from config.
         let mut fields = match cx.context.get("site") {
             Some(Value::Dict(pairs)) => pairs.clone(),
@@ -193,12 +193,12 @@ impl Module for Site {
 }
 
 /// `baudelaire:config`: user-defined build-time constants from the `client { }`
-/// config block — baudelaire's answer to Vite's `define`.
+/// config block: baudelaire's answer to Vite's `define`.
 struct Settings;
 
 impl Module for Settings {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // The build context's `client` sub-tree — same source as
+        // The build context's `client` sub-tree: same source as
         // `sys.inputs.baudelaire.client`.
         let data = cx
             .context
@@ -209,8 +209,8 @@ impl Module for Settings {
     }
 }
 
-/// `baudelaire:assets`: the request → fingerprinted-URL map, with a `url()`
-/// lookup that falls back to the input — so client JS can reference a hashed
+/// `baudelaire:assets`: the request -> fingerprinted-URL map, with a `url()`
+/// lookup that falls back to the input, so client JS can reference a hashed
 /// asset by its logical path, the way CSS and HTML already do.
 struct Assets;
 
@@ -253,8 +253,8 @@ impl Module for Pages {
     }
 }
 
-/// `baudelaire:sections`: the site's section tree — `{ id, pages: [{ url, title
-/// }], children: [...] }` per content directory, nested — exactly what templates
+/// `baudelaire:sections`: the site's section tree: `{ id, pages: [{ url, title
+/// }], children: [...] }` per content directory, nested, exactly what templates
 /// get as `page.sections`, for building menus and command palettes client-side.
 struct Sections;
 
@@ -266,13 +266,13 @@ impl Module for Sections {
 }
 
 /// `baudelaire:taxonomies`: each taxonomy's terms mapped to the pages that carry
-/// them — `{ tags: { rust: [{ url, title }], .. }, .. }` — for client-side tag
+/// them: `{ tags: { rust: [{ url, title }], .. }, .. }`, for client-side tag
 /// filtering and term clouds.
 struct Taxonomies;
 
 impl Module for Taxonomies {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // taxonomy → term → pages, sorted for deterministic output.
+        // taxonomy -> term -> pages, sorted for deterministic output.
         let mut taxos: BTreeMap<&str, BTreeMap<&str, Vec<Value>>> = BTreeMap::new();
         for page in cx
             .pages
@@ -303,7 +303,7 @@ impl Module for Taxonomies {
 }
 
 /// `baudelaire:feed`: the most recent dated pages as `{ url, title, date }`,
-/// newest first, capped at the feed's configured `limit` — for a "latest posts"
+/// newest first, capped at the feed's configured `limit`, for a "latest posts"
 /// widget without fetching a feed file.
 struct Feed;
 

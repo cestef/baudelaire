@@ -1,4 +1,4 @@
-//! Deploying the built site's *files* to a host — the counterpart to
+//! Deploying the built site's *files* to a host, the counterpart to
 //! [`crate::announce`], which publishes metadata records. A destination
 //! implements one [`Backend`]; it receives the built [`Dist`] and reconciles the
 //! remote with it (upload changed, delete removed). Adding a destination is one
@@ -17,7 +17,7 @@ use crate::remote::Options;
 use crate::ui::{Count, Ui};
 
 /// Files keyed by dist-relative path, each mapped to a content digest. The
-/// currency every [`Backend`] reconciles in — local digests versus remote.
+/// currency every [`Backend`] reconciles in: local digests versus remote.
 pub type Digests = BTreeMap<String, String>;
 
 #[cfg(test)]
@@ -28,7 +28,7 @@ use self::ssh::Ssh;
 
 /// The built output tree handed to every [`Backend`]: the `dist` root and every
 /// file under it as a forward-slashed, root-relative path. Bytes are read on
-/// demand rather than held, so reconciling a large site stays streaming — a
+/// demand rather than held, so reconciling a large site stays streaming: a
 /// backend hashes each file to decide what changed, then reads only what it
 /// uploads.
 pub struct Dist {
@@ -47,7 +47,7 @@ impl Dist {
     }
 
     /// Append every file under `dir` to `out`, as a path relative to `base` with
-    /// forward slashes — recursing into subdirectories.
+    /// forward slashes, recursing into subdirectories.
     fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
         for path in crate::fs::read_dir(dir)? {
             if path.is_dir() {
@@ -92,7 +92,7 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     }
     let dist = Dist::scan(&config.dist)?;
     for backend in backends {
-        ui.section(format_args!("{} — {}", backend.name(), Count::files(dist.files.len())));
+        ui.section(format_args!("{} - {}", backend.name(), Count::files(dist.files.len())));
         // Confirm before any network mutation, unless previewing or `--yes`.
         if !opts.dry_run && !opts.confirm(&format!("deploy to {}?", backend.name()))? {
             ui.detail(format_args!("skipped {}", backend.name()));
@@ -116,7 +116,7 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
     out
 }
 
-/// What a reconcile will do to the remote — shared by every [`Backend`], which
+/// What a reconcile will do to the remote, shared by every [`Backend`], which
 /// hashes its files, lists the remote, and diffs the two through [`Plan::compute`].
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
@@ -133,7 +133,7 @@ impl Plan {
     /// path. A file uploads when its digest differs from the remote's (or it is
     /// new); an entry deletes when the build no longer produces it and `delete`
     /// is on; everything else is unchanged. The digest algorithm is the backend's
-    /// choice — this only compares the strings.
+    /// choice; this only compares the strings.
     pub fn compute(local: &Digests, remote: &Digests, delete: bool) -> Plan {
         let mut out = Plan::default();
         for (key, digest) in local {
@@ -151,7 +151,7 @@ impl Plan {
     /// Announce the plan: a one-line summary, prefixed on a dry run so the preview
     /// reads as a preview.
     fn preview(&self, ui: &Ui, dry_run: bool) {
-        let lead = if dry_run { "dry run — would deploy " } else { "" };
+        let lead = if dry_run { "dry run: would deploy " } else { "" };
         ui.detail(format_args!(
             "{lead}{} to upload, {} to delete, {} unchanged",
             Count::files(self.uploads.len()),
@@ -163,7 +163,7 @@ impl Plan {
     /// Announce the completed reconcile against `target`.
     fn done(&self, ui: &Ui, target: impl std::fmt::Display) {
         ui.done(format_args!(
-            "deployed to {target} — {} uploaded, {} deleted",
+            "deployed to {target}: {} uploaded, {} deleted",
             self.uploads.len(),
             self.deletes.len()
         ));

@@ -7,9 +7,9 @@ use crate::render::links::Link;
 use crate::render::transform::{Cx, ElementExt, Transform};
 
 /// The core [`Transform`]: resolves internal `.typ` source-path links to
-/// permalinks. Always runs — it is URL resolution, not an optional pass — and
+/// permalinks. Always runs (it is URL resolution, not an optional pass) and
 /// records broken internal links in the context for link checking. Operates on
-/// the typed DOM — never on the serialized string — so it can't corrupt markup.
+/// the typed DOM (never on the serialized string) so it can't corrupt markup.
 pub(super) struct Links;
 
 impl Transform for Links {

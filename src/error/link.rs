@@ -2,7 +2,7 @@
 //!
 //! Each broken `.typ` link is a related sub-diagnostic carrying the offending
 //! page's source and a labeled span at the link target, so miette underlines the
-//! exact reference — not just a flat list of strings.
+//! exact reference, not just a flat list of strings.
 
 use std::fmt;
 use std::path::Path;
@@ -20,7 +20,7 @@ pub struct Broken {
     src: NamedSource<String>,
     /// Byte span of the target within the source, if it could be located.
     span: Option<SourceSpan>,
-    /// Error under `strict_links`, warning otherwise — set by the
+    /// Error under `strict_links`, warning otherwise; set by the
     /// [`BrokenLinks`] constructor so parent and children render alike.
     severity: Severity,
 }

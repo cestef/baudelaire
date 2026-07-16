@@ -1,7 +1,7 @@
 //! The [standard.site] announcing backend.
 //!
-//! Maps a [`SiteView`] onto AT Protocol records — one `site.standard.publication`
-//! for the site and one `site.standard.document` per dated page — and writes them
+//! Maps a [`SiteView`] onto AT Protocol records (one `site.standard.publication`
+//! for the site and one `site.standard.document` per dated page) and writes them
 //! to a PDS over XRPC. The remote repository is the source of truth: every
 //! an announce lists the existing document records and deletes those no longer
 //! backed by a page, so nothing is orphaned. A local [`SkipCache`] only spares
@@ -40,7 +40,7 @@ const PUBLICATION_RKEY: &str = "self";
 /// Environment variable holding the app password (never stored in config).
 const PASSWORD_ENV: &str = "BAUDELAIRE_ATPROTO_PASSWORD";
 
-/// The publication record's `at://` URI under `did` — the single definition of
+/// The publication record's `at://` URI under `did`: the single definition of
 /// where a site's publication lives, shared by announcing and verification.
 pub fn publication_uri(did: &str) -> AtUri {
     AtUri::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
@@ -82,7 +82,7 @@ impl Backend for Standard {
         }
         let publication = publication_uri(target.did().as_str());
 
-        // The publication record comes first, so documents can point at it — a
+        // The publication record comes first, so documents can point at it; a
         // preview only diffs, so it writes nothing here.
         if let Target::Live(session) = &target {
             let record = Publication::new(site, &base, self.icon(session)?, self.config.discover);
@@ -101,7 +101,7 @@ impl Standard {
     /// the identity check is the same on both paths.
     fn connect(&self, opts: &Options, ui: &Ui) -> Result<Target> {
         if opts.dry_run {
-            ui.detail("dry run — no records will be written");
+            ui.detail("dry run: no records will be written");
             let repo = Repo::resolve(&self.config.pds, &self.config.handle)?;
             return Ok(Target::Preview(repo));
         }
@@ -147,8 +147,8 @@ impl Standard {
         let (mut sent, mut unchanged) = (0usize, 0usize);
         let mut undated: Vec<&str> = Vec::new();
         for doc in &site.documents {
-            // Undated pages are not documents — standard.site requires a
-            // `publishedAt` — so they are skipped and reported.
+            // Undated pages are not documents (standard.site requires a
+            // `publishedAt`), so they are skipped and reported.
             let Some(date) = doc.date else {
                 undated.push(&doc.path);
                 continue;
@@ -179,7 +179,7 @@ impl Standard {
         }
 
         // A preview computes the plan against the real remote but changes
-        // nothing — locally or otherwise — so the skip-cache is left untouched.
+        // nothing (locally or otherwise), so the skip-cache is left untouched.
         if !target.is_preview() {
             cache.retain(&desired);
             cache.save(self.name())?;
@@ -209,7 +209,7 @@ impl Standard {
 /// The repository an announce acts on, and how. A dry run gets a read-only
 /// [`Repo`] resolved without credentials; a real run gets an authenticated
 /// [`Session`] that can also write. Bundling each mode with its capability makes
-/// an illegal combination — writing during a preview — unrepresentable, and
+/// an illegal combination (writing during a preview) unrepresentable, and
 /// leaves one reconcile path to serve both.
 enum Target {
     /// A dry run: read the live records, write nothing.
@@ -232,7 +232,7 @@ impl Target {
         self.repo().did()
     }
 
-    /// The writer, present only for a live run — a preview writes nothing.
+    /// The writer, present only for a live run; a preview writes nothing.
     fn writer(&self) -> Option<&Session> {
         match self {
             Self::Live(session) => Some(session),
@@ -247,10 +247,10 @@ impl Target {
 }
 
 /// Reconcile the configured `did` pin against the identity an announce `resolved`.
-/// A pin that disagrees is fatal — the build emitted verification artifacts for
+/// A pin that disagrees is fatal: the build emitted verification artifacts for
 /// the wrong account. No pin is fine, but the resolved DID comes back as
 /// [`DidUnpinned`] advice so the user can pin it and get those artifacts;
-/// `Ok(None)` means the pin held. Pure — the caller surfaces the advice — so it
+/// `Ok(None)` means the pin held. Pure (the caller surfaces the advice), so it
 /// is testable without a `Ui` or a network.
 fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, AnnounceError> {
     match pin {
@@ -266,7 +266,7 @@ fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, A
 }
 
 /// A colored one-line announce summary: the destination, then counts styled by
-/// meaning — sent in green (additive), unchanged dimmed (no-op), removed in
+/// meaning: sent in green (additive), unchanged dimmed (no-op), removed in
 /// yellow when any went (else dimmed). `--dry-run` phrases the verbs as intent.
 /// A [`Display`] newtype like [`Count`], so the styling lives in one place.
 struct Summary<'a> {
@@ -364,7 +364,7 @@ impl Fingerprint for Document {
 
 impl Document {
     /// A document record for a `doc` published on `date`, under `publication`.
-    /// The caller filters undated pages — standard.site requires `publishedAt`.
+    /// The caller filters undated pages: standard.site requires `publishedAt`.
     fn new(doc: &Doc, publication: &AtUri, date: time::Date) -> Self {
         Self {
             kind: DOCUMENT.as_str(),
@@ -378,7 +378,7 @@ impl Document {
     }
 }
 
-/// A date as an RFC 3339 timestamp at midnight UTC — the format `publishedAt`
+/// A date as an RFC 3339 timestamp at midnight UTC: the format `publishedAt`
 /// requires. A [`Display`] adapter over [`Iso`](crate::content::Iso), so it
 /// formats on demand without allocating a field.
 struct Rfc3339(time::Date);

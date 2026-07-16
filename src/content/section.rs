@@ -1,8 +1,8 @@
 //! The site's section tree: content directories nested as they appear under
 //! `content/`, each carrying the pages filed directly in it and its child
 //! directories. Built once from the planned pages and shared by both consumers
-//! of a site nav — the template `page.sections` value and the
-//! `baudelaire:sections` JS module — so the two can never disagree.
+//! of a site nav (the template `page.sections` value and the
+//! `baudelaire:sections` JS module) so the two can never disagree.
 
 use crate::codegen::Value;
 use crate::config::Config;

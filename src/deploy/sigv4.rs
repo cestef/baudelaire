@@ -4,7 +4,7 @@
 //!
 //! A [`Request`] carries its `payload_hash` ready-made (the hex SHA-256 of the
 //! body, or `"UNSIGNED-PAYLOAD"`) rather than the body itself, so [`Signer::sign`]
-//! is a pure function of its inputs — which is what lets the vectors match to the
+//! is a pure function of its inputs, which is what lets the vectors match to the
 //! byte.
 
 use hmac::{Hmac, KeyInit, Mac};
@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 /// A request to sign. `uri` is the already-encoded absolute path; `query` is the
 /// canonical (sorted, encoded) query string, or empty; `headers` are extra
-/// signed headers as `(name, value)` — `host` and `x-amz-date` are added for you.
+/// signed headers as `(name, value)`; `host` and `x-amz-date` are added for you.
 pub struct Request<'a> {
     pub method: &'a str,
     pub host: &'a str,
@@ -22,7 +22,7 @@ pub struct Request<'a> {
     pub payload_hash: &'a str,
 }
 
-/// Credentials and the scope — region, service, time — a signature binds to.
+/// Credentials and the scope (region, service, time) a signature binds to.
 pub struct Signer<'a> {
     pub access_key: &'a str,
     pub secret_key: &'a str,
@@ -80,7 +80,7 @@ impl Signer<'_> {
         &self.timestamp[..8]
     }
 
-    /// The lowercase hex SHA-256 of `data` — the value S3 wants in
+    /// The lowercase hex SHA-256 of `data`, the value S3 wants in
     /// `x-amz-content-sha256`, and the digest used throughout signing.
     pub fn sha256_hex(data: &[u8]) -> String {
         Self::hex(&Sha256::digest(data))

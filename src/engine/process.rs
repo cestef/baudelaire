@@ -2,7 +2,7 @@
 //!
 //! Each [`Processor`] reads the built [`Site`] and writes derived output
 //! through an [`Emit`] sink. [`Processors::builtin`] is the single source of
-//! what runs, in order — a new site-level output (search index, robots.txt) is
+//! what runs, in order: a new site-level output (search index, robots.txt) is
 //! one `impl Processor` plus one line in that list.
 
 use std::fmt;
@@ -27,12 +27,12 @@ pub(super) struct Site<'a> {
     pub config: &'a Config,
     pub pages: &'a [Page],
     /// Each page paired with its rendered HTML (cached and freshly compiled
-    /// alike), for processors that derive from page text — e.g. search.
+    /// alike), for processors that derive from page text, e.g. search.
     pub outputs: &'a [(&'a Page, &'a str)],
 }
 
 impl Site<'_> {
-    /// The base URL for a URL-requiring processor — the one warn-and-skip
+    /// The base URL for a URL-requiring processor: the one warn-and-skip
     /// policy for a missing `url`, naming the `feature` that needs it.
     pub(super) fn base(
         &self,
@@ -49,7 +49,7 @@ impl Site<'_> {
     }
 
     /// The base URL, warning with `missing` when absent. The single "is a `url`
-    /// configured?" check shared by every processor — skip-on-absent callers go
+    /// configured?" check shared by every processor: skip-on-absent callers go
     /// through [`Site::base`]; those that still emit (llms with relative links,
     /// robots dropping its sitemap line) supply their own consequence here.
     pub(super) fn warn_missing_base(
@@ -68,13 +68,13 @@ impl Site<'_> {
 /// Sink for a processor's output: file writes plus progress reporting.
 ///
 /// A trait so processors are unit-testable against an in-memory sink instead of
-/// the real filesystem. [`Emit::file`] is silent by design — the processor
+/// the real filesystem. [`Emit::file`] is silent by design: the processor
 /// decides what to report via [`Emit::note`], matching the per-feature phrasing
 /// the CLI already uses.
 pub(super) trait Emit {
     /// Write `contents` to absolute `path`, creating parent directories.
     fn file(&mut self, path: &Path, contents: &str) -> Result<()>;
-    /// A progress note (e.g. `wrote sitemap.xml`) — a debug log line in
+    /// A progress note (e.g. `wrote sitemap.xml`): a debug log line in
     /// production, captured verbatim by test sinks.
     fn note(&mut self, msg: fmt::Arguments);
     /// A typed warning: an enabled feature missing its `url` precondition.
@@ -83,7 +83,7 @@ pub(super) trait Emit {
 
 /// One post-build pass over the site.
 pub(super) trait Processor {
-    /// Whether to run, from config alone — keeps the gate declarative and out of
+    /// Whether to run, from config alone: keeps the gate declarative and out of
     /// [`Processor::run`]. Default: always.
     fn enabled(&self, _config: &Config) -> bool {
         true
@@ -139,7 +139,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// How many files were written — the count of generated outputs for the
+    /// How many files were written: the count of generated outputs for the
     /// build summary (feeds, sitemap, search index, and so on).
     pub(super) fn written(&self) -> usize {
         self.paths.len()

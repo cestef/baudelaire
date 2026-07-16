@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-/// The files a page's compilation read — transitive imports, data loaders, and
-/// assets — as captured by [`crate::world::Tracked`]. A change to any of them
+/// The files a page's compilation read (transitive imports, data loaders, and
+/// assets) as captured by [`crate::world::Tracked`]. A change to any of them
 /// invalidates the page's cached output.
 #[derive(Debug, Default)]
 pub struct Deps {

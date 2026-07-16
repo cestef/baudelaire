@@ -1,7 +1,7 @@
 //! Per-page transforms over the typed HTML DOM.
 //!
 //! A [`Transform`] rewrites a page's [`HtmlDocument`] in place before
-//! serialization — the render-side counterpart to a post-build
+//! serialization: the render-side counterpart to a post-build
 //! [`crate::engine`] `Processor`. [`Transforms::builtin`] is the single source
 //! of the DOM pipeline: a new pass is one `impl Transform` plus one line in that
 //! list, each gated on its own config. Even core link resolution is a transform.
@@ -39,17 +39,17 @@ pub(super) struct Cx<'a> {
 pub(super) trait ElementExt {
     /// Visit this element, then every descendant element, depth-first.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
-    /// This element's `<head>` child, if it has one — the one place a transform
+    /// This element's `<head>` child, if it has one: the one place a transform
     /// appends head elements, so meta and verification tags find it the same way.
     fn head(&mut self) -> Option<&mut HtmlElement>;
     /// Rewrite each attribute among `keys` that is present: `f` returns the
     /// replacement value, or `None` to leave it as authored.
     fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
-    /// Rewrite every asset-bearing attribute — the `keys` plus `srcset` — through
+    /// Rewrite every asset-bearing attribute (the `keys` plus `srcset`) through
     /// `f` in one pass, so an asset-rewriting transform states only its key list.
     fn assets(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
-    /// Rewrite each URL in a `srcset` attribute — a comma-separated list of
-    /// `url [descriptor]` candidates — leaving descriptors intact. `f` maps one
+    /// Rewrite each URL in a `srcset` attribute (a comma-separated list of
+    /// `url [descriptor]` candidates) leaving descriptors intact. `f` maps one
     /// URL to its replacement, or `None` to keep it. So `<img srcset>` and
     /// `<source srcset>` get the same asset rewriting as plain `src`.
     fn rewrite_srcset(&mut self, f: impl FnMut(&str) -> Option<String>);
@@ -120,8 +120,8 @@ impl ElementExt for HtmlElement {
 
 /// Split a `srcset` into `(url, descriptor)` candidates by the HTML spec's
 /// whitespace-driven rule: a URL runs to the next whitespace and may itself
-/// contain commas (`data:` URIs), so only a URL's *trailing* commas — or a
-/// comma after the descriptor — terminate a candidate.
+/// contain commas (`data:` URIs), so only a URL's *trailing* commas (or a
+/// comma after the descriptor) terminate a candidate.
 fn candidates(srcset: &str) -> Vec<(&str, &str)> {
     let mut out = Vec::new();
     let mut rest = srcset;

@@ -25,7 +25,7 @@ pub fn write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
     std::fs::write(path, contents).map_err(|e| FsError::new(Op::Write, path, e).into())
 }
 
-/// Write bytes to a file, creating any missing parent directories first — the
+/// Write bytes to a file, creating any missing parent directories first: the
 /// one shared "emit an output file" path.
 pub fn write_all(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
     let path = path.as_ref();

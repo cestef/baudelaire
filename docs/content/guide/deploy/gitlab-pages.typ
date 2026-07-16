@@ -3,7 +3,7 @@
   order: 12,
 )
 
-GitLab Pages serves the `public/` artifact of a job named `pages` — which is
+GitLab Pages serves the `public/` artifact of a job named `pages`, which is
 exactly what `baudelaire build` produces. The installer picks the glibc or musl
 binary to match the image, so Alpine works too:
 

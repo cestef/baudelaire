@@ -69,7 +69,7 @@ impl Default for HtmlConfig {
 impl Default for ImagesConfig {
     fn default() -> Self {
         Self {
-            // lazy loading is a universal win; optimization is opt-in — it re-encodes and costs time
+            // lazy loading is a universal win; optimization is opt-in: it re-encodes and costs time
             lazy: true,
             optimize: OptimizeConfig::default(),
         }
@@ -231,10 +231,10 @@ impl Default for CollectionConfig {
 /// How page permalinks map onto output files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum UrlStyle {
-    /// Directory-per-page: `foo.typ` → `foo/index.html`, served at `/foo/`.
+    /// Directory-per-page: `foo.typ` -> `foo/index.html`, served at `/foo/`.
     #[default]
     Clean,
-    /// Flat files: `foo.typ` → `foo.html`, served at `/foo.html`.
+    /// Flat files: `foo.typ` -> `foo.html`, served at `/foo.html`.
     Flat,
 }
 

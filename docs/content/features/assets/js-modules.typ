@@ -24,7 +24,7 @@ one.
 
 == The modules
 
-/ #raw("baudelaire:site"): `title`, `url`, `lang`, `author`, and `version` —
+/ #raw("baudelaire:site"): `title`, `url`, `lang`, `author`, and `version`,
   the values templates also read from `sys.inputs.baudelaire`. See
   #link("../build/context.typ")[build context].
 / #raw("baudelaire:config"): your own constants, from the `client` block below.
@@ -35,9 +35,9 @@ one.
 / #raw("baudelaire:pages"): the content pages, each as `{ url, title,
   collection, date, taxonomies }`.
 / #raw("baudelaire:sections"): the collections, grouped as `{ id, pages: [...]
-  }` — what templates get as `page.sections`.
+  }`, what templates get as `page.sections`.
 / #raw("baudelaire:taxonomies"): each taxonomy's terms mapped to the pages that
-  carry them, e.g. `{ tags: { rust: [{ url, title }], .. } }` — for tag
+  carry them, e.g. `{ tags: { rust: [{ url, title }], .. } }`, for tag
   filtering or a term cloud.
 / #raw("baudelaire:feed"): the most recent dated pages as `{ url, title, date
   }`, newest first, for a "latest posts" widget.

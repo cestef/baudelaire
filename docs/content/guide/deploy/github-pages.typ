@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Set #emph[Settings → Pages → Source] to #emph["GitHub Actions"], then commit this
+Set #emph[Settings -> Pages -> Source] to #emph["GitHub Actions"], then commit this
 workflow. It installs the prebuilt binary (no compile), caches the incremental
 build state, and hands `public/` to Pages. The `permissions`, `environment`, and
 `concurrency` blocks are all required for `deploy-pages` to work.
@@ -49,7 +49,7 @@ jobs:
 
 #callout(kind: "note")[
   Prefer `cargo install baudelaire` in CI only if you already cache the Cargo
-  build — a cold compile is minutes, the prebuilt binary is seconds. On
+  build: a cold compile is minutes, the prebuilt binary is seconds. On
   non-`x86_64`/`aarch64` runners the installer has no binary, so fall back to
   `cargo install`.
 ]

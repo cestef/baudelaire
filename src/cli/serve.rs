@@ -58,7 +58,7 @@ struct Dev<'a> {
     /// The config file the session was started with (`--config`), watched so
     /// edits to it reload the session live.
     config_path: PathBuf,
-    /// Re-reads `config.kdl` with the same profile and CLI overrides — invoked
+    /// Re-reads `config.kdl` with the same profile and CLI overrides, invoked
     /// when the config file changes so edits take effect live.
     reload: Box<dyn FnMut() -> Result<Config> + 'a>,
 }
@@ -83,8 +83,8 @@ impl Dev<'_> {
         if self.config.serve.open {
             // Detached: `open::that` waits for the spawned program to exit, so a
             // browser launched in the foreground would block the watch loop until
-            // its window closed. Failing to open a browser is non-fatal — the
-            // server is already up — so report it and carry on.
+            // its window closed. Failing to open a browser is non-fatal (the
+            // server is already up), so report it and carry on.
             let url = format!("http://{addr}/");
             if let Err(e) = open::that_detached(&url) {
                 self.ui.warn(BrowserOpen { url, source: e });
@@ -122,7 +122,7 @@ impl Dev<'_> {
     fn watch(mut self, live: Live) -> Result<()> {
         // Rebuild the watcher whenever `config.kdl` is reloaded, so changes to
         // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
-        // change still needs a restart — the HTTP server is already bound.)
+        // change still needs a restart: the HTTP server is already bound.)
         loop {
             let filter = Filter::new(&self.config, self.root, &self.config_path)?;
             let (tx, rx) = flume::unbounded::<DebounceEventResult>();
@@ -132,7 +132,7 @@ impl Dev<'_> {
             for result in rx {
                 let outcome = self.on_event(result, &live, &filter)?;
                 // Render whatever the iteration warned about (watcher trouble,
-                // a failed rebuild) right away — the server runs indefinitely,
+                // a failed rebuild) right away; the server runs indefinitely,
                 // so there is no end-of-run flush to wait for.
                 self.ui.flush();
                 if outcome {
@@ -148,7 +148,7 @@ impl Dev<'_> {
 
     /// Handle one debounced watcher delivery: rebuild on events, and surface
     /// watcher failures (dropped watches, queue overflow) as warnings instead
-    /// of silently discarding them — the server keeps serving either way.
+    /// of silently discarding them; the server keeps serving either way.
     /// Returns whether `config.kdl` was reloaded (so the caller recreates the
     /// watcher).
     fn on_event(
@@ -189,8 +189,8 @@ impl Dev<'_> {
             return Ok(false);
         }
 
-        // A change to the config file reloads it first, so the rebuild — and,
-        // back in `watch`, the recreated watcher — see the new settings. A parse
+        // A change to the config file reloads it first, so the rebuild (and,
+        // back in `watch`, the recreated watcher) see the new settings. A parse
         // error keeps the last-good config so the server stays up.
         let config_changed = changed.iter().any(|p| filter.is_config(p));
         if config_changed {
@@ -198,7 +198,7 @@ impl Dev<'_> {
                 Ok(config) => self.config = config,
                 Err(e) => {
                     // The parse error rides along as a related diagnostic, so
-                    // the warning renders it in full — spans and all.
+                    // the warning renders it in full, spans and all.
                     self.ui.warn(ConfigReload { errors: vec![e] });
                     return Ok(false);
                 }
@@ -225,8 +225,8 @@ impl Dev<'_> {
                 live.bump();
             }
             Err(e) => {
-                // The failure rides along as a related diagnostic — spans,
-                // offending page and all — rendered by the caller's flush.
+                // The failure rides along as a related diagnostic (spans,
+                // offending page and all), rendered by the caller's flush.
                 self.ui.warn(RebuildFailed { errors: vec![e] });
             }
         }
@@ -333,8 +333,8 @@ impl Handler {
         let _ = req.respond(response);
     }
 
-    /// Respond with the site's own not-found page when it emits one — the same
-    /// file a static host serves for unmatched URLs — else an empty 404.
+    /// Respond with the site's own not-found page when it emits one (the same
+    /// file a static host serves for unmatched URLs), else an empty 404.
     fn respond_404(&self, req: Request, url: &str) {
         // A per-request line at the session's level, so `--quiet` silences
         // these too. (It may still interleave with a concurrent rebuild
@@ -378,7 +378,7 @@ impl Handler {
 ///
 /// Streams are keyed by id so a closed connection is reaped promptly: the writer
 /// thread wakes every [`Live::HEARTBEAT`] to send an SSE comment, notices the
-/// dead socket on the failed write, and removes its own entry — no leak waiting
+/// dead socket on the failed write, and removes its own entry: no leak waiting
 /// on the next rebuild.
 #[derive(Clone, Default)]
 struct Live {
@@ -483,7 +483,7 @@ struct Filter {
     assets: PathBuf,
     statics: PathBuf,
     /// The session's config file, absolute (canonical when it resolves), so a
-    /// changed path can be tested for "is this *my* config" — a sibling `.kdl`
+    /// changed path can be tested for "is this *my* config": a sibling `.kdl`
     /// in the same directory must not reload the session.
     config: PathBuf,
     watches: Vec<(PathBuf, notify::RecursiveMode)>,
@@ -505,7 +505,7 @@ impl Filter {
             (config.assets.clone(), Recursive),
             (config.r#static.clone(), Recursive),
         ];
-        // Watch the config file via its parent directory, non-recursively —
+        // Watch the config file via its parent directory, non-recursively:
         // editors commonly save by rename-over, which drops a watch pinned to
         // the file itself. A bare `config.kdl` has an empty parent, meaning
         // the project root.
@@ -570,7 +570,7 @@ impl Filter {
     }
 
     /// Whether a changed path should trigger a rebuild. Of `.kdl` files only
-    /// the session's own config counts — baudelaire reads no other KDL, and
+    /// the session's own config counts: baudelaire reads no other KDL, and
     /// the config directory's non-recursive watch also surfaces its siblings.
     fn is_relevant(&self, path: &Path) -> bool {
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
@@ -633,7 +633,7 @@ mod tests {
     }
 
     /// The config file's directory is watched (non-recursively), so an edit to
-    /// `config.kdl` at the project root reaches the reload path — it lives
+    /// `config.kdl` at the project root reaches the reload path; it lives
     /// outside content/templates/assets, which are the only recursive roots.
     #[test]
     fn config_directory_is_watched_and_config_edits_are_relevant() {
@@ -651,7 +651,7 @@ mod tests {
         );
         assert!(filter.is_relevant(Path::new("/proj/config.kdl")));
         // Unrelated root-level files seen via the same non-recursive watch do
-        // not trigger rebuilds — not even other `.kdl` files: baudelaire reads
+        // not trigger rebuilds, not even other `.kdl` files: baudelaire reads
         // no KDL besides its config.
         assert!(!filter.is_relevant(Path::new("/proj/README.md")));
         assert!(!filter.is_relevant(Path::new("/proj/other.kdl")));
@@ -660,7 +660,7 @@ mod tests {
     }
 
     /// A `--config` outside the root watches that file's own directory, and
-    /// only that exact file — a sibling `.kdl` there must not reload the
+    /// only that exact file: a sibling `.kdl` there must not reload the
     /// session or trigger a rebuild.
     #[test]
     fn relocated_config_watches_its_parent() {

@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Prefer to let a platform serve the files? `public/` is a plain static folder —
+Prefer to let a platform serve the files? `public/` is a plain static folder:
 upload it to Netlify, Vercel, Cloudflare Pages, GitHub Pages, or your own nginx.
 The typical settings:
 

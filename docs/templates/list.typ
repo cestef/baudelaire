@@ -2,7 +2,7 @@
 
 // Generated listing page (taxonomy terms, paginated indexes). Each entry
 // carries `url`, `label`, an optional `date` and `note`, and the source page's
-// `extra` frontmatter — so a dated blog index can show dates and summaries
+// `extra` frontmatter, so a dated blog index can show dates and summaries
 // while a tag index shows counts, all from one template.
 #let list(page, body) = shell(page.frontmatter.title, {
   html.elem(

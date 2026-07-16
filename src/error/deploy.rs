@@ -53,7 +53,7 @@ pub enum DeployError {
     },
 
     /// The server presented a different host key than the one recorded in
-    /// `known_hosts` — the man-in-the-middle guard.
+    /// `known_hosts`, the man-in-the-middle guard.
     #[error("the host key for `{host}` has changed")]
     #[diagnostic(
         code(baudelaire::deploy::ssh::host_key),

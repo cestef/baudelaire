@@ -5,11 +5,11 @@
 //! **JavaScript** (the `baudelaire:*` virtual modules), and into a Typst
 //! **runtime** value (`sys.inputs`). All start from one [`Value`] tree:
 //!
-//! - source in a target language → wrap in the [`Typst`] or [`Js`] display
+//! - source in a target language -> wrap in the [`Typst`] or [`Js`] display
 //!   adapter (`Typst(&value).to_string()`), which name the target explicitly
 //!   rather than overloading `Display` on the data;
-//! - a runtime Typst value → `typst::foundations::Value::from(&value)`;
-//! - a Typst value read back → `Value::from(&typst_value)`.
+//! - a runtime Typst value -> `typst::foundations::Value::from(&value)`;
+//! - a Typst value read back -> `Value::from(&typst_value)`.
 //!
 //! Every string is escaped by its [`Format`], so a value can neither break out
 //! of a Typst string literal nor produce invalid JavaScript. Add a target by
@@ -20,7 +20,7 @@ use std::fmt::{self, Write};
 use serde::{Deserialize, Serialize};
 use typst::foundations::Repr;
 
-/// Displays a string as a Typst string literal, escaping `"` and `\` — the only
+/// Displays a string as a Typst string literal, escaping `"` and `\`: the only
 /// two metacharacters inside a Typst quoted string.
 pub struct Str<'a>(pub &'a str);
 
@@ -49,9 +49,9 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
-    /// A sequence — Typst `(a, b)`, JavaScript `[a, b]`.
+    /// A sequence: Typst `(a, b)`, JavaScript `[a, b]`.
     Array(Vec<Value>),
-    /// A mapping — Typst `(key: value)`, JavaScript `{ "key": value }`. Keys are
+    /// A mapping: Typst `(key: value)`, JavaScript `{ "key": value }`. Keys are
     /// quoted where the target requires it, so arbitrary keys are safe.
     Dict(Vec<(String, Value)>),
     /// A pre-formed expression in the *target's* own syntax, emitted verbatim.
@@ -91,7 +91,7 @@ impl Value {
         }
     }
 
-    /// The value under `key`, for a `Dict` — so a consumer can serve a sub-tree
+    /// The value under `key`, for a `Dict`, so a consumer can serve a sub-tree
     /// of a larger value (a JS module exposing part of the build context).
     pub fn get(&self, key: &str) -> Option<&Value> {
         match self {
@@ -187,7 +187,7 @@ pub trait Format {
     const NONE: &'static str;
     /// The `(open, close)` brackets around a sequence.
     const ARRAY: (&'static str, &'static str);
-    /// Emitted after the last element of a non-empty sequence — a trailing `, `
+    /// Emitted after the last element of a non-empty sequence: a trailing `, `
     /// in Typst (so `(x, )` stays an array), nothing in JavaScript.
     const ARRAY_TRAILING: &'static str;
     /// The `(open, close)` brackets around a mapping.
@@ -280,7 +280,7 @@ impl fmt::Display for Js<'_> {
     }
 }
 
-/// Displays a string as Typst *content* that renders literally — `#"..."` — so
+/// Displays a string as Typst *content* that renders literally (`#"..."`), so
 /// user text can never inject markup.
 pub struct Content<'a>(pub &'a str);
 

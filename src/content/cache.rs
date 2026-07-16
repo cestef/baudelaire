@@ -1,7 +1,7 @@
 //! Discovery cache: persisted, extracted frontmatter.
 //!
 //! Building the page set means reading every page's `#let frontmatter`, which
-//! requires *evaluating* the page's typst module — the build's dominant cost on
+//! requires *evaluating* the page's typst module, the build's dominant cost on
 //! an otherwise-unchanged rebuild, since the compiled output is already cached
 //! but the frontmatter is re-derived from scratch each time.
 //!
@@ -47,7 +47,7 @@ struct Entry {
 struct Manifest {
     /// Fingerprint of the config inputs that change how frontmatter is
     /// interpreted (the configured taxonomy keys). A change invalidates every
-    /// entry — a key that was `extra` yesterday may be a taxonomy today.
+    /// entry: a key that was `extra` yesterday may be a taxonomy today.
     salt: Option<Hash>,
     /// Entries keyed by page source path.
     pages: BTreeMap<PathBuf, Entry>,
@@ -70,7 +70,7 @@ pub struct DiscoveryCache {
 
 impl DiscoveryCache {
     /// Load the cache for a build. When incremental builds are disabled it never
-    /// reports a hit and never persists — every page evaluates live.
+    /// reports a hit and never persists: every page evaluates live.
     pub fn load(config: &Config) -> Self {
         let salt = Self::salt(config);
         let dir = config.cache.dir.clone();
@@ -91,12 +91,12 @@ impl DiscoveryCache {
     }
 
     /// Load a page's extracted frontmatter, whether the module exported one, and
-    /// its body text — reusing the cached frontmatter when the source and every
+    /// its body text, reusing the cached frontmatter when the source and every
     /// dependency are unchanged.
     ///
     /// On a hit the page's typst module is never touched: neither parsed nor
     /// evaluated. The body is decoded straight from the file bytes (which equal
-    /// `Source::text` — typst stores the text verbatim, stripping only a leading
+    /// `Source::text`; typst stores the text verbatim, stripping only a leading
     /// UTF-8 BOM), and the legacy-syntax check is skipped because the cached
     /// entry could only have been written after a build that already passed it
     /// on identical content. On a miss the module is parsed, checked, evaluated,
@@ -145,8 +145,8 @@ impl DiscoveryCache {
         Ok((frontmatter, export, source.text().to_owned()))
     }
 
-    /// The previous entry for `path` if it is still valid — its source and every
-    /// dependency hash unchanged — carried into the next manifest so it survives
+    /// The previous entry for `path` if it is still valid, its source and every
+    /// dependency hash unchanged, carried into the next manifest so it survives
     /// to the following build.
     fn reuse(&self, path: &Path, hash: Hash) -> Option<Entry> {
         let entry = self.prev.pages.get(path)?;
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn decode_matches_typst_source_text() {
-        // typst strips a leading UTF-8 BOM and transforms nothing else — in
+        // typst strips a leading UTF-8 BOM and transforms nothing else; in
         // particular CRLF line endings are preserved verbatim in `Source::text`,
         // so the parse-free hit path must preserve them too.
         assert_eq!(decode(b"hello").as_deref(), Some("hello"));

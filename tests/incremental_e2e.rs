@@ -2,7 +2,7 @@
 //!
 //! Several of these exist to *confirm* a specific claim: that wrapping the
 //! shared, comemo-memoized world in `Tracked` captures a page's true
-//! dependency set — transitive imports and shared modules included — because
+//! dependency set (transitive imports and shared modules included) because
 //! comemo re-calls the tracked `source`/`file` accessors when validating a
 //! cached result. Each such test edits only a transitive/shared input and
 //! asserts the affected page's *output* actually changed on rebuild; a missed
@@ -30,9 +30,9 @@ fn second_build_reuses_all_pages() {
 
     site.build();
     let second = site.build();
-    // Nothing changed → every page served from cache.
+    // Nothing changed -> every page served from cache.
     assert!(
-        second.contains("(2 cached)"),
+        second.contains("2 cached"),
         "expected all pages cached: {second}"
     );
 }
@@ -85,7 +85,7 @@ fn editing_a_page_rebuilds_only_it() {
     let out = site.build();
 
     // One page recompiled, the other reused.
-    assert!(out.contains("(1 cached)"), "expected 1 cached: {out}");
+    assert!(out.contains("1 cached"), "expected 1 cached: {out}");
     assert!(site.output("posts/a/index.html").contains("ALPHA2"));
 }
 
@@ -93,7 +93,7 @@ fn editing_a_page_rebuilds_only_it() {
 fn retitling_a_page_invalidates_its_sibling() {
     // A page's prev/next links carry its neighbour's title, baked into the
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
-    // sibling whose nav points at it — otherwise its "next" link goes stale.
+    // sibling whose nav points at it; otherwise its "next" link goes stale.
     let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
@@ -121,14 +121,14 @@ fn retitling_a_page_invalidates_its_sibling() {
         "sibling nav should reflect the neighbour's new title"
     );
     assert!(
-        !out.contains("(1 cached)"),
+        !out.contains("1 cached"),
         "retitling b must recompile a (its sibling nav changed): {out}"
     );
 }
 
 #[test]
 fn editing_transitive_import_invalidates_page() {
-    // a imports b, b imports c. Editing only c must rebuild a — proving the
+    // a imports b, b imports c. Editing only c must rebuild a, proving the
     // transitive dependency was captured.
     let site = Site::with(CONFIG);
     // Modules live at the project root so they aren't discovered as pages.
@@ -147,10 +147,10 @@ fn editing_transitive_import_invalidates_page() {
 
     assert!(
         site.output("posts/a/index.html").contains("CHANGED"),
-        "transitive dep change did not propagate — c was not tracked as a dep of a"
+        "transitive dep change did not propagate: c was not tracked as a dep of a"
     );
     assert!(
-        !out.contains("(1 cached)"),
+        !out.contains("1 cached"),
         "page a should have been recompiled, not cached: {out}"
     );
 }
@@ -158,7 +158,7 @@ fn editing_transitive_import_invalidates_page() {
 #[test]
 fn shared_module_tracked_for_every_page() {
     // Two pages import the same module; within one build they share the
-    // comemo-memoized world. Editing the module must rebuild BOTH — proving
+    // comemo-memoized world. Editing the module must rebuild BOTH, proving
     // the dependency is recorded even when the second page's compile reuses
     // comemo's cached evaluation of the shared module.
     let site = Site::with(CONFIG);
@@ -214,7 +214,7 @@ fn editing_layout_template_rebuilds_dependent_pages() {
         "template change did not invalidate the page"
     );
     assert!(
-        !out.contains("(1 cached)"),
+        !out.contains("1 cached"),
         "page should have rebuilt: {out}"
     );
 }
@@ -223,7 +223,7 @@ fn editing_layout_template_rebuilds_dependent_pages() {
 fn generated_pages_are_cached() {
     // Taxonomy/pagination pages have synthetic sources that never touch disk.
     // Their fingerprint is the text typst compiles, so an unchanged rebuild must
-    // reuse them alongside the real pages — not silently recompile every time.
+    // reuse them alongside the real pages, not silently recompile every time.
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
@@ -243,7 +243,7 @@ fn generated_pages_are_cached() {
     let second = site.build();
     // 2 posts + tags/index + tags/x = 4 pages, all served from cache.
     assert!(
-        second.contains("(4 cached)"),
+        second.contains("4 cached"),
         "generated pages must be cached on an unchanged rebuild: {second}"
     );
 }
@@ -251,7 +251,7 @@ fn generated_pages_are_cached() {
 #[test]
 fn retitling_invalidates_taxonomy_listing() {
     // A term listing embeds member titles, so retitling a member must rebuild
-    // that listing — but not the index (its per-term counts are unchanged).
+    // that listing, but not the index (its per-term counts are unchanged).
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
@@ -279,16 +279,16 @@ fn retitling_invalidates_taxonomy_listing() {
         "term listing did not pick up the new title"
     );
     // Page a rebuilds (the `#let frontmatter` export is part of its compiled
-    // source — the page can render its own metadata) and so does the tags/x
+    // source: the page can render its own metadata) and so does the tags/x
     // listing that embeds the title. tags/index shows unchanged per-term counts
     // and stays cached; page b is untouched.
-    assert!(out.contains("(2 cached)"), "expected 2 cached: {out}");
+    assert!(out.contains("2 cached"), "expected 2 cached: {out}");
 }
 
 #[test]
 fn changing_a_slug_updates_links_from_cached_pages() {
     // Page a links to b by source path; b's permalink is resolved into a's HTML
-    // at render time — a dependency the per-page tracker cannot see (typst never
+    // at render time: a dependency the per-page tracker cannot see (typst never
     // reads b.typ). Changing b's slug must still invalidate a's cached link.
     let site = Site::with(CONFIG);
     site.write(
@@ -305,7 +305,7 @@ fn changing_a_slug_updates_links_from_cached_pages() {
         "a's link should resolve to b's permalink"
     );
 
-    // Give b a new slug → new permalink.
+    // Give b a new slug -> new permalink.
     site.write(
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", slug: \"bee\",)\nbeta",
@@ -325,7 +325,7 @@ fn changing_a_slug_updates_links_from_cached_pages() {
 
 #[test]
 fn editing_an_embedded_asset_invalidates_the_page() {
-    // With `embed`, a page inlines asset bytes as a `data:` URI at render time —
+    // With `embed`, a page inlines asset bytes as a `data:` URI at render time:
     // bytes typst never reads, so the per-page tracker is blind to them. Editing
     // the asset must still rebuild the page (its inlined copy is now stale).
     let site = Site::with(
@@ -348,7 +348,7 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     let out = site.build();
 
     assert!(
-        !out.contains("(1 cached)"),
+        !out.contains("1 cached"),
         "page must rebuild when its embedded asset changes: {out}"
     );
     // The freshly inlined bytes differ from the original.
@@ -377,7 +377,7 @@ fn discovery_cache_persisted_and_reused() {
 
     let before = site.output("posts/a/index.html");
     site.build();
-    // Frontmatter served from the discovery cache — output is unchanged.
+    // Frontmatter served from the discovery cache: output is unchanged.
     assert_eq!(before, site.output("posts/a/index.html"));
 }
 
@@ -385,7 +385,7 @@ fn discovery_cache_persisted_and_reused() {
 fn frontmatter_from_import_invalidated_on_dep_change() {
     // A page's frontmatter reads a value from an imported module, so the cached
     // frontmatter depends on that module. Editing it must re-evaluate the page's
-    // frontmatter — a missed dependency would serve the stale title from cache.
+    // frontmatter: a missed dependency would serve the stale title from cache.
     let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
     site.write(
         "templates/post.typ",
@@ -404,7 +404,7 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     site.build();
     assert!(
         site.output("posts/a/index.html").contains("SECOND"),
-        "frontmatter dependency change did not propagate — the import was not \
+        "frontmatter dependency change did not propagate: the import was not \
          tracked as a discovery-cache dependency"
     );
 }
@@ -420,7 +420,7 @@ fn no_cache_flag_forces_full_rebuild() {
 
     let out = site.run(&["--no-cache", "build", "-v"]);
     let logs = String::from_utf8_lossy(&out.stderr);
-    // A forced full rebuild serves nothing from cache — no page nor the summary
+    // A forced full rebuild serves nothing from cache: no page nor the summary
     // mentions caching (the summary omits the cached count when it is zero).
     assert!(
         !logs.contains("cached"),
@@ -430,7 +430,7 @@ fn no_cache_flag_forces_full_rebuild() {
 
 // ---- Stale-output pruning -------------------------------------------------
 //
-// A build must not only write the current outputs — it must remove the ones a
+// A build must not only write the current outputs; it must remove the ones a
 // previous build wrote that no longer belong (a deleted page, a renamed
 // permalink, a taxonomy term whose last page dropped it). Otherwise `dist`
 // only grows and keeps serving files no source maps to. These lock in that
@@ -475,7 +475,7 @@ fn renamed_page_prunes_the_old_permalink() {
     site.build();
     assert!(site.exists("public/posts/old/index.html"));
 
-    // Rename the source (slug → permalink), which moves the output.
+    // Rename the source (slug -> permalink), which moves the output.
     fs::rename(
         site.path("content/posts/old.typ"),
         site.path("content/posts/new.typ"),
@@ -687,17 +687,17 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
     // Unchanged rebuild: both pages served from cache.
     let unchanged = site.build();
     assert!(
-        unchanged.contains("(2 cached)"),
+        unchanged.contains("2 cached"),
         "an unchanged rebuild must reuse both pages: {unchanged}"
     );
 
-    // A new commit changes only git.hash — no page source touched.
+    // A new commit changes only git.hash: no page source touched.
     git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
     let after = site.build();
 
     // The reader rebuilt (its value changed); the plain page stayed cached.
     assert!(
-        after.contains("(1 cached)"),
+        after.contains("1 cached"),
         "exactly the metadata reader should rebuild: {after}"
     );
     assert_ne!(

@@ -2,8 +2,8 @@
 //!
 //! When `publish.standard` carries a `did` and `verify.links` is on, every dated
 //! page gets `<link rel="site.standard.document" href="at://..">` in its `<head>`,
-//! letting an AppView confirm the page and its record belong together. The URI —
-//! and the key scheme behind it — comes from [`crate::announce::standard`], the
+//! letting an AppView confirm the page and its record belong together. The URI
+//! (and the key scheme behind it) comes from [`crate::announce::standard`], the
 //! single source of the record shapes, so the build names exactly what the
 //! publisher writes.
 

@@ -1,4 +1,4 @@
-//! Plain-text extraction over page HTML — the per-page cost of search indexing.
+//! Plain-text extraction over page HTML: the per-page cost of search indexing.
 //! Swept by document size so a regression reads as bytes/s, not a lone total.
 
 mod common;

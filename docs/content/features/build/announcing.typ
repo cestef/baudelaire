@@ -7,18 +7,18 @@
 
 Baudelaire is atproto-native. `baudelaire announce` publishes your site's
 _metadata_ to the #link("https://atproto.com")[AT Protocol] as
-#link("https://standard.site")[standard.site] records — a
+#link("https://standard.site")[standard.site] records: a
 `site.standard.publication` for the site and one `site.standard.document` per
 dated page. It doesn't upload the built files (that's
 #link("../../guide/deploy/overview.typ")[deploying]); it announces, to the network, that
 your pages exist and where they live.
 
-The layer is backend-neutral — a destination is one `impl Backend` — but
+The layer is backend-neutral (a destination is one `impl Backend`), but
 standard.site is the one that ships, and the one this is built around.
 
 == Configure
 
-Enable it by adding an `announce` block. Only `handle` is required — it is the
+Enable it by adding an `announce` block. Only `handle` is required: it is the
 account the records are written under.
 
 ```kdl
@@ -47,15 +47,15 @@ description (or `summary`), and taxonomy terms travel with each document.
 
 Authentication uses an *app password*, never your account password. On Bluesky
 (the default PDS), create one at
-#link("https://bsky.app/settings/app-passwords")[Settings → Privacy and Security
-→ App Passwords]: add a password, name it (e.g. `baudelaire`), and copy the
+#link("https://bsky.app/settings/app-passwords")[Settings -> Privacy and Security
+-> App Passwords]: add a password, name it (e.g. `baudelaire`), and copy the
 `xxxx-xxxx-xxxx-xxxx` value. It is revocable and scoped, so it is safe to hand to
 a build. On another PDS, get the app password from that provider instead.
 
 Baudelaire never stores the password in config. It is resolved, in order, from:
 
 ```sh
-# 1. the environment variable — best for CI
+# 1. the environment variable - best for CI
 BAUDELAIRE_ATPROTO_PASSWORD="xxxx-xxxx-xxxx-xxxx" baudelaire announce
 
 # 2. stdin, so it never appears in the process arguments
@@ -84,7 +84,7 @@ baudelaire announce --yes       # skip the confirmation
 
 The remote is the source of truth. Each run puts new or changed records, skips
 unchanged ones, and deletes document records whose page no longer exists, so
-nothing is orphaned. A dry run lists the remote to compute an accurate plan — it
+nothing is orphaned. A dry run lists the remote to compute an accurate plan; it
 just writes nothing.
 
 #callout(kind: "note")[
@@ -95,7 +95,7 @@ just writes nothing.
 == Domain verification
 
 standard.site can tie a publication to your own domain. Set `did` to your
-repository DID and the build emits verification artifacts offline — no announce
+repository DID and the build emits verification artifacts offline, no announce
 required:
 
 ```kdl
@@ -113,7 +113,7 @@ announce {
 
 Both artifacts prove the site and the records belong together; a site may emit
 one, the other, or both. When `did` is set, `announce` resolves your handle and
-refuses a mismatch, so you never write under the wrong identity — and `--dry-run`
+refuses a mismatch, so you never write under the wrong identity, and `--dry-run`
 runs the same check, catching a misconfigured `did` before you ever authenticate.
-Don't know your DID yet? Run `announce --dry-run` without it — the output prints
+Don't know your DID yet? Run `announce --dry-run` without it: the output prints
 the value to configure, no password required.

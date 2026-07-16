@@ -20,7 +20,7 @@ pub use links::LinkMap;
 
 use crate::graph::Fingerprint;
 
-/// A raw `href`/`src` split at its `#fragment` / `?query` boundary — the one
+/// A raw `href`/`src` split at its `#fragment` / `?query` boundary: the one
 /// parsing rule for URL tails, shared by link and asset resolution.
 pub(crate) struct Tail<'a> {
     /// The path portion, up to the first `#` or `?`.
@@ -65,7 +65,7 @@ impl Renderer {
         }
     }
 
-    /// Fingerprint of the page→permalink map, for the build cache.
+    /// Fingerprint of the page-to-permalink map, for the build cache.
     pub fn links(&self) -> crate::graph::Hash {
         self.links.fingerprint()
     }
@@ -76,7 +76,7 @@ impl Renderer {
     }
 
     /// Run the DOM transform pipeline over a page's document in place: link
-    /// resolution (source-path `.typ` links → permalinks) first, then the
+    /// resolution (source-path `.typ` links to permalinks) first, then the
     /// configured transforms. Returns the raw targets of any internal `.typ`
     /// links that point at a non-existent page.
     pub fn rewrite(&self, doc: &mut HtmlDocument, page: &Page, config: &Config) -> Vec<String> {

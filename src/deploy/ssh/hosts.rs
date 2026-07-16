@@ -2,7 +2,7 @@
 //!
 //! Strict mode (the default) mirrors OpenSSH: a key already in `known_hosts` is
 //! trusted, an unseen host is learned on first connect (trust-on-first-use), and
-//! a *changed* key for a known host is refused — the man-in-the-middle guard.
+//! a *changed* key for a known host is refused: the man-in-the-middle guard.
 //! Non-strict accepts any key, matching `StrictHostKeyChecking=no`.
 //!
 //! A rejection can't travel out of [`russh::client::Handler::check_server_key`]
@@ -18,7 +18,7 @@ use russh::keys::{Error as KeyError, PublicKey};
 
 use crate::config::SshConfig;
 
-/// Why a server key was refused — the case worth an actionable message.
+/// Why a server key was refused: the case worth an actionable message.
 #[derive(Clone, Copy)]
 pub enum Rejected {
     /// A key is recorded for this host, but the server presented a different one.
@@ -31,11 +31,11 @@ pub type Slot = Arc<Mutex<Option<Rejected>>>;
 
 /// The verdict of checking a server key against `known_hosts`.
 enum Verdict {
-    /// Recorded and matching, or freshly learned — accept.
+    /// Recorded and matching, or freshly learned: accept.
     Trusted,
-    /// Recorded but different — a man-in-the-middle guard trip.
+    /// Recorded but different: a man-in-the-middle guard trip.
     Changed,
-    /// The file could not be read or parsed — refuse, but without a specific
+    /// The file could not be read or parsed: refuse, but without a specific
     /// explanation.
     Unverifiable,
 }

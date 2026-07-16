@@ -2,14 +2,14 @@
 //!
 //! One [`Corpus`] is built from every page's rendered HTML, then serialized
 //! into each configured [`SearchFormat`]. Adding a format is a new match arm
-//! plus a [`crate::config::SearchFormat`] variant — the corpus is shared.
+//! plus a [`crate::config::SearchFormat`] variant; the corpus is shared.
 //!
 //! ## Output schemas
 //!
-//! - [`SearchFormat::Json`] → `search.json`: a flat array of documents
+//! - [`SearchFormat::Json`] -> `search.json`: a flat array of documents
 //!   `[{ "url", "title", "tags", "body" }]`. Feed it to any client library
 //!   (Fuse.js, MiniSearch, ..) that indexes at runtime.
-//! - [`SearchFormat::Inverted`] → `search.inverted.json`: a prebuilt index
+//! - [`SearchFormat::Inverted`] -> `search.inverted.json`: a prebuilt index
 //!   `{ "documents": [{ "url", "title" }], "postings": { term: [docId..] } }`.
 //!   The server does the tokenizing; the client resolves a query by looking up
 //!   its terms and intersecting the posting lists.
@@ -80,7 +80,7 @@ impl Corpus {
                     .then(|| page.frontmatter.title.clone())
                     .flatten()
                     .unwrap_or_default(),
-                // every configured taxonomy's terms, not a hardcoded key — a
+                // every configured taxonomy's terms, not a hardcoded key: a
                 // site classifying by `topics` indexes just as well as `tags`.
                 tags: if has(SearchField::Tags) {
                     page.frontmatter
@@ -111,7 +111,7 @@ impl Corpus {
         json(&self.documents)
     }
 
-    /// A prebuilt inverted index (`search.inverted.json`): term → document ids,
+    /// A prebuilt inverted index (`search.inverted.json`): term -> document ids,
     /// with tokens shorter than `min_length` or listed in `stopwords` dropped.
     fn inverted_json(&self, stopwords: &[String], min_length: usize) -> Result<String> {
         let stop: HashSet<&str> = stopwords.iter().map(String::as_str).collect();
@@ -201,7 +201,7 @@ fn json<T: Serialize>(value: &T) -> Result<String> {
 const PALETTE: &str = include_str!("js/palette.js");
 
 /// Appended to the standalone client so dropping one `<script type=module>`
-/// yields a working Cmd/Ctrl-K palette — no markup or CSS to write. Omitted from
+/// yields a working Cmd/Ctrl-K palette: no markup or CSS to write. Omitted from
 /// the virtual-module source, where the importer wires the trigger itself.
 const AUTO_MOUNT: &str = "\nif (typeof document !== \"undefined\") mountSearch();\n";
 

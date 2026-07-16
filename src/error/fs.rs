@@ -103,17 +103,17 @@ impl Diagnostic for FsError {
         ))
     }
 
-    /// A remedy keyed off the OS error kind — far more actionable than the raw
+    /// A remedy keyed off the OS error kind, far more actionable than the raw
     /// `io::Error` message.
     fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
         let hint = match self.source.kind() {
             io::ErrorKind::NotFound => {
-                "the path does not exist — check the spelling and that it was created"
+                "the path does not exist: check the spelling and that it was created"
             }
             io::ErrorKind::PermissionDenied => {
-                "permission denied — check the file's ownership and mode"
+                "permission denied: check the file's ownership and mode"
             }
-            io::ErrorKind::AlreadyExists => "the path already exists — remove it or pick another",
+            io::ErrorKind::AlreadyExists => "the path already exists: remove it or pick another",
             _ => return None,
         };
         Some(Box::new(hint))

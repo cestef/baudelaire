@@ -33,13 +33,13 @@ pub struct Config {
     /// Bundle index basename. A content file with this stem takes its slug from
     /// its parent directory instead of its filename, so `posts/hello/index.typ`
     /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
-    /// resources). `None` disables it — every page is keyed by its filename.
+    /// resources). `None` disables it: every page is keyed by its filename.
     pub index: Option<String>,
     /// Output (distribution) directory.
     pub dist: PathBuf,
     /// Asset pipeline source directory (minified, bundled, fingerprinted).
     pub assets: PathBuf,
-    /// Static passthrough directory: copied verbatim to the `dist` root — no
+    /// Static passthrough directory: copied verbatim to the `dist` root, with no
     /// processing, no fingerprint, no URL prefix.
     pub r#static: PathBuf,
     /// Layout / template directory.
@@ -47,7 +47,7 @@ pub struct Config {
     /// How permalinks map onto output files: clean (directory-per-page) or flat
     /// (`.html`). Set under `output { urls "clean" | "flat" }`.
     pub urls: UrlStyle,
-    /// Remove orphaned outputs from `dist` on each build — files a previous
+    /// Remove orphaned outputs from `dist` on each build: files a previous
     /// build wrote that this one no longer produces (a deleted page, a renamed
     /// permalink, a dropped taxonomy term). The asset tree and build cache are
     /// never touched. Set under `output { clean #true | #false }`.
@@ -100,7 +100,7 @@ pub struct Config {
     /// Named profile partials (raw KDL, applied over base in [`Config::with_profile`]).
     pub profiles: Vec<(String, KdlDocument)>,
     /// The raw `config.kdl` text this config was parsed from. Profile overlay
-    /// errors are reported against it — the retained profile nodes carry spans
+    /// errors are reported against it: the retained profile nodes carry spans
     /// into this exact string.
     pub(crate) source: String,
 }
@@ -111,8 +111,8 @@ impl Config {
     ///
     /// ```text
     /// .baudelaire/
-    ///   cache/    incremental build cache — loss forces a full rebuild
-    ///   announce/  per-backend announce skip-cache — loss forces idempotent re-sends
+    ///   cache/    incremental build cache: loss forces a full rebuild
+    ///   announce/  per-backend announce skip-cache: loss forces idempotent re-sends
     /// ```
     ///
     /// Everything here is derivable, never authored: it is gitignored, wiped by
@@ -122,12 +122,12 @@ impl Config {
     /// [`scratch`]: Config::scratch
     pub const SCRATCH: &'static str = ".baudelaire";
 
-    /// The not-found page's output file. Flat at the dist root — the name
-    /// static hosts serve for unmatched URLs — and what the dev server falls
+    /// The not-found page's output file. Flat at the dist root, the name
+    /// static hosts serve for unmatched URLs, and what the dev server falls
     /// back to; single source for both.
     pub const NOT_FOUND: &'static str = "404.html";
 
-    /// The path of a named scratch subdirectory (e.g. `cache`, `announce`) — the
+    /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the
     /// one builder every subsystem uses to locate its local state under
     /// [`SCRATCH`](Config::SCRATCH).
     pub fn scratch(sub: &str) -> PathBuf {
@@ -140,7 +140,7 @@ impl Config {
     }
 
     /// The configured base URL, normalized for joining. `None` when `url` is
-    /// unset — URL-absolute features gate on this.
+    /// unset: URL-absolute features gate on this.
     pub fn base(&self) -> Option<BaseUrl> {
         self.url
             .as_deref()
@@ -149,7 +149,7 @@ impl Config {
 
     /// The DID a `standard.site` verification artifact should reference, present
     /// only when the backend is configured *with* a `did` and the artifact's
-    /// `verify` flag is on — `artifact` selects that flag (e.g. `|v| v.links`).
+    /// `verify` flag is on; `artifact` selects that flag (e.g. `|v| v.links`).
     /// The single gate the render transform and the well-known processor share,
     /// so both agree on when an artifact is emitted and neither re-checks the
     /// `did` after gating.
@@ -168,7 +168,7 @@ impl Config {
             .map(|(_, c)| c)
     }
 
-    /// The served name of the assets directory — its final path segment, and
+    /// The served name of the assets directory: its final path segment, and
     /// the leading segment of every asset URL. The single derivation shared by
     /// the asset pipeline and the embed transform.
     pub fn asset_name(&self) -> &str {
@@ -178,14 +178,14 @@ impl Config {
             .unwrap_or("assets")
     }
 
-    /// The processed assets directory under `dist` — where the pipeline writes
+    /// The processed assets directory under `dist`: where the pipeline writes
     /// and the embed transform reads.
     pub fn asset_dist(&self) -> PathBuf {
         self.dist.join(self.asset_name())
     }
 
     /// The file a URL path is written to under `dist`, honoring clean URLs.
-    /// Single source for the URL→file mapping, shared by page output and
+    /// Single source for the URL-to-file mapping, shared by page output and
     /// redirect stubs.
     ///
     /// `..` segments are dropped here: permalink *templates* are already
@@ -213,7 +213,7 @@ impl Config {
     }
 }
 
-/// The site base URL with its trailing slash normalized away — the single
+/// The site base URL with its trailing slash normalized away: the single
 /// join rule for every consumer that makes root-relative paths absolute
 /// (sitemap, feeds, robots, llms, meta tags).
 #[derive(Debug, Clone)]
@@ -226,13 +226,13 @@ impl BaseUrl {
     }
 
     /// Absolute URL for a bare output file name sitting at the site root, e.g.
-    /// `sitemap.xml` → `https://site/sitemap.xml`.
+    /// `sitemap.xml` -> `https://site/sitemap.xml`.
     pub fn file(&self, name: &str) -> String {
         self.join(format!("/{name}"))
     }
 
     /// Make a root-relative `path` absolute when a base is configured, else
-    /// leave it as-is — the one "absolutize if we can, otherwise stay relative"
+    /// leave it as-is: the one "absolutize if we can, otherwise stay relative"
     /// rule shared by every URL emitter. Non-root-relative refs (external URLs)
     /// pass through untouched.
     pub fn resolve(base: Option<&BaseUrl>, path: &str) -> String {
@@ -257,7 +257,7 @@ impl std::fmt::Display for BaseUrl {
 /// Feeds every build-affecting setting into the hasher so a config change
 /// invalidates the build cache (a permalink or template tweak can alter every
 /// page). Destructuring means a newly added field fails to compile until it is
-/// accounted for here — no field can be silently forgotten.
+/// accounted for here: no field can be silently forgotten.
 impl std::hash::Hash for Config {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
@@ -293,7 +293,7 @@ impl std::hash::Hash for Config {
             hooks,
             announce,
             deploy,
-            // dev-server settings never affect output, so they must not key the cache —
+            // dev-server settings never affect output, so they must not key the cache;
             // else `serve` on a custom port would invalidate a `build`'s cache
             serve: _,
             profile,
@@ -420,7 +420,7 @@ pub struct SearchConfig {
 /// A client-side search index format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SearchFormat {
-    /// A flat document list (`search.json`) — pair with any client library
+    /// A flat document list (`search.json`): pair with any client library
     /// (Fuse.js, MiniSearch, ..), which builds its own index at runtime.
     Json,
     /// A prebuilt inverted index (`search.inverted.json`): server-side tokenized
@@ -567,11 +567,11 @@ pub struct LlmsConfig {
     pub summary: Option<String>,
 }
 
-/// Asset pipeline options. All opt-in — a fresh site copies assets verbatim.
+/// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
 ///
 /// CSS is minified with lightningcss, independently of bundling. JavaScript is
 /// only processed (bundled *and* minified, via rolldown) when
-/// [`AssetConfig::bundle`] is set — the bundler owns the whole JS step.
+/// [`AssetConfig::bundle`] is set: the bundler owns the whole JS step.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct AssetConfig {
     /// Minify CSS (lightningcss) and, when bundling, JavaScript (rolldown).
@@ -579,7 +579,7 @@ pub struct AssetConfig {
     /// Bundle JavaScript entry points through rolldown (resolves imports and
     /// tree-shakes). Required for any JavaScript processing.
     pub bundle: bool,
-    /// Content-hash asset filenames (`style.css` → `style.<hash>.css`) and
+    /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
     /// rewrite references, for far-future caching.
     pub fingerprint: bool,
 }
@@ -594,7 +594,7 @@ pub struct CacheConfig {
 }
 
 /// External command hooks. Each command runs through the system shell in the
-/// project root — the escape hatch for tools baudelaire does not embed
+/// project root: the escape hatch for tools baudelaire does not embed
 /// (Tailwind, PostCSS, Pagefind, image optimizers, deploy scripts).
 #[derive(Debug, Clone, Hash, Default)]
 pub struct HooksConfig {
@@ -607,7 +607,7 @@ pub struct HooksConfig {
 
 /// Announce destinations for the built site. Each backend is an optional
 /// block under `announce { .. }`; adding a destination is one field here plus one
-/// backend in [`crate::announce`]. Secrets are never stored here — a backend
+/// backend in [`crate::announce`]. Secrets are never stored here; a backend
 /// reads its credentials from the environment at announce time.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct AnnounceConfig {
@@ -621,8 +621,8 @@ pub struct StandardConfig {
     /// Account handle or DID to authenticate as, e.g. `you.bsky.social`.
     pub handle: String,
     /// Repository DID (a stable public identifier, not a secret). When set, the
-    /// build emits the standard.site verification artifacts — the `.well-known`
-    /// file and per-page `<link>` tags — offline; the announce run checks it against
+    /// build emits the standard.site verification artifacts (the `.well-known`
+    /// file and per-page `<link>` tags) offline; the announce run checks it against
     /// the authenticated session.
     pub did: Option<String>,
     /// PDS/entryway host to authenticate and write records against.
@@ -637,7 +637,7 @@ pub struct StandardConfig {
 
 /// Deploy destinations for the built files. Each backend is an optional block
 /// under `deploy { .. }`; adding one is a field here plus a backend in
-/// [`crate::deploy`]. Credentials are never stored here — a backend reads them
+/// [`crate::deploy`]. Credentials are never stored here; a backend reads them
 /// from the environment at deploy time.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct DeployConfig {

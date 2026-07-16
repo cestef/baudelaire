@@ -5,7 +5,7 @@ use baudelaire::world::{Mode, Project};
 use common::Site;
 
 /// Load `text` as a page in a site declaring the `tags` and `series`
-/// taxonomies (taxonomy keys are recognized from config, not hard-coded) —
+/// taxonomies (taxonomy keys are recognized from config, not hard-coded);
 /// frontmatter is the page module's `frontmatter` export, so extraction goes
 /// through real module evaluation.
 fn try_load(text: &str) -> baudelaire::error::Result<Page> {
@@ -121,19 +121,19 @@ body
 
 #[test]
 fn frontmatter_is_computed_like_any_export() {
-    // The export is evaluated by typst itself — it can use bindings, string
+    // The export is evaluated by typst itself: it can use bindings, string
     // ops, whatever the language offers, not just a literal dict.
     let fm = extract(
         r#"
 #let series = "build"
 #let frontmatter = (
-  title: "Part 2 — " + series,
+  title: "Part 2 - " + series,
   series: (series,),
 )
 body
 "#,
     );
-    assert_eq!(fm.title.as_deref(), Some("Part 2 — build"));
+    assert_eq!(fm.title.as_deref(), Some("Part 2 - build"));
     assert_eq!(
         fm.taxonomies.get("series").unwrap(),
         &vec!["build".to_string()]
@@ -177,7 +177,7 @@ fn non_dict_frontmatter_errors() {
 #[test]
 fn legacy_call_form_is_a_migration_error() {
     // The pre-export `#frontmatter(...)` call is a precise error pointing at
-    // the binding syntax — never a generic "unknown variable".
+    // the binding syntax, never a generic "unknown variable".
     let err = try_load("#frontmatter((title: \"X\"))\nbody\n").unwrap_err();
     let rendered = format!("{:?}", miette::Report::new(err));
     assert!(rendered.contains("#let frontmatter = "), "{rendered}");

@@ -4,7 +4,7 @@ use std::fs;
 
 use baudelaire::content::discover;
 use baudelaire::world::{Mode, Project};
-/// A [`Project`] for a test config — module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world.
 fn project(cfg: &baudelaire::config::Config) -> Project {
     Project::new(cfg, Mode::Build).expect("project")
 }
@@ -256,7 +256,7 @@ fn compile_error_reports_with_context() {
 #[test]
 fn error_in_a_bound_template_renders_against_the_template_file() {
     // A span reaching into another file (here a template, whose text differs in
-    // length from the page's) must resolve against that file — never overrun the
+    // length from the page's) must resolve against that file: never overrun the
     // page source and crash the renderer with an `OutOfBounds` panic.
     let site = Site::new();
     site.write(
@@ -306,7 +306,7 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     // The compact summary line counts assets and generated files, and shows dist.
     assert!(logs.contains("1 asset"), "assets counted: {logs}");
     assert!(logs.contains("file"), "generated files counted: {logs}");
-    assert!(logs.contains("→ public"), "output dir shown: {logs}");
+    assert!(logs.contains("╰─ public"), "output dir shown: {logs}");
 }
 
 #[test]
@@ -369,7 +369,7 @@ fn prev_next_siblings_exposed_to_the_template() {
 #[test]
 fn sections_expose_the_ordered_page_set_to_templates() {
     // `page.sections` lets a template build a site nav (sidebar) from the same
-    // ordered page set that drives prev/next — one source of truth.
+    // ordered page set that drives prev/next: one source of truth.
     let site = Site::new();
     site.write(
         "config.kdl",
@@ -852,7 +852,7 @@ fn layout_template_default_from_collection() {
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"main\", body)\n",
     );
-    // No `template` in frontmatter — inherited from the collection default.
+    // No `template` in frontmatter: inherited from the collection default.
     site.write(
         "content/posts/hello.typ",
         "#let frontmatter = (title: \"Hi\",)\nbody here",
@@ -973,7 +973,7 @@ fn pagination_splits_collection_into_index_pages() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // 5 items / 2 per page → 3 index pages.
+    // 5 items / 2 per page -> 3 index pages.
     let p1 = fs::read_to_string(site.root.join("public/posts/index.html")).unwrap();
     assert!(
         p1.contains("href=\"/posts/page/2/\""),
@@ -1033,7 +1033,7 @@ fn pagination_prefix_is_configurable() {
 #[test]
 fn list_without_paginate_makes_a_single_index() {
     // A `list` template with no `paginate` yields one index page holding every
-    // member — no `page/2/`, no prev/next nav.
+    // member: no `page/2/`, no prev/next nav.
     let site = Site::new();
     site.write(
         "config.kdl",
@@ -1099,7 +1099,7 @@ fn sitemap_and_rss_emitted_when_url_set() {
 #[test]
 fn feed_titles_fall_back_to_the_page_id() {
     // A dated page with no frontmatter `title` must still get its id-based
-    // display title in feeds — the same fallback the rest of the site uses,
+    // display title in feeds: the same fallback the rest of the site uses,
     // not an empty <title>.
     let site = Site::new();
     site.write(
@@ -1623,7 +1623,7 @@ fn cache_stores_html_in_object_store_not_manifest() {
         "#let frontmatter = (title: \"Unique Marker\",)\nDistinct Body Text",
     );
     assert!(site.run(&["build"]).status.success(), "build failed");
-    // The manifest is metadata only — page markup lives in the object store.
+    // The manifest is metadata only: page markup lives in the object store.
     let manifest = fs::read_to_string(site.root.join(".baudelaire/cache/manifest.json")).unwrap();
     assert!(
         !manifest.contains("Distinct Body Text"),
@@ -1733,7 +1733,7 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
 
 #[test]
 fn duplicate_permalinks_are_rejected() {
-    // Two pages with the same slug resolve to one URL — a silent overwrite
+    // Two pages with the same slug resolve to one URL: a silent overwrite
     // before, now a hard error naming both.
     let site = Site::new();
     site.write("config.kdl", CONFIG);

@@ -17,7 +17,7 @@ use crate::error::{ContentError, Result};
 /// naming `path`/`key` on a type mismatch (never silently dropped).
 type Field = fn(fm: &mut Frontmatter, value: &Value, path: &Path, key: &str) -> Result<()>;
 
-/// The recognized built-in frontmatter keys and how each parses — the single
+/// The recognized built-in frontmatter keys and how each parses, the single
 /// source of truth for both dispatch and the typo suggester, so a new key is one
 /// row here and the two can't drift (taxonomy keys are configured, so they are
 /// recognized dynamically, not listed). Mirrors `config::dispatch`'s tables.
@@ -58,7 +58,7 @@ const FIELDS: &[(&str, Field)] = &[
 /// typst module on an unchanged build. `extra` holds arbitrary frontmatter as
 /// [`codegen::Value`] rather than a raw typst `Value`: it renders to the same
 /// generated source, keeps string content readable for [`Frontmatter::text`],
-/// and — unlike a typst runtime value — round-trips through the cache.
+/// and, unlike a typst runtime value, round-trips through the cache.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Frontmatter {
     pub title: Option<String>,
@@ -74,7 +74,7 @@ pub struct Frontmatter {
 
 impl Frontmatter {
     /// A string value from `extra` (arbitrary frontmatter), if present and a
-    /// string — e.g. `description`, `summary`, `image`, `author`.
+    /// string, e.g. `description`, `summary`, `image`, `author`.
     pub fn text(&self, key: &str) -> Option<String> {
         self.extra
             .get(key)
@@ -83,7 +83,7 @@ impl Frontmatter {
     }
 
     /// Reject the removed `#frontmatter(..)` call form with a migration error.
-    /// A syntax-tree check, run *before* evaluation — the call no longer
+    /// A syntax-tree check, run *before* evaluation: the call no longer
     /// evaluates (`frontmatter` is undefined), and "unknown variable" would
     /// say nothing about the new syntax.
     pub fn check(source: &Source, path: &Path) -> Result<()> {
@@ -153,7 +153,7 @@ impl Frontmatter {
     }
 }
 
-/// Whether the source opens with the pre-export `#frontmatter(..)` call form —
+/// Whether the source opens with the pre-export `#frontmatter(..)` call form,
 /// recognized in the syntax tree purely to point migration at the binding
 /// syntax (the call itself no longer evaluates: `frontmatter` is undefined).
 fn legacy_call(source: &Source) -> bool {
@@ -174,7 +174,7 @@ fn legacy_call(source: &Source) -> bool {
 /// Typed accessors over an evaluated frontmatter [`Value`]. The `path`/`key`
 /// parameters let a type mismatch name the file and field instead of being
 /// silently dropped. [`ValueExt::str`] (infallible, for `extra` reads) is the
-/// exception — a non-string there is simply "absent".
+/// exception: a non-string there is simply "absent".
 trait ValueExt {
     fn str(&self) -> Option<String>;
     fn string(&self, path: &Path, key: &str) -> Result<String>;
@@ -234,7 +234,7 @@ impl ValueExt for Value {
     }
 
     fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>> {
-        // a wrong-typed *element* is an error too — never silently dropped,
+        // a wrong-typed *element* is an error too, never silently dropped,
         // same as every scalar accessor here.
         let wrong = |kind| {
             ContentError::frontmatter_field(path, key, "a list of strings", kind, None).into()

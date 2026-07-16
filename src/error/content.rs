@@ -65,7 +65,7 @@ pub enum ContentError {
     #[diagnostic(
         code(baudelaire::content::collision),
         help(
-            "two outputs cannot share a file — rename one, set a distinct `slug`/`permalink`, or drop the clashing `redirect`"
+            "two outputs cannot share a file: rename one, set a distinct `slug`/`permalink`, or drop the clashing `redirect`"
         )
     )]
     Collision {
@@ -77,7 +77,7 @@ pub enum ContentError {
     #[error("terms `{first}` and `{second}` of `{taxonomy}` both slug to `{slug}`")]
     #[diagnostic(
         code(baudelaire::content::term_collision),
-        help("two terms cannot share a URL — rename one so their slugs differ")
+        help("two terms cannot share a URL: rename one so their slugs differ")
     )]
     TermCollision {
         taxonomy: String,
@@ -113,7 +113,7 @@ impl ContentError {
         }
     }
 
-    /// A known frontmatter key whose value has the wrong type — previously
+    /// A known frontmatter key whose value has the wrong type; previously
     /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
     pub fn frontmatter_field(
         path: &std::path::Path,

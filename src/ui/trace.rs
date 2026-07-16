@@ -1,7 +1,7 @@
 //! Debug logging via `tracing`: `-v` enables baudelaire's debug events, `-vv`
 //! trace; `RUST_LOG` overrides both (and is the only way to see dependencies).
 //!
-//! Strictly diagnostic — user-facing output goes through [`super::Ui`]. Events
+//! Strictly diagnostic: user-facing output goes through [`super::Ui`]. Events
 //! land on stderr with an uptime stamp so build phases can be profiled at a
 //! glance.
 
@@ -12,7 +12,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::time::FormatTime;
 
-/// Millisecond-precision uptime stamp (` 0.005s`) — enough to profile build
+/// Millisecond-precision uptime stamp (` 0.005s`): enough to profile build
 /// phases without the nanosecond noise of the stock uptime timer.
 struct Uptime(Instant);
 

@@ -1,13 +1,13 @@
 //! Plain-text extraction from rendered HTML.
 //!
 //! Shared by processors that index or republish page prose (search, llms).
-//! A small tag-aware scanner — deliberately *not* a structure-aware rewrite
+//! A small tag-aware scanner, deliberately *not* a structure-aware rewrite
 //! (that is the render layer's job on the typed DOM) and not a full HTML parser.
 //! It drops tags and the raw contents of `script`/`style`, decodes the five
 //! predefined entities, and collapses runs of whitespace.
 //!
 //! Extraction is scoped to the page's `<main>` region when it has one, so site
-//! chrome (header, sidebar, footer) never pollutes the prose — otherwise every
+//! chrome (header, sidebar, footer) never pollutes the prose; otherwise every
 //! page would index the same navigation text and search relevance collapses.
 
 /// The predefined HTML/XML entities as `(char, name)`, read when decoding

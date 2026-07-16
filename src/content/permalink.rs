@@ -35,7 +35,7 @@ impl Permalink {
         }
     }
 
-    /// The conventional `/{collection}/{slug}/` permalink — [`Self::CONVENTION`]
+    /// The conventional `/{collection}/{slug}/` permalink, [`Self::CONVENTION`]
     /// parsed once through the same parser as every user template.
     pub fn convention() -> Self {
         static PARSED: LazyLock<Permalink> = LazyLock::new(|| {
@@ -89,8 +89,8 @@ impl Permalink {
     }
 
     /// A rooted, trailing-slashed URL path from already-slugged segments:
-    /// `["notes", "rust"]` → `/notes/rust/`, `[]` → `/`. The single joiner for
-    /// *generated* (non-template) URLs — taxonomy, pagination, and root pages —
+    /// `["notes", "rust"]` -> `/notes/rust/`, `[]` -> `/`. The single joiner for
+    /// *generated* (non-template) URLs, taxonomy, pagination, and root pages,
     /// so trailing-slash and separator policy lives in one place instead of a
     /// `format!` at each call site.
     pub fn join(segments: &[&str]) -> String {

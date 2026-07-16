@@ -79,8 +79,8 @@ fn serve_404_for_missing() {
 
 #[test]
 fn serve_falls_back_to_the_site_404_page() {
-    // A site emitting a `404.html` gets it served for unmatched URLs — with
-    // the 404 status intact — matching what a static host would do.
+    // A site emitting a `404.html` gets it served for unmatched URLs (with
+    // the 404 status intact) matching what a static host would do.
     let t = Site::new();
     t.write(
         "config.kdl",
@@ -140,7 +140,7 @@ fn live_reload_script_injected_only_when_watching() {
         "#let frontmatter = (title: \"H\",)\nhome",
     );
 
-    // Watching → the SSE client is injected.
+    // Watching -> the SSE client is injected.
     let srv = Serve::start(&t, &[]);
     let (_, body) = srv.get("/");
     assert!(
@@ -149,7 +149,7 @@ fn live_reload_script_injected_only_when_watching() {
     );
     drop(srv);
 
-    // --no-watch → no injection.
+    // --no-watch -> no injection.
     let srv = Serve::start(&t, &["--no-watch"]);
     let (_, body) = srv.get("/");
     assert!(
@@ -192,7 +192,7 @@ fn sse_stream_pushes_reload_on_change() {
         "#let frontmatter = (title: \"H\",)\nv2",
     );
 
-    // Read until the reload event, then stop — don't wait out the whole stream
+    // Read until the reload event, then stop: don't wait out the whole stream
     // (an SSE connection stays open, so `wait_with_output` would block for the
     // full `--max-time`).
     let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
@@ -218,7 +218,7 @@ fn config_edit_reloads_and_pushes_reload() {
     );
     let srv = Serve::start(&t, &[]);
 
-    // Open the event stream, then edit only the config file — it sits at the
+    // Open the event stream, then edit only the config file: it sits at the
     // project root, outside the content/templates/assets watch roots, so this
     // proves the config file itself is watched and reloads the session.
     let mut stream = Command::new("curl")

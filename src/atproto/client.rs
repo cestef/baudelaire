@@ -61,7 +61,7 @@ impl Repo {
         &self.did
     }
 
-    /// Every record key currently in `collection`, following pagination — the
+    /// Every record key currently in `collection`, following pagination: the
     /// remote source of truth a publisher diffs against, so a removed page's
     /// record is deleted and nothing is orphaned. A public read: no auth.
     pub fn list_rkeys(&self, collection: Nsid) -> Result<Vec<Rkey>, AnnounceError> {
@@ -134,7 +134,7 @@ impl Session {
         })
     }
 
-    /// The authenticated repository DID — the source of truth for identity,
+    /// The authenticated repository DID: the source of truth for identity,
     /// overriding any configured guess.
     pub fn did(&self) -> &Did {
         self.repo.did()
@@ -193,7 +193,7 @@ impl Session {
         )
     }
 
-    /// POST a JSON `body` to `nsid` with bearer auth, discarding the response —
+    /// POST a JSON `body` to `nsid` with bearer auth, discarding the response:
     /// the shared spine of the record-mutating calls (put/delete).
     fn post(&self, nsid: &str, body: &Value) -> Result<(), AnnounceError> {
         let mut resp = self

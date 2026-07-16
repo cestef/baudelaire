@@ -1,10 +1,10 @@
 //! Generated (synthetic) pages.
 //!
 //! Beyond the authored content pages, a build includes pages *derived* from
-//! them — taxonomy term indexes, paginated collection listings. Each derivation
+//! them: taxonomy term indexes, paginated collection listings. Each derivation
 //! is a [`Generate`] pass; [`Generators::builtin`] is the single source of what
 //! runs, so a new kind of generated page (archives, author pages, ...) is one
-//! `impl Generate` plus one line here — mirroring `engine::process::Processors`
+//! `impl Generate` plus one line here, mirroring `engine::process::Processors`
 //! for emitted files.
 
 use crate::config::Config;

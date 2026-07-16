@@ -1,8 +1,8 @@
 //! The asset pipeline: classify each file under `config.assets`, transform it
 //! through the [`Handler`] that claims it, and write the result into `dist`.
 //!
-//! Each asset kind is one handler — [`Stylesheet`], [`Script`], [`Raster`], or
-//! the fallback [`Verbatim`] copy — registered in [`builtin`]. A handler owns
+//! Each asset kind is one handler ([`Stylesheet`], [`Script`], [`Raster`], or
+//! the fallback [`Verbatim`] copy), registered in [`builtin`]. A handler owns
 //! its kind end to end: which files it claims and how their bytes are produced.
 //! Adding a kind is a new `Handler` impl and one line in `builtin`; nothing in
 //! the orchestrator changes.
@@ -43,10 +43,10 @@ use js::{Js, Script};
 use module::ModuleCx;
 
 /// Length of the hex fingerprint spliced into asset filenames. 16 hex chars =
-/// 64 bits of blake3 — collision-free in practice for a site's asset set.
+/// 64 bits of blake3: collision-free in practice for a site's asset set.
 const FINGERPRINT_LEN: usize = 16;
 
-/// The outcome of processing the asset tree: the request→served URL map (only
+/// The outcome of processing the asset tree: the request->served URL map (only
 /// entries renamed by fingerprinting appear), the count of files emitted
 /// (partials excluded), and their total byte size.
 #[derive(Default)]
@@ -73,7 +73,7 @@ enum Phase {
 /// [`AssetMap`] is passed to [`Handler::render`] separately, so the pipeline can
 /// keep mutating it between calls.
 struct Ctx<'a> {
-    /// The site config — read by the css and image handlers for their options.
+    /// The site config: read by the css and image handlers for their options.
     #[cfg(any(feature = "css", feature = "images"))]
     config: &'a Config,
     prefix: &'a str,
@@ -156,13 +156,13 @@ trait Handler {
     }
 
     /// Transform `file` (relative path `rel`) into the bytes written to `dist`,
-    /// or `None` to emit nothing — a script partial pulled in only through
+    /// or `None` to emit nothing: a script partial pulled in only through
     /// imports. `map` holds the served names of every asset processed so far.
     fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx)
     -> Result<Option<Vec<u8>>>;
 }
 
-/// The registered handlers, in claim priority — [`Verbatim`] is last because it
+/// The registered handlers, in claim priority: [`Verbatim`] is last because it
 /// claims every file. [`Script`] is present only under the `js` feature; without
 /// it, `.js` files fall through to [`Verbatim`] and are copied unbundled.
 fn builtin() -> Vec<Box<dyn Handler>> {
@@ -217,7 +217,7 @@ pub struct JsCtx<'a> {
 pub struct Assets<'a> {
     config: &'a Config,
     /// The site data the JS bundler serves through its `baudelaire:*` virtual
-    /// modules — present only under the `js` feature, since nothing else reads it.
+    /// modules, present only under the `js` feature, since nothing else reads it.
     #[cfg(feature = "js")]
     js: JsCtx<'a>,
     /// Source asset directory (`config.assets`).
@@ -260,7 +260,7 @@ impl<'a> Assets<'a> {
                 .expect("Verbatim claims every file");
             buckets[idx].push(file);
         }
-        // Early then Late — non-bundle phases run without a bundler, so their
+        // Early then Late: non-bundle phases run without a bundler, so their
         // fingerprint renames land in the map before anything reads it.
         let ctx = self.ctx();
         for phase in [Phase::Early, Phase::Late] {
@@ -341,7 +341,7 @@ impl<'a> Assets<'a> {
     }
 
     /// Fingerprint (when enabled) and write `bytes` for the asset at `rel`,
-    /// recording the request→served URL mapping when the name changed.
+    /// recording the request->served URL mapping when the name changed.
     fn emit(&self, ctx: &Ctx, rel: &Path, bytes: &[u8], out: &mut Processed) -> Result<()> {
         let dst = self.fingerprint(rel, bytes);
         fs::write_all(self.dst.join(&dst), bytes)?;
@@ -354,7 +354,7 @@ impl<'a> Assets<'a> {
     }
 
     /// The relative output path for an asset, splicing a content hash into the
-    /// filename when fingerprinting is enabled (`app.css` → `app.<hash>.css`).
+    /// filename when fingerprinting is enabled (`app.css` -> `app.<hash>.css`).
     fn fingerprint(&self, rel: &Path, bytes: &[u8]) -> PathBuf {
         if !self.config.asset.fingerprint {
             return rel.to_path_buf();

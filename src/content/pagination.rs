@@ -16,8 +16,8 @@ use crate::error::Result;
 pub struct Pagination;
 
 impl Generate for Pagination {
-    /// Generate index pages for every collection that asks for one — via a
-    /// `list` template or a `paginate` count — over its build-eligible members.
+    /// Generate index pages for every collection that asks for one (via a
+    /// `list` template or a `paginate` count) over its build-eligible members.
     /// Never fails; the `Result` satisfies the shared [`Generate`] signature.
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
@@ -86,7 +86,7 @@ impl<'a> Section<'a> {
         let items = members.iter().map(|p| Item::of(p)).collect();
         let title = match number {
             1 => Titlecase(self.id).to_string(),
-            n => format!("{} — page {n}", Titlecase(self.id)),
+            n => format!("{} - page {n}", Titlecase(self.id)),
         };
         Listing::new(self.id, self.slug(number), self.url(number), title)
             .items(items)
@@ -98,7 +98,7 @@ impl<'a> Section<'a> {
     }
 
     /// Page 1 lives at the collection root (or the configured `index`, e.g. `/`
-    /// for a blog home); later pages under `{prefix}/{n}/` — or just `{n}/` when
+    /// for a blog home); later pages under `{prefix}/{n}/`, or just `{n}/` when
     /// `prefix` is empty.
     fn url(&self, number: usize) -> String {
         match number {

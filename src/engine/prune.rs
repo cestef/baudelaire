@@ -1,11 +1,11 @@
 //! Remove orphaned outputs from `dist`: files a previous build wrote that the
-//! current one no longer produces — a deleted page, a renamed permalink, a
+//! current one no longer produces: a deleted page, a renamed permalink, a
 //! removed taxonomy term or paginated index, a redirect that was taken down.
 //!
 //! Without this pass `dist` only ever grows: a stale file lingers and keeps
 //! serving content no source maps to (e.g. an old `og:url` after the site URL
-//! changed). The asset subtree is exempt — the pipeline already wipes and
-//! regenerates it wholesale ([`crate::engine::asset`]) — as is the build cache,
+//! changed). The asset subtree is exempt (the pipeline already wipes and
+//! regenerates it wholesale, [`crate::engine::asset`]), as is the build cache,
 //! which lives outside `dist` but is skipped defensively in case it is nested.
 
 use std::collections::BTreeSet;

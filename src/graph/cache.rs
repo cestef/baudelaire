@@ -8,7 +8,7 @@
 //! objects/ab/abcd..       # rendered HTML, content-addressed by blob hash
 //! ```
 //!
-//! The manifest holds only metadata — hashes, dependency edges, output paths,
+//! The manifest holds only metadata: hashes, dependency edges, output paths,
 //! and a pointer to each page's HTML *blob*. The HTML itself lives in a
 //! content-addressed object store, so a load parses a small manifest instead of
 //! deserializing every page's markup, identical output is stored once, and an
@@ -37,7 +37,7 @@ const MANIFEST: &str = "manifest.json";
 const OBJECTS: &str = "objects";
 
 /// A page's cached compile result and the fingerprints that validate it. The
-/// rendered HTML is not inlined — [`Entry::blob`] points at it in the object
+/// rendered HTML is not inlined: [`Entry::blob`] points at it in the object
 /// store, read only on a cache hit.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
@@ -58,12 +58,12 @@ struct Entry {
     blob: Hash,
 }
 
-/// The serialized cache manifest — metadata only, no page markup.
+/// The serialized cache manifest: metadata only, no page markup.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Manifest {
     /// Fingerprint of the site-wide inputs that produced these entries (config,
     /// asset map, link map, embedded assets). Any change invalidates the whole
-    /// manifest — it can alter every permalink or embedded input. Build metadata
+    /// manifest, since it can alter every permalink or embedded input. Build metadata
     /// is *not* here: it's tracked per page via [`Entry::meta`].
     config: Option<Hash>,
     /// Entries keyed by page source path.
@@ -71,11 +71,11 @@ struct Manifest {
 }
 
 /// The render-side inputs folded into the cache fingerprint alongside the
-/// config: the processed-asset URL map, the page→permalink map, and the
+/// config: the processed-asset URL map, the page-to-permalink map, and the
 /// embedded-asset content hash. None are visible to the per-page
 /// dependency tracker (asset renames and link resolution happen in the render
 /// pass; embeds inline bytes typst never reads), so they are fingerprinted
-/// whole — any change invalidates every page.
+/// whole: any change invalidates every page.
 #[derive(std::hash::Hash)]
 pub struct RenderInputs {
     pub assets: Hash,
@@ -107,11 +107,11 @@ impl Cache {
     /// cache still records the next manifest but never reports a hit.
     ///
     /// The manifest fingerprint mixes the config, the asset map, the link map,
-    /// and (when `embed` is on) the embedded asset contents — the site-wide
+    /// and (when `embed` is on) the embedded asset contents: the site-wide
     /// inputs that can alter any page. Build metadata (a new commit or day) is
     /// deliberately *not* here: it's tracked per page against `roots`, so it
     /// rebuilds only the pages that display the value that changed. Only the
-    /// small manifest is read here — HTML blobs are fetched lazily on a hit.
+    /// small manifest is read here; HTML blobs are fetched lazily on a hit.
     pub fn load(
         config: &Config,
         render: &RenderInputs,
@@ -134,7 +134,7 @@ impl Cache {
                     Manifest::default()
                 }
             },
-            // absent manifest is the normal first-build case — stay silent.
+            // absent manifest is the normal first-build case, stay silent.
             Err(_) => Manifest::default(),
         };
         let fingerprint = Hash::of(&(config, render));
@@ -160,13 +160,13 @@ impl Cache {
             .collect()
     }
 
-    /// Cached HTML for `page` if still valid — its content fingerprint, every
+    /// Cached HTML for `page` if still valid: its content fingerprint, every
     /// dependency, and the manifest fingerprint are all unchanged, and its blob
     /// is still present in the object store. A hit carries the entry into the
     /// next manifest so it survives to the following build.
     ///
     /// `fingerprint` hashes the exact text typst compiles, so it validates
-    /// generated pages (taxonomies, paginated indexes) too — their synthetic
+    /// generated pages (taxonomies, paginated indexes) too, whose synthetic
     /// sources never touch disk and so have no file to hash.
     pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<String> {
         if !self.enabled || self.prev.config.as_ref() != Some(&self.config) {
@@ -184,7 +184,7 @@ impl Cache {
             return None;
         }
         // every injected value the page read must still hash the same, so a
-        // commit or day that changes a value it displays is a miss — and one that
+        // commit or day that changes a value it displays is a miss, and one that
         // doesn't is a hit.
         let roots = self.roots();
         if !entry
@@ -246,8 +246,8 @@ impl Cache {
             .map(|(page, html)| (Self::key(page), *html))
             .collect();
         // collect blobs needing a write (new content only), keyed by path so
-        // two pages sharing identical markup stage one write — a duplicate
-        // would race itself in the parallel pass — then write them in
+        // two pages sharing identical markup stage one write (a duplicate
+        // would race itself in the parallel pass), then write them in
         // parallel: independent content-addressed files.
         let pending: BTreeMap<PathBuf, &str> = self
             .next

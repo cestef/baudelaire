@@ -34,8 +34,8 @@ impl Transform for Embed {
 }
 
 /// Resolves local `href`/`src` values to `data:` URIs over the *processed*
-/// asset — the minified/bundled/optimized (and possibly fingerprinted) output
-/// under `dist`, not the raw source — so an embedded asset carries the same
+/// asset: the minified/bundled/optimized (and possibly fingerprinted) output
+/// under `dist`, not the raw source, so an embedded asset carries the same
 /// bytes a linked one would serve.
 struct Inliner<'a> {
     /// Destination asset directory under `dist` (e.g. `dist/assets`).
@@ -43,7 +43,7 @@ struct Inliner<'a> {
     /// The leading URL segment that maps to the assets directory, e.g.
     /// `/assets/`. Refs must start with it to be considered local assets.
     prefix: String,
-    /// Request→served URL map, so a fingerprinted reference resolves to its
+    /// Request-to-served URL map, so a fingerprinted reference resolves to its
     /// hashed output file rather than a name no longer present in `dist`.
     assets: &'a AssetMap,
 }
@@ -62,7 +62,7 @@ impl<'a> Inliner<'a> {
         // a fingerprinted ref resolves to its hashed file; unmapped ones keep their name
         let served = self.assets.resolve(raw).unwrap_or_else(|| raw.to_owned());
         let rest = served.strip_prefix(&self.prefix)?;
-        // reject dir escapes and query/fragment refs — not plain file references
+        // reject dir escapes and query/fragment refs, not plain file references
         if rest.contains("..") || rest.contains(['?', '#']) {
             return None;
         }

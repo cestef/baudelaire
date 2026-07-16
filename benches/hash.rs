@@ -1,4 +1,4 @@
-//! blake3 content hashing — the cache's invalidation primitive, run over every
+//! blake3 content hashing: the cache's invalidation primitive, run over every
 //! source and processed asset each build. Swept by payload size (throughput in
 //! bytes) so per-byte hashing cost is visible independent of file count.
 

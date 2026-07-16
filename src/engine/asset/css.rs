@@ -158,7 +158,7 @@ impl Stylesheet {
     }
 
     /// The asset-map keys of stylesheets referenced by `file`. Unreadable or
-    /// unparseable input yields no deps — the error surfaces in `transform`.
+    /// unparseable input yields no deps: the error surfaces in `transform`.
     fn deps(file: &Path, ctx: &Ctx) -> Vec<String> {
         let rel = file
             .strip_prefix(ctx.css.src)

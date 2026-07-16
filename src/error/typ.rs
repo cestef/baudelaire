@@ -11,7 +11,7 @@ use typst::{
 /// A typst diagnostic bridged to miette, with span resolution via the world
 /// that produced it. [`src`](Self::src) holds one file's text; [`file`](Self::file)
 /// records which file that is, so a label is only drawn for spans in that same
-/// file — a span reaching into another file (a bound template, a shared module)
+/// file: a span reaching into another file (a bound template, a shared module)
 /// would otherwise overrun this text and panic miette with `OutOfBounds`.
 pub struct TypstSourceDiagnostic {
     inner: SourceDiagnostic,
@@ -134,7 +134,7 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .hints
             .iter()
             .filter_map(|h| self.labeled(h.span, Some(h.v.as_str())));
-        // call stack leading to the error, annotated per frame — surfaces which
+        // call stack leading to the error, annotated per frame: surfaces which
         // page/template a shared-module error flowed through.
         let trace = self
             .inner

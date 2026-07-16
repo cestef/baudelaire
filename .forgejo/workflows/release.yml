@@ -179,7 +179,7 @@ jobs:
 
           ## Builds
 
-          Two flavors per target. **full** is the default — everything built in.
+          Two flavors per target. **full** is the default: everything built in.
           **slim** drops the bundled fonts and the CSS/JS/image pipelines, so it
           renders with system fonts only and copies \`.css\`/\`.js\`/images verbatim
           (no minify, bundle, or optimize). Pick slim when your host has the fonts

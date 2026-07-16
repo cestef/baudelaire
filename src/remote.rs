@@ -1,4 +1,4 @@
-//! Plumbing shared by the destinations baudelaire pushes to — [`crate::announce`]
+//! Plumbing shared by the destinations baudelaire pushes to: [`crate::announce`]
 //! (metadata records) and [`crate::deploy`] (files). Both confirm mutating
 //! actions, honor `--dry-run`/`--yes`, and resolve a secret the same way, so
 //! that lives here once behind a terminal-agnostic [`Interaction`] seam.
@@ -25,7 +25,7 @@ pub struct Options<'a> {
     pub dry_run: bool,
     /// Skip the confirmation prompt.
     pub yes: bool,
-    /// A secret supplied on the command line — preferred over the environment
+    /// A secret supplied on the command line, preferred over the environment
     /// variable and the interactive prompt.
     pub secret: Option<String>,
     /// The user-interaction backend (terminal in the CLI, a stub in tests).
@@ -41,7 +41,7 @@ impl Options<'_> {
             if secret != "-" {
                 return Ok(secret.clone());
             }
-            // A closed or blank stdin is "no secret", not an empty password —
+            // A closed or blank stdin is "no secret", not an empty password:
             // matches the env and prompt branches, which both reject empty.
             let line = Self::stdin_line()?;
             if line.is_empty() {
@@ -70,7 +70,7 @@ impl Options<'_> {
         RemoteError::MissingSecret { label: label.to_owned() }.into()
     }
 
-    /// Read one line from stdin as a secret — the conventional `-` value for a
+    /// Read one line from stdin as a secret: the conventional `-` value for a
     /// secret flag, for piping without exposing it in argv. The trailing newline
     /// is stripped; the rest is taken verbatim.
     fn stdin_line() -> Result<String> {

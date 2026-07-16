@@ -10,7 +10,7 @@ use crate::content::{Frontmatter, Permalink, PermalinkCtx, Slug};
 use crate::error::{ContentError, Result};
 use crate::world::Project;
 
-/// How a page's frontmatter reaches its layout template — the single encoding
+/// How a page's frontmatter reaches its layout template, the single encoding
 /// of where a page's data (and body) live.
 #[derive(Debug, Clone)]
 pub enum Data {
@@ -34,7 +34,7 @@ pub struct Sibling {
 }
 
 /// The previous and next pages within a page's collection, in the collection's
-/// sort order — the "older/newer post" links of a blog. Empty for pages with no
+/// sort order, the "older/newer post" links of a blog. Empty for pages with no
 /// neighbour and for generated listings.
 #[derive(Debug, Clone, Default)]
 pub struct Siblings {
@@ -96,7 +96,7 @@ impl Page {
         let stem = Stem::of(path, &config.draft.suffix);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
-        // explicit frontmatter slug, else the file stem — except a bundle index
+        // explicit frontmatter slug, else the file stem, except a bundle index
         // (`posts/hello/index.typ`) takes its parent dir name, so the directory is
         // one page with colocated resources. reject a name yielding nothing URL-safe.
         let raw = frontmatter
@@ -154,7 +154,7 @@ impl Page {
         }
     }
 
-    /// This page as a neighbour link — its URL and display title — for a
+    /// This page as a neighbour link, its URL and display title, for a
     /// sibling's prev/next navigation.
     pub(super) fn sibling(&self) -> Sibling {
         Sibling {
@@ -179,7 +179,7 @@ impl Page {
     }
 
     /// The chain of section names this page nests under, from its location in
-    /// the content tree — the basis for a nested nav. `content/guide/cli.typ`
+    /// the content tree, the basis for a nested nav. `content/guide/cli.typ`
     /// yields `[guide]`; `content/guide/advanced/deep.typ` yields
     /// `[guide, advanced]`. A bundle index (`posts/hello/index.typ`) owns its
     /// final directory as its slug, so that directory is dropped and the page
@@ -211,7 +211,7 @@ impl Page {
     }
 
     /// This page's taxonomies as the `(name: (term, ..))` value templates get as
-    /// `page.taxonomies` — the single serialization shared with the
+    /// `page.taxonomies`, the single serialization shared with the
     /// `baudelaire:pages` module, so their shapes can't drift.
     pub fn taxonomies(&self) -> crate::codegen::Value {
         use crate::codegen::Value;
@@ -236,7 +236,7 @@ impl Page {
         dated
     }
 
-    /// Whether this page builds under the current draft/future config — the
+    /// Whether this page builds under the current draft/future config, the
     /// one eligibility predicate, shared by the engine and page generators.
     pub fn eligible(&self, config: &Config) -> bool {
         !self.skipped(config.draft.build, config.future)
@@ -254,7 +254,7 @@ impl Page {
     }
 
     /// The permalink a page will resolve to for a given collection (or a root
-    /// page when `None`) — the single rule shared by discovery and by `new`'s
+    /// page when `None`), the single rule shared by discovery and by `new`'s
     /// preview, so a scaffolded page reports exactly the URL the build produces.
     pub(crate) fn permalink_of(
         collection: Option<&str>,
@@ -367,7 +367,7 @@ pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
     Ok(collections)
 }
 
-/// Assigns discovered content files to collections — glob-configured
+/// Assigns discovered content files to collections, glob-configured
 /// collections first, then convention for whatever remains.
 struct Discovery<'a> {
     config: &'a Config,
@@ -434,7 +434,7 @@ impl<'a> Discovery<'a> {
 
     /// Resolve each content file to its owning collection as `(id, path)` pairs,
     /// in the same order pages are grouped: glob-configured collections first
-    /// (config order), then convention for whatever remains. Pure bookkeeping —
+    /// (config order), then convention for whatever remains. Pure bookkeeping:
     /// no file is read here, so the expensive load can run in parallel.
     fn assign(&mut self) -> Result<Vec<(String, PathBuf)>> {
         let mut out = Vec::new();

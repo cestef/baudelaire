@@ -1,6 +1,6 @@
 //! End-to-end deploy tests: the real backends driven through the public
 //! [`baudelaire::deploy::run`], against in-process servers. They exercise the
-//! whole round trip — signing, HTTP/SFTP, listing, and the upload/delete plan —
+//! whole round trip (signing, HTTP/SFTP, listing, and the upload/delete plan)
 //! without any external service. The digest *skip* path (unchanged files) is
 //! covered by unit tests in `deploy`; here we assert the observable effects:
 //! new files land, orphans are removed, and a dry run writes nothing.
@@ -162,7 +162,7 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
     dist(&site);
 
     let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
-    // An object the build no longer produces — it must be deleted.
+    // An object the build no longer produces: it must be deleted.
     store.lock().unwrap().insert("orphan.html".into(), b"stale".to_vec());
     let log: Log = Arc::new(Mutex::new(Vec::new()));
     let port = spawn_s3(store.clone(), log.clone());
@@ -385,7 +385,7 @@ impl russh_sftp::server::Handler for Sftp {
     }
 
     async fn realpath(&mut self, id: u32, path: String) -> Result<russh_sftp::protocol::Name, StatusCode> {
-        // Echo the path back as its own canonical form — enough for a client
+        // Echo the path back as its own canonical form: enough for a client
         // that only ever opens absolute paths.
         Ok(russh_sftp::protocol::Name {
             id,
@@ -469,7 +469,7 @@ fn ssh_refuses_a_changed_host_key() {
     let port = spawn_ssh(store.clone(), String::new());
 
     // A known_hosts that records a *different* key for this host:port, so the
-    // server's ephemeral key reads as changed — the man-in-the-middle guard.
+    // server's ephemeral key reads as changed: the man-in-the-middle guard.
     set_home(&site.root);
     let other = PrivateKey::random(&mut Rng, Algorithm::Ed25519).unwrap();
     site.write(

@@ -1,6 +1,6 @@
 //! The mapping from asset request paths to their processed output URLs.
 //!
-//! Built by the engine's asset pipeline (minify → bundle → fingerprint) and
+//! Built by the engine's asset pipeline (minify -> bundle -> fingerprint) and
 //! shared read-only into the render layer, where the [`super::fingerprint`]
 //! transform rewrites `href`/`src` references to point at the processed files.
 
@@ -10,7 +10,7 @@ use crate::graph::{Fingerprint, Hash};
 
 /// Maps an asset's authored request path (`/assets/style.css`) to the URL it is
 /// actually served at (`/assets/style.<hash>.css`). Identity for assets whose
-/// name is unchanged (minify-only, no fingerprint) — those need no rewrite and
+/// name is unchanged (minify-only, no fingerprint): those need no rewrite and
 /// are simply absent from the map.
 ///
 /// Ordered so its hash is deterministic: the map folds into the build cache
@@ -34,7 +34,7 @@ impl AssetMap {
         self.map.insert(from, to);
     }
 
-    /// The recorded `request → served` pairs, for exposing the map to client JS
+    /// The recorded `request -> served` pairs, for exposing the map to client JS
     /// (the `baudelaire:assets` virtual module).
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.map.iter().map(|(k, v)| (k.as_str(), v.as_str()))

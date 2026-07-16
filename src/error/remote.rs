@@ -1,4 +1,4 @@
-//! Errors shared by the destinations baudelaire pushes to — the announce and
+//! Errors shared by the destinations baudelaire pushes to: the announce and
 //! deploy layers both resolve credentials and prompt through [`crate::remote`].
 
 use miette::Diagnostic;

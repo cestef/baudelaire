@@ -15,7 +15,7 @@ impl Config {
             .find(|(n, _)| n == name)
             .map(|(_, doc)| doc)
             .ok_or_else(|| ConfigError::missing_profile(name, &profiles))?;
-        // overlay errors report against the *original* config text — retained nodes
+        // overlay errors report against the *original* config text: retained nodes
         // carry spans into it, so labels point at the real config.kdl lines
         let text = self.source.clone();
         for node in partial.nodes() {

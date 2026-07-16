@@ -1,4 +1,4 @@
-//! Internal-link resolution — one classify per `href`, each a `canonicalize`
+//! Internal-link resolution: one classify per `href`, each a `canonicalize`
 //! against the page map. Blog nav and cross-refs hit the same targets often, so
 //! the workload deliberately repeats hits.
 

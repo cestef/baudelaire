@@ -234,7 +234,7 @@ impl Details {
 }
 
 /// A new content page `new` will scaffold: its target path plus the structure
-/// inferred for it — title from the filename, the ordering field from the
+/// inferred for it: title from the filename, the ordering field from the
 /// collection (a `date` for a dated collection, the next `order` for an ordered
 /// one), the template, and the permalink it will occupy (with any existing
 /// occupant). The operation is a type, not a free function: [`plan`](Self::plan)
@@ -276,7 +276,7 @@ impl Draft {
         let sort = collection
             .as_deref()
             .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
-        // Discover once — reused for the next order and the collision check.
+        // Discover once, reused for the next order and the collision check.
         // A discovery failure (e.g. a broken sibling page) must not block `new`.
         let discovered = crate::content::discover(config, project).unwrap_or_default();
 
@@ -297,7 +297,7 @@ impl Draft {
             ..Frontmatter::default()
         };
         // A root page (no collection) maps `index` to `/` and every other slug
-        // to `/{slug}/` — `permalink_of` owns that fallback, exactly as the build.
+        // to `/{slug}/`; `permalink_of` owns that fallback, exactly as the build.
         let permalink = Page::permalink_of(collection.as_deref(), &frontmatter, &slug, config);
 
         let output = config.destination(&permalink);
@@ -350,8 +350,8 @@ impl Draft {
         Ok(())
     }
 
-    /// The name behind the page's slug: the file stem, or — for a bundle
-    /// `index` — the directory it lives in, so `posts/hello/index.typ` is titled
+    /// The name behind the page's slug: the file stem, or (for a bundle
+    /// `index`) the directory it lives in, so `posts/hello/index.typ` is titled
     /// "Hello", not "Index".
     fn raw_name(path: &Path, config: &Config) -> String {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
@@ -368,7 +368,7 @@ impl Draft {
     }
 
     /// De-slugify a filename into a title: split on `-`/`_`/spaces and
-    /// capitalize each word (`my-first-post` → `My First Post`).
+    /// capitalize each word (`my-first-post` -> `My First Post`).
     fn titleize(name: &str) -> String {
         name.split(['-', '_', ' '])
             .filter(|w| !w.is_empty())
@@ -384,7 +384,7 @@ impl Draft {
     }
 
     /// The next `order` for a collection: one past the highest already used, or
-    /// 1 for the first page — so a new chapter appends to the end.
+    /// 1 for the first page, so a new chapter appends to the end.
     fn next_order(collection: &str, discovered: &[Collection]) -> i64 {
         discovered
             .iter()
@@ -508,7 +508,7 @@ impl<'a> Repo<'a> {
 
     /// Which VCS to set up, if any. An explicit `--vcs` wins; `yes` takes the
     /// default (git) without asking; otherwise ask, but only when the session is
-    /// `interactive` (decided once, in `init`) — piped or CI input defaults to
+    /// `interactive` (decided once, in `init`); piped or CI input defaults to
     /// none, so a scaffold never blocks nor creates a repo unbidden.
     fn wanted(yes: bool, interactive: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
         if explicit.is_some() {
@@ -543,7 +543,7 @@ impl<'a> Repo<'a> {
             return Ok(());
         }
         let (cmd, args) = argv.split_first().expect("non-empty argv");
-        // Capture the tool's output rather than inherit it — jj in particular
+        // Capture the tool's output rather than inherit it: jj in particular
         // prints an "Initialized repo" line and a hint that would clutter the
         // scaffold log. Surface it only if the command actually failed.
         match Command::new(cmd).args(args).current_dir(self.root).output() {
@@ -569,7 +569,7 @@ impl<'a> Repo<'a> {
 }
 
 /// Scaffold templates, embedded from `scaffold/` at build time. Editing those
-/// files — not string literals here — changes what `init`/`new` produce.
+/// files (not string literals here) changes what `init`/`new` produce.
 mod templates {
     /// Site config; `{{site}}`, `{{author}}`, `{{url}}` are filled by [`render`].
     pub const CONFIG: &str = include_str!("scaffold/config.kdl");

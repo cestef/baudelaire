@@ -1,8 +1,8 @@
 //! Content discovery and the site's page set.
 //!
 //! [`discover`] walks the content root into [`Collection`]s of [`Page`]s;
-//! [`plan`] turns those into the full build set — eligible content pages plus
-//! generated taxonomy and paginated index pages — with permalink uniqueness
+//! [`plan`] turns those into the full build set (eligible content pages plus
+//! generated taxonomy and paginated index pages) with permalink uniqueness
 //! enforced. Submodules own the pieces: frontmatter, permalinks, slugs,
 //! listings, taxonomy, and pagination.
 
@@ -34,7 +34,7 @@ use crate::world::Project;
 
 /// The site's full page set: eligible content pages plus generated taxonomy and
 /// paginated index pages, with permalink collisions rejected. The single entry
-/// point the engine calls — all page-set assembly lives here, not in the engine.
+/// point the engine calls: all page-set assembly lives here, not in the engine.
 pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
     let collections = discover(config, project)?;
     // Within each collection, the eligible pages sit in the collection's sort
@@ -69,7 +69,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
     Ok(pages)
 }
 
-/// Reject two claimants of one output file — otherwise the second silently
+/// Reject two claimants of one output file; otherwise the second silently
 /// overwrites the first. Keyed on the destination *file*, not the permalink
 /// string: [`Config::destination`] normalizes segments, so distinct permalinks
 /// can still meet on disk. Covers colliding slugs, a `posts/index.typ`
@@ -93,7 +93,7 @@ fn unique(pages: &[Page], config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// One claim on an output file, and where it came from — the single accounting
+/// One claim on an output file, and where it came from, the single accounting
 /// of everything a page writes into `dist`.
 struct Claim {
     output: std::path::PathBuf,

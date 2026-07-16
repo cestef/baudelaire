@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-/// A date as an ISO-8601 day (`2026-07-15`) — the single date rendering used by
+/// A date as an ISO-8601 day (`2026-07-15`), the single date rendering used by
 /// listings, the JS `baudelaire:pages`/`baudelaire:feed` modules, and (with a
 /// midnight-UTC suffix) publish timestamps.
 pub struct Iso(pub time::Date);

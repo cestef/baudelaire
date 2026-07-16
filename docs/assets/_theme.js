@@ -1,6 +1,6 @@
 // Light/dark theme, remembered in localStorage. When nothing is stored the
 // page follows the OS `prefers-color-scheme` (handled in CSS), so there is no
-// flash for the common case — the toggle only records an explicit override.
+// flash for the common case; the toggle only records an explicit override.
 
 const KEY = "bd-theme";
 const root = document.documentElement;

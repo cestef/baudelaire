@@ -176,7 +176,7 @@ impl Serve {
     }
 
     /// Like [`Serve::get`], but sends the path verbatim (`curl --path-as-is`) so
-    /// `..` segments reach the server instead of being collapsed by the client —
+    /// `..` segments reach the server instead of being collapsed by the client:
     /// the only way to exercise path-traversal defenses.
     pub fn get_raw(&self, path: &str) -> (u16, String) {
         self.request(path, true)

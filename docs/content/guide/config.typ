@@ -56,7 +56,7 @@ Every field has a sensible default, so a minimal `config.kdl` is just
 
 / #raw("paths"): Where content, output, assets, templates, and the `static`
   passthrough directory live. Files under `static/` are copied verbatim to the
-  output root — no processing, no fingerprint — for a `robots.txt` override,
+  output root (no processing, no fingerprint) for a `robots.txt` override,
   `.well-known/`, a `CNAME`, or an `install.sh`.
 / #raw("client"): Build-time constants exposed to client JavaScript through the
   #link("../features/assets/js-modules.typ")[#raw("baudelaire:config")] virtual module.
@@ -82,7 +82,7 @@ Every field has a sensible default, so a minimal `config.kdl` is just
 
 This site's own `client { }` block, read straight from the
 #link("../features/assets/js-modules.typ")[#raw("baudelaire:config")] module and
-printed by a few lines of script — the same object your bundle would import:
+printed by a few lines of script, the same object your bundle would import:
 
 #html.elem("pre", attrs: (class: "config-live", "data-config": ""))[
   #html.elem("code", "// enable JavaScript to load baudelaire:config")

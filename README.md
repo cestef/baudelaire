@@ -4,7 +4,7 @@ A static site generator where everything is just [Typst](https://typst.app).
 
 ## Install
 
-**Prebuilt binary** — Linux x86_64 / aarch64, no Rust toolchain. Fetch the
+**Prebuilt binary**: Linux x86_64 / aarch64, no Rust toolchain. Fetch the
 script, skim it, then run it:
 
 ```sh

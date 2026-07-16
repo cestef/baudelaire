@@ -52,7 +52,7 @@ impl<'a, T: Clone> Prompt<'a, T> {
     /// Read a choice with the arrow keys: ←/→ (or ↑/↓) move, a letter jumps to a
     /// matching option, Enter confirms, Esc takes the default. Redraws in place.
     /// Without an interactive terminal (piped/CI) it returns the default at once.
-    /// Renders on stderr, like every other CLI line — stdout stays data-only.
+    /// Renders on stderr, like every other CLI line: stdout stays data-only.
     pub fn ask(&self) -> Result<T> {
         let term = Term::stderr();
         if !term.is_term() {
@@ -67,7 +67,7 @@ impl<'a, T: Clone> Prompt<'a, T> {
         loop {
             self.render(&term, selected, false)?;
             // A read failure (EOF, closed terminal) falls back to the default,
-            // as the module contract promises — it must never error out of init.
+            // as the module contract promises: it must never error out of init.
             let Ok(key) = term.read_key() else {
                 self.render(&term, self.default, true)?;
                 return Ok(self.chosen(self.default));
@@ -148,7 +148,7 @@ impl<'a, T: Clone> Prompt<'a, T> {
     }
 }
 
-/// A styled hidden-input prompt for secrets — the same `? question` prefix as
+/// A styled hidden-input prompt for secrets: the same `? question` prefix as
 /// [`Input`], but the typed characters never echo. Returns `None` on a
 /// non-terminal (nothing to read) or an empty answer, so a caller can fall back.
 pub struct Secret<'a> {

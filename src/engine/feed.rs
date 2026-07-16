@@ -73,7 +73,7 @@ impl<'a> Feed<'a> {
     }
 
     /// Serialize in the requested format. Item timestamps are rendered up
-    /// front — for XML the only fallible step, so the building itself stays
+    /// front: for XML the only fallible step, so the building itself stays
     /// infallible.
     pub(super) fn render(&self, kind: FeedKind) -> Result<String> {
         let stamps = self.stamps(kind)?;
@@ -196,7 +196,7 @@ impl<'a> Feed<'a> {
     }
 }
 
-/// The JSON Feed 1.1 top-level object — just the required members plus the
+/// The JSON Feed 1.1 top-level object: just the required members plus the
 /// item list; optional members are omitted, not emitted empty.
 #[derive(Serialize)]
 struct JsonFeed<'a> {

@@ -1,4 +1,4 @@
-/* Baudelaire docs — an editorial theme: serif prose, sans chrome, a wine
+/* Baudelaire docs, an editorial theme: serif prose, sans chrome, a wine
    accent, and a full dark mode. Minified and fingerprinted by the build. */
 
 /* ---- Design tokens ------------------------------------------------------ */
@@ -109,7 +109,7 @@ button,
   border-radius: 3px;
 }
 
-/* Skip link — first tab stop, off-screen until focused. */
+/* Skip link: first tab stop, off-screen until focused. */
 .skip-link {
   position: absolute;
   left: 0.5rem;
@@ -1075,7 +1075,7 @@ ul.listing {
 
 /* ---- Syntax highlighting ------------------------------------------------- */
 /* Typst bakes highlight colors inline (no class hook), so we match the exact
-   hex it emits from our .tmTheme and remap each to a themeable variable —
+   hex it emits from our .tmTheme and remap each to a themeable variable,
    making code adapt to light/dark like everything else. */
 :root {
   --sx-comment: #8a837a;

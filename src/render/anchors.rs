@@ -22,8 +22,8 @@ impl Transform for Anchors {
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
         // ids are unique per page: like-slugged headings get `-2`, `-3`, .. suffixes.
-        // Every authored id is collected up front — on any element, anywhere in
-        // the document — so a derived id never collides with one, regardless of
+        // Every authored id is collected up front (on any element, anywhere in
+        // the document) so a derived id never collides with one, regardless of
         // which comes first in the walk.
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         doc.root_mut().walk(&mut |element| {
@@ -65,7 +65,7 @@ impl Anchors {
         }
     }
 
-    /// An element's visible text, concatenating descendant text nodes — enough to
+    /// An element's visible text, concatenating descendant text nodes, enough to
     /// slug a heading whose content is styled inline (`<code>`, `<em>`, ..).
     fn text(element: &HtmlElement) -> String {
         let mut out = String::new();

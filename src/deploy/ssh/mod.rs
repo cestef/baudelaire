@@ -1,11 +1,11 @@
-//! An SSH deploy backend on `russh` + `russh-sftp` — pure Rust, no shelling out.
+//! An SSH deploy backend on `russh` + `russh-sftp`: pure Rust, no shelling out.
 //! It reconciles a remote directory with the built `dist`: upload what changed,
 //! delete what the build no longer produces.
 //!
 //! The work is split into cohesive pieces: [`auth`] resolves and performs
 //! authentication (key, agent, password), [`hosts`] verifies the server's host
 //! key, and [`session`] is the transport that lists, uploads, and deletes over
-//! SFTP. Change detection is stateless and content-correct — the host hashes its
+//! SFTP. Change detection is stateless and content-correct: the host hashes its
 //! files with `sha256sum`, diffed against the local files' SHA-256. `russh` is
 //! async, so the whole exchange runs on a private current-thread runtime, keeping
 //! the rest of the codebase blocking.

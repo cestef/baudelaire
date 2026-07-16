@@ -3,7 +3,7 @@
 //! When `html { images true }` is set (the default), every image gains
 //! `loading="lazy"` (defer offscreen images) and `decoding="async"` (never block
 //! rendering on decode) unless the author already set them. Best-effort and
-//! attribute-only — the image bytes are untouched.
+//! attribute-only: the image bytes are untouched.
 
 use typst_html::{HtmlDocument, attr, tag};
 

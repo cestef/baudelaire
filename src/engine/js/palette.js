@@ -63,7 +63,7 @@ const MARKUP = `
   <p class="bd-empty">Start typing to search.</p>
 </div>`;
 
-// Minimal, neutral defaults — a centred overlay, a scrollable list, an active
+// Minimal, neutral defaults: a centred overlay, a scrollable list, an active
 // row. System colours, low specificity, no shadows or brand hues; a host is
 // expected to layer its own look on the same classes.
 const DEFAULT_STYLES = `
@@ -140,7 +140,7 @@ class Palette {
   }
 
   render() {
-    // A failed index load is its own state — "No results" would be a lie.
+    // A failed index load is its own state: "No results" would be a lie.
     if (this.searcher?.failed) {
       this.hits = [];
       this.active = -1;

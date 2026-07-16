@@ -51,26 +51,43 @@ impl Count {
     pub fn warnings(n: usize) -> Self {
         Self { n, noun: "warning" }
     }
+
+    /// The noun with its plural `s`, so styling can treat number and label
+    /// separately.
+    fn label(&self) -> String {
+        format!("{}{}", self.noun, if self.n == 1 { "" } else { "s" })
+    }
+
+    /// Summary styling: the number in bold, the label dimmed, so quantities
+    /// pop and their nouns recede.
+    pub fn styled(&self) -> StyledCount<'_> {
+        StyledCount(self)
+    }
 }
 
 impl Display for Count {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {}{}",
-            self.n,
-            self.noun,
-            if self.n == 1 { "" } else { "s" }
-        )
+        write!(f, "{} {}", self.n, self.label())
     }
 }
 
-/// A byte count in binary units — `512 B`, `1.4 MB` — 1024-based with one
+/// [`Count`] with the number bold and the label dimmed (see [`Count::styled`]).
+pub struct StyledCount<'a>(&'a Count);
+
+impl Display for StyledCount<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.0.n.bold(), self.0.label().dimmed())
+    }
+}
+
+/// A byte count in binary units (`512 B`, `1.4 MB`): 1024-based with one
 /// decimal above the byte threshold. The single source of size formatting.
 pub struct Bytes(pub u64);
 
-impl Display for Bytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Bytes {
+    /// The scaled number and its unit, split so styling can treat them
+    /// separately.
+    fn parts(&self) -> (String, &'static str) {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
         let mut size = self.0 as f64;
         let mut unit = 0;
@@ -78,14 +95,38 @@ impl Display for Bytes {
             size /= 1024.0;
             unit += 1;
         }
-        match unit {
-            0 => write!(f, "{} {}", self.0, UNITS[0]),
-            _ => write!(f, "{size:.1} {}", UNITS[unit]),
-        }
+        let value = if unit == 0 {
+            self.0.to_string()
+        } else {
+            format!("{size:.1}")
+        };
+        (value, UNITS[unit])
+    }
+
+    /// Summary styling: the number in bold, the unit dimmed.
+    pub fn styled(&self) -> StyledBytes<'_> {
+        StyledBytes(self)
     }
 }
 
-/// A duration in the tightest sensible unit — `840µs`, `132ms`, `1.24s` — the
+impl Display for Bytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (value, unit) = self.parts();
+        write!(f, "{value} {unit}")
+    }
+}
+
+/// [`Bytes`] with the number bold and the unit dimmed (see [`Bytes::styled`]).
+pub struct StyledBytes<'a>(&'a Bytes);
+
+impl Display for StyledBytes<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (value, unit) = self.0.parts();
+        write!(f, "{} {}", value.bold(), unit.dimmed())
+    }
+}
+
+/// A duration in the tightest sensible unit (`840µs`, `132ms`, `1.24s`): the
 /// single source of elapsed-time formatting (hyperfine-style, no parentheses).
 pub struct Dur(pub Duration);
 

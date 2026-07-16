@@ -1,5 +1,5 @@
 // Sidebar helpers: highlight the link for the current page and drive the
-// collapsible navigation on small screens. Pure progressive enhancement — the
+// collapsible navigation on small screens. Pure progressive enhancement: the
 // links work without any of this.
 
 function normalize(pathname) {
@@ -37,7 +37,7 @@ export function initNavSections() {
     try {
       localStorage.setItem(KEY, JSON.stringify(open));
     } catch {
-      /* private mode — toggles just won't persist */
+      /* private mode: toggles just won't persist */
     }
   };
 

@@ -1,5 +1,5 @@
 //! `baudelaire deploy`: build the site, then upload its files to every configured
-//! destination. The terminal-facing half of [`crate::deploy`] — it maps the CLI
+//! destination. The terminal-facing half of [`crate::deploy`]: it maps the CLI
 //! flags onto [`Options`] and supplies an [`Interaction`] backed by the shared
 //! prompt widgets, so confirmation and credential entry reuse the same styled
 //! prompts as the rest of the CLI.

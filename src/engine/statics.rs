@@ -1,10 +1,10 @@
 //! Static passthrough: files copied verbatim from `config.static` into the
-//! `dist` root — no minify, no bundle, no fingerprint, no URL prefix. The
+//! `dist` root: no minify, no bundle, no fingerprint, no URL prefix. The
 //! escape hatch for anything the asset pipeline would otherwise rewrite: a
 //! `robots.txt` override, `.well-known/`, a `CNAME`, an `install.sh`.
 //!
 //! Runs before the asset pipeline and page writes, so a generated file at the
-//! same output path wins — static is the lowest-priority source.
+//! same output path wins; static is the lowest-priority source.
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ pub struct Static<'a> {
 }
 
 /// The outcome of a static copy: files written this build and their byte size.
-/// Files skipped as already-current do not count — an unchanged tree reports 0.
+/// Files skipped as already-current do not count; an unchanged tree reports 0.
 /// `paths` lists every destination the static tree owns (copied or skipped), so
 /// the prune pass keeps them.
 #[derive(Default)]
@@ -40,7 +40,7 @@ impl<'a> Static<'a> {
 
     /// Copy every file under `src` to the same relative path under `dist`,
     /// skipping any already present with an identical size and no older than
-    /// its source — so an unchanged tree costs no writes on rebuild, and the
+    /// its source, so an unchanged tree costs no writes on rebuild, and the
     /// dev server's live-reload isn't churned by untouched files. A missing
     /// `src` is not an error: the directory is optional.
     pub fn copy(&self) -> Result<Copied> {
@@ -69,7 +69,7 @@ impl<'a> Static<'a> {
     }
 
     /// Whether `dst` already holds `src` verbatim: same size and last modified
-    /// no earlier than the source. Best-effort — any metadata error means copy.
+    /// no earlier than the source. Best-effort; any metadata error means copy.
     fn current(src: &Path, dst: &Path) -> bool {
         let (Ok(s), Ok(d)) = (src.metadata(), dst.metadata()) else {
             return false;

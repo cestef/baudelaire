@@ -4,7 +4,7 @@ use std::fs;
 
 use baudelaire::content::{DiscoveryCache, Page, discover};
 use baudelaire::world::{Mode, Project};
-/// A [`Project`] for a test config — module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world.
 fn project(cfg: &baudelaire::config::Config) -> Project {
     Project::new(cfg, Mode::Build).expect("project")
 }
@@ -55,7 +55,7 @@ fn collection_sort_and_reverse_applied() {
     );
     let cols = discover(&site.config(), &project(&site.config())).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
-    // date descending → newest first.
+    // date descending -> newest first.
     let slugs: Vec<_> = posts
         .pages
         .iter()
@@ -174,7 +174,7 @@ fn page_loads_frontmatter_and_body() {
     assert_eq!(page.frontmatter.title.as_deref(), Some("Hello"));
     assert_eq!(page.frontmatter.slug.as_deref(), Some("hello"));
     assert!(page.body.contains("Body of Hello"));
-    // the export stays in the body — it is a valid binding producing no
+    // the export stays in the body: it is a valid binding producing no
     // output, and lets the page read its own metadata.
     assert!(page.body.contains("#let frontmatter"));
 }

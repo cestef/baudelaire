@@ -8,14 +8,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// still valid.
 ///
 /// Stored as the raw 32-byte digest, not its hex string: comparison (the hot
-/// path — every cache probe) is a fixed 32-byte memcmp with no allocation, and
+/// path, every cache probe) is a fixed 32-byte memcmp with no allocation, and
 /// the 64-char hex form is materialized only when a hash is used as a filename
 /// or written to the manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hash([u8; 32]);
 
 impl Hash {
-    /// The hex digest, materialized on demand — used as a content-addressed
+    /// The hex digest, materialized on demand, used as a content-addressed
     /// filename. Allocates; the raw bytes drive equality, so hot-path compares
     /// never call this.
     pub fn hex(&self) -> String {
@@ -32,7 +32,7 @@ impl Hash {
         Self(blake3::hash(bytes).into())
     }
 
-    /// Fingerprint any [`std::hash::Hash`] value with blake3 — used to hash
+    /// Fingerprint any [`std::hash::Hash`] value with blake3, used to hash
     /// structured data (e.g. the whole [`crate::config::Config`]) without
     /// serializing it to a string first.
     pub fn of<T: std::hash::Hash>(value: &T) -> Self {
@@ -43,7 +43,7 @@ impl Hash {
 
     /// A content fingerprint of every file under `dir`, sorted by relative path
     /// (an empty directory, or an absent one, hashes to a stable empty value).
-    /// Used to invalidate pages that inline asset bytes (`embed`) — a change the
+    /// Used to invalidate pages that inline asset bytes (`embed`): a change the
     /// per-file dependency tracker cannot otherwise see, since typst never reads
     /// the embedded files.
     pub fn of_dir(dir: &Path) -> Self {
@@ -75,7 +75,7 @@ impl Hash {
 
 /// A value that can fingerprint itself into a [`Hash`], for cache invalidation.
 ///
-/// One shared vocabulary for "the content digest of this thing" — a page-link
+/// One shared vocabulary for "the content digest of this thing": a page-link
 /// map, the processed-asset map, a publishable record. Every implementor folds
 /// its digest into some cache and re-derives dependent work when it changes, so
 /// they all speak in [`Hash`] and compose the same way. Implement it, don't call

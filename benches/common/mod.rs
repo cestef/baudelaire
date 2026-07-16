@@ -1,7 +1,7 @@
 //! Shared fixtures for the hotpath benchmarks.
 //!
 //! Every bench target compiles this module in, so some helpers are unused from
-//! any single target's point of view — hence the crate-level `dead_code` allow.
+//! any single target's point of view, hence the crate-level `dead_code` allow.
 #![allow(dead_code)]
 
 use std::fs;
@@ -17,7 +17,7 @@ use baudelaire::world::Project;
 /// build groups all report on the same axis.
 pub const PAGE_COUNTS: [usize; 3] = [16, 64, 256];
 
-/// A [`Project`] for a test config — module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world.
 pub fn project(cfg: &Config) -> Project {
     Project::new(cfg, Mode::Build).expect("project")
 }
@@ -87,7 +87,7 @@ pub fn site(n: usize) -> (TempDir, Config) {
 }
 
 /// A page-sized HTML document with `sections` repeats of chrome, prose, entities,
-/// and a raw element — the shape [`baudelaire::engine::text::Text::extract`] sees.
+/// and a raw element, the shape [`baudelaire::engine::text::Text::extract`] sees.
 pub fn html_doc(sections: usize) -> String {
     let mut s = String::from(
         "<html><head><style>.x{color:red}</style></head><body>\

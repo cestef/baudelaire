@@ -1,6 +1,6 @@
 //! Content-assembly hotpaths, both swept by page count with throughput in pages:
-//! - `discover` — the content walk plus per-page frontmatter module evaluation.
-//! - `plan`     — everything `discover` does, then the full page-set assembly
+//! - `discover`: the content walk plus per-page frontmatter module evaluation.
+//! - `plan`:     everything `discover` does, then the full page-set assembly
 //!   (siblings, taxonomy, pagination, permalink-collision check). The gap
 //!   between the two curves is the pure assembly cost.
 

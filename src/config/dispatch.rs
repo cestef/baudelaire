@@ -2,7 +2,7 @@
 //!
 //! [`Block`] matches a scope's child nodes by name; [`Attrs`] matches a node's
 //! `key=value` entries. Each dispatch table is the *single source of truth* for
-//! that scope's valid keys — [`Keys`] derives "unknown key" errors (with a
+//! that scope's valid keys: [`Keys`] derives "unknown key" errors (with a
 //! nearest-match hint) from the very same table, so suggestions never drift from
 //! what actually parses.
 
@@ -56,7 +56,7 @@ impl<T> Attrs<T> {
     /// Apply named attributes of `node`, erroring on the first unrecognized
     /// attribute. At most `leading` positional (unnamed) entries are tolerated,
     /// and only at the front of the node (the caller consumes them, e.g. a
-    /// collection's glob) — any other positional would be silently discarded,
+    /// collection's glob): any other positional would be silently discarded,
     /// so it errors instead.
     pub(super) fn apply(
         &self,
@@ -115,7 +115,7 @@ impl Keys<'_> {
     }
 
     /// Build an unknown-*value* error (an unrecognized enum variant supplied as
-    /// a value) from an allowed-values `table` — the value counterpart to
+    /// a value) from an allowed-values `table`: the value counterpart to
     /// [`Keys::unknown_key`].
     pub(super) fn unknown_value<F>(
         table: &[(&'static str, F)],

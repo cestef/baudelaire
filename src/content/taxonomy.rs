@@ -31,11 +31,11 @@ impl Generate for Taxonomy {
 
 /// One taxonomy's terms and the pages under each.
 struct Group<'a> {
-    /// Taxonomy name, e.g. `tags` — also its URL prefix and section id.
+    /// Taxonomy name, e.g. `tags`; also its URL prefix and section id.
     name: &'a str,
     /// Optional user template for the generated pages.
     template: Option<String>,
-    /// term → member pages, sorted by term then title.
+    /// term -> member pages, sorted by term then title.
     terms: BTreeMap<String, Vec<&'a Page>>,
 }
 
@@ -60,7 +60,7 @@ impl<'a> Group<'a> {
     }
 
     /// Emit the index listing and one listing per term. Resolves every term's
-    /// slug up front so an empty slug or a collision (`C++`/`C--` → `c`) is a
+    /// slug up front so an empty slug or a collision (`C++`/`C--` -> `c`) is a
     /// precise error, not a silent `/tags//` or overwrite.
     fn build(&self, config: &Config, out: &mut Vec<Page>) -> Result<()> {
         if self.terms.is_empty() {

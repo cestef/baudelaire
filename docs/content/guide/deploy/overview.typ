@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-`baudelaire build` writes a plain folder of static files to `public/` — the
+`baudelaire build` writes a plain folder of static files to `public/`, the
 `dist` directory from #link("../config.typ")[config], overridable with `--out`.
 There is no server to run.
 
@@ -14,8 +14,8 @@ static host or CI pipeline.
 
 == The `deploy` command
 
-`baudelaire deploy` builds the site first — so a run always reflects the current
-sources — then reconciles the configured destination with `public/`: it uploads
+`baudelaire deploy` builds the site first (so a run always reflects the current
+sources) then reconciles the configured destination with `public/`: it uploads
 new or changed files, skips unchanged ones, and (unless told otherwise) deletes
 what the build no longer produces.
 
@@ -27,11 +27,11 @@ baudelaire deploy --yes       # skip the confirmation
 
 Pick a backend by adding a `deploy` block to `config.kdl`: an
 #link("s3.typ")[S3-compatible bucket] or an #link("ssh.typ")[SSH host].
-Credentials never live in config — each backend reads them from the environment
+Credentials never live in config: each backend reads them from the environment
 (or a prompt) at deploy time.
 
 #callout(kind: "note")[
-  No backend configured? `baudelaire deploy` says so rather than doing nothing —
+  No backend configured? `baudelaire deploy` says so rather than doing nothing:
   hand `public/` to a #link("static-hosts.typ")[static host] instead.
 ]
 

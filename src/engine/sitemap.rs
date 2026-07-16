@@ -14,7 +14,7 @@ use crate::error::Result;
 pub(super) struct SiteMap;
 
 impl SiteMap {
-    /// The output file name — robots.txt references it too.
+    /// The output file name; robots.txt references it too.
     pub(super) const FILE: &'static str = "sitemap.xml";
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
 

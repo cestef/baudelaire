@@ -8,15 +8,15 @@
 //! `sys.inputs.baudelaire.git.hash` alone and rebuild only when *that* value
 //! changes, not on every commit.
 //!
-//! It is generic over the root value. Give [`reads`] a set of [`Root`]s — each a
+//! It is generic over the root value. Give [`reads`] a set of [`Root`]s, each a
 //! dotted base that names the value in source (`"sys.inputs.baudelaire"`) and
-//! its current [`Value`] — and it returns the qualified paths read from each.
+//! its current [`Value`], and it returns the qualified paths read from each.
 //! The same roots drive [`digest`], so analysis and invalidation share one
 //! source of truth and cannot drift.
 //!
 //! The analysis is sound by over-approximation: it never misses a read (which
-//! would serve stale output), but where it cannot narrow an access — a dynamic
-//! `.at(key)`, a value pulled through a destructuring — it widens to the base
+//! would serve stale output), but where it cannot narrow an access (a dynamic
+//! `.at(key)`, a value pulled through a destructuring) it widens to the base
 //! itself, i.e. "depends on the entire value". Precise for the direct-access and
 //! `let`-alias patterns templates actually use.
 
@@ -56,7 +56,7 @@ pub fn reads(source: &Source, roots: &[Root]) -> Reads {
 
 /// The content digest of the value at a qualified `key`, or `None` when no value
 /// lives there. Two builds agree iff the digests are equal, so a path that gains
-/// or loses a value (`None` ↔ `Some`) reads as a change — no sentinel needed.
+/// or loses a value (`None` <-> `Some`) reads as a change, no sentinel needed.
 pub fn digest(roots: &[Root], key: &str) -> Option<Hash> {
     roots.iter().find(|root| root.owns(key))?.digest(key)
 }
@@ -131,8 +131,8 @@ impl<'a> Root<'a> {
 }
 
 /// A syntax-tree walk that accumulates the value paths a source reads. Threads
-/// its state — the tracked roots, the `let`-alias environment, and the reads so
-/// far — as one object rather than through every step.
+/// its state (the tracked roots, the `let`-alias environment, and the reads so
+/// far) as one object rather than through every step.
 struct Scan<'a> {
     roots: &'a [Root<'a>],
     /// `let` aliases into a tracked value, e.g. the `git` in
@@ -157,8 +157,8 @@ impl<'a> Scan<'a> {
         if let Some(expr) = node.cast::<Expr>() {
             // A binding we can alias is not a read: the value becomes a dependency
             // where the alias is *used*, so we only scan a call's arguments (a
-            // default is still a read). A binding we can't alias — a destructuring
-            // or complex pattern — would let the value escape untracked, so its
+            // default is still a read). A binding we can't alias (a destructuring
+            // or complex pattern) would let the value escape untracked, so its
             // initializer is recorded like any other use instead.
             if let Expr::LetBinding(binding) = expr {
                 let init = binding.init().map(|init| init.to_untyped());
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn destructuring_the_value_widens_soundly() {
         // We can't alias `git` through a destructuring pattern, so the whole
-        // value it's pulled from is recorded — never dropped (that would be a
+        // value it's pulled from is recorded, never dropped (that would be a
         // stale-output bug).
         let code = "#let (git,) = sys.inputs.baudelaire\n#git.hash";
         assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire"]);
@@ -440,7 +440,7 @@ mod tests {
     #[test]
     fn destructuring_a_tuple_of_leaves_stays_precise() {
         // The initializer is an array of individual reads, so each is recorded
-        // on its own — no need to widen to the whole context.
+        // on its own, no need to widen to the whole context.
         let code = "#let (v, d) = (sys.inputs.baudelaire.version, sys.inputs.baudelaire.date)";
         assert_eq!(
             keys(&read(code)),
@@ -504,12 +504,12 @@ mod tests {
             tree: &after,
         }];
 
-        // git.hash unchanged across a day boundary → same digest → no rebuild.
+        // git.hash unchanged across a day boundary -> same digest -> no rebuild.
         assert_eq!(
             digest(&roots_before, "sys.inputs.baudelaire.git.hash"),
             digest(&roots_after, "sys.inputs.baudelaire.git.hash")
         );
-        // date changed → its digest differs.
+        // date changed -> its digest differs.
         assert_ne!(
             digest(&roots_before, "sys.inputs.baudelaire.date"),
             digest(&roots_after, "sys.inputs.baudelaire.date")

@@ -7,7 +7,7 @@
 //! (`og:url`, canonical) are emitted only when a base `url` is configured.
 //!
 //! typst-html owns the document `<head>` (templates can only set the title), so
-//! these tags cannot be authored in a layout — appending them to the parsed DOM
+//! these tags cannot be authored in a layout, so appending them to the parsed DOM
 //! here is the single place they can be added for every page at once.
 
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};

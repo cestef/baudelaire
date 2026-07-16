@@ -67,7 +67,7 @@ See #link("../features/content/taxonomies.typ")[taxonomies].
 
 == Everything else
 
-Unknown keys are not errors — they pass through as *extra* frontmatter, yours to
+Unknown keys are not errors: they pass through as *extra* frontmatter, yours to
 read in a template. `description`, `summary`, `image`, and `author` are common
 ones the build itself reads when present (for
 #link("../features/discovery/meta.typ")[meta and social tags]):
@@ -84,7 +84,7 @@ A template reaches them through the page's `frontmatter` dict like any other
 field.
 
 #callout(kind: "note")[
-  A key that is a near-miss of a recognized one — `titel`, `tag`, `redirects` —
+  A key that is a near-miss of a recognized one (`titel`, `tag`, `redirects`)
   is treated as a typo and reported with a "did you mean?" suggestion rather than
   silently passed through.
 ]

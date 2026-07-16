@@ -19,7 +19,7 @@ use super::module::{ModuleCx, Virtual};
 use super::{Ctx, Handler, PathExt, Phase};
 
 /// JavaScript entries: bundled when `bundle` is on. A file whose name starts
-/// with `_` is a partial — pulled in through imports, never emitted standalone.
+/// with `_` is a partial: pulled in through imports, never emitted standalone.
 /// With bundling off, JS is left to the verbatim copy.
 ///
 /// Runs in [`Phase::Bundle`], the last phase, so a bundle importing
@@ -74,7 +74,7 @@ pub(super) struct Js {
 }
 
 impl Js {
-    /// Build the bundler against the finalized site context — call once the
+    /// Build the bundler against the finalized site context: call once the
     /// asset map is complete, so `baudelaire:assets` resolves every asset.
     pub(super) fn new(cx: &ModuleCx) -> Self {
         let runtime = tokio::runtime::Builder::new_multi_thread()

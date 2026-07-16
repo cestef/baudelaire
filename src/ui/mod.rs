@@ -2,12 +2,12 @@
 //! prints.
 //!
 //! Layers:
-//! - **Reporting** ([`Ui`]) — banners, results, per-page progress, dev-server
+//! - **Reporting** ([`Ui`]): banners, results, per-page progress, dev-server
 //!   event lines. Human-facing, on stderr, level-gated.
-//! - **Warnings** ([`Ui::warn`]) — full [`miette::Diagnostic`]s with codes,
+//! - **Warnings** ([`Ui::warn`]): full [`miette::Diagnostic`]s with codes,
 //!   spans, and help, collected during a run and rendered together by
 //!   [`Ui::flush`], so a build's noise never interleaves with its progress.
-//! - **Debug logs** ([`trace`]) — `tracing` events for `-v`/`-vv`/`RUST_LOG`,
+//! - **Debug logs** ([`trace`]): `tracing` events for `-v`/`-vv`/`RUST_LOG`,
 //!   strictly diagnostic.
 //!
 //! Everything goes to stderr (stdout stays reserved for data), through
@@ -34,7 +34,7 @@ pub use progress::Progress;
 /// Output verbosity level.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
-    /// Nothing but collected warnings — used internally while the dev server
+    /// Nothing but collected warnings: used internally while the dev server
     /// rebuilds, so a rebuild reads as one concise log line, not a full build
     /// block.
     Silent,
@@ -43,12 +43,12 @@ pub enum Level {
     /// Default: banner, results, warnings.
     #[default]
     Default,
-    /// Verbose: + per-page progress and detail. Debug *logs* are separate —
+    /// Verbose: + per-page progress and detail. Debug *logs* are separate:
     /// `-v` also enables them, via [`trace`].
     Verbose,
 }
 
-/// A started stopwatch, for the operation summaries. Explicit — the caller
+/// A started stopwatch, for the operation summaries. Explicit: the caller
 /// times what it means to time, rather than the writer guessing.
 pub struct Timer(Instant);
 
@@ -133,7 +133,7 @@ impl Ui {
         );
     }
 
-    /// A stage heading set off by a blank line: `◆ standard.site — 24 documents`.
+    /// A stage heading set off by a blank line: `◆ standard.site - 24 documents`.
     pub fn section(&self, msg: impl Display) {
         let mut s = self.state.lock();
         if s.level < Level::Default {
@@ -183,6 +183,20 @@ impl Ui {
         let _ = writeln!(s.out, "    {} {}", "↳".dimmed(), msg);
     }
 
+    /// Rows hung off the preceding result as a dimmed tree: each row gets a
+    /// `├─` connector, the last a rounded `╰─`, aligned under the result glyph.
+    pub fn tree(&self, rows: &[String]) {
+        let mut s = self.state.lock();
+        if s.level < Level::Default {
+            return;
+        }
+        let last = rows.len().saturating_sub(1);
+        for (i, row) in rows.iter().enumerate() {
+            let connector = if i == last { "╰─" } else { "├─" };
+            let _ = writeln!(s.out, "  {} {}", connector.dimmed(), row);
+        }
+    }
+
     /// A vite-style pointer line: `➜ local  http://..`. Labels align across
     /// consecutive arrows (padded to the widest expected label).
     pub fn arrow(&self, label: &str, value: impl Display) {
@@ -190,7 +204,7 @@ impl Ui {
         if s.level < Level::Default {
             return;
         }
-        // pad before styling — a width applied to the styled value would count
+        // pad before styling: a width applied to the styled value would count
         // its escape codes and misalign the column.
         let _ = writeln!(
             s.out,
@@ -256,7 +270,7 @@ impl Ui {
     }
 
     /// Render everything collected since the last flush, miette-formatted and
-    /// indented into the report column. Shown at every level — a warning
+    /// indented into the report column. Shown at every level: a warning
     /// survives `--quiet` and the dev server's silent rebuilds. Identical
     /// renders collapse into one block with a repeat count, so the same
     /// missing font across fifty pages reads as one warning, not fifty.
@@ -295,7 +309,7 @@ impl Ui {
     }
 
     /// The renderer for collected diagnostics, sized to the terminal. Colors
-    /// are always emitted — the `anstream` writer strips them on pipes and
+    /// are always emitted: the `anstream` writer strips them on pipes and
     /// under `NO_COLOR`, same as every other line.
     fn handler(&self) -> GraphicalReportHandler {
         let width = console::Term::stderr()
@@ -351,7 +365,7 @@ impl Ui {
         );
     }
 
-    /// A progress bar labeled `verb` over `len` items — visible only on a
+    /// A progress bar labeled `verb` over `len` items: visible only on a
     /// terminal at the default level (verbose prints per-page lines instead,
     /// quiet prints nothing).
     pub fn progress(&self, verb: &'static str, len: usize) -> Progress {

@@ -1,7 +1,7 @@
 //! Minimal EXIF orientation reader for JPEG.
 //!
-//! Re-encoding a JPEG strips its metadata — including the Orientation tag a
-//! camera used instead of rotating pixels — so the optimizer must bake that
+//! Re-encoding a JPEG strips its metadata, including the Orientation tag a
+//! camera used instead of rotating pixels, so the optimizer must bake that
 //! rotation into the pixels first or phone photos come out sideways. This
 //! reads just the one tag; anything missing or malformed is [`Upright`].
 

@@ -9,7 +9,7 @@ use crate::config::{SortKey, UrlStyle};
 use crate::error::{ConfigError, Result};
 
 /// A `${VAR}` reference whose variable is unset and which carries no
-/// `:-default` — the one failure mode of [`Env`] expansion.
+/// `:-default`: the one failure mode of [`Env`] expansion.
 #[derive(Debug)]
 struct MissingVar(String);
 
@@ -25,7 +25,7 @@ impl Env {
         Self::expand_with(raw, |name| std::env::var(name).ok())
     }
 
-    /// Expansion against an arbitrary variable lookup — the core logic, kept
+    /// Expansion against an arbitrary variable lookup: the core logic, kept
     /// free of the process environment so it is testable without mutating global
     /// state (unsound under multi-threaded test runners).
     fn expand_with(
@@ -61,14 +61,14 @@ pub(super) trait ValueExt {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String>;
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64>;
     /// An integer required to fall within `min..=max`, erroring (never clamping)
-    /// when it does not — the same policy as `port` and `paginate`.
+    /// when it does not: the same policy as `port` and `paginate`.
     fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64>;
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
     fn urls(&self, text: &str, span: SourceSpan) -> Result<UrlStyle>;
     /// Map a string value through a `(name, value)` table, erroring on an
-    /// unknown name with a nearest-match hint — the single-value counterpart of
+    /// unknown name with a nearest-match hint: the single-value counterpart of
     /// `NodeExt::mapped`, so the table drives both parsing and error help.
     fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
@@ -89,7 +89,7 @@ impl ValueExt for KdlValue {
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {
-        // kdl 6 integers are i128 — a literal beyond i64 must not wrap.
+        // kdl 6 integers are i128: a literal beyond i64 must not wrap.
         match self.as_integer() {
             Some(n) => {
                 i64::try_from(n).map_err(|_| ConfigError::integer_overflow(text, n, span).into())
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn env_expands_variables_defaults_and_literals() {
-        // fixed lookup, no real env touched — sound under any test runner
+        // fixed lookup, no real env touched: sound under any test runner
         let env = |name: &str| (name == "APP_ENV").then(|| "prod".to_owned());
         assert_eq!(
             Env::expand_with("site-${APP_ENV}", env).unwrap(),

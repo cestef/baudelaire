@@ -2,7 +2,7 @@ mod common;
 
 use baudelaire::content::discover;
 use baudelaire::world::{Mode, Project};
-/// A [`Project`] for a test config — module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world.
 fn project(cfg: &baudelaire::config::Config) -> Project {
     Project::new(cfg, Mode::Build).expect("project")
 }

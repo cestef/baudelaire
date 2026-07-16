@@ -3,8 +3,8 @@
 //! the built `dist` directory: upload what changed, delete what the build no
 //! longer produces.
 //!
-//! The moving parts are kept pure and tested — key encoding, the listing parse,
-//! and the upload/delete [`Plan`] — while the `ureq` calls stay a thin shell
+//! The moving parts are kept pure and tested (key encoding, the listing parse,
+//! and the upload/delete [`Plan`]) while the `ureq` calls stay a thin shell
 //! around them. Change detection is stateless: S3 returns each object's ETag,
 //! which for a single-part upload is the hex MD5 of its bytes, so a local file
 //! whose MD5 matches the remote ETag is skipped without any local record.
@@ -92,13 +92,13 @@ pub struct Bucket {
     region: String,
     /// Key prefix every object is placed under (no leading/trailing slash).
     prefix: String,
-    /// Scheme and host a request URL hangs off, no trailing slash —
+    /// Scheme and host a request URL hangs off, no trailing slash:
     /// `https://bucket.s3.region.amazonaws.com` for AWS virtual-hosting,
     /// `https://endpoint` for a custom endpoint. A signing URI is appended to it.
     authority: String,
     /// Host header the signature commits to.
     host: String,
-    /// The leading path every signing URI carries — empty for virtual-hosted,
+    /// The leading path every signing URI carries: empty for virtual-hosted,
     /// `/bucket` for path-style.
     root: String,
 }
@@ -177,7 +177,7 @@ impl Bucket {
     }
 
     /// Strip the configured prefix from a listed object key, so the whole client
-    /// speaks one namespace — dist-relative paths — with the prefix an internal
+    /// speaks one namespace, dist-relative paths, with the prefix an internal
     /// detail of addressing.
     fn relative(&self, key: String) -> String {
         if self.prefix.is_empty() {
@@ -295,7 +295,7 @@ struct Listing {
     next: Option<String>,
 }
 
-/// Wire-format helpers — key normalization, encoding, and the values a request
+/// Wire-format helpers: key normalization, encoding, and the values a request
 /// signs with. Kept as associated functions so they stay pure and testable while
 /// living under the client they serve.
 impl Bucket {

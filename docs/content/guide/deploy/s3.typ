@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-`baudelaire deploy` uploads the built files to an S3-compatible bucket — AWS S3,
+`baudelaire deploy` uploads the built files to an S3-compatible bucket: AWS S3,
 Cloudflare R2, MinIO, or anything that speaks the S3 API. Add a `deploy` block
 with your bucket:
 
@@ -38,7 +38,7 @@ Baudelaire never stores credentials in config. The access key id is read from
 `AWS_ACCESS_KEY_ID`; the secret key is resolved, in order, from:
 
 ```sh
-# 1. the environment variable — best for CI
+# 1. the environment variable, best for CI
 AWS_ACCESS_KEY_ID=AKIA.. AWS_SECRET_ACCESS_KEY=.. baudelaire deploy
 
 # 2. stdin, so it never appears in the process arguments

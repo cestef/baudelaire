@@ -153,7 +153,7 @@
 }
 
 // The doc collections shown in the sidebar, as `(id, display title)`. Their
-// pages — and their order — come from `page.sections` (the build's own view of
+// pages, and their order, come from `page.sections` (the build's own view of
 // the site), so the sidebar can never drift from the content or from the
 // prev/next pager, which read the same source.
 #let _doc-groups = (("guide", "Guide"), ("features", "Features"))

@@ -3,7 +3,7 @@
 //! Several dependencies (kdl, wax, ..) ship their own `Diagnostic`s but against
 //! an incompatible miette version, so their rich spans can't cross into ours
 //! directly. Rather than hand-roll a bespoke bridge per dependency, they lower
-//! their error — a message, the offending source, and labeled byte ranges —
+//! their error (a message, the offending source, and labeled byte ranges)
 //! into an [`Annotated`], which renders natively.
 
 use std::fmt;

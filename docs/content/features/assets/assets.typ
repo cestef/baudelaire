@@ -59,8 +59,8 @@ markup. This site's stylesheet and script go through exactly this path.
 
 == In JavaScript
 
-A bundled entry can import the site's build data — including this fingerprint
-map — from the #link("js-modules.typ")[#raw("baudelaire:*") virtual modules], so
+A bundled entry can import the site's build data, including this fingerprint
+map, from the #link("js-modules.typ")[#raw("baudelaire:*") virtual modules], so
 client code references a hashed asset by its logical path.
 
 == Bypassing the pipeline
@@ -68,6 +68,6 @@ client code references a hashed asset by its logical path.
 Some files must reach the output root untouched: a `robots.txt` override,
 `.well-known/`, a `CNAME`, an `install.sh`. Put them in the `static/` directory
 (configured under #link("../../guide/config.typ")[`paths`]) and they are copied
-verbatim to the site root — no minify, no bundle, no fingerprint, no prefix. A
+verbatim to the site root: no minify, no bundle, no fingerprint, no prefix. A
 generated page at the same path wins, so `static/` is the lowest-priority source.
 

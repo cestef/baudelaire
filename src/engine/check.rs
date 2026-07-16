@@ -2,7 +2,7 @@
 //!
 //! Each [`Check`] inspects the freshly compiled pages and reports problems it
 //! finds. A check either fails the build (returns `Err`) or downgrades to a
-//! [`Ui`] warning, per its own config gate — the strict-vs-lenient policy lives
+//! [`Ui`] warning, per its own config gate: the strict-vs-lenient policy lives
 //! with the check, not the runner. [`Checks::builtin`] is the single source of
 //! what runs, in order: a new validation is one `impl Check` plus one line
 //! there, exactly like [`super::process::Processors`] for emitted output.
@@ -14,7 +14,7 @@ use crate::error::{Broken, BrokenLinks, Result};
 use crate::ui::Ui;
 
 /// Read-only view of the freshly compiled pages handed to every check. Cached
-/// pages are excluded by the caller — they kept their links from the build that
+/// pages are excluded by the caller: they kept their links from the build that
 /// produced them, so there is nothing new to validate.
 pub(super) struct Compiled<'a> {
     pub config: &'a Config,
@@ -34,7 +34,7 @@ pub(super) struct CheckedPage<'a> {
 
 /// One post-render validation pass.
 pub(super) trait Check {
-    /// Whether to run, from config alone — keeps the gate declarative and out of
+    /// Whether to run, from config alone: keeps the gate declarative and out of
     /// [`Check::run`]. Default: always.
     fn enabled(&self, _config: &Config) -> bool {
         true

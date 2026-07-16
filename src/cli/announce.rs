@@ -1,5 +1,5 @@
 //! `baudelaire announce`: build the site, then push it to every configured
-//! destination. The terminal-facing half of [`crate::announce`] — it maps the
+//! destination. The terminal-facing half of [`crate::announce`]: it maps the
 //! CLI flags onto [`Options`] and supplies an [`Interaction`] backed by the
 //! shared prompt widgets, so confirmation and secret entry reuse the same
 //! styled prompts as `init` rather than re-implementing them.

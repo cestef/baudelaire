@@ -41,7 +41,7 @@ const FEATURES: &[(&str, Feature)] = &[
 #[derive(Clone)]
 pub struct Project {
     lib: Arc<LazyHash<Library>>,
-    /// System fonts, discovered lazily on first glyph lookup — a fully-cached
+    /// System fonts, discovered lazily on first glyph lookup: a fully-cached
     /// rebuild compiles nothing, so it never pays to scan the font directories.
     fonts: Arc<LazyLock<FontStore>>,
     files: Arc<FileStore<SystemFiles>>,
@@ -92,7 +92,7 @@ pub struct BuildContext {
 /// Git state of the site repository at build time.
 #[derive(Debug, Clone)]
 struct GitInfo {
-    /// The full commit SHA — pages slice it themselves for a short form.
+    /// The full commit SHA: pages slice it themselves for a short form.
     hash: String,
     /// The revision number: how many commits are reachable from HEAD.
     rev: Option<String>,
@@ -285,12 +285,12 @@ impl Project {
 
     /// Discover and load the system fonts. Used as the [`LazyLock`] initializer
     /// for [`Project::fonts`] so the cost (scanning font directories, parsing
-    /// fontconfig) is paid only when a page is actually compiled — never on a
+    /// fontconfig) is paid only when a page is actually compiled: never on a
     /// fully-cached rebuild.
     fn system_fonts() -> FontStore {
         let mut fonts = FontStore::new();
         // Typst's embedded defaults (Libertinus, New Computer Modern, DejaVu)
-        // first, then system fonts — so a glyph resolves the same way it does
+        // first, then system fonts, so a glyph resolves the same way it does
         // under `typst` itself, instead of falling back to whatever the system
         // happens to offer (which can rasterize digits as colour-font images).
         // Without the `embedded-fonts` feature the defaults are not bundled, so
@@ -307,7 +307,7 @@ impl Project {
     }
 
     /// The injected values whose per-page reads the cache tracks, each as a
-    /// dotted base and its current tree. One entry today — build metadata — but
+    /// dotted base and its current tree. One entry today (build metadata), but
     /// the mechanism is generic, so any future `sys.inputs.*` value tracked for
     /// fine-grained invalidation is added here.
     pub fn tracked(&self) -> Vec<(String, codegen::Value)> {
@@ -338,7 +338,7 @@ impl Project {
     }
 
     /// The parsed source of a project file, loaded through the shared file
-    /// store — discovery and compilation read one parse.
+    /// store: discovery and compilation read one parse.
     pub fn source(&self, path: &Path) -> Result<Source> {
         let id = FileId::new(self.virtualize(path)?);
         self.files.source(id).map_err(|e| {
@@ -352,7 +352,7 @@ impl Project {
         })
     }
 
-    /// Evaluate a source as a typst module — the compiler's own memoized
+    /// Evaluate a source as a typst module: the compiler's own memoized
     /// evaluation, so a later compile of the same file reuses it. A module's
     /// scope carries the page's exports (`#let frontmatter = ..`); its errors
     /// carry real file spans.
@@ -379,7 +379,7 @@ impl Project {
     }
 
     /// Evaluate a source as a typst module and capture the files the evaluation
-    /// read — the frontmatter's exact dependency set, so discovery can cache the
+    /// read: the frontmatter's exact dependency set, so discovery can cache the
     /// extracted frontmatter and re-evaluate only when a dependency changes.
     /// Like [`Project::module`] but through a [`Tracked`] world; the page's own
     /// source is excluded from the deps (it is fingerprinted separately).
@@ -419,7 +419,7 @@ impl Project {
     }
 
     /// The files a tracked compilation read, excluding its own `main` source
-    /// (fingerprinted separately), resolved to canonical paths — a page's exact
+    /// (fingerprinted separately), resolved to canonical paths: a page's exact
     /// dependency set.
     pub fn dependencies<W: World>(&self, world: &Tracked<W>) -> Deps {
         let main = world.main();
@@ -435,7 +435,7 @@ impl Project {
 }
 
 /// A [`World`] wrapper that records every file the compiler reads, yielding a
-/// compilation's exact dependency set — transitive imports, data loaders
+/// compilation's exact dependency set: transitive imports, data loaders
 /// (`json`, `csv`, ..), and assets alike.
 ///
 /// This works even though the underlying world is comemo-memoized and shared
@@ -462,7 +462,7 @@ impl<W> Tracked<W> {
         &self.inner
     }
 
-    /// Consume the wrapper, returning the wrapped world — for building an owned
+    /// Consume the wrapper, returning the wrapped world, for building an owned
     /// world (e.g. an `Arc`) once tracking is done.
     pub fn into_inner(self) -> W {
         self.inner
@@ -559,7 +559,7 @@ impl World for PageWorld {
     }
 
     fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
-        // No offset defaults to UTC — the same clock the build context stamps —
+        // No offset defaults to UTC (the same clock the build context stamps)
         // rather than `None`, which typst reports as "unable to determine
         // current date" on every offset-less `datetime.today()` call.
         let offset = match offset {

@@ -13,7 +13,7 @@ collections {
 }
 ```
 
-That single page holds every member — no pagination. This site's
+That single page holds every member: no pagination. This site's
 #link("/features/")[features index] is exactly this: one page, all features, in
 `order`.
 
@@ -27,7 +27,7 @@ collections {
 
 Now Baudelaire generates `/blog/`, `/blog/page/2/`, `/blog/page/3/`, and so on,
 each listing five entries with previous and next links. Pagination is just the
-splitting modifier on top of a listing — the same `list` template renders both.
+splitting modifier on top of a listing: the same `list` template renders both.
 
 The `page` segment in the URL is configurable per collection with `prefix`:
 

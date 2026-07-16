@@ -2,7 +2,7 @@
 //!
 //! This is typst *code* generation, not HTML templating: the synthetic module
 //! imports the template function and applies it document-wide via a show rule,
-//! so the template itself produces the DOM. No HTML is ever assembled as text —
+//! so the template itself produces the DOM. No HTML is ever assembled as text,
 //! and a real page's source is never touched either: its frontmatter arrives as
 //! a module *import* of the page's own `frontmatter` export, and its body via
 //! `#include`. Only generated listings (which have no file) inline anything.
@@ -23,7 +23,7 @@ pub(super) enum Bind<'a> {
 
 /// The page content the template wraps.
 pub(super) enum Body<'a> {
-    /// `#include` the real page file — its source compiles as authored.
+    /// `#include` the real page file: its source compiles as authored.
     Include,
     /// Generated markup, inlined (listings have no file to include).
     Inline(&'a str),
@@ -36,16 +36,16 @@ pub(super) enum Body<'a> {
 pub(super) struct Context<'a> {
     /// Where the page's frontmatter dict comes from.
     pub data: Bind<'a>,
-    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))` — passed
+    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))`, passed
     /// alongside the frontmatter so a template reads a page's taxonomy terms
     /// the same structured way a listing reads an entry's, not by guessing which
     /// frontmatter keys are taxonomies.
     pub taxonomies: &'a str,
     /// Prev/next sibling links as a dict literal, e.g.
-    /// `(prev: (url: "..", title: ".."), next: none)` — exposed to the template as
+    /// `(prev: (url: "..", title: ".."), next: none)`, exposed to the template as
     /// `page.nav` for older/newer navigation.
     pub nav: &'a str,
-    /// The site's content collections as an array literal — exposed to the
+    /// The site's content collections as an array literal, exposed to the
     /// template as `page.sections`, the single source a site nav is built from.
     pub sections: &'a str,
 }
@@ -83,7 +83,7 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// The template function to apply: the file stem (`post.typ` → `post`).
+    /// The template function to apply: the file stem (`post.typ` -> `post`).
     fn func(&self) -> &str {
         Path::new(self.file)
             .file_stem()
@@ -100,7 +100,7 @@ impl<'a> Layout<'a> {
 impl fmt::Display for Layout<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // import under internal aliases so the template function and the data
-        // are never shadowed by a page binding — even a `page.typ`/`body.typ`.
+        // are never shadowed by a page binding, even a `page.typ`/`body.typ`.
         writeln!(
             f,
             "#import {}: {} as __layout",

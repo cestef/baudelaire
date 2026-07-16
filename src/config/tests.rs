@@ -414,7 +414,7 @@ fn err_unknown_permalink_placeholder_is_spanned() {
         "{rendered}"
     );
     assert!(rendered.contains("valid placeholders"), "{rendered}");
-    // the label excerpts config.kdl — the error is spanned at parse time
+    // the label excerpts config.kdl: the error is spanned at parse time
     assert!(rendered.contains("permalink="), "{rendered}");
 }
 

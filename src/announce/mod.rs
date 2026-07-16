@@ -1,7 +1,7 @@
 //! Announcing the built site to external destinations.
 //!
 //! The layer is backend-neutral: [`Backend`] is the one interface a
-//! destination implements, and it receives a [`SiteView`] — the site reduced to
+//! destination implements, and it receives a [`SiteView`]: the site reduced to
 //! portable metadata, with no knowledge of any particular protocol. Concrete
 //! backends (e.g. [`standard`], which speaks AT Protocol) map that view onto
 //! their own records. Adding a destination is one `impl Backend` plus one line
@@ -25,7 +25,7 @@ use self::standard::Standard;
 
 /// A backend-neutral view of the built site handed to every [`Backend`].
 pub struct SiteView<'a> {
-    /// The full resolved config — a backend reads the base `url`, `site` name,
+    /// The full resolved config: a backend reads the base `url`, `site` name,
     /// output directory, and its own `announce` block from here.
     pub config: &'a Config,
     /// Every publishable page, reduced to portable metadata.
@@ -33,7 +33,7 @@ pub struct SiteView<'a> {
 }
 
 /// One publishable page, reduced to the metadata any destination might want.
-/// Typed throughout — dates stay [`time::Date`], not strings — so a backend
+/// Typed throughout (dates stay [`time::Date`], not strings), so a backend
 /// formats them however its wire format requires.
 pub struct Doc {
     /// Root-relative permalink, e.g. `/posts/hello/`.
@@ -82,7 +82,7 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     let site = view(config)?;
     for backend in backends {
         ui.section(format_args!(
-            "{} — {}",
+            "{} - {}",
             backend.name(),
             Count::documents(site.documents.len())
         ));
@@ -107,7 +107,7 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
 }
 
 /// Reduce the discovered, eligible content pages to a [`SiteView`]. Only real
-/// content pages are included — generated index and taxonomy pages are site
+/// content pages are included: generated index and taxonomy pages are site
 /// navigation, not publishable documents.
 fn view(config: &Config) -> Result<SiteView<'_>> {
     let project = crate::world::Project::new(config, crate::world::Mode::Build)?;
@@ -124,7 +124,7 @@ fn view(config: &Config) -> Result<SiteView<'_>> {
 /// A disposable, per-backend skip-cache mapping a record identifier to a
 /// fingerprint of the content last sent, so an unchanged record is not re-sent.
 ///
-/// Kept under [`Config::SCRATCH`], so `clean` wipes it — deliberately. Its loss
+/// Kept under [`Config::SCRATCH`], so `clean` wipes it, deliberately. Its loss
 /// only costs a re-send (which is idempotent), never correctness: a backend
 /// diffs against the *remote* to decide deletions, so nothing is ever orphaned
 /// because a local cache went missing.
@@ -134,7 +134,7 @@ pub struct SkipCache {
 }
 
 impl SkipCache {
-    /// Load the cache for `backend`, treating any read/parse failure as empty —
+    /// Load the cache for `backend`, treating any read/parse failure as empty:
     /// a stale or missing cache is never fatal.
     pub fn load(backend: &str) -> Self {
         crate::fs::read(Self::path(backend))
@@ -153,7 +153,7 @@ impl SkipCache {
         self.hashes.insert(id, fingerprint);
     }
 
-    /// Drop every entry whose id is not in `keep` — the records that no longer
+    /// Drop every entry whose id is not in `keep`: the records that no longer
     /// exist after this announce.
     pub fn retain(&mut self, keep: &BTreeSet<String>) {
         self.hashes.retain(|id, _| keep.contains(id));

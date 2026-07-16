@@ -1,7 +1,7 @@
 //! End-to-end build timings on one fixed-size site:
-//! - `full_build/cold` — an empty cache, so every stage runs: typst compile,
+//! - `full_build/cold`: an empty cache, so every stage runs: typst compile,
 //!   render, asset processing, search index, serialization. The headline number.
-//! - `incremental_build` — a warm cache, so compile is skipped and the timing is
+//! - `incremental_build`: a warm cache, so compile is skipped and the timing is
 //!   dependency re-hashing, asset reprocessing, and search-index rebuild alone.
 
 mod common;
@@ -14,7 +14,7 @@ use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use baudelaire::engine::{Engine, Mode};
 use baudelaire::ui::{Level, Ui};
 
-/// Both build groups run on a site this size — big enough to be compile-bound,
+/// Both build groups run on a site this size, big enough to be compile-bound,
 /// small enough that a cold build stays a practical benchmark.
 const PAGES: usize = 64;
 

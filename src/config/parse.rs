@@ -24,7 +24,7 @@ impl Config {
         Ok(cfg)
     }
 
-    /// Apply a single config node over `self` — used to overlay profile nodes
+    /// Apply a single config node over `self`, used to overlay profile nodes
     /// (see [`Config::with_profile`]).
     pub(crate) fn overlay(&mut self, text: &str, node: &KdlNode) -> Result<()> {
         Self::RULES.apply(self, std::slice::from_ref(node), text)
@@ -32,7 +32,7 @@ impl Config {
 
     /// The top-level config schema: every key paired with the handler that
     /// applies it. This table is the *single source of truth* for what keys are
-    /// valid — dispatch and "unknown key" suggestions both read it.
+    /// valid: dispatch and "unknown key" suggestions both read it.
     const RULES: Block<Config> = Block(&[
         ("site", |c, n, t| {
             c.site = Some(n.string(t, 0)?);
@@ -96,7 +96,7 @@ pub(super) trait NodeExt {
     fn port(&self, text: &str, idx: usize) -> Result<u16>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
-    /// duplicate id — the single dedup rule for collections, taxonomies, and
+    /// duplicate id: the single dedup rule for collections, taxonomies, and
     /// profiles, where a repeated id would otherwise silently lose one side.
     fn unique<T>(
         &self,
@@ -161,7 +161,7 @@ impl NodeExt for KdlNode {
     }
 
     /// A flag node's boolean: a bare node (`clean`) enables, a present argument
-    /// must be a KDL boolean (`clean #false`) — anything else is a type error,
+    /// must be a KDL boolean (`clean #false`); anything else is a type error,
     /// never a silent coercion.
     fn boolean(&self, text: &str, idx: usize) -> Result<bool> {
         match self.get(idx) {
@@ -247,7 +247,7 @@ impl NodeExt for KdlNode {
             .iter()
             .map(|entry| {
                 let raw = entry.value().as_str(text, NodeExt::span(self))?;
-                // a `-` prefix reads as "disable", but nothing subtracts — error beats silently enabling
+                // a `-` prefix reads as "disable", but nothing subtracts: error beats silently enabling
                 if let Some(name) = raw.strip_prefix('-') {
                     return Err(
                         ConfigError::feature_removal(text, name, NodeExt::span(self)).into(),
@@ -270,7 +270,7 @@ impl NodeExt for KdlNode {
 
     /// Map the node's positional string args through a `(name, value)` table,
     /// erroring on the first unknown name with a nearest-match hint. The single
-    /// source for parsing enum lists (feed formats, search formats/fields) — the
+    /// source for parsing enum lists (feed formats, search formats/fields): the
     /// table drives both the mapping and the "valid names" in errors.
     fn mapped<T: Copy>(&self, text: &str, table: &[(&'static str, T)]) -> Result<Vec<T>> {
         let mut seen: Vec<&'static str> = Vec::new();
@@ -337,7 +337,7 @@ impl NodeExt for KdlNode {
     }
 
     /// The `optimize { png [level=..] [strip=..]; jpeg [quality=..] }` block: each
-    /// child names a format (leniently — `jpg`/`jpeg` both work) and enables it,
+    /// child names a format (leniently: `jpg`/`jpeg` both work) and enables it,
     /// with optional per-format tuning as attributes. Fills onto the existing
     /// per-format config so a profile tuning one attribute keeps its siblings.
     fn optimize(&self, target: &mut OptimizeConfig, text: &str) -> Result<()> {
@@ -518,7 +518,7 @@ impl NodeExt for KdlNode {
     }
 
     fn feed(&self, target: &mut FeedConfig, text: &str) -> Result<()> {
-        /// Feed formats as `(name, kind)` — single source for parsing + errors.
+        /// Feed formats as `(name, kind)`: single source for parsing + errors.
         const FORMATS: &[(&str, FeedKind)] = &[
             ("rss", FeedKind::Rss),
             ("atom", FeedKind::Atom),
@@ -538,7 +538,7 @@ impl NodeExt for KdlNode {
     }
 
     fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()> {
-        /// Index formats as `(name, kind)` — single source for parsing + errors.
+        /// Index formats as `(name, kind)`: single source for parsing + errors.
         const FORMATS: &[(&str, SearchFormat)] = &[
             ("json", SearchFormat::Json),
             ("inverted", SearchFormat::Inverted),
@@ -589,7 +589,7 @@ impl NodeExt for KdlNode {
     }
 
     /// Each list replaces (never appends) so a profile overriding `before`
-    /// leaves `after` inherited from the base — same whole-value replacement as
+    /// leaves `after` inherited from the base: same whole-value replacement as
     /// every other list field.
     fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()> {
         const HOOKS: Block<HooksConfig> = Block(&[
@@ -853,7 +853,7 @@ impl NodeExt for KdlNode {
     }
 }
 
-/// Span bridging for a single [`KdlEntry`] (kdl's own miette 7 → ours), so
+/// Span bridging for a single [`KdlEntry`] (kdl's own miette 7 -> ours), so
 /// value-level errors can point at the exact argument rather than the node.
 pub(super) trait EntryExt {
     fn span(&self) -> SourceSpan;

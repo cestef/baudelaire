@@ -1,7 +1,7 @@
 //! Rewrites asset references to their content-addressed (fingerprinted) URLs.
 //!
 //! When `output { assets { fingerprint #true } }` is set, the engine copies each
-//! asset to a content-hashed name (`style.css` → `style.<hash>.css`) and records
+//! asset to a content-hashed name (`style.css` -> `style.<hash>.css`) and records
 //! the mapping in an [`super::AssetMap`]. This transform rewrites every `href`/
 //! `src` that names an original asset to its hashed URL, so caches can serve
 //! assets forever and bust automatically on change.

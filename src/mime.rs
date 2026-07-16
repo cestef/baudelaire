@@ -1,5 +1,5 @@
-//! One extension → MIME-type table for every consumer (`data:` URIs, the dev
-//! server's `Content-Type`) — a single source so the types can't drift apart.
+//! One extension-to-MIME-type table for every consumer (`data:` URIs, the dev
+//! server's `Content-Type`): a single source so the types can't drift apart.
 
 use std::fmt;
 use std::path::Path;
@@ -41,7 +41,7 @@ impl Mime {
         }
     }
 
-    /// Whether this is HTML — the dev server injects its live-reload client
+    /// Whether this is HTML: the dev server injects its live-reload client
     /// into exactly these responses.
     pub fn html(self) -> bool {
         self.0 == "text/html"

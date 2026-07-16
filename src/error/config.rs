@@ -256,7 +256,7 @@ impl miette::Diagnostic for ConfigError {
         None
     }
 
-    /// Hand the kdl error over transparently — it is itself a miette-7
+    /// Hand the kdl error over transparently: it is itself a miette-7
     /// `Diagnostic` that renders each of its diagnostics (with spans against the
     /// kdl source) as related.
     fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {

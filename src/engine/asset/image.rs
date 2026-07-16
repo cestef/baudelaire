@@ -11,7 +11,7 @@ use super::{Ctx, Handler, PathExt};
 
 /// Raster images: losslessly optimized (PNG) or re-encoded at a quality (JPEG).
 /// An optimizer must never make a file bigger, so the smaller of the input and
-/// output always wins — re-encoding an already-tight file can grow it.
+/// output always wins: re-encoding an already-tight file can grow it.
 pub(super) struct Raster;
 
 impl Handler for Raster {
@@ -76,8 +76,8 @@ impl Encoder for Png<'_> {
     }
 }
 
-/// Lossy JPEG re-encode at the configured quality. The re-encode strips EXIF —
-/// including Orientation — so rotation is baked into the pixels first, or camera
+/// Lossy JPEG re-encode at the configured quality. The re-encode strips EXIF,
+/// including Orientation, so rotation is baked into the pixels first, or camera
 /// photos would come out sideways.
 struct Jpeg<'a>(&'a JpegConfig);
 

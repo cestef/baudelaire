@@ -142,7 +142,7 @@ inputs aren't visible to per-page dependency tracking.
 == Build metadata, read by read
 
 One input used to sit in that whole-site fingerprint and shouldn't have: build
-metadata. A page reaches it through `sys.inputs.baudelaire` — `.git.hash`,
+metadata. A page reaches it through `sys.inputs.baudelaire`: `.git.hash`,
 `.version`, `.date`. Folding it into the manifest meant every commit rebuilt every
 page, including the ones that never mention it.
 
@@ -151,7 +151,7 @@ only when its value changes. The catch is that the read is a dictionary access
 inside Typst, which the file tracker never sees. So Baudelaire reads it out of the
 syntax tree instead. For each page it walks the closure of source it compiled and
 resolves every expression rooted at `sys.inputs.baudelaire` down to the exact path
-it reads — `git.hash`, not `git`, not the whole context. `let` aliases are
+it reads: `git.hash`, not `git`, not the whole context. `let` aliases are
 followed, so the idiomatic
 
 ```typ
@@ -163,11 +163,11 @@ followed, so the idiomatic
 resolves to `git.hash` all the same. Each path is stored with the digest of its
 value; a page is reused unless one of those digests moved. A new commit changes
 `git.hash`, so the pages that print the commit rebuild and the rest stay cached. A
-new day changes `date` and nothing else — so unless a page shows the date, nothing
+new day changes `date` and nothing else, so unless a page shows the date, nothing
 rebuilds.
 
-When an access can't be narrowed — a dynamic `.at(key)`, the whole object bound and
-passed around — it widens to the entire context: correct, but coarse. Sound first,
+When an access can't be narrowed (a dynamic `.at(key)`, the whole object bound and
+passed around), it widens to the entire context: correct, but coarse. Sound first,
 precise where it can be.
 
 == Writing it back
