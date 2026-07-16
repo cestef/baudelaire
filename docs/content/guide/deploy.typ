@@ -84,14 +84,14 @@ jobs:
 == GitLab Pages
 
 GitLab Pages serves the `public/` artifact of a job named `pages` — which is
-exactly what `baudelaire build` produces. Use a glibc image (the prebuilt binary
-is `x86_64-unknown-linux-gnu`, so Alpine's musl won't run it):
+exactly what `baudelaire build` produces. The installer picks the glibc or musl
+binary to match the image, so Alpine works too:
 
 ```yaml
 pages:
-  image: debian:stable-slim
+  image: alpine:latest
   script:
-    - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+    - apk add --no-cache curl
     - curl -fsSL https://baudelaire.cstef.dev/install.sh | sh
     - ~/.local/bin/baudelaire build
   artifacts:

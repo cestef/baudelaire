@@ -6,6 +6,7 @@ REPO="${REPO:-https://codeberg.org/cstef/baudelaire}"
 PREFIX="${PREFIX:-$HOME/.local/bin}"
 VERSION="${VERSION:-}"
 FLAVOR="${FLAVOR:-full}" # full, or slim: only system fonts + assets copied as-is
+LIBC="${LIBC:-}"        # gnu or musl; empty auto-detects
 
 # colors
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -30,6 +31,20 @@ case $(uname -m) in
   *) die "unsupported arch $(uname -m). $src" ;;
 esac
 
+# musl build on musl hosts (Alpine), glibc otherwise. LIBC= overrides.
+if [ -z "$LIBC" ]; then
+  LIBC=gnu
+  for ld in /lib/ld-musl-*.so.1; do
+    [ -e "$ld" ] && { LIBC=musl; break; }
+  done
+  [ "$LIBC" = gnu ] && ldd --version 2>&1 | grep -qi musl && LIBC=musl
+fi
+case "$LIBC" in
+  gnu)  libc= ;;
+  musl) libc=-musl ;;
+  *) die "unknown ${b}LIBC=$LIBC${x}, use ${b}gnu${x} or ${b}musl${x}" ;;
+esac
+
 case "$FLAVOR" in
   full) suffix= ;;
   slim) suffix=-slim ;;
@@ -47,8 +62,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # download tar + sha
-asset="baudelaire-linux-$arch$suffix.tar.gz"
-step "downloading ${b}baudelaire $VERSION${x} ${d}(linux-$arch, $FLAVOR)${x}"
+asset="baudelaire-linux-$arch$libc$suffix.tar.gz"
+step "downloading ${b}baudelaire $VERSION${x} ${d}(linux-$arch$libc, $FLAVOR)${x}"
 for f in "$asset" "$asset.sha256"; do
   dl "$REPO/releases/download/$VERSION/$f" "$tmp/$f" || die "download failed: $f"
 done
