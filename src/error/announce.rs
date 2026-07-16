@@ -24,16 +24,6 @@ pub enum AnnounceError {
     )]
     NoUrl,
 
-    /// A destination's secret was not supplied and could not be prompted for.
-    #[error("no {label} supplied for announcing")]
-    #[diagnostic(
-        code(baudelaire::announce::secret),
-        help(
-            "pass `--password`, set its environment variable, or run in a terminal to be prompted"
-        )
-    )]
-    MissingSecret { label: String },
-
     /// Authentication (`createSession`) succeeded at the HTTP layer but the
     /// response was missing or rejected.
     #[error("atproto authentication failed: {message}")]

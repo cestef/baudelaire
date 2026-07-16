@@ -3,6 +3,7 @@
 
 pub mod prompt;
 pub mod announce;
+pub mod deploy;
 pub mod scaffold;
 pub mod serve;
 
@@ -213,6 +214,8 @@ pub enum Command {
     New(NewArgs),
     /// Announce the site's metadata to the configured destination (atproto/standard.site).
     Announce(AnnounceArgs),
+    /// Deploy the built files to the configured destination (S3/R2).
+    Deploy(DeployArgs),
     /// Remove build output and local build state.
     Clean(CleanArgs),
     /// Scaffold a new project (config.kdl + dirs).
@@ -264,6 +267,22 @@ pub struct AnnounceArgs {
     /// a literal flag can leak into shell history.
     #[arg(long)]
     pub password: Option<String>,
+    /// Skip the confirmation prompt.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Report what would change without writing to any destination.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+/// Arguments for `baudelaire deploy`.
+#[derive(Args, Debug, Clone)]
+pub struct DeployArgs {
+    /// Secret access key for the destination; `-` reads it from stdin. Prefer
+    /// stdin, the `AWS_SECRET_ACCESS_KEY` environment variable, or the interactive
+    /// prompt — a literal flag can leak into shell history.
+    #[arg(long)]
+    pub secret: Option<String>,
     /// Skip the confirmation prompt.
     #[arg(short = 'y', long)]
     pub yes: bool,
@@ -514,6 +533,7 @@ impl Command {
             Command::Check(args) => args.run(cx),
             Command::New(args) => args.run(cx),
             Command::Announce(args) => args.run(cx),
+            Command::Deploy(args) => args.run(cx),
             Command::Clean(args) => args.run(cx),
             Command::Init(args) => args.run(cx),
         }
@@ -566,6 +586,13 @@ impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("announcing")?;
         announce::run(cx.ui, &config, self)
+    }
+}
+
+impl Run for DeployArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let config = cx.announced("deploying")?;
+        deploy::run(cx.ui, &config, self)
     }
 }
 

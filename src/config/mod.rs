@@ -91,6 +91,8 @@ pub struct Config {
     pub hooks: HooksConfig,
     /// Announce destinations for the built site.
     pub announce: AnnounceConfig,
+    /// Deploy destinations for the built files.
+    pub deploy: DeployConfig,
     /// Dev server options.
     pub serve: ServeConfig,
     /// The active profile name, if one was applied (exposed to pages).
@@ -290,6 +292,7 @@ impl std::hash::Hash for Config {
             cache,
             hooks,
             announce,
+            deploy,
             // dev-server settings never affect output, so they must not key the cache —
             // else `serve` on a custom port would invalidate a `build`'s cache
             serve: _,
@@ -309,7 +312,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
-        (asset, cache, hooks, announce, profile).hash(state);
+        (asset, cache, hooks, announce, deploy, profile).hash(state);
         // `serde_json::Value` isn't `Hash`; its serialization is a faithful,
         // deterministic stand-in for the cache fingerprint.
         serde_json::to_string(client)
@@ -630,6 +633,34 @@ pub struct StandardConfig {
     pub icon: Option<PathBuf>,
     /// Which build-time verification artifacts to emit (requires `did`).
     pub verify: VerifyConfig,
+}
+
+/// Deploy destinations for the built files. Each backend is an optional block
+/// under `deploy { .. }`; adding one is a field here plus a backend in
+/// [`crate::deploy`]. Credentials are never stored here — a backend reads them
+/// from the environment at deploy time.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct DeployConfig {
+    /// An S3-compatible bucket (AWS S3, Cloudflare R2, ..).
+    pub s3: Option<S3Config>,
+}
+
+/// An S3-compatible bucket target. Works against AWS S3 by default; set
+/// `endpoint` for R2 or any S3-compatible host.
+#[derive(Debug, Clone, Hash)]
+pub struct S3Config {
+    /// Bucket name.
+    pub bucket: String,
+    /// S3 endpoint host, e.g. `https://ACCOUNT.r2.cloudflarestorage.com`. `None`
+    /// targets AWS at the region's default host.
+    pub endpoint: Option<String>,
+    /// Region code. R2 uses `auto`; AWS uses e.g. `us-east-1` (the default).
+    pub region: String,
+    /// Key prefix every uploaded object is placed under (a subdirectory in the
+    /// bucket). Empty by default.
+    pub prefix: String,
+    /// Delete remote objects under `prefix` that the build no longer produces.
+    pub delete: bool,
 }
 
 /// The standard.site domain-verification artifacts the build emits, each

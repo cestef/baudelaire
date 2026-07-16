@@ -8,6 +8,66 @@
 `dist` directory from #link("config.typ")[config], overridable with `--out`.
 There is no server to run. Host it anywhere that serves files.
 
+== Built-in deploy with `deploy`
+
+`baudelaire deploy` uploads the built files to an S3-compatible bucket — AWS S3,
+Cloudflare R2, MinIO, or anything that speaks the S3 API. Add a `deploy` block
+with your bucket:
+
+```kdl
+deploy {
+  s3 {
+    bucket "my-site"
+  }
+}
+```
+
+Every other key has a default:
+
+/ `bucket`: bucket name. Required.
+/ `endpoint`: an S3-compatible host, e.g.
+  `https://ACCOUNT.r2.cloudflarestorage.com`. Unset targets AWS at the region's
+  default host; set it for R2, MinIO, or any non-AWS provider.
+/ `region` (`us-east-1`): region code. R2 uses `auto`.
+/ `prefix`: a key prefix (subdirectory in the bucket) every object lands under.
+/ `delete` (`#true`): remove objects under `prefix` that the build no longer
+  produces, so the bucket mirrors `public/` exactly.
+
+Change detection is stateless: S3 returns each object's ETag, which for a
+single-part upload is the MD5 of its bytes, so a file whose content already
+matches is skipped without any local record to keep or lose. Re-deploying an
+unchanged site uploads nothing.
+
+=== Credentials
+
+Baudelaire never stores credentials in config. The access key id is read from
+`AWS_ACCESS_KEY_ID`; the secret key is resolved, in order, from:
+
+```sh
+# 1. the environment variable — best for CI
+AWS_ACCESS_KEY_ID=AKIA.. AWS_SECRET_ACCESS_KEY=.. baudelaire deploy
+
+# 2. stdin, so it never appears in the process arguments
+echo "$AWS_SECRET_ACCESS_KEY" | baudelaire deploy --secret -
+
+# 3. an interactive prompt (hidden input) when a terminal is attached
+AWS_ACCESS_KEY_ID=AKIA.. baudelaire deploy
+```
+
+=== Deploying
+
+`baudelaire deploy` builds the site first, so a run always reflects the current
+sources, then reconciles the bucket with `public/`:
+
+```sh
+baudelaire deploy --dry-run   # list the bucket, show the plan, write nothing
+baudelaire deploy             # confirm, then upload and delete
+baudelaire deploy --yes       # skip the confirmation
+```
+
+The remote is the source of truth. Each run uploads new or changed files, skips
+matching ones, and (with `delete`) removes objects the build no longer produces.
+
 == Any static host
 
 Upload `public/` to Netlify, Vercel, Cloudflare Pages, GitHub Pages, S3, or your

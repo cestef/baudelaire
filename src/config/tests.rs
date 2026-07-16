@@ -465,3 +465,19 @@ fn destination_never_escapes_dist() {
         );
     }
 }
+
+#[test]
+fn deploy_s3_block_enables_backend_with_defaults() {
+    let cfg = parse("deploy {\n  s3 {\n    bucket \"my-site\"\n    endpoint \"https://acct.r2.cloudflarestorage.com\"\n    region \"auto\"\n  }\n}\n");
+    let s3 = cfg.deploy.s3.expect("s3 backend configured");
+    assert_eq!(s3.bucket, "my-site");
+    assert_eq!(s3.endpoint.as_deref(), Some("https://acct.r2.cloudflarestorage.com"));
+    assert_eq!(s3.region, "auto");
+    assert_eq!(s3.prefix, "");
+    assert!(s3.delete, "delete defaults on");
+}
+
+#[test]
+fn deploy_unset_leaves_no_backend() {
+    assert!(parse("").deploy.s3.is_none());
+}

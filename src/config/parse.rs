@@ -6,8 +6,8 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
-    ServeConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
+    DeployConfig, PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
+    S3Config, ServeConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
 use crate::error::{ConfigError, Result};
@@ -74,6 +74,7 @@ impl Config {
         }),
         ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
         ("announce", |c, n, t| n.announce(&mut c.announce, t)),
+        ("deploy", |c, n, t| n.deploy(&mut c.deploy, t)),
         ("serve", |c, n, t| n.serve(&mut c.serve, t)),
         ("profiles", |c, n, t| {
             c.profiles = n.profiles(t)?;
@@ -131,6 +132,8 @@ pub(super) trait NodeExt {
     fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()>;
     fn announce(&self, target: &mut AnnounceConfig, text: &str) -> Result<()>;
     fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()>;
+    fn deploy(&self, target: &mut DeployConfig, text: &str) -> Result<()>;
+    fn s3(&self, target: &mut Option<S3Config>, text: &str) -> Result<()>;
     fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()>;
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()>;
     fn profiles(&self, text: &str) -> Result<Vec<(String, KdlDocument)>>;
@@ -606,6 +609,43 @@ impl NodeExt for KdlNode {
         const ANNOUNCE: Block<AnnounceConfig> =
             Block(&[("standard", |c, n, t| n.standard(&mut c.standard, t))]);
         ANNOUNCE.fill(target, self, text)
+    }
+
+    /// The `deploy { .. }` parent section: one block per destination backend.
+    fn deploy(&self, target: &mut DeployConfig, text: &str) -> Result<()> {
+        const DEPLOY: Block<DeployConfig> = Block(&[("s3", |c, n, t| n.s3(&mut c.s3, t))]);
+        DEPLOY.fill(target, self, text)
+    }
+
+    /// The `s3 { .. }` block: presence enables the S3 backend. Fills onto the
+    /// existing config so a profile tuning one key keeps the rest.
+    fn s3(&self, target: &mut Option<S3Config>, text: &str) -> Result<()> {
+        const S3: Block<S3Config> = Block(&[
+            ("bucket", |c, n, t| {
+                c.bucket = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("endpoint", |c, n, t| {
+                c.endpoint = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("region", |c, n, t| {
+                c.region = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("prefix", |c, n, t| {
+                c.prefix = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("delete", |c, n, t| {
+                c.delete = n.boolean(t, 0)?;
+                Ok(())
+            }),
+        ]);
+        let mut cfg = target.take().unwrap_or_default();
+        S3.fill(&mut cfg, self, text)?;
+        *target = Some(cfg);
+        Ok(())
     }
 
     /// The `standard { .. }` block: presence enables the standard.site backend.

@@ -18,91 +18,10 @@ use crate::config::Config;
 use crate::content::{Page, discover};
 use crate::error::{AnnounceError, Result};
 use crate::graph::Hash;
+use crate::remote::Options;
 use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
-
-/// How a announce run talks to the user — confirmations and interactive secret
-/// entry. The announce layer depends only on this interface, never on the
-/// terminal, so the CLI implements it with the shared prompt widgets and tests
-/// pass a headless stub. The one seam through which announcing becomes
-/// interactive.
-pub trait Interaction {
-    /// Confirm a mutating action; `Ok(false)` cancels it.
-    fn confirm(&self, prompt: &str) -> Result<bool>;
-
-    /// Prompt for a secret labeled `label`, or `Ok(None)` when the environment
-    /// cannot supply one (non-interactive).
-    fn secret(&self, label: &str) -> Result<Option<String>>;
-}
-
-/// Cross-cutting options for a announce run, backend-neutral. A backend reads
-/// `dry_run` to preview without writing and resolves its own secret through
-/// [`Options::secret`]; confirmation runs generically before a backend does.
-pub struct Options<'a> {
-    /// Report what would change without writing to any destination.
-    pub dry_run: bool,
-    /// Skip the confirmation prompt.
-    pub yes: bool,
-    /// A secret supplied on the command line — preferred over the environment
-    /// variable and the interactive prompt.
-    pub secret: Option<String>,
-    /// The user-interaction backend (terminal in the CLI, a stub in tests).
-    pub interaction: &'a dyn Interaction,
-}
-
-impl Options<'_> {
-    /// Resolve a destination's secret: the CLI value (or stdin when it is the
-    /// conventional `-`), else the `env` variable, else an interactive prompt
-    /// labeled `label`. The one place credential acquisition lives, shared by
-    /// every backend.
-    pub fn secret(&self, env: &str, label: &str) -> Result<String> {
-        if let Some(secret) = &self.secret {
-            if secret != "-" {
-                return Ok(secret.clone());
-            }
-            // A closed or blank stdin is "no secret", not an empty password —
-            // matches the env and prompt branches, which both reject empty.
-            let line = stdin_line()?;
-            if line.is_empty() {
-                return Err(AnnounceError::MissingSecret {
-                    label: label.to_owned(),
-                }
-                .into());
-            }
-            return Ok(line);
-        }
-        if let Ok(secret) = std::env::var(env)
-            && !secret.is_empty()
-        {
-            return Ok(secret);
-        }
-        self.interaction.secret(label)?.ok_or_else(|| {
-            AnnounceError::MissingSecret {
-                label: label.to_owned(),
-            }
-            .into()
-        })
-    }
-
-    /// Confirm a mutating action, short-circuiting to `true` under `--yes`.
-    fn confirm(&self, prompt: &str) -> Result<bool> {
-        if self.yes {
-            return Ok(true);
-        }
-        self.interaction.confirm(prompt)
-    }
-}
-
-/// Read a single line from stdin as a secret — the conventional `-` value for a
-/// secret flag (`--password -`), for piping without exposing it in argv. The
-/// trailing newline is stripped; the rest is taken verbatim.
-fn stdin_line() -> Result<String> {
-    use std::io::BufRead;
-    let mut line = String::new();
-    std::io::stdin().lock().read_line(&mut line)?;
-    Ok(line.trim_end_matches(['\r', '\n']).to_owned())
-}
 
 /// A backend-neutral view of the built site handed to every [`Backend`].
 pub struct SiteView<'a> {
@@ -255,83 +174,7 @@ impl SkipCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Hash, Interaction, Options, AnnounceError, Result, SkipCache};
-
-    /// A headless [`Interaction`] for tests: a fixed confirmation answer and an
-    /// optional prompt secret.
-    struct Stub {
-        confirm: bool,
-        secret: Option<String>,
-    }
-
-    impl Interaction for Stub {
-        fn confirm(&self, _prompt: &str) -> Result<bool> {
-            Ok(self.confirm)
-        }
-        fn secret(&self, _label: &str) -> Result<Option<String>> {
-            Ok(self.secret.clone())
-        }
-    }
-
-    fn options<'a>(secret: Option<String>, stub: &'a Stub) -> Options<'a> {
-        Options {
-            dry_run: false,
-            yes: false,
-            secret,
-            interaction: stub,
-        }
-    }
-
-    /// An env var name no test sets, so secret resolution falls past the env step.
-    const UNSET: &str = "BAUDELAIRE_TEST_UNSET_SECRET";
-
-    #[test]
-    fn secret_prefers_the_cli_value() {
-        let stub = Stub {
-            confirm: true,
-            secret: Some("prompted".into()),
-        };
-        let opts = options(Some("flag".into()), &stub);
-        assert_eq!(opts.secret(UNSET, "pw").unwrap(), "flag");
-    }
-
-    #[test]
-    fn secret_falls_back_to_the_prompt() {
-        let stub = Stub {
-            confirm: true,
-            secret: Some("prompted".into()),
-        };
-        let opts = options(None, &stub);
-        assert_eq!(opts.secret(UNSET, "pw").unwrap(), "prompted");
-    }
-
-    #[test]
-    fn secret_missing_when_no_source_can_supply_it() {
-        let stub = Stub {
-            confirm: true,
-            secret: None,
-        };
-        let opts = options(None, &stub);
-        assert!(matches!(
-            opts.secret(UNSET, "pw"),
-            Err(crate::error::BaudelaireErrorKind::Announce(
-                AnnounceError::MissingSecret { .. }
-            ))
-        ));
-    }
-
-    #[test]
-    fn confirm_short_circuits_under_yes() {
-        let stub = Stub {
-            confirm: false,
-            secret: None,
-        };
-        let opts = Options {
-            yes: true,
-            ..options(None, &stub)
-        };
-        assert!(opts.confirm("go?").unwrap());
-    }
+    use super::{Hash, SkipCache};
 
     #[test]
     fn skip_cache_matches_only_the_recorded_fingerprint() {

@@ -6,10 +6,10 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
-    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, ServeConfig,
-    StandardConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
+    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
+    OptimizeConfig, PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, ServeConfig,
+    S3Config, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -46,6 +46,7 @@ impl Default for Config {
             cache: CacheConfig::default(),
             hooks: HooksConfig::default(),
             announce: AnnounceConfig::default(),
+            deploy: DeployConfig::default(),
             serve: ServeConfig::default(),
             profile: None,
             profiles: Default::default(),
@@ -147,6 +148,21 @@ impl Default for ServeConfig {
             watch: true,
             include: Vec::new(),
             exclude: Vec::new(),
+        }
+    }
+}
+
+impl Default for S3Config {
+    fn default() -> Self {
+        Self {
+            bucket: String::new(),
+            // None targets AWS; R2/custom hosts set it.
+            endpoint: None,
+            // AWS's default region; R2 wants "auto".
+            region: "us-east-1".into(),
+            prefix: String::new(),
+            // reconcile: remove what the build no longer produces.
+            delete: true,
         }
     }
 }
