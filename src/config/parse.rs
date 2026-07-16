@@ -676,6 +676,10 @@ impl NodeExt for KdlNode {
                 c.key = Some(n.string(t, 0)?.into());
                 Ok(())
             }),
+            ("strict", |c, n, t| {
+                c.strict = n.boolean(t, 0)?;
+                Ok(())
+            }),
             ("delete", |c, n, t| {
                 c.delete = n.boolean(t, 0)?;
                 Ok(())

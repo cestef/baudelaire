@@ -16,6 +16,10 @@ use crate::error::{DeployError, Result};
 use crate::remote::Options;
 use crate::ui::{Count, Ui};
 
+/// Files keyed by dist-relative path, each mapped to a content digest. The
+/// currency every [`Backend`] reconciles in — local digests versus remote.
+pub type Digests = BTreeMap<String, String>;
+
 #[cfg(test)]
 use crate::ui::Level;
 
@@ -50,7 +54,7 @@ impl Dist {
     /// Digest every file with `hash`, keyed by relative path. Each file is read
     /// once, hashed, and dropped, so a large site never sits wholly in memory;
     /// the algorithm is the backend's choice (S3 wants MD5, SSH SHA-256).
-    pub fn digests(&self, hash: impl Fn(&[u8]) -> String) -> Result<BTreeMap<String, String>> {
+    pub fn digests(&self, hash: impl Fn(&[u8]) -> String) -> Result<Digests> {
         self.files.iter().map(|rel| Ok((rel.clone(), hash(&self.read(rel)?)))).collect()
     }
 }
@@ -129,11 +133,7 @@ pub struct Plan {
 /// entry deletes when the build no longer produces it and `delete` is on;
 /// everything else is unchanged. The digest algorithm is the backend's choice —
 /// this only compares the strings.
-pub fn plan(
-    local: &BTreeMap<String, String>,
-    remote: &BTreeMap<String, String>,
-    delete: bool,
-) -> Plan {
+pub fn plan(local: &Digests, remote: &Digests, delete: bool) -> Plan {
     let mut out = Plan::default();
     for (key, digest) in local {
         match remote.get(key) {

@@ -176,8 +176,10 @@ impl Default for SshConfig {
             port: 22,
             // None resolves to $USER at deploy time.
             user: None,
-            // None falls back to password auth.
+            // None falls back to agent, then password auth.
             key: None,
+            // secure by default: verify host keys against known_hosts.
+            strict: true,
             // reconcile: remove what the build no longer produces.
             delete: true,
         }

@@ -87,14 +87,19 @@ deploy {
 / `path`: absolute remote directory the build is mirrored into. Required.
 / `port` (`22`): SSH port.
 / `user`: user to authenticate as. Defaults to `$USER`.
-/ `key`: path to a private key (absolute, or under the project root). Unset falls
-  back to password authentication.
+/ `key`: path to a private key (absolute, `~`-relative, or under the project
+  root). Unset tries the ssh-agent, then a password.
+/ `strict` (`#true`): verify the server's host key against `~/.ssh/known_hosts` —
+  learning an unseen host on first connect and refusing a changed key. Set
+  `#false` to accept any key (`StrictHostKeyChecking=no`).
 / `delete` (`#true`): remove remote files under `path` that the build no longer
   produces.
 
-Authentication is key-based when `key` is set — supply the passphrase, if the key
-has one, the same way as any other secret (below). Without `key`, a password is
-resolved from `BAUDELAIRE_SSH_PASSWORD`, stdin (`--secret -`), or the prompt.
+Authentication tries, in order: the configured `key` (supply its passphrase, if
+any, like any other secret below); the *ssh-agent* at `$SSH_AUTH_SOCK`, offering
+each identity it holds; then a *password* from `BAUDELAIRE_SSH_PASSWORD`, stdin
+(`--secret -`), or the prompt. A configured `key` is used exclusively — the agent
+and password are only tried when no key is set.
 
 Change detection runs `sha256sum` on the host and diffs it against the local
 files, so an unchanged file is never re-sent. If the host cannot run it (a bare

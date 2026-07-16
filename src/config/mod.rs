@@ -678,9 +678,14 @@ pub struct SshConfig {
     pub port: u16,
     /// User to authenticate as. Defaults to `$USER`.
     pub user: Option<String>,
-    /// Path to a private key (under the project root or absolute). When unset,
-    /// authentication falls back to a password from the environment/prompt.
+    /// Path to a private key (absolute, `~`-relative, or under the project
+    /// root). When unset, authentication tries the ssh-agent, then a password
+    /// from the environment/prompt.
     pub key: Option<PathBuf>,
+    /// Verify the server's host key against `~/.ssh/known_hosts`, learning an
+    /// unseen host on first connect and refusing a changed key (MITM guard).
+    /// Turn off to accept any key (`StrictHostKeyChecking=no`).
+    pub strict: bool,
     /// Delete remote files under `path` that the build no longer produces.
     pub delete: bool,
 }

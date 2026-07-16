@@ -486,6 +486,7 @@ fn deploy_ssh_block_enables_backend_with_defaults() {
     assert_eq!(ssh.user.as_deref(), Some("deploy"));
     assert_eq!(ssh.port, 22, "port defaults to 22");
     assert!(ssh.key.is_none());
+    assert!(ssh.strict, "host-key verification defaults on");
     assert!(ssh.delete, "delete defaults on");
 }
 
