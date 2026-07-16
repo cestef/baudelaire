@@ -18,7 +18,7 @@ At a glance:
   [`baudelaire serve`], [Build, serve, watch, and live-reload.],
   [`baudelaire check`], [Compile and report broken links without writing.],
   [`baudelaire new <path>`], [Scaffold a content file from config and convention.],
-  [`baudelaire publish`], [Push the built site to every destination.],
+  [`baudelaire publish`], [Announce the site's metadata to atproto (standard.site).],
   [`baudelaire init [dir]`], [Scaffold a whole project.],
   [`baudelaire clean`], [Remove build output and local state.],
 )
@@ -66,7 +66,11 @@ What it infers:
 
 === publish
 
-Publish the built site to every configured destination.
+Announce the site's metadata to the configured destination — an
+atproto/#link("https://standard.site")[standard.site] publication plus one
+document record per dated page. It announces the site; it does not upload the
+built files (see #link("deploy.typ")[Deploying] for that). Builds first, then
+reconciles the remote records with your pages.
 
 / #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
   environment variable over a literal flag.

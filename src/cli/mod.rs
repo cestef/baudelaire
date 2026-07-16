@@ -211,7 +211,7 @@ pub enum Command {
     Check(CheckArgs),
     /// Scaffold a new content file.
     New(NewArgs),
-    /// Publish the built site to every configured destination.
+    /// Announce the site's metadata to the configured destination (atproto/standard.site).
     Publish(PublishArgs),
     /// Remove build output and local build state.
     Clean(CleanArgs),

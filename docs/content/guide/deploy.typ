@@ -109,11 +109,14 @@ The GitHub workflow above runs almost verbatim on a Forgejo or Gitea runner —
 keep the `build` and `upload`/`deploy` steps, and swap the Pages actions for
 whatever your instance provides (many just publish the `public/` artifact).
 
-== Built-in publish
+== Announcing with `publish`
 
-For hosts baudelaire pushes to directly — no CI — `baudelaire publish` sends the
-built site to every destination in the config. See the
-#link("cli.typ")[CLI reference].
+`baudelaire publish` is not a deploy step — it uploads none of `public/`. It
+_announces_ your site to the #link("https://atproto.com")[AT Protocol] via
+#link("https://standard.site")[standard.site]: a publication record plus one
+document record per dated page, written to the PDS in your config. Deploy the
+files with one of the methods above, then run `publish` to announce them. See
+#link("../features/build/publishing.typ")[Publishing].
 
 == Preview builds
 
