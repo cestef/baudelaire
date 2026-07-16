@@ -10,7 +10,7 @@ _metadata_ to the #link("https://atproto.com")[AT Protocol] as
 #link("https://standard.site")[standard.site] records — a
 `site.standard.publication` for the site and one `site.standard.document` per
 dated page. It doesn't upload the built files (that's
-#link("../../guide/deploy.typ")[deploying]); it announces, to the network, that
+#link("../../guide/deploy/overview.typ")[deploying]); it announces, to the network, that
 your pages exist and where they live.
 
 The layer is backend-neutral — a destination is one `impl Backend` — but

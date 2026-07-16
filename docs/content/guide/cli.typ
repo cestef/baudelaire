@@ -69,7 +69,7 @@ What it infers:
 Announce the site's metadata to the configured destination — an
 atproto/#link("https://standard.site")[standard.site] publication plus one
 document record per dated page. It announces the site; it does not upload the
-built files (see #link("deploy.typ")[Deploying] for that). Builds first, then
+built files (see #link("deploy/overview.typ")[Deploying] for that). Builds first, then
 reconciles the remote records with your pages.
 
 / #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
