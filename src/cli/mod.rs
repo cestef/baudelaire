@@ -2,7 +2,7 @@
 //! terminal output ([`crate::ui`]) and debug logging (`tracing`).
 
 pub mod prompt;
-pub mod publish;
+pub mod announce;
 pub mod scaffold;
 pub mod serve;
 
@@ -212,7 +212,7 @@ pub enum Command {
     /// Scaffold a new content file.
     New(NewArgs),
     /// Announce the site's metadata to the configured destination (atproto/standard.site).
-    Publish(PublishArgs),
+    Announce(AnnounceArgs),
     /// Remove build output and local build state.
     Clean(CleanArgs),
     /// Scaffold a new project (config.kdl + dirs).
@@ -256,9 +256,9 @@ pub struct ServeArgs {
     pub no_watch: bool,
 }
 
-/// Arguments for `baudelaire publish`.
+/// Arguments for `baudelaire announce`.
 #[derive(Args, Debug, Clone)]
-pub struct PublishArgs {
+pub struct AnnounceArgs {
     /// Secret (app password / token) for the destination; `-` reads it from
     /// stdin. Prefer stdin, the environment variable, or the interactive prompt —
     /// a literal flag can leak into shell history.
@@ -274,7 +274,7 @@ pub struct PublishArgs {
 
 /// Arguments for `baudelaire clean`. With no target flag every directory is
 /// swept; naming targets narrows it to those, so `clean --cache` forces a
-/// rebuild without discarding publish state.
+/// rebuild without discarding announce state.
 #[derive(Args, Debug, Clone)]
 pub struct CleanArgs {
     /// Remove the build output directory.
@@ -283,9 +283,9 @@ pub struct CleanArgs {
     /// Remove the incremental build cache.
     #[arg(long, help_heading = group::TARGETS)]
     pub cache: bool,
-    /// Remove local publish state.
+    /// Remove local announce state.
     #[arg(long, help_heading = group::TARGETS)]
-    pub publish: bool,
+    pub announce: bool,
 }
 
 /// One nameable `clean` target: the flag that selects it and the directories it
@@ -307,8 +307,8 @@ const CLEAN_TARGETS: &[CleanTarget] = &[
         dirs: |c| vec![c.cache.dir.clone()],
     },
     CleanTarget {
-        selected: |a| a.publish,
-        dirs: |_| vec![Config::scratch("publish")],
+        selected: |a| a.announce,
+        dirs: |_| vec![Config::scratch("announce")],
     },
 ];
 
@@ -320,7 +320,7 @@ impl CleanArgs {
 
     /// The directories to remove for this invocation. A full sweep clears the
     /// output plus the whole scratch root in one step (covering the cache,
-    /// publish state, and any future intermediate); a relocated cache dir lives
+    /// announce state, and any future intermediate); a relocated cache dir lives
     /// outside that root, so it is named explicitly. A narrowed sweep removes
     /// only the [`CLEAN_TARGETS`] whose flags were set.
     fn targets(&self, config: &Config) -> Vec<PathBuf> {
@@ -513,7 +513,7 @@ impl Command {
             Command::Serve(args) => args.run(cx),
             Command::Check(args) => args.run(cx),
             Command::New(args) => args.run(cx),
-            Command::Publish(args) => args.run(cx),
+            Command::Announce(args) => args.run(cx),
             Command::Clean(args) => args.run(cx),
             Command::Init(args) => args.run(cx),
         }
@@ -562,10 +562,10 @@ impl Run for NewArgs {
     }
 }
 
-impl Run for PublishArgs {
+impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let config = cx.announced("publishing")?;
-        publish::run(cx.ui, &config, self)
+        let config = cx.announced("announcing")?;
+        announce::run(cx.ui, &config, self)
     }
 }
 
@@ -650,11 +650,11 @@ fn clean(ui: &Ui, config: &Config, args: &CleanArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn args(dist: bool, cache: bool, publish: bool) -> CleanArgs {
+    fn args(dist: bool, cache: bool, announce: bool) -> CleanArgs {
         CleanArgs {
             dist,
             cache,
-            publish,
+            announce,
         }
     }
 
@@ -689,7 +689,7 @@ mod tests {
         );
         assert_eq!(
             args(false, false, true).targets(&config),
-            vec![Config::scratch("publish")]
+            vec![Config::scratch("announce")]
         );
         assert_eq!(
             args(true, false, false).targets(&config),

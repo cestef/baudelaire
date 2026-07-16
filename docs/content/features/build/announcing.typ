@@ -1,24 +1,28 @@
 #let frontmatter = (
   order: 13,
-  title: "Publishing",
-  tags: ("feature", "publishing"),
+  title: "Announcing",
+  tags: ("feature", "announcing"),
 )
 #import "/templates/theme.typ": callout
 
-Baudelaire can push a built site to an external destination with `baudelaire
-publish`. The layer is backend-neutral; the one backend shipped today speaks the
-#link("https://atproto.com")[AT Protocol] and publishes to
-#link("https://standard.site")[standard.site], mapping your pages onto a
-`site.standard.publication` record and one `site.standard.document` per dated
-page.
+Baudelaire is atproto-native. `baudelaire announce` publishes your site's
+_metadata_ to the #link("https://atproto.com")[AT Protocol] as
+#link("https://standard.site")[standard.site] records — a
+`site.standard.publication` for the site and one `site.standard.document` per
+dated page. It doesn't upload the built files (that's
+#link("../../guide/deploy.typ")[deploying]); it announces, to the network, that
+your pages exist and where they live.
+
+The layer is backend-neutral — a destination is one `impl Backend` — but
+standard.site is the one that ships, and the one this is built around.
 
 == Configure
 
-Enable the backend by adding a `publish` block. Only `handle` is required — it is
-the account the records are written under.
+Enable it by adding an `announce` block. Only `handle` is required — it is the
+account the records are written under.
 
 ```kdl
-publish {
+announce {
   standard {
     handle "you.bsky.social"
   }
@@ -52,13 +56,13 @@ Baudelaire never stores the password in config. It is resolved, in order, from:
 
 ```sh
 # 1. the environment variable — best for CI
-BAUDELAIRE_ATPROTO_PASSWORD="xxxx-xxxx-xxxx-xxxx" baudelaire publish
+BAUDELAIRE_ATPROTO_PASSWORD="xxxx-xxxx-xxxx-xxxx" baudelaire announce
 
 # 2. stdin, so it never appears in the process arguments
-echo "$APP_PASSWORD" | baudelaire publish --password -
+echo "$APP_PASSWORD" | baudelaire announce --password -
 
 # 3. an interactive prompt (hidden input) when a terminal is attached
-baudelaire publish
+baudelaire announce
 ```
 
 #callout(kind: "warn")[
@@ -67,35 +71,35 @@ baudelaire publish
   in any shared or automated environment.
 ]
 
-== Publishing
+== Announcing
 
-`baudelaire publish` builds the site first, so a publish always reflects the
-current sources, then reconciles the remote repository with your pages:
+`baudelaire announce` builds the site first, so a run always reflects the current
+sources, then reconciles the remote repository with your pages:
 
 ```sh
-baudelaire publish --dry-run   # show the plan, write nothing
-baudelaire publish             # confirm, then publish
-baudelaire publish --yes       # skip the confirmation
+baudelaire announce --dry-run   # show the plan, write nothing
+baudelaire announce             # confirm, then write
+baudelaire announce --yes       # skip the confirmation
 ```
 
 The remote is the source of truth. Each run puts new or changed records, skips
 unchanged ones, and deletes document records whose page no longer exists, so
-nothing is orphaned. A dry run lists the remote to compute an accurate plan —
-it just writes nothing.
+nothing is orphaned. A dry run lists the remote to compute an accurate plan — it
+just writes nothing.
 
 #callout(kind: "note")[
   `--dry-run` needs no app password: it diffs against your live repository over
-  public reads to tell you exactly what a real publish would send and remove.
+  public reads to tell you exactly what a real run would send and remove.
 ]
 
 == Domain verification
 
 standard.site can tie a publication to your own domain. Set `did` to your
-repository DID and the build emits verification artifacts offline — no publish
+repository DID and the build emits verification artifacts offline — no announce
 required:
 
 ```kdl
-publish {
+announce {
   standard {
     handle "you.bsky.social"
     did "did:plc:abc123.."
@@ -108,8 +112,8 @@ publish {
 ```
 
 Both artifacts prove the site and the records belong together; a site may emit
-one, the other, or both. When `did` is set, `publish` resolves your handle and
-refuses a mismatch, so you never publish under the wrong identity — and
-`--dry-run` runs the same check, catching a misconfigured `did` before you ever
-authenticate. Don't know your DID yet? Run `publish --dry-run` without it — the
-output prints the value to configure, no password required.
+one, the other, or both. When `did` is set, `announce` resolves your handle and
+refuses a mismatch, so you never write under the wrong identity — and `--dry-run`
+runs the same check, catching a misconfigured `did` before you ever authenticate.
+Don't know your DID yet? Run `announce --dry-run` without it — the output prints
+the value to configure, no password required.

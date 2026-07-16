@@ -16,7 +16,7 @@ pub enum Artifact {
     /// A generated search index.
     SearchIndex,
     /// A publish backend's skip-cache.
-    PublishCache,
+    AnnounceCache,
     /// A JSON Feed.
     Feed,
 }
@@ -26,7 +26,7 @@ impl std::fmt::Display for Artifact {
         f.write_str(match self {
             Self::Cache => "build cache",
             Self::SearchIndex => "search index",
-            Self::PublishCache => "publish cache",
+            Self::AnnounceCache => "publish cache",
             Self::Feed => "JSON feed",
         })
     }

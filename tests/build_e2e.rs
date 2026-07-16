@@ -1801,7 +1801,7 @@ fn standard_verify_emits_wellknown_and_link_on_dated_pages() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            publish {
+            announce {
                 standard {
                     handle "me.example"
                     did "did:plc:test123"
@@ -1853,7 +1853,7 @@ fn standard_verify_absent_without_a_did() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            publish { standard { handle "me.example" } }
+            announce { standard { handle "me.example" } }
         "#,
     );
     site.write(
@@ -1886,7 +1886,7 @@ fn standard_verify_toggle_suppresses_wellknown_only() {
         r#"
             site "Test"
             paths { content "content" dist "public" }
-            publish {
+            announce {
                 standard {
                     handle "me.example"
                     did "did:plc:test123"

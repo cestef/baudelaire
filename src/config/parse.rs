@@ -6,7 +6,7 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, PublishConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
+    PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
     ServeConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
@@ -73,7 +73,7 @@ impl Config {
             Ok(())
         }),
         ("hooks", |c, n, t| n.hooks(&mut c.hooks, t)),
-        ("publish", |c, n, t| n.publish(&mut c.publish, t)),
+        ("announce", |c, n, t| n.announce(&mut c.announce, t)),
         ("serve", |c, n, t| n.serve(&mut c.serve, t)),
         ("profiles", |c, n, t| {
             c.profiles = n.profiles(t)?;
@@ -129,7 +129,7 @@ pub(super) trait NodeExt {
     fn search(&self, target: &mut SearchConfig, text: &str) -> Result<()>;
     fn cache(&self, target: &mut CacheConfig, text: &str) -> Result<()>;
     fn hooks(&self, target: &mut HooksConfig, text: &str) -> Result<()>;
-    fn publish(&self, target: &mut PublishConfig, text: &str) -> Result<()>;
+    fn announce(&self, target: &mut AnnounceConfig, text: &str) -> Result<()>;
     fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()>;
     fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()>;
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()>;
@@ -601,11 +601,11 @@ impl NodeExt for KdlNode {
         HOOKS.fill(target, self, text)
     }
 
-    /// The `publish { .. }` parent section: one block per destination backend.
-    fn publish(&self, target: &mut PublishConfig, text: &str) -> Result<()> {
-        const PUBLISH: Block<PublishConfig> =
+    /// The `announce { .. }` parent section: one block per destination backend.
+    fn announce(&self, target: &mut AnnounceConfig, text: &str) -> Result<()> {
+        const ANNOUNCE: Block<AnnounceConfig> =
             Block(&[("standard", |c, n, t| n.standard(&mut c.standard, t))]);
-        PUBLISH.fill(target, self, text)
+        ANNOUNCE.fill(target, self, text)
     }
 
     /// The `standard { .. }` block: presence enables the standard.site backend.

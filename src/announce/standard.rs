@@ -1,9 +1,9 @@
-//! The [standard.site] publishing backend.
+//! The [standard.site] announcing backend.
 //!
 //! Maps a [`SiteView`] onto AT Protocol records — one `site.standard.publication`
 //! for the site and one `site.standard.document` per dated page — and writes them
 //! to a PDS over XRPC. The remote repository is the source of truth: every
-//! publish lists the existing document records and deletes those no longer
+//! an announce lists the existing document records and deletes those no longer
 //! backed by a page, so nothing is orphaned. A local [`SkipCache`] only spares
 //! re-sending records whose content is unchanged.
 //!
@@ -21,12 +21,12 @@ use owo_colors::OwoColorize;
 use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
 use crate::config::{BaseUrl, StandardConfig};
 use crate::error::warning::{DidUnpinned, Undated};
-use crate::error::{PublishError, Result};
+use crate::error::{AnnounceError, Result};
 use crate::graph::{Fingerprint, Hash};
 use crate::mime::Mime;
 use crate::ui::Ui;
 
-use super::{Doc, Options, Publisher, SiteView, SkipCache};
+use super::{Doc, Options, Backend, SiteView, SkipCache};
 
 /// The lexicon ids, which double as repository collection names. Public so the
 /// build-time verification artifacts (an engine processor for `.well-known`, a
@@ -40,19 +40,19 @@ const PUBLICATION_RKEY: &str = "self";
 const PASSWORD_ENV: &str = "BAUDELAIRE_ATPROTO_PASSWORD";
 
 /// The publication record's `at://` URI under `did` — the single definition of
-/// where a site's publication lives, shared by publishing and verification.
+/// where a site's publication lives, shared by announcing and verification.
 pub fn publication_uri(did: &str) -> AtUri {
     AtUri::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
 }
 
 /// A document's `at://` URI under `did`, keyed by its page `path`. The key is a
 /// pure function of the path (see [`Rkey::derived`]), so the build names the
-/// same record the publisher writes, without any coordination.
+/// same record the backend writes, without any coordination.
 pub fn document_uri(did: &str, path: &str) -> AtUri {
     AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
 }
 
-/// The standard.site backend, configured from a `publish { standard { .. } }`
+/// The standard.site backend, configured from a `announce { standard { .. } }`
 /// block.
 pub struct Standard {
     config: StandardConfig,
@@ -64,16 +64,16 @@ impl Standard {
     }
 }
 
-impl Publisher for Standard {
+impl Backend for Standard {
     fn name(&self) -> &'static str {
         "standard.site"
     }
 
-    fn publish(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()> {
+    fn run(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()> {
         if self.config.handle.is_empty() {
-            return Err(PublishError::Unconfigured.into());
+            return Err(AnnounceError::Unconfigured.into());
         }
-        let base = site.config.base().ok_or(PublishError::NoUrl)?;
+        let base = site.config.base().ok_or(AnnounceError::NoUrl)?;
 
         let target = self.connect(opts, ui)?;
         if let Some(advice) = reconcile(self.config.did.as_deref(), target.did())? {
@@ -93,7 +93,7 @@ impl Publisher for Standard {
 }
 
 impl Standard {
-    /// Connect to the publish target. A dry run resolves a read-only [`Repo`]
+    /// Connect to the destination. A dry run resolves a read-only [`Repo`]
     /// from the handle without credentials (`listRecords` and `resolveHandle`
     /// are public XRPC); a real run authenticates a writable [`Session`] with the
     /// app password. Either way the resolved DID flows through [`reconcile`], so
@@ -110,12 +110,12 @@ impl Standard {
     }
 
     /// Upload the configured publication icon as a blob, if any. The path is
-    /// resolved against the project root (the process cwd during a publish).
+    /// resolved against the project root (the process cwd during an announce).
     fn icon(&self, session: &Session) -> Result<Option<Blob>> {
         let Some(path) = &self.config.icon else {
             return Ok(None);
         };
-        let bytes = std::fs::read(path).map_err(|source| PublishError::Icon {
+        let bytes = std::fs::read(path).map_err(|source| AnnounceError::Icon {
             path: path.display().to_string(),
             source,
         })?;
@@ -205,7 +205,7 @@ impl Standard {
     }
 }
 
-/// The repository a publish acts on, and how. A dry run gets a read-only
+/// The repository an announce acts on, and how. A dry run gets a read-only
 /// [`Repo`] resolved without credentials; a real run gets an authenticated
 /// [`Session`] that can also write. Bundling each mode with its capability makes
 /// an illegal combination — writing during a preview — unrepresentable, and
@@ -245,16 +245,16 @@ impl Target {
     }
 }
 
-/// Reconcile the configured `did` pin against the identity a publish `resolved`.
+/// Reconcile the configured `did` pin against the identity an announce `resolved`.
 /// A pin that disagrees is fatal — the build emitted verification artifacts for
 /// the wrong account. No pin is fine, but the resolved DID comes back as
 /// [`DidUnpinned`] advice so the user can pin it and get those artifacts;
 /// `Ok(None)` means the pin held. Pure — the caller surfaces the advice — so it
 /// is testable without a `Ui` or a network.
-fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, PublishError> {
+fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, AnnounceError> {
     match pin {
         Some(did) if did == resolved.as_str() => Ok(None),
-        Some(did) => Err(PublishError::DidMismatch {
+        Some(did) => Err(AnnounceError::DidMismatch {
             configured: did.to_owned(),
             actual: resolved.to_string(),
         }),
@@ -264,7 +264,7 @@ fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, P
     }
 }
 
-/// A colored one-line publish summary: the destination, then counts styled by
+/// A colored one-line announce summary: the destination, then counts styled by
 /// meaning — sent in green (additive), unchanged dimmed (no-op), removed in
 /// yellow when any went (else dimmed). `--dry-run` phrases the verbs as intent.
 /// A [`Display`] newtype like [`Count`], so the styling lives in one place.
@@ -419,7 +419,7 @@ mod tests {
     fn reconcile_rejects_a_mismatched_pin() {
         assert!(matches!(
             reconcile(Some("did:plc:x"), &Did::new("did:plc:y")),
-            Err(PublishError::DidMismatch { .. })
+            Err(AnnounceError::DidMismatch { .. })
         ));
     }
 

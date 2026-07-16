@@ -18,7 +18,7 @@ At a glance:
   [`baudelaire serve`], [Build, serve, watch, and live-reload.],
   [`baudelaire check`], [Compile and report broken links without writing.],
   [`baudelaire new <path>`], [Scaffold a content file from config and convention.],
-  [`baudelaire publish`], [Announce the site's metadata to atproto (standard.site).],
+  [`baudelaire announce`], [Announce the site's metadata to atproto (standard.site).],
   [`baudelaire init [dir]`], [Scaffold a whole project.],
   [`baudelaire clean`], [Remove build output and local state.],
 )
@@ -64,7 +64,7 @@ What it infers:
 / #raw("-b, --bundle"): Create `<name>/index.typ` for colocated assets.
 / #raw("-e, --open"): Open the new file in `$EDITOR`.
 
-=== publish
+=== announce
 
 Announce the site's metadata to the configured destination — an
 atproto/#link("https://standard.site")[standard.site] publication plus one
@@ -75,7 +75,7 @@ reconciles the remote records with your pages.
 / #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
   environment variable over a literal flag.
 / #raw("-y, --yes"): Skip the confirmation prompt.
-/ #raw("--dry-run"): Report what a real publish would send and remove, without
+/ #raw("--dry-run"): Report what a real announce would send and remove, without
   writing. Needs no password — it diffs against the live repository over public
   reads.
 
@@ -92,13 +92,13 @@ up version control with a `.gitignore`.
 === clean
 
 Remove build output and local build state. With no flag it sweeps everything:
-the output plus the `.baudelaire` scratch root (cache and publish state). The
-flags narrow it, so `clean --cache` forces a rebuild without discarding publish
+the output plus the `.baudelaire` scratch root (cache and announce state). The
+flags narrow it, so `clean --cache` forces a rebuild without discarding announce
 state.
 
 / #raw("--dist"): Remove only the output directory.
 / #raw("--cache"): Remove only the build cache.
-/ #raw("--publish"): Remove only the publish state.
+/ #raw("--announce"): Remove only the announce state.
 
 == Global flags <global-flags>
 

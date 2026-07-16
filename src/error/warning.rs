@@ -130,11 +130,11 @@ pub struct BaseUrlMissing {
     pub effect: &'static str,
 }
 
-/// Pages a publish run skipped because they carry no publication date.
+/// Pages a announce run skipped because they carry no publication date.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{} skipped — no publication date", crate::ui::Count::pages(*count))]
 #[diagnostic(
-    code(baudelaire::publish::undated),
+    code(baudelaire::announce::undated),
     severity(warning),
     help("add `date` to their frontmatter (run with -v to see which pages)")
 )]
@@ -144,12 +144,12 @@ pub struct Undated {
 
 /// The account's DID is not pinned in config — worth doing, not wrong.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("publish destination resolved to {did}")]
+#[error("announce destination resolved to {did}")]
 #[diagnostic(
-    code(baudelaire::publish::did),
+    code(baudelaire::announce::did),
     severity(advice),
     help(
-        "pin it with `publish.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time"
+        "pin it with `announce.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time"
     )
 )]
 pub struct DidUnpinned {

@@ -4,12 +4,12 @@
 //! build writes `/.well-known/site.standard.publication`, whose body is the
 //! publication's `at://` URI. An AppView fetches it from the deployed domain to
 //! confirm the site owns the publication record. The URI comes from
-//! [`crate::publish::standard`], the single source of the record shapes.
+//! [`crate::announce::standard`], the single source of the record shapes.
 
 use super::process::{Emit, Processor, Site};
 use crate::config::Config;
 use crate::error::Result;
-use crate::publish::standard::{PUBLICATION, publication_uri};
+use crate::announce::standard::{PUBLICATION, publication_uri};
 
 /// Writes `.well-known/site.standard.publication` for the configured `did`.
 pub(super) struct WellKnown;

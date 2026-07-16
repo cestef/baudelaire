@@ -1,10 +1,10 @@
-//! Publishing the built site to external destinations.
+//! Announcing the built site to external destinations.
 //!
-//! The layer is backend-neutral: [`Publisher`] is the one interface a
+//! The layer is backend-neutral: [`Backend`] is the one interface a
 //! destination implements, and it receives a [`SiteView`] — the site reduced to
 //! portable metadata, with no knowledge of any particular protocol. Concrete
 //! backends (e.g. [`standard`], which speaks AT Protocol) map that view onto
-//! their own records. Adding a destination is one `impl Publisher` plus one line
+//! their own records. Adding a destination is one `impl Backend` plus one line
 //! in [`configured`]; nothing else in the codebase learns about it.
 
 pub mod standard;
@@ -16,16 +16,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::content::{Page, discover};
-use crate::error::{PublishError, Result};
+use crate::error::{AnnounceError, Result};
 use crate::graph::Hash;
 use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
 
-/// How a publish run talks to the user — confirmations and interactive secret
-/// entry. The publish layer depends only on this interface, never on the
+/// How a announce run talks to the user — confirmations and interactive secret
+/// entry. The announce layer depends only on this interface, never on the
 /// terminal, so the CLI implements it with the shared prompt widgets and tests
-/// pass a headless stub. The one seam through which publishing becomes
+/// pass a headless stub. The one seam through which announcing becomes
 /// interactive.
 pub trait Interaction {
     /// Confirm a mutating action; `Ok(false)` cancels it.
@@ -36,7 +36,7 @@ pub trait Interaction {
     fn secret(&self, label: &str) -> Result<Option<String>>;
 }
 
-/// Cross-cutting options for a publish run, backend-neutral. A backend reads
+/// Cross-cutting options for a announce run, backend-neutral. A backend reads
 /// `dry_run` to preview without writing and resolves its own secret through
 /// [`Options::secret`]; confirmation runs generically before a backend does.
 pub struct Options<'a> {
@@ -65,7 +65,7 @@ impl Options<'_> {
             // matches the env and prompt branches, which both reject empty.
             let line = stdin_line()?;
             if line.is_empty() {
-                return Err(PublishError::MissingSecret {
+                return Err(AnnounceError::MissingSecret {
                     label: label.to_owned(),
                 }
                 .into());
@@ -78,7 +78,7 @@ impl Options<'_> {
             return Ok(secret);
         }
         self.interaction.secret(label)?.ok_or_else(|| {
-            PublishError::MissingSecret {
+            AnnounceError::MissingSecret {
                 label: label.to_owned(),
             }
             .into()
@@ -104,10 +104,10 @@ fn stdin_line() -> Result<String> {
     Ok(line.trim_end_matches(['\r', '\n']).to_owned())
 }
 
-/// A backend-neutral view of the built site handed to every [`Publisher`].
+/// A backend-neutral view of the built site handed to every [`Backend`].
 pub struct SiteView<'a> {
     /// The full resolved config — a backend reads the base `url`, `site` name,
-    /// output directory, and its own `publish` block from here.
+    /// output directory, and its own `announce` block from here.
     pub config: &'a Config,
     /// Every publishable page, reduced to portable metadata.
     pub documents: Vec<Doc>,
@@ -142,46 +142,46 @@ impl Doc {
     }
 }
 
-/// A destination the built site can be published to.
-pub trait Publisher {
+/// A destination the built site can be announced to.
+pub trait Backend {
     /// Stable, human-facing name, shown in progress output.
     fn name(&self) -> &'static str;
 
-    /// Publish `site` under `opts`, reporting progress as it goes. Honors
+    /// Announce `site` under `opts`, reporting progress as it goes. Honors
     /// `opts.dry_run` by computing and reporting the plan without writing.
-    fn publish(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()>;
+    fn run(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()>;
 }
 
-/// Publish to every configured destination in turn. Errors if none is
-/// configured, so `baudelaire publish` on an unconfigured project explains
+/// Announce to every configured destination in turn. Errors if none is
+/// configured, so `baudelaire announce` on an unconfigured project explains
 /// itself rather than silently doing nothing.
 pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
-    let publishers = configured(config);
-    if publishers.is_empty() {
-        return Err(PublishError::Unconfigured.into());
+    let backends = configured(config);
+    if backends.is_empty() {
+        return Err(AnnounceError::Unconfigured.into());
     }
     let site = view(config)?;
-    for publisher in publishers {
+    for backend in backends {
         ui.section(format_args!(
             "{} — {}",
-            publisher.name(),
+            backend.name(),
             Count::documents(site.documents.len())
         ));
         // Confirm before any network mutation, unless previewing or `--yes`.
-        if !opts.dry_run && !opts.confirm(&format!("publish to {}?", publisher.name()))? {
-            ui.detail(format_args!("skipped {}", publisher.name()));
+        if !opts.dry_run && !opts.confirm(&format!("announce to {}?", backend.name()))? {
+            ui.detail(format_args!("skipped {}", backend.name()));
             continue;
         }
-        publisher.publish(&site, opts, ui)?;
+        backend.run(&site, opts, ui)?;
     }
     Ok(())
 }
 
 /// The enabled destinations, from config alone. THE single source of what a
-/// `publish` run targets: add a backend by adding one line here.
-fn configured(config: &Config) -> Vec<Box<dyn Publisher>> {
-    let mut out: Vec<Box<dyn Publisher>> = Vec::new();
-    if let Some(standard) = &config.publish.standard {
+/// `announce` run targets: add a backend by adding one line here.
+fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
+    let mut out: Vec<Box<dyn Backend>> = Vec::new();
+    if let Some(standard) = &config.announce.standard {
         out.push(Box::new(Standard::new(standard.clone())));
     }
     out
@@ -235,7 +235,7 @@ impl SkipCache {
     }
 
     /// Drop every entry whose id is not in `keep` — the records that no longer
-    /// exist after this publish.
+    /// exist after this announce.
     pub fn retain(&mut self, keep: &BTreeSet<String>) {
         self.hashes.retain(|id, _| keep.contains(id));
     }
@@ -243,19 +243,19 @@ impl SkipCache {
     /// Persist the cache for `backend`.
     pub fn save(&self, backend: &str) -> Result<()> {
         let bytes = serde_json::to_vec(self).map_err(|e| {
-            crate::error::SerializeError::new(crate::error::Artifact::PublishCache, e)
+            crate::error::SerializeError::new(crate::error::Artifact::AnnounceCache, e)
         })?;
         crate::fs::write_all(Self::path(backend), bytes)
     }
 
     fn path(backend: &str) -> PathBuf {
-        Config::scratch("publish").join(format!("{backend}.json"))
+        Config::scratch("announce").join(format!("{backend}.json"))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Hash, Interaction, Options, PublishError, Result, SkipCache};
+    use super::{Hash, Interaction, Options, AnnounceError, Result, SkipCache};
 
     /// A headless [`Interaction`] for tests: a fixed confirmation answer and an
     /// optional prompt secret.
@@ -314,8 +314,8 @@ mod tests {
         let opts = options(None, &stub);
         assert!(matches!(
             opts.secret(UNSET, "pw"),
-            Err(crate::error::BaudelaireErrorKind::Publish(
-                PublishError::MissingSecret { .. }
+            Err(crate::error::BaudelaireErrorKind::Announce(
+                AnnounceError::MissingSecret { .. }
             ))
         ));
     }

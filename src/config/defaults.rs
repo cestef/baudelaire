@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    PngConfig, PngStrip, PublishConfig, RobotsConfig, SearchConfig, SearchField, ServeConfig,
+    PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, ServeConfig,
     StandardConfig, VerifyConfig,
 };
 
@@ -45,7 +45,7 @@ impl Default for Config {
             asset: AssetConfig::default(),
             cache: CacheConfig::default(),
             hooks: HooksConfig::default(),
-            publish: PublishConfig::default(),
+            announce: AnnounceConfig::default(),
             serve: ServeConfig::default(),
             profile: None,
             profiles: Default::default(),
@@ -156,7 +156,7 @@ impl Default for StandardConfig {
         Self {
             // empty by convention: a backend checks handle presence to know it was configured
             handle: String::new(),
-            // resolved from the session at publish; set in config only to unlock offline verify artifacts
+            // resolved from the session at announce time; set in config only to unlock offline verify artifacts
             did: None,
             // Bluesky entryway, also the PDS for accounts it hosts; custom-PDS users override
             pds: "https://bsky.social".into(),

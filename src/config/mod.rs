@@ -89,8 +89,8 @@ pub struct Config {
     pub cache: CacheConfig,
     /// External command hooks run around the build.
     pub hooks: HooksConfig,
-    /// Publishing destinations for the built site.
-    pub publish: PublishConfig,
+    /// Announce destinations for the built site.
+    pub announce: AnnounceConfig,
     /// Dev server options.
     pub serve: ServeConfig,
     /// The active profile name, if one was applied (exposed to pages).
@@ -110,7 +110,7 @@ impl Config {
     /// ```text
     /// .baudelaire/
     ///   cache/    incremental build cache — loss forces a full rebuild
-    ///   publish/  per-backend publish skip-cache — loss forces idempotent re-sends
+    ///   announce/  per-backend announce skip-cache — loss forces idempotent re-sends
     /// ```
     ///
     /// Everything here is derivable, never authored: it is gitignored, wiped by
@@ -125,7 +125,7 @@ impl Config {
     /// back to; single source for both.
     pub const NOT_FOUND: &'static str = "404.html";
 
-    /// The path of a named scratch subdirectory (e.g. `cache`, `publish`) — the
+    /// The path of a named scratch subdirectory (e.g. `cache`, `announce`) — the
     /// one builder every subsystem uses to locate its local state under
     /// [`SCRATCH`](Config::SCRATCH).
     pub fn scratch(sub: &str) -> PathBuf {
@@ -152,7 +152,7 @@ impl Config {
     /// so both agree on when an artifact is emitted and neither re-checks the
     /// `did` after gating.
     pub(crate) fn verify_did(&self, artifact: impl Fn(&VerifyConfig) -> bool) -> Option<&str> {
-        let standard = self.publish.standard.as_ref()?;
+        let standard = self.announce.standard.as_ref()?;
         artifact(&standard.verify)
             .then_some(standard.did.as_deref())
             .flatten()
@@ -289,7 +289,7 @@ impl std::hash::Hash for Config {
             asset,
             cache,
             hooks,
-            publish,
+            announce,
             // dev-server settings never affect output, so they must not key the cache —
             // else `serve` on a custom port would invalidate a `build`'s cache
             serve: _,
@@ -309,7 +309,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
-        (asset, cache, hooks, publish, profile).hash(state);
+        (asset, cache, hooks, announce, profile).hash(state);
         // `serde_json::Value` isn't `Hash`; its serialization is a faithful,
         // deterministic stand-in for the cache fingerprint.
         serde_json::to_string(client)
@@ -602,24 +602,24 @@ pub struct HooksConfig {
     pub after: Vec<String>,
 }
 
-/// Publishing destinations for the built site. Each backend is an optional
-/// block under `publish { .. }`; adding a destination is one field here plus one
-/// backend in [`crate::publish`]. Secrets are never stored here — a backend
-/// reads its credentials from the environment at publish time.
+/// Announce destinations for the built site. Each backend is an optional
+/// block under `announce { .. }`; adding a destination is one field here plus one
+/// backend in [`crate::announce`]. Secrets are never stored here — a backend
+/// reads its credentials from the environment at announce time.
 #[derive(Debug, Clone, Hash, Default)]
-pub struct PublishConfig {
-    /// standard.site (AT Protocol) publishing.
+pub struct AnnounceConfig {
+    /// standard.site (AT Protocol) target.
     pub standard: Option<StandardConfig>,
 }
 
-/// The standard.site (AT Protocol) publishing target.
+/// The standard.site (AT Protocol) target.
 #[derive(Debug, Clone, Hash)]
 pub struct StandardConfig {
     /// Account handle or DID to authenticate as, e.g. `you.bsky.social`.
     pub handle: String,
     /// Repository DID (a stable public identifier, not a secret). When set, the
     /// build emits the standard.site verification artifacts — the `.well-known`
-    /// file and per-page `<link>` tags — offline; publishing checks it against
+    /// file and per-page `<link>` tags — offline; the announce run checks it against
     /// the authenticated session.
     pub did: Option<String>,
     /// PDS/entryway host to authenticate and write records against.
