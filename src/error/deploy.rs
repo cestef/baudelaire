@@ -57,9 +57,7 @@ pub enum DeployError {
     #[error("the host key for `{host}` has changed")]
     #[diagnostic(
         code(baudelaire::deploy::ssh::host_key),
-        help(
-            "this may be a man-in-the-middle attack, or the server was legitimately rebuilt. If you trust the change, remove the old key with `ssh-keygen -R {host}` and retry, or set `strict #false` to skip verification"
-        )
+        help("if you trust the change, run `ssh-keygen -R {host}`; else set `strict #false`")
     )]
     HostKeyChanged { host: String },
 
