@@ -16,7 +16,7 @@
 //!
 //! The analysis is sound by over-approximation: it never misses a read (which
 //! would serve stale output), but where it cannot narrow an access — a dynamic
-//! `.at(key)`, the whole base bound to a variable — it widens to the base
+//! `.at(key)`, a value pulled through a destructuring — it widens to the base
 //! itself, i.e. "depends on the entire value". Precise for the direct-access and
 //! `let`-alias patterns templates actually use.
 
@@ -49,19 +49,19 @@ pub type Reads = BTreeSet<String>;
 
 /// The value paths `source` reads from `roots`.
 pub fn reads(source: &Source, roots: &[Root]) -> Reads {
-    let mut out = Reads::new();
-    visit(source.root(), &mut Env::new(), roots, &mut out);
-    out
+    let mut scan = Scan::new(roots);
+    scan.walk(source.root());
+    scan.out
 }
 
 /// The content digest of the value at a qualified `key`. Equal across builds iff
-/// the value is unchanged; an absent path hashes to a stable marker, so its
-/// later appearance still invalidates.
+/// the value is unchanged; a key no root owns, or an absent path, hashes to a
+/// stable marker so its later appearance still invalidates.
 pub fn digest(roots: &[Root], key: &str) -> Hash {
-    match locate(roots, key) {
-        Some(value) => Hash::of_bytes(&serde_json::to_vec(value).unwrap_or_default()),
-        None => Hash::of_bytes(ABSENT),
-    }
+    roots
+        .iter()
+        .find(|root| root.owns(key))
+        .map_or_else(|| Hash::of_bytes(ABSENT), |root| root.digest(key))
 }
 
 /// The digest of every key in `keys`, ready to store in a cache entry.
@@ -71,187 +71,206 @@ pub fn digests(roots: &[Root], keys: &Reads) -> BTreeMap<String, Hash> {
         .collect()
 }
 
-/// Sentinel hashed for a key that resolves to no value — distinct from any real
-/// serialized value, so a path gaining a value later reads as a change.
+/// Sentinel hashed for a key with no value — distinct from any serialized value,
+/// so a path gaining a value later reads as a change.
 const ABSENT: &[u8] = b"\0baudelaire::access::absent";
 
-/// Variable bindings that alias into a tracked value, e.g. the `git` in
-/// `#let git = sys.inputs.baudelaire.git`. Maps the name to the access path it
-/// stands for, so later `git.hash` resolves to the full path.
-type Env = HashMap<String, Vec<String>>;
+impl<'a> Root<'a> {
+    /// Whether this root owns `key`: its base is the key, or a prefix of it.
+    fn owns(&self, key: &str) -> bool {
+        key == self.base
+            || key
+                .strip_prefix(self.base)
+                .is_some_and(|r| r.starts_with('.'))
+    }
 
-/// Walk a node, updating `env` at `let` bindings and recording the read of every
-/// maximal access expression. Recording happens at the outermost resolvable node
-/// and then descends only into call arguments (never the callee chain), so a
-/// chain is recorded once, not once per link.
-fn visit(node: &SyntaxNode, env: &mut Env, roots: &[Root], out: &mut Reads) {
-    if let Some(expr) = node.cast::<Expr>() {
-        match expr {
-            // A binding is not a read: the bound value only becomes a dependency
-            // where it is *used*. Record `let`s in `env` and scan the
-            // initializer's arguments (a metadata default is still a read).
-            Expr::LetBinding(binding) => {
-                bind(binding, env);
-                if let Some(init) = binding.init() {
-                    visit_init(init.to_untyped(), env, roots, out);
+    /// The qualified key an access `path` (from the global scope) reads from this
+    /// root, or `None` if it doesn't touch it. A path that stops short of, equals,
+    /// or grabs a non-narrowable part of the base yields the base itself (the
+    /// whole value); a longer one is truncated at the first leaf it reaches, since
+    /// trailing segments are method calls on the value.
+    fn key(&self, path: &[String]) -> Option<String> {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        let base: Vec<&str> = self.base.split('.').collect();
+        let shared = base.len().min(path.len());
+        if path[..shared] != base[..shared] {
+            return None;
+        }
+        if path.len() <= base.len() {
+            return Some(self.base.to_string());
+        }
+        let mut key = self.base.to_string();
+        let mut node = self.tree;
+        for segment in &path[base.len()..] {
+            let Value::Dict(_) = node else {
+                break; // a leaf; the rest are method calls on it.
+            };
+            key.push('.');
+            key.push_str(segment);
+            match node.get(segment) {
+                Some(child) => node = child,
+                None => break, // an absent key; its presence is the dependency.
+            }
+        }
+        Some(key)
+    }
+
+    /// The value at a qualified `key` this root owns, or `None` if it's absent.
+    fn value(&self, key: &str) -> Option<&'a Value> {
+        let rest = key.strip_prefix(self.base)?;
+        let mut node = self.tree;
+        for segment in rest.strip_prefix('.').unwrap_or_default().split('.') {
+            if segment.is_empty() {
+                continue; // the bare base: the whole value.
+            }
+            node = node.get(segment)?;
+        }
+        Some(node)
+    }
+
+    /// The digest of the value at `key`; the absent marker when there is none.
+    fn digest(&self, key: &str) -> Hash {
+        match self.value(key) {
+            Some(value) => Hash::of_bytes(&serde_json::to_vec(value).unwrap_or_default()),
+            None => Hash::of_bytes(ABSENT),
+        }
+    }
+}
+
+/// A syntax-tree walk that accumulates the value paths a source reads. Threads
+/// its state — the tracked roots, the `let`-alias environment, and the reads so
+/// far — as one object rather than through every step.
+struct Scan<'a> {
+    roots: &'a [Root<'a>],
+    /// `let` aliases into a tracked value, e.g. the `git` in
+    /// `#let git = sys.inputs.baudelaire.git`, mapped to the path it stands for.
+    env: HashMap<String, Vec<String>>,
+    out: Reads,
+}
+
+impl<'a> Scan<'a> {
+    fn new(roots: &'a [Root<'a>]) -> Self {
+        Self {
+            roots,
+            env: HashMap::new(),
+            out: Reads::new(),
+        }
+    }
+
+    /// Walk a node, recording the read of every maximal access. Recording happens
+    /// at the outermost resolvable node, then descends only into call arguments
+    /// (never the callee chain), so a chain is recorded once, not per link.
+    fn walk(&mut self, node: &SyntaxNode) {
+        if let Some(expr) = node.cast::<Expr>() {
+            // A binding we can alias is not a read: the value becomes a dependency
+            // where the alias is *used*, so we only scan a call's arguments (a
+            // default is still a read). A binding we can't alias — a destructuring
+            // or complex pattern — would let the value escape untracked, so its
+            // initializer is recorded like any other use instead.
+            if let Expr::LetBinding(binding) = expr {
+                let init = binding.init().map(|init| init.to_untyped());
+                match (self.bind(binding), init) {
+                    (true, Some(init)) => self.args(init),
+                    (false, Some(init)) => self.walk(init),
+                    (_, None) => {}
                 }
                 return;
             }
-            _ => {
-                if let Some(path) = resolve(&expr, env) {
-                    record(&path, roots, out);
-                    if let Expr::FuncCall(call) = expr {
-                        for arg in call.args().items() {
-                            visit(arg.to_untyped(), env, roots, out);
-                        }
-                    }
-                    return;
-                }
+            if let Some(path) = self.resolve(&expr) {
+                self.record(&path);
+                self.args(node);
+                return;
             }
         }
+        for child in node.children() {
+            self.walk(child);
+        }
     }
-    for child in node.children() {
-        visit(child, env, roots, out);
-    }
-}
 
-/// Visit a `let` initializer without recording the bound chain itself, but still
-/// catching reads nested in its call arguments.
-fn visit_init(node: &SyntaxNode, env: &mut Env, roots: &[Root], out: &mut Reads) {
-    if let Some(expr) = node.cast::<Expr>()
-        && resolve(&expr, env).is_some()
-    {
-        if let Expr::FuncCall(call) = expr {
+    /// Walk the argument list of a call node (a no-op for anything else), so a
+    /// read nested in an argument is caught while the callee chain is left alone.
+    fn args(&mut self, node: &SyntaxNode) {
+        if let Some(Expr::FuncCall(call)) = node.cast::<Expr>() {
             for arg in call.args().items() {
-                visit(arg.to_untyped(), env, roots, out);
+                self.walk(arg.to_untyped());
             }
         }
-        return;
     }
-    visit(node, env, roots, out);
-}
 
-/// Record `#let name = <access>` so later uses of `name` resolve through it.
-fn bind(binding: ast::LetBinding, env: &mut Env) {
-    if let ast::LetBindingKind::Normal(ast::Pattern::Normal(Expr::Ident(name))) = binding.kind()
-        && let Some(path) = binding.init().and_then(|init| resolve(&init, env))
-    {
-        env.insert(name.get().to_string(), path);
-    }
-}
-
-/// Resolve an access expression to its path from the global scope, or `None` if
-/// it isn't a plain access. Follows identifiers (through `env` aliases), field
-/// access, `.at("key")`, and the collection methods that expose a whole value.
-fn resolve(expr: &Expr, env: &Env) -> Option<Vec<String>> {
-    match expr {
-        Expr::Ident(ident) => {
-            let name = ident.get();
-            Some(
-                env.get(name.as_str())
-                    .cloned()
-                    .unwrap_or_else(|| vec![name.to_string()]),
-            )
-        }
-        Expr::FieldAccess(access) => {
-            let mut path = resolve(&access.target(), env)?;
-            path.push(access.field().get().to_string());
-            Some(path)
-        }
-        Expr::FuncCall(call) => resolve_call(*call, env),
-        Expr::Parenthesized(paren) => resolve(&paren.expr(), env),
-        _ => None,
-    }
-}
-
-/// Resolve `<target>.method(..)` for the accessors that read a value: `.at("k")`
-/// narrows to that key; a dynamic `.at(expr)` and the collection accessors
-/// (`.keys`, `.values`, ..) widen to the whole target.
-fn resolve_call(call: ast::FuncCall, env: &Env) -> Option<Vec<String>> {
-    let Expr::FieldAccess(access) = call.callee() else {
-        return None;
-    };
-    let mut path = resolve(&access.target(), env)?;
-    match access.field().get().as_str() {
-        "at" => {
-            if let Some(Expr::Str(key)) = first_positional(call) {
-                path.push(key.get().to_string());
-            }
-            Some(path)
-        }
-        "keys" | "values" | "pairs" | "len" | "has" | "contains" => Some(path),
-        _ => None,
-    }
-}
-
-/// The first positional argument of a call, if any.
-fn first_positional(call: ast::FuncCall) -> Option<Expr> {
-    call.args().items().find_map(|arg| match arg {
-        ast::Arg::Pos(expr) => Some(expr),
-        _ => None,
-    })
-}
-
-/// Match a resolved access path against each root and record the qualified key
-/// it reads.
-fn record(path: &[String], roots: &[Root], out: &mut Reads) {
-    for root in roots {
-        if let Some(key) = qualified(path, root) {
-            out.insert(key);
-        }
-    }
-}
-
-/// The qualified key `path` reads from `root`, or `None` if it doesn't touch it.
-/// A path that stops short of, equals, or grabs a non-narrowable part of the
-/// base yields the base itself (the whole value); a longer path is truncated at
-/// the first leaf it reaches (trailing segments are method calls on the value).
-fn qualified(path: &[String], root: &Root) -> Option<String> {
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    let base: Vec<&str> = root.base.split('.').collect();
-    let shared = base.len().min(path.len());
-    if path[..shared] != base[..shared] {
-        return None;
-    }
-    if path.len() <= base.len() {
-        // the access is the base, or a prefix of it (a superset): the whole value.
-        return Some(root.base.to_string());
-    }
-    let mut key = root.base.to_string();
-    let mut node = root.tree;
-    for segment in &path[base.len()..] {
-        let Value::Dict(_) = node else {
-            break; // a leaf; the rest are method calls on it.
+    /// Alias `#let name = <access>` so later uses of `name` resolve through it,
+    /// returning whether an alias was created. Only a plain `name = access` binds;
+    /// a destructuring or complex pattern, or a non-access initializer, returns
+    /// `false` so the caller records the initializer instead of dropping a value
+    /// it can't follow.
+    fn bind(&mut self, binding: ast::LetBinding) -> bool {
+        let ast::LetBindingKind::Normal(ast::Pattern::Normal(Expr::Ident(name))) = binding.kind()
+        else {
+            return false;
         };
-        key.push('.');
-        key.push_str(segment);
-        match node.get(segment) {
-            Some(child) => node = child,
-            None => break, // an absent key; its presence is the dependency.
-        }
+        let Some(path) = binding.init().and_then(|init| self.resolve(&init)) else {
+            return false;
+        };
+        self.env.insert(name.get().to_string(), path);
+        true
     }
-    Some(key)
-}
 
-/// The value at a qualified `key`, or `None` if no root owns it or the path is
-/// absent.
-fn locate<'a>(roots: &'a [Root], key: &str) -> Option<&'a Value> {
-    for root in roots {
-        if key == root.base {
-            return Some(root.tree);
-        }
-        if let Some(rest) = key
-            .strip_prefix(root.base)
-            .and_then(|r| r.strip_prefix('.'))
-        {
-            let mut node = root.tree;
-            for segment in rest.split('.') {
-                node = node.get(segment)?;
+    /// Resolve an access to its path from the global scope, or `None` if it isn't
+    /// a plain access. Follows identifiers (through `env` aliases), field access,
+    /// `.at("key")`, and the collection methods that expose a whole value.
+    fn resolve(&self, expr: &Expr) -> Option<Vec<String>> {
+        match expr {
+            Expr::Ident(ident) => {
+                let name = ident.get();
+                Some(
+                    self.env
+                        .get(name.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| vec![name.to_string()]),
+                )
             }
-            return Some(node);
+            Expr::FieldAccess(access) => {
+                let mut path = self.resolve(&access.target())?;
+                path.push(access.field().get().to_string());
+                Some(path)
+            }
+            Expr::FuncCall(call) => self.call(*call),
+            Expr::Parenthesized(paren) => self.resolve(&paren.expr()),
+            _ => None,
         }
     }
-    None
+
+    /// Resolve `<target>.method(..)` for the accessors that read a value: `.at("k")`
+    /// narrows to that key; a dynamic `.at(expr)` and the collection accessors
+    /// (`.keys`, `.values`, ..) widen to the whole target.
+    fn call(&self, call: ast::FuncCall) -> Option<Vec<String>> {
+        let Expr::FieldAccess(access) = call.callee() else {
+            return None;
+        };
+        let mut path = self.resolve(&access.target())?;
+        match access.field().get().as_str() {
+            "at" => {
+                let first = call.args().items().find_map(|arg| match arg {
+                    ast::Arg::Pos(expr) => Some(expr),
+                    _ => None,
+                });
+                if let Some(Expr::Str(key)) = first {
+                    path.push(key.get().to_string());
+                }
+                Some(path)
+            }
+            "keys" | "values" | "pairs" | "len" | "has" | "contains" => Some(path),
+            _ => None,
+        }
+    }
+
+    /// Record the qualified key `path` reads from each root it touches.
+    fn record(&mut self, path: &[String]) {
+        for root in self.roots {
+            if let Some(key) = root.key(path) {
+                self.out.insert(key);
+            }
+        }
+    }
 }
 
 /// A build-scoped analyzer: the tracked roots plus a per-file memo, so a template
@@ -285,7 +304,7 @@ impl<'a> Analyzer<'a> {
         out
     }
 
-    /// The reads of a dependency file, hashed once per build.
+    /// The reads of a dependency file, analyzed once per build.
     fn file(&self, path: &Path) -> Arc<Reads> {
         if let Some(cached) = self.memo.lock().get(path) {
             return cached.clone();
@@ -405,6 +424,41 @@ mod tests {
     }
 
     #[test]
+    fn transitive_aliases_chain() {
+        // a = root; c = a; d = c; then read a leaf off d.
+        let code = r#"
+            #let a = sys.inputs.baudelaire
+            #let c = a
+            #let d = c
+            #d.git.hash
+        "#;
+        assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire.git.hash"]);
+    }
+
+    #[test]
+    fn destructuring_the_value_widens_soundly() {
+        // We can't alias `git` through a destructuring pattern, so the whole
+        // value it's pulled from is recorded — never dropped (that would be a
+        // stale-output bug).
+        let code = "#let (git,) = sys.inputs.baudelaire\n#git.hash";
+        assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire"]);
+    }
+
+    #[test]
+    fn destructuring_a_tuple_of_leaves_stays_precise() {
+        // The initializer is an array of individual reads, so each is recorded
+        // on its own — no need to widen to the whole context.
+        let code = "#let (v, d) = (sys.inputs.baudelaire.version, sys.inputs.baudelaire.date)";
+        assert_eq!(
+            keys(&read(code)),
+            [
+                "sys.inputs.baudelaire.date",
+                "sys.inputs.baudelaire.version"
+            ]
+        );
+    }
+
+    #[test]
     fn dynamic_key_widens_to_the_target() {
         let code = "#let k = \"git\"\n#sys.inputs.baudelaire.at(k)";
         assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire"]);
@@ -437,18 +491,17 @@ mod tests {
     #[test]
     fn digest_changes_only_for_the_read_value() {
         let before = tree();
-        let mut after_dict = vec![
-            ("version".to_string(), Value::str("0.1.0")),
-            ("date".to_string(), Value::str("2026-07-17")), // a new day
+        let after = Value::dict([
+            ("version", Value::str("0.1.0")),
+            ("date", Value::str("2026-07-17")), // a new day
             (
-                "git".to_string(),
+                "git",
                 Value::dict([
                     ("hash", Value::str("abc123")),
                     ("dirty", Value::Bool(false)),
                 ]),
             ),
-        ];
-        let after = Value::Dict(std::mem::take(&mut after_dict));
+        ]);
         let roots_before = [Root {
             base: "sys.inputs.baudelaire",
             tree: &before,
