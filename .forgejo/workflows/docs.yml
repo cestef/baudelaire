@@ -56,12 +56,8 @@ jobs:
         if: failure()
         run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
 
-      - uses: https://codeberg.org/cstef/bloom/deploy@main
+      - uses: https://codeberg.org/git-pages/action@v2
         with:
-          path: docs/public
-          service: baudelaire
-          host: ${{ secrets.DEPLOY_HOST }}
-          user: ${{ secrets.DEPLOY_USER }}
-          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
-          ssh-host-key: ${{ secrets.DEPLOY_HOST_KEY }}
-          label: ${{ github.ref_name }}
+          site: https://cstef.codeberg.page/baudelaire/
+          token: ${{ forge.token }}
+          source: docs/public/
