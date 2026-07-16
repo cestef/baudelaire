@@ -49,6 +49,13 @@ css = ["dep:lightningcss"]
 # Note: `<img>` lazy/async annotation is attribute-only and stays on regardless.
 images = ["dep:oxipng", "dep:image"]
 
+# Build OpenSSL from source and link it statically instead of using the host's
+# libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
+# (`ureq`) pull in `native-tls` → OpenSSL, which has no system copy on a static
+# musl target — so the musl release builds turn this on. Needs a C compiler,
+# `perl`, and `make` at build time.
+vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
+
 [dependencies]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }

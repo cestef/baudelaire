@@ -24,9 +24,17 @@ jobs:
           - name: linux-x86_64
             runner: linux-amd64-large
             target: x86_64-unknown-linux-gnu
+          - name: linux-x86_64-musl
+            runner: linux-amd64-large
+            target: x86_64-unknown-linux-musl
+            musl: true
           - name: linux-aarch64
             runner: linux-arm64-large
             target: aarch64-unknown-linux-gnu
+          - name: linux-aarch64-musl
+            runner: linux-arm64-large
+            target: aarch64-unknown-linux-musl
+            musl: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +52,21 @@ jobs:
           rustup show active-toolchain || rustup toolchain install
           rustup target add ${{ matrix.target }}
 
+      # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
+      # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
+      # rustc's self-contained musl handles the final static link.
+      - name: musl toolchain
+        if: matrix.musl
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v apt-get >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends musl-tools perl make
+          elif command -v apk >/dev/null; then
+            apk add --no-cache musl-dev gcc perl make
+          fi
+
       # Keyed on Cargo.lock + rustc, so it runs after the toolchain install.
       # Each matrix row has its own arch/target, so give it a per-target key.
       - name: cargo cache
@@ -57,11 +80,19 @@ jobs:
       # is tarred with a matching checksum; slim carries a `-slim` suffix.
       - name: build
         shell: bash
+        env:
+          # Compile the vendored OpenSSL C for the musl target (no-op for gnu,
+          # where `EXTRA_FEATURES` is empty). Target-scoped so host build scripts
+          # and proc-macros still use the default host compiler.
+          EXTRA_FEATURES: ${{ matrix.musl && 'vendored-openssl' || '' }}
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
         run: |
           set -euo pipefail
           package() {  # $1 = asset suffix, rest = extra cargo flags
             local suffix="$1"; shift
-            cargo build --release --target ${{ matrix.target }} "$@"
+            cargo build --release --target ${{ matrix.target }} \
+              ${EXTRA_FEATURES:+--features "$EXTRA_FEATURES"} "$@"
             local out="baudelaire-${{ matrix.name }}${suffix}.tar.gz"
             tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
             sha256sum "$out" > "$out.sha256"
@@ -118,6 +149,10 @@ jobs:
           SIZE_ARM=$(bin_size "baudelaire-linux-aarch64.tar.gz")
           SIZE_X86_SLIM=$(bin_size "baudelaire-linux-x86_64-slim.tar.gz")
           SIZE_ARM_SLIM=$(bin_size "baudelaire-linux-aarch64-slim.tar.gz")
+          SIZE_X86_MUSL=$(bin_size "baudelaire-linux-x86_64-musl.tar.gz")
+          SIZE_ARM_MUSL=$(bin_size "baudelaire-linux-aarch64-musl.tar.gz")
+          SIZE_X86_MUSL_SLIM=$(bin_size "baudelaire-linux-x86_64-musl-slim.tar.gz")
+          SIZE_ARM_MUSL_SLIM=$(bin_size "baudelaire-linux-aarch64-musl-slim.tar.gz")
 
           cat > release-notes.md <<EOF
           ## Install
@@ -150,12 +185,19 @@ jobs:
           (no minify, bundle, or optimize). Pick slim when your host has the fonts
           and you run your own asset tooling.
 
+          The \`gnu\` builds link the host's glibc; the fully static \`musl\` builds
+          run anywhere (Alpine, distroless, scratch containers).
+
           | Artifact | Size |
           |----------|------|
           | \`baudelaire-linux-x86_64\` | ${SIZE_X86} |
           | \`baudelaire-linux-x86_64-slim\` | ${SIZE_X86_SLIM} |
+          | \`baudelaire-linux-x86_64-musl\` | ${SIZE_X86_MUSL} |
+          | \`baudelaire-linux-x86_64-musl-slim\` | ${SIZE_X86_MUSL_SLIM} |
           | \`baudelaire-linux-aarch64\` | ${SIZE_ARM} |
           | \`baudelaire-linux-aarch64-slim\` | ${SIZE_ARM_SLIM} |
+          | \`baudelaire-linux-aarch64-musl\` | ${SIZE_ARM_MUSL} |
+          | \`baudelaire-linux-aarch64-musl-slim\` | ${SIZE_ARM_MUSL_SLIM} |
 
           Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
