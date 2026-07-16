@@ -43,6 +43,7 @@ typst {
 ```
 
 #callout(kind: "tip")[
-  Build metadata folds into the cache key, so a new commit or a new day rebuilds
-  the pages that display it. Version stamps never go stale.
+  Each value a page reads here is tracked individually, so a new commit rebuilds
+  the pages that show the commit, a new day rebuilds the pages that show the date,
+  and nothing else moves. Version stamps never go stale.
 ]

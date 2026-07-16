@@ -41,7 +41,7 @@ use crate::engine::process::{Emitter, Processors, Site};
 use crate::engine::statics::Static;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
-use crate::graph::{Cache, Deps, Fingerprint, Hash, RenderInputs};
+use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Reads, RenderInputs, Root};
 use crate::render::{AssetMap, Renderer};
 use crate::ui::{Bytes, Count, Dur, PageStatus, Paths, Timer, Ui};
 pub use crate::world::Mode;
@@ -185,7 +185,17 @@ impl Engine {
                 .embed
                 .then(|| Hash::of_dir(&self.config.asset_dist())),
         };
-        let mut cache = Cache::load(&self.config, self.project.context(), &render, ui)?;
+        // The injected values whose per-page reads drive fine-grained metadata
+        // invalidation: the analyzer records them from each page's syntax, the
+        // cache re-hashes them to decide reuse. One owned copy backs the cache;
+        // the analyzer borrows another view of the same trees.
+        let tracked = self.project.tracked();
+        let roots: Vec<Root> = tracked
+            .iter()
+            .map(|(base, tree)| Root { base, tree })
+            .collect();
+        let analyzer = Analyzer::new(roots, &self.project);
+        let mut cache = Cache::load(&self.config, &render, tracked.clone(), ui)?;
 
         // split cache hits from stale pages. `prepare` produces each page's
         // text + fingerprint without parsing it — the parse into a typst
@@ -215,12 +225,14 @@ impl Engine {
         let rendered = self.render_pages("compiling", stale, ui, |(page, prepared)| {
             (
                 page,
-                prepared.and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer)),
+                prepared.and_then(|(id, text, fp)| {
+                    self.compile(page, id, text, fp, &renderer, &analyzer)
+                }),
             )
         })?;
 
         for r in &rendered {
-            cache.record(r.page, r.fingerprint, &r.html, &r.deps);
+            cache.record(r.page, r.fingerprint, &r.html, &r.deps, &r.reads);
         }
         for (page, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);
@@ -307,12 +319,19 @@ impl Engine {
         );
         let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
         let sections = crate::codegen::Typst(&self.sections(&pages)).to_string();
+        let tracked = self.project.tracked();
+        let roots: Vec<Root> = tracked
+            .iter()
+            .map(|(base, tree)| Root { base, tree })
+            .collect();
+        let analyzer = Analyzer::new(roots, &self.project);
         // Prepare + compile every page inline (no cache split, no output).
         let rendered = self.render_pages("checking", pages.iter().collect(), ui, |page| {
             (
                 page,
-                self.prepare(page, &sections)
-                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &renderer)),
+                self.prepare(page, &sections).and_then(|(id, text, fp)| {
+                    self.compile(page, id, text, fp, &renderer, &analyzer)
+                }),
             )
         })?;
         ui.flush();
@@ -497,6 +516,7 @@ impl Engine {
         text: String,
         fingerprint: Hash,
         renderer: &Renderer,
+        analyzer: &Analyzer,
     ) -> Result<Rendered<'a>> {
         // parse only now, for a page actually being (re)compiled.
         let source = Source::new(id, text);
@@ -524,11 +544,17 @@ impl Engine {
         let html = typst_html::html(&doc, &self.html_options()).map_err(|errs| {
             BaudelaireErrorKind::TypstHtml(self.diagnostics(errs, page, &source, world.inner()))
         })?;
+        let deps = self.project.dependencies(&world);
+        // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
+        // its own source and every `.typ` it depends on — the fine-grained
+        // metadata dependency set.
+        let reads = analyzer.reads(&source, &deps);
         Ok(Rendered {
             page,
             fingerprint,
             html,
-            deps: self.project.dependencies(&world),
+            deps,
+            reads,
             broken,
             warnings,
         })
@@ -588,6 +614,7 @@ struct Rendered<'a> {
     fingerprint: Hash,
     html: String,
     deps: Deps,
+    reads: Reads,
     broken: Vec<String>,
     warnings: Vec<TypstSourceDiagnostic>,
 }

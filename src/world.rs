@@ -70,8 +70,12 @@ impl Mode {
 }
 
 /// Build metadata exposed to pages via `sys.inputs.baudelaire` (version, build
-/// date, mode, active profile, git state, and a mirror of site identity). `Hash`
-/// so it can salt the build cache.
+/// date, mode, active profile, git state, and a mirror of site identity).
+///
+/// It no longer keys the cache directly: pages read individual values from it,
+/// and [`crate::graph::Analyzer`] tracks those reads per page, so a commit or a
+/// new day invalidates only the pages that display the value that moved. The
+/// tree is exposed for that tracking via [`Project::tracked`].
 #[derive(Debug, Clone)]
 pub struct BuildContext {
     version: &'static str,
@@ -85,30 +89,8 @@ pub struct BuildContext {
     client: codegen::Value,
 }
 
-/// Feeds the cache fingerprint. `mode` is deliberately excluded: it is
-/// informational only (exposed at `sys.inputs.baudelaire.mode`) and must not
-/// key the cache, or `build` and `serve` — which differ only in mode — would
-/// invalidate each other's cache on every switch. Destructuring keeps a new
-/// field from being silently forgotten.
-impl std::hash::Hash for BuildContext {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let Self {
-            version,
-            date,
-            mode: _,
-            profile,
-            git,
-            site,
-            // client constants already fold into the cache via `Config`'s own
-            // hash, so hashing them here too would only double-count.
-            client: _,
-        } = self;
-        (version, date, profile, git, site).hash(state);
-    }
-}
-
 /// Git state of the site repository at build time.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 struct GitInfo {
     /// The full commit SHA — pages slice it themselves for a short form.
     hash: String,
@@ -122,7 +104,7 @@ struct GitInfo {
 
 /// A mirror of site identity, so layouts can read it via `sys.inputs` without
 /// per-page frontmatter plumbing.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 struct SiteInfo {
     title: Option<String>,
     url: Option<String>,
@@ -319,10 +301,20 @@ impl Project {
         fonts
     }
 
-    /// Build metadata injected into `sys.inputs.baudelaire`; folded into the
-    /// cache fingerprint so a new commit or day rebuilds pages that embed it.
+    /// Build metadata injected into `sys.inputs.baudelaire`.
     pub fn context(&self) -> &BuildContext {
         &self.context
+    }
+
+    /// The injected values whose per-page reads the cache tracks, each as a
+    /// dotted base and its current tree. One entry today — build metadata — but
+    /// the mechanism is generic, so any future `sys.inputs.*` value tracked for
+    /// fine-grained invalidation is added here.
+    pub fn tracked(&self) -> Vec<(String, codegen::Value)> {
+        vec![(
+            "sys.inputs.baudelaire".to_string(),
+            codegen::Value::from(&self.context),
+        )]
     }
 
     /// Project root directory.

@@ -125,19 +125,50 @@ A page is reused only if all of this holds:
 - the manifest-level config fingerprint matches,
 - the page's content hash equals the stored one,
 - every dependency's current digest equals its stored digest,
+- every build-metadata value the page read still hashes the same,
 - the blob is still readable, and re-hashes to the stored address.
 
-That last clause guards against a torn write: if the bytes on disk don't hash to
-the address the manifest claims, it's a miss and the page rebuilds.
+The torn-write clause guards a corner case: if the bytes on disk don't hash to the
+address the manifest claims, it's a miss and the page rebuilds.
 
 == When everything is stale at once
 
 Some changes legitimately invalidate the whole site. A manifest-level fingerprint
-folds together the `Config`, the `BuildContext` (git SHA, branch, tag, dirty flag,
-build date, profile, version), and the render inputs: the processed-asset URL map,
-the page-to-permalink map, and a hash of inlined assets when embedding is on.
-Change your config or bump a fingerprinted asset and every page rebuilds, because
-those inputs aren't visible to per-page dependency tracking.
+folds together the `Config` and the render inputs: the processed-asset URL map, the
+page-to-permalink map, and a hash of inlined assets when embedding is on. Change
+your config or bump a fingerprinted asset and every page rebuilds, because those
+inputs aren't visible to per-page dependency tracking.
+
+== Build metadata, read by read
+
+One input used to sit in that whole-site fingerprint and shouldn't have: build
+metadata. A page reaches it through `sys.inputs.baudelaire` — `.git.hash`,
+`.version`, `.date`. Folding it into the manifest meant every commit rebuilt every
+page, including the ones that never mention it.
+
+The fix is to treat a metadata read like any other dependency: find it, and rebuild
+only when its value changes. The catch is that the read is a dictionary access
+inside Typst, which the file tracker never sees. So Baudelaire reads it out of the
+syntax tree instead. For each page it walks the closure of source it compiled and
+resolves every expression rooted at `sys.inputs.baudelaire` down to the exact path
+it reads — `git.hash`, not `git`, not the whole context. `let` aliases are
+followed, so the idiomatic
+
+```typ
+#let build = sys.inputs.baudelaire
+#let git = build.at("git", default: none)
+... #git.hash ...
+```
+
+resolves to `git.hash` all the same. Each path is stored with the digest of its
+value; a page is reused unless one of those digests moved. A new commit changes
+`git.hash`, so the pages that print the commit rebuild and the rest stay cached. A
+new day changes `date` and nothing else — so unless a page shows the date, nothing
+rebuilds.
+
+When an access can't be narrowed — a dynamic `.at(key)`, the whole object bound and
+passed around — it widens to the entire context: correct, but coarse. Sound first,
+precise where it can be.
 
 == Writing it back
 

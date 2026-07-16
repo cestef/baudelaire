@@ -31,9 +31,9 @@ That makes invalidation sharp and predictable:
   and nothing else.
 / Change `config.kdl`: the whole site rebuilds, since config can change any
   permalink.
-/ New commit or new day: the whole site rebuilds. Build metadata (git SHA, build
-  date) is a manifest-level input, not a per-page dependency, so any change to it
-  invalidates every page at once, whether or not the page displays it.
+/ New commit or new day: only the pages that read the value that changed rebuild.
+  A page printing `sys.inputs.baudelaire.git.hash` rebuilds on a commit; one that
+  only reads `.version` does not. Everything else stays cached.
 
 == The cache
 

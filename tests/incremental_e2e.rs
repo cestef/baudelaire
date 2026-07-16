@@ -637,3 +637,72 @@ fn flat_urls_still_prune_on_rename() {
         "old flat output not pruned"
     );
 }
+
+/// Run a git command in the site root, failing loudly. Isolated: the site lives
+/// in a fresh tempdir, so this never touches the project's own repository.
+fn git(site: &Site, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(&site.root)
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@t")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@t")
+        .output()
+        .expect("run git");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn metadata_change_rebuilds_only_the_pages_that_read_it() {
+    // The payoff of per-value tracking: a new commit changes
+    // `sys.inputs.baudelaire.git.hash`, so the page that displays it rebuilds,
+    // while a page that reads no metadata stays cached. Build metadata is not in
+    // the manifest fingerprint, so nothing forces a whole-site rebuild.
+    let site = Site::with(CONFIG);
+    git(&site, &["init", "-q"]);
+    git(&site, &["commit", "-q", "--allow-empty", "-m", "one"]);
+
+    site.write(
+        "content/reader.typ",
+        "#let frontmatter = (title: \"R\",)\n\
+         commit #sys.inputs.baudelaire.at(\"git\", default: (:)).at(\"hash\", default: \"none\")",
+    );
+    site.write(
+        "content/plain.typ",
+        "#let frontmatter = (title: \"P\",)\njust text",
+    );
+
+    site.build();
+    let reader_before = site.output("reader/index.html");
+    assert!(
+        !reader_before.contains("none"),
+        "the reader page should display the real commit hash: {reader_before}"
+    );
+
+    // Unchanged rebuild: both pages served from cache.
+    let unchanged = site.build();
+    assert!(
+        unchanged.contains("(2 cached)"),
+        "an unchanged rebuild must reuse both pages: {unchanged}"
+    );
+
+    // A new commit changes only git.hash — no page source touched.
+    git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    let after = site.build();
+
+    // The reader rebuilt (its value changed); the plain page stayed cached.
+    assert!(
+        after.contains("(1 cached)"),
+        "exactly the metadata reader should rebuild: {after}"
+    );
+    assert_ne!(
+        reader_before,
+        site.output("reader/index.html"),
+        "the reader page must show the new commit hash after a rebuild"
+    );
+}

@@ -21,13 +21,14 @@ use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::codegen::Value;
 use crate::config::Config;
 use crate::content::Page;
 use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::{Deps, FileDigests, Hash};
+use crate::graph::access::{self, Root};
+use crate::graph::{Deps, FileDigests, Hash, Reads};
 use crate::ui::Ui;
-use crate::world::BuildContext;
 
 /// The on-disk manifest file name under the cache directory.
 const MANIFEST: &str = "manifest.json";
@@ -46,6 +47,12 @@ struct Entry {
     /// (serde-serialized, not `Display`) so a non-UTF-8 path round-trips
     /// exactly instead of being lossily replaced and permanently missing.
     deps: BTreeMap<PathBuf, Hash>,
+    /// Injected values the page read (`sys.inputs.baudelaire.git.hash`, ..) and
+    /// their digests at compile time, so a new commit or day rebuilds only the
+    /// pages that display the value that changed. Absent from pre-tracking
+    /// manifests, hence `default`.
+    #[serde(default)]
+    meta: BTreeMap<String, Hash>,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
 }
@@ -53,17 +60,18 @@ struct Entry {
 /// The serialized cache manifest — metadata only, no page markup.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Manifest {
-    /// Fingerprint of the inputs that produced these entries (config, build
-    /// context, asset map, link map, embedded assets). Any change invalidates
-    /// the whole manifest — it can alter every permalink or embedded input.
+    /// Fingerprint of the site-wide inputs that produced these entries (config,
+    /// asset map, link map, embedded assets). Any change invalidates the whole
+    /// manifest — it can alter every permalink or embedded input. Build metadata
+    /// is *not* here: it's tracked per page via [`Entry::meta`].
     config: Option<Hash>,
     /// Entries keyed by page source path.
     pages: BTreeMap<PathBuf, Entry>,
 }
 
 /// The render-side inputs folded into the cache fingerprint alongside the
-/// config and build context: the processed-asset URL map, the page→permalink
-/// map, and the embedded-asset content hash. None are visible to the per-page
+/// config: the processed-asset URL map, the page→permalink map, and the
+/// embedded-asset content hash. None are visible to the per-page
 /// dependency tracker (asset renames and link resolution happen in the render
 /// pass; embeds inline bytes typst never reads), so they are fingerprinted
 /// whole — any change invalidates every page.
@@ -87,21 +95,26 @@ pub struct Cache {
     /// a theme module) is hashed once across validation and recording, not once
     /// per page.
     digests: FileDigests,
+    /// The tracked injected values (base path + current tree), for resolving the
+    /// digest of a page's recorded value reads. Owned so the cache is
+    /// self-contained across the build.
+    roots: Vec<(String, Value)>,
 }
 
 impl Cache {
     /// Load the cache for a build. When incremental builds are disabled the
     /// cache still records the next manifest but never reports a hit.
     ///
-    /// The manifest fingerprint mixes the config, the build context, the asset
-    /// map, the link map, and (when `embed` is on) the embedded asset contents,
-    /// so a new commit, a new day, a re-fingerprinted asset, a changed permalink,
-    /// or an edited embedded file all invalidate the pages they can affect. Only
-    /// the small manifest is read here — HTML blobs are fetched lazily on a hit.
+    /// The manifest fingerprint mixes the config, the asset map, the link map,
+    /// and (when `embed` is on) the embedded asset contents — the site-wide
+    /// inputs that can alter any page. Build metadata (a new commit or day) is
+    /// deliberately *not* here: it's tracked per page against `roots`, so it
+    /// rebuilds only the pages that display the value that changed. Only the
+    /// small manifest is read here — HTML blobs are fetched lazily on a hit.
     pub fn load(
         config: &Config,
-        context: &BuildContext,
         render: &RenderInputs,
+        roots: Vec<(String, Value)>,
         ui: &Ui,
     ) -> Result<Self> {
         let dir = config.cache.dir.clone();
@@ -123,7 +136,7 @@ impl Cache {
             // absent manifest is the normal first-build case — stay silent.
             Err(_) => Manifest::default(),
         };
-        let fingerprint = Hash::of(&(config, context, render));
+        let fingerprint = Hash::of(&(config, render));
         Ok(Self {
             dir,
             enabled: config.cache.incremental,
@@ -134,7 +147,16 @@ impl Cache {
             config: fingerprint,
             prev,
             digests: FileDigests::default(),
+            roots,
         })
+    }
+
+    /// Borrow the tracked roots for a value-digest resolution.
+    fn roots(&self) -> Vec<Root<'_>> {
+        self.roots
+            .iter()
+            .map(|(base, tree)| Root { base, tree })
+            .collect()
     }
 
     /// Cached HTML for `page` if still valid — its content fingerprint, every
@@ -160,6 +182,17 @@ impl Cache {
         {
             return None;
         }
+        // every injected value the page read must still hash the same, so a
+        // commit or day that changes a value it displays is a miss — and one that
+        // doesn't is a hit.
+        let roots = self.roots();
+        if !entry
+            .meta
+            .iter()
+            .all(|(key, hash)| access::digest(&roots, key) == *hash)
+        {
+            return None;
+        }
         let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
         // verify the blob against its content address: a torn write leaves bytes
         // not matching the name that claims their hash. mismatch is a miss.
@@ -172,9 +205,18 @@ impl Cache {
         Some(html)
     }
 
-    /// Record a freshly compiled page against its content fingerprint and
-    /// dependency hashes, staging its HTML for the object store.
-    pub fn record(&mut self, page: &Page, fingerprint: Hash, html: &str, deps: &Deps) {
+    /// Record a freshly compiled page against its content fingerprint, its
+    /// dependency hashes, and the digests of the injected values it read,
+    /// staging its HTML for the object store.
+    pub fn record(
+        &mut self,
+        page: &Page,
+        fingerprint: Hash,
+        html: &str,
+        deps: &Deps,
+        reads: &Reads,
+    ) {
+        let meta = access::digests(&self.roots(), reads);
         let deps = deps
             .files()
             .iter()
@@ -186,6 +228,7 @@ impl Cache {
             Entry {
                 hash: fingerprint,
                 deps,
+                meta,
                 blob,
             },
         );
