@@ -54,26 +54,19 @@ pub fn reads(source: &Source, roots: &[Root]) -> Reads {
     scan.out
 }
 
-/// The content digest of the value at a qualified `key`. Equal across builds iff
-/// the value is unchanged; a key no root owns, or an absent path, hashes to a
-/// stable marker so its later appearance still invalidates.
-pub fn digest(roots: &[Root], key: &str) -> Hash {
-    roots
-        .iter()
-        .find(|root| root.owns(key))
-        .map_or_else(|| Hash::of_bytes(ABSENT), |root| root.digest(key))
+/// The content digest of the value at a qualified `key`, or `None` when no value
+/// lives there. Two builds agree iff the digests are equal, so a path that gains
+/// or loses a value (`None` ↔ `Some`) reads as a change — no sentinel needed.
+pub fn digest(roots: &[Root], key: &str) -> Option<Hash> {
+    roots.iter().find(|root| root.owns(key))?.digest(key)
 }
 
 /// The digest of every key in `keys`, ready to store in a cache entry.
-pub fn digests(roots: &[Root], keys: &Reads) -> BTreeMap<String, Hash> {
+pub fn digests(roots: &[Root], keys: &Reads) -> BTreeMap<String, Option<Hash>> {
     keys.iter()
         .map(|key| (key.clone(), digest(roots, key)))
         .collect()
 }
-
-/// Sentinel hashed for a key with no value — distinct from any serialized value,
-/// so a path gaining a value later reads as a change.
-const ABSENT: &[u8] = b"\0baudelaire::access::absent";
 
 impl<'a> Root<'a> {
     /// Whether this root owns `key`: its base is the key, or a prefix of it.
@@ -128,12 +121,12 @@ impl<'a> Root<'a> {
         Some(node)
     }
 
-    /// The digest of the value at `key`; the absent marker when there is none.
-    fn digest(&self, key: &str) -> Hash {
-        match self.value(key) {
-            Some(value) => Hash::of_bytes(&serde_json::to_vec(value).unwrap_or_default()),
-            None => Hash::of_bytes(ABSENT),
-        }
+    /// The digest of the value at `key`, or `None` when the path is absent.
+    fn digest(&self, key: &str) -> Option<Hash> {
+        let value = self.value(key)?;
+        Some(Hash::of_bytes(
+            &serde_json::to_vec(value).unwrap_or_default(),
+        ))
     }
 }
 

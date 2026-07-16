@@ -49,10 +49,11 @@ struct Entry {
     deps: BTreeMap<PathBuf, Hash>,
     /// Injected values the page read (`sys.inputs.baudelaire.git.hash`, ..) and
     /// their digests at compile time, so a new commit or day rebuilds only the
-    /// pages that display the value that changed. Absent from pre-tracking
-    /// manifests, hence `default`.
+    /// pages that display the value that changed. `None` records a read of an
+    /// absent value, so its later appearance still invalidates. Absent from
+    /// pre-tracking manifests, hence `default`.
     #[serde(default)]
-    meta: BTreeMap<String, Hash>,
+    meta: BTreeMap<String, Option<Hash>>,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
 }
