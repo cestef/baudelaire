@@ -31,8 +31,9 @@ That makes invalidation sharp and predictable:
   and nothing else.
 / Change `config.kdl`: the whole site rebuilds, since config can change any
   permalink.
-/ New commit or new day: pages that print build metadata rebuild, because that
-  metadata is part of the fingerprint.
+/ New commit or new day: the whole site rebuilds. Build metadata (git SHA, build
+  date) is a manifest-level input, not a per-page dependency, so any change to it
+  invalidates every page at once, whether or not the page displays it.
 
 == The cache
 

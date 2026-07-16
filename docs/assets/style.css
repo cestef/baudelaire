@@ -94,7 +94,7 @@ button,
 .sidebar li a,
 .top-nav a,
 .tag-row a,
-.bd-hit > a {
+.bd-hit>a {
   transition:
     color 0.16s ease,
     background-color 0.16s ease,
@@ -318,7 +318,7 @@ button,
   display: none;
 }
 
-.bd-hit > a {
+.bd-hit>a {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.05rem 0.75rem;
@@ -328,7 +328,7 @@ button,
   color: var(--ink);
 }
 
-.bd-hit.is-active > a {
+.bd-hit.is-active>a {
   background: var(--wine-soft);
 }
 
@@ -424,7 +424,7 @@ button,
   border-left: 1px solid var(--rule);
 }
 
-.nav-sub > summary.nav-title {
+.nav-sub>summary.nav-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -441,26 +441,26 @@ button,
 }
 
 /* Suppress the browser's default disclosure triangle in every engine. */
-.nav-sub > summary::-webkit-details-marker,
-.nav-sub > summary::marker {
+.nav-sub>summary::-webkit-details-marker,
+.nav-sub>summary::marker {
   display: none;
   content: "";
 }
 
-.nav-sub > summary:hover,
-.nav-sub > summary:focus-visible {
+.nav-sub>summary:hover,
+.nav-sub>summary:focus-visible {
   color: var(--wine-ink);
   background: var(--wine-soft);
   outline: none;
 }
 
-.nav-sub > summary .icon {
+.nav-sub>summary .icon {
   flex: none;
   color: var(--muted);
   transition: transform 0.16s ease;
 }
 
-.nav-sub[open] > summary .icon {
+.nav-sub[open]>summary .icon {
   transform: rotate(90deg);
 }
 
@@ -473,7 +473,7 @@ button,
   border-left-color: var(--wine);
 }
 
-.nav-sub.is-active > summary.nav-title {
+.nav-sub.is-active>summary.nav-title {
   color: var(--wine-ink);
 }
 
@@ -667,6 +667,11 @@ th {
 
 .callout> :last-child {
   margin-bottom: 0;
+}
+
+.callout>code {
+  background: var(--paper);
+  border: 1px solid var(--rule);
 }
 
 .callout-label {
@@ -924,15 +929,25 @@ ul.listing {
 .pager {
   display: flex;
   justify-content: space-between;
+  gap: 2rem;
   margin-top: 2.25rem;
   padding-top: 1.1rem;
   font-family: var(--sans);
   font-size: 0.9rem;
+  line-height: 1.35;
   border-top: 1px solid var(--rule);
 }
 
+/* Cap each link to its half so long titles wrap instead of colliding; the gap
+   keeps a gutter even at full width. */
 .pager a {
+  max-width: 47%;
   text-decoration: none;
+}
+
+/* Right-align "next" (the second link), but leave a lone prev/next flush left. */
+.pager a:not(:only-child):last-child {
+  text-align: right;
 }
 
 /* Page tag row */
@@ -1050,6 +1065,7 @@ ul.listing {
     animation: none !important;
   }
 }
+
 /* ---- Syntax highlighting ------------------------------------------------- */
 /* Typst bakes highlight colors inline (no class hook), so we match the exact
    hex it emits from our .tmTheme and remap each to a themeable variable —
@@ -1064,6 +1080,7 @@ ul.listing {
   --sx-type: #7a4fa0;
   --sx-punct: #6b6560;
 }
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --sx-comment: #736c64;
@@ -1076,6 +1093,7 @@ ul.listing {
     --sx-punct: #9a9184;
   }
 }
+
 :root[data-theme="dark"] {
   --sx-comment: #736c64;
   --sx-string: #a3c98a;
@@ -1086,11 +1104,36 @@ ul.listing {
   --sx-type: #c9a8e0;
   --sx-punct: #9a9184;
 }
-pre code [style*="e5d001"] { color: var(--sx-comment) !important; font-style: italic; }
-pre code [style*="e5d002"] { color: var(--sx-string) !important; }
-pre code [style*="e5d003"] { color: var(--sx-number) !important; }
-pre code [style*="e5d004"] { color: var(--sx-keyword) !important; }
-pre code [style*="e5d005"] { color: var(--sx-node) !important; }
-pre code [style*="e5d006"] { color: var(--sx-prop) !important; }
-pre code [style*="e5d007"] { color: var(--sx-type) !important; }
-pre code [style*="e5d008"] { color: var(--sx-punct) !important; }
+
+pre code [style*="e5d001"] {
+  color: var(--sx-comment) !important;
+  font-style: italic;
+}
+
+pre code [style*="e5d002"] {
+  color: var(--sx-string) !important;
+}
+
+pre code [style*="e5d003"] {
+  color: var(--sx-number) !important;
+}
+
+pre code [style*="e5d004"] {
+  color: var(--sx-keyword) !important;
+}
+
+pre code [style*="e5d005"] {
+  color: var(--sx-node) !important;
+}
+
+pre code [style*="e5d006"] {
+  color: var(--sx-prop) !important;
+}
+
+pre code [style*="e5d007"] {
+  color: var(--sx-type) !important;
+}
+
+pre code [style*="e5d008"] {
+  color: var(--sx-punct) !important;
+}

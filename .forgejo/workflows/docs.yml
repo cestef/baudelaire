@@ -1,7 +1,5 @@
 name: Docs
 
-# The documentation site lives in `docs/` and is built by baudelaire itself —
-# the site is its own dogfood. Build the binary, run it over `docs/`, deploy.
 on:
   push:
     branches: [main]
@@ -34,16 +32,13 @@ jobs:
           fi
           rustup show active-toolchain || rustup toolchain install
 
-      # See ci.yml — small pruned cache that survives Codeberg eviction. Keyed
-      # on Cargo.lock + rustc, so it runs after the toolchain install. Distinct
-      # shared-key from CI because this is a release build (separate target).
       - name: cargo cache
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
           shared-key: docs
 
       - name: build baudelaire
-        run: cargo build --release
+        run: cargo build
 
       - name: build docs site
         working-directory: docs
