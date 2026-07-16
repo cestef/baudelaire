@@ -119,6 +119,11 @@ md-5 = "0.11.0"
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.8", features = ["html_reports"] }
+# In-process SSH/SFTP server for the deploy end-to-end test.
+russh = "0.62.2"
+russh-sftp = "2.3.0"
+rand = "0.9"
+tokio = { version = "1.52.3", features = ["rt", "macros", "net", "io-util"] }
 
 [[bench]]
 name = "text"
