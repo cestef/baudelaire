@@ -15,7 +15,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
-  RUSTFLAGS: -C link-arg=-fuse-ld=mold
+  CARGO_PROFILE_DEV_DEBUG: 0
 
 jobs:
   ship:
@@ -33,28 +33,17 @@ jobs:
           fi
           rustup show active-toolchain || rustup toolchain install
 
-      - name: linker (mold)
-        run: |
-          command -v mold >/dev/null || {
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends mold
-          }
-
       - name: cargo cache
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
           shared-key: docs
 
       - name: build baudelaire
-        run: cargo build --release
+        run: cargo build
 
       - name: build docs site
         working-directory: docs
-        run: ../target/release/baudelaire build
-
-      - name: memory diagnostics
-        if: failure()
-        run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
+        run: ../target/debug/baudelaire build
 
       - uses: https://codeberg.org/git-pages/action@v2
         with:
