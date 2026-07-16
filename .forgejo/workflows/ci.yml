@@ -67,3 +67,9 @@ jobs:
 
       - name: nextest
         run: cargo nextest run --workspace --no-tests warn
+
+      # A build OOM-kill (exit 137 / signal 9) is otherwise invisible from the
+      # job log; oom_kill > 0 in memory.events names the culprit.
+      - name: memory diagnostics
+        if: failure()
+        run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
