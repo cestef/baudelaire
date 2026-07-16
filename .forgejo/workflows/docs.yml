@@ -18,7 +18,10 @@ env:
 
 jobs:
   ship:
-    runs-on: linux-any
+    # Linking baudelaire needs ~4 GB alone; the bare `linux-any` label can land
+    # on a 4 GB-capped small runner, where the linker gets OOM-killed. `-large`
+    # guarantees a 14 GB runner.
+    runs-on: linux-any-large
     steps:
       - uses: actions/checkout@v4
 
@@ -38,11 +41,17 @@ jobs:
           shared-key: docs
 
       - name: build baudelaire
-        run: cargo build
+        run: cargo build --release
 
       - name: build docs site
         working-directory: docs
         run: ../target/release/baudelaire build
+
+      # A build OOM-kill (exit 137 / signal 9) is otherwise invisible from the
+      # job log; oom_kill > 0 in memory.events names the culprit.
+      - name: memory diagnostics
+        if: failure()
+        run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
 
       - uses: https://codeberg.org/cstef/bloom/deploy@main
         with:
