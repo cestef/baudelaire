@@ -33,6 +33,12 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       - name: build baudelaire
         run: cargo build
@@ -40,6 +46,15 @@ jobs:
       - name: build docs site
         working-directory: docs
         run: ../target/debug/baudelaire build
+
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        if: always()
+        with:
+          mode: save
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       - uses: https://codeberg.org/git-pages/action@v2
         with:

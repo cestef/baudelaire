@@ -29,6 +29,13 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      # Restore the crate registry (sccache caches compiler output, not downloads).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
       # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
@@ -48,10 +55,19 @@ jobs:
           run: "true"
           args: --workspace --no-tests warn
 
-      - name: memory diagnostics
+      - uses: https://codeberg.org/cstef/actions/mem-diagnostics@main
         if: failure()
-        run: grep -H . /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.events 2>/dev/null || true
 
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true
+
+      # Persist any newly downloaded crates (immutable key: skips if unchanged).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        if: always()
+        with:
+          mode: save
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}

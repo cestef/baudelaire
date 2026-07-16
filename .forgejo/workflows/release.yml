@@ -11,6 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -C link-arg=-fuse-ld=mold
 
 jobs:
   build:
@@ -42,21 +43,15 @@ jobs:
       - uses: https://codeberg.org/cstef/actions/rust@main
         with:
           targets: ${{ matrix.target }}
+      - uses: https://codeberg.org/cstef/actions/mold@main
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
       # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
-      - name: musl toolchain
+      - uses: https://codeberg.org/cstef/actions/musl@main
         if: matrix.musl
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v apt-get >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends musl-tools perl make
-          elif command -v apk >/dev/null; then
-            apk add --no-cache musl-dev gcc perl make
-          fi
 
       - uses: https://codeberg.org/cstef/actions/sccache@main
         with:
