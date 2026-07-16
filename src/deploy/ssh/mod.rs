@@ -17,7 +17,7 @@ mod session;
 use tokio::runtime::Builder;
 
 use super::sigv4::sha256_hex;
-use super::{Backend, Digests, Dist, plan, report};
+use super::{Backend, Digests, Dist, done, plan, report};
 use crate::config::SshConfig;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
@@ -62,13 +62,7 @@ impl Ssh {
             ui.item(format_args!("✕ {key}"));
         }
         session.close().await;
-        ui.done(format_args!(
-            "deployed to {}:{} — {} uploaded, {} deleted",
-            self.config.host,
-            self.config.path,
-            plan.uploads.len(),
-            plan.deletes.len()
-        ));
+        done(ui, format_args!("{}:{}", self.config.host, self.config.path), &plan);
         Ok(())
     }
 }

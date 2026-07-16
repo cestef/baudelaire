@@ -15,7 +15,7 @@ use md5::{Digest, Md5};
 use time::OffsetDateTime;
 
 use super::sigv4::{self, Request, Signer};
-use super::{Backend, Dist, plan, report};
+use super::{Backend, Dist, done, plan, report};
 use crate::config::S3Config;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
@@ -64,12 +64,7 @@ impl Backend for S3 {
             bucket.delete(key)?;
             ui.item(format_args!("✕ {key}"));
         }
-        ui.done(format_args!(
-            "deployed to {} — {} uploaded, {} deleted",
-            self.config.bucket,
-            plan.uploads.len(),
-            plan.deletes.len()
-        ));
+        done(ui, &self.config.bucket, &plan);
         Ok(())
     }
 }
@@ -96,14 +91,14 @@ pub struct Bucket {
     region: String,
     /// Key prefix every object is placed under (no leading/trailing slash).
     prefix: String,
-    /// URL prefix objects hang off, no trailing slash — virtual-hosted for AWS
-    /// (`https://bucket.s3.region.amazonaws.com`), path-style for a custom
-    /// endpoint (`https://endpoint/bucket`).
-    base: String,
+    /// Scheme and host a request URL hangs off, no trailing slash —
+    /// `https://bucket.s3.region.amazonaws.com` for AWS virtual-hosting,
+    /// `https://endpoint` for a custom endpoint. A signing URI is appended to it.
+    authority: String,
     /// Host header the signature commits to.
     host: String,
-    /// The signing URI path matching `base` — empty for virtual-hosted, `/bucket`
-    /// for path-style.
+    /// The leading path every signing URI carries — empty for virtual-hosted,
+    /// `/bucket` for path-style.
     root: String,
 }
 
@@ -112,11 +107,11 @@ impl Bucket {
     /// environment. A custom `endpoint` selects path-style addressing (R2,
     /// MinIO); its absence targets AWS virtual-hosted addressing.
     pub fn new(config: &S3Config, access_key: String, secret_key: String) -> Self {
-        let (base, host, root) = match &config.endpoint {
+        let (authority, host, root) = match &config.endpoint {
             Some(endpoint) => {
                 let endpoint = endpoint.trim_end_matches('/');
                 let host = endpoint.split_once("://").map_or(endpoint, |(_, h)| h).to_owned();
-                (format!("{endpoint}/{}", config.bucket), host, format!("/{}", config.bucket))
+                (endpoint.to_owned(), host, format!("/{}", config.bucket))
             }
             None => {
                 let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region);
@@ -129,7 +124,7 @@ impl Bucket {
             secret_key,
             region: config.region.clone(),
             prefix: config.prefix.trim_matches('/').to_owned(),
-            base,
+            authority,
             host,
             root,
         }
@@ -176,7 +171,7 @@ impl Bucket {
     /// The signing URI for an object at relative `key`: the root, the prefix, and
     /// the URI-encoded key.
     fn object(&self, key: &str) -> String {
-        format!("{}/{}", self.root, encode(&object_key(&self.prefix, key)))
+        format!("{}/{}", self.root, encode(&object_key(&self.prefix, key), true))
     }
 
     /// Strip the configured prefix from a listed object key, so the whole client
@@ -193,20 +188,13 @@ impl Bucket {
 
     /// A signed GET returning the response body as a string (listings).
     fn send(&self, method: &'static str, uri: &str, query: &str, body: &[u8]) -> Result<String> {
-        let url = if query.is_empty() {
-            self.base_of(uri)
-        } else {
-            format!("{}?{query}", self.base_of(uri))
+        let url = match query.is_empty() {
+            true => self.url(uri),
+            false => format!("{}?{query}", self.url(uri)),
         };
         let auth = self.authorize(method, uri, query, body);
-        let mut response = self
-            .agent
-            .get(&url)
-            .header("Authorization", &auth.header)
-            .header("x-amz-date", &auth.timestamp)
-            .header("x-amz-content-sha256", &auth.payload_hash)
-            .call()
-            .map_err(DeployError::from)?;
+        let mut response =
+            self.signed(self.agent.get(&url), &auth).call().map_err(DeployError::from)?;
         self.check(method, uri, response.status().as_u16(), &mut response)?;
         Ok(response.body_mut().read_to_string().unwrap_or_default())
     }
@@ -214,22 +202,12 @@ impl Bucket {
     /// A signed PUT (with a body) or DELETE (without). ureq types the two builders
     /// differently, so each drives its own call.
     fn write(&self, method: &'static str, uri: &str, body: &[u8], content_type: Option<&str>) -> Result<()> {
-        let url = self.base_of(uri);
+        let url = self.url(uri);
         let auth = self.authorize(method, uri, "", body);
         let mut response = if method == "DELETE" {
-            self.agent
-                .delete(&url)
-                .header("Authorization", &auth.header)
-                .header("x-amz-date", &auth.timestamp)
-                .header("x-amz-content-sha256", &auth.payload_hash)
-                .call()
+            self.signed(self.agent.delete(&url), &auth).call()
         } else {
-            let mut request = self
-                .agent
-                .put(&url)
-                .header("Authorization", &auth.header)
-                .header("x-amz-date", &auth.timestamp)
-                .header("x-amz-content-sha256", &auth.payload_hash);
+            let mut request = self.signed(self.agent.put(&url), &auth);
             if let Some(content_type) = content_type {
                 request = request.header("Content-Type", content_type);
             }
@@ -239,13 +217,21 @@ impl Bucket {
         self.check(method, uri, response.status().as_u16(), &mut response)
     }
 
+    /// Attach the SigV4 authorization header trio to any request builder.
+    fn signed<Any>(
+        &self,
+        request: ureq::RequestBuilder<Any>,
+        auth: &Authorization,
+    ) -> ureq::RequestBuilder<Any> {
+        request
+            .header("Authorization", &auth.header)
+            .header("x-amz-date", &auth.timestamp)
+            .header("x-amz-content-sha256", &auth.payload_hash)
+    }
+
     /// The full URL for a signing `uri` (which already carries the root/prefix).
-    fn base_of(&self, uri: &str) -> String {
-        // `base` ends at the host (+ bucket for path-style); `uri` starts at the
-        // same root, so trim the root from `base`'s tail is unnecessary — `uri`
-        // begins after the host. Compose host-authority + uri.
-        let authority = self.base.strip_suffix(&self.root).unwrap_or(&self.base);
-        format!("{authority}{uri}")
+    fn url(&self, uri: &str) -> String {
+        format!("{}{uri}", self.authority)
     }
 
     /// Sign a request, returning the header trio to attach.
@@ -319,15 +305,15 @@ fn object_key(prefix: &str, path: &str) -> String {
     }
 }
 
-/// Percent-encode a key for a URL path: every byte except the unreserved set and
-/// the path separator `/`, uppercase hex, per the S3 signing rules.
-fn encode(key: &str) -> String {
-    let mut out = String::with_capacity(key.len());
-    for byte in key.bytes() {
+/// Percent-encode per the S3 signing rules: unreserved bytes pass through,
+/// everything else becomes uppercase `%XX`. A path keeps its `/` separators; a
+/// query component encodes them too.
+fn encode(value: &str, keep_slash: bool) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                out.push(byte as char);
-            }
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            b'/' if keep_slash => out.push('/'),
             _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -337,24 +323,9 @@ fn encode(key: &str) -> String {
 /// Canonical query string: each name and value URI-encoded, sorted by name.
 fn canonical_query(params: &[(&str, String)]) -> String {
     let mut params: Vec<(String, String)> =
-        params.iter().map(|(name, value)| (encode_component(name), encode_component(value))).collect();
+        params.iter().map(|(name, value)| (encode(name, false), encode(value, false))).collect();
     params.sort();
     params.iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("&")
-}
-
-/// Percent-encode a query component: unreserved bytes pass, everything else
-/// (including `/`) is encoded.
-fn encode_component(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char);
-            }
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
 }
 
 /// Parse a ListObjectsV2 XML response into its objects and continuation token.
@@ -384,7 +355,7 @@ fn unquote(etag: &str) -> &str {
 
 /// Lowercase hex MD5 — the ETag S3 assigns a single-part upload.
 fn md5_hex(bytes: &[u8]) -> String {
-    Md5::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
+    sigv4::hex(&Md5::digest(bytes))
 }
 
 /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`.
@@ -416,20 +387,21 @@ mod tests {
     fn aws_addressing_is_virtual_hosted() {
         let b = bucket(None, "");
         assert_eq!(b.host, "my-site.s3.us-east-1.amazonaws.com");
-        assert_eq!(b.base, "https://my-site.s3.us-east-1.amazonaws.com");
+        assert_eq!(b.authority, "https://my-site.s3.us-east-1.amazonaws.com");
         assert_eq!(b.root, "");
         assert_eq!(b.object("posts/a.html"), "/posts/a.html");
+        assert_eq!(b.url(&b.object("posts/a.html")), "https://my-site.s3.us-east-1.amazonaws.com/posts/a.html");
     }
 
     #[test]
     fn custom_endpoint_is_path_style() {
         let b = bucket(Some("https://acct.r2.cloudflarestorage.com"), "");
         assert_eq!(b.host, "acct.r2.cloudflarestorage.com");
-        assert_eq!(b.base, "https://acct.r2.cloudflarestorage.com/my-site");
+        assert_eq!(b.authority, "https://acct.r2.cloudflarestorage.com");
         assert_eq!(b.root, "/my-site");
         assert_eq!(b.object("a.html"), "/my-site/a.html");
         // the full URL recomposes to the object.
-        assert_eq!(b.base_of(&b.object("a.html")), "https://acct.r2.cloudflarestorage.com/my-site/a.html");
+        assert_eq!(b.url(&b.object("a.html")), "https://acct.r2.cloudflarestorage.com/my-site/a.html");
     }
 
     #[test]
@@ -458,11 +430,13 @@ mod tests {
     }
 
     #[test]
-    fn encode_keeps_slashes_and_unreserved() {
-        assert_eq!(encode("posts/a-b_c.html"), "posts/a-b_c.html");
-        assert_eq!(encode("a b.html"), "a%20b.html");
-        assert_eq!(encode("caf\u{e9}.html"), "caf%C3%A9.html");
-        assert_eq!(encode("a+b&c.html"), "a%2Bb%26c.html");
+    fn encode_keeps_slashes_when_asked_and_escapes_the_rest() {
+        assert_eq!(encode("posts/a-b_c.html", true), "posts/a-b_c.html");
+        assert_eq!(encode("a b.html", true), "a%20b.html");
+        assert_eq!(encode("caf\u{e9}.html", true), "caf%C3%A9.html");
+        assert_eq!(encode("a+b&c.html", true), "a%2Bb%26c.html");
+        // A query component encodes the slash too.
+        assert_eq!(encode("a/b", false), "a%2Fb");
     }
 
     #[test]

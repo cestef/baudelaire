@@ -159,6 +159,15 @@ fn report(ui: &Ui, plan: &Plan, dry_run: bool) {
     ));
 }
 
+/// Report a completed reconcile against `target`. Shared by the backends.
+fn done(ui: &Ui, target: impl std::fmt::Display, plan: &Plan) {
+    ui.done(format_args!(
+        "deployed to {target} — {} uploaded, {} deleted",
+        plan.uploads.len(),
+        plan.deletes.len()
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

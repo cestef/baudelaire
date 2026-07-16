@@ -36,17 +36,13 @@ impl Signer<'_> {
     /// The `Authorization` header value for `req`.
     pub fn sign(&self, req: &Request) -> String {
         let (canonical, headers) = self.canonical(req);
-        let to_sign = join(&[
-            "AWS4-HMAC-SHA256",
-            self.timestamp,
-            &self.scope(),
-            &sha256_hex(canonical.as_bytes()),
-        ]);
+        let scope = self.scope();
+        let to_sign =
+            join(&["AWS4-HMAC-SHA256", self.timestamp, &scope, &sha256_hex(canonical.as_bytes())]);
         let signature = hex(&hmac(&self.key(), to_sign.as_bytes()));
         format!(
-            "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={headers}, Signature={signature}",
+            "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
             self.access_key,
-            self.scope(),
         )
     }
 
@@ -99,8 +95,8 @@ fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-/// Lowercase, zero-padded hex.
-fn hex(bytes: &[u8]) -> String {
+/// Lowercase, zero-padded hex. Shared with the S3 backend's ETag comparison.
+pub(super) fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write;
     bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
         let _ = write!(out, "{byte:02x}");

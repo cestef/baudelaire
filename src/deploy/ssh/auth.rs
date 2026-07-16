@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use russh::client::Handle;
+use russh::client::AuthResult;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::AgentClient;
 use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
@@ -47,11 +48,7 @@ impl<'a> Auth<'a> {
     /// Authenticate with the configured private key.
     async fn key(&self, handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
         let key = Arc::new(self.load()?);
-        let result = handle
-            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(key, hash))
-            .await
-            .map_err(|e| DeployError::transfer("authenticate", e))?;
-        Ok(result.success())
+        Self::ok(handle.authenticate_publickey(user, PrivateKeyWithHashAlg::new(key, hash)).await)
     }
 
     /// Authenticate through the ssh-agent, offering each identity it holds. Any
@@ -78,11 +75,12 @@ impl<'a> Auth<'a> {
     /// Authenticate with a password from the environment, stdin, or prompt.
     async fn password(&self, handle: &mut Handle<Client>, user: &str) -> Result<bool> {
         let password = self.opts.secret(PASSWORD_ENV, "ssh password")?;
-        let result = handle
-            .authenticate_password(user, password)
-            .await
-            .map_err(|e| DeployError::transfer("authenticate", e))?;
-        Ok(result.success())
+        Self::ok(handle.authenticate_password(user, password).await)
+    }
+
+    /// Whether an authentication attempt succeeded, mapping a transport failure.
+    fn ok(result: Result<AuthResult, russh::Error>) -> Result<bool> {
+        Ok(result.map_err(|e| DeployError::transfer("authenticate", e))?.success())
     }
 
     /// Load the configured private key, prompting for a passphrase only if the
