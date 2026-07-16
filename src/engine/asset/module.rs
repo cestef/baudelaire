@@ -162,12 +162,16 @@ impl Module for Search {
         } else {
             SearchFormat::Json
         };
+        let base = cx.config.base_path();
         vec![
-            ("baudelaire:search".into(), default.module()),
-            ("baudelaire:search/json".into(), SearchFormat::Json.module()),
+            ("baudelaire:search".into(), default.module(base)),
+            (
+                "baudelaire:search/json".into(),
+                SearchFormat::Json.module(base),
+            ),
             (
                 "baudelaire:search/inverted".into(),
-                SearchFormat::Inverted.module(),
+                SearchFormat::Inverted.module(base),
             ),
         ]
     }

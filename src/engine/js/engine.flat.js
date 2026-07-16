@@ -7,7 +7,7 @@
 const tokenize = (text) =>
   text.toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
 
-export async function createSearch(url = "/search.json") {
+export async function createSearch(url = `${BASE}/search.json`) {
   let documents = [];
   let failed = false;
   try {

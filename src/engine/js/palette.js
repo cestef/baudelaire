@@ -46,7 +46,7 @@ const snippetOf = (body, terms) => {
 const rowOf = (doc, i, terms) => {
   const snippet = snippetOf(doc.body || "", terms);
   return `<li class="bd-hit" role="option" id="bd-hit-${i}" aria-selected="${i === 0}">
-    <a href="${doc.url}" tabindex="-1">
+    <a href="${BASE}${doc.url}" tabindex="-1">
       <span class="bd-section">${escapeHtml(sectionOf(doc.url))}</span>
       <span class="bd-title">${highlight(doc.title || doc.url, terms)}</span>
       ${snippet ? `<span class="bd-snippet">${highlight(snippet, terms)}</span>` : ""}

@@ -14,6 +14,7 @@ use crate::content::Page;
 use super::AssetMap;
 use super::LinkMap;
 use super::anchors::Anchors;
+use super::base::BasePath;
 use super::embed::Embed;
 use super::fingerprint::Fingerprint;
 use super::image::Images;
@@ -165,7 +166,7 @@ pub(super) struct Transforms(Vec<Box<dyn Transform>>);
 impl Transforms {
     pub(super) fn builtin() -> Self {
         // order matters: resolve links, annotate, inline embeds (as `data:` URIs),
-        // then fingerprint whatever refs remain.
+        // fingerprint whatever refs remain, then shift them under the base path.
         Self(vec![
             Box::new(Links),
             Box::new(Anchors),
@@ -174,6 +175,7 @@ impl Transforms {
             Box::new(Images),
             Box::new(Embed),
             Box::new(Fingerprint),
+            Box::new(BasePath),
         ])
     }
 

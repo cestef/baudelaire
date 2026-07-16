@@ -1,6 +1,6 @@
 //! A minimal, blocking XRPC client for the `com.atproto.*` methods a publisher
 //! needs: authenticate, upload a blob, put/list/delete records. Built on `ureq`
-//! (blocking, rustls) so publishing needs no async runtime; a [`Session`]'s
+//! (blocking, native-tls) so publishing needs no async runtime; a [`Session`]'s
 //! `ureq::Agent` is `Send + Sync`, so a caller may drive calls from a rayon pool.
 
 use serde::Serialize;
@@ -22,6 +22,7 @@ pub struct Blob(Value);
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
+        .tls_config(crate::remote::tls())
         .build()
         .into()
 }
@@ -66,9 +67,14 @@ impl Repo {
     /// record is deleted and nothing is orphaned. A public read: no auth.
     pub fn list_rkeys(&self, collection: Nsid) -> Result<Vec<Rkey>, AnnounceError> {
         const NSID: &str = "com.atproto.repo.listRecords";
+        // A ceiling on pages followed, so a PDS that advances the cursor forever
+        // (buggy or hostile) fails loudly instead of looping or exhausting memory.
+        // At 100 records/page this admits a million records: far past any real
+        // announce repo, which holds one record per published page.
+        const MAX_PAGES: usize = 10_000;
         let mut rkeys = Vec::new();
         let mut cursor: Option<String> = None;
-        loop {
+        for _ in 0..MAX_PAGES {
             let mut req = self
                 .agent
                 .get(self.xrpc(NSID))
@@ -96,10 +102,16 @@ impl Repo {
             }
             match value.get("cursor").and_then(Value::as_str) {
                 Some(next) if !next.is_empty() => cursor = Some(next.to_owned()),
-                _ => break,
+                _ => return Ok(rkeys),
             }
         }
-        Ok(rkeys)
+        // Fell off the page ceiling with a cursor still pending: the walk never
+        // reached the end, so refuse rather than return a silently short list
+        // (which would leave stale remote records undeleted).
+        Err(AnnounceError::Pagination {
+            nsid: NSID.to_owned(),
+            pages: MAX_PAGES,
+        })
     }
 
     fn xrpc(&self, nsid: &str) -> String {

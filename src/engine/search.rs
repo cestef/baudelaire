@@ -53,7 +53,7 @@ impl Processor for SearchIndex {
             if cfg.client {
                 out.file(
                     &site.config.dist.join(format.client_file()),
-                    &format.client(),
+                    &format.client(site.config.base_path()),
                 )?;
                 out.note(format_args!("wrote {}", format.client_file()));
             }
@@ -218,15 +218,21 @@ impl SearchFormat {
     }
 
     /// The standalone generated client: engine + palette UI + auto-mount.
-    fn client(self) -> String {
-        format!("{}\n{PALETTE}{AUTO_MOUNT}", self.engine())
+    fn client(self, base: &str) -> String {
+        format!("{}{}\n{PALETTE}{AUTO_MOUNT}", Self::prelude(base), self.engine())
     }
 
     /// The composable module source (engine + palette, no auto-mount) served to
     /// bundlers through the `baudelaire:search` virtual module.
     #[cfg(feature = "js")]
-    pub(crate) fn module(self) -> String {
-        format!("{}\n{PALETTE}", self.engine())
+    pub(crate) fn module(self, base: &str) -> String {
+        format!("{}{}\n{PALETTE}", Self::prelude(base), self.engine())
+    }
+
+    /// The `BASE` constant the engine and palette prepend to the index fetch URL
+    /// and each hit's href, so a subdirectory-hosted site resolves both.
+    fn prelude(base: &str) -> String {
+        format!("const BASE = {base:?};\n")
     }
 }
 

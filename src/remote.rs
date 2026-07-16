@@ -3,7 +3,23 @@
 //! actions, honor `--dry-run`/`--yes`, and resolve a secret the same way, so
 //! that lives here once behind a terminal-agnostic [`Interaction`] seam.
 
+use ureq::tls::{TlsConfig, TlsProvider};
+
 use crate::error::{RemoteError, Result};
+
+/// The TLS configuration every `ureq` agent baudelaire builds must use.
+///
+/// ureq 3 defaults its provider to rustls, but we compile it with only the
+/// `native-tls` backend (so the musl release can statically link a vendored
+/// OpenSSL). Left at the default, any `https://` request panics at connect time
+/// with "provider is Rustls but feature is not enabled". Pinning the provider to
+/// native-tls is what makes HTTPS actually work; verification stays on (ureq's
+/// default), so this only selects the backend, it does not weaken trust.
+pub fn tls() -> TlsConfig {
+    TlsConfig::builder()
+        .provider(TlsProvider::NativeTls)
+        .build()
+}
 
 /// How a run talks to the user: confirmations and interactive secret entry. The
 /// remote layers depend only on this, never on the terminal, so the CLI backs it

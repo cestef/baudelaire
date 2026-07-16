@@ -126,7 +126,10 @@ impl Bucket {
             }
         };
         Self {
-            agent: ureq::agent(),
+            agent: ureq::Agent::config_builder()
+                .tls_config(crate::remote::tls())
+                .build()
+                .into(),
             access_key,
             secret_key,
             region: config.region.clone(),

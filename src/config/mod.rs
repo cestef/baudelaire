@@ -147,6 +147,28 @@ impl Config {
             .map(|url| BaseUrl(url.trim_end_matches('/').to_owned()))
     }
 
+    /// The path the site is served under, from the `url`'s path component
+    /// (`url "https://host/docs"` -> `/docs`); empty for a root-hosted site.
+    /// Every on-page root-absolute URL is prefixed with it so the site works
+    /// under a subdirectory, leaving the on-disk layout unchanged.
+    pub fn base_path(&self) -> &str {
+        self.url.as_deref().map_or("", |url| {
+            let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+            rest.find('/')
+                .map_or("", |slash| rest[slash..].trim_end_matches('/'))
+        })
+    }
+
+    /// Prefix a root-absolute site path with the [`base_path`](Self::base_path).
+    /// Protocol-relative (`//`) and non-root refs pass through untouched.
+    pub fn prefixed(&self, path: &str) -> String {
+        match self.base_path() {
+            "" => path.to_owned(),
+            base if path.starts_with('/') && !path.starts_with("//") => format!("{base}{path}"),
+            _ => path.to_owned(),
+        }
+    }
+
     /// The DID a `standard.site` verification artifact should reference, present
     /// only when the backend is configured *with* a `did` and the artifact's
     /// `verify` flag is on; `artifact` selects that flag (e.g. `|v| v.links`).

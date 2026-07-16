@@ -6,6 +6,7 @@
 
 mod anchors;
 mod asset;
+mod base;
 mod embed;
 mod fingerprint;
 mod image;

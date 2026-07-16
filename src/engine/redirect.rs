@@ -14,7 +14,8 @@ impl Processor for Redirects {
         let mut count = 0usize;
         for page in site.pages {
             for old in &page.frontmatter.redirect {
-                out.file(&site.config.destination(old), &Self::stub(&page.permalink))?;
+                let target = site.config.prefixed(&page.permalink);
+                out.file(&site.config.destination(old), &Self::stub(&target))?;
                 count += 1;
             }
         }

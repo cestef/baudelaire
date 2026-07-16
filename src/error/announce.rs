@@ -69,6 +69,16 @@ pub enum AnnounceError {
         #[source]
         source: std::io::Error,
     },
+
+    /// A paginated read kept returning a cursor past a sane page ceiling: a
+    /// misbehaving or hostile PDS can advance the cursor forever, so the walk is
+    /// bounded and refused rather than looping (or growing memory) unbounded.
+    #[error("XRPC `{nsid}` did not stop paginating after {pages} pages")]
+    #[diagnostic(
+        code(baudelaire::announce::pagination),
+        help("the PDS keeps returning a pagination cursor; check that `pds` points at a real server")
+    )]
+    Pagination { nsid: String, pages: usize },
 }
 
 impl AnnounceError {

@@ -78,6 +78,28 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   knows every valid key, so typos never silently do nothing.
 ]
 
+== Subdirectory hosting
+
+Give `url` a path and the whole site is served from it:
+
+```kdl
+url "https://user.codeberg.page/project"
+```
+
+Every on-page URL, links, assets, redirects, the search client, then resolves
+under `/project`, and the absolute URLs in the sitemap, feeds, and canonical
+tags carry it too. Only the emitted URLs shift: the files on disk keep their
+plain layout (`public/guide/index.html`, never `public/project/...`), so the
+host maps the path back for you. `baudelaire serve` previews under the same
+path, and `--base-url` overrides it per build.
+
+#callout(kind: "note")[
+  A root domain (`url "https://example.com"`) has no path, so nothing is
+  prefixed. Data files a client reads directly, `search.json` and the
+  `baudelaire:*` modules, keep canonical root-relative URLs; the bundled search
+  client applies the base for you.
+]
+
 == The client block, live
 
 This site's own `client { }` block, read straight from the

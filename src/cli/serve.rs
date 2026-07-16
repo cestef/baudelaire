@@ -70,8 +70,12 @@ impl Dev<'_> {
 
         Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)?;
         self.ui.blank();
-        self.ui
-            .arrow("local", format!("http://{addr}/").cyan().underline());
+        self.ui.arrow(
+            "local",
+            format!("http://{addr}{}/", self.config.base_path())
+                .cyan()
+                .underline(),
+        );
         self.ui.arrow(
             "watching",
             match self.config.serve.watch {
@@ -85,7 +89,7 @@ impl Dev<'_> {
             // browser launched in the foreground would block the watch loop until
             // its window closed. Failing to open a browser is non-fatal (the
             // server is already up), so report it and carry on.
-            let url = format!("http://{addr}/");
+            let url = format!("http://{addr}{}/", self.config.base_path());
             if let Err(e) = open::that_detached(&url) {
                 self.ui.warn(BrowserOpen { url, source: e });
                 self.ui.flush();
@@ -95,10 +99,12 @@ impl Dev<'_> {
         let level = self.ui.level();
         if self.config.serve.watch {
             let live = Live::default();
-            Handler::new(self.config.dist.clone(), Some(live.clone()), level).spawn(server);
+            let base = self.config.base_path().to_owned();
+            Handler::new(self.config.dist.clone(), base, Some(live.clone()), level).spawn(server);
             self.watch(live)
         } else {
-            Handler::new(self.config.dist.clone(), None, level).serve(&server);
+            let base = self.config.base_path().to_owned();
+            Handler::new(self.config.dist.clone(), base, None, level).serve(&server);
             Ok(())
         }
     }
@@ -265,6 +271,9 @@ impl Dev<'_> {
 /// request-handling thread, so it is `Send` and self-contained.
 struct Handler {
     dist: PathBuf,
+    /// The path the site is served under, stripped from each request so a
+    /// subdirectory-hosted site (`url "https://host/docs"`) previews locally.
+    base: String,
     live: Option<Live>,
     /// The handler's own [`Ui`] at the session's verbosity, so per-request
     /// logging (404s) honors `--quiet` like every other line without sharing
@@ -273,13 +282,14 @@ struct Handler {
 }
 
 impl Handler {
-    fn new(dist: PathBuf, live: Option<Live>, level: Level) -> Self {
+    fn new(dist: PathBuf, base: String, live: Option<Live>, level: Level) -> Self {
         // Canonicalize the served root up front so every per-request traversal
         // check compares canonical paths (with `..` and symlinks resolved)
         // against a canonical root.
         let dist = crate::fs::canonicalize(&dist).unwrap_or(dist);
         Self {
             dist,
+            base,
             live,
             ui: Ui::new(level),
         }
@@ -352,7 +362,11 @@ impl Handler {
     /// candidate is checked to stay within `dist` (see [`Handler::within`]), so
     /// a `..`-laden or symlinked request can never escape the served root.
     fn resolve(&self, url: &str) -> Option<PathBuf> {
-        let rel = url.split('?').next().unwrap_or(url).trim_start_matches('/');
+        let path = url.split('?').next().unwrap_or(url);
+        let rel = path
+            .strip_prefix(&self.base)
+            .unwrap_or(path)
+            .trim_start_matches('/');
         let base = self.dist.join(rel);
         self.within(&base)
             .or_else(|| self.within(&base.join("index.html")))

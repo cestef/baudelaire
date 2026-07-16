@@ -503,3 +503,23 @@ fn deploy_unset_leaves_no_backend() {
     assert!(deploy.s3.is_none());
     assert!(deploy.ssh.is_none());
 }
+
+#[test]
+fn base_path_is_the_url_path_component() {
+    assert_eq!(parse("url \"https://host.test/docs\"").base_path(), "/docs");
+    assert_eq!(parse("url \"https://host.test/a/b\"").base_path(), "/a/b");
+    assert_eq!(parse("url \"https://host.test/docs/\"").base_path(), "/docs");
+    assert_eq!(parse("url \"https://host.test\"").base_path(), "");
+    assert_eq!(parse("url \"https://host.test/\"").base_path(), "");
+    assert_eq!(parse("").base_path(), "");
+}
+
+#[test]
+fn prefixed_shifts_only_root_absolute_paths() {
+    let cfg = parse("url \"https://host.test/docs\"");
+    assert_eq!(cfg.prefixed("/guide/"), "/docs/guide/");
+    assert_eq!(cfg.prefixed("//cdn/x"), "//cdn/x");
+    assert_eq!(cfg.prefixed("https://x/y"), "https://x/y");
+    assert_eq!(cfg.prefixed("#frag"), "#frag");
+    assert_eq!(parse("url \"https://host.test\"").prefixed("/guide/"), "/guide/");
+}
