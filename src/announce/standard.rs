@@ -26,7 +26,7 @@ use crate::graph::{Fingerprint, Hash};
 use crate::mime::Mime;
 use crate::ui::Ui;
 
-use super::{Doc, Backend, SiteView, SkipCache};
+use super::{Backend, Doc, SiteView, SkipCache};
 use crate::remote::Options;
 
 /// The lexicon ids, which double as repository collection names. Public so the

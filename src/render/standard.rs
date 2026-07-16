@@ -9,8 +9,8 @@
 
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
-use crate::config::Config;
 use crate::announce::standard::{DOCUMENT, document_uri};
+use crate::config::Config;
 
 use super::transform::{Cx, ElementExt, Transform};
 

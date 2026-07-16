@@ -11,7 +11,9 @@ pub enum RemoteError {
     #[error("no {label} supplied")]
     #[diagnostic(
         code(baudelaire::remote::secret),
-        help("pass it on the command line, set its environment variable, or run in a terminal to be prompted")
+        help(
+            "pass it on the command line, set its environment variable, or run in a terminal to be prompted"
+        )
     )]
     MissingSecret { label: String },
 }

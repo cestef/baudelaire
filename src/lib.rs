@@ -1,3 +1,4 @@
+pub mod announce;
 pub mod atproto;
 pub mod cli;
 pub mod codegen;
@@ -9,7 +10,6 @@ pub mod error;
 pub mod fs;
 pub mod graph;
 pub mod mime;
-pub mod announce;
 pub mod remote;
 pub mod render;
 pub mod ui;

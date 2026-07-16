@@ -5,8 +5,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use russh::client::Handle;
 use russh::client::AuthResult;
+use russh::client::Handle;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::AgentClient;
 use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
@@ -35,26 +35,49 @@ impl<'a> Auth<'a> {
     /// is exhausted without success.
     pub async fn run(&self, handle: &mut Handle<Client>, user: &str) -> Result<()> {
         // RSA keys need a negotiated SHA-2 hash; other key types ignore it.
-        let hash = handle.best_supported_rsa_hash().await.ok().flatten().flatten();
+        let hash = handle
+            .best_supported_rsa_hash()
+            .await
+            .ok()
+            .flatten()
+            .flatten();
         let ok = if self.config.key.is_some() {
             self.key(handle, user, hash).await?
         } else {
             self.agent(handle, user, hash).await? || self.password(handle, user).await?
         };
-        ok.then_some(())
-            .ok_or_else(|| DeployError::Auth { user: user.to_owned() }.into())
+        ok.then_some(()).ok_or_else(|| {
+            DeployError::Auth {
+                user: user.to_owned(),
+            }
+            .into()
+        })
     }
 
     /// Authenticate with the configured private key.
-    async fn key(&self, handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
+    async fn key(
+        &self,
+        handle: &mut Handle<Client>,
+        user: &str,
+        hash: Option<HashAlg>,
+    ) -> Result<bool> {
         let key = Arc::new(self.load()?);
-        Self::ok(handle.authenticate_publickey(user, PrivateKeyWithHashAlg::new(key, hash)).await)
+        Self::ok(
+            handle
+                .authenticate_publickey(user, PrivateKeyWithHashAlg::new(key, hash))
+                .await,
+        )
     }
 
     /// Authenticate through the ssh-agent, offering each identity it holds. Any
     /// agent hiccup (no socket, no keys, a rejected identity) simply yields
     /// `false`, so the caller falls back to a password.
-    async fn agent(&self, handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
+    async fn agent(
+        &self,
+        handle: &mut Handle<Client>,
+        user: &str,
+        hash: Option<HashAlg>,
+    ) -> Result<bool> {
         let Ok(mut agent) = AgentClient::connect_env().await else {
             return Ok(false);
         };
@@ -63,7 +86,9 @@ impl<'a> Auth<'a> {
         };
         for identity in identities {
             if let AgentIdentity::PublicKey { key, .. } = identity
-                && let Ok(result) = handle.authenticate_publickey_with(user, key, hash, &mut agent).await
+                && let Ok(result) = handle
+                    .authenticate_publickey_with(user, key, hash, &mut agent)
+                    .await
                 && result.success()
             {
                 return Ok(true);
@@ -80,7 +105,9 @@ impl<'a> Auth<'a> {
 
     /// Whether an authentication attempt succeeded, mapping a transport failure.
     fn ok(result: Result<AuthResult, russh::Error>) -> Result<bool> {
-        Ok(result.map_err(|e| DeployError::transfer("authenticate", e))?.success())
+        Ok(result
+            .map_err(|e| DeployError::transfer("authenticate", e))?
+            .success())
     }
 
     /// Load the configured private key, prompting for a passphrase only if the
@@ -115,8 +142,14 @@ mod tests {
     #[test]
     fn expand_replaces_leading_tilde_with_home() {
         let home = Some("/home/test".into());
-        assert_eq!(Auth::expand(Path::new("~/.ssh/id_ed25519"), home.clone()), PathBuf::from("/home/test/.ssh/id_ed25519"));
-        assert_eq!(Auth::expand(Path::new("/etc/key"), home), PathBuf::from("/etc/key"));
+        assert_eq!(
+            Auth::expand(Path::new("~/.ssh/id_ed25519"), home.clone()),
+            PathBuf::from("/home/test/.ssh/id_ed25519")
+        );
+        assert_eq!(
+            Auth::expand(Path::new("/etc/key"), home),
+            PathBuf::from("/etc/key")
+        );
         // No home to resolve against: the `~` path is left as-is.
         assert_eq!(Auth::expand(Path::new("~/k"), None), PathBuf::from("~/k"));
     }

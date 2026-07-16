@@ -38,12 +38,22 @@ impl Session {
             })?;
         Auth::new(config, opts).run(&mut handle, user).await?;
 
-        let channel = handle.channel_open_session().await.map_err(|e| DeployError::connect(&config.host, e))?;
-        channel.request_subsystem(true, "sftp").await.map_err(|e| DeployError::connect(&config.host, e))?;
+        let channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|e| DeployError::connect(&config.host, e))?;
+        channel
+            .request_subsystem(true, "sftp")
+            .await
+            .map_err(|e| DeployError::connect(&config.host, e))?;
         let sftp = SftpSession::new(channel.into_stream())
             .await
             .map_err(|e| DeployError::transfer("open sftp", e))?;
-        Ok(Self { handle, sftp, remote: Remote::new(&config.path) })
+        Ok(Self {
+            handle,
+            sftp,
+            remote: Remote::new(&config.path),
+        })
     }
 
     /// The remote files' digests, from the host's `sha256sum`. A missing
@@ -57,10 +67,20 @@ impl Session {
     pub async fn upload(&self, rel: &str, body: &[u8]) -> Result<()> {
         let path = self.remote.path(rel);
         self.mkdirs(&path).await;
-        let mut file = self.sftp.create(&path).await.map_err(|e| DeployError::transfer("upload", e))?;
-        file.write_all(body).await.map_err(|e| DeployError::transfer("upload", e))?;
-        file.flush().await.map_err(|e| DeployError::transfer("upload", e))?;
-        file.shutdown().await.map_err(|e| DeployError::transfer("upload", e))?;
+        let mut file = self
+            .sftp
+            .create(&path)
+            .await
+            .map_err(|e| DeployError::transfer("upload", e))?;
+        file.write_all(body)
+            .await
+            .map_err(|e| DeployError::transfer("upload", e))?;
+        file.flush()
+            .await
+            .map_err(|e| DeployError::transfer("upload", e))?;
+        file.shutdown()
+            .await
+            .map_err(|e| DeployError::transfer("upload", e))?;
         Ok(())
     }
 
@@ -75,13 +95,23 @@ impl Session {
 
     /// Cleanly disconnect; a failed teardown is not worth surfacing.
     pub async fn close(self) {
-        let _ = self.handle.disconnect(Disconnect::ByApplication, "", "").await;
+        let _ = self
+            .handle
+            .disconnect(Disconnect::ByApplication, "", "")
+            .await;
     }
 
     /// Run `command` over an exec channel and collect its stdout.
     async fn exec(&self, command: &str) -> Result<String> {
-        let mut channel = self.handle.channel_open_session().await.map_err(|e| DeployError::transfer("exec", e))?;
-        channel.exec(true, command).await.map_err(|e| DeployError::transfer("exec", e))?;
+        let mut channel = self
+            .handle
+            .channel_open_session()
+            .await
+            .map_err(|e| DeployError::transfer("exec", e))?;
+        channel
+            .exec(true, command)
+            .await
+            .map_err(|e| DeployError::transfer("exec", e))?;
         let mut out = Vec::new();
         while let Some(msg) = channel.wait().await {
             match msg {
@@ -118,7 +148,9 @@ struct Remote {
 
 impl Remote {
     fn new(base: &str) -> Self {
-        Self { base: base.trim_end_matches('/').to_owned() }
+        Self {
+            base: base.trim_end_matches('/').to_owned(),
+        }
     }
 
     /// The absolute remote path for a dist-relative file.
@@ -128,7 +160,10 @@ impl Remote {
 
     /// The shell command that lists the tree with a SHA-256 per file.
     fn command(&self) -> String {
-        format!("cd {} && find . -type f -exec sha256sum {{}} +", Self::quote(&self.base))
+        format!(
+            "cd {} && find . -type f -exec sha256sum {{}} +",
+            Self::quote(&self.base)
+        )
     }
 
     /// Single-quote a path for the remote shell, escaping embedded quotes.
@@ -142,7 +177,12 @@ impl Remote {
         output
             .lines()
             .filter_map(|line| line.split_once("  "))
-            .map(|(hash, path)| (path.trim().trim_start_matches("./").to_owned(), hash.to_owned()))
+            .map(|(hash, path)| {
+                (
+                    path.trim().trim_start_matches("./").to_owned(),
+                    hash.to_owned(),
+                )
+            })
             .filter(|(path, hash)| !path.is_empty() && !hash.is_empty())
             .collect()
     }
@@ -174,8 +214,14 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./index.html
 ";
         let digests = Remote::parse(out);
         assert_eq!(digests.len(), 2);
-        assert_eq!(digests["index.html"], "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-        assert_eq!(digests["posts/a.css"], "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae");
+        assert_eq!(
+            digests["index.html"],
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            digests["posts/a.css"],
+            "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+        );
     }
 
     #[test]

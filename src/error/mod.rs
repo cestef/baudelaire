@@ -1,6 +1,7 @@
 use typst::syntax::VirtualizeError;
 
 pub mod annotated;
+pub mod announce;
 pub mod asset;
 pub mod config;
 pub mod content;
@@ -8,7 +9,6 @@ pub mod deploy;
 pub mod fs;
 pub mod hook;
 pub mod link;
-pub mod announce;
 pub mod remote;
 pub mod scaffold;
 pub mod serialize;
@@ -17,6 +17,7 @@ pub mod typ;
 pub mod warning;
 
 pub use annotated::Annotated;
+pub use announce::AnnounceError;
 pub use asset::AssetError;
 pub use config::{ConfigError, ConfigErrorKind};
 pub use content::ContentError;
@@ -24,7 +25,6 @@ pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks};
-pub use announce::AnnounceError;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
 pub use serialize::{Artifact, SerializeError};

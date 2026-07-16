@@ -61,7 +61,10 @@ impl Ssh {
             ui.item(format_args!("✕ {key}"));
         }
         session.close().await;
-        plan.done(ui, format_args!("{}:{}", self.config.host, self.config.path));
+        plan.done(
+            ui,
+            format_args!("{}:{}", self.config.host, self.config.path),
+        );
         Ok(())
     }
 }

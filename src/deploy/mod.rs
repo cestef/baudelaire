@@ -43,7 +43,10 @@ impl Dist {
         let mut files = Vec::new();
         Self::walk(root, root, &mut files)?;
         files.sort();
-        Ok(Self { root: root.to_owned(), files })
+        Ok(Self {
+            root: root.to_owned(),
+            files,
+        })
     }
 
     /// Append every file under `dir` to `out`, as a path relative to `base` with
@@ -68,7 +71,10 @@ impl Dist {
     /// once, hashed, and dropped, so a large site never sits wholly in memory;
     /// the algorithm is the backend's choice (S3 wants MD5, SSH SHA-256).
     pub fn digests(&self, hash: impl Fn(&[u8]) -> String) -> Result<Digests> {
-        self.files.iter().map(|rel| Ok((rel.clone(), hash(&self.read(rel)?)))).collect()
+        self.files
+            .iter()
+            .map(|rel| Ok((rel.clone(), hash(&self.read(rel)?))))
+            .collect()
     }
 }
 
@@ -92,7 +98,11 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     }
     let dist = Dist::scan(&config.dist)?;
     for backend in backends {
-        ui.section(format_args!("{} - {}", backend.name(), Count::files(dist.files.len())));
+        ui.section(format_args!(
+            "{} - {}",
+            backend.name(),
+            Count::files(dist.files.len())
+        ));
         // Confirm before any network mutation, unless previewing or `--yes`.
         if !opts.dry_run && !opts.confirm(&format!("deploy to {}?", backend.name()))? {
             ui.detail(format_args!("skipped {}", backend.name()));
@@ -143,7 +153,11 @@ impl Plan {
             }
         }
         if delete {
-            out.deletes = remote.keys().filter(|key| !local.contains_key(*key)).cloned().collect();
+            out.deletes = remote
+                .keys()
+                .filter(|key| !local.contains_key(*key))
+                .cloned()
+                .collect();
         }
         out
     }
@@ -151,7 +165,11 @@ impl Plan {
     /// Announce the plan: a one-line summary, prefixed on a dry run so the preview
     /// reads as a preview.
     fn preview(&self, ui: &Ui, dry_run: bool) {
-        let lead = if dry_run { "dry run: would deploy " } else { "" };
+        let lead = if dry_run {
+            "dry run: would deploy "
+        } else {
+            ""
+        };
         ui.detail(format_args!(
             "{lead}{} to upload, {} to delete, {} unchanged",
             Count::files(self.uploads.len()),
@@ -178,10 +196,17 @@ mod tests {
     fn unconfigured_deploy_errors() {
         let config = Config::default();
         assert!(configured(&config).is_empty());
-        let opts = Options { dry_run: true, yes: true, secret: None, interaction: &Headless };
+        let opts = Options {
+            dry_run: true,
+            yes: true,
+            secret: None,
+            interaction: &Headless,
+        };
         assert!(matches!(
             run(&config, &opts, &Ui::new(Level::Silent)),
-            Err(crate::error::BaudelaireErrorKind::Deploy(DeployError::Unconfigured))
+            Err(crate::error::BaudelaireErrorKind::Deploy(
+                DeployError::Unconfigured
+            ))
         ));
     }
 
@@ -196,15 +221,25 @@ mod tests {
     }
 
     fn digests(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
     fn plan_uploads_new_and_changed_skips_matching() {
-        let local = digests(&[("new.html", "aa"), ("same.html", "bb"), ("changed.html", "cc")]);
+        let local = digests(&[
+            ("new.html", "aa"),
+            ("same.html", "bb"),
+            ("changed.html", "cc"),
+        ]);
         let remote = digests(&[("same.html", "bb"), ("changed.html", "old")]);
         let plan = Plan::compute(&local, &remote, true);
-        assert_eq!(plan.uploads, vec!["changed.html".to_string(), "new.html".to_string()]);
+        assert_eq!(
+            plan.uploads,
+            vec!["changed.html".to_string(), "new.html".to_string()]
+        );
         assert_eq!(plan.unchanged, 1);
     }
 

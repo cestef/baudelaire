@@ -1,9 +1,9 @@
 //! Command-line interface: per-subcommand args, dispatch, and the wiring of
 //! terminal output ([`crate::ui`]) and debug logging (`tracing`).
 
-pub mod prompt;
 pub mod announce;
 pub mod deploy;
+pub mod prompt;
 pub mod scaffold;
 pub mod serve;
 
@@ -564,10 +564,11 @@ impl Run for ServeArgs {
         // Prefix the site name with the active profile, if one was requested.
         use owo_colors::OwoColorize;
         match cx.cli.global.profile.as_deref() {
-            Some(profile) => {
-                cx.ui
-                    .banner(format_args!("{} · {}", profile.cyan().bold(), config.label()))
-            }
+            Some(profile) => cx.ui.banner(format_args!(
+                "{} · {}",
+                profile.cyan().bold(),
+                config.label()
+            )),
             None => cx.ui.banner(format_args!("{}", config.label())),
         }
         // Re-reads config.kdl with the same profile + overrides, so the dev

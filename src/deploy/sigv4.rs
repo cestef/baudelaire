@@ -37,8 +37,13 @@ impl Signer<'_> {
     pub fn sign(&self, req: &Request) -> String {
         let (canonical, headers) = self.canonical(req);
         let scope = self.scope();
-        let to_sign = ["AWS4-HMAC-SHA256", self.timestamp, &scope, &Self::sha256_hex(canonical.as_bytes())]
-            .join("\n");
+        let to_sign = [
+            "AWS4-HMAC-SHA256",
+            self.timestamp,
+            &scope,
+            &Self::sha256_hex(canonical.as_bytes()),
+        ]
+        .join("\n");
         let signature = Self::hex(&Self::hmac(&self.key(), to_sign.as_bytes()));
         format!(
             "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
@@ -50,20 +55,46 @@ impl Signer<'_> {
     /// `x-amz-date` are folded in; values are whitespace-collapsed and the set is
     /// sorted by lowercase name.
     fn canonical(&self, req: &Request) -> (String, String) {
-        let mut headers = vec![("host", req.host.to_owned()), ("x-amz-date", self.timestamp.to_owned())];
-        headers.extend(req.headers.iter().map(|(name, value)| (*name, Self::collapse(value))));
+        let mut headers = vec![
+            ("host", req.host.to_owned()),
+            ("x-amz-date", self.timestamp.to_owned()),
+        ];
+        headers.extend(
+            req.headers
+                .iter()
+                .map(|(name, value)| (*name, Self::collapse(value))),
+        );
         headers.sort_by_key(|(name, _)| name.to_lowercase());
 
-        let names = headers.iter().map(|(name, _)| name.to_lowercase()).collect::<Vec<_>>().join(";");
-        let rows: String =
-            headers.iter().map(|(name, value)| format!("{}:{value}\n", name.to_lowercase())).collect();
-        let canonical = [req.method, req.uri, req.query, &rows, &names, req.payload_hash].join("\n");
+        let names = headers
+            .iter()
+            .map(|(name, _)| name.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(";");
+        let rows: String = headers
+            .iter()
+            .map(|(name, value)| format!("{}:{value}\n", name.to_lowercase()))
+            .collect();
+        let canonical = [
+            req.method,
+            req.uri,
+            req.query,
+            &rows,
+            &names,
+            req.payload_hash,
+        ]
+        .join("\n");
         (canonical, names)
     }
 
     /// The credential scope: `YYYYMMDD/region/service/aws4_request`.
     fn scope(&self) -> String {
-        format!("{}/{}/{}/aws4_request", self.date(), self.region, self.service)
+        format!(
+            "{}/{}/{}/aws4_request",
+            self.date(),
+            self.region,
+            self.service
+        )
     }
 
     /// The signing key: HMAC-chained from the secret through date, region, and
@@ -72,7 +103,9 @@ impl Signer<'_> {
         let seed = format!("AWS4{}", self.secret_key);
         [self.date(), self.region, self.service, "aws4_request"]
             .into_iter()
-            .fold(seed.into_bytes(), |key, part| Self::hmac(&key, part.as_bytes()))
+            .fold(seed.into_bytes(), |key, part| {
+                Self::hmac(&key, part.as_bytes())
+            })
     }
 
     /// The `YYYYMMDD` date, sliced from the timestamp.
@@ -89,10 +122,12 @@ impl Signer<'_> {
     /// Lowercase, zero-padded hex. Shared with the S3 backend's ETag comparison.
     pub(super) fn hex(bytes: &[u8]) -> String {
         use std::fmt::Write;
-        bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
-            let _ = write!(out, "{byte:02x}");
-            out
-        })
+        bytes
+            .iter()
+            .fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
+                let _ = write!(out, "{byte:02x}");
+                out
+            })
     }
 
     /// HMAC-SHA256 of `message` under `key`.
@@ -128,7 +163,9 @@ mod tests {
     const EMPTY: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     fn signature(auth: &str) -> &str {
-        auth.rsplit_once("Signature=").expect("authorization carries a signature").1
+        auth.rsplit_once("Signature=")
+            .expect("authorization carries a signature")
+            .1
     }
 
     #[test]
@@ -151,8 +188,7 @@ mod tests {
         assert_eq!(
             canonical,
             "GET\n/\n\nhost:example.amazonaws.com\nx-amz-date:20150830T123600Z\n\nhost;x-amz-date\n"
-                .to_owned()
-                + EMPTY
+                .to_owned() + EMPTY
         );
         // the suite publishes the hash of the canonical request (its string-to-sign line)
         assert_eq!(

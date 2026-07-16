@@ -7,9 +7,9 @@ use std::path::PathBuf;
 
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
-    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
-    OptimizeConfig, PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, ServeConfig,
-    S3Config, SshConfig, StandardConfig, VerifyConfig,
+    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
+    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, RobotsConfig, S3Config, SearchConfig,
+    SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {

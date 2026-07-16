@@ -213,10 +213,7 @@ fn editing_layout_template_rebuilds_dependent_pages() {
         site.output("posts/a/index.html").contains("<section>"),
         "template change did not invalidate the page"
     );
-    assert!(
-        !out.contains("1 cached"),
-        "page should have rebuilt: {out}"
-    );
+    assert!(!out.contains("1 cached"), "page should have rebuilt: {out}");
 }
 
 #[test]

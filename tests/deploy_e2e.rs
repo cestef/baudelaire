@@ -163,19 +163,36 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
 
     let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
     // An object the build no longer produces: it must be deleted.
-    store.lock().unwrap().insert("orphan.html".into(), b"stale".to_vec());
+    store
+        .lock()
+        .unwrap()
+        .insert("orphan.html".into(), b"stale".to_vec());
     let log: Log = Arc::new(Mutex::new(Vec::new()));
     let port = spawn_s3(store.clone(), log.clone());
 
     set_aws_creds();
-    let opts = Options { dry_run: false, yes: true, secret: None, interaction: &Headless };
+    let opts = Options {
+        dry_run: false,
+        yes: true,
+        secret: None,
+        interaction: &Headless,
+    };
     deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
 
     let store = store.lock().unwrap();
-    assert_eq!(store.get("index.html").map(Vec::as_slice), Some(&b"<h1>home</h1>"[..]));
-    assert_eq!(store.get("posts/a.html").map(Vec::as_slice), Some(&b"post a"[..]));
+    assert_eq!(
+        store.get("index.html").map(Vec::as_slice),
+        Some(&b"<h1>home</h1>"[..])
+    );
+    assert_eq!(
+        store.get("posts/a.html").map(Vec::as_slice),
+        Some(&b"post a"[..])
+    );
     assert!(store.contains_key("style.css"));
-    assert!(!store.contains_key("orphan.html"), "orphan should be deleted");
+    assert!(
+        !store.contains_key("orphan.html"),
+        "orphan should be deleted"
+    );
 }
 
 #[test]
@@ -188,13 +205,24 @@ fn s3_dry_run_lists_but_writes_nothing() {
     let port = spawn_s3(store.clone(), log.clone());
 
     set_aws_creds();
-    let opts = Options { dry_run: true, yes: true, secret: None, interaction: &Headless };
+    let opts = Options {
+        dry_run: true,
+        yes: true,
+        secret: None,
+        interaction: &Headless,
+    };
     deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
 
     assert!(store.lock().unwrap().is_empty(), "dry run must not upload");
     let log = log.lock().unwrap();
-    assert!(log.iter().any(|line| line.contains("list-type")), "it should list the bucket");
-    assert!(!log.iter().any(|line| line.starts_with("PUT")), "dry run must not PUT");
+    assert!(
+        log.iter().any(|line| line.contains("list-type")),
+        "it should list the bucket"
+    );
+    assert!(
+        !log.iter().any(|line| line.starts_with("PUT")),
+        "dry run must not PUT"
+    );
 }
 
 // --- SSH ------------------------------------------------------------------
@@ -203,7 +231,9 @@ use std::collections::HashMap;
 
 use baudelaire::config::SshConfig;
 use russh::keys::{Algorithm, PrivateKey};
-use russh::server::{Auth, ChannelOpenHandle, Config as ServerConfig, Handler, Msg, Session, run_stream};
+use russh::server::{
+    Auth, ChannelOpenHandle, Config as ServerConfig, Handler, Msg, Session, run_stream,
+};
 use russh::{Channel, ChannelId};
 use russh_sftp::protocol::{Handle, Status, StatusCode};
 
@@ -255,7 +285,12 @@ impl russh::keys::signature::rand_core::TryCryptoRng for Rng {}
 type SftpStore = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 
 fn options<'a>(dry_run: bool, headless: &'a Headless) -> Options<'a> {
-    Options { dry_run, yes: true, secret: Some(PASSWORD.into()), interaction: headless }
+    Options {
+        dry_run,
+        yes: true,
+        secret: Some(PASSWORD.into()),
+        interaction: headless,
+    }
 }
 
 /// Start an in-process SSH server whose `exec` answers with `listing` (the
@@ -266,10 +301,16 @@ fn spawn_ssh(store: SftpStore, listing: String) -> u16 {
     std_listener.set_nonblocking(true).unwrap();
     let port = std_listener.local_addr().unwrap().port();
     thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         rt.block_on(async move {
             let key = PrivateKey::random(&mut Rng, Algorithm::Ed25519).unwrap();
-            let config = Arc::new(ServerConfig { keys: vec![key], ..Default::default() });
+            let config = Arc::new(ServerConfig {
+                keys: vec![key],
+                ..Default::default()
+            });
             let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
             while let Ok((stream, _)) = listener.accept().await {
                 let handler = SshServer {
@@ -301,7 +342,11 @@ impl Handler for SshServer {
     type Error = russh::Error;
 
     async fn auth_password(&mut self, _user: &str, password: &str) -> Result<Auth, Self::Error> {
-        Ok(if password == PASSWORD { Auth::Accept } else { Auth::reject() })
+        Ok(if password == PASSWORD {
+            Auth::Accept
+        } else {
+            Auth::reject()
+        })
     }
 
     async fn auth_publickey(
@@ -369,11 +414,18 @@ impl Sftp {
     }
 
     fn rel(path: &str) -> String {
-        path.trim_start_matches(REMOTE).trim_start_matches('/').to_owned()
+        path.trim_start_matches(REMOTE)
+            .trim_start_matches('/')
+            .to_owned()
     }
 
     fn ok(id: u32) -> Status {
-        Status { id, status_code: StatusCode::Ok, error_message: String::new(), language_tag: "en-US".into() }
+        Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: String::new(),
+            language_tag: "en-US".into(),
+        }
     }
 }
 
@@ -384,12 +436,20 @@ impl russh_sftp::server::Handler for Sftp {
         StatusCode::OpUnsupported
     }
 
-    async fn realpath(&mut self, id: u32, path: String) -> Result<russh_sftp::protocol::Name, StatusCode> {
+    async fn realpath(
+        &mut self,
+        id: u32,
+        path: String,
+    ) -> Result<russh_sftp::protocol::Name, StatusCode> {
         // Echo the path back as its own canonical form: enough for a client
         // that only ever opens absolute paths.
         Ok(russh_sftp::protocol::Name {
             id,
-            files: vec![russh_sftp::protocol::File::dummy(if path == "." { REMOTE } else { &path })],
+            files: vec![russh_sftp::protocol::File::dummy(if path == "." {
+                REMOTE
+            } else {
+                &path
+            })],
         })
     }
 
@@ -405,8 +465,19 @@ impl russh_sftp::server::Handler for Sftp {
         Ok(Handle { id, handle: rel })
     }
 
-    async fn write(&mut self, id: u32, handle: String, _offset: u64, data: Vec<u8>) -> Result<Status, StatusCode> {
-        self.store.lock().unwrap().entry(handle).or_default().extend_from_slice(&data);
+    async fn write(
+        &mut self,
+        id: u32,
+        handle: String,
+        _offset: u64,
+        data: Vec<u8>,
+    ) -> Result<Status, StatusCode> {
+        self.store
+            .lock()
+            .unwrap()
+            .entry(handle)
+            .or_default()
+            .extend_from_slice(&data);
         Ok(Self::ok(id))
     }
 
@@ -440,17 +511,34 @@ fn ssh_deploy_uploads_new_files_and_deletes_orphans() {
     dist(&site);
 
     let store: SftpStore = Arc::new(Mutex::new(BTreeMap::new()));
-    store.lock().unwrap().insert("orphan.html".into(), b"stale".to_vec());
+    store
+        .lock()
+        .unwrap()
+        .insert("orphan.html".into(), b"stale".to_vec());
     let port = spawn_ssh(store.clone(), orphan_listing("orphan.html"));
 
     let headless = Headless;
-    deploy::run(&ssh_config(&site, port), &options(false, &headless), &silent()).unwrap();
+    deploy::run(
+        &ssh_config(&site, port),
+        &options(false, &headless),
+        &silent(),
+    )
+    .unwrap();
 
     let store = store.lock().unwrap();
-    assert_eq!(store.get("index.html").map(Vec::as_slice), Some(&b"<h1>home</h1>"[..]));
-    assert_eq!(store.get("posts/a.html").map(Vec::as_slice), Some(&b"post a"[..]));
+    assert_eq!(
+        store.get("index.html").map(Vec::as_slice),
+        Some(&b"<h1>home</h1>"[..])
+    );
+    assert_eq!(
+        store.get("posts/a.html").map(Vec::as_slice),
+        Some(&b"post a"[..])
+    );
     assert!(store.contains_key("style.css"));
-    assert!(!store.contains_key("orphan.html"), "orphan should be deleted");
+    assert!(
+        !store.contains_key("orphan.html"),
+        "orphan should be deleted"
+    );
 }
 
 /// Point `$HOME` at `dir` so the ssh backend reads `dir/.ssh/known_hosts`.
@@ -474,7 +562,10 @@ fn ssh_refuses_a_changed_host_key() {
     let other = PrivateKey::random(&mut Rng, Algorithm::Ed25519).unwrap();
     site.write(
         ".ssh/known_hosts",
-        &format!("[127.0.0.1]:{port} {}\n", other.public_key().to_openssh().unwrap()),
+        &format!(
+            "[127.0.0.1]:{port} {}\n",
+            other.public_key().to_openssh().unwrap()
+        ),
     );
 
     let mut config = ssh_config(&site, port);
@@ -483,10 +574,16 @@ fn ssh_refuses_a_changed_host_key() {
     let err = deploy::run(&config, &options(false, &headless), &silent()).unwrap_err();
 
     assert!(
-        matches!(err, BaudelaireErrorKind::Deploy(DeployError::HostKeyChanged { .. })),
+        matches!(
+            err,
+            BaudelaireErrorKind::Deploy(DeployError::HostKeyChanged { .. })
+        ),
         "expected a changed-host-key error, got {err:?}"
     );
-    assert!(store.lock().unwrap().is_empty(), "a refused host uploads nothing");
+    assert!(
+        store.lock().unwrap().is_empty(),
+        "a refused host uploads nothing"
+    );
 }
 
 #[test]
@@ -498,7 +595,12 @@ fn ssh_dry_run_writes_nothing() {
     let port = spawn_ssh(store.clone(), String::new());
 
     let headless = Headless;
-    deploy::run(&ssh_config(&site, port), &options(true, &headless), &silent()).unwrap();
+    deploy::run(
+        &ssh_config(&site, port),
+        &options(true, &headless),
+        &silent(),
+    )
+    .unwrap();
 
     assert!(store.lock().unwrap().is_empty(), "dry run must not upload");
 }

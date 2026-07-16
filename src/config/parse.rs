@@ -4,10 +4,11 @@ use miette::SourceSpan;
 use crate::config::dispatch::{Attrs, Block, Keys};
 use crate::config::value::ValueExt;
 use crate::config::{
-    AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
-    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
-    DeployConfig, PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
-    S3Config, ServeConfig, SshConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
+    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
+    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, RobotsConfig, S3Config, SearchConfig,
+    SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig, TaxonomyConfig,
+    VerifyConfig,
 };
 use crate::content::Permalink;
 use crate::error::{ConfigError, Result};

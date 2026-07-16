@@ -74,7 +74,10 @@ impl S3 {
     fn credential(var: &str) -> Result<String> {
         match std::env::var(var) {
             Ok(value) if !value.is_empty() => Ok(value),
-            _ => Err(DeployError::MissingCredentials { var: var.to_owned() }.into()),
+            _ => Err(DeployError::MissingCredentials {
+                var: var.to_owned(),
+            }
+            .into()),
         }
     }
 }
@@ -111,7 +114,10 @@ impl Bucket {
         let (authority, host, root) = match &config.endpoint {
             Some(endpoint) => {
                 let endpoint = endpoint.trim_end_matches('/');
-                let host = endpoint.split_once("://").map_or(endpoint, |(_, h)| h).to_owned();
+                let host = endpoint
+                    .split_once("://")
+                    .map_or(endpoint, |(_, h)| h)
+                    .to_owned();
                 (endpoint.to_owned(), host, format!("/{}", config.bucket))
             }
             None => {
@@ -144,10 +150,19 @@ impl Bucket {
             if let Some(token) = &token {
                 query.push(("continuation-token", token.clone()));
             }
-            let body =
-                self.send("GET", &format!("{}/", self.root), &Self::canonical_query(&query), &[])?;
+            let body = self.send(
+                "GET",
+                &format!("{}/", self.root),
+                &Self::canonical_query(&query),
+                &[],
+            )?;
             let listing = Listing::parse(&body)?;
-            out.extend(listing.objects.into_iter().map(|(key, etag)| (self.relative(key), etag)));
+            out.extend(
+                listing
+                    .objects
+                    .into_iter()
+                    .map(|(key, etag)| (self.relative(key), etag)),
+            );
             match listing.next {
                 Some(next) => token = Some(next),
                 None => break,
@@ -173,7 +188,11 @@ impl Bucket {
     /// The signing URI for an object at relative `key`: the root, the prefix, and
     /// the URI-encoded key.
     fn object(&self, key: &str) -> String {
-        format!("{}/{}", self.root, Self::encode(&Self::object_key(&self.prefix, key), true))
+        format!(
+            "{}/{}",
+            self.root,
+            Self::encode(&Self::object_key(&self.prefix, key), true)
+        )
     }
 
     /// Strip the configured prefix from a listed object key, so the whole client
@@ -195,15 +214,23 @@ impl Bucket {
             false => format!("{}?{query}", self.url(uri)),
         };
         let auth = self.authorize(method, uri, query, body);
-        let mut response =
-            self.signed(self.agent.get(&url), &auth).call().map_err(DeployError::from)?;
+        let mut response = self
+            .signed(self.agent.get(&url), &auth)
+            .call()
+            .map_err(DeployError::from)?;
         self.check(method, uri, response.status().as_u16(), &mut response)?;
         Ok(response.body_mut().read_to_string().unwrap_or_default())
     }
 
     /// A signed PUT (with a body) or DELETE (without). ureq types the two builders
     /// differently, so each drives its own call.
-    fn write(&self, method: &'static str, uri: &str, body: &[u8], content_type: Option<&str>) -> Result<()> {
+    fn write(
+        &self,
+        method: &'static str,
+        uri: &str,
+        body: &[u8],
+        content_type: Option<&str>,
+    ) -> Result<()> {
         let url = self.url(uri);
         let auth = self.authorize(method, uri, "", body);
         let mut response = if method == "DELETE" {
@@ -255,7 +282,11 @@ impl Bucket {
             headers: &[("x-amz-content-sha256", &payload_hash)],
             payload_hash: &payload_hash,
         });
-        Authorization { header, timestamp, payload_hash }
+        Authorization {
+            header,
+            timestamp,
+            payload_hash,
+        }
     }
 
     /// Turn a non-2xx status into a [`DeployError::Request`] carrying the host's
@@ -335,7 +366,11 @@ impl Bucket {
             .map(|(name, value)| (Self::encode(name, false), Self::encode(value, false)))
             .collect();
         params.sort();
-        params.iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("&")
+        params
+            .iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>()
+            .join("&")
     }
 
     /// The ETag S3 assigns a single-part upload: the lowercase hex MD5 of `bytes`.
@@ -354,15 +389,24 @@ impl Bucket {
 impl Listing {
     /// Parse a ListObjectsV2 XML response into its objects and continuation token.
     fn parse(xml: &str) -> Result<Listing> {
-        let document = roxmltree::Document::parse(xml)
-            .map_err(|e| DeployError::Listing { message: e.to_string() })?;
+        let document = roxmltree::Document::parse(xml).map_err(|e| DeployError::Listing {
+            message: e.to_string(),
+        })?;
         let text = |node: roxmltree::Node, tag: &str| {
-            node.children().find(|c| c.has_tag_name(tag)).and_then(|c| c.text()).map(str::to_owned)
+            node.children()
+                .find(|c| c.has_tag_name(tag))
+                .and_then(|c| c.text())
+                .map(str::to_owned)
         };
         let objects = document
             .descendants()
             .filter(|node| node.has_tag_name("Contents"))
-            .filter_map(|node| Some((text(node, "Key")?, Self::unquote(&text(node, "ETag")?).to_owned())))
+            .filter_map(|node| {
+                Some((
+                    text(node, "Key")?,
+                    Self::unquote(&text(node, "ETag")?).to_owned(),
+                ))
+            })
             .collect();
         let next = document
             .descendants()
@@ -403,7 +447,10 @@ mod tests {
         assert_eq!(b.authority, "https://my-site.s3.us-east-1.amazonaws.com");
         assert_eq!(b.root, "");
         assert_eq!(b.object("posts/a.html"), "/posts/a.html");
-        assert_eq!(b.url(&b.object("posts/a.html")), "https://my-site.s3.us-east-1.amazonaws.com/posts/a.html");
+        assert_eq!(
+            b.url(&b.object("posts/a.html")),
+            "https://my-site.s3.us-east-1.amazonaws.com/posts/a.html"
+        );
     }
 
     #[test]
@@ -414,7 +461,10 @@ mod tests {
         assert_eq!(b.root, "/my-site");
         assert_eq!(b.object("a.html"), "/my-site/a.html");
         // the full URL recomposes to the object.
-        assert_eq!(b.url(&b.object("a.html")), "https://acct.r2.cloudflarestorage.com/my-site/a.html");
+        assert_eq!(
+            b.url(&b.object("a.html")),
+            "https://acct.r2.cloudflarestorage.com/my-site/a.html"
+        );
     }
 
     #[test]
@@ -438,7 +488,10 @@ mod tests {
     fn object_key_normalizes() {
         assert_eq!(Bucket::object_key("", "posts/a.html"), "posts/a.html");
         assert_eq!(Bucket::object_key("", "/posts/a.html"), "posts/a.html");
-        assert_eq!(Bucket::object_key("site", "posts/a.html"), "site/posts/a.html");
+        assert_eq!(
+            Bucket::object_key("site", "posts/a.html"),
+            "site/posts/a.html"
+        );
         assert_eq!(Bucket::object_key("site", "a\\b.html"), "site/a/b.html");
     }
 
@@ -454,10 +507,8 @@ mod tests {
 
     #[test]
     fn canonical_query_sorts_and_encodes() {
-        let query = Bucket::canonical_query(&[
-            ("prefix", "a/b c".into()),
-            ("list-type", "2".into()),
-        ]);
+        let query =
+            Bucket::canonical_query(&[("prefix", "a/b c".into()), ("list-type", "2".into())]);
         assert_eq!(query, "list-type=2&prefix=a%2Fb%20c");
     }
 
@@ -478,7 +529,10 @@ mod tests {
         let listing = Listing::parse(xml).unwrap();
         assert_eq!(
             listing.objects,
-            vec![("a.html".into(), "abc123".into()), ("b/c.css".into(), "def456".into())]
+            vec![
+                ("a.html".into(), "abc123".into()),
+                ("b/c.css".into(), "def456".into())
+            ]
         );
         assert_eq!(listing.next.as_deref(), Some("TOKEN=="));
     }

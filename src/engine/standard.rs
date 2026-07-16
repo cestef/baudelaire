@@ -7,9 +7,9 @@
 //! [`crate::announce::standard`], the single source of the record shapes.
 
 use super::process::{Emit, Processor, Site};
+use crate::announce::standard::{PUBLICATION, publication_uri};
 use crate::config::Config;
 use crate::error::Result;
-use crate::announce::standard::{PUBLICATION, publication_uri};
 
 /// Writes `.well-known/site.standard.publication` for the configured `did`.
 pub(super) struct WellKnown;

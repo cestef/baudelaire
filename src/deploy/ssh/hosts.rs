@@ -48,7 +48,10 @@ struct KnownHosts {
 
 impl KnownHosts {
     fn new(config: &SshConfig) -> Self {
-        Self { host: config.host.clone(), port: config.port }
+        Self {
+            host: config.host.clone(),
+            port: config.port,
+        }
     }
 
     /// Check `key`, learning and trusting an unseen host (TOFU). A failure to
@@ -76,7 +79,11 @@ pub struct Client {
 
 impl Client {
     pub fn new(config: &SshConfig, rejected: Slot) -> Self {
-        Self { known: KnownHosts::new(config), strict: config.strict, rejected }
+        Self {
+            known: KnownHosts::new(config),
+            strict: config.strict,
+            rejected,
+        }
     }
 }
 
