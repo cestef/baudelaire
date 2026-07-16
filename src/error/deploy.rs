@@ -42,6 +42,52 @@ pub enum DeployError {
     #[error("could not parse the bucket listing")]
     #[diagnostic(code(baudelaire::deploy::listing))]
     Listing { message: String },
+
+    /// The SSH connection or transport failed (DNS, TCP, host key, protocol).
+    #[error("ssh connection to `{host}` failed")]
+    #[diagnostic(code(baudelaire::deploy::ssh::connect))]
+    Connect {
+        host: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    /// The server rejected authentication for the user.
+    #[error("ssh authentication as `{user}` failed")]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::auth),
+        help("check the `key`/password and that the user is authorized on the host")
+    )]
+    Auth { user: String },
+
+    /// An SFTP transfer or remote command failed.
+    #[error("{operation} failed on the ssh host: {message}")]
+    #[diagnostic(code(baudelaire::deploy::ssh::transfer))]
+    Transfer {
+        operation: &'static str,
+        message: String,
+    },
+}
+
+impl DeployError {
+    /// A connection or transport failure to `host`, carrying its source.
+    pub fn connect(
+        host: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Connect {
+            host: host.into(),
+            source: Box::new(source),
+        }
+    }
+
+    /// An SFTP or remote-command failure at `operation`.
+    pub fn transfer(operation: &'static str, source: impl std::fmt::Display) -> Self {
+        Self::Transfer {
+            operation,
+            message: source.to_string(),
+        }
+    }
 }
 
 impl From<ureq::Error> for DeployError {

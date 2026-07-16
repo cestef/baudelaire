@@ -214,7 +214,7 @@ pub enum Command {
     New(NewArgs),
     /// Announce the site's metadata to the configured destination (atproto/standard.site).
     Announce(AnnounceArgs),
-    /// Deploy the built files to the configured destination (S3/R2).
+    /// Deploy the built files to the configured destination (S3/R2 or SSH).
     Deploy(DeployArgs),
     /// Remove build output and local build state.
     Clean(CleanArgs),
@@ -278,9 +278,10 @@ pub struct AnnounceArgs {
 /// Arguments for `baudelaire deploy`.
 #[derive(Args, Debug, Clone)]
 pub struct DeployArgs {
-    /// Secret access key for the destination; `-` reads it from stdin. Prefer
-    /// stdin, the `AWS_SECRET_ACCESS_KEY` environment variable, or the interactive
-    /// prompt — a literal flag can leak into shell history.
+    /// Secret for the destination (S3 secret access key, or SSH password/key
+    /// passphrase); `-` reads it from stdin. Prefer stdin, the backend's
+    /// environment variable, or the interactive prompt — a literal flag can leak
+    /// into shell history.
     #[arg(long)]
     pub secret: Option<String>,
     /// Skip the confirmation prompt.

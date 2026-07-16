@@ -9,7 +9,7 @@ use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
     OptimizeConfig, PngConfig, PngStrip, RobotsConfig, SearchConfig, SearchField, ServeConfig,
-    S3Config, StandardConfig, VerifyConfig,
+    S3Config, SshConfig, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -161,6 +161,23 @@ impl Default for S3Config {
             // AWS's default region; R2 wants "auto".
             region: "us-east-1".into(),
             prefix: String::new(),
+            // reconcile: remove what the build no longer produces.
+            delete: true,
+        }
+    }
+}
+
+impl Default for SshConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            path: String::new(),
+            // The standard SSH port.
+            port: 22,
+            // None resolves to $USER at deploy time.
+            user: None,
+            // None falls back to password auth.
+            key: None,
             // reconcile: remove what the build no longer produces.
             delete: true,
         }

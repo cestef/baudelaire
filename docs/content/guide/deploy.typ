@@ -68,6 +68,39 @@ baudelaire deploy --yes       # skip the confirmation
 The remote is the source of truth. Each run uploads new or changed files, skips
 matching ones, and (with `delete`) removes objects the build no longer produces.
 
+=== SSH / SFTP
+
+`baudelaire deploy` also targets any host reachable over SSH, transferring files
+with SFTP. Add an `ssh` block instead of (or alongside) `s3`:
+
+```kdl
+deploy {
+  ssh {
+    host "example.com"
+    path "/var/www/site"
+    key "~/.ssh/id_ed25519"
+  }
+}
+```
+
+/ `host`: server hostname or IP. Required.
+/ `path`: absolute remote directory the build is mirrored into. Required.
+/ `port` (`22`): SSH port.
+/ `user`: user to authenticate as. Defaults to `$USER`.
+/ `key`: path to a private key (absolute, or under the project root). Unset falls
+  back to password authentication.
+/ `delete` (`#true`): remove remote files under `path` that the build no longer
+  produces.
+
+Authentication is key-based when `key` is set — supply the passphrase, if the key
+has one, the same way as any other secret (below). Without `key`, a password is
+resolved from `BAUDELAIRE_SSH_PASSWORD`, stdin (`--secret -`), or the prompt.
+
+Change detection runs `sha256sum` on the host and diffs it against the local
+files, so an unchanged file is never re-sent. If the host cannot run it (a bare
+directory, a non-coreutils system), every file simply uploads — the deploy is
+still correct, just not incremental that run.
+
 == Any static host
 
 Upload `public/` to Netlify, Vercel, Cloudflare Pages, GitHub Pages, S3, or your

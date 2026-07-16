@@ -15,12 +15,12 @@ use md5::{Digest, Md5};
 use time::OffsetDateTime;
 
 use super::sigv4::{self, Request, Signer};
-use super::{Backend, Dist};
+use super::{Backend, Dist, plan, report};
 use crate::config::S3Config;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
 use crate::remote::Options;
-use crate::ui::{Count, Ui};
+use crate::ui::Ui;
 
 /// The S3 deploy backend: resolves credentials, reconciles the bucket against
 /// the built `dist`, and reports the plan. Holds only config; the live client is
@@ -48,7 +48,7 @@ impl Backend for S3 {
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(&self.config, access_key, secret_key);
 
-        let local = digests(dist)?;
+        let local = dist.digests(md5_hex)?;
         let remote = bucket.list()?;
         let plan = plan(&local, &remote, self.config.delete);
         report(ui, &plan, opts.dry_run);
@@ -72,28 +72,6 @@ impl Backend for S3 {
         ));
         Ok(())
     }
-}
-
-/// The MD5 digest of every built file, keyed by dist-relative path — each file is
-/// read once, hashed, and dropped, so a large site never sits wholly in memory.
-/// MD5 because that is exactly what an S3 ETag is for a single-part upload.
-fn digests(dist: &Dist) -> Result<BTreeMap<String, String>> {
-    dist.files
-        .iter()
-        .map(|rel| Ok((rel.clone(), md5_hex(&dist.read(rel)?))))
-        .collect()
-}
-
-/// Report the reconcile plan: a one-line summary, prefixed on a dry run so the
-/// preview reads as a preview.
-fn report(ui: &Ui, plan: &Plan, dry_run: bool) {
-    let lead = if dry_run { "dry run — would deploy " } else { "" };
-    ui.detail(format_args!(
-        "{lead}{} to upload, {} to delete, {} unchanged",
-        Count::files(plan.uploads.len()),
-        Count::files(plan.deletes.len()),
-        plan.unchanged
-    ));
 }
 
 /// Read a required credential from the environment, erroring with the variable's
@@ -329,35 +307,6 @@ struct Listing {
     next: Option<String>,
 }
 
-/// What a reconcile will do to the remote.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Plan {
-    /// Keys to upload (new or changed).
-    pub uploads: Vec<String>,
-    /// Keys to delete (present remotely, gone locally).
-    pub deletes: Vec<String>,
-    /// How many objects are already up to date.
-    pub unchanged: usize,
-}
-
-/// Diff the local digests against the remote listing, both keyed by dist-relative
-/// path. A file uploads when its MD5 differs from the remote ETag (or it is new);
-/// an object deletes when the build no longer produces it and `delete` is on;
-/// everything else is unchanged.
-pub fn plan(local: &BTreeMap<String, String>, remote: &BTreeMap<String, String>, delete: bool) -> Plan {
-    let mut out = Plan::default();
-    for (key, digest) in local {
-        match remote.get(key) {
-            Some(etag) if unquote(etag).eq_ignore_ascii_case(digest) => out.unchanged += 1,
-            _ => out.uploads.push(key.clone()),
-        }
-    }
-    if delete {
-        out.deletes = remote.keys().filter(|key| !local.contains_key(*key)).cloned().collect();
-    }
-    out
-}
-
 /// The object key for a dist-relative path under `prefix`: forward-slashed, no
 /// leading slash, prefix folded in.
 fn object_key(prefix: &str, path: &str) -> String {
@@ -553,46 +502,6 @@ mod tests {
         let listing = parse_listing(xml).unwrap();
         assert!(listing.objects.is_empty());
         assert_eq!(listing.next, None);
-    }
-
-    fn local(pairs: &[(&str, &[u8])]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), md5_hex(v))).collect()
-    }
-
-    fn remote(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
-    }
-
-    #[test]
-    fn plan_uploads_new_and_changed_skips_matching() {
-        let local = local(&[("new.html", b"n"), ("same.html", b"s"), ("changed.html", b"x")]);
-        let remote = remote(&[
-            ("same.html", &md5_hex(b"s")),
-            ("changed.html", &md5_hex(b"old")),
-        ]);
-        let plan = plan(&local, &remote, true);
-        assert_eq!(plan.uploads, vec!["changed.html".to_string(), "new.html".to_string()]);
-        assert_eq!(plan.unchanged, 1);
-    }
-
-    #[test]
-    fn plan_deletes_orphans_only_when_enabled() {
-        let local = local(&[("keep.html", b"k")]);
-        let remote = remote(&[("keep.html", &md5_hex(b"k")), ("gone.html", "whatever")]);
-
-        let with_delete = plan(&local, &remote, true);
-        assert_eq!(with_delete.deletes, vec!["gone.html".to_string()]);
-        assert_eq!(with_delete.unchanged, 1);
-
-        let without_delete = plan(&local, &remote, false);
-        assert!(without_delete.deletes.is_empty());
-    }
-
-    #[test]
-    fn plan_matches_quoted_etags_case_insensitively() {
-        let local = local(&[("a.html", b"a")]);
-        let remote = remote(&[("a.html", &format!("\"{}\"", md5_hex(b"a").to_uppercase()))]);
-        assert_eq!(plan(&local, &remote, true).unchanged, 1);
     }
 
     #[test]

@@ -478,6 +478,20 @@ fn deploy_s3_block_enables_backend_with_defaults() {
 }
 
 #[test]
+fn deploy_ssh_block_enables_backend_with_defaults() {
+    let cfg = parse("deploy {\n  ssh {\n    host \"example.com\"\n    path \"/var/www/site\"\n    user \"deploy\"\n  }\n}\n");
+    let ssh = cfg.deploy.ssh.expect("ssh backend configured");
+    assert_eq!(ssh.host, "example.com");
+    assert_eq!(ssh.path, "/var/www/site");
+    assert_eq!(ssh.user.as_deref(), Some("deploy"));
+    assert_eq!(ssh.port, 22, "port defaults to 22");
+    assert!(ssh.key.is_none());
+    assert!(ssh.delete, "delete defaults on");
+}
+
+#[test]
 fn deploy_unset_leaves_no_backend() {
-    assert!(parse("").deploy.s3.is_none());
+    let deploy = parse("").deploy;
+    assert!(deploy.s3.is_none());
+    assert!(deploy.ssh.is_none());
 }

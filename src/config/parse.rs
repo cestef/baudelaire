@@ -7,7 +7,7 @@ use crate::config::{
     AssetConfig, CacheConfig, CollectionConfig, Config, DraftConfig, FeedConfig, FeedKind,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig, OptimizeConfig,
     DeployConfig, PngConfig, PngStrip, AnnounceConfig, RobotsConfig, SearchConfig, SearchField, SearchFormat,
-    S3Config, ServeConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
+    S3Config, ServeConfig, SshConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
 use crate::error::{ConfigError, Result};
@@ -134,6 +134,7 @@ pub(super) trait NodeExt {
     fn standard(&self, target: &mut Option<StandardConfig>, text: &str) -> Result<()>;
     fn deploy(&self, target: &mut DeployConfig, text: &str) -> Result<()>;
     fn s3(&self, target: &mut Option<S3Config>, text: &str) -> Result<()>;
+    fn ssh(&self, target: &mut Option<SshConfig>, text: &str) -> Result<()>;
     fn verify(&self, target: &mut VerifyConfig, text: &str) -> Result<()>;
     fn serve(&self, target: &mut ServeConfig, text: &str) -> Result<()>;
     fn profiles(&self, text: &str) -> Result<Vec<(String, KdlDocument)>>;
@@ -613,7 +614,10 @@ impl NodeExt for KdlNode {
 
     /// The `deploy { .. }` parent section: one block per destination backend.
     fn deploy(&self, target: &mut DeployConfig, text: &str) -> Result<()> {
-        const DEPLOY: Block<DeployConfig> = Block(&[("s3", |c, n, t| n.s3(&mut c.s3, t))]);
+        const DEPLOY: Block<DeployConfig> = Block(&[
+            ("s3", |c, n, t| n.s3(&mut c.s3, t)),
+            ("ssh", |c, n, t| n.ssh(&mut c.ssh, t)),
+        ]);
         DEPLOY.fill(target, self, text)
     }
 
@@ -644,6 +648,41 @@ impl NodeExt for KdlNode {
         ]);
         let mut cfg = target.take().unwrap_or_default();
         S3.fill(&mut cfg, self, text)?;
+        *target = Some(cfg);
+        Ok(())
+    }
+
+    /// The `ssh { .. }` block: presence enables the SSH backend. Fills onto the
+    /// existing config so a profile tuning one key keeps the rest.
+    fn ssh(&self, target: &mut Option<SshConfig>, text: &str) -> Result<()> {
+        const SSH: Block<SshConfig> = Block(&[
+            ("host", |c, n, t| {
+                c.host = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("path", |c, n, t| {
+                c.path = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("port", |c, n, t| {
+                c.port = n.count(t, 0)? as u16;
+                Ok(())
+            }),
+            ("user", |c, n, t| {
+                c.user = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("key", |c, n, t| {
+                c.key = Some(n.string(t, 0)?.into());
+                Ok(())
+            }),
+            ("delete", |c, n, t| {
+                c.delete = n.boolean(t, 0)?;
+                Ok(())
+            }),
+        ]);
+        let mut cfg = target.take().unwrap_or_default();
+        SSH.fill(&mut cfg, self, text)?;
         *target = Some(cfg);
         Ok(())
     }

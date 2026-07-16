@@ -643,6 +643,8 @@ pub struct StandardConfig {
 pub struct DeployConfig {
     /// An S3-compatible bucket (AWS S3, Cloudflare R2, ..).
     pub s3: Option<S3Config>,
+    /// A host reachable over SSH, files transferred with SFTP.
+    pub ssh: Option<SshConfig>,
 }
 
 /// An S3-compatible bucket target. Works against AWS S3 by default; set
@@ -660,6 +662,26 @@ pub struct S3Config {
     /// bucket). Empty by default.
     pub prefix: String,
     /// Delete remote objects under `prefix` that the build no longer produces.
+    pub delete: bool,
+}
+
+/// A host reachable over SSH. Files are reconciled with the remote directory
+/// over SFTP; change detection runs `sha256sum` on the host so an unchanged file
+/// is never re-sent. Works against any OpenSSH-compatible server.
+#[derive(Debug, Clone, Hash)]
+pub struct SshConfig {
+    /// Hostname or IP of the server.
+    pub host: String,
+    /// Absolute path to the remote directory the build is mirrored into.
+    pub path: String,
+    /// Port the SSH server listens on.
+    pub port: u16,
+    /// User to authenticate as. Defaults to `$USER`.
+    pub user: Option<String>,
+    /// Path to a private key (under the project root or absolute). When unset,
+    /// authentication falls back to a password from the environment/prompt.
+    pub key: Option<PathBuf>,
+    /// Delete remote files under `path` that the build no longer produces.
     pub delete: bool,
 }
 
