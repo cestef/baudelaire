@@ -77,7 +77,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
       - uses: https://codeberg.org/cstef/actions/rust@main
+        with:
+          components: llvm-tools-preview
       - uses: https://codeberg.org/cstef/actions/mold@main
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
@@ -89,11 +92,12 @@ jobs:
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
       # Coverage recompiles with instrumentation, so it doesn't share the sccache
-      # cache. tarpaulin exposes the total percent as an output.
+      # cache. The LLVM engine avoids ptrace/ASLR, which the runner's seccomp
+      # profile blocks (the default ptrace engine fails with EPERM there).
       - id: cov
         uses: https://codeberg.org/cstef/actions/tarpaulin@main
         with:
-          args: --workspace --exclude-files benches/*
+          args: --workspace --exclude-files benches/* --engine llvm
           out: Stdout Xml
 
       # Publish a badge (default branch), comment the delta on PRs, and ratchet:
