@@ -1,5 +1,7 @@
 # Baudelaire
 
+![coverage](https://pub-5363e10fff4a4996aefc53c255177c80.r2.dev/coverage.svg)
+
 A static site generator where everything is just [Typst](https://typst.app).
 
 ## Install

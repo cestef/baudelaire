@@ -27,15 +27,15 @@ jobs:
         with:
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
-          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
       # Restore the crate registry (sccache caches compiler output, not downloads).
       - uses: https://codeberg.org/cstef/actions/cargo-cache@main
         with:
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
-          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
       # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
@@ -69,8 +69,8 @@ jobs:
           mode: save
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
-          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
   coverage:
     runs-on: linux-any-large
@@ -85,15 +85,34 @@ jobs:
         with:
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
-          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
       # Coverage recompiles with instrumentation, so it doesn't share the sccache
-      # cache; informational for now (no fail-under until the baseline settles).
-      - uses: https://codeberg.org/cstef/actions/tarpaulin@main
+      # cache. tarpaulin exposes the total percent as an output.
+      - id: cov
+        uses: https://codeberg.org/cstef/actions/tarpaulin@main
         with:
           args: --workspace --exclude-files benches/*
           out: Stdout Xml
+
+      # Publish a badge (default branch), comment the delta on PRs, and ratchet:
+      # a PR can't drop coverage below main's, minus a small tolerance.
+      - uses: https://codeberg.org/cstef/actions/coverage-report@main
+        with:
+          percent: ${{ steps.cov.outputs.percent }}
+          bucket: baudelaire-badges
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_BADGE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_BADGE_SECRET_ACCESS_KEY }}
+          public-url: https://pub-5363e10fff4a4996aefc53c255177c80.r2.dev
+          token: ${{ forge.token }}
+          server-url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          event-name: ${{ github.event_name }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          ratchet: "true"
 
       - uses: actions/upload-artifact@v3
         if: always()
