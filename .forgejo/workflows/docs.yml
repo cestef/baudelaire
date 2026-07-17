@@ -56,9 +56,13 @@ jobs:
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
-      - uses: https://codeberg.org/git-pages/action@v2
+      - uses: https://codeberg.org/cstef/actions/wrangler@main
         with:
-          site: https://baudelaire.cstef.dev/
-          server: codeberg.page
-          token: ${{ forge.token }}
-          source: docs/public/
+          command: pages deploy public --project-name=baudelaire --branch=main
+          working-directory: docs
+          api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
