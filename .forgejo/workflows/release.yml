@@ -59,6 +59,13 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
+      # Restore the crate registry (one key across targets; keyed on Cargo.lock).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -95,6 +102,15 @@ jobs:
             baudelaire-${{ matrix.name }}.tar.gz.sha256
             baudelaire-${{ matrix.name }}-slim.tar.gz
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
+
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        if: always()
+        with:
+          mode: save
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
   release:
     needs: build
