@@ -248,3 +248,37 @@ impl Listing {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Nav, Titlecase};
+
+    #[test]
+    fn titlecase_capitalizes_first_char_only() {
+        assert_eq!(Titlecase("tags").to_string(), "Tags");
+        assert_eq!(Titlecase("my notes").to_string(), "My notes");
+        assert_eq!(Titlecase("A").to_string(), "A");
+        // Empty stays empty; already-capitalized is unchanged.
+        assert_eq!(Titlecase("").to_string(), "");
+        assert_eq!(Titlecase("Rust").to_string(), "Rust");
+    }
+
+    #[test]
+    fn nav_is_empty_only_without_links() {
+        assert!(Nav::default().is_empty());
+        assert!(
+            !Nav {
+                prev: Some("/a/".into()),
+                next: None,
+            }
+            .is_empty()
+        );
+        assert!(
+            !Nav {
+                prev: None,
+                next: Some("/b/".into()),
+            }
+            .is_empty()
+        );
+    }
+}

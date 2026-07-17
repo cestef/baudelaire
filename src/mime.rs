@@ -53,3 +53,62 @@ impl fmt::Display for Mime {
         f.write_str(self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Mime;
+
+    #[test]
+    fn maps_known_extensions() {
+        let cases = [
+            ("index.html", "text/html"),
+            ("style.css", "text/css"),
+            ("app.js", "text/javascript"),
+            ("mod.mjs", "text/javascript"),
+            ("logo.svg", "image/svg+xml"),
+            ("pic.png", "image/png"),
+            ("pic.jpg", "image/jpeg"),
+            ("pic.jpeg", "image/jpeg"),
+            ("anim.gif", "image/gif"),
+            ("pic.webp", "image/webp"),
+            ("pic.avif", "image/avif"),
+            ("fav.ico", "image/x-icon"),
+            ("f.woff2", "font/woff2"),
+            ("f.woff", "font/woff"),
+            ("f.ttf", "font/ttf"),
+            ("data.json", "application/json"),
+            ("feed.xml", "application/xml"),
+            ("notes.txt", "text/plain"),
+        ];
+        for (path, want) in cases {
+            assert_eq!(Mime::of(path).to_string(), want, "{path}");
+        }
+    }
+
+    #[test]
+    fn unknown_and_missing_extension_fall_back_to_binary() {
+        assert_eq!(Mime::of("archive.tar.zst").to_string(), "application/octet-stream");
+        assert_eq!(Mime::of("Makefile").to_string(), "application/octet-stream");
+        // Matching is case-sensitive: an uppercase extension is not recognized.
+        assert_eq!(Mime::of("INDEX.HTML").to_string(), "application/octet-stream");
+    }
+
+    #[test]
+    fn header_adds_charset_only_for_text() {
+        assert_eq!(Mime::of("i.html").header(), "text/html; charset=utf-8");
+        assert_eq!(Mime::of("a.js").header(), "text/javascript; charset=utf-8");
+        assert_eq!(Mime::of("n.txt").header(), "text/plain; charset=utf-8");
+        // Non-text types carry no charset.
+        assert_eq!(Mime::of("p.png").header(), "image/png");
+        assert_eq!(Mime::of("d.json").header(), "application/json");
+        assert_eq!(Mime::of("s.svg").header(), "image/svg+xml");
+    }
+
+    #[test]
+    fn html_predicate_is_exact() {
+        assert!(Mime::of("page.html").html());
+        assert!(!Mime::of("style.css").html());
+        assert!(!Mime::of("logo.svg").html());
+        assert!(!Mime::of("unknown.bin").html());
+    }
+}
