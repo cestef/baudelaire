@@ -64,11 +64,26 @@ cache-busted file.
 
 == Images
 
-The `images` block does two independent things.
+The `images` block does four independent things.
 
 / #raw("lazy"): every `<img>` gains `loading="lazy"` (offscreen images defer
   until needed) and `decoding="async"` (decoding never blocks rendering). On by
   default; anything you set yourself is left as authored.
+/ #raw("extract"): lift Typst-embedded images out of the page. Typst inlines an
+  `#image("photo.png")` into the HTML as a base64 `data:` URI, which bloats the
+  page and can't be cached. With `extract` (on by default), the bytes are
+  written to a file under the asset URL and the `<img>` references it
+  (`/assets/photo.png`), so the markup stays small and the image caches like any
+  asset. Sizing (`#image("x", width: 50%)`) is preserved as inline CSS, so the
+  output matches Typst's own. The original filename is kept; with
+  `output.assets.fingerprint` the served name carries a content hash. Set
+  `extract #false` to keep Typst's inlining.
+/ #raw("responsive"): pre-generate downscaled copies of each raster and emit a
+  `srcset`, so a browser fetches the smallest size that fits its screen. Enabled
+  by the block's presence; `widths` sets the target pixel widths (default
+  `480 960 1440`), `quality` the JPEG re-encode quality (PNG stays lossless), and
+  `sizes` an optional layout hint. A width at or above the source is skipped
+  (never upscaled), and the source is always the largest candidate.
 / #raw("optimize"): a block of raster formats to shrink at build time. Name a
   format to enable it, with optional tuning. `png` is lossless (oxipng, `level`
   0–6 and `strip` none/safe/all); `jpeg` re-encodes at a `quality` (1–100).
@@ -77,6 +92,11 @@ The `images` block does two independent things.
 
 ```kdl
 images {
+  extract #true
+  responsive {
+    widths 480 960 1440
+    sizes "(min-width: 60rem) 640px, 100vw"
+  }
   optimize {
     png level=4 strip="all"
     jpeg quality=75
@@ -85,6 +105,9 @@ images {
 ```
 
 #callout(kind: "note")[
-  Optimization is opt-in per format: an empty or absent `optimize` block leaves
-  every image untouched. Only formats you name are processed.
+  `extract` only touches `#image(..)` that names a project file. An image built
+  from raw bytes, or one from a package (`@preview/..`), has no project file to
+  reference, so it stays inline. `responsive` applies to any raster the pipeline
+  sees, and pairs with the source-directory assets; `optimize` is opt-in per
+  format.
 ]

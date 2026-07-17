@@ -59,17 +59,46 @@ fn typst_image_externalizes_to_a_file() {
 }
 
 #[test]
-fn inline_base64_is_the_default() {
-    // Without `extract`, typst's native inlining is left alone.
+fn extract_is_the_default() {
+    // Externalization is on out of the box: a bare config still writes the file.
     let site = Site::with("site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n");
+    site.write_bytes("content/pic.png", &png(2, 2));
+    site.write("content/index.typ", "#image(\"pic.png\")\n");
+
+    build(&site);
+    assert!(
+        site.output("index.html")
+            .contains("src=\"/assets/pic.png\"")
+    );
+    assert!(site.exists("public/assets/pic.png"));
+}
+
+#[test]
+fn extract_false_keeps_typst_inlining() {
+    // Opting out restores typst's native base64 inlining.
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  images { extract #false }\n}\n",
+    );
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
     build(&site);
     let html = site.output("index.html");
     assert!(html.contains("data:image"), "image stays inline: {html}");
-    assert!(!html.contains("/assets/pic.png"));
     assert!(!site.exists("public/assets/pic.png"));
+}
+
+#[test]
+fn extract_preserves_typst_image_sizing() {
+    // The override rule reproduces typst's width sizing as inline CSS, so an
+    // `image(width: ..)` is not silently dropped when externalized.
+    let site = Site::with(EXTRACT);
+    site.write_bytes("content/pic.png", &png(2, 2));
+    site.write("content/index.typ", "#image(\"pic.png\", width: 50%)\n");
+
+    build(&site);
+    let html = site.output("index.html");
+    assert!(html.contains("width:50%"), "sizing is kept as CSS: {html}");
 }
 
 #[test]

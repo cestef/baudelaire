@@ -20,9 +20,12 @@
 //! Explicit typst image sizing is therefore not preserved under `extract`; size
 //! with CSS instead.
 
-use typst::foundations::{NativeElement, ShowFn};
-use typst::layout::BlockElem;
+use std::fmt::Write;
+
+use typst::foundations::{NativeElement, ShowFn, Smart};
+use typst::layout::{BlockElem, Length, Rel, Sizing};
 use typst::loading::DataSource;
+use typst::syntax::VirtualRoot;
 use typst::visualize::ImageElem;
 use typst_html::{HtmlAttrs, HtmlElem, attr, tag};
 
@@ -34,15 +37,17 @@ pub const MARKER: &str = "baudelaire:asset:";
 pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     let image = elem.decode(engine, styles)?;
 
-    // The source's project-relative path, when it is a real file. Resolved the
-    // same way typst itself resolves an image path (against the element's own
-    // source file), so the marker names exactly the file typst read.
+    // The source's project-relative path, when it is a real project file.
+    // Resolved the same way typst itself resolves an image path (against the
+    // element's own source file), so the marker names exactly the file typst
+    // read. A package image (`@preview/..`) lives outside the project root the
+    // externalize pass copies from, so it is left inline rather than mis-copied.
     let vpath = match &elem.source.source {
         DataSource::Path(path) => path
             .resolve_if_some(elem.span().id())
             .ok()
-            .map(|id| id.intern())
-            .map(|id| id.vpath().get_without_slash().to_owned()),
+            .filter(|rooted| matches!(rooted.root(), VirtualRoot::Project))
+            .map(|rooted| rooted.vpath().get_without_slash().to_owned()),
         DataSource::Bytes(_) => None,
     };
 
@@ -63,6 +68,23 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     attrs.push(attr::width, cast(image.width()));
     attrs.push(attr::height, cast(image.height()));
 
+    // Reproduce the sizing typst's native rule sets as inline CSS: pixel-hinting,
+    // and the author's `width`/`height`. typst-html's own `css` builder is
+    // private, so the same values are rendered here (see [`css`]).
+    let mut style = String::new();
+    if let Some(rendering) = typst_svg::convert_image_scaling(image.scaling()) {
+        let _ = write!(style, "image-rendering:{rendering};");
+    }
+    if let Smart::Custom(width) = elem.width.get(styles) {
+        let _ = write!(style, "width:{};", css(&width));
+    }
+    if let Sizing::Rel(height) = elem.height.get(styles) {
+        let _ = write!(style, "height:{};", css(&height));
+    }
+    if !style.is_empty() {
+        attrs.push(attr::style, style);
+    }
+
     Ok(BlockElem::packed(
         HtmlElem::new(tag::img)
             .with_attrs(attrs)
@@ -70,3 +92,64 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
             .spanned(elem.span()),
     ))
 };
+
+/// A relative length as a CSS dimension, mirroring typst-html's own (private)
+/// `ToCss` encoding: a ratio becomes a percent, an absolute length points, an
+/// em-length ems, and a mix becomes a `calc(..)` sum. A single term is emitted
+/// bare, and an all-zero length is `0`.
+fn css(rel: &Rel<Length>) -> String {
+    let mut terms = Vec::new();
+    if rel.rel.get() != 0.0 {
+        terms.push(format!("{}%", trim(rel.rel.get() * 100.0)));
+    }
+    if rel.abs.em.get() != 0.0 {
+        terms.push(format!("{}em", trim(rel.abs.em.get())));
+    }
+    if rel.abs.abs.to_pt() != 0.0 {
+        terms.push(format!("{}pt", trim(rel.abs.abs.to_pt())));
+    }
+    match terms.len() {
+        0 => "0".into(),
+        1 => terms.pop().unwrap(),
+        _ => format!("calc({})", terms.join(" + ")),
+    }
+}
+
+/// A finite number formatted for CSS: up to four decimals, with trailing zeros
+/// (and any bare decimal point) trimmed, so `50.0` renders as `50`.
+fn trim(value: f64) -> String {
+    let s = format!("{value:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    s.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::css;
+    use typst::layout::{Abs, Em, Length, Ratio, Rel};
+
+    #[test]
+    fn css_renders_a_ratio_as_a_percent() {
+        let rel = Rel::new(Ratio::new(0.5), Length::zero());
+        assert_eq!(css(&rel), "50%");
+    }
+
+    #[test]
+    fn css_renders_absolute_and_em_lengths() {
+        let pt = Rel::new(Ratio::zero(), Length::from(Abs::pt(200.0)));
+        assert_eq!(css(&pt), "200pt");
+        let em = Rel::new(Ratio::zero(), Length::from(Em::new(1.5)));
+        assert_eq!(css(&em), "1.5em");
+    }
+
+    #[test]
+    fn css_sums_mixed_terms_into_a_calc() {
+        let rel = Rel::new(Ratio::new(0.5), Length::from(Abs::pt(10.0)));
+        assert_eq!(css(&rel), "calc(50% + 10pt)");
+    }
+
+    #[test]
+    fn css_of_zero_is_zero() {
+        assert_eq!(css(&Rel::new(Ratio::zero(), Length::zero())), "0");
+    }
+}

@@ -377,6 +377,95 @@ impl Ui {
     }
 }
 
+/// The `·`-separated list separator shared by multi-item lines (the watch list,
+/// the build breakdown), so they wrap and read the same way.
+const DOT: &str = " · ";
+
+/// The usable terminal width in columns, clamped to a sane band and falling back
+/// to 100 when the size is unavailable (piped output, no tty). The single width
+/// source for [`wrap`].
+pub fn term_width() -> usize {
+    console::Term::stdout()
+        .size_checked()
+        .map(|(_, cols)| (cols as usize).clamp(40, 200))
+        .unwrap_or(100)
+}
+
+/// Lay out `·`-separated `items` so no line exceeds `width`, with every line
+/// after the first indented to `indent` columns, aligning continuations under
+/// the first item. Returns the ready-to-print value (embedded newlines and all),
+/// so a long watch list or build breakdown flows onto extra lines instead of
+/// running off-screen. A single item wider than the budget still takes its own
+/// line rather than being split.
+pub fn wrap(items: &[String], indent: usize, width: usize) -> String {
+    // Measure display columns, not bytes: the separator's middle dot is
+    // multi-byte, and an item may carry ANSI color (the build breakdown does),
+    // both of which a byte or char count would get wrong.
+    let sep = console::measure_text_width(DOT);
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut col = indent;
+    for item in items {
+        let w = console::measure_text_width(item);
+        if line.is_empty() {
+            line.push_str(item);
+            col = indent + w;
+        } else if col + sep + w <= width {
+            line.push_str(DOT);
+            line.push_str(item);
+            col += sep + w;
+        } else {
+            lines.push(std::mem::take(&mut line));
+            line.push_str(item);
+            col = indent + w;
+        }
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines.join(&format!("\n{}", " ".repeat(indent)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrap;
+
+    fn items(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn wrap_keeps_a_short_list_on_one_line() {
+        assert_eq!(wrap(&items(&["a", "b", "c"]), 2, 80), "a · b · c");
+    }
+
+    #[test]
+    fn wrap_breaks_at_width_and_aligns_continuations() {
+        // indent 2: "aaa · bbb" ends at col 11; " · ccc" would reach 17 > 14, so
+        // ccc starts a new line padded to the indent.
+        assert_eq!(
+            wrap(&items(&["aaa", "bbb", "ccc", "ddd"]), 2, 14),
+            "aaa · bbb\n  ccc · ddd"
+        );
+    }
+
+    #[test]
+    fn wrap_gives_an_overlong_item_its_own_line() {
+        // A single item wider than the budget is not split; it just sits alone.
+        assert_eq!(
+            wrap(&items(&["short", "a-very-long-single-item"]), 0, 10),
+            "short\na-very-long-single-item"
+        );
+    }
+
+    #[test]
+    fn wrap_counts_the_multibyte_separator_by_columns() {
+        // ` · ` is 3 columns but 4 bytes; two 4-char items plus a separator is
+        // 11 columns, which fits a width of 11 exactly.
+        assert_eq!(wrap(&items(&["aaaa", "bbbb"]), 0, 11), "aaaa · bbbb");
+    }
+}
+
 /// Per-page build status for progress reporting.
 #[derive(Debug, Clone, Copy)]
 pub enum PageStatus {

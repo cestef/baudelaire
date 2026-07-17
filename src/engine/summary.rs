@@ -59,7 +59,9 @@ impl Summary<'_> {
 
         let mut rows = Vec::new();
         if !parts.is_empty() {
-            rows.push(parts.join(&" · ".dimmed().to_string()));
+            // Wrap under the tree row's content column (col 5) so a long
+            // breakdown flows onto extra lines rather than off-screen.
+            rows.push(crate::ui::wrap(&parts, 5, crate::ui::term_width()));
         }
         rows.push(Paths(&self.dist.display().to_string()).to_string());
         ui.tree(&rows);

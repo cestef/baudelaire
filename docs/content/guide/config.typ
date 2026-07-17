@@ -36,7 +36,7 @@ output {
   urls "clean"
   clean #true
   html { pretty #true; meta #true; anchors #true }
-  images { lazy #true; optimize { png; jpeg quality=82 } }
+  images { lazy #true; extract #true; responsive { widths 480 960 1440 }; optimize { png; jpeg quality=82 } }
   assets { minify #true; bundle #true; fingerprint #true }
   search { formats "json"; fields "title" "body" "tags" }
   feed { formats "rss" "atom"; limit 20 }
@@ -46,7 +46,8 @@ output {
 The `html` block controls the emitted markup (`pretty` formatting, `embed` to
 inline assets as `data:` URIs, `meta` for SEO and social tags, and `anchors` to
 give every heading a slug `id` for deep links); the `images` block handles lazy
-loading and per-format optimization. See
+loading, externalizing embedded images, responsive `srcset` variants, and
+per-format optimization. See
 #link("../features/discovery/meta.typ")[meta and images].
 
 Every field has a sensible default, so a minimal `config.kdl` is just

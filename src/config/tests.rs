@@ -531,10 +531,10 @@ fn prefixed_shifts_only_root_absolute_paths() {
 }
 
 #[test]
-fn images_extract_defaults_off_and_parses() {
-    assert!(!parse("").images.extract);
-    let cfg = parse("output {\n  images {\n    extract #true\n  }\n}\n");
-    assert!(cfg.images.extract);
+fn images_extract_defaults_on_and_parses() {
+    assert!(parse("").images.extract);
+    let cfg = parse("output {\n  images {\n    extract #false\n  }\n}\n");
+    assert!(!cfg.images.extract);
 }
 
 #[test]

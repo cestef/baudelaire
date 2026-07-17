@@ -71,9 +71,9 @@ impl Default for ImagesConfig {
         Self {
             // lazy loading is a universal win; optimization is opt-in: it re-encodes and costs time
             lazy: true,
-            // opt-in for now: externalizing needs the copy pass wired end to end
-            // before it can be the default.
-            extract: false,
+            // externalize by default: smaller HTML and cacheable images, at full
+            // sizing parity with typst's inlining. `html.embed` forces inline.
+            extract: true,
             optimize: OptimizeConfig::default(),
             responsive: ResponsiveConfig::default(),
         }

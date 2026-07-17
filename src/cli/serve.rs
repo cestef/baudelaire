@@ -79,7 +79,12 @@ impl Dev<'_> {
         self.ui.arrow(
             "watching",
             match self.config.serve.watch {
-                true => self.watched().dimmed().to_string(),
+                // Wrap the watched roots to the terminal, aligned under the value
+                // column (col 14), so a long list flows onto extra lines instead
+                // of running off-screen.
+                true => crate::ui::wrap(&self.watched(), 14, crate::ui::term_width())
+                    .dimmed()
+                    .to_string(),
                 false => "off (--no-watch)".dimmed().to_string(),
             },
         );
@@ -110,8 +115,9 @@ impl Dev<'_> {
     }
 
     /// The watched roots, for the startup banner: the defaults, the config
-    /// file, plus any `serve.include` globs.
-    fn watched(&self) -> String {
+    /// file, plus any `serve.include` globs. Returned as separate items so the
+    /// banner can wrap them to the terminal width.
+    fn watched(&self) -> Vec<String> {
         let mut parts = vec![
             self.config.content.display().to_string(),
             self.config.templates.display().to_string(),
@@ -120,7 +126,7 @@ impl Dev<'_> {
             self.config_path.display().to_string(),
         ];
         parts.extend(self.config.serve.include.iter().cloned());
-        parts.join(" · ")
+        parts
     }
 
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
