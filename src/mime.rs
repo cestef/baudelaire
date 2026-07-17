@@ -87,10 +87,16 @@ mod tests {
 
     #[test]
     fn unknown_and_missing_extension_fall_back_to_binary() {
-        assert_eq!(Mime::of("archive.tar.zst").to_string(), "application/octet-stream");
+        assert_eq!(
+            Mime::of("archive.tar.zst").to_string(),
+            "application/octet-stream"
+        );
         assert_eq!(Mime::of("Makefile").to_string(), "application/octet-stream");
         // Matching is case-sensitive: an uppercase extension is not recognized.
-        assert_eq!(Mime::of("INDEX.HTML").to_string(), "application/octet-stream");
+        assert_eq!(
+            Mime::of("INDEX.HTML").to_string(),
+            "application/octet-stream"
+        );
     }
 
     #[test]

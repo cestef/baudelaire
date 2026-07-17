@@ -56,7 +56,11 @@ fn full_site_generates_taxonomies_pagination_feeds_and_metadata() {
         .expect("engine")
         .build(&silent())
         .expect("build");
-    assert!(stats.pages >= 3, "at least the 3 posts built, got {}", stats.pages);
+    assert!(
+        stats.pages >= 3,
+        "at least the 3 posts built, got {}",
+        stats.pages
+    );
 
     // Pagination: paginate=2 over 3 posts -> page 1 plus a page 2.
     assert!(site.exists("public/blog/index.html"), "paginated index");
@@ -79,7 +83,9 @@ fn full_site_generates_taxonomies_pagination_feeds_and_metadata() {
     // A feed was emitted (rss + atom enabled).
     let files = site.files("public");
     assert!(
-        files.iter().any(|f| f.contains("rss") || f.contains("atom") || f.contains("feed")),
+        files
+            .iter()
+            .any(|f| f.contains("rss") || f.contains("atom") || f.contains("feed")),
         "a feed file exists: {files:?}"
     );
 }
@@ -127,7 +133,10 @@ fn flat_urls_with_redirects_search_and_llms() {
     // A redirect stub forwards the stale path to the page's permalink.
     let stub = site.read("public/old-about.html");
     assert!(stub.contains("http-equiv"), "meta-refresh redirect: {stub}");
-    assert!(stub.to_lowercase().contains("redirecting"), "redirect body: {stub}");
+    assert!(
+        stub.to_lowercase().contains("redirecting"),
+        "redirect body: {stub}"
+    );
 
     // Client-side search index (formats "json").
     assert!(site.exists("public/search.json"), "search index");
@@ -152,11 +161,21 @@ output {
 #[test]
 fn asset_pipeline_processes_css_js_and_images() {
     let site = Site::with(ASSET_CONFIG);
-    site.write("content/index.typ", "#let frontmatter = (title: \"H\",)\nhi\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhi\n",
+    );
     // CSS with a url() reference so the fingerprint-rewrite path runs.
-    site.write("assets/style.css", "body { color: #ff0000; background: url(\"pic.png\"); }\n");
+    site.write(
+        "assets/style.css",
+        "body { color: #ff0000; background: url(\"pic.png\"); }\n",
+    );
     site.write("assets/app.js", "export const answer = 41 + 1;\n");
-    let png = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/bloated.png")).unwrap();
+    let png = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/bloated.png"
+    ))
+    .unwrap();
     site.write_bytes("assets/pic.png", &png);
 
     let stats = Engine::new(site.config(), Mode::Build)
@@ -167,7 +186,16 @@ fn asset_pipeline_processes_css_js_and_images() {
 
     // Each asset kind lands under dist/assets, fingerprinted.
     let out = site.files("public/assets");
-    assert!(out.iter().any(|f| f.ends_with(".css")), "css emitted: {out:?}");
-    assert!(out.iter().any(|f| f.ends_with(".js")), "js emitted: {out:?}");
-    assert!(out.iter().any(|f| f.ends_with(".png")), "png emitted: {out:?}");
+    assert!(
+        out.iter().any(|f| f.ends_with(".css")),
+        "css emitted: {out:?}"
+    );
+    assert!(
+        out.iter().any(|f| f.ends_with(".js")),
+        "js emitted: {out:?}"
+    );
+    assert!(
+        out.iter().any(|f| f.ends_with(".png")),
+        "png emitted: {out:?}"
+    );
 }

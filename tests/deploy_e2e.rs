@@ -274,7 +274,7 @@ impl russh::keys::signature::rand_core::TryRng for Rng {
         Ok(rand::random())
     }
     fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        dst.fill_with(|| rand::random());
+        dst.fill_with(rand::random);
         Ok(())
     }
 }
