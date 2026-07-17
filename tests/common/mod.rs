@@ -74,6 +74,9 @@ impl Site {
         let mut cfg = Config::parse(&self.read("config.kdl")).unwrap();
         cfg.content = self.root.join(&cfg.content);
         cfg.dist = self.root.join(&cfg.dist);
+        cfg.assets = self.root.join(&cfg.assets);
+        cfg.templates = self.root.join(&cfg.templates);
+        cfg.r#static = self.root.join(&cfg.r#static);
         cfg.cache.dir = self.root.join(&cfg.cache.dir);
         cfg
     }
