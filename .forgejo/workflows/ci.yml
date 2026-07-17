@@ -71,3 +71,32 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+  coverage:
+    runs-on: linux-any-large
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: https://codeberg.org/cstef/actions/rust@main
+      - uses: https://codeberg.org/cstef/actions/mold@main
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      # Coverage recompiles with instrumentation, so it doesn't share the sccache
+      # cache; informational for now (no fail-under until the baseline settles).
+      - uses: https://codeberg.org/cstef/actions/tarpaulin@main
+        with:
+          args: --workspace --exclude-files benches/*
+          out: Stdout Xml
+
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage
+          path: cobertura.xml
