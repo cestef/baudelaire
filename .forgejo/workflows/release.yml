@@ -94,6 +94,10 @@ jobs:
           package ""
           package "-slim" --no-default-features
 
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
       - uses: actions/upload-artifact@v3
         with:
           name: baudelaire-${{ matrix.name }}

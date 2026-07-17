@@ -47,6 +47,10 @@ jobs:
         working-directory: docs
         run: ../target/debug/baudelaire build
 
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
       - uses: https://codeberg.org/cstef/actions/cargo-cache@main
         if: always()
         with:

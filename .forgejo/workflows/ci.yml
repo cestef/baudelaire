@@ -117,6 +117,7 @@ jobs:
           ref-name: ${{ github.ref_name }}
           pr-number: ${{ github.event.pull_request.number }}
           ratchet: "true"
+          badge-label: baudelaire cov
 
       - uses: actions/upload-artifact@v3
         if: always()
