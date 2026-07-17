@@ -6,9 +6,9 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, RobotsConfig, S3Config, SearchConfig,
-    SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig, TaxonomyConfig,
-    VerifyConfig,
+    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config,
+    SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
+    TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
 use crate::error::{ConfigError, Result};
@@ -119,6 +119,8 @@ pub(super) trait NodeExt {
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)>;
     fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()>;
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()>;
+    fn responsive(&self, target: &mut ResponsiveConfig, text: &str) -> Result<()>;
+    fn widths(&self, text: &str) -> Result<Vec<u32>>;
     fn optimize(&self, target: &mut OptimizeConfig, text: &str) -> Result<()>;
     fn png(&self, target: &mut PngConfig, text: &str) -> Result<()>;
     fn jpeg(&self, target: &mut JpegConfig, text: &str) -> Result<()>;
@@ -332,9 +334,49 @@ impl NodeExt for KdlNode {
                 c.lazy = n.boolean(t, 0)?;
                 Ok(())
             }),
+            ("extract", |c, n, t| {
+                c.extract = n.boolean(t, 0)?;
+                Ok(())
+            }),
             ("optimize", |c, n, t| n.optimize(&mut c.optimize, t)),
+            ("responsive", |c, n, t| n.responsive(&mut c.responsive, t)),
         ]);
         IMAGES.fill(target, self, text)
+    }
+
+    /// The `responsive { widths .. ; quality N }` block. Its presence enables
+    /// width-variant generation; widths and quality keep their defaults unless
+    /// named.
+    fn responsive(&self, target: &mut ResponsiveConfig, text: &str) -> Result<()> {
+        const RESPONSIVE: Block<ResponsiveConfig> = Block(&[
+            ("widths", |c, n, t| {
+                c.widths = n.widths(t)?;
+                Ok(())
+            }),
+            ("quality", |c, n, t| {
+                c.quality = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, 100)? as u8;
+                Ok(())
+            }),
+            ("sizes", |c, n, t| {
+                c.sizes = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+        ]);
+        // presence of the block enables emission
+        target.enabled = true;
+        RESPONSIVE.fill(target, self, text)
+    }
+
+    /// The positional integer arguments of a `widths 480 960 ..` node, each a
+    /// pixel width in `1..=16384` (the max texture size browsers guarantee).
+    /// Mirrors [`NodeExt::words`] for the integer case.
+    fn widths(&self, text: &str) -> Result<Vec<u32>> {
+        let span = NodeExt::span(self);
+        self.entries()
+            .iter()
+            .filter(|e| e.name().is_none())
+            .map(|e| Ok(e.value().ranged(text, span, 1, 16384)? as u32))
+            .collect()
     }
 
     /// The `optimize { png [level=..] [strip=..]; jpeg [quality=..] }` block: each

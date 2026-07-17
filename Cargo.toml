@@ -59,6 +59,7 @@ vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
 [dependencies]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
+typst-svg = { version = "0.15" }
 typst-kit = { version = "0.15", features = [
   "system-files",
   "system-downloader",
@@ -102,6 +103,7 @@ oxipng = { version = "10.1.1", default-features = false, features = [
 ], optional = true }
 image = { version = "0.25", default-features = false, features = [
   "jpeg",
+  "png",
 ], optional = true }
 console = "0.16"
 ureq = { version = "3", default-features = false, features = [
@@ -118,6 +120,8 @@ md-5 = "0.11.0"
 
 [dev-dependencies]
 tempfile = "3"
+# Generate test images (already in the tree via the `images` feature).
+image = { version = "0.25", default-features = false, features = ["png"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 # In-process SSH/SFTP server for the deploy end-to-end test.
 russh = "0.62.2"

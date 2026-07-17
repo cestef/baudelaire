@@ -13,13 +13,16 @@ use crate::content::Page;
 
 use super::AssetMap;
 use super::LinkMap;
+use super::SrcSets;
 use super::anchors::Anchors;
 use super::base::BasePath;
 use super::embed::Embed;
+use super::externalize::Externalize;
 use super::fingerprint::Fingerprint;
 use super::image::Images;
 use super::meta::Meta;
 use super::rewrite::Links;
+use super::sources::Sources;
 use super::standard::Verify;
 
 /// Per-page context handed to every transform. Transforms run sequentially for
@@ -30,9 +33,16 @@ pub(super) struct Cx<'a> {
     pub links: &'a LinkMap,
     /// Processed-asset URL map, consumed by the fingerprint and meta transforms.
     pub assets: &'a AssetMap,
+    /// Responsive width-variant manifest, consumed by the sources transform.
+    pub srcsets: &'a SrcSets,
+    /// Project root, so the externalize transform resolves image markers to
+    /// source files.
+    pub root: &'a std::path::Path,
     /// Raw targets of internal `.typ` links with no matching page, collected for
     /// link checking.
     pub broken: Vec<String>,
+    /// Images the externalize transform lifted out of the DOM into files.
+    pub images: Vec<super::ImageRef>,
 }
 
 /// The one shared walker over the typed DOM, so every transform visits
@@ -165,14 +175,17 @@ pub(super) struct Transforms(Vec<Box<dyn Transform>>);
 
 impl Transforms {
     pub(super) fn builtin() -> Self {
-        // order matters: resolve links, annotate, inline embeds (as `data:` URIs),
-        // fingerprint whatever refs remain, then shift them under the base path.
+        // order matters: resolve links, annotate, add responsive srcsets, inline
+        // embeds (as `data:` URIs), fingerprint whatever refs remain (the srcset
+        // URLs among them), then shift them under the base path.
         Self(vec![
             Box::new(Links),
             Box::new(Anchors),
             Box::new(Meta),
             Box::new(Verify),
             Box::new(Images),
+            Box::new(Externalize),
+            Box::new(Sources),
             Box::new(Embed),
             Box::new(Fingerprint),
             Box::new(BasePath),

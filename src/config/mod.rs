@@ -497,8 +497,48 @@ pub struct HtmlConfig {
 pub struct ImagesConfig {
     /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
     pub lazy: bool,
+    /// Externalize typst-embedded images: write each `image()` to a file under
+    /// the asset URL and reference it, instead of typst's default inline
+    /// base64 `data:` URI. Forced off while `html.embed` is on (which re-inlines
+    /// asset references), so the two never fight.
+    pub extract: bool,
     /// Per-format build-time optimization.
     pub optimize: OptimizeConfig,
+    /// Responsive width variants (`srcset`).
+    pub responsive: ResponsiveConfig,
+}
+
+impl ImagesConfig {
+    /// Whether to externalize typst-embedded images: the `extract` switch, unless
+    /// `html.embed` is inlining everything (in which case externalizing would be
+    /// undone immediately).
+    pub fn externalize(&self, html: &HtmlConfig) -> bool {
+        self.extract && !html.embed
+    }
+}
+
+/// Responsive images: pre-generate downscaled copies of each raster and let the
+/// browser pick the smallest that fits via `srcset`. Enabled by the presence of
+/// a `responsive` block. Variants stay in the source format (a jpeg source
+/// yields smaller jpegs); a width wider than the source is skipped, never
+/// upscaled.
+#[derive(Debug, Clone, Hash)]
+pub struct ResponsiveConfig {
+    /// Whether to emit width variants.
+    pub enabled: bool,
+    /// Target widths in CSS pixels. The source's own width is always the largest
+    /// candidate, so these only add smaller sizes.
+    pub widths: Vec<u32>,
+    /// JPEG re-encode quality (`1`–`100`) for downscaled variants. PNG variants
+    /// are re-encoded losslessly and ignore this.
+    pub quality: u8,
+    /// The `sizes` attribute for images the author left unsized: a media-query
+    /// list describing the image's displayed width so the browser picks the
+    /// smallest variant that fits (`(min-width: 60rem) 640px, 100vw`). `None`
+    /// emits no attribute, which the spec treats as `100vw`; set it to the
+    /// theme's real content width to stop wide viewports over-fetching. An
+    /// authored `sizes` on the image always wins.
+    pub sizes: Option<String>,
 }
 
 /// Build-time image optimization, per format. A format is enabled by naming it
@@ -519,20 +559,30 @@ pub enum ImageFormat {
     Jpeg,
 }
 
+impl ImageFormat {
+    /// The raster format a file extension names, matched leniently (`jpg`,
+    /// `jpeg`, `jpe`, `jfif` all map to JPEG). `None` when unrecognized. The
+    /// single source for classifying a raster, independent of whether any
+    /// optimization or responsive processing is enabled for it.
+    pub fn from_ext(ext: &str) -> Option<Self> {
+        match ext.to_ascii_lowercase().as_str() {
+            "png" => Some(Self::Png),
+            "jpg" | "jpeg" | "jpe" | "jfif" => Some(Self::Jpeg),
+            _ => None,
+        }
+    }
+}
+
 impl OptimizeConfig {
     /// Whether any format is enabled.
     pub fn any(&self) -> bool {
         self.png.is_some() || self.jpeg.is_some()
     }
 
-    /// The enabled format for a file extension, matched leniently (`jpg`, `jpeg`,
-    /// `jpe` all map to JPEG). `None` when unrecognized or that format is off.
+    /// The enabled format for a file extension. `None` when unrecognized or that
+    /// format's optimization is off.
     pub fn format(&self, ext: &str) -> Option<ImageFormat> {
-        let matched = match ext.to_ascii_lowercase().as_str() {
-            "png" => ImageFormat::Png,
-            "jpg" | "jpeg" | "jpe" | "jfif" => ImageFormat::Jpeg,
-            _ => return None,
-        };
+        let matched = ImageFormat::from_ext(ext)?;
         let on = match matched {
             ImageFormat::Png => self.png.is_some(),
             ImageFormat::Jpeg => self.jpeg.is_some(),

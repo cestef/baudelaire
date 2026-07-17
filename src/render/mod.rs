@@ -8,16 +8,23 @@ mod anchors;
 mod asset;
 mod base;
 mod embed;
+mod externalize;
 mod fingerprint;
 mod image;
+mod image_rule;
 mod links;
 mod meta;
 mod rewrite;
+mod sources;
+mod srcset;
 mod standard;
 mod transform;
 
 pub use asset::AssetMap;
+pub use externalize::ImageRef;
+pub use image_rule::{IMAGE_RULE, MARKER};
 pub use links::LinkMap;
+pub use srcset::SrcSets;
 
 use crate::graph::Fingerprint;
 
@@ -51,17 +58,33 @@ use crate::render::transform::{Cx, Transforms};
 pub struct Renderer {
     links: LinkMap,
     assets: AssetMap,
+    srcsets: SrcSets,
+    /// Project root, so the externalize transform resolves an image marker's
+    /// project-relative path to the source file on disk.
+    root: std::path::PathBuf,
     transforms: Transforms,
+}
+
+/// The findings of running the transform pipeline over one page: internal links
+/// with no target, and images externalized out of the DOM into files.
+pub struct Rewrite {
+    /// Raw targets of internal `.typ` links that point at a non-existent page.
+    pub broken: Vec<String>,
+    /// Images lifted out of the DOM, for the engine to copy into `dist`.
+    pub images: Vec<ImageRef>,
 }
 
 impl Renderer {
     /// Build a renderer that resolves links across `pages` and rewrites asset
-    /// references through `assets` (the processed-asset URL map). `root` is the
+    /// references through `assets` (the processed-asset URL map), adding a
+    /// `srcset` to each image with variants recorded in `srcsets`. `root` is the
     /// typst project root absolute link paths resolve against.
-    pub fn new(pages: &[Page], assets: AssetMap, root: &std::path::Path) -> Self {
+    pub fn new(pages: &[Page], assets: AssetMap, srcsets: SrcSets, root: &std::path::Path) -> Self {
         Self {
             links: LinkMap::new(pages, root),
             assets,
+            srcsets,
+            root: root.to_path_buf(),
             transforms: Transforms::builtin(),
         }
     }
@@ -76,19 +99,30 @@ impl Renderer {
         &self.assets
     }
 
+    /// Fingerprint of the responsive width-variant manifest, for the build cache.
+    pub fn srcsets(&self) -> crate::graph::Hash {
+        self.srcsets.fingerprint()
+    }
+
     /// Run the DOM transform pipeline over a page's document in place: link
     /// resolution (source-path `.typ` links to permalinks) first, then the
     /// configured transforms. Returns the raw targets of any internal `.typ`
     /// links that point at a non-existent page.
-    pub fn rewrite(&self, doc: &mut HtmlDocument, page: &Page, config: &Config) -> Vec<String> {
+    pub fn rewrite(&self, doc: &mut HtmlDocument, page: &Page, config: &Config) -> Rewrite {
         let mut cx = Cx {
             config,
             page,
             links: &self.links,
             assets: &self.assets,
+            srcsets: &self.srcsets,
+            root: &self.root,
             broken: Vec::new(),
+            images: Vec::new(),
         };
         self.transforms.apply(doc, &mut cx);
-        cx.broken
+        Rewrite {
+            broken: cx.broken,
+            images: cx.images,
+        }
     }
 }

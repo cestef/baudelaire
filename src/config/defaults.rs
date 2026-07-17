@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, RobotsConfig, S3Config, SearchConfig,
-    SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
+    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config,
+    SearchConfig, SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -71,7 +71,27 @@ impl Default for ImagesConfig {
         Self {
             // lazy loading is a universal win; optimization is opt-in: it re-encodes and costs time
             lazy: true,
+            // opt-in for now: externalizing needs the copy pass wired end to end
+            // before it can be the default.
+            extract: false,
             optimize: OptimizeConfig::default(),
+            responsive: ResponsiveConfig::default(),
+        }
+    }
+}
+
+impl Default for ResponsiveConfig {
+    fn default() -> Self {
+        // opt-in (re-encodes, costs time); the default widths cover phone,
+        // tablet, and desktop breakpoints when the block is present but silent.
+        Self {
+            enabled: false,
+            widths: vec![480, 960, 1440],
+            quality: 80,
+            // no default: the browser already assumes 100vw for w-descriptor
+            // srcsets, so emitting it would add bytes for nothing. A theme sets
+            // its real content width here.
+            sizes: None,
         }
     }
 }

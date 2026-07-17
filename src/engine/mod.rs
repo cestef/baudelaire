@@ -6,6 +6,7 @@ mod check;
 mod exif;
 mod feed;
 mod hook;
+mod image;
 mod layout;
 mod llms;
 mod process;
@@ -16,12 +17,12 @@ mod search;
 mod sitemap;
 mod standard;
 mod statics;
+mod summary;
 pub mod text;
 mod xml;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use rayon::prelude::*;
 use tracing::debug;
@@ -36,14 +37,16 @@ use crate::engine::asset::Assets;
 use crate::engine::asset::JsCtx;
 use crate::engine::check::{CheckedPage, Checks, Compiled};
 use crate::engine::hook::Hooks;
+use crate::engine::image::Images;
 use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
 use crate::engine::statics::Static;
+use crate::engine::summary::Summary;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Reads, RenderInputs, Root};
-use crate::render::{AssetMap, Renderer};
-use crate::ui::{Bytes, Count, Dur, PageStatus, Paths, Timer, Ui};
+use crate::render::{AssetMap, ImageRef, Renderer, SrcSets};
+use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
 use crate::world::{PageWorld, Project, Tracked};
 
@@ -59,67 +62,6 @@ pub struct Stats {
 /// typst will compile, and that text's fingerprint, before the costly parse
 /// into a `Source` (deferred to [`Engine::compile`], run only for stale pages).
 type Prepared = (FileId, String, Hash);
-
-/// The end-of-build summary: one tight result line covering pages (and how many
-/// were cached), assets processed, generated files, any warnings, the output
-/// directory, and elapsed time. Owns its own rendering so [`Engine::build`]
-/// only gathers the numbers.
-struct Summary<'a> {
-    pages: usize,
-    cached: usize,
-    assets: usize,
-    statics: usize,
-    generated: usize,
-    bytes: u64,
-    warnings: usize,
-    dist: &'a Path,
-    elapsed: Duration,
-}
-
-impl Summary<'_> {
-    fn report(&self, ui: &Ui) {
-        use owo_colors::OwoColorize;
-
-        // Headline: what built and how long, terse enough to stand alone at
-        // `--quiet`. Values are bold, their labels dimmed, so the eye lands on
-        // the numbers. The breakdown and output path demote to tree sub-lines.
-        ui.done(format_args!(
-            "built {} {} {}",
-            Count::pages(self.pages).styled(),
-            "in".dimmed(),
-            Dur(self.elapsed).bold(),
-        ));
-
-        // Each metric styles by kind: reused pages recede (fully dimmed, nothing
-        // happened), fresh work keeps bold numbers, warnings turn yellow.
-        let mut parts = Vec::new();
-        if self.cached > 0 {
-            parts.push(format!("{} cached", self.cached).dimmed().to_string());
-        }
-        if self.assets > 0 {
-            parts.push(Count::assets(self.assets).styled().to_string());
-        }
-        if self.statics > 0 {
-            parts.push(Count::statics(self.statics).styled().to_string());
-        }
-        if self.generated > 0 {
-            parts.push(Count::files(self.generated).styled().to_string());
-        }
-        if self.bytes > 0 {
-            parts.push(Bytes(self.bytes).styled().to_string());
-        }
-        if self.warnings > 0 {
-            parts.push(Count::warnings(self.warnings).yellow().to_string());
-        }
-
-        let mut rows = Vec::new();
-        if !parts.is_empty() {
-            rows.push(parts.join(&" · ".dimmed().to_string()));
-        }
-        rows.push(Paths(&self.dist.display().to_string()).to_string());
-        ui.tree(&rows);
-    }
-}
 
 /// The build engine. Owns shared project state and drives the pipeline.
 pub struct Engine {
@@ -184,13 +126,15 @@ impl Engine {
         let asset_count = assets.count;
         let asset_bytes = assets.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
-        let renderer = Renderer::new(&pages, assets.map, self.project.root());
-        // render-side cache inputs: asset renames, the link map, and, only
-        // when pages inline asset bytes, the embedded contents (the per-page
-        // dependency tracker can't see them, since typst never reads them).
+        let renderer = Renderer::new(&pages, assets.map, assets.srcsets, self.project.root());
+        // render-side cache inputs: asset renames, the link map, the responsive
+        // variant manifest, and, only when pages inline asset bytes, the embedded
+        // contents (the per-page dependency tracker can't see them, since typst
+        // never reads them).
         let render = RenderInputs {
             assets: renderer.assets().fingerprint(),
             links: renderer.links(),
+            srcsets: renderer.srcsets(),
             // hash the *processed* asset tree, what Embed actually inlines: a
             // bundle's bytes can change through imports outside the source
             // assets dir (../lib, node_modules), which a source-dir hash misses.
@@ -222,12 +166,12 @@ impl Engine {
         // renders on all of them).
         let sections = crate::codegen::Typst(&sections).to_string();
 
-        let mut cached: Vec<(&Page, String)> = Vec::new();
+        let mut cached: Vec<(&Page, String, Vec<ImageRef>)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
             match self.prepare(page, &sections) {
                 Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
-                    Some(html) => cached.push((page, html)),
+                    Some((html, images)) => cached.push((page, html, images)),
                     None => stale.push((page, Ok((id, text, fingerprint)))),
                 },
                 Err(e) => stale.push((page, Err(e))),
@@ -247,17 +191,27 @@ impl Engine {
         })?;
 
         for r in &rendered {
-            cache.record(r.page, r.fingerprint, &r.html, &r.deps, &r.reads);
+            cache.record(r.page, r.fingerprint, &r.html, &r.deps, &r.reads, &r.images);
         }
-        for (page, _) in &cached {
+        for (page, _, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);
         }
+        // Copy every page's externalized images into the (freshly regenerated)
+        // asset directory: fresh pages carry their refs, cache hits their stored
+        // ones, so the files are present regardless of what recompiled.
+        let images = Images::new(&self.config).copy(
+            rendered
+                .iter()
+                .flat_map(|r| &r.images)
+                .chain(cached.iter().flat_map(|(_, _, images)| images)),
+            ui,
+        )?;
         // pair every page (rendered and cache-served alike) with its final
         // HTML once: write pass, blob staging, and processors share this view.
         let outputs: Vec<(&Page, &str)> = rendered
             .iter()
             .map(|r| (r.page, r.html.as_str()))
-            .chain(cached.iter().map(|(page, html)| (*page, html.as_str())))
+            .chain(cached.iter().map(|(page, html, _)| (*page, html.as_str())))
             .collect();
         // write page HTML in parallel: independent files, no shared state.
         outputs
@@ -308,10 +262,10 @@ impl Engine {
         Summary {
             pages: total,
             cached: cached.len(),
-            assets: asset_count,
+            assets: asset_count + images.count(),
             statics: statics.count,
             generated,
-            bytes: page_bytes + asset_bytes + generated_bytes + statics.bytes,
+            bytes: page_bytes + asset_bytes + images.bytes() + generated_bytes + statics.bytes,
             warnings: ui.warnings() - warned,
             dist: &self.config.dist,
             elapsed: timer.elapsed(),
@@ -332,7 +286,12 @@ impl Engine {
             site = self.config.label(),
             "planned check"
         );
-        let renderer = Renderer::new(&pages, AssetMap::default(), self.project.root());
+        let renderer = Renderer::new(
+            &pages,
+            AssetMap::default(),
+            SrcSets::default(),
+            self.project.root(),
+        );
         let sections = crate::codegen::Typst(&self.sections(&pages)).to_string();
         let tracked = self.project.tracked();
         let roots: Vec<Root> = tracked
@@ -555,8 +514,11 @@ impl Engine {
         let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
         })?;
-        let broken = renderer.rewrite(&mut doc, page, &self.config);
-        let html = typst_html::html(&doc, &self.html_options()).map_err(|errs| {
+        let rewrite = renderer.rewrite(&mut doc, page, &self.config);
+        let options = HtmlOptions {
+            pretty: self.config.html.pretty,
+        };
+        let html = typst_html::html(&doc, &options).map_err(|errs| {
             BaudelaireErrorKind::TypstHtml(self.diagnostics(errs, page, &source, world.inner()))
         })?;
         let deps = self.project.dependencies(&world);
@@ -570,7 +532,8 @@ impl Engine {
             html,
             deps,
             reads,
-            broken,
+            broken: rewrite.broken,
+            images: rewrite.images,
             warnings,
         })
     }
@@ -595,12 +558,6 @@ impl Engine {
             },
             ui,
         )
-    }
-
-    fn html_options(&self) -> HtmlOptions {
-        HtmlOptions {
-            pretty: self.config.html.pretty,
-        }
     }
 
     /// Wrap typst source diagnostics with the compiled source so miette renders
@@ -631,5 +588,7 @@ struct Rendered<'a> {
     deps: Deps,
     reads: Reads,
     broken: Vec<String>,
+    /// Images this page externalized out of the DOM, for the copy pass.
+    images: Vec<ImageRef>,
     warnings: Vec<TypstSourceDiagnostic>,
 }

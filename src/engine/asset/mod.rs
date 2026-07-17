@@ -31,7 +31,7 @@ use crate::content::Page;
 use crate::error::Result;
 use crate::fs;
 use crate::graph::Hash;
-use crate::render::AssetMap;
+use crate::render::{AssetMap, SrcSets};
 
 #[cfg(feature = "css")]
 use css::Stylesheet;
@@ -52,6 +52,9 @@ const FINGERPRINT_LEN: usize = 16;
 #[derive(Default)]
 pub struct Processed {
     pub map: AssetMap,
+    /// Responsive width variants, keyed by source path: the render layer's
+    /// `srcset` source.
+    pub srcsets: SrcSets,
     pub count: usize,
     pub bytes: u64,
 }
@@ -160,6 +163,26 @@ trait Handler {
     /// imports. `map` holds the served names of every asset processed so far.
     fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx)
     -> Result<Option<Vec<u8>>>;
+
+    /// Responsive width variants derived from `file`, beyond the primary
+    /// [`render`](Handler::render) output: the raster handler's downscaled
+    /// copies. The pipeline writes each variant and records the `srcset`
+    /// manifest from their widths. Default: none.
+    ///
+    /// [`Handler::render`]: Handler::render
+    fn variants(&self, _file: &Path, _rel: &Path, _ctx: &Ctx) -> Result<Vec<Variant>> {
+        Ok(Vec::new())
+    }
+}
+
+/// One responsive candidate a handler derives from a source image: a target
+/// `width`, its output path `rel`, and the `bytes` to write. `bytes` is `None`
+/// for the source's own width, whose bytes are the handler's primary output; it
+/// still becomes the largest `srcset` candidate.
+pub(super) struct Variant {
+    pub rel: PathBuf,
+    pub width: u32,
+    pub bytes: Option<Vec<u8>>,
 }
 
 /// The registered handlers, in claim priority: [`Verbatim`] is last because it
@@ -335,6 +358,16 @@ impl<'a> Assets<'a> {
                 .expect("Walk yields paths under src");
             if let Some(bytes) = handler.render(&file, rel, &out.map, ctx)? {
                 self.emit(ctx, rel, &bytes, out)?;
+            }
+            // Responsive variants: write each downscaled copy (the source's own
+            // width carries no bytes, having been emitted above) and record it
+            // as a `srcset` candidate against the source's URL.
+            for variant in handler.variants(&file, rel, ctx)? {
+                if let Some(bytes) = &variant.bytes {
+                    self.emit(ctx, &variant.rel, bytes, out)?;
+                }
+                out.srcsets
+                    .record(ctx.url(rel), variant.width, ctx.url(&variant.rel));
             }
         }
         Ok(())

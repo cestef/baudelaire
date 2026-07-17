@@ -529,3 +529,47 @@ fn prefixed_shifts_only_root_absolute_paths() {
         "/guide/"
     );
 }
+
+#[test]
+fn images_extract_defaults_off_and_parses() {
+    assert!(!parse("").images.extract);
+    let cfg = parse("output {\n  images {\n    extract #true\n  }\n}\n");
+    assert!(cfg.images.extract);
+}
+
+#[test]
+fn externalize_gate_yields_to_embed() {
+    // `extract` alone externalizes; `html.embed` (which re-inlines assets)
+    // overrides it so the two never fight.
+    let extract = parse("output {\n  images { extract #true }\n}\n");
+    assert!(extract.images.externalize(&extract.html));
+    let both = parse("output {\n  html { embed #true }\n  images { extract #true }\n}\n");
+    assert!(!both.images.externalize(&both.html));
+}
+
+#[test]
+fn responsive_block_enables_with_default_widths() {
+    assert!(!parse("").images.responsive.enabled);
+    let cfg = parse("output {\n  images {\n    responsive { }\n  }\n}\n");
+    assert!(cfg.images.responsive.enabled);
+    // silent block keeps the built-in breakpoints and quality.
+    assert_eq!(cfg.images.responsive.widths, vec![480, 960, 1440]);
+    assert_eq!(cfg.images.responsive.quality, 80);
+    assert!(cfg.images.responsive.sizes.is_none());
+}
+
+#[test]
+fn responsive_widths_and_sizes_override() {
+    let cfg = parse(
+        "output {\n  images {\n    responsive {\n      widths 320 640\n      quality 70\n      sizes \"50vw\"\n    }\n  }\n}\n",
+    );
+    assert_eq!(cfg.images.responsive.widths, vec![320, 640]);
+    assert_eq!(cfg.images.responsive.quality, 70);
+    assert_eq!(cfg.images.responsive.sizes.as_deref(), Some("50vw"));
+}
+
+#[test]
+fn responsive_rejects_a_zero_width() {
+    // widths are 1..=16384; a 0 (or negative) is a hard error, not a silent drop.
+    assert!(Config::parse("output {\n  images {\n    responsive { widths 0 }\n  }\n}\n").is_err());
+}

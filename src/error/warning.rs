@@ -49,6 +49,25 @@ pub struct VcsMissing {
     pub tool: &'static str,
 }
 
+/// Two different externalized images resolved to the same served filename. Only
+/// the first is kept, so one image would be wrong; the author must rename a
+/// source or enable `output { assets { fingerprint } }` to disambiguate by
+/// content hash.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("two images map to `{name}`: `{kept}` and `{dropped}`")]
+#[diagnostic(
+    code(baudelaire::images::collision),
+    severity(warning),
+    help(
+        "rename one source, or turn on `output {{ assets {{ fingerprint }} }}` to name by content"
+    )
+)]
+pub struct ImageCollision {
+    pub name: String,
+    pub kept: PathBuf,
+    pub dropped: PathBuf,
+}
+
 /// The version-control tool ran but failed to initialize a repository.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("`{tool} init` failed, repository setup skipped{}", detail.as_deref().map(|d| format!(": {d}")).unwrap_or_default())]

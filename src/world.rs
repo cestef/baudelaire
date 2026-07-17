@@ -265,13 +265,21 @@ impl Project {
             }
         }
 
+        let mut library = Library::builder()
+            .with_features(Features::from_iter(features))
+            .with_inputs(inputs)
+            .build();
+        // Externalize typst-embedded images (base64 -> file reference) by
+        // overriding typst-html's native image rule. Off by default and skipped
+        // when `html.embed` inlines everything anyway.
+        if config.images.externalize(&config.html) {
+            library
+                .rules
+                .replace(typst::foundations::Target::Html, crate::render::IMAGE_RULE);
+        }
+
         Ok(Self {
-            lib: Arc::new(LazyHash::new(
-                Library::builder()
-                    .with_features(Features::from_iter(features))
-                    .with_inputs(inputs)
-                    .build(),
-            )),
+            lib: Arc::new(LazyHash::new(library)),
             fonts: Arc::new(LazyLock::new(Self::system_fonts)),
             files: Arc::new(FileStore::new(SystemFiles::new(
                 FsRoot::new(project_root.clone()),

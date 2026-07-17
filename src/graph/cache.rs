@@ -28,6 +28,7 @@ use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{self, Root};
 use crate::graph::{Deps, FileDigests, Hash, Reads};
+use crate::render::ImageRef;
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
@@ -56,6 +57,11 @@ struct Entry {
     meta: BTreeMap<String, Option<Hash>>,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
+    /// Images this page externalized out of the DOM. Re-copied into `dist` on a
+    /// cache hit, since the asset directory is regenerated every build. Absent
+    /// from manifests written before externalization existed, hence `default`.
+    #[serde(default)]
+    images: Vec<ImageRef>,
 }
 
 /// The serialized cache manifest: metadata only, no page markup.
@@ -80,6 +86,9 @@ struct Manifest {
 pub struct RenderInputs {
     pub assets: Hash,
     pub links: Hash,
+    /// The responsive width-variant manifest: a page's `srcset` markup changes
+    /// when its images' variants do.
+    pub srcsets: Hash,
     /// Present only when `embed` is on: a content hash of the inlined assets.
     pub embeds: Option<Hash>,
 }
@@ -168,7 +177,7 @@ impl Cache {
     /// `fingerprint` hashes the exact text typst compiles, so it validates
     /// generated pages (taxonomies, paginated indexes) too, whose synthetic
     /// sources never touch disk and so have no file to hash.
-    pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<String> {
+    pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<(String, Vec<ImageRef>)> {
         if !self.enabled || self.prev.config.as_ref() != Some(&self.config) {
             return None;
         }
@@ -200,10 +209,11 @@ impl Cache {
         if Hash::of_bytes(html.as_bytes()) != entry.blob {
             return None;
         }
+        let images = entry.images.clone();
         self.next
             .pages
             .insert(Self::key(page).to_path_buf(), entry.clone());
-        Some(html)
+        Some((html, images))
     }
 
     /// Record a freshly compiled page against its content fingerprint, its
@@ -216,6 +226,7 @@ impl Cache {
         html: &str,
         deps: &Deps,
         reads: &Reads,
+        images: &[ImageRef],
     ) {
         let meta = access::digests(&self.roots(), reads);
         let deps = deps
@@ -231,6 +242,7 @@ impl Cache {
                 deps,
                 meta,
                 blob,
+                images: images.to_vec(),
             },
         );
     }
