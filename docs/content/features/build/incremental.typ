@@ -11,10 +11,11 @@ reloads the browser almost the instant you save.
 
 ```sh
 $ baudelaire build
- built 420 pages (0 cached)      # cold: everything compiled
+ built 420 pages in 3.1s         # cold: everything compiled
 
 $ baudelaire build               # after editing one post
- built 420 pages (419 cached)    # only that post recompiled
+ built 420 pages in 40ms
+   419 cached                    # only that post recompiled
 ```
 
 == How it decides

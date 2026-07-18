@@ -35,15 +35,20 @@ unchanged site uploads nothing.
 == Credentials
 
 Baudelaire never stores credentials in config. The access key id is read from
-`AWS_ACCESS_KEY_ID`; the secret key is resolved, in order, from:
+`AWS_ACCESS_KEY_ID`; the secret key is resolved, in order of precedence, from:
 
 ```sh
-# 1. the environment variable, best for CI
-AWS_ACCESS_KEY_ID=AKIA.. AWS_SECRET_ACCESS_KEY=.. baudelaire deploy
-
-# 2. stdin, so it never appears in the process arguments
+# 1. stdin (--secret -), so it never appears in the process arguments;
+#    this wins over the environment variable when both are present
 echo "$AWS_SECRET_ACCESS_KEY" | baudelaire deploy --secret -
+
+# 2. the AWS_SECRET_ACCESS_KEY environment variable, best for CI
+AWS_ACCESS_KEY_ID=AKIA.. AWS_SECRET_ACCESS_KEY=.. baudelaire deploy
 
 # 3. an interactive prompt (hidden input) when a terminal is attached
 AWS_ACCESS_KEY_ID=AKIA.. baudelaire deploy
 ```
+
+`--secret` also accepts a literal value, which takes precedence over everything
+above, but it lands in the process arguments; prefer `--secret -` or the
+environment variable.

@@ -18,9 +18,10 @@ document.title = site.title;
 loadLogo(url("/assets/logo.png"));   // the fingerprinted name
 ```
 
-Every module has a default export. When the data is an object, each key is also
-a named export, so `import { title } from "baudelaire:site"` pulls in just that
-one.
+Every module has a default export. When the data is an object, each key that is
+a valid, non-reserved JavaScript identifier is also a named export, so
+`import { title } from "baudelaire:site"` pulls in just that one; keys that
+aren't legal identifiers stay reachable through the default export only.
 
 == The modules
 
@@ -34,15 +35,18 @@ one.
   #link("assets.typ")[asset] from script code.
 / #raw("baudelaire:pages"): the content pages, each as `{ url, title,
   collection, date, taxonomies }`.
-/ #raw("baudelaire:sections"): the collections, grouped as `{ id, pages: [...]
-  }`, what templates get as `page.sections`.
+/ #raw("baudelaire:sections"): the tree of content directories as
+  `{ id, pages: [...], children: [...] }` nodes, what templates get as
+  `page.sections`. `children` nests subdirectories, so recurse it for the whole
+  tree.
 / #raw("baudelaire:taxonomies"): each taxonomy's terms mapped to the pages that
   carry them, e.g. `{ tags: { rust: [{ url, title }], .. } }`, for tag
   filtering or a term cloud.
 / #raw("baudelaire:feed"): the most recent dated pages as `{ url, title, date
-  }`, newest first, for a "latest posts" widget.
+  }`, newest first (capped at the feed `limit`), for a "latest posts" widget.
 / #raw("baudelaire:search"): the search-palette client. See
-  #link("../discovery/search.typ")[search].
+  #link("../discovery/search.typ")[search]. Pin an index shape with
+  #raw("baudelaire:search/json") or #raw("baudelaire:search/inverted").
 
 == Client constants
 

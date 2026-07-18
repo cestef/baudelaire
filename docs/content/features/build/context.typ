@@ -14,16 +14,25 @@ a version stamp, a "last built" line, or a commit link in your footer.
 #build.version           // "0.1.0"  (Baudelaire's version)
 #build.date              // "2026-07-09"
 #build.mode              // "build" | "serve" | "check"
+#build.profile           // the active --profile name, when one is set
 #build.git.hash          // full commit SHA (slice it for a short form)
 #build.git.rev           // revision number (commit count), when available
 #build.git.dirty         // uncommitted changes?
 #build.site.title        // your configured site title
+#build.site.url          // the configured base url
+#build.site.lang         // the configured language
+#build.site.author       // the configured author
+#build.client.analytics  // any constant from your `client { }` block
 ```
 
 Inside a git repository `git.hash` and `git.dirty` are always set; `git.rev`,
 `git.branch`, `git.tag`, and `git.committed` appear only when git can supply them
-(so guard optional reads). The footer on this page is built from these values. The Typst compiler
-version comes from Typst itself, through the built-in `sys.version`.
+(so guard optional reads). `profile` is present only when a `--profile` is
+active. `site` mirrors your config (`title`, `url`, `lang`, `author`), and
+`client` mirrors the `client { }` block, the same constants the
+#link("../assets/js-modules.typ")[#raw("baudelaire:config")] module exposes to
+client JavaScript. The footer on this page is built from these values. The Typst
+compiler version comes from Typst itself, through the built-in `sys.version`.
 
 == Your own inputs
 
@@ -42,8 +51,10 @@ typst {
 #sys.inputs.environment  // "production"
 ```
 
-#callout(kind: "tip")[
-  Each value a page reads here is tracked individually, so a new commit rebuilds
-  the pages that show the commit, a new day rebuilds the pages that show the date,
-  and nothing else moves. Version stamps never go stale.
+#callout(kind: "note")[
+  Per-value tracking applies to the `sys.inputs.baudelaire.*` build facts: a new
+  commit rebuilds only the pages that read the commit, a new day only the pages
+  that show the date, so version stamps never go stale. Your own `typst.inputs`
+  values fold into the config fingerprint instead, so changing one rebuilds the
+  whole site.
 ]

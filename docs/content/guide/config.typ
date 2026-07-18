@@ -73,6 +73,20 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   #link("../features/discovery/feeds.typ")[feeds and sitemap], `robots.txt`, and `llms.txt`.
 / #raw("hooks"): Run external tools around the build. See
   #link("../features/assets/hooks.typ")[build hooks].
+/ #raw("draft"), #raw("future"): Whether to build draft or future-dated pages
+  (both off by default; the `--drafts` / `--future` flags override per build).
+/ #raw("links"): Broken-internal-link policy, error by default (the
+  `--strict-links` flag overrides).
+/ #raw("cache"): The incremental build cache. See
+  #link("../features/build/incremental.typ")[incremental builds].
+/ #raw("serve"): Dev-server options, including the `exclude` / `include` watch
+  globs. See #link("../features/assets/hooks.typ")[build hooks].
+/ #raw("typst"): Typst compiler settings, notably the `inputs` exposed to pages
+  as `sys.inputs`. See #link("../features/build/context.typ")[build metadata].
+/ #raw("deploy"): Upload target for `baudelaire deploy`. See
+  #link("deploy/overview.typ")[deploying].
+/ #raw("announce"): atproto/standard.site destination for `baudelaire announce`.
+  See #link("../features/build/announcing.typ")[announcing].
 
 #callout(kind: "note")[
   A misspelled key is a hard error with a "did you mean?" suggestion: the parser
@@ -145,7 +159,9 @@ typst {
 }
 ```
 
-An unset variable with no default expands to an empty string. Expansion happens
+An unset variable with no default is a hard error, not a silent empty string, so
+a missing secret fails the build instead of shipping a blank value; give it a
+`${VAR:-default}` fallback when an empty result is acceptable. Expansion happens
 as the config is parsed, so it works in every string: paths, hook commands,
 inputs, and more.
 

@@ -23,5 +23,14 @@ Both are ordinary templated pages. They receive the term and its entries as
 structured data and render through the `template` you bound, so they inherit the
 site layout. The chips under this article link straight into `/tags/`.
 
-Point several taxonomies at different frontmatter keys to group the same content
-more than one way.
+By default a taxonomy reads the frontmatter key that matches its own name (the
+`tags` taxonomy reads `tags`). Point it at a different key with `key=` to group
+the same content more than one way, or to name the taxonomy independently of the
+field:
+
+```kdl
+taxonomies {
+  tags index=#true template="list.typ"
+  topics key="categories" index=#true template="list.typ"
+}
+```

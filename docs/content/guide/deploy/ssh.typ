@@ -34,9 +34,11 @@ deploy {
 
 Baudelaire tries, in order: the configured `key` (supply its passphrase, if any,
 like any other secret below); the *ssh-agent* at `$SSH_AUTH_SOCK`, offering each
-identity it holds; then a *password* from `BAUDELAIRE_SSH_PASSWORD`, stdin
-(`--secret -`), or the prompt. A configured `key` is used exclusively: the agent
-and password are only tried when no key is set.
+identity it holds; then a *password* resolved, in order of precedence, from
+stdin (`--secret -`, which wins when both are present), the
+`BAUDELAIRE_SSH_PASSWORD` environment variable, then the prompt. A configured
+`key` is used exclusively: the agent and password are only tried when no key is
+set.
 
 #callout(kind: "note")[
   On a changed host key, the deploy stops with an error rather than trusting the

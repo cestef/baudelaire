@@ -21,8 +21,8 @@ hooks {
 - `after` runs once the finished site is in `dist` (deploy scripts,
   post-processors).
 
-Commands run through your shell in the project root and stream their output; a
-non-zero exit fails the build.
+Commands run through the system shell (`sh -c` on Unix, `cmd /C` on Windows) in
+the project root and stream their output; a non-zero exit fails the build.
 
 == Tailwind, staying single-binary
 

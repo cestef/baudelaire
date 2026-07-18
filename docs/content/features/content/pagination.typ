@@ -47,13 +47,18 @@ data, not HTML:
 ```typ
 #let list(page, body) = {
   for entry in page.frontmatter.entries {
-    // entry.url, entry.label, entry.date, entry.note, entry.extra
+    // entry.url, entry.label, entry.date, entry.note, entry.extra, entry.taxonomies
   }
   let nav = page.frontmatter.nav   // nav.prev, nav.next
 }
 ```
 
-Each entry carries the source page's `date` and its full `extra` frontmatter, so
-a blog index can show dates and summaries while a tag index shows counts, all
-from one template. Because it is a template, paginated indexes look like the rest
-of your site. This site's #link("/blog/")[blog] is paginated exactly this way.
+Each entry carries the source page's `date`, its full `extra` frontmatter, and
+its `taxonomies` (a dict of taxonomy name to its terms), so a blog index can show
+dates and tags while a tag index shows counts, all from one template. Because it
+is a template, paginated indexes look like the rest of your site. This site's
+#link("/blog/")[blog] is paginated exactly this way.
+
+Give a collection an `index` to mount its first listing page at a custom URL: set
+`index="/"` on a blog collection and page 1 becomes the site home, while
+`/blog/page/2/` and on keep the normal layout.

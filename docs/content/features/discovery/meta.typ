@@ -29,6 +29,8 @@ layout. Baudelaire appends them to every page instead, drawing from frontmatter
 and the site config:
 
 / Description: from a page's `description`, falling back to `summary`.
+/ Author: a `<meta name="author">` from a page's `author`, falling back to the
+  site-wide `author` in config.
 / #link("https://ogp.me")[OpenGraph]: `og:title`, `og:type` (a dated page is an
   `article`, everything else a `website`), `og:description`, `og:image`,
   `og:site_name`, `og:locale`, and, when a base `url` is set, `og:url`.

@@ -39,20 +39,27 @@ this `page.nav`.
 
 == The whole site, in order
 
-The same build view is available as `page.sections`: every content
-collection, in its sort order, as `(id, pages)` where each page is
-`(url, title)`:
+The same build view is available as `page.sections`: the tree of content
+directories, nested as they sit under `content/`. Each node is
+`(id, pages, children)` where `id` is the directory name, `pages` is its
+directly-filed pages as `(url, title)` in sort order, and `children` is its
+subdirectories as more nodes. A page under `content/guide/advanced/` lands in
+the `advanced` child of the `guide` section, so recurse `children` to walk the
+whole tree:
 
 ```typ
+#let render(sections) = {
+  for section in sections {
+    for entry in section.pages {
+      link(entry.url)[#entry.title]
+    }
+    render(section.children)   // descend into subdirectories
+  }
+}
+
 #let page(page, body) = {
   body
-  for section in page.sections {
-    if section.id == "guide" {
-      for entry in section.pages {
-        link(entry.url)[#entry.title]
-      }
-    }
-  }
+  render(page.sections)
 }
 ```
 

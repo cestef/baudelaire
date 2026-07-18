@@ -15,16 +15,20 @@ this site (press `/` or `Ctrl` `K`) is exactly that, no custom code.
 ```kdl
 output {
   search {
-    formats "json"
+    formats "inverted"
     fields "title" "body" "tags"
     minimum 2
+    stopwords "the" "a" "and"
   }
 }
 ```
 
-`fields` chooses what to index; `minimum` drops tokens shorter than N characters.
-Only the page's main content is indexed, not the site chrome, so a search for
-"install" doesn't match every page's navigation.
+`fields` chooses what to index. `minimum` drops tokens shorter than N characters
+and `stopwords` drops the listed words; both prune the `inverted` index only,
+where tokenization happens at build time, and have no effect on the flat `json`
+format, which keeps every document's full body for in-browser ranking. Only the
+page's main content is indexed, not the site chrome, so a search for "install"
+doesn't match every page's navigation.
 
 == Two index shapes
 

@@ -23,7 +23,7 @@ output {
 
 / #raw("minify"): CSS is minified with #link("https://lightningcss.dev")[Lightning CSS];
   JavaScript is minified as part of bundling.
-/ #raw("bundle"): JavaScript entry points are bundled with
+/ #raw("bundle"): JavaScript entry points (`.js`, `.mjs`, `.ts`) are bundled with
   #link("https://rolldown.rs")[rolldown], with imports resolved and dead code
   shaken out. Files whose name starts with `_` are partials: pulled in through
   imports, never emitted on their own.

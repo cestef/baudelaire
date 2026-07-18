@@ -18,6 +18,7 @@ At a glance:
   [`baudelaire serve`], [Build, serve, watch, and live-reload.],
   [`baudelaire check`], [Compile and report broken links without writing.],
   [`baudelaire new <path>`], [Scaffold a content file from config and convention.],
+  [`baudelaire deploy`], [Build, then upload the output to the configured S3 or SSH target.],
   [`baudelaire announce`], [Announce the site's metadata to atproto (standard.site).],
   [`baudelaire init [dir]`], [Scaffold a whole project.],
   [`baudelaire clean`], [Remove build output and local state.],
@@ -63,6 +64,22 @@ What it infers:
 / #raw("--draft <bool>"): Mark the page a draft.
 / #raw("-b, --bundle"): Create `<name>/index.typ` for colocated assets.
 / #raw("-e, --open"): Open the new file in `$EDITOR`.
+
+=== deploy
+
+Build the site, then upload the output to the destination in the `deploy` config
+block: an #link("deploy/s3.typ")[S3-compatible bucket] or an
+#link("deploy/ssh.typ")[SSH/SFTP host]. It uploads the built files; it does not
+announce metadata (see #link("deploy/overview.typ")[Deploying] for the full
+picture). Only changed files are sent, and stale remote files are pruned unless
+`delete` is off. Errors if no `deploy` block is configured.
+
+/ #raw("--secret <value>"): The destination secret (S3 secret key or SSH
+  password/passphrase). `-` reads it from stdin; prefer that or the environment
+  variable over a literal flag.
+/ #raw("-y, --yes"): Skip the confirmation prompt.
+/ #raw("--dry-run"): Report what a real deploy would upload and remove, without
+  writing anything to the destination.
 
 === announce
 
