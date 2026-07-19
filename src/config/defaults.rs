@@ -37,7 +37,9 @@ impl Default for Config {
             search: SearchConfig::default(),
             inputs: Default::default(),
             client: Default::default(),
-            features: vec!["html".into()],
+            // HTML is forced on in `world.rs`; this list is purely additive
+            // extras, empty by default.
+            features: Vec::new(),
             collections: Default::default(),
             taxonomies: Default::default(),
             html: HtmlConfig::default(),

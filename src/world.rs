@@ -250,7 +250,11 @@ impl Project {
             Value::from(&codegen::Value::from(&context)),
         );
 
-        let mut features = Vec::new();
+        // HTML export is non-negotiable: Baudelaire only ever emits an
+        // `HtmlDocument`, so `Feature::Html` is always on and never something the
+        // user must remember. `features` in config is then purely additive for
+        // extras (`a11y-extras`, ...) and can never accidentally drop HTML.
+        let mut features = vec![Feature::Html];
         for name in &config.features {
             match FEATURES.iter().find(|(n, _)| n == name) {
                 Some((_, feature)) => features.push(*feature),

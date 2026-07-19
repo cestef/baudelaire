@@ -10,10 +10,6 @@ paths {
   templates "templates"
 }
 
-typst {
-  features "+html"
-}
-
 collections {
   posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ"
 }

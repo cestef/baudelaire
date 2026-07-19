@@ -43,7 +43,11 @@ the browser. Also accepts the #link(<build-flags>)[build flags].
 === check
 
 Compile every page and report broken internal links without writing output: a
-fast CI gate. Accepts the #link(<build-flags>)[build flags].
+fast CI gate. "Internal links" means links written against a `.typ` source path
+(the typst-native `#link("/content/post.typ")` cross-reference that resolves to
+the target's permalink); a link to an already-resolved URL like `/posts/hello/`
+is left untouched and never checked, so a permalink can change without breaking
+`.typ` references to it. Accepts the #link(<build-flags>)[build flags].
 
 === new \<path>
 
@@ -61,7 +65,9 @@ What it infers:
 
 / #raw("--title <text>"): Override the inferred title.
 / #raw("--date YYYY-MM-DD"): Set the date explicitly.
-/ #raw("--draft <bool>"): Mark the page a draft.
+/ #raw("--draft <bool>"): Mark the page a draft. Defaults to `true`, so a new
+  page stays out of a normal build until you finish it; pass `--draft false` (or
+  drop the `draft` frontmatter) to publish it, or build with `--drafts`.
 / #raw("-b, --bundle"): Create `<name>/index.typ` for colocated assets.
 / #raw("-e, --open"): Open the new file in `$EDITOR`.
 
@@ -136,5 +142,5 @@ Config overrides accepted by the commands that build: `build`, `serve`, and
 / #raw("--base-url <url>"): Override the site URL, useful for preview deploys.
 / #raw("--drafts"), #raw("--future"): Include draft or future-dated pages.
 / #raw("--no-cache"): Ignore the cache and rebuild everything.
-/ #raw("--strict-links <bool>"): Treat broken internal links as errors
+/ #raw("--strict-links <bool>"): Treat broken internal `.typ` links as errors
   (default) or warnings.

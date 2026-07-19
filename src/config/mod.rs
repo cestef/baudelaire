@@ -73,7 +73,9 @@ pub struct Config {
     /// Build-time constants exposed to client JS through the `baudelaire:config`
     /// virtual module: arbitrary scalars keyed by name.
     pub client: Vec<(String, crate::codegen::Value)>,
-    /// Typst features to enable (e.g. `html`).
+    /// Extra experimental Typst features to enable (e.g. `a11y-extras`). `html`
+    /// is always forced on in `world.rs`, so this list is purely additive and
+    /// never needs to include it.
     pub features: Vec<String>,
     /// Collection overrides keyed by id.
     pub collections: Vec<(String, CollectionConfig)>,

@@ -79,10 +79,13 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   `--strict-links` flag overrides).
 / #raw("cache"): The incremental build cache. See
   #link("../features/build/incremental.typ")[incremental builds].
-/ #raw("serve"): Dev-server options, including the `exclude` / `include` watch
-  globs. See #link("../features/assets/hooks.typ")[build hooks].
-/ #raw("typst"): Typst compiler settings, notably the `inputs` exposed to pages
-  as `sys.inputs`. See #link("../features/build/context.typ")[build metadata].
+/ #raw("serve"): Dev-server options: `port`, `bind` address, `open` (launch a
+  browser), `watch` (rebuild on change, on by default), and the `exclude` /
+  `include` watch globs. See #link("../features/assets/hooks.typ")[build hooks].
+/ #raw("typst"): Typst compiler settings: `inputs` exposes values to pages as
+  `sys.inputs`, and `features` opts into extra experimental Typst features (e.g.
+  `features "+a11y-extras"`). HTML export is always on, so you never list it. See
+  #link("../features/build/context.typ")[build metadata].
 / #raw("deploy"): Upload target for `baudelaire deploy`. See
   #link("deploy/overview.typ")[deploying].
 / #raw("announce"): atproto/standard.site destination for `baudelaire announce`.

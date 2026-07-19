@@ -4,6 +4,33 @@
   tags: ("feature", "content"),
 )
 
+== Defining a collection
+
+A `collections` entry groups pages that share sorting, permalinks, and a default
+template. The node name is the collection id; a leading string argument is a glob
+selecting its members, and the keys tune the rest:
+
+```kdl
+collections {
+  posts "posts/**/*.typ" sort="date" reverse=#true \
+    permalink="/posts/{slug}/" template="post.typ"
+}
+```
+
+/ glob (the positional string): which files belong to the collection. Omit it and
+  the collection is the top-level directory of the same name under `content/`.
+/ #raw("sort"), #raw("reverse"): order members by `date`, `order`, `title`, or
+  `slug`, optionally reversed. This is the order the prev/next pager and listings
+  follow.
+/ #raw("permalink"): the URL template for each member. Tokens `{collection}`,
+  `{slug}`, `{year}`, `{month}`, `{day}`, and `{order}` are filled per page;
+  the default is `/{collection}/{slug}/`. A typo'd template is a spanned config
+  error, not a silent fallback.
+/ #raw("template"): the default layout for members that don't set their own
+  `template` in frontmatter.
+
+== Listings
+
 Give a collection a `list` template and Baudelaire generates an index page at
 `/{collection}/` listing its members:
 

@@ -51,6 +51,16 @@ typst {
 #sys.inputs.environment  // "production"
 ```
 
+The same `typst` block also carries `features`, opting into extra experimental
+Typst features. HTML export is always enabled for you, so this list is purely
+additive, you only name the extras you want:
+
+```kdl
+typst {
+  features "+a11y-extras"
+}
+```
+
 #callout(kind: "note")[
   Per-value tracking applies to the `sys.inputs.baudelaire.*` build facts: a new
   commit rebuilds only the pages that read the commit, a new day only the pages
