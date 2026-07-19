@@ -90,7 +90,10 @@ fn unknown_language_is_rejected() {
         "#let frontmatter = (title: \"Bad\", lang: \"xx\",)\n",
     );
     let out = site.run(&["build"]);
-    assert!(!out.status.success(), "build should reject an unknown language");
+    assert!(
+        !out.status.success(),
+        "build should reject an unknown language"
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("unknown language"), "{stderr}");
 }
@@ -224,7 +227,10 @@ fn template_receives_lang_translations_and_strings() {
          T=#page.translations.len() #body]\n",
     );
     for f in ["content/index.typ", "content/index.fr.typ"] {
-        site.write(f, "#let frontmatter = (title: \"H\", template: \"layout.typ\")\nx\n");
+        site.write(
+            f,
+            "#let frontmatter = (title: \"H\", template: \"layout.typ\")\nx\n",
+        );
     }
     site.build();
     assert!(site.output("index.html").contains("L=en"));
@@ -243,7 +249,10 @@ fn i18n_module_inlines_languages_and_strings() {
         output { assets { bundle #true } }
         "#,
     );
-    site.write("content/index.typ", "#let frontmatter = (title: \"H\",)\nx\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nx\n",
+    );
     site.write(
         "assets/main.js",
         "import { languages, strings } from \"baudelaire:i18n\";\nglobalThis.x = { languages, strings };\n",

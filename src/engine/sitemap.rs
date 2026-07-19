@@ -46,7 +46,11 @@ impl SiteMap {
             let href = base.join(url);
             xml.empty(
                 "xhtml:link",
-                &[("rel", "alternate"), ("hreflang", hreflang), ("href", &href)],
+                &[
+                    ("rel", "alternate"),
+                    ("hreflang", hreflang),
+                    ("href", &href),
+                ],
             );
         };
         for t in &page.translations {

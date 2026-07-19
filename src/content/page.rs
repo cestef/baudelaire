@@ -151,10 +151,7 @@ impl Page {
                 Err(ContentError::unknown_language(path, lang, &config.langs()).into())
             }
             Some(lang) => Ok(lang.clone()),
-            None => Ok(stem
-                .lang()
-                .unwrap_or(&config.lang)
-                .to_owned()),
+            None => Ok(stem.lang().unwrap_or(&config.lang).to_owned()),
         }
     }
 

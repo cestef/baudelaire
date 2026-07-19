@@ -5,8 +5,8 @@ use crate::config::dispatch::{Attrs, Block, Keys};
 use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
-    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    LanguageConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig,
+    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig,
+    LinkConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig,
     S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
     TaxonomyConfig, VerifyConfig,
 };

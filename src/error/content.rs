@@ -170,7 +170,10 @@ impl ContentError {
         Self::UnknownLanguage {
             path: path.display().to_string(),
             lang: lang.to_owned(),
-            help: format!("declare it under `languages`, or use one of: {}", known.join(", ")),
+            help: format!(
+                "declare it under `languages`, or use one of: {}",
+                known.join(", ")
+            ),
         }
     }
 

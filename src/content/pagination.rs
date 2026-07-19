@@ -92,7 +92,10 @@ impl<'a> Section<'a> {
             chunks.push(&[]);
         }
         for (index, chunk) in chunks.iter().enumerate() {
-            out.push(self.page(index + 1, chunk, chunks.len()).into_page(self.config));
+            out.push(
+                self.page(index + 1, chunk, chunks.len())
+                    .into_page(self.config),
+            );
         }
     }
 

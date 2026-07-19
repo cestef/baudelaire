@@ -339,7 +339,9 @@ pub enum ConfigErrorKind {
     #[error("feature `{name}` is required and cannot be disabled")]
     #[diagnostic(
         code(baudelaire::config::feature_removal),
-        help("HTML export underpins the whole build; other features may be turned off with `-name`")
+        help(
+            "HTML export underpins the whole build; other features may be turned off with `-name`"
+        )
     )]
     FeatureRemoval { name: String },
 
