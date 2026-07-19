@@ -22,15 +22,20 @@ impl Generate for Pagination {
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for collection in ctx.collections {
-            if let Some(section) = Section::of(collection, ctx.config) {
-                section.build(ctx.config, &mut out);
+            // One index per language: members are partitioned by language, so a
+            // collection's `/blog/` and `/fr/blog/` list only their own pages.
+            for lang in ctx.config.langs() {
+                if let Some(section) = Section::of(collection, ctx.config, lang) {
+                    section.build(&mut out);
+                }
             }
         }
         Ok(out)
     }
 }
 
-/// One collection's build-eligible members, chunked into pages.
+/// One collection's build-eligible members in a single language, chunked into
+/// pages.
 struct Section<'a> {
     id: &'a str,
     template: Option<String>,
@@ -40,13 +45,16 @@ struct Section<'a> {
     prefix: &'a str,
     members: Vec<&'a Page>,
     per_page: usize,
+    /// The language this index covers; localizes every URL.
+    lang: &'a str,
+    config: &'a Config,
 }
 
 impl<'a> Section<'a> {
     /// The index section for a collection, or `None` when it configures no
     /// index. `paginate` sets the page size; a `list` template without one puts
     /// every member on a single page (`per_page` = the whole membership).
-    fn of(collection: &'a Collection, config: &Config) -> Option<Self> {
+    fn of(collection: &'a Collection, config: &'a Config, lang: &'a str) -> Option<Self> {
         let paginate = collection.config.paginate.filter(|n| *n > 0);
         if paginate.is_none() && collection.config.list.is_none() {
             return None;
@@ -54,7 +62,7 @@ impl<'a> Section<'a> {
         let members: Vec<&Page> = collection
             .pages
             .iter()
-            .filter(|p| p.eligible(config))
+            .filter(|p| p.eligible(config) && p.lang == lang)
             .collect();
         // A single un-paginated page holds every member; guard against a zero
         // chunk size for an empty collection (`chunks(0)` panics).
@@ -66,10 +74,17 @@ impl<'a> Section<'a> {
             prefix: &collection.config.prefix,
             members,
             per_page,
+            lang,
+            config,
         })
     }
 
-    fn build(&self, config: &Config, out: &mut Vec<Page>) {
+    fn build(&self, out: &mut Vec<Page>) {
+        // Only the default language gets an index for an empty collection: a
+        // memberless language simply has no listing rather than an empty /fr/.
+        if self.members.is_empty() && self.lang != self.config.lang {
+            return;
+        }
         let mut chunks: Vec<&[&Page]> = self.members.chunks(self.per_page).collect();
         // A memberless collection still gets its page-1 index: nav links point
         // at it, and an empty listing beats a 404.
@@ -77,7 +92,7 @@ impl<'a> Section<'a> {
             chunks.push(&[]);
         }
         for (index, chunk) in chunks.iter().enumerate() {
-            out.push(self.page(index + 1, chunk, chunks.len()).into_page(config));
+            out.push(self.page(index + 1, chunk, chunks.len()).into_page(self.config));
         }
     }
 
@@ -95,13 +110,14 @@ impl<'a> Section<'a> {
                 next: (number < total).then(|| self.url(number + 1)),
             })
             .template(self.template.clone())
+            .lang(self.lang)
     }
 
     /// Page 1 lives at the collection root (or the configured `index`, e.g. `/`
     /// for a blog home); later pages under `{prefix}/{n}/`, or just `{n}/` when
-    /// `prefix` is empty.
+    /// `prefix` is empty. Every URL is localized to the section's language.
     fn url(&self, number: usize) -> String {
-        match number {
+        let raw = match number {
             1 => self
                 .index
                 .clone()
@@ -115,7 +131,8 @@ impl<'a> Section<'a> {
                 };
                 Permalink::join(segments)
             }
-        }
+        };
+        self.config.localize(self.lang, &raw)
     }
 
     /// The internal page slug (its [`PageId`] within the section, not a URL). A

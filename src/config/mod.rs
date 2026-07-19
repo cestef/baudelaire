@@ -81,6 +81,13 @@ pub struct Config {
     pub collections: Vec<(String, CollectionConfig)>,
     /// Taxonomy definitions.
     pub taxonomies: Vec<(String, TaxonomyConfig)>,
+    /// Declared languages keyed by code, for a multi-language site. Empty means
+    /// a single-language site (only `lang`); a non-empty block turns on i18n:
+    /// filename suffixes (`post.fr.typ`) are recognized, non-default languages
+    /// get a `/{code}` URL prefix, and each language can carry a display name,
+    /// text direction, and a UI-string table. The default `lang` is always a
+    /// known language whether or not it appears here.
+    pub languages: Vec<(String, LanguageConfig)>,
     /// HTML output options.
     pub html: HtmlConfig,
     /// Image handling (lazy loading, optimization).
@@ -139,6 +146,39 @@ impl Config {
     /// Human-readable site label for CLI output.
     pub fn label(&self) -> &str {
         self.site.as_deref().unwrap_or("unnamed")
+    }
+
+    /// The site title in a given language: the language's `site` override if it
+    /// has one, else the site-wide title. Used for per-language feed titles.
+    pub fn title(&self, code: &str) -> &str {
+        self.language(code)
+            .and_then(|lang| lang.site.as_deref())
+            .unwrap_or_else(|| self.label())
+    }
+
+    /// A language's display name, if declared (e.g. `Français`), else `None`.
+    pub fn name(&self, code: &str) -> Option<&str> {
+        self.language(code).and_then(|lang| lang.name.as_deref())
+    }
+
+    /// The writing direction (`rtl`) declared for a language, if any; `None`
+    /// means the default `ltr`.
+    pub fn dir(&self, code: &str) -> Option<&str> {
+        self.language(code).and_then(|lang| lang.dir.as_deref())
+    }
+
+    /// A language's UI-string table (empty when it declares none), exposed to
+    /// templates as `page.strings` and to client JS via `baudelaire:i18n`.
+    pub fn strings(&self, code: &str) -> &[(String, crate::codegen::Value)] {
+        self.language(code).map_or(&[], |lang| &lang.strings)
+    }
+
+    /// The declared config for a language code, if any.
+    fn language(&self, code: &str) -> Option<&LanguageConfig> {
+        self.languages
+            .iter()
+            .find(|(id, _)| id == code)
+            .map(|(_, lang)| lang)
     }
 
     /// The configured base URL, normalized for joining. `None` when `url` is
@@ -235,6 +275,50 @@ impl Config {
             self.dist.join(format!("{trimmed}.html"))
         }
     }
+
+    /// Whether the site declares languages beyond the default.
+    pub fn multilingual(&self) -> bool {
+        !self.languages.is_empty()
+    }
+
+    /// Whether `code` is a language the site builds: a declared one, or the
+    /// default `lang` (always known, listed or not).
+    pub fn knows(&self, code: &str) -> bool {
+        code == self.lang || self.languages.iter().any(|(id, _)| id == code)
+    }
+
+    /// Every language the site builds, default first then declared ones in
+    /// config order (default deduplicated). A single-language site yields just
+    /// the default. The single source for iterating languages.
+    pub fn langs(&self) -> Vec<&str> {
+        let declared = self.languages.iter().map(|(id, _)| id.as_str());
+        std::iter::once(self.lang.as_str())
+            .chain(declared.filter(|id| *id != self.lang))
+            .collect()
+    }
+
+    /// A root-relative `path` under `code`: prefixed with `/{code}` for a
+    /// non-default language, unchanged for the default (which keeps clean root
+    /// URLs). The single localization rule for permalinks and every generator.
+    pub fn localize(&self, code: &str, path: &str) -> String {
+        match code == self.lang {
+            true => path.to_owned(),
+            false if path == "/" => format!("/{code}/"),
+            false => format!("/{code}{path}"),
+        }
+    }
+
+    /// The language path segment for `code`: empty for the default, the code
+    /// otherwise. It prefixes a generated page's identity (its
+    /// [`crate::content::PageId`] and virtual source path) and names a
+    /// language's output subdirectory (feeds, sitemaps), so both mirror the
+    /// localized URL. `id` is an optional trailing segment. Derived from
+    /// [`Config::localize`], its single source.
+    pub fn scope(&self, code: &str, id: &str) -> String {
+        self.localize(code, &format!("/{id}"))
+            .trim_matches('/')
+            .to_owned()
+    }
 }
 
 /// The site base URL with its trailing slash normalized away: the single
@@ -310,6 +394,7 @@ impl std::hash::Hash for Config {
             features,
             collections,
             taxonomies,
+            languages,
             html,
             images,
             asset,
@@ -339,9 +424,14 @@ impl std::hash::Hash for Config {
         (asset, cache, hooks, announce, deploy, profile).hash(state);
         // `serde_json::Value` isn't `Hash`; its serialization is a faithful,
         // deterministic stand-in for the cache fingerprint.
-        serde_json::to_string(client)
-            .unwrap_or_default()
-            .hash(state);
+        // `client` and `languages` both carry `codegen::Value` (not `Hash`); their
+        // deterministic serialization is a faithful stand-in for the fingerprint.
+        for json in [
+            serde_json::to_string(client),
+            serde_json::to_string(languages),
+        ] {
+            json.unwrap_or_default().hash(state);
+        }
     }
 }
 
@@ -369,6 +459,23 @@ pub struct CollectionConfig {
     /// Defaults to `page` (`/blog/page/2/`); an empty string drops the segment
     /// entirely (`/blog/2/`).
     pub prefix: String,
+}
+
+/// One declared language in a multi-language site.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct LanguageConfig {
+    /// Display name for a language switcher, e.g. `Français`. Falls back to the
+    /// code when unset.
+    pub name: Option<String>,
+    /// Writing direction, `ltr` (default) or `rtl`, surfaced as `<html dir>`.
+    pub dir: Option<String>,
+    /// Per-language site title override (else the site-wide `site`).
+    pub site: Option<String>,
+    /// Per-language author override (else the site-wide `author`).
+    pub author: Option<String>,
+    /// UI-string table for this language, exposed to templates as
+    /// `page.strings` and to client JS via `baudelaire:i18n`.
+    pub strings: Vec<(String, crate::codegen::Value)>,
 }
 
 /// Taxonomy definition.

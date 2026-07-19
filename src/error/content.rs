@@ -61,6 +61,15 @@ pub enum ContentError {
     )]
     EmptySlug { name: String },
 
+    #[error("{path} declares unknown language `{lang}`")]
+    #[diagnostic(code(baudelaire::content::unknown_language))]
+    UnknownLanguage {
+        path: String,
+        lang: String,
+        #[help]
+        help: String,
+    },
+
     #[error("`{first}` and `{second}` both write `{target}`")]
     #[diagnostic(
         code(baudelaire::content::collision),
@@ -153,6 +162,15 @@ impl ContentError {
     pub fn empty_slug(name: &str) -> Self {
         Self::EmptySlug {
             name: name.to_owned(),
+        }
+    }
+
+    /// A page's resolved language is not among the declared `languages`.
+    pub fn unknown_language(path: &std::path::Path, lang: &str, known: &[&str]) -> Self {
+        Self::UnknownLanguage {
+            path: path.display().to_string(),
+            lang: lang.to_owned(),
+            help: format!("declare it under `languages`, or use one of: {}", known.join(", ")),
         }
     }
 

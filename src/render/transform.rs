@@ -20,6 +20,7 @@ use super::embed::Embed;
 use super::externalize::Externalize;
 use super::fingerprint::Fingerprint;
 use super::image::Images;
+use super::lang::Lang;
 use super::meta::Meta;
 use super::rewrite::Links;
 use super::sources::Sources;
@@ -53,6 +54,8 @@ pub(super) trait ElementExt {
     /// This element's `<head>` child, if it has one: the one place a transform
     /// appends head elements, so meta and verification tags find it the same way.
     fn head(&mut self) -> Option<&mut HtmlElement>;
+    /// Set `key` to `value`, replacing an existing attribute or appending one.
+    fn set(&mut self, key: HtmlAttr, value: &str);
     /// Rewrite each attribute among `keys` that is present: `f` returns the
     /// replacement value, or `None` to leave it as authored.
     fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
@@ -84,6 +87,13 @@ impl ElementExt for HtmlElement {
                 HtmlNode::Element(el) if el.tag == tag::head => Some(el),
                 _ => None,
             })
+    }
+
+    fn set(&mut self, key: HtmlAttr, value: &str) {
+        match self.attrs.get_mut(key) {
+            Some(existing) => *existing = value.into(),
+            None => self.attrs.push(key, value),
+        }
     }
 
     fn rewrite(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
@@ -180,6 +190,7 @@ impl Transforms {
         // URLs among them), then shift them under the base path.
         Self(vec![
             Box::new(Links),
+            Box::new(Lang),
             Box::new(Anchors),
             Box::new(Meta),
             Box::new(Verify),

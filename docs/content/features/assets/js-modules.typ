@@ -47,6 +47,9 @@ aren't legal identifiers stay reachable through the default export only.
 / #raw("baudelaire:search"): the search-palette client. See
   #link("../discovery/search.typ")[search]. Pin an index shape with
   #raw("baudelaire:search/json") or #raw("baudelaire:search/inverted").
+/ #raw("baudelaire:i18n"): the declared `languages` (`{ code, name }`) and their
+  UI-string tables keyed by code, for a client-side language switcher. See
+  #link("../content/i18n.typ")[internationalization].
 
 == Client constants
 

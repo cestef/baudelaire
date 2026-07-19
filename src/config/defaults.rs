@@ -42,6 +42,7 @@ impl Default for Config {
             features: Vec::new(),
             collections: Default::default(),
             taxonomies: Default::default(),
+            languages: Default::default(),
             html: HtmlConfig::default(),
             images: ImagesConfig::default(),
             asset: AssetConfig::default(),

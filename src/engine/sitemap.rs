@@ -17,10 +17,12 @@ impl SiteMap {
     /// The output file name; robots.txt references it too.
     pub(super) const FILE: &'static str = "sitemap.xml";
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    const XHTML: &'static str = "http://www.w3.org/1999/xhtml";
 
-    fn render(base: &BaseUrl, pages: &[Page]) -> String {
+    fn render(base: &BaseUrl, pages: &[Page], config: &Config) -> String {
         let mut xml = Xml::document();
-        xml.nest("urlset", &[("xmlns", Self::XMLNS)], |xml| {
+        let ns: &[(&str, &str)] = &[("xmlns", Self::XMLNS), ("xmlns:xhtml", Self::XHTML)];
+        xml.nest("urlset", ns, |xml| {
             for page in pages {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
@@ -29,10 +31,30 @@ impl SiteMap {
                         // exactly the W3C format `lastmod` wants.
                         xml.leaf("lastmod", &date.to_string());
                     }
+                    Self::alternates(xml, base, page, config);
                 });
             }
         });
         xml.finish()
+    }
+
+    /// The `hreflang` alternates for a translated page: one per edition plus an
+    /// `x-default` pointing at the default language's. A single-language page
+    /// has no translations and emits none.
+    fn alternates(xml: &mut Xml, base: &BaseUrl, page: &Page, config: &Config) {
+        let link = |xml: &mut Xml, hreflang: &str, url: &str| {
+            let href = base.join(url);
+            xml.empty(
+                "xhtml:link",
+                &[("rel", "alternate"), ("hreflang", hreflang), ("href", &href)],
+            );
+        };
+        for t in &page.translations {
+            link(xml, &t.lang, &t.url);
+        }
+        if let Some(default) = page.translations.iter().find(|t| t.lang == config.lang) {
+            link(xml, "x-default", &default.url);
+        }
     }
 }
 
@@ -47,7 +69,7 @@ impl Processor for SiteMap {
         };
         out.file(
             &site.config.dist.join(Self::FILE),
-            &Self::render(&base, site.pages),
+            &Self::render(&base, site.pages, site.config),
         )?;
         out.note(format_args!("wrote {}", Self::FILE));
         Ok(())

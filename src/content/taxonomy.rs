@@ -17,19 +17,24 @@ pub struct Taxonomy;
 
 impl Generate for Taxonomy {
     /// Generate index + term pages for every configured taxonomy that requests
-    /// an index, drawing terms from the planned pages' frontmatter.
+    /// an index, drawing terms from the planned pages' frontmatter. Terms are
+    /// grouped per language: a French and an English `rust` tag are separate
+    /// `/fr/tags/rust/` and `/tags/rust/` pages, never a merged one.
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for (name, cfg) in &ctx.config.taxonomies {
-            if cfg.index {
-                Group::new(name, cfg, ctx.pages).build(ctx.config, &mut out)?;
+            if !cfg.index {
+                continue;
+            }
+            for lang in ctx.config.langs() {
+                Group::new(name, cfg, ctx.pages, lang, ctx.config).build(&mut out)?;
             }
         }
         Ok(out)
     }
 }
 
-/// One taxonomy's terms and the pages under each.
+/// One taxonomy's terms and the pages under each, within a single language.
 struct Group<'a> {
     /// Taxonomy name, e.g. `tags`; also its URL prefix and section id.
     name: &'a str,
@@ -37,12 +42,21 @@ struct Group<'a> {
     template: Option<String>,
     /// term -> member pages, sorted by term then title.
     terms: BTreeMap<String, Vec<&'a Page>>,
+    /// The language whose pages this group indexes; localizes every URL.
+    lang: &'a str,
+    config: &'a Config,
 }
 
 impl<'a> Group<'a> {
-    fn new(name: &'a str, cfg: &TaxonomyConfig, pages: &'a [Page]) -> Self {
+    fn new(
+        name: &'a str,
+        cfg: &TaxonomyConfig,
+        pages: &'a [Page],
+        lang: &'a str,
+        config: &'a Config,
+    ) -> Self {
         let mut terms: BTreeMap<String, Vec<&Page>> = BTreeMap::new();
-        for page in pages {
+        for page in pages.iter().filter(|p| p.lang == lang) {
             if let Some(values) = page.frontmatter.taxonomies.get(&cfg.key) {
                 for term in values {
                     terms.entry(term.clone()).or_default().push(page);
@@ -56,25 +70,34 @@ impl<'a> Group<'a> {
             name,
             template: cfg.template.clone(),
             terms,
+            lang,
+            config,
         }
+    }
+
+    /// A localized URL from already-slugged segments.
+    fn url(&self, segments: &[&str]) -> String {
+        self.config.localize(self.lang, &Permalink::join(segments))
     }
 
     /// Emit the index listing and one listing per term. Resolves every term's
     /// slug up front so an empty slug or a collision (`C++`/`C--` -> `c`) is a
     /// precise error, not a silent `/tags//` or overwrite.
-    fn build(&self, config: &Config, out: &mut Vec<Page>) -> Result<()> {
+    fn build(&self, out: &mut Vec<Page>) -> Result<()> {
         if self.terms.is_empty() {
             return Ok(());
         }
         let resolved = self.resolve()?;
-        out.push(self.index(&resolved).into_page(config));
+        out.push(self.index(&resolved).into_page(self.config));
         for term in &resolved {
-            out.push(self.term(term).into_page(config));
+            out.push(self.term(term).into_page(self.config));
         }
         Ok(())
     }
 
-    /// Each term paired with its URL, checked for empty slugs and collisions.
+    /// Each term paired with its localized URL, checked for empty slugs and
+    /// collisions (per language, so identical terms across languages never
+    /// clash).
     fn resolve(&self) -> Result<Vec<Term<'_>>> {
         let mut seen: BTreeMap<String, &str> = BTreeMap::new();
         let mut resolved = Vec::with_capacity(self.terms.len());
@@ -84,7 +107,7 @@ impl<'a> Group<'a> {
                 return Err(ContentError::term_collision(self.name, &slug, prev, name).into());
             }
             resolved.push(Term {
-                url: Permalink::join(&[self.name, &slug]),
+                url: self.url(&[self.name, &slug]),
                 name,
                 slug,
                 members: members.as_slice(),
@@ -102,11 +125,12 @@ impl<'a> Group<'a> {
         Listing::new(
             self.name,
             "index",
-            Permalink::join(&[self.name]),
+            self.url(&[self.name]),
             Titlecase(self.name).to_string(),
         )
         .items(items)
         .template(self.template.clone())
+        .lang(self.lang)
     }
 
     /// The `/{name}/{term}/` listing of the pages under `term`.
@@ -116,6 +140,7 @@ impl<'a> Group<'a> {
         Listing::new(self.name, term.slug.clone(), term.url.clone(), title)
             .items(items)
             .template(self.template.clone())
+            .lang(self.lang)
     }
 }
 

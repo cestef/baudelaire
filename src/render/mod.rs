@@ -12,6 +12,7 @@ mod externalize;
 mod fingerprint;
 mod image;
 mod image_rule;
+mod lang;
 mod links;
 mod meta;
 mod rewrite;

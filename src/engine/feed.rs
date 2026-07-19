@@ -46,14 +46,23 @@ impl Processor for Feeds {
         let Some(base) = site.base("feeds", out)? else {
             return Ok(());
         };
-        let dated = Page::recent(site.pages, site.config.feed.limit);
-        if dated.is_empty() {
-            return Ok(());
-        }
-        let feed = Feed::new(&base, site.config.label(), &dated);
-        for kind in &site.config.feed.formats {
-            out.file(&site.config.dist.join(kind.file()), &feed.render(*kind)?)?;
-            out.note(format_args!("wrote {}", kind.file()));
+        // One feed set per language: the default at `/rss.xml`, others under
+        // `/{code}/rss.xml`, each listing only its language's recent posts.
+        for lang in site.config.langs() {
+            let dated = Page::recent(site.pages, lang, site.config.feed.limit);
+            if dated.is_empty() {
+                continue;
+            }
+            let feed = Feed::new(&base, site.config.title(lang), &dated);
+            for kind in &site.config.feed.formats {
+                let path = site
+                    .config
+                    .dist
+                    .join(site.config.scope(lang, ""))
+                    .join(kind.file());
+                out.file(&path, &feed.render(*kind)?)?;
+                out.note(format_args!("wrote {}", path.display()));
+            }
         }
         Ok(())
     }

@@ -90,7 +90,7 @@ impl Card<'_> {
         if let Some(site) = &self.config.site {
             tags.push(Self::property("og:site_name", site));
         }
-        tags.push(Self::property("og:locale", &self.config.lang));
+        tags.push(Self::property("og:locale", &self.page.lang));
         if let Some(image) = &image {
             tags.push(Self::property("og:image", image));
         }
@@ -117,7 +117,29 @@ impl Card<'_> {
         if let Some(url) = &canonical {
             tags.push(Self::canonical(url));
         }
+        self.alternates(&mut tags);
         tags
+    }
+
+    /// `<link rel="alternate" hreflang="..">` for each of a translated page's
+    /// editions plus an `x-default` to the default language's, so crawlers pair
+    /// the translations. Absolute URLs, so gated on a configured base `url`; a
+    /// single-language page has no translations and adds none.
+    fn alternates(&self, tags: &mut Vec<HtmlNode>) {
+        let Some(base) = self.config.base() else {
+            return;
+        };
+        for t in &self.page.translations {
+            tags.push(Self::alternate(&t.lang, &base.join(&t.url)));
+        }
+        if let Some(default) = self
+            .page
+            .translations
+            .iter()
+            .find(|t| t.lang == self.config.lang)
+        {
+            tags.push(Self::alternate("x-default", &base.join(&default.url)));
+        }
     }
 
     /// The page's canonical absolute URL, if a base `url` is configured.
@@ -154,6 +176,15 @@ impl Card<'_> {
     fn canonical(href: &str) -> HtmlNode {
         let mut el = HtmlElement::new(tag::link);
         el.attrs.push(attr::rel, "canonical");
+        el.attrs.push(attr::href, href);
+        HtmlNode::Element(el)
+    }
+
+    /// A `<link rel="alternate" hreflang=".." href="..">` tag.
+    fn alternate(hreflang: &str, href: &str) -> HtmlNode {
+        let mut el = HtmlElement::new(tag::link);
+        el.attrs.push(attr::rel, "alternate");
+        el.attrs.push(HtmlAttr::constant("hreflang"), hreflang);
         el.attrs.push(attr::href, href);
         HtmlNode::Element(el)
     }

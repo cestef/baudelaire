@@ -110,6 +110,9 @@ struct SiteInfo {
     url: Option<String>,
     lang: String,
     author: Option<String>,
+    /// Declared languages as `(code, display name)`, default first. Empty on a
+    /// single-language site, so `site.languages` only appears when i18n is on.
+    languages: Vec<(String, Option<String>)>,
 }
 
 impl BuildContext {
@@ -126,6 +129,15 @@ impl BuildContext {
                 url: config.url.clone(),
                 lang: config.lang.clone(),
                 author: config.author.clone(),
+                languages: if config.multilingual() {
+                    config
+                        .langs()
+                        .iter()
+                        .map(|code| ((*code).to_owned(), config.name(code).map(str::to_owned)))
+                        .collect()
+                } else {
+                    Vec::new()
+                },
             },
             client: codegen::Value::dict(config.client.iter().cloned()),
         }
@@ -223,6 +235,15 @@ impl From<&SiteInfo> for codegen::Value {
         fields.push(("lang", Value::str(&site.lang)));
         if let Some(author) = &site.author {
             fields.push(("author", Value::str(author)));
+        }
+        if !site.languages.is_empty() {
+            let langs = site.languages.iter().map(|(code, name)| {
+                Value::dict([
+                    ("code", Value::str(code)),
+                    ("name", Value::str(name.as_deref().unwrap_or(code))),
+                ])
+            });
+            fields.push(("languages", Value::array(langs)));
         }
         Value::dict(fields)
     }

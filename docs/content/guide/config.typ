@@ -65,6 +65,8 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   default template. See #link("../features/content/pagination.typ")[pagination].
 / #raw("taxonomies"): Group pages by a frontmatter list such as `tags`. See
   #link("../features/content/taxonomies.typ")[taxonomies].
+/ #raw("languages"): Declare the languages of a multi-language site. See
+  #link("../features/content/i18n.typ")[internationalization].
 / #raw("output"): Everything the build emits: the URL style (`urls "clean"` for
   directory-per-page permalinks, `urls "flat"` for `.html` files), whether to
   sweep orphaned files from the output directory (`clean`, on by default), HTML

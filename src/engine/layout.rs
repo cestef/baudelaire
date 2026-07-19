@@ -48,6 +48,17 @@ pub(super) struct Context<'a> {
     /// The site's content collections as an array literal, exposed to the
     /// template as `page.sections`, the single source a site nav is built from.
     pub sections: &'a str,
+    /// The page's language code, exposed as `page.lang`.
+    pub lang: &'a str,
+    /// The page's editions in every language as an array literal, e.g.
+    /// `((lang: "en", url: "..", title: ".."), ..)`, exposed as
+    /// `page.translations` for a language switcher. Empty on a single-language
+    /// site. Part of the wrapper so adding, removing, or retitling a translation
+    /// refingerprints the pages that show it.
+    pub translations: &'a str,
+    /// The current language's UI-string table as a dict literal, exposed as
+    /// `page.strings`.
+    pub strings: &'a str,
 }
 
 /// A synthetic typst module that applies a layout template to a page,
@@ -112,6 +123,9 @@ impl fmt::Display for Layout<'_> {
             taxonomies,
             nav,
             sections,
+            lang,
+            translations,
+            strings,
         } = &self.context;
         let frontmatter: &dyn fmt::Display = match data {
             Bind::Import => {
@@ -122,7 +136,8 @@ impl fmt::Display for Layout<'_> {
         };
         writeln!(
             f,
-            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, sections: {sections}), __body)"
+            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, sections: {sections}, lang: {}, translations: {translations}, strings: {strings}), __body)",
+            Str(lang)
         )?;
         match &self.body {
             Body::Include => write!(f, "#include {}", Str(self.page)),
@@ -146,6 +161,9 @@ mod tests {
                 taxonomies: "(tags: (\"a\",))",
                 nav: "(prev: none, next: none)",
                 sections: "()",
+                lang: "en",
+                translations: "()",
+                strings: "(:)",
             },
             Body::Include,
         )
@@ -154,7 +172,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), sections: ()), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), sections: (), lang: \"en\", translations: (), strings: (:)), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -170,6 +188,9 @@ mod tests {
                 taxonomies: "(:)",
                 nav: "(prev: none, next: none)",
                 sections: "()",
+                lang: "en",
+                translations: "()",
+                strings: "(:)",
             },
             Body::Inline("listing body"),
         )
@@ -177,7 +198,7 @@ mod tests {
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), sections: ()), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), sections: (), lang: \"en\", translations: (), strings: (:)), __body)\n\
              listing body"
         );
     }
@@ -193,6 +214,9 @@ mod tests {
                 taxonomies: "(:)",
                 nav: "(prev: none, next: none)",
                 sections: "()",
+                lang: "en",
+                translations: "()",
+                strings: "(:)",
             },
             Body::Include,
         )
@@ -213,6 +237,9 @@ mod tests {
                 taxonomies: "(:)",
                 nav: "(prev: none, next: none)",
                 sections: "()",
+                lang: "en",
+                translations: "()",
+                strings: "(:)",
             },
             Body::Inline("b"),
         )
@@ -220,7 +247,7 @@ mod tests {
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), sections: ()), __body)"
+                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), sections: (), lang: \"en\", translations: (), strings: (:)), __body)"
             ),
             "{out}"
         );

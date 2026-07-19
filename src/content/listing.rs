@@ -134,6 +134,8 @@ pub struct Listing {
     /// Optional user template; when set it receives the structured listing data
     /// and controls the whole page, so we aren't opinionated about its look.
     template: Option<String>,
+    /// Language this listing belongs to; `None` = the site default.
+    lang: Option<String>,
 }
 
 impl Listing {
@@ -151,11 +153,18 @@ impl Listing {
             items: Vec::new(),
             nav: Nav::default(),
             template: None,
+            lang: None,
         }
     }
 
     pub fn items(mut self, items: Vec<Item>) -> Self {
         self.items = items;
+        self
+    }
+
+    /// Assign this listing's language (a non-default one is URL-prefixed).
+    pub fn lang(mut self, lang: impl Into<String>) -> Self {
+        self.lang = Some(lang.into());
         self
     }
 
@@ -172,12 +181,16 @@ impl Listing {
 
     /// Lower to a synthetic [`Page`] ready for the compile pipeline.
     pub fn into_page(self, config: &Config) -> Page {
-        // Absolute so the world can virtualize it under the project root; the
-        // file need not exist (real pages reach absolute paths via canonicalize).
+        let lang = self.lang.clone().unwrap_or_else(|| config.lang.clone());
+        // Namespace the identity by language so per-language listings get
+        // distinct page ids and virtual source paths (the permalink is already
+        // localized by the generator). Absolute so the world can virtualize it
+        // under the project root; the file need not exist.
+        let section = config.scope(&lang, &self.section);
         let base = crate::fs::canonical(&config.content);
-        let source = base.join(&self.section).join(format!("{}.typ", self.slug));
+        let source = base.join(&section).join(format!("{}.typ", self.slug));
         Page::assemble(
-            PageId::new(&self.section, &self.slug),
+            PageId::new(&section, &self.slug),
             source,
             Frontmatter {
                 title: Some(self.title.clone()),
@@ -187,9 +200,10 @@ impl Listing {
             // A bound template receives this structured data as `page.frontmatter`;
             // without one, the default body renders and this is unused.
             crate::content::Data::Generated(crate::codegen::Typst(&self.data()).to_string()),
-            self.section.clone(),
+            section,
             self.permalink.clone(),
             self.template.clone(),
+            lang,
             config,
         )
     }

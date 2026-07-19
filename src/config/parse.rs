@@ -6,8 +6,8 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config,
-    SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
+    LanguageConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig,
+    S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
     TaxonomyConfig, VerifyConfig,
 };
 use crate::content::Permalink;
@@ -69,6 +69,10 @@ impl Config {
             c.taxonomies = n.taxonomies(t)?;
             Ok(())
         }),
+        ("languages", |c, n, t| {
+            c.languages = n.languages(t)?;
+            Ok(())
+        }),
         ("client", |c, n, t| {
             c.client = n.client(t)?;
             Ok(())
@@ -115,8 +119,10 @@ pub(super) trait NodeExt {
     fn mapped<T: Copy>(&self, text: &str, table: &[(&'static str, T)]) -> Result<Vec<T>>;
     fn collections(&self, text: &str) -> Result<Vec<(String, CollectionConfig)>>;
     fn taxonomies(&self, text: &str) -> Result<Vec<(String, TaxonomyConfig)>>;
+    fn languages(&self, text: &str) -> Result<Vec<(String, LanguageConfig)>>;
     fn as_collection(&self, text: &str) -> Result<(String, CollectionConfig)>;
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)>;
+    fn as_language(&self, text: &str) -> Result<(String, LanguageConfig)>;
     fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()>;
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()>;
     fn responsive(&self, target: &mut ResponsiveConfig, text: &str) -> Result<()>;
@@ -309,6 +315,10 @@ impl NodeExt for KdlNode {
 
     fn taxonomies(&self, text: &str) -> Result<Vec<(String, TaxonomyConfig)>> {
         self.unique(text, "taxonomy", |node, t| node.as_taxonomy(t))
+    }
+
+    fn languages(&self, text: &str) -> Result<Vec<(String, LanguageConfig)>> {
+        self.unique(text, "language", |node, t| node.as_language(t))
     }
 
     fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()> {
@@ -899,6 +909,37 @@ impl NodeExt for KdlNode {
         };
         ATTRS.apply(&mut tax, self, text, 0)?;
         Ok((id, tax))
+    }
+
+    fn as_language(&self, text: &str) -> Result<(String, LanguageConfig)> {
+        // Scalar fields dispatch through the shared `Block` table; the nested
+        // `strings { .. }` table reuses the very parser `client { .. }` uses, so
+        // a UI string dictionary and a client-constant block stay one shape.
+        const LANG: Block<LanguageConfig> = Block(&[
+            ("name", |c, n, t| {
+                c.name = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("dir", |c, n, t| {
+                c.dir = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("site", |c, n, t| {
+                c.site = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("author", |c, n, t| {
+                c.author = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("strings", |c, n, t| {
+                c.strings = n.client(t)?;
+                Ok(())
+            }),
+        ]);
+        let mut lang = LanguageConfig::default();
+        LANG.fill(&mut lang, self, text)?;
+        Ok((self.name().value().to_owned(), lang))
     }
 }
 

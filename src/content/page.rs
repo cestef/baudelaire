@@ -42,6 +42,17 @@ pub struct Siblings {
     pub next: Option<Sibling>,
 }
 
+/// One language edition of a page: its code, URL, and title, for a language
+/// switcher (`page.translations`) and `hreflang` alternates. A page's own
+/// edition is included, so a template can render the full set and mark the
+/// current one by `page.lang`.
+#[derive(Debug, Clone)]
+pub struct Translation {
+    pub lang: String,
+    pub url: String,
+    pub title: String,
+}
+
 /// Stable identifier for a page within the site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PageId(pub String);
@@ -72,9 +83,14 @@ pub struct Page {
     pub output: PathBuf,
     /// Resolved layout template file (frontmatter, else collection default).
     pub template: Option<String>,
+    /// This page's language code (default `lang` on a single-language site).
+    pub lang: String,
     /// Prev/next pages within this page's collection, assigned by
     /// [`crate::content::plan`]. Empty until then, and for generated listings.
     pub siblings: Siblings,
+    /// This page's editions in every language (including its own), assigned by
+    /// [`crate::content::plan`]. Empty on a single-language site.
+    pub translations: Vec<Translation>,
 }
 
 impl Page {
@@ -93,9 +109,10 @@ impl Page {
         // and dependencies are unchanged, returning the body straight from disk.
         let (mut frontmatter, export, body) = cache.load_page(path, config, project)?;
         let data = if export { Data::Export } else { Data::Empty };
-        let stem = Stem::of(path, &config.draft.suffix);
+        let stem = Stem::of(path, config);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
+        let lang = Self::lang(&frontmatter, &stem, path, config)?;
         // explicit frontmatter slug, else the file stem, except a bundle index
         // (`posts/hello/index.typ`) takes its parent dir name, so the directory is
         // one page with colocated resources. reject a name yielding nothing URL-safe.
@@ -104,7 +121,7 @@ impl Page {
             .clone()
             .unwrap_or_else(|| Self::bundle_slug(path, collection, &stem, config));
         let slug = Slug::require(&raw)?.into_string();
-        let permalink = Self::permalink(collection, &frontmatter, &slug, config);
+        let permalink = Self::permalink(collection, &frontmatter, &slug, &lang, config);
         let template = frontmatter.template.clone().or_else(|| {
             config
                 .collection(collection)
@@ -119,8 +136,26 @@ impl Page {
             collection.to_owned(),
             permalink,
             template,
+            lang,
             config,
         ))
+    }
+
+    /// A page's language: explicit frontmatter `lang`, else the filename suffix,
+    /// else the site default. The single resolution rule; an explicit language
+    /// the site does not declare is an error (a suffix is only recognized when
+    /// declared, so it can't reach here unknown).
+    fn lang(fm: &Frontmatter, stem: &Stem, path: &Path, config: &Config) -> Result<String> {
+        match &fm.lang {
+            Some(lang) if !config.knows(lang) => {
+                Err(ContentError::unknown_language(path, lang, &config.langs()).into())
+            }
+            Some(lang) => Ok(lang.clone()),
+            None => Ok(stem
+                .lang()
+                .unwrap_or(&config.lang)
+                .to_owned()),
+        }
     }
 
     /// Assemble a page from its resolved parts, deriving the output path from the
@@ -138,6 +173,7 @@ impl Page {
         collection: String,
         permalink: String,
         template: Option<String>,
+        lang: String,
         config: &Config,
     ) -> Self {
         Self {
@@ -150,7 +186,9 @@ impl Page {
             collection,
             permalink,
             template,
+            lang,
             siblings: Siblings::default(),
+            translations: Vec::new(),
         }
     }
 
@@ -198,7 +236,7 @@ impl Page {
                 _ => None,
             })
             .collect();
-        if Stem::of(&self.source, &config.draft.suffix).is_index(config) {
+        if Stem::of(&self.source, config).is_index(config) {
             dirs.pop();
         }
         dirs
@@ -223,17 +261,72 @@ impl Page {
         )
     }
 
-    /// The most recent dated pages, newest first, capped at `limit`: authored
-    /// content carrying a date. The single "recent posts" selection shared by
-    /// the syndication feeds and the `baudelaire:feed` module.
-    pub fn recent(pages: &[Page], limit: usize) -> Vec<&Page> {
+    /// The most recent dated pages of one language, newest first, capped at
+    /// `limit`: authored content carrying a date. The single "recent posts"
+    /// selection shared by the syndication feeds and the `baudelaire:feed`
+    /// module, so a language's feed lists only its own posts.
+    pub fn recent<'a>(pages: &'a [Page], lang: &str, limit: usize) -> Vec<&'a Page> {
         let mut dated: Vec<&Page> = pages
             .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.frontmatter.date.is_some())
+            .filter(|p| {
+                !matches!(p.data, Data::Generated(_))
+                    && p.frontmatter.date.is_some()
+                    && p.lang == lang
+            })
             .collect();
         dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
         dated.truncate(limit);
         dated
+    }
+
+    /// Pages bucketed by language, preserving each language's relative order:
+    /// one group per language in first-seen order, a single group for a
+    /// single-language site. The single language-partition rule, shared wherever
+    /// per-language ordering matters (siblings, listings).
+    pub fn groups<'a>(pages: &[&'a Page]) -> Vec<Vec<&'a Page>> {
+        let mut groups: Vec<(&str, Vec<&Page>)> = Vec::new();
+        for &page in pages {
+            match groups.iter_mut().find(|(lang, _)| *lang == page.lang) {
+                Some((_, group)) => group.push(page),
+                None => groups.push((&page.lang, vec![page])),
+            }
+        }
+        groups.into_iter().map(|(_, group)| group).collect()
+    }
+
+    /// Fill each content page's `translations` with the editions of the same
+    /// logical page in other languages. A page and its translations share a
+    /// [`PageId`] (`collection/slug`), so that is the grouping key; only sets
+    /// spanning more than one language are recorded, and generated listings are
+    /// left out. Editions are ordered by the site's language order (default
+    /// first) for a stable switcher.
+    pub(super) fn relate(pages: &mut [Page], config: &Config) {
+        use std::collections::BTreeMap;
+        let mut editions: BTreeMap<&str, Vec<Translation>> = BTreeMap::new();
+        for page in pages.iter() {
+            if matches!(page.data, Data::Generated(_)) {
+                continue;
+            }
+            editions.entry(&page.id.0).or_default().push(Translation {
+                lang: page.lang.clone(),
+                url: page.permalink.clone(),
+                title: page.title().to_owned(),
+            });
+        }
+        let order = config.langs();
+        for set in editions.values_mut() {
+            set.sort_by_key(|t| order.iter().position(|l| *l == t.lang));
+        }
+        let editions: BTreeMap<String, Vec<Translation>> = editions
+            .into_iter()
+            .filter(|(_, set)| set.len() > 1)
+            .map(|(key, set)| (key.to_owned(), set))
+            .collect();
+        for page in pages.iter_mut() {
+            if let Some(set) = editions.get(&page.id.0) {
+                page.translations = set.clone();
+            }
+        }
     }
 
     /// Whether this page builds under the current draft/future config, the
@@ -262,20 +355,29 @@ impl Page {
         slug: &str,
         config: &Config,
     ) -> String {
-        Self::permalink(collection.unwrap_or(ROOT), fm, slug, config)
+        // `new`'s preview is always for a default-language page.
+        Self::permalink(collection.unwrap_or(ROOT), fm, slug, &config.lang, config)
     }
 
-    fn permalink(collection: &str, fm: &Frontmatter, slug: &str, config: &Config) -> String {
-        if collection == ROOT {
+    fn permalink(
+        collection: &str,
+        fm: &Frontmatter,
+        slug: &str,
+        lang: &str,
+        config: &Config,
+    ) -> String {
+        let path = if collection == ROOT {
             // The root collection maps straight onto the site root: `index`
             // becomes `/`, every other page a top-level `/{slug}/`.
             let segments: &[&str] = if slug == "index" { &[] } else { &[slug] };
-            return Permalink::join(segments);
-        }
-        let template = config
-            .collection(collection)
-            .and_then(|c| c.permalink.as_deref());
-        Permalink::of(template).render(&PermalinkCtx::from_page(collection, fm, slug))
+            Permalink::join(segments)
+        } else {
+            let template = config
+                .collection(collection)
+                .and_then(|c| c.permalink.as_deref());
+            Permalink::of(template).render(&PermalinkCtx::from_page(collection, fm, slug))
+        };
+        config.localize(lang, &path)
     }
 }
 
@@ -313,22 +415,42 @@ impl Collection {
     }
 }
 
-/// The slug-bearing stem of a source path. A configured `draft_suffix` in the
-/// stem (e.g. `post.draft.typ`) both marks the page a draft and is stripped
-/// from its slug.
+/// The parsed stem of a source path: its language and draft markers peeled off,
+/// leaving the slug. `post.fr.typ` carries language `fr`; `post.draft.typ` is a
+/// draft; the two stack as `post.draft.fr.typ` (language last). The single place
+/// a filename is decoded, shared by slugging and section nesting.
 struct Stem<'a> {
+    /// File stem with the language suffix removed; the draft suffix, if any,
+    /// still trails (stripped by [`Stem::slug`]).
     raw: &'a str,
     suffix: &'a str,
+    /// Declared non-default language named by a trailing `.{code}`, if any.
+    lang: Option<&'a str>,
 }
 
 impl<'a> Stem<'a> {
-    fn of(path: &'a Path, suffix: &'a str) -> Self {
-        let raw = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
-        Self { raw, suffix }
+    fn of(path: &'a Path, config: &'a Config) -> Self {
+        let full = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
+        // Peel a trailing `.{code}` naming a declared, non-default language: the
+        // default language uses bare filenames, so `.en` on an en site stays put.
+        let (raw, lang) = match full.rsplit_once('.') {
+            Some((head, code)) if code != config.lang && config.knows(code) => (head, Some(code)),
+            _ => (full, None),
+        };
+        Self {
+            raw,
+            suffix: &config.draft.suffix,
+            lang,
+        }
     }
 
     fn is_draft(&self) -> bool {
         !self.suffix.is_empty() && self.raw.ends_with(self.suffix)
+    }
+
+    /// The declared language named by the filename, if any.
+    fn lang(&self) -> Option<&'a str> {
+        self.lang
     }
 
     /// Whether this stem names a bundle index (`config.index`), so the file's
@@ -340,10 +462,7 @@ impl<'a> Stem<'a> {
             .is_some_and(|idx| self.slug() == idx)
     }
 
-    fn slug(&self) -> &str {
-        if self.suffix.is_empty() {
-            return self.raw;
-        }
+    fn slug(&self) -> &'a str {
         self.raw.strip_suffix(self.suffix).unwrap_or(self.raw)
     }
 }

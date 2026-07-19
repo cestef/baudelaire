@@ -40,7 +40,7 @@ trait Module {
 }
 
 /// The registered virtual modules.
-fn builtin() -> [Box<dyn Module>; 8] {
+fn builtin() -> [Box<dyn Module>; 9] {
     [
         Box::new(Search),
         Box::new(Site),
@@ -50,6 +50,7 @@ fn builtin() -> [Box<dyn Module>; 8] {
         Box::new(Sections),
         Box::new(Taxonomies),
         Box::new(Feed),
+        Box::new(I18n),
     ]
 }
 
@@ -313,7 +314,7 @@ struct Feed;
 
 impl Module for Feed {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let items = Page::recent(cx.pages, cx.config.feed.limit)
+        let items = Page::recent(cx.pages, &cx.config.lang, cx.config.feed.limit)
             .into_iter()
             .map(|page| {
                 Value::dict([
@@ -326,5 +327,28 @@ impl Module for Feed {
                 ])
             });
         vec![("baudelaire:feed".into(), Esm::value(&Value::array(items)))]
+    }
+}
+
+/// `baudelaire:i18n`: the declared `languages` (`{ code, name }`, default first)
+/// and their UI-string tables keyed by code (`strings.fr.more`), for a
+/// client-side language switcher and localized UI text.
+struct I18n;
+
+impl Module for I18n {
+    fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
+        let codes = cx.config.langs();
+        let languages = Value::array(codes.iter().map(|code| {
+            Value::dict([
+                ("code", Value::str(code)),
+                ("name", Value::str(cx.config.name(code).unwrap_or(code))),
+            ])
+        }));
+        let strings = Value::dict(codes.iter().map(|code| {
+            let table = Value::dict(cx.config.strings(code).iter().cloned());
+            ((*code).to_owned(), table)
+        }));
+        let data = Value::dict([("languages", languages), ("strings", strings)]);
+        vec![("baudelaire:i18n".into(), Esm::object(&data))]
     }
 }

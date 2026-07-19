@@ -5,6 +5,40 @@ fn parse(text: &str) -> Config {
 }
 
 #[test]
+fn languages_block_parses_with_names_and_strings() {
+    let cfg = parse(
+        r#"
+        lang "en"
+        languages {
+            fr { name "Français"; strings { more "Lire la suite" } }
+            de { name "Deutsch"; dir "ltr" }
+        }
+    "#,
+    );
+    assert_eq!(cfg.languages.len(), 2);
+    let (code, fr) = &cfg.languages[0];
+    assert_eq!(code, "fr");
+    assert_eq!(fr.name.as_deref(), Some("Français"));
+    assert_eq!(fr.strings.len(), 1);
+}
+
+#[test]
+fn langs_lists_default_first_then_declared() {
+    let cfg = parse("lang \"en\"\nlanguages {\n  fr { }\n  de { }\n}\n");
+    assert_eq!(cfg.langs(), ["en", "fr", "de"]);
+    assert!(cfg.knows("fr") && cfg.knows("en") && !cfg.knows("es"));
+    assert!(cfg.multilingual());
+}
+
+#[test]
+fn localize_prefixes_only_non_default_languages() {
+    let cfg = parse("lang \"en\"\nlanguages {\n  fr { }\n}\n");
+    assert_eq!(cfg.localize("en", "/posts/hello/"), "/posts/hello/");
+    assert_eq!(cfg.localize("fr", "/posts/hello/"), "/fr/posts/hello/");
+    assert_eq!(cfg.localize("fr", "/"), "/fr/");
+}
+
+#[test]
 fn client_block_parses_json_scalars() {
     use crate::codegen::Value;
     let cfg = parse("client {\n  env \"prod\"\n  retries 3\n  ratio 0.5\n  beta #true\n}\n");

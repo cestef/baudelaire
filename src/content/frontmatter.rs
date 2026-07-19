@@ -38,6 +38,10 @@ const FIELDS: &[(&str, Field)] = &[
         fm.slug = Some(v.string(p, k)?);
         Ok(())
     }),
+    ("lang", |fm, v, p, k| {
+        fm.lang = Some(v.string(p, k)?);
+        Ok(())
+    }),
     ("template", |fm, v, p, k| {
         fm.template = Some(v.string(p, k)?);
         Ok(())
@@ -65,6 +69,9 @@ pub struct Frontmatter {
     pub date: Option<time::Date>,
     pub draft: bool,
     pub slug: Option<String>,
+    /// Explicit language override; beats the filename suffix and the default
+    /// `lang`. Only meaningful on a multi-language site.
+    pub lang: Option<String>,
     pub template: Option<String>,
     pub order: Option<i64>,
     pub redirect: Vec<String>,

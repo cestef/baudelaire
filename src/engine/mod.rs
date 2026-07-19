@@ -63,6 +63,17 @@ pub struct Stats {
 /// into a `Source` (deferred to [`Engine::compile`], run only for stale pages).
 type Prepared = (FileId, String, Hash);
 
+/// Per-language section-tree wrapper text, keyed by language code and picked by
+/// a page's language for its `page.sections`.
+struct Trees(std::collections::BTreeMap<String, String>);
+
+impl Trees {
+    /// This language's section tree as wrapper text (empty when none was built).
+    fn get(&self, lang: &str) -> &str {
+        self.0.get(lang).map_or("", String::as_str)
+    }
+}
+
 /// The build engine. Owns shared project state and drives the pipeline.
 pub struct Engine {
     project: Project,
@@ -101,10 +112,12 @@ impl Engine {
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
 
-        // Build the section tree and the `sys.inputs.baudelaire` value once: both
+        // Build the section trees and the `sys.inputs.baudelaire` value once: both
         // feed templates (`page.sections`, `sys.inputs`) AND the `baudelaire:*`
-        // JS modules, which reuse these rather than recompute them.
-        let sections = self.sections(&pages);
+        // JS modules, which reuse these rather than recompute them. The JS module
+        // exposes the default language's tree; per-page nav is language-picked.
+        let trees = self.trees(&pages);
+        let sections = self.sections(&pages, &self.config.lang);
         // The codegen `Value` view of the build context exists only to feed the
         // `baudelaire:*` JS modules; Typst reads `sys.inputs` from the raw context.
         #[cfg(feature = "js")]
@@ -160,16 +173,10 @@ impl Engine {
         // text + fingerprint without parsing it; the parse into a typst
         // `Source` is deferred to `compile`, so a hit never pays to parse a
         // page it won't render.
-        // the section tree as wrapper text: exposed to every template as
-        // `page.sections`, and part of each page's wrapper, so a title/url change
-        // refingerprints every page that embeds the nav (correct: the sidebar
-        // renders on all of them).
-        let sections = crate::codegen::Typst(&sections).to_string();
-
         let mut cached: Vec<(&Page, String, Vec<ImageRef>)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
-            match self.prepare(page, &sections) {
+            match self.prepare(page, &trees) {
                 Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
                     Some((html, images)) => cached.push((page, html, images)),
                     None => stale.push((page, Ok((id, text, fingerprint)))),
@@ -292,7 +299,7 @@ impl Engine {
             SrcSets::default(),
             self.project.root(),
         );
-        let sections = crate::codegen::Typst(&self.sections(&pages)).to_string();
+        let trees = self.trees(&pages);
         let tracked = self.project.tracked();
         let roots: Vec<Root> = tracked
             .iter()
@@ -303,7 +310,7 @@ impl Engine {
         let rendered = self.render_pages("checking", pages.iter().collect(), ui, |page| {
             (
                 page,
-                self.prepare(page, &sections).and_then(|(id, text, fp)| {
+                self.prepare(page, &trees).and_then(|(id, text, fp)| {
                     self.compile(page, id, text, fp, &renderer, &analyzer)
                 }),
             )
@@ -400,7 +407,8 @@ impl Engine {
     /// listings, which have no file, inline their body, and only their
     /// wrapper text needs fingerprinting. Built once and shared by the cache
     /// check and the compile.
-    fn prepare(&self, page: &Page, sections: &str) -> Result<Prepared> {
+    fn prepare(&self, page: &Page, trees: &Trees) -> Result<Prepared> {
+        let sections = trees.get(&page.lang);
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
@@ -412,6 +420,8 @@ impl Engine {
         // the wrapper text, so a neighbour's addition, removal, or retitling
         // refingerprints this page and rebuilds it: the cache stays correct.
         let nav = crate::codegen::Typst(&Self::nav(&page.siblings)).to_string();
+        let translations = crate::codegen::Typst(&Self::translations(page)).to_string();
+        let strings = crate::codegen::Typst(&self.strings(&page.lang)).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
             Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
@@ -427,6 +437,9 @@ impl Engine {
             taxonomies: &taxonomies,
             nav: &nav,
             sections,
+            lang: &page.lang,
+            translations: &translations,
+            strings: &strings,
         };
         let text = Layout::new(&self.config.templates, template, &vpath, context, body).to_string();
         // hash the exact text typst compiles; the parse into a `Source` is
@@ -435,16 +448,31 @@ impl Engine {
         Ok((id, text, fingerprint))
     }
 
-    /// The site's [`Section`] tree as a value: exposed to every template as
-    /// `page.sections` (the single source a site nav is built from, so it can't
-    /// drift from the pages) and reused by the `baudelaire:sections` JS module.
-    /// Each node is `(id, pages: ((url, title), ..), children: (..))`, one per
-    /// content directory; generated listings are excluded.
-    fn sections(&self, pages: &[Page]) -> crate::codegen::Value {
+    /// One language's [`Section`] tree as a value: exposed to that language's
+    /// templates as `page.sections` (the single source a site nav is built from,
+    /// so it can't drift from the pages) and reused by the `baudelaire:sections`
+    /// JS module. Each node is `(id, pages: ((url, title), ..), children: (..))`,
+    /// one per content directory; generated listings are excluded.
+    fn sections(&self, pages: &[Page], lang: &str) -> crate::codegen::Value {
         crate::codegen::Value::array(
-            Section::tree(pages, &self.config)
+            Section::tree(pages, &self.config, lang)
                 .iter()
                 .map(Section::value),
+        )
+    }
+
+    /// The section tree as wrapper text for every built language, so each page
+    /// embeds its own language's nav. Built once and shared by every page.
+    fn trees(&self, pages: &[Page]) -> Trees {
+        Trees(
+            self.config
+                .langs()
+                .iter()
+                .map(|lang| {
+                    let tree = crate::codegen::Typst(&self.sections(pages, lang)).to_string();
+                    ((*lang).to_owned(), tree)
+                })
+                .collect(),
         )
     }
 
@@ -461,6 +489,33 @@ impl Engine {
             ("prev", link(&siblings.prev)),
             ("next", link(&siblings.next)),
         ])
+    }
+
+    /// A page's translations as an array value:
+    /// `((lang: .., url: .., title: ..), ..)`, exposed to the template as
+    /// `page.translations` for a language switcher. Empty on a single-language
+    /// site.
+    fn translations(page: &Page) -> crate::codegen::Value {
+        use crate::codegen::Value;
+        Value::array(page.translations.iter().map(|t| {
+            Value::dict([
+                ("lang", Value::str(&t.lang)),
+                ("url", Value::str(&t.url)),
+                ("title", Value::str(&t.title)),
+            ])
+        }))
+    }
+
+    /// A language's UI-string table as a dict value, exposed to the template as
+    /// `page.strings`. Empty for a language with no `strings` block.
+    fn strings(&self, lang: &str) -> crate::codegen::Value {
+        use crate::codegen::Value;
+        Value::dict(
+            self.config
+                .strings(lang)
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        )
     }
 
     /// A page's project-root-absolute virtual path (`/content/posts/a.typ`):

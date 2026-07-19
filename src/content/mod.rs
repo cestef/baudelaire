@@ -48,13 +48,17 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
             .iter()
             .filter(|p| p.eligible(config))
             .collect();
-        for (i, page) in eligible.iter().enumerate() {
-            let mut page = (*page).clone();
-            page.siblings = page::Siblings {
-                prev: i.checked_sub(1).map(|j| eligible[j].sibling()),
-                next: eligible.get(i + 1).map(|n| n.sibling()),
-            };
-            pages.push(page);
+        // Siblings link within a language as well as a collection: prev/next
+        // never cross a language boundary. A single-language site is one group.
+        for group in Page::groups(&eligible) {
+            for (i, page) in group.iter().enumerate() {
+                let mut page = (*page).clone();
+                page.siblings = page::Siblings {
+                    prev: i.checked_sub(1).map(|j| group[j].sibling()),
+                    next: group.get(i + 1).map(|n| n.sibling()),
+                };
+                pages.push(page);
+            }
         }
     }
     // Synthetic pages (taxonomy indexes, paginated listings) derive from the
@@ -65,6 +69,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
         collections: &collections,
     })?;
     pages.extend(generated);
+    Page::relate(&mut pages, config);
     unique(&pages, config)?;
     Ok(pages)
 }
