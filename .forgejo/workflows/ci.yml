@@ -36,6 +36,17 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
+      # Restore target/ (dep rlibs, build-script outputs, fingerprint DB; not sccache's).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          prefix: target-cache
+          toolchain-key: "true"
+          base: "."
+          paths: target
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
       # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
@@ -71,6 +82,19 @@ jobs:
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
+      # Persist target/ (immutable per Cargo.lock + rustc: skips if unchanged).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        if: always()
+        with:
+          mode: save
+          prefix: target-cache
+          toolchain-key: "true"
+          base: "."
+          paths: target
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
 
   coverage:
     runs-on: linux-any-large
@@ -86,6 +110,17 @@ jobs:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       - uses: https://codeberg.org/cstef/actions/cargo-cache@main
         with:
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
+      # Separate target/ cache: instrumented artifacts don't match the check job's.
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        with:
+          prefix: target-cache-cov
+          toolchain-key: "true"
+          base: "."
+          paths: target
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
@@ -124,3 +159,17 @@ jobs:
         with:
           name: coverage
           path: cobertura.xml
+
+      # Persist the instrumented target/ (immutable per Cargo.lock + rustc).
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+        if: always()
+        with:
+          mode: save
+          prefix: target-cache-cov
+          toolchain-key: "true"
+          base: "."
+          paths: target
+          bucket: baudelaire-sccache
+          endpoint: ${{ secrets.R2_ENDPOINT }}
+          access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
