@@ -10,6 +10,7 @@ import { initMobileNav, initNavSections, markActiveNav } from "./_nav.js";
 // are themed by style.css instead.
 import { mountSearch } from "baudelaire:search";
 import { mountConfig, mountRecent } from "./_widgets.js";
+import { initCopyButtons } from "./_copy.js";
 
 initTheme();
 markActiveNav();
@@ -18,3 +19,4 @@ initMobileNav();
 mountSearch({ styles: false, placeholder: "Search the docs" });
 mountRecent();
 mountConfig();
+initCopyButtons();
