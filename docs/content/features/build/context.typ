@@ -51,13 +51,14 @@ typst {
 #sys.inputs.environment  // "production"
 ```
 
-The same `typst` block also carries `features`, opting into extra experimental
-Typst features. HTML export is always enabled for you, so this list is purely
-additive, you only name the extras you want:
+The same `typst` block also carries `features`, toggling experimental Typst
+features. `+name` (the `+` is optional) turns one on and `-name` turns one off,
+resolved left to right so a later entry wins. HTML export is always enabled for
+you, so you never add `html` and `-html` is refused:
 
 ```kdl
 typst {
-  features "+a11y-extras"
+  features "+a11y-extras"   // "-a11y-extras" would turn it back off
 }
 ```
 

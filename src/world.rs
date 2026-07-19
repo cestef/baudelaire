@@ -251,13 +251,22 @@ impl Project {
         );
 
         // HTML export is non-negotiable: Baudelaire only ever emits an
-        // `HtmlDocument`, so `Feature::Html` is always on and never something the
-        // user must remember. `features` in config is then purely additive for
-        // extras (`a11y-extras`, ...) and can never accidentally drop HTML.
+        // `HtmlDocument`, so `Feature::Html` is always on and can never be
+        // disabled (`-html` is rejected at parse). Every other feature is a
+        // `+name`/`-name` toggle resolved here in order, so a later entry wins.
         let mut features = vec![Feature::Html];
-        for name in &config.features {
-            match FEATURES.iter().find(|(n, _)| n == name) {
-                Some((_, feature)) => features.push(*feature),
+        for token in &config.features {
+            let (enable, name) = match token.strip_prefix('-') {
+                Some(rest) => (false, rest),
+                None => (true, token.as_str()),
+            };
+            match FEATURES.iter().find(|(n, _)| *n == name) {
+                Some((_, feature)) if enable => {
+                    if !features.contains(feature) {
+                        features.push(*feature);
+                    }
+                }
+                Some((_, feature)) => features.retain(|f| f != feature),
                 None => {
                     let valid = FEATURES
                         .iter()

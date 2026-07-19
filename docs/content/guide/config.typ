@@ -83,8 +83,9 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   browser), `watch` (rebuild on change, on by default), and the `exclude` /
   `include` watch globs. See #link("../features/assets/hooks.typ")[build hooks].
 / #raw("typst"): Typst compiler settings: `inputs` exposes values to pages as
-  `sys.inputs`, and `features` opts into extra experimental Typst features (e.g.
-  `features "+a11y-extras"`). HTML export is always on, so you never list it. See
+  `sys.inputs`, and `features` toggles experimental Typst features, `+name` on
+  and `-name` off (e.g. `features "+a11y-extras"`). HTML export is always on, so
+  you never list it and `-html` is refused. See
   #link("../features/build/context.typ")[build metadata].
 / #raw("deploy"): Upload target for `baudelaire deploy`. See
   #link("deploy/overview.typ")[deploying].

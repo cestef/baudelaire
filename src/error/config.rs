@@ -159,7 +159,8 @@ impl ConfigError {
         )
     }
 
-    /// A `-feature` entry: feature removal is not supported.
+    /// A `-html` entry: HTML export is required and cannot be disabled (other
+    /// features may be toggled off with `-name`).
     pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -335,8 +336,11 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::unknown_image_format))]
     UnknownImageFormat { format: String },
 
-    #[error("removing feature `{name}` is not supported; list the features you want enabled")]
-    #[diagnostic(code(baudelaire::config::feature_removal))]
+    #[error("feature `{name}` is required and cannot be disabled")]
+    #[diagnostic(
+        code(baudelaire::config::feature_removal),
+        help("HTML export underpins the whole build; other features may be turned off with `-name`")
+    )]
     FeatureRemoval { name: String },
 
     #[error("unexpected argument {value}; `{node}` takes `key=value` attributes")]

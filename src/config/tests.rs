@@ -106,11 +106,20 @@ fn inputs_and_features() {
 }
 
 #[test]
-fn err_feature_removal_rejected() {
-    let err = Config::parse("typst {\n  features \"-pdf\"\n}\n").unwrap_err();
+fn feature_disable_parses_as_negated_token() {
+    let cfg = parse("typst {\n  features \"+a11y-extras\" \"-bundle\"\n}\n");
+    assert_eq!(
+        cfg.features,
+        vec!["a11y-extras".to_owned(), "-bundle".to_owned()]
+    );
+}
+
+#[test]
+fn err_html_feature_removal_rejected() {
+    let err = Config::parse("typst {\n  features \"-html\"\n}\n").unwrap_err();
     assert!(
         err.to_string()
-            .contains("removing feature `pdf` is not supported"),
+            .contains("feature `html` is required and cannot be disabled"),
         "{err}"
     );
 }

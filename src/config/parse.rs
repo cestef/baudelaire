@@ -249,12 +249,18 @@ impl NodeExt for KdlNode {
         positional
             .iter()
             .map(|entry| {
-                let raw = entry.value().as_str(text, NodeExt::span(self))?;
-                // a `-` prefix reads as "disable", but nothing subtracts: error beats silently enabling
+                let span = EntryExt::span(*entry);
+                let raw = entry.value().as_str(text, span)?;
+                // `-name` disables a feature, `+name`/`name` enables it. The
+                // normalized token keeps a leading `-` for disable and drops the
+                // optional `+` for enable; `world.rs` resolves them in order.
+                // `html` underpins the whole HTML pipeline, so it is always on
+                // and refusing `-html` is clearer than silently keeping it.
                 if let Some(name) = raw.strip_prefix('-') {
-                    return Err(
-                        ConfigError::feature_removal(text, name, NodeExt::span(self)).into(),
-                    );
+                    if name == "html" {
+                        return Err(ConfigError::feature_removal(text, name, span).into());
+                    }
+                    return Ok(format!("-{name}"));
                 }
                 Ok(raw.strip_prefix('+').unwrap_or(&raw).to_owned())
             })
