@@ -18,7 +18,7 @@ use tiny_http::{Header, Request, Response, Server};
 use wax::{Glob, Program};
 
 use crate::cli::Root;
-use crate::config::Config;
+use crate::config::{Config, Percent};
 use crate::engine::{Engine, Mode};
 use crate::error::serve::ServeError;
 use crate::error::warning::{BrowserOpen, ConfigReload, RebuildFailed, WatchLost};
@@ -64,11 +64,18 @@ struct Dev<'a> {
 }
 
 impl Dev<'_> {
-    fn run(self) -> Result<()> {
+    fn run(mut self) -> Result<()> {
         let addr = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&addr).map_err(|e| ServeError::bind(&addr, e))?;
 
-        Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)?;
+        // A failed first build is a warning, not a fatal error, exactly like
+        // every rebuild after it: the same typo killed the server or merely
+        // warned depending only on when it was made. The server comes up and
+        // fixing the file rebuilds.
+        if let Err(e) = self.rebuild() {
+            self.ui.warn(RebuildFailed { errors: vec![e] });
+            self.ui.flush();
+        }
         self.ui.blank();
         self.ui.arrow(
             "local",
@@ -102,16 +109,26 @@ impl Dev<'_> {
         }
 
         let level = self.ui.level();
+        let route = Arc::new(Mutex::new(Route::new(&self.config)));
         if self.config.serve.watch {
             let live = Live::default();
-            let base = self.config.base_path().to_owned();
-            Handler::new(self.config.dist.clone(), base, Some(live.clone()), level).spawn(server);
-            self.watch(live)
+            Handler::new(Arc::clone(&route), Some(live.clone()), level).spawn(server);
+            self.watch(live, &route)
         } else {
-            let base = self.config.base_path().to_owned();
-            Handler::new(self.config.dist.clone(), base, None, level).serve(&server);
+            Handler::new(route, None, level).serve(&server);
             Ok(())
         }
+    }
+
+    /// Build the site once.
+    ///
+    /// A fresh [`Engine`] every time, deliberately: its [`crate::world::Project`]
+    /// memoizes file contents with no invalidation hook, so a reused one serves
+    /// the bytes it first read and an edit never shows up. That costs six `git`
+    /// subprocesses and the loaded fonts per rebuild; making it reusable means
+    /// giving the file store a reset, not just hoisting the value.
+    fn rebuild(&mut self) -> Result<crate::engine::Stats> {
+        Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)
     }
 
     /// The watched roots, for the startup banner: the defaults, the config
@@ -131,7 +148,7 @@ impl Dev<'_> {
 
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
     /// every relevant change.
-    fn watch(mut self, live: Live) -> Result<()> {
+    fn watch(mut self, live: Live, route: &Mutex<Route>) -> Result<()> {
         // Rebuild the watcher whenever `config.kdl` is reloaded, so changes to
         // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
         // change still needs a restart: the HTTP server is already bound.)
@@ -155,6 +172,8 @@ impl Dev<'_> {
             if !reloaded {
                 return Ok(());
             }
+            // The reloaded config may have moved `dist` or changed `url`.
+            *route.lock() = Route::new(&self.config);
         }
     }
 
@@ -226,7 +245,7 @@ impl Dev<'_> {
         let timer = Timer::start();
         let prior = self.ui.level();
         self.ui.set_level(Level::Silent);
-        let result = Engine::new(self.config.clone(), Mode::Serve).and_then(|e| e.build(self.ui));
+        let result = self.rebuild();
         self.ui.set_level(prior);
 
         match result {
@@ -276,10 +295,10 @@ impl Dev<'_> {
 /// Serves files from `dist`, optionally injecting live reload. Moved into the
 /// request-handling thread, so it is `Send` and self-contained.
 struct Handler {
-    dist: PathBuf,
-    /// The path the site is served under, stripped from each request so a
-    /// subdirectory-hosted site (`url "https://host/docs"`) previews locally.
-    base: String,
+    /// Shared with the rebuild loop, so a `config.kdl` reload that moves `dist`
+    /// or changes `url` reaches the request thread; the handler outlives any
+    /// single config, and used to serve the startup one forever.
+    route: Arc<Mutex<Route>>,
     live: Option<Live>,
     /// The handler's own [`Ui`] at the session's verbosity, so per-request
     /// logging (404s) honors `--quiet` like every other line without sharing
@@ -287,15 +306,32 @@ struct Handler {
     ui: Ui,
 }
 
-impl Handler {
-    fn new(dist: PathBuf, base: String, live: Option<Live>, level: Level) -> Self {
-        // Canonicalize the served root up front so every per-request traversal
-        // check compares canonical paths (with `..` and symlinks resolved)
-        // against a canonical root.
-        let dist = crate::fs::canonicalize(&dist).unwrap_or(dist);
+/// What the server reads from and what URL prefix it strips: the two things a
+/// config reload can move out from under a running handler.
+#[derive(Clone)]
+struct Route {
+    /// The served root, canonical so every per-request traversal check compares
+    /// canonical paths (with `..` and symlinks resolved) against it.
+    dist: PathBuf,
+    /// The path the site is served under, stripped from each request so a
+    /// subdirectory-hosted site (`url "https://host/docs"`) previews locally.
+    base: String,
+}
+
+impl Route {
+    fn new(config: &Config) -> Self {
+        let dist = config.dist.clone();
         Self {
-            dist,
-            base,
+            dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
+            base: config.base_path().to_owned(),
+        }
+    }
+}
+
+impl Handler {
+    fn new(route: Arc<Mutex<Route>>, live: Option<Live>, level: Level) -> Self {
+        Self {
+            route,
             live,
             ui: Ui::new(level),
         }
@@ -336,6 +372,9 @@ impl Handler {
         // A read failure (a permission error, or the file vanishing between the
         // `exists` check and here during a rebuild) is a 500, never a blank 200.
         let Ok(mut body) = crate::fs::read(path) else {
+            // Logged like a 404: an unreadable file used to produce a blank page
+            // and an idle-looking server, with no line at any verbosity.
+            self.ui.request(500, &path.display().to_string());
             let _ = req.respond(Response::empty(500));
             return;
         };
@@ -356,7 +395,8 @@ impl Handler {
         // these too. (It may still interleave with a concurrent rebuild
         // status line; acceptable for now.)
         self.ui.request(404, url);
-        match self.within(&self.dist.join(crate::config::Config::NOT_FOUND)) {
+        let dist = self.route.lock().dist.clone();
+        match self.within(&dist.join(crate::config::Config::NOT_FOUND)) {
             Some(page) => self.serve_file(req, &page, 404),
             None => {
                 let _ = req.respond(Response::empty(404));
@@ -368,15 +408,21 @@ impl Handler {
     /// candidate is checked to stay within `dist` (see [`Handler::within`]), so
     /// a `..`-laden or symlinked request can never escape the served root.
     fn resolve(&self, url: &str) -> Option<PathBuf> {
+        let route = self.route.lock().clone();
         let path = url.split('?').next().unwrap_or(url);
         let rel = path
-            .strip_prefix(&self.base)
+            .strip_prefix(&route.base)
             .unwrap_or(path)
             .trim_start_matches('/');
-        let base = self.dist.join(rel);
+        // Browsers percent-encode every non-ASCII byte, so a page whose slug
+        // carries one (`/posts/café/`) arrives as `%C3%A9` and matches no file
+        // on disk. `within` still canonicalizes and containment-checks whatever
+        // this produces, so decoding cannot open a traversal.
+        let rel = Percent::decode(rel);
+        let base = route.dist.join(&rel);
         self.within(&base)
             .or_else(|| self.within(&base.join("index.html")))
-            .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
+            .or_else(|| self.within(&route.dist.join(format!("{rel}.html"))))
     }
 
     /// The canonical path of `candidate` when it is an existing file inside
@@ -385,7 +431,7 @@ impl Handler {
     /// would leave the served tree are rejected before any read.
     fn within(&self, candidate: &Path) -> Option<PathBuf> {
         let canon = crate::fs::canonicalize(candidate).ok()?;
-        (canon.starts_with(&self.dist) && canon.is_file()).then_some(canon)
+        (canon.starts_with(&self.route.lock().dist) && canon.is_file()).then_some(canon)
     }
 }
 
@@ -515,41 +561,31 @@ impl Filter {
     fn new(config: &Config, root: &Root, config_path: &Path) -> Result<Self> {
         use notify::RecursiveMode::{NonRecursive, Recursive};
         let root = root.path().to_path_buf();
-        let assets =
-            crate::fs::canonicalize(&config.assets).unwrap_or_else(|_| root.join(&config.assets));
-        let statics = crate::fs::canonicalize(&config.r#static)
-            .unwrap_or_else(|_| root.join(&config.r#static));
+        let assets = Self::absolute(&root, &config.assets);
+        let statics = Self::absolute(&root, &config.r#static);
         let mut watches = vec![
-            (config.content.clone(), Recursive),
-            (config.templates.clone(), Recursive),
-            (config.assets.clone(), Recursive),
-            (config.r#static.clone(), Recursive),
+            (Self::absolute(&root, &config.content), Recursive),
+            (Self::absolute(&root, &config.templates), Recursive),
+            (assets.clone(), Recursive),
+            (statics.clone(), Recursive),
         ];
         // Watch the config file via its parent directory, non-recursively:
         // editors commonly save by rename-over, which drops a watch pinned to
         // the file itself. A bare `config.kdl` has an empty parent, meaning
         // the project root.
         let config_dir = match config_path.parent() {
-            Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+            Some(dir) if !dir.as_os_str().is_empty() => Self::absolute(&root, dir),
             _ => root.clone(),
         };
         watches.push((config_dir, NonRecursive));
-        // Absolute identity for the config file: canonical when it exists,
-        // else root-resolved, so event paths (absolute) compare against it.
-        let config_file = crate::fs::canonicalize(config_path).unwrap_or_else(|_| {
-            if config_path.is_absolute() {
-                config_path.to_path_buf()
-            } else {
-                root.join(config_path)
-            }
-        });
+        let config_file = Self::absolute(&root, config_path);
         let include = Self::compile(&config.serve.include)?;
         // Watch the literal prefix directory of each include glob (e.g. `data/`
         // in `data/**/*.json`) so its files are actually observed.
         for glob in &include {
             let (prefix, _) = glob.clone().partition();
             if !prefix.as_os_str().is_empty() {
-                watches.push((root.join(prefix), Recursive));
+                watches.push((Self::absolute(&root, &prefix), Recursive));
             }
         }
         let exclude = Self::compile(&config.serve.exclude)?;
@@ -564,6 +600,19 @@ impl Filter {
         })
     }
 
+    /// A path in the one form this filter compares in: absolute, canonical when
+    /// it resolves, else root-joined.
+    ///
+    /// Watch roots go through here too, not just the comparison bases: a
+    /// watcher reports events under the path it was registered with, so a
+    /// symlinked `assets` (registered as the link, compared against its target)
+    /// makes every branch of [`Self::is_relevant`] miss and no edit there
+    /// rebuilds. Registering the resolved path keeps the two spellings equal by
+    /// construction rather than by each backend's normalization.
+    fn absolute(root: &Path, path: &Path) -> PathBuf {
+        crate::fs::canonicalize(path).unwrap_or_else(|_| root.join(path))
+    }
+
     /// Compile a list of patterns into owned globs.
     fn compile(patterns: &[String]) -> Result<Vec<Glob<'static>>> {
         patterns
@@ -571,7 +620,7 @@ impl Filter {
             .map(|pattern| {
                 Glob::new(pattern)
                     .map(Glob::into_owned)
-                    .map_err(|e| ContentError::bad_glob(pattern, e).into())
+                    .map_err(|e| ContentError::bad_glob("serve", pattern, e).into())
             })
             .collect()
     }
@@ -677,6 +726,24 @@ mod tests {
         assert!(!filter.is_relevant(Path::new("/proj/other.kdl")));
         assert!(filter.is_config(Path::new("/proj/config.kdl")));
         assert!(!filter.is_config(Path::new("/proj/other.kdl")));
+    }
+
+    /// Watch roots are registered resolved and absolute, in the same form
+    /// `is_relevant` compares against: a watcher reports events under the path
+    /// it was given, so the two must agree by construction.
+    #[test]
+    fn watch_roots_are_absolute_and_asset_edits_are_relevant() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+        assert!(
+            filter.watches().iter().all(|(dir, _)| dir.is_absolute()),
+            "relative watch root: {:?}",
+            filter.watches()
+        );
+        assert!(filter.is_relevant(&Path::new("/proj").join(&config.assets).join("style.css")));
+        assert!(filter.is_relevant(&Path::new("/proj").join(&config.r#static).join("CNAME")));
+        assert!(!filter.is_relevant(Path::new("/proj/elsewhere/style.css")));
     }
 
     /// A `--config` outside the root watches that file's own directory, and

@@ -171,37 +171,14 @@ fn sse_stream_pushes_reload_on_change() {
     );
     let srv = Serve::start(&t, &[]);
 
-    // Open the event stream in the background. `--max-time` only guards against
-    // a hang: on success the read below exits the instant the event arrives.
-    let mut stream = Command::new("curl")
-        .args([
-            "-s",
-            "-N",
-            "--max-time",
-            "10",
-            &format!("http://127.0.0.1:{}/__baudelaire/live", srv.port()),
-        ])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("curl");
-
-    // Give the stream a moment to connect, then trigger a rebuild.
-    std::thread::sleep(Duration::from_millis(200));
-    t.write(
-        "content/index.typ",
-        "#let frontmatter = (title: \"H\",)\nv2",
-    );
-
-    // Read until the reload event, then stop: don't wait out the whole stream
-    // (an SSE connection stays open, so `wait_with_output` would block for the
-    // full `--max-time`).
-    let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
-    let pushed = reader
-        .lines()
-        .map_while(Result::ok)
-        .any(|line| line.contains("data: reload"));
-    let _ = stream.kill();
-    let _ = stream.wait();
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write(
+            "content/index.typ",
+            &format!("#let frontmatter = (title: \"H\",)\nv{n}"),
+        );
+    });
     assert!(pushed, "no reload event pushed");
 }
 
@@ -218,33 +195,19 @@ fn config_edit_reloads_and_pushes_reload() {
     );
     let srv = Serve::start(&t, &[]);
 
-    // Open the event stream, then edit only the config file: it sits at the
-    // project root, outside the content/templates/assets watch roots, so this
-    // proves the config file itself is watched and reloads the session.
-    let mut stream = Command::new("curl")
-        .args([
-            "-s",
-            "-N",
-            "--max-time",
-            "10",
-            &format!("http://127.0.0.1:{}/__baudelaire/live", srv.port()),
-        ])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("curl");
-    std::thread::sleep(Duration::from_millis(200));
-    t.write(
-        "config.kdl",
-        "site \"S2\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
-    );
-
-    let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
-    let pushed = reader
-        .lines()
-        .map_while(Result::ok)
-        .any(|line| line.contains("data: reload"));
-    let _ = stream.kill();
-    let _ = stream.wait();
+    // Only the config file is edited: it sits at the project root, outside the
+    // content/templates/assets watch roots, so this proves the config file
+    // itself is watched and reloads the session.
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write(
+            "config.kdl",
+            &format!(
+                "site \"S{n}\"\npaths {{\n  content \"content\"\n  dist \"public\"\n}}\nserve {{ open #false; }}"
+            ),
+        );
+    });
     assert!(pushed, "config edit did not trigger a rebuild + reload");
 }
 
@@ -268,4 +231,128 @@ fn serve_serves_index_at_root() {
     let (code, body) = srv.get("/");
     assert_eq!(code, 200);
     assert!(body.contains("welcome home"));
+}
+
+/// A `config.kdl` reload that moves `paths { dist }` must reach the request
+/// thread: the handler captured the served root at startup and kept serving the
+/// old directory for the rest of the session.
+#[test]
+fn a_config_reload_moves_the_served_root() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nfirst dist",
+    );
+    let srv = Serve::start(&t, &[]);
+    assert!(srv.get("/").1.contains("first dist"));
+
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nsecond dist",
+    );
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"other\"\n}\nserve { open #false; }",
+    );
+
+    // The rebuild is debounced; poll until the new root is being served.
+    let served = (0..30).any(|_| {
+        std::thread::sleep(Duration::from_millis(100));
+        srv.get("/").1.contains("second dist")
+    });
+    assert!(served, "still serving the old dist after a config reload");
+}
+
+/// A build failure is a warning whether it is the first build or a later one:
+/// the same typo used to kill the server or merely warn, depending only on
+/// whether it predated `serve`.
+#[test]
+fn a_failing_first_build_keeps_the_server_up() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#(",
+    );
+
+    let srv = Serve::start(&t, &[]);
+    // Nothing built, so the request 404s; the point is that it answers at all.
+    assert_eq!(srv.get("/").0, 404);
+
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nfixed",
+    );
+    let served = (0..30).any(|_| {
+        std::thread::sleep(Duration::from_millis(100));
+        srv.get("/").1.contains("fixed")
+    });
+    assert!(served, "server did not recover once the page was fixed");
+}
+
+/// Slugs keep Unicode letters, and a browser percent-encodes every non-ASCII
+/// byte, so without decoding the request path every such page 404s in `serve`.
+#[test]
+fn a_unicode_url_is_served() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/posts/café.typ",
+        "#let frontmatter = (title: \"Café\",)\nfound me",
+    );
+    let srv = Serve::start(&t, &["--no-watch"]);
+
+    let (code, body) = srv.get_raw("/posts/caf%C3%A9/");
+    assert_eq!(code, 200, "percent-encoded: {body}");
+    assert!(body.contains("found me"), "{body}");
+    // Traversal is still refused after decoding.
+    assert_eq!(srv.get_raw("/%2e%2e/config.kdl").0, 404);
+}
+
+/// Open the live-reload stream, then apply `trigger` until a reload arrives.
+///
+/// Repeating the edit rather than sleeping once before it removes the race
+/// between the SSE client connecting and the change landing, which a loaded
+/// runner loses.
+fn awaits_reload(srv: &Serve, mut trigger: impl FnMut()) -> bool {
+    let mut stream = Command::new("curl")
+        .args([
+            "-s",
+            "-N",
+            "--max-time",
+            "20",
+            &format!("http://127.0.0.1:{}/__baudelaire/live", srv.port()),
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("curl");
+
+    let reader = BufReader::new(stream.stdout.take().expect("piped stdout"));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in reader.lines().map_while(Result::ok) {
+            if line.contains("data: reload") {
+                let _ = tx.send(());
+                return;
+            }
+        }
+    });
+
+    let seen = (0..40).any(|_| {
+        trigger();
+        rx.recv_timeout(Duration::from_millis(250)).is_ok()
+    });
+    let _ = stream.kill();
+    let _ = stream.wait();
+    seen
 }

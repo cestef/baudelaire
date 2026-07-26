@@ -68,6 +68,51 @@ pub struct ImageCollision {
     pub dropped: PathBuf,
 }
 
+/// Two pages claimed the same `redirect` old-path. Only the first stub is
+/// written, so the second page's redirect silently does not exist. The common
+/// cause is translating a page by copying its frontmatter, which copies the
+/// `redirect` list along with it.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("two pages redirect `{old}`: `{kept}` and `{dropped}`")]
+#[diagnostic(
+    code(baudelaire::output::redirect_collision),
+    severity(warning),
+    help("keep the `redirect` entry on one page, or give each a distinct old path")
+)]
+pub struct RedirectCollision {
+    pub old: String,
+    pub kept: PathBuf,
+    pub dropped: PathBuf,
+}
+
+/// `clean` was pointed at a directory that holds the project itself.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("refusing to clean `{dir}`: it contains the project")]
+#[diagnostic(
+    code(baudelaire::output::clean_refused),
+    severity(warning),
+    help("point `paths {{ dist }}` / `cache {{ dir }}` at a directory below the project root")
+)]
+pub struct CleanRefused {
+    pub dir: PathBuf,
+}
+
+/// A host presented a key that does not match the one `known_hosts` records,
+/// and `strict #false` accepted it. The connection went ahead; the point is
+/// that it does not go ahead *in silence*, which turns a flag set once to
+/// bootstrap into a permanently man-in-the-middle-accepting setting. OpenSSH
+/// warns here too.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("host key for `{host}` has changed, and `strict #false` accepted it")]
+#[diagnostic(
+    code(baudelaire::deploy::ssh::host_key_accepted),
+    severity(warning),
+    help("confirm the new key out of band, run `ssh-keygen -R {host}`, and set `strict #true`")
+)]
+pub struct HostKeyAccepted {
+    pub host: String,
+}
+
 /// The version-control tool ran but failed to initialize a repository.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("`{tool} init` failed, repository setup skipped{}", detail.as_deref().map(|d| format!(": {d}")).unwrap_or_default())]
@@ -92,7 +137,10 @@ pub struct BrowserOpen {
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("file watcher error, some changes may not trigger a rebuild")]
 #[diagnostic(
-    code(baudelaire::serve::watch),
+    // Distinct from `serve::watch`, which is the *failure to establish* a watch:
+    // codes are what a user greps and suppresses by, so two conditions must not
+    // share one.
+    code(baudelaire::serve::watch_lost),
     severity(warning),
     help("restart `baudelaire serve` to re-establish the watches")
 )]
@@ -165,7 +213,8 @@ pub struct Undated {
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("announce destination resolved to {did}")]
 #[diagnostic(
-    code(baudelaire::announce::did),
+    // Distinct from `announce::did`, the mismatch *error*.
+    code(baudelaire::announce::did_unpinned),
     severity(advice),
     help(
         "pin it with `announce.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time"

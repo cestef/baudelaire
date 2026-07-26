@@ -6,11 +6,11 @@
 //! `src` that names an original asset to its hashed URL, so caches can serve
 //! assets forever and bust automatically on change.
 
-use typst_html::{HtmlDocument, attr};
+use typst_html::HtmlDocument;
 
 use crate::config::Config;
 
-use super::transform::{Cx, ElementExt, Transform};
+use super::transform::{Cx, ElementExt, Transform, URL_ATTRS};
 
 /// The [`Transform`] that swaps asset references for their fingerprinted URLs.
 ///
@@ -28,10 +28,7 @@ impl Transform for Fingerprint {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         doc.root_mut().walk(&mut |element| {
-            element.assets(
-                &[attr::href, attr::src, attr::content, attr::poster],
-                |value| cx.assets.resolve(value),
-            );
+            element.assets(URL_ATTRS, |value| cx.assets.resolve(value));
         });
     }
 }

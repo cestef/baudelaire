@@ -1,3 +1,7 @@
+# First-party actions are pinned to a commit, not `@main`: they run with this
+# repo's R2 credentials and Cloudflare API token, so a push to the actions repo
+# would otherwise change what runs with those secrets. Bump with:
+#   git ls-remote https://codeberg.org/cstef/actions HEAD
 name: Release
 
 on:
@@ -14,8 +18,47 @@ env:
   RUSTFLAGS: -C link-arg=-fuse-ld=mold
 
 jobs:
+  # A tag used to ship eight binaries with no gate at all: no fmt, no clippy, no
+  # tests, and no check that the tag matches the version it claims to be.
+  gate:
+    runs-on: linux-any-large
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: https://codeberg.org/cstef/actions/rust@2f67efe8a159031b9a95246225515f4361d90299
+      - uses: https://codeberg.org/cstef/actions/mold@2f67efe8a159031b9a95246225515f4361d90299
+        with:
+          rustflags: "false"
+
+      - name: tag matches Cargo.toml
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version=$(cargo metadata --format-version 1 --no-deps \
+            | sed -n 's/.*"name":"baudelaire","version":"\([^"]*\)".*/\1/p')
+          [ "$tag" = "v$version" ] || {
+            echo "tag $tag does not match Cargo.toml version $version"
+            exit 1
+          }
+
+      - name: fmt
+        run: cargo fmt --all --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: clippy (slim)
+        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+
+      - uses: https://codeberg.org/cstef/actions/nextest@2f67efe8a159031b9a95246225515f4361d90299
+        with:
+          run: "true"
+          args: --workspace --no-tests warn
+
   build:
     name: build ${{ matrix.name }}
+    needs: gate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -40,27 +83,27 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - uses: https://codeberg.org/cstef/actions/rust@main
+      - uses: https://codeberg.org/cstef/actions/rust@2f67efe8a159031b9a95246225515f4361d90299
         with:
           targets: ${{ matrix.target }}
-      - uses: https://codeberg.org/cstef/actions/mold@main
+      - uses: https://codeberg.org/cstef/actions/mold@2f67efe8a159031b9a95246225515f4361d90299
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
       # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
-      - uses: https://codeberg.org/cstef/actions/musl@main
+      - uses: https://codeberg.org/cstef/actions/musl@2f67efe8a159031b9a95246225515f4361d90299
         if: matrix.musl
 
-      - uses: https://codeberg.org/cstef/actions/sccache@main
+      - uses: https://codeberg.org/cstef/actions/sccache@2f67efe8a159031b9a95246225515f4361d90299
         with:
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
           access-key-id: ${{ secrets.R2_CACHE_ACCESS_KEY_ID }}
           secret-access-key: ${{ secrets.R2_CACHE_SECRET_ACCESS_KEY }}
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
-      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@2f67efe8a159031b9a95246225515f4361d90299
         with:
           bucket: baudelaire-sccache
           endpoint: ${{ secrets.R2_ENDPOINT }}
@@ -107,7 +150,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
-      - uses: https://codeberg.org/cstef/actions/cargo-cache@main
+      - uses: https://codeberg.org/cstef/actions/cargo-cache@2f67efe8a159031b9a95246225515f4361d90299
         if: always()
         with:
           mode: save

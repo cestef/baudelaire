@@ -1,8 +1,6 @@
 use std::fmt;
 use std::sync::LazyLock;
 
-use crate::content::Frontmatter;
-
 /// A permalink template parsed from a config string like `/posts/{slug}/`.
 ///
 /// Segments are parsed once at config load and rendered per page. No
@@ -85,7 +83,33 @@ impl Permalink {
 
     /// Render to a final URL path.
     pub fn render(&self, ctx: &PermalinkCtx) -> String {
-        self.segments.iter().map(|s| s.render(ctx)).collect()
+        let raw: String = self.segments.iter().map(|s| s.render(ctx)).collect();
+        Self::collapse(&raw)
+    }
+
+    /// Drop empty segments from a rendered path, keeping the leading and
+    /// trailing slash.
+    ///
+    /// A placeholder with nothing to render (`{year}` on a dateless page under
+    /// `/posts/{year}/{slug}/`) otherwise leaves `/posts//hello/` in
+    /// `page.permalink`. Normalizing the *file* path is not enough: the raw
+    /// string is what the sitemap, feeds, search index, `llms.txt`,
+    /// `baudelaire:pages` and every rewritten `<a href>` emit.
+    fn collapse(url: &str) -> String {
+        let mut out = String::with_capacity(url.len());
+        if url.starts_with('/') {
+            out.push('/');
+        }
+        for (i, segment) in url.split('/').filter(|s| !s.is_empty()).enumerate() {
+            if i > 0 {
+                out.push('/');
+            }
+            out.push_str(segment);
+        }
+        if url.ends_with('/') && !out.ends_with('/') {
+            out.push('/');
+        }
+        out
     }
 
     /// A rooted, trailing-slashed URL path from already-slugged segments:
@@ -180,19 +204,6 @@ pub struct PermalinkCtx {
     pub order: Option<i64>,
 }
 
-impl PermalinkCtx {
-    /// Context from a page's already-resolved `slug` (frontmatter-else-stem
-    /// precedence is decided once, in `Page::load`).
-    pub fn from_page(collection: &str, fm: &Frontmatter, slug: &str) -> Self {
-        Self {
-            slug: slug.to_owned(),
-            collection: collection.to_owned(),
-            date: fm.date,
-            order: fm.order,
-        }
-    }
-}
-
 impl PermalinkError {
     /// An unknown `{placeholder}`, its help listing the valid names straight
     /// from [`PLACEHOLDERS`].
@@ -245,6 +256,34 @@ mod tests {
             date: time::Date::from_calendar_date(2024, time::Month::January, 15).ok(),
             order: Some(3),
         }
+    }
+
+    /// A placeholder with nothing to render collapses its segment away instead
+    /// of emitting `/posts//hello/` as the page's canonical URL.
+    #[test]
+    fn an_unset_placeholder_leaves_no_empty_segment() {
+        let dateless = PermalinkCtx {
+            slug: "hello".into(),
+            collection: "posts".into(),
+            date: None,
+            order: None,
+        };
+        let p = Permalink::parse("/posts/{year}/{month}/{slug}/").unwrap();
+        assert_eq!(p.render(&dateless), "/posts/hello/");
+        assert_eq!(p.render(&ctx("hello", "posts")), "/posts/2024/01/hello/");
+    }
+
+    /// A template that renders to nothing at all is still the site root.
+    #[test]
+    fn an_empty_render_is_the_root() {
+        let p = Permalink::parse("/{order}/").unwrap();
+        let orderless = PermalinkCtx {
+            slug: "x".into(),
+            collection: "y".into(),
+            date: None,
+            order: None,
+        };
+        assert_eq!(p.render(&orderless), "/");
     }
 
     #[test]
@@ -308,15 +347,6 @@ mod tests {
         let p = Permalink::convention();
         assert_eq!(p.to_string(), Permalink::CONVENTION);
         assert_eq!(p.render(&ctx("hello", "notes")), "/notes/hello/");
-    }
-
-    #[test]
-    fn missing_date_renders_empty() {
-        let mut c = ctx("hello", "posts");
-        c.date = None;
-        let p = Permalink::parse("/posts/{year}/{slug}/").unwrap();
-        // empty year leaves a blank segment; clean-url pass normalizes later
-        assert_eq!(p.render(&c), "/posts//hello/");
     }
 
     #[test]

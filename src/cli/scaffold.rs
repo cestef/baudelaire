@@ -392,7 +392,10 @@ impl Draft {
             .flat_map(|c| c.pages.iter())
             .filter_map(|p| p.frontmatter.order)
             .max()
-            .map_or(1, |highest| highest + 1)
+            // Saturating: `order` comes from authored frontmatter, and
+            // `overflow-checks` is off in release, so `i64::MAX` wrapped to
+            // `i64::MIN` and the new page sorted first instead of last.
+            .map_or(1, |highest| highest.saturating_add(1))
     }
 
     fn parse_date(input: &str) -> Result<time::Date> {
@@ -658,5 +661,53 @@ mod templates {
                 "dangling {{site"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::Draft;
+    use crate::config::CollectionConfig;
+    use crate::content::{Collection, Data, Frontmatter, Page, PageId, Siblings};
+    use std::path::PathBuf;
+
+    fn collection(orders: &[i64]) -> Collection {
+        Collection {
+            id: "posts".into(),
+            config: CollectionConfig::default(),
+            pages: orders
+                .iter()
+                .map(|order| Page {
+                    id: PageId::new("posts", "a"),
+                    source: PathBuf::from("content/posts/a.typ"),
+                    frontmatter: Frontmatter {
+                        order: Some(*order),
+                        ..Frontmatter::default()
+                    },
+                    body: String::new(),
+                    data: Data::Empty,
+                    collection: "posts".into(),
+                    permalink: "/p/".into(),
+                    output: PathBuf::new(),
+                    template: None,
+                    lang: "en".into(),
+                    siblings: Siblings::default(),
+                    translations: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+
+    /// `order` comes from authored frontmatter and `overflow-checks` is off in
+    /// release, so `i64::MAX + 1` wrapped to `i64::MIN` and the new page sorted
+    /// first instead of last.
+    #[test]
+    fn next_order_saturates_instead_of_wrapping() {
+        assert_eq!(Draft::next_order("posts", &[collection(&[])]), 1);
+        assert_eq!(Draft::next_order("posts", &[collection(&[1, 3, 2])]), 4);
+        assert_eq!(
+            Draft::next_order("posts", &[collection(&[i64::MAX])]),
+            i64::MAX
+        );
     }
 }

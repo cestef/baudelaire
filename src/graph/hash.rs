@@ -47,28 +47,55 @@ impl Hash {
     /// per-file dependency tracker cannot otherwise see, since typst never reads
     /// the embedded files.
     pub fn of_dir(dir: &Path) -> Self {
-        let mut files: Vec<(String, Hash)> = Vec::new();
-        Self::collect(dir, dir, &mut files);
+        // Keyed by the path's raw bytes rather than a lossy string: two distinct
+        // non-UTF-8 names both render as `??` and would collapse into one key,
+        // hiding a change from the very fingerprint meant to catch it.
+        let mut files: Vec<(Vec<u8>, Hash)> = crate::fs::Walk::new(dir)
+            .lossy()
+            .files
+            .iter()
+            .filter_map(|path| {
+                let hash = Self::of_file(path)?;
+                let rel = path.strip_prefix(dir).unwrap_or(path);
+                Some((rel.as_os_str().as_encoded_bytes().to_vec(), hash))
+            })
+            .collect();
         files.sort_by(|(a, _), (b, _)| a.cmp(b));
         Self::of(&files)
     }
+}
 
-    fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, Hash)>) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                Self::collect(root, &path, out);
-            } else if let Some(hash) = Self::of_file(&path) {
-                let rel = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .into_owned();
-                out.push((rel, hash));
-            }
+/// The identity of the thing that produced a cached artifact: everything that
+/// can change generated output with no source, config, or dependency changing.
+///
+/// Every persisted cache folds this into its fingerprint. Without it, upgrading
+/// baudelaire (a fixed renderer, a new transform, a different HTML shape) or the
+/// typst it embeds leaves every page a cache *hit*, serving markup from the
+/// previous renderer forever, and a change to the manifest's own layout reads
+/// the old file as if it meant the same thing.
+#[derive(Debug, Clone, PartialEq, Eq, std::hash::Hash)]
+pub struct Renderer {
+    /// This binary's version.
+    baudelaire: &'static str,
+    /// The embedded typst compiler's version, which owns HTML export.
+    typst: &'static str,
+    /// The on-disk cache layout. Bump by hand whenever a manifest or entry
+    /// field changes meaning without changing shape, since serde would happily
+    /// read the old file.
+    schema: u32,
+}
+
+impl Renderer {
+    /// 3: `Entry` groups the render pass's results under `outputs`, which now
+    /// also carries the page's broken links. 2: `Entry::deps` values became
+    /// `Option<Hash>`, and manifest keys became project-relative.
+    const SCHEMA: u32 = 3;
+
+    pub fn current() -> Self {
+        Self {
+            baudelaire: crate::VERSION,
+            typst: typst::utils::version().raw(),
+            schema: Self::SCHEMA,
         }
     }
 }

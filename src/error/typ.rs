@@ -98,10 +98,10 @@ impl std::error::Error for TypstSourceDiagnostic {}
 
 impl miette::Diagnostic for TypstSourceDiagnostic {
     fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new(match self.inner.severity {
-            typst::diag::Severity::Error => "typst::error",
-            typst::diag::Severity::Warning => "typst::warning",
-        }))
+        // Namespaced like every other code, and keyed on the error class, not
+        // on severity: severity already has its own field, and an unnamespaced
+        // code is not greppable alongside the rest.
+        Some(Box::new("baudelaire::typst::diagnostic"))
     }
 
     fn severity(&self) -> Option<miette::Severity> {

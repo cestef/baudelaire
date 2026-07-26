@@ -4,13 +4,8 @@
 mod common;
 
 use baudelaire::engine::{Engine, Mode};
-use baudelaire::ui::{Level, Ui};
 
-use common::Site;
-
-fn silent() -> Ui {
-    Ui::new(Level::Silent)
-}
+use common::{Site, silent};
 
 /// A tiny PNG of the given size, its pixels varying with position so two
 /// different sizes never share bytes (and so collide only when we mean them to).
@@ -157,7 +152,10 @@ fn image_from_bytes_has_no_file_and_stays_inline() {
     assert!(!site.exists("public/assets/pic.png"));
 }
 
+/// Responsive variants are re-encoded by the image handler, which the `images`
+/// feature owns; the slim flavour copies verbatim and emits no `srcset`.
 #[test]
+#[cfg(feature = "images")]
 fn responsive_adds_srcset_and_writes_width_variants() {
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  images {\n    responsive { widths 30 }\n  }\n}\n",
@@ -224,4 +222,44 @@ fn colliding_image_names_warn_and_keep_one() {
         "collision warning surfaced: {stderr}"
     );
     assert!(site.exists("public/assets/pic.png"), "one file kept");
+}
+
+/// Processed bytes are memoized across builds: the pipeline used to re-run
+/// oxipng and the downscale over every image on every build, including a fully
+/// cached one.
+#[test]
+#[cfg(feature = "images")]
+fn an_unchanged_image_is_not_re_encoded() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  images {\n    optimize { png level=2 }\n    responsive { widths 20 }\n  }\n}\n",
+    );
+    site.write_bytes("assets/big.png", &png(60, 40));
+    site.write(
+        "content/index.typ",
+        "#html.elem(\"img\", attrs: (src: \"/assets/big.png\"))\n",
+    );
+    build(&site);
+    let first = std::fs::read(site.path("public/assets/big.png")).unwrap();
+    let variant = std::fs::read(site.path("public/assets/big-20.png")).unwrap();
+
+    // The memo survives the asset tree being regenerated wholesale.
+    build(&site);
+    assert_eq!(
+        std::fs::read(site.path("public/assets/big.png")).unwrap(),
+        first,
+        "a memoized rebuild must produce the same bytes"
+    );
+    assert_eq!(
+        std::fs::read(site.path("public/assets/big-20.png")).unwrap(),
+        variant
+    );
+
+    // ...and a changed source is re-encoded rather than served from the memo.
+    site.write_bytes("assets/big.png", &png(60, 41));
+    build(&site);
+    assert_ne!(
+        std::fs::read(site.path("public/assets/big.png")).unwrap(),
+        first,
+        "an edited image must not come from the memo"
+    );
 }

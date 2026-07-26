@@ -21,7 +21,9 @@ Every other key has a default:
 / `bucket`: bucket name. Required.
 / `endpoint`: an S3-compatible host, e.g.
   `https://ACCOUNT.r2.cloudflarestorage.com`. Unset targets AWS at the region's
-  default host; set it for R2, MinIO, or any non-AWS provider.
+  default host; set it for R2, MinIO, or any non-AWS provider. Must be `https`,
+  since the request carries your signature; `http://localhost` is allowed for a
+  local MinIO.
 / `region` (`us-east-1`): region code. R2 uses `auto`.
 / `prefix`: a key prefix (subdirectory in the bucket) every object lands under.
 / `delete` (`#true`): remove objects under `prefix` that the build no longer
@@ -52,3 +54,7 @@ AWS_ACCESS_KEY_ID=AKIA.. baudelaire deploy
 `--secret` also accepts a literal value, which takes precedence over everything
 above, but it lands in the process arguments; prefer `--secret -` or the
 environment variable.
+
+Temporary credentials work as they are: `AWS_SESSION_TOKEN`, set by GitHub OIDC,
+an EC2/ECS instance role, `aws sso login` or `sts assume-role`, is picked up and
+signed along with the request.

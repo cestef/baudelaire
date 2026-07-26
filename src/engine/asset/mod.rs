@@ -18,6 +18,7 @@ mod css;
 mod image;
 #[cfg(feature = "js")]
 mod js;
+mod memo;
 #[cfg(feature = "js")]
 mod module;
 
@@ -31,7 +32,10 @@ use crate::content::Page;
 use crate::error::Result;
 use crate::fs;
 use crate::graph::Hash;
+use rayon::prelude::*;
+
 use crate::render::{AssetMap, SrcSets};
+use memo::Memo;
 
 #[cfg(feature = "css")]
 use css::Stylesheet;
@@ -104,19 +108,22 @@ impl Ctx<'_> {
 
     /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
     /// (the assets live under `dist`, so there is nothing to canonicalize).
+    /// `None` when the path walks out of the asset root.
+    ///
+    /// Fallible because `PathBuf::pop` on an empty buffer is a silent no-op:
+    /// `url(../x.png)` in `assets/a.css` normalized to `assets/x.png` and so
+    /// resolved to a *different, real* file whenever one happened to exist.
     #[cfg(feature = "css")]
-    fn normalize(path: &Path) -> PathBuf {
+    fn normalize(path: &Path) -> Option<PathBuf> {
         let mut out = PathBuf::new();
         for component in path.components() {
             match component {
-                Component::ParentDir => {
-                    out.pop();
-                }
-                Component::CurDir => {}
+                Component::ParentDir if !out.pop() => return None,
+                Component::ParentDir | Component::CurDir => {}
                 other => out.push(other),
             }
         }
-        out
+        Some(out)
     }
 }
 
@@ -140,7 +147,7 @@ impl PathExt for Path {
 
 /// One asset-processing strategy: which files it claims, when it runs, and how a
 /// claimed file becomes its emitted bytes.
-trait Handler {
+trait Handler: Sync {
     /// Whether this handler processes `file`. The first handler in [`builtin`]
     /// to claim a file owns it, so specific handlers come first and [`Verbatim`]
     /// claims whatever is left.
@@ -151,11 +158,31 @@ trait Handler {
         Phase::Early
     }
 
+    /// Whether this handler's output is a pure function of the file's own bytes
+    /// and the config, and so can be memoized across builds.
+    ///
+    /// False by default, and deliberately so: a stylesheet rewrites references
+    /// to *other* assets' hashed names and a script bundles a whole import
+    /// graph, so neither is determined by the bytes in front of it.
+    fn pure(&self) -> bool {
+        false
+    }
+
     /// Reorder this handler's files before rendering. The default keeps input
     /// order; stylesheets override it to fingerprint an imported sheet before
     /// its importer.
     fn order(&self, files: Vec<PathBuf>, _ctx: &Ctx) -> Vec<PathBuf> {
         files
+    }
+
+    /// The served path for a claimed file, when this handler's output is no
+    /// longer the same kind of file as its source. Default: unchanged.
+    ///
+    /// Scripts use it: a bundled `.ts` entry holds JavaScript, and writing it as
+    /// `app.<hash>.ts` left the served file under a MIME type browsers refuse
+    /// for `type=module`, keyed in the asset map under a name no author writes.
+    fn rename(&self, rel: &Path) -> PathBuf {
+        rel.to_path_buf()
     }
 
     /// Transform `file` (relative path `rel`) into the bytes written to `dist`,
@@ -173,6 +200,16 @@ trait Handler {
     fn variants(&self, _file: &Path, _rel: &Path, _ctx: &Ctx) -> Result<Vec<Variant>> {
         Ok(Vec::new())
     }
+}
+
+/// One file's rendered outputs, held until the serial emit pass writes them.
+struct Render {
+    /// Source path relative to the asset root.
+    rel: PathBuf,
+    /// Where it is served from, which a handler may rename (`.ts` -> `.js`).
+    served: PathBuf,
+    primary: Option<Vec<u8>>,
+    variants: Vec<Variant>,
 }
 
 /// One responsive candidate a handler derives from a source image: a target
@@ -245,8 +282,12 @@ pub struct Assets<'a> {
     js: JsCtx<'a>,
     /// Source asset directory (`config.assets`).
     src: &'a Path,
-    /// Destination directory under `dist`, named after `src` (e.g. `dist/assets`).
+    /// Where this build writes, published over `dist/assets` by
+    /// [`Assets::publish`] once the build is far enough along to be consistent.
     dst: PathBuf,
+    /// Cross-build memo of processed bytes, so an unchanged image is not
+    /// re-encoded on every build.
+    memo: Memo,
     /// URL prefix the assets are served under, e.g. `/assets`.
     prefix: String,
 }
@@ -258,25 +299,46 @@ impl<'a> Assets<'a> {
             #[cfg(feature = "js")]
             js,
             src: &config.assets,
-            dst: config.asset_dist(),
+            dst: config.asset_staging(),
+            memo: Memo::new(config),
             prefix: format!("/{}", config.asset_name()),
         }
     }
 
+    /// Move the staged tree into its served place, replacing whatever the
+    /// previous build left there. Called once every page is on disk naming the
+    /// new asset filenames; see [`Config::asset_staging`].
+    ///
+    /// A rename, so there is no window in which half the assets exist. The
+    /// served tree is dropped even when this build staged nothing: the pipeline
+    /// owns it end to end and the prune pass deliberately skips it, so anything
+    /// left behind would never be collected.
+    pub fn publish(&self) -> Result<()> {
+        let served = self.config.asset_dist();
+        if served.exists() {
+            fs::remove_dir_all(&served)?;
+        }
+        if self.dst.exists() {
+            fs::rename(&self.dst, &served)?;
+        }
+        Ok(())
+    }
+
     /// Process every asset into `dist`, returning the [`Processed`] summary.
+    /// The staging tree is *not* cleared here: [`Engine::build`] clears it at
+    /// the start of the build, before the static copy seeds it with whatever
+    /// `static/` places inside the asset directory.
+    ///
+    /// [`Engine::build`]: crate::engine::Engine::build
     pub fn process(&self) -> Result<Processed> {
         let mut out = Processed::default();
         if !self.src.exists() {
             return Ok(out);
         }
-        // Regenerate the whole tree so stale fingerprinted files never linger.
-        if self.dst.exists() {
-            fs::remove_dir_all(&self.dst)?;
-        }
         let handlers = builtin();
         // Bucket every file under the first handler that claims it.
         let mut buckets: Vec<Vec<PathBuf>> = handlers.iter().map(|_| Vec::new()).collect();
-        for file in Walk::files(self.src)? {
+        for file in fs::Walk::new(self.src).files()? {
             let idx = handlers
                 .iter()
                 .position(|h| h.claims(&file, self.config))
@@ -310,7 +372,7 @@ impl<'a> Assets<'a> {
                         context: self.js.context,
                         sections: self.js.sections,
                     };
-                    Js::new(&cx)
+                    Js::new(&cx)?
                 };
                 let ctx = Ctx {
                     #[cfg(any(feature = "css", feature = "images"))]
@@ -352,30 +414,96 @@ impl<'a> Assets<'a> {
         ctx: &Ctx,
         out: &mut Processed,
     ) -> Result<()> {
-        for file in handler.order(files, ctx) {
-            let rel = file
-                .strip_prefix(self.src)
-                .expect("Walk yields paths under src");
-            if let Some(bytes) = handler.render(&file, rel, &out.map, ctx)? {
-                self.emit(ctx, rel, &bytes, out)?;
+        let files = handler.order(files, ctx);
+        // Render first, emit second. A pure handler's files are independent, so
+        // the expensive half (re-encoding an image) runs across the pool while
+        // the writes and the map inserts stay ordered and single-threaded.
+        let rendered: Vec<Render> = match handler.pure() {
+            true => files
+                .par_iter()
+                .map(|file| self.render(handler, file, ctx, &out.map))
+                .collect::<Result<_>>()?,
+            false => files
+                .iter()
+                .map(|file| self.render(handler, file, ctx, &out.map))
+                .collect::<Result<_>>()?,
+        };
+        for render in rendered {
+            let Render {
+                rel,
+                served,
+                primary,
+                variants,
+            } = render;
+            if let Some(bytes) = primary {
+                let dst = self.emit(ctx, &served, &bytes, out)?;
+                // A renamed asset is referenced by *either* name: authors write
+                // `main.js` for a bundle, but `main.ts` is what is on disk and
+                // what an editor completes. Map both, or one of the two spellings
+                // silently keeps pointing at a file that was never written.
+                if served != rel {
+                    out.map.insert(ctx.url(&rel), ctx.url(&dst));
+                }
             }
             // Responsive variants: write each downscaled copy (the source's own
             // width carries no bytes, having been emitted above) and record it
             // as a `srcset` candidate against the source's URL.
-            for variant in handler.variants(&file, rel, ctx)? {
+            for variant in variants {
                 if let Some(bytes) = &variant.bytes {
                     self.emit(ctx, &variant.rel, bytes, out)?;
                 }
                 out.srcsets
-                    .record(ctx.url(rel), variant.width, ctx.url(&variant.rel));
+                    .record(ctx.url(&rel), variant.width, ctx.url(&variant.rel));
             }
         }
         Ok(())
     }
 
+    /// Produce one file's outputs, from the memo when the handler is pure and
+    /// nothing that shapes them has changed.
+    fn render(
+        &self,
+        handler: &dyn Handler,
+        file: &Path,
+        ctx: &Ctx,
+        map: &AssetMap,
+    ) -> Result<Render> {
+        let rel = file
+            .strip_prefix(self.src)
+            .expect("Walk yields paths under src")
+            .to_path_buf();
+        // Render against the source path (stylesheets resolve their relative
+        // references from it), emit under the served one.
+        let served = handler.rename(&rel);
+        let key = match handler.pure() {
+            true => Some(self.memo.key(&fs::read(file)?, &rel)),
+            false => None,
+        };
+        if let Some((primary, variants)) = key.as_ref().and_then(|key| self.memo.get(key)) {
+            return Ok(Render {
+                rel,
+                served,
+                primary,
+                variants,
+            });
+        }
+        let primary = handler.render(file, &rel, map, ctx)?;
+        let variants = handler.variants(file, &rel, ctx)?;
+        if let Some(key) = &key {
+            self.memo.put(key, primary.as_deref(), &variants);
+        }
+        Ok(Render {
+            rel,
+            served,
+            primary,
+            variants,
+        })
+    }
+
     /// Fingerprint (when enabled) and write `bytes` for the asset at `rel`,
-    /// recording the request->served URL mapping when the name changed.
-    fn emit(&self, ctx: &Ctx, rel: &Path, bytes: &[u8], out: &mut Processed) -> Result<()> {
+    /// recording the request->served URL mapping when the name changed. Returns
+    /// the path actually written.
+    fn emit(&self, ctx: &Ctx, rel: &Path, bytes: &[u8], out: &mut Processed) -> Result<PathBuf> {
         let dst = self.fingerprint(rel, bytes);
         fs::write_all(self.dst.join(&dst), bytes)?;
         out.count += 1;
@@ -383,7 +511,7 @@ impl<'a> Assets<'a> {
         if dst != rel {
             out.map.insert(ctx.url(rel), ctx.url(&dst));
         }
-        Ok(())
+        Ok(dst)
     }
 
     /// The relative output path for an asset, splicing a content hash into the
@@ -403,24 +531,25 @@ impl<'a> Assets<'a> {
     }
 }
 
-/// Recursively lists every file under a directory.
-pub(super) struct Walk;
+#[cfg(all(test, feature = "css"))]
+mod tests {
+    use super::Ctx;
+    use std::path::{Path, PathBuf};
 
-impl Walk {
-    pub(super) fn files(root: &Path) -> Result<Vec<PathBuf>> {
-        let mut files = Vec::new();
-        Self::collect(root, &mut files)?;
-        Ok(files)
+    /// A `..` that walks out of the asset root must not be absorbed: it used to
+    /// normalize to a sibling inside the root and resolve to a different, real
+    /// file.
+    #[test]
+    fn normalize_rejects_a_path_escaping_the_asset_root() {
+        assert_eq!(Ctx::normalize(Path::new("../x.png")), None);
+        assert_eq!(Ctx::normalize(Path::new("css/../../x.png")), None);
     }
 
-    fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-        for path in fs::read_dir(dir)? {
-            if path.is_dir() {
-                Self::collect(&path, out)?;
-            } else {
-                out.push(path);
-            }
-        }
-        Ok(())
+    #[test]
+    fn normalize_collapses_interior_segments() {
+        assert_eq!(
+            Ctx::normalize(Path::new("css/../img/./logo.png")),
+            Some(PathBuf::from("img/logo.png"))
+        );
     }
 }

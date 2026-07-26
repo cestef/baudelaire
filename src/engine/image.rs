@@ -8,7 +8,7 @@
 //! silent overwrite never serves the wrong picture.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::error::Result;
@@ -24,6 +24,10 @@ use crate::ui::Ui;
 pub(super) struct Images {
     /// The asset directory copies land in.
     dir: PathBuf,
+    /// The project root, so a diagnostic names `content/a/photo.png` like every
+    /// other one rather than `/home/you/mysite/content/a/photo.png`: an
+    /// [`ImageRef`] carries an absolute source because the copy needs one.
+    root: PathBuf,
     /// Served name -> (content hash, the source that claimed it), for deduping
     /// identical writes and detecting collisions.
     seen: HashMap<String, (Hash, PathBuf)>,
@@ -32,9 +36,10 @@ pub(super) struct Images {
 }
 
 impl Images {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, root: &Path) -> Self {
         Self {
-            dir: config.asset_dist(),
+            dir: config.asset_staging(),
+            root: crate::fs::canonical(root),
             seen: HashMap::new(),
             count: 0,
             bytes: 0,
@@ -43,11 +48,16 @@ impl Images {
 
     /// Copy every image in `refs`, skipping duplicates and warning on
     /// collisions. Returns `self` so the count and bytes can be read off.
+    ///
+    /// `refs` is sorted first: callers pass fresh pages' images before cached
+    /// ones, so "the first source wins" is only a rule once the order is fixed.
     pub fn copy<'a>(
         mut self,
         refs: impl IntoIterator<Item = &'a ImageRef>,
         ui: &Ui,
     ) -> Result<Self> {
+        let mut refs: Vec<&ImageRef> = refs.into_iter().collect();
+        refs.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.source.cmp(&b.source)));
         for image in refs {
             self.add(image, ui)?;
         }
@@ -65,19 +75,39 @@ impl Images {
             Some((_, kept)) => {
                 ui.warn(ImageCollision {
                     name: image.name.clone(),
-                    kept: kept.clone(),
-                    dropped: image.source.clone(),
+                    kept: self.relative(kept),
+                    dropped: self.relative(&image.source),
                 });
                 return Ok(());
             }
             None => {}
         }
-        fs::write_all(self.dir.join(&image.name), &data)?;
+        // The asset pipeline regenerates this directory before any image is
+        // copied, so a file already here belongs to it. `seen` only dedupes
+        // externalized images against each other, so without this an
+        // externalized `photo.png` silently replaced a pipeline asset of the
+        // same name.
+        let dst = self.dir.join(&image.name);
+        if dst.exists() {
+            ui.warn(ImageCollision {
+                name: image.name.clone(),
+                kept: self.relative(&dst),
+                dropped: self.relative(&image.source),
+            });
+            return Ok(());
+        }
+        fs::write_all(&dst, &data)?;
         self.seen
             .insert(image.name.clone(), (hash, image.source.clone()));
         self.count += 1;
         self.bytes += data.len() as u64;
         Ok(())
+    }
+
+    /// A path as diagnostics spell it: relative to the project root when it
+    /// lies inside, unchanged otherwise.
+    fn relative(&self, path: &Path) -> PathBuf {
+        path.strip_prefix(&self.root).unwrap_or(path).to_path_buf()
     }
 
     /// Number of files written (duplicates and collisions excluded).

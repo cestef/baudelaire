@@ -18,7 +18,7 @@ use crate::config::Config;
 use crate::content::{Page, discover};
 use crate::error::{AnnounceError, Result};
 use crate::graph::Hash;
-use crate::remote::Options;
+use crate::remote::{self, Backend, Options};
 use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
@@ -61,16 +61,6 @@ impl Doc {
     }
 }
 
-/// A destination the built site can be announced to.
-pub trait Backend {
-    /// Stable, human-facing name, shown in progress output.
-    fn name(&self) -> &'static str;
-
-    /// Announce `site` under `opts`, reporting progress as it goes. Honors
-    /// `opts.dry_run` by computing and reporting the plan without writing.
-    fn run(&self, site: &SiteView, opts: &Options, ui: &Ui) -> Result<()>;
-}
-
 /// Announce to every configured destination in turn. Errors if none is
 /// configured, so `baudelaire announce` on an unconfigured project explains
 /// itself rather than silently doing nothing.
@@ -80,26 +70,20 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
         return Err(AnnounceError::Unconfigured.into());
     }
     let site = view(config)?;
-    for backend in backends {
-        ui.section(format_args!(
-            "{} - {}",
-            backend.name(),
-            Count::documents(site.documents.len())
-        ));
-        // Confirm before any network mutation, unless previewing or `--yes`.
-        if !opts.dry_run && !opts.confirm(&format!("announce to {}?", backend.name()))? {
-            ui.detail(format_args!("skipped {}", backend.name()));
-            continue;
-        }
-        backend.run(&site, opts, ui)?;
-    }
-    Ok(())
+    remote::publish(
+        "announce",
+        backends,
+        &site,
+        |site| Count::documents(site.documents.len()).to_string(),
+        opts,
+        ui,
+    )
 }
 
 /// The enabled destinations, from config alone. THE single source of what a
 /// `announce` run targets: add a backend by adding one line here.
-fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
-    let mut out: Vec<Box<dyn Backend>> = Vec::new();
+fn configured(config: &Config) -> Vec<Box<dyn Backend<SiteView<'_>>>> {
+    let mut out: Vec<Box<dyn Backend<SiteView<'_>>>> = Vec::new();
     if let Some(standard) = &config.announce.standard {
         out.push(Box::new(Standard::new(standard.clone())));
     }

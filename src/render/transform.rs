@@ -48,6 +48,15 @@ pub(super) struct Cx<'a> {
 
 /// The one shared walker over the typed DOM, so every transform visits
 /// elements the same way instead of hand-rolling its own recursion.
+/// The attributes that carry a URL to an asset this site owns.
+///
+/// One list, because four hand-written copies had drifted into four different
+/// sets: `og:image` (a `content` attribute) was fingerprinted but never
+/// base-path-prefixed and never embedded, so a subpath-hosted site's social card
+/// pointed at a file that was not there. `srcset` is handled separately by
+/// [`ElementExt::assets`], which parses its candidate list.
+pub(super) const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
+
 pub(super) trait ElementExt {
     /// Visit this element, then every descendant element, depth-first.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));

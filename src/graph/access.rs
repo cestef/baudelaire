@@ -123,10 +123,7 @@ impl<'a> Root<'a> {
 
     /// The digest of the value at `key`, or `None` when the path is absent.
     fn digest(&self, key: &str) -> Option<Hash> {
-        let value = self.value(key)?;
-        Some(Hash::of_bytes(
-            &serde_json::to_vec(value).unwrap_or_default(),
-        ))
+        Some(Hash::of(self.value(key)?))
     }
 }
 
@@ -302,11 +299,16 @@ impl<'a> Analyzer<'a> {
         if let Some(cached) = self.memo.lock().get(path) {
             return cached.clone();
         }
-        let found = self
-            .project
-            .source(path)
-            .map(|source| reads(&source, &self.roots))
-            .unwrap_or_default();
+        let found = match self.project.source(path) {
+            Ok(source) => reads(&source, &self.roots),
+            // A file that could not be loaded must not be recorded as reading
+            // *nothing*: that is the unsound direction, and it leaves a page
+            // depending on a dependency it can never be invalidated by (a
+            // `@preview` theme in the package cache reading `git.hash` would go
+            // stale across every commit). Widen to every root instead, the same
+            // over-approximation this analysis uses for an unnarrowable access.
+            Err(_) => self.roots.iter().map(|root| root.base.to_owned()).collect(),
+        };
         let found = Arc::new(found);
         self.memo.lock().insert(path.to_owned(), found.clone());
         found

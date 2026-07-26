@@ -9,6 +9,8 @@ use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
 use baudelaire::config::Config;
+use baudelaire::engine::{Engine, Mode, Stats};
+use baudelaire::ui::{Level, Ui};
 
 /// The minimal config nearly every test starts from: content in, `public` out,
 /// clean URLs on. Tests needing more compose their own.
@@ -72,6 +74,7 @@ impl Site {
     /// calls resolve against this site instead of the test runner's cwd.
     pub fn config(&self) -> Config {
         let mut cfg = Config::parse(&self.read("config.kdl")).unwrap();
+        cfg.root = self.root.clone();
         cfg.content = self.root.join(&cfg.content);
         cfg.dist = self.root.join(&cfg.dist);
         cfg.assets = self.root.join(&cfg.assets);
@@ -108,10 +111,29 @@ impl Site {
         String::from_utf8_lossy(&out.stderr).into_owned()
     }
 
+    /// Build in-process and return the engine's own [`Stats`].
+    ///
+    /// Preferred over scraping `build()`'s summary text for cache counts: the
+    /// numbers come from the engine rather than from prose that could be
+    /// reworded, `!contains("1 cached")` cannot pass by accident, and the
+    /// coverage tool sees this path (it instruments the test binary, not a
+    /// spawned subprocess).
+    pub fn stats(&self) -> Stats {
+        Engine::new(self.config(), Mode::Build)
+            .expect("engine")
+            .build(&Ui::new(Level::Silent))
+            .expect("build")
+    }
+
     /// A built page under the default `public` dist.
     pub fn output(&self, rel: &str) -> String {
         self.read(&format!("public/{rel}"))
     }
+}
+
+/// A `Ui` that prints nothing, for tests that drive the library in-process.
+pub fn silent() -> Ui {
+    Ui::new(Level::Silent)
 }
 
 /// A spawned child process, killed and reaped on drop so an early panic never
@@ -158,7 +180,10 @@ impl Serve {
         let arg = port.to_string();
         let mut full = vec!["serve"];
         full.extend_from_slice(args);
-        full.extend_from_slice(&["--port", &arg]);
+        // `serve.open` defaults to on, so a test whose config forgets
+        // `serve { open #false }` launches a real browser on the runner. Forced
+        // here rather than per test, where it can be forgotten again.
+        full.extend_from_slice(&["--port", &arg, "--open", "false"]);
         let child = site.spawn(&full);
         assert!(
             wait_for_port(port, 5000),
@@ -193,10 +218,12 @@ impl Serve {
             cmd.arg("--path-as-is");
         }
         let resp = cmd.arg(&url).output().expect("curl");
+        // `-w "\n%{http_code}"` appends a newline and the status to the body, so
+        // split at the last newline rather than counting characters: the old
+        // arithmetic was off by three and left `"\n2"` on every body, so every
+        // negative assertion was checking slightly wrong data.
         let out = String::from_utf8_lossy(&resp.stdout);
-        let mut lines = out.lines().rev();
-        let code: u16 = lines.next().unwrap_or("0").parse().unwrap_or(0);
-        let body = out[..out.len().saturating_sub(code.to_string().len() - 1)].to_string();
-        (code, body)
+        let (body, status) = out.rsplit_once('\n').unwrap_or(("", out.as_ref()));
+        (status.trim().parse().unwrap_or(0), body.to_owned())
     }
 }

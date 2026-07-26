@@ -274,7 +274,10 @@ fn nested_parent_sections() {
 #[test]
 fn err_unknown_key_in_parent_section() {
     let err = Config::parse("paths {\n  bogus \"x\"\n}\n").unwrap_err();
-    assert!(err.to_string().contains("unknown key `bogus`"), "{err}");
+    assert!(
+        err.to_string().contains("unknown config key `bogus`"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -298,7 +301,7 @@ fn serve_overrides() {
 #[test]
 fn err_unknown_top_key() {
     let err = Config::parse("bogus \"\"").unwrap_err();
-    assert!(err.to_string().contains("unknown key `bogus`"));
+    assert!(err.to_string().contains("unknown config key `bogus`"));
 }
 
 #[test]
@@ -509,6 +512,38 @@ fn destination_never_escapes_dist() {
     }
 }
 
+/// Values carrying a `codegen::Value` reach the cache fingerprint through a
+/// real `Hash`. Hashing their serialization instead meant any two configs whose
+/// serialization failed fingerprinted identically, and a stale site.
+#[test]
+fn client_and_language_values_key_the_fingerprint() {
+    use crate::graph::Hash;
+    let base = parse("client {\n  env \"prod\"\n}\nlanguages {\n  fr { name \"Français\" }\n}");
+    let client = parse("client {\n  env \"dev\"\n}\nlanguages {\n  fr { name \"Français\" }\n}");
+    let language = parse("client {\n  env \"prod\"\n}\nlanguages {\n  fr { name \"Francais\" }\n}");
+    assert_ne!(Hash::of(&base), Hash::of(&client));
+    assert_ne!(Hash::of(&base), Hash::of(&language));
+}
+
+/// A translated not-found page must stay a flat `404.html` inside its language
+/// scope: `dist/fr/404/index.html` is not served as not-found by any host.
+#[test]
+fn a_localized_404_stays_a_flat_page() {
+    let cfg = parse("lang \"en\"\nlanguages {\n  fr { }\n}");
+    assert_eq!(cfg.destination("/404/"), cfg.dist.join("404.html"));
+    assert_eq!(cfg.destination("/fr/404/"), cfg.dist.join("fr/404.html"));
+    // Only a language scope counts: an ordinary page that happens to be called
+    // `404` keeps the site's URL style.
+    assert_eq!(
+        cfg.destination("/notes/404/"),
+        cfg.dist.join("notes/404/index.html")
+    );
+    assert_eq!(
+        cfg.destination("/posts/4040/"),
+        cfg.dist.join("posts/4040/index.html")
+    );
+}
+
 #[test]
 fn deploy_s3_block_enables_backend_with_defaults() {
     let cfg = parse(
@@ -615,4 +650,50 @@ fn responsive_widths_and_sizes_override() {
 fn responsive_rejects_a_zero_width() {
     // widths are 1..=16384; a 0 (or negative) is a hard error, not a silent drop.
     assert!(Config::parse("output {\n  images {\n    responsive { widths 0 }\n  }\n}\n").is_err());
+}
+
+/// A monolingual right-to-left site has no `languages` block to declare `dir`
+/// in, so the direction has to come from the code itself.
+#[test]
+fn rtl_is_inferred_when_no_language_declares_it() {
+    assert_eq!(parse("lang \"ar\"").dir("ar"), Some("rtl"));
+    assert_eq!(parse("lang \"az-Arab\"").dir("az-Arab"), Some("rtl"));
+    assert_eq!(parse("lang \"en\"").dir("en"), None);
+    assert_eq!(parse("lang \"fr\"").dir("fr"), None);
+}
+
+/// An explicit `dir` still wins over the inference.
+#[test]
+fn a_declared_dir_overrides_the_inferred_one() {
+    let cfg = parse("lang \"en\"\nlanguages {\n  ar { dir \"ltr\" }\n}");
+    assert_eq!(cfg.dir("ar"), Some("ltr"));
+}
+
+/// Absolute URLs are percent-encoded: `<loc>` and a feed's `<id>` are specified
+/// as URIs, and slugs now carry raw UTF-8.
+#[test]
+fn absolute_urls_are_percent_encoded() {
+    let cfg = parse("url \"https://host.test\"");
+    let base = cfg.base().expect("base");
+    assert_eq!(
+        base.join("/posts/café/"),
+        "https://host.test/posts/caf%C3%A9/"
+    );
+    // Path structure and the sub-delimiters a URL legitimately uses survive.
+    assert_eq!(base.join("/a/b-c_d~e/"), "https://host.test/a/b-c_d~e/");
+    // An already-encoded path is not encoded twice.
+    assert_eq!(
+        base.join("/posts/caf%C3%A9/"),
+        "https://host.test/posts/caf%C3%A9/"
+    );
+}
+
+/// ...and decoding is its inverse, which is what the dev server applies to an
+/// incoming request path.
+#[test]
+fn percent_round_trips() {
+    use crate::config::Percent;
+    for path in ["/posts/café/", "/a b/", "/日本語/", "/plain/"] {
+        assert_eq!(Percent::decode(&Percent::encode(path)), path);
+    }
 }

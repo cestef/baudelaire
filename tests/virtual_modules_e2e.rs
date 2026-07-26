@@ -63,7 +63,9 @@ fn config_module_exposes_client_constants() {
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx");
     let js = bundle(&site);
     assert!(js.contains("prod"), "string constant inlined: {js}");
-    assert!(js.contains('3'), "number constant inlined: {js}");
+    // `contains('3')` matched any digit anywhere in the bundle.
+    assert!(js.contains("retries"), "number constant inlined: {js}");
+    assert!(js.contains("beta"), "boolean constant inlined: {js}");
 }
 
 #[test]
@@ -130,6 +132,9 @@ fn sections_module_groups_by_collection() {
     let js = bundle(&site);
     assert!(js.contains("posts"), "collection id inlined: {js}");
     assert!(js.contains("One"), "page title inlined: {js}");
+    // Keyed by language: one bundle serves every language's nav. `"en"` alone
+    // would match the `children` key, so require the quoted key itself.
+    assert!(js.contains("\"en\""), "language key inlined: {js}");
 }
 
 #[test]
@@ -192,4 +197,85 @@ fn entry(site: &Site, ext: &str) -> String {
         .collect();
     assert_eq!(found.len(), 1, "exactly one {ext} file: {found:?}");
     site.read(&format!("public/assets/{}", found.remove(0)))
+}
+
+/// A bundled `.ts` entry holds JavaScript, so it must be served as `.js`: under
+/// its source extension the asset map is keyed under a name no author writes,
+/// and browsers refuse the MIME type for `type=module`.
+#[test]
+fn a_typescript_entry_is_served_as_javascript() {
+    let site = Site::new();
+    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    site.write(
+        "assets/main.ts",
+        "const greet: string = \"hi\";\nexport { greet };\n",
+    );
+    build(&site);
+
+    assert!(
+        site.exists("public/assets/main.js"),
+        "{:?}",
+        site.files("public/assets")
+    );
+    assert!(!site.exists("public/assets/main.ts"));
+}
+
+/// A dynamic `import()` used to produce a second chunk the pipeline dropped,
+/// leaving the written entry importing a file absent from `dist`.
+#[test]
+fn a_dynamic_import_lands_in_the_entry() {
+    let site = Site::new();
+    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    site.write("assets/_lazy.js", "export const answer = 42;\n");
+    site.write(
+        "assets/main.js",
+        "import(\"./_lazy.js\").then((m) => console.log(m.answer));\n",
+    );
+    build(&site);
+
+    let served = site.files("public/assets");
+    assert_eq!(
+        served,
+        ["main.js"],
+        "extra chunk left unemitted: {served:?}"
+    );
+    assert!(site.read("public/assets/main.js").contains("42"));
+}
+
+/// A bundled `.ts` entry is served as `.js`, so *both* spellings must resolve:
+/// `main.ts` is the file on disk and what an editor completes, `main.js` is what
+/// the bundle is. Mapping only one left the other pointing at nothing.
+#[test]
+fn a_renamed_entry_resolves_under_both_names() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        &config("output { assets { bundle #true; fingerprint #true } }"),
+    );
+    site.write("assets/main.ts", "export const greet: string = \"hi\";\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#html.elem(\"script\", attrs: (src: \"/assets/main.ts\", type: \"module\"))[]\n#html.elem(\"script\", attrs: (src: \"/assets/main.js\", type: \"module\"))[]\n",
+    );
+    build(&site);
+
+    let served = site
+        .files("public/assets")
+        .into_iter()
+        .find(|name| name.ends_with(".js"))
+        .expect("bundled entry");
+    let html = site.read("public/index.html");
+    assert_eq!(
+        html.matches(&served).count(),
+        2,
+        "both spellings should resolve to {served}: {html}"
+    );
 }

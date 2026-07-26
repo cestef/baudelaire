@@ -65,7 +65,7 @@ impl Standard {
     }
 }
 
-impl Backend for Standard {
+impl Backend<SiteView<'_>> for Standard {
     fn name(&self) -> &'static str {
         "standard.site"
     }

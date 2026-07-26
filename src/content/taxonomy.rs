@@ -6,10 +6,11 @@
 
 use std::collections::BTreeMap;
 
+use crate::config::Permalink;
 use crate::config::{Config, TaxonomyConfig};
 use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Titlecase};
-use crate::content::{Page, Permalink, Slug};
+use crate::content::{Page, Slug};
 use crate::error::{ContentError, Result};
 
 /// Builds the taxonomy index pages for a site.

@@ -4,9 +4,10 @@ use rayon::prelude::*;
 use wax::Glob;
 use wax::prelude::*;
 
+use crate::config::Permalink;
 use crate::config::{CollectionConfig, Config, SortKey};
 use crate::content::cache::DiscoveryCache;
-use crate::content::{Frontmatter, Permalink, PermalinkCtx, Slug};
+use crate::content::{Frontmatter, Slug};
 use crate::error::{ContentError, Result};
 use crate::world::Project;
 
@@ -109,6 +110,13 @@ impl Page {
         // and dependencies are unchanged, returning the body straight from disk.
         let (mut frontmatter, export, body) = cache.load_page(path, config, project)?;
         let data = if export { Data::Export } else { Data::Empty };
+        // Reject a name that is not text before decoding it. `Stem::of` falls
+        // back to `index` for one, which is the *bundle index* name: the file
+        // silently took its parent directory's slug and could overwrite the
+        // real page there.
+        if path.file_stem().and_then(|s| s.to_str()).is_none() {
+            return Err(ContentError::non_utf8_source(path).into());
+        }
         let stem = Stem::of(path, config);
         // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
@@ -142,16 +150,23 @@ impl Page {
     }
 
     /// A page's language: explicit frontmatter `lang`, else the filename suffix,
-    /// else the site default. The single resolution rule; an explicit language
-    /// the site does not declare is an error (a suffix is only recognized when
-    /// declared, so it can't reach here unknown).
+    /// else the site default. The single resolution rule.
+    ///
+    /// An undeclared language is an error whichever way it was written. A
+    /// suffix only *resolves* when declared, so `post.fr.typ` on a site without
+    /// `fr` used to fall through and publish at `/post.fr/` as a
+    /// default-language page, while the very same typo spelled `lang: "fr"`
+    /// stopped the build: one mistake, two opposite outcomes.
     fn lang(fm: &Frontmatter, stem: &Stem, path: &Path, config: &Config) -> Result<String> {
+        let unknown =
+            |code: &str| Err(ContentError::unknown_language(path, code, &config.langs()).into());
         match &fm.lang {
-            Some(lang) if !config.knows(lang) => {
-                Err(ContentError::unknown_language(path, lang, &config.langs()).into())
-            }
+            Some(lang) if !config.knows(lang) => unknown(lang),
             Some(lang) => Ok(lang.clone()),
-            None => Ok(stem.lang().unwrap_or(&config.lang).to_owned()),
+            None => match stem.undeclared(config) {
+                Some(code) => unknown(code),
+                None => Ok(stem.lang().unwrap_or(&config.lang).to_owned()),
+            },
         }
     }
 
@@ -173,6 +188,10 @@ impl Page {
         lang: String,
         config: &Config,
     ) -> Self {
+        // Shape the URL for the site's style here, the one funnel every page
+        // (authored and generated) passes through, so the permalink and the
+        // file it maps to can never disagree.
+        let permalink = config.urls.url(&permalink);
         Self {
             output: config.destination(&permalink),
             id,
@@ -291,39 +310,48 @@ impl Page {
         groups.into_iter().map(|(_, group)| group).collect()
     }
 
-    /// Fill each content page's `translations` with the editions of the same
-    /// logical page in other languages. A page and its translations share a
-    /// [`PageId`] (`collection/slug`), so that is the grouping key; only sets
-    /// spanning more than one language are recorded, and generated listings are
-    /// left out. Editions are ordered by the site's language order (default
-    /// first) for a stable switcher.
+    /// Fill each page's `translations` with the editions of the same logical
+    /// page in other languages, generated listings included. Only sets spanning
+    /// more than one language are recorded. Editions are ordered by the site's
+    /// language order (default first) for a stable switcher.
     pub(super) fn relate(pages: &mut [Page], config: &Config) {
         use std::collections::BTreeMap;
-        let mut editions: BTreeMap<&str, Vec<Translation>> = BTreeMap::new();
+        let mut editions: BTreeMap<String, Vec<Translation>> = BTreeMap::new();
         for page in pages.iter() {
-            if matches!(page.data, Data::Generated(_)) {
-                continue;
-            }
-            editions.entry(&page.id.0).or_default().push(Translation {
-                lang: page.lang.clone(),
-                url: page.permalink.clone(),
-                title: page.title().to_owned(),
-            });
+            editions
+                .entry(page.identity())
+                .or_default()
+                .push(Translation {
+                    lang: page.lang.clone(),
+                    url: page.permalink.clone(),
+                    title: page.title().to_owned(),
+                });
         }
         let order = config.langs();
+        editions.retain(|_, set| set.len() > 1);
         for set in editions.values_mut() {
             set.sort_by_key(|t| order.iter().position(|l| *l == t.lang));
         }
-        let editions: BTreeMap<String, Vec<Translation>> = editions
-            .into_iter()
-            .filter(|(_, set)| set.len() > 1)
-            .map(|(key, set)| (key.to_owned(), set))
-            .collect();
         for page in pages.iter_mut() {
-            if let Some(set) = editions.get(&page.id.0) {
+            if let Some(set) = editions.get(&page.identity()) {
                 page.translations = set.clone();
             }
         }
+    }
+
+    /// The key pairing this page with its editions in other languages.
+    ///
+    /// A page's [`PageId`] is `collection/slug`, which already matches across
+    /// languages for authored pages. A generated listing's collection is the
+    /// *scoped* section (`fr/tags`), so its id differed per language and no
+    /// listing ever had a translation: no language switcher, and no `hreflang`
+    /// in the sitemap. Stripping the scope back off restores the pairing.
+    fn identity(&self) -> String {
+        self.id
+            .0
+            .strip_prefix(&format!("{}/", self.lang))
+            .unwrap_or(&self.id.0)
+            .to_owned()
     }
 
     /// Whether this page builds under the current draft/future config, the
@@ -372,7 +400,7 @@ impl Page {
             let template = config
                 .collection(collection)
                 .and_then(|c| c.permalink.as_deref());
-            Permalink::of(template).render(&PermalinkCtx::from_page(collection, fm, slug))
+            Permalink::of(template).render(&fm.permalink(collection, slug))
         };
         config.localize(lang, &path)
     }
@@ -399,11 +427,17 @@ impl Collection {
         .sorted()
     }
 
+    /// Sort by the collection's key, breaking ties on source path so that pages
+    /// sharing a key (or lacking one entirely) keep a stable order across
+    /// machines rather than inheriting directory order.
     fn sorted(mut self) -> Self {
-        self.pages.sort_by(|a, b| match self.config.sort {
-            SortKey::Order => a.frontmatter.order.cmp(&b.frontmatter.order),
-            SortKey::Date => a.frontmatter.date.cmp(&b.frontmatter.date),
-            SortKey::Title => a.frontmatter.title.cmp(&b.frontmatter.title),
+        self.pages.sort_by(|a, b| {
+            match self.config.sort {
+                SortKey::Order => a.frontmatter.order.cmp(&b.frontmatter.order),
+                SortKey::Date => a.frontmatter.date.cmp(&b.frontmatter.date),
+                SortKey::Title => a.frontmatter.title.cmp(&b.frontmatter.title),
+            }
+            .then_with(|| a.source.cmp(&b.source))
         });
         if self.config.reverse {
             self.pages.reverse();
@@ -414,13 +448,13 @@ impl Collection {
 
 /// The parsed stem of a source path: its language and draft markers peeled off,
 /// leaving the slug. `post.fr.typ` carries language `fr`; `post.draft.typ` is a
-/// draft; the two stack as `post.draft.fr.typ` (language last). The single place
-/// a filename is decoded, shared by slugging and section nesting.
+/// draft; the two stack in either order (`post.draft.fr.typ`, `post.fr.draft.typ`).
+/// The single place a filename is decoded, shared by slugging and section nesting.
 struct Stem<'a> {
-    /// File stem with the language suffix removed; the draft suffix, if any,
-    /// still trails (stripped by [`Stem::slug`]).
-    raw: &'a str,
-    suffix: &'a str,
+    /// The stem with both markers peeled: what the page's slug derives from.
+    slug: &'a str,
+    /// Whether the stem carried the draft marker.
+    draft: bool,
     /// Declared non-default language named by a trailing `.{code}`, if any.
     lang: Option<&'a str>,
 }
@@ -428,21 +462,48 @@ struct Stem<'a> {
 impl<'a> Stem<'a> {
     fn of(path: &'a Path, config: &'a Config) -> Self {
         let full = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
-        // Peel a trailing `.{code}` naming a declared, non-default language: the
-        // default language uses bare filenames, so `.en` on an en site stays put.
-        let (raw, lang) = match full.rsplit_once('.') {
-            Some((head, code)) if code != config.lang && config.knows(code) => (head, Some(code)),
-            _ => (full, None),
-        };
-        Self {
-            raw,
-            suffix: &config.draft.suffix,
-            lang,
+        let mut slug = full;
+        let mut lang = None;
+        let mut draft = false;
+        // Peel the two optional trailing markers in whichever order the author
+        // wrote them: `post.draft.fr` and `post.fr.draft` both name a French
+        // draft. Reading only one order left the other decoding as a
+        // default-language page whose slug embedded the code (`post-fr`), so a
+        // translated draft published. Two passes, each marker peeled at most
+        // once, so a stem that genuinely ends in a language code keeps it.
+        for _ in 0..2 {
+            if let (None, Some((head, code))) = (lang, Self::language(slug, config)) {
+                slug = head;
+                lang = Some(code);
+            } else if let (false, Some(head)) = (draft, Self::undraft(slug, &config.draft.suffix)) {
+                slug = head;
+                draft = true;
+            }
+        }
+        Self { slug, draft, lang }
+    }
+
+    /// The declared, non-default language a trailing `.{code}` names, with the
+    /// stem before it. The default language uses bare filenames, so `.en` on an
+    /// en site stays put.
+    fn language(stem: &'a str, config: &Config) -> Option<(&'a str, &'a str)> {
+        match stem.rsplit_once('.') {
+            Some((head, code)) if code != config.lang && config.knows(code) => Some((head, code)),
+            _ => None,
         }
     }
 
+    /// The stem with the draft marker peeled, or `None` when it carries none.
+    /// An empty suffix disables the marker entirely.
+    fn undraft(stem: &'a str, suffix: &str) -> Option<&'a str> {
+        if suffix.is_empty() {
+            return None;
+        }
+        stem.strip_suffix(suffix)
+    }
+
     fn is_draft(&self) -> bool {
-        !self.suffix.is_empty() && self.raw.ends_with(self.suffix)
+        self.draft
     }
 
     /// The declared language named by the filename, if any.
@@ -450,17 +511,31 @@ impl<'a> Stem<'a> {
         self.lang
     }
 
+    /// A trailing segment that looks like a language code but is not declared,
+    /// on a site that declares languages at all.
+    ///
+    /// Deliberately narrow: two or three lowercase ASCII letters, so an
+    /// ordinary dotted filename (`notes.v2.typ`, `report.2024.typ`) is
+    /// untouched. Within that shape it is a misspelt or forgotten `languages`
+    /// entry far more often than a filename, and silently publishing it as a
+    /// default-language page is the worst of the available answers.
+    fn undeclared(&self, config: &Config) -> Option<&'a str> {
+        if !config.multilingual() || self.lang.is_some() {
+            return None;
+        }
+        let (_, code) = self.slug.rsplit_once('.')?;
+        let shaped = matches!(code.len(), 2 | 3) && code.chars().all(|c| c.is_ascii_lowercase());
+        (shaped && !config.knows(code)).then_some(code)
+    }
+
     /// Whether this stem names a bundle index (`config.index`), so the file's
     /// parent directory supplies the slug rather than the file name.
     fn is_index(&self, config: &Config) -> bool {
-        config
-            .index
-            .as_deref()
-            .is_some_and(|idx| self.slug() == idx)
+        config.index.as_deref().is_some_and(|idx| self.slug == idx)
     }
 
     fn slug(&self) -> &'a str {
-        self.raw.strip_suffix(self.suffix).unwrap_or(self.raw)
+        self.slug
     }
 }
 
@@ -530,22 +605,17 @@ impl<'a> Discovery<'a> {
     /// Every `.typ` file under `dir`, recursively, skipping dotfiles and
     /// dot-directories.
     fn gather(dir: &Path) -> Result<Vec<PathBuf>> {
-        let mut out = Vec::new();
-        for path in crate::fs::read_dir(dir)? {
-            let hidden = path
-                .file_name()
+        let hidden = |path: &Path| {
+            path.file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with('.'));
-            if hidden {
-                continue;
-            }
-            if path.is_dir() {
-                out.extend(Self::gather(&path)?);
-            } else if path.extension().is_some_and(|e| e == "typ") {
-                out.push(path);
-            }
-        }
-        Ok(out)
+                .is_some_and(|n| n.starts_with('.'))
+        };
+        Ok(crate::fs::Walk::new(dir)
+            .skipping(hidden)
+            .files()?
+            .into_iter()
+            .filter(|path| !hidden(path) && path.extension().is_some_and(|e| e == "typ"))
+            .collect())
     }
 
     /// Resolve each content file to its owning collection as `(id, path)` pairs,
@@ -561,7 +631,8 @@ impl<'a> Discovery<'a> {
             .filter_map(|(id, cfg)| Some((id.clone(), cfg.glob.clone()?)))
             .collect();
         for (id, glob) in globs {
-            let pattern = Glob::new(&glob).map_err(|e| ContentError::bad_glob(&glob, e))?;
+            let pattern =
+                Glob::new(&glob).map_err(|e| ContentError::bad_glob("collection", &glob, e))?;
             for (path, taken) in &mut self.files {
                 let rel = path.strip_prefix(&self.config.content).unwrap_or(path);
                 if !*taken && pattern.is_match(rel) {
@@ -587,5 +658,93 @@ impl<'a> Discovery<'a> {
             (Some(dir), Some(_)) => dir.as_os_str().to_string_lossy().into_owned(),
             _ => ROOT.to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Stem;
+    use crate::config::Config;
+    use std::path::Path;
+
+    fn config() -> Config {
+        Config::parse("lang \"en\"\nlanguages {\n  fr { }\n}\n").expect("config")
+    }
+
+    /// A stem decodes the same whichever order the author stacked the markers
+    /// in: `post.fr.draft.typ` used to decode as a default-language page slugged
+    /// `post-fr`, so a French draft published at a real URL.
+    #[test]
+    fn draft_and_language_markers_decode_in_either_order() {
+        let config = config();
+        for name in ["post.draft.fr.typ", "post.fr.draft.typ"] {
+            let stem = Stem::of(Path::new(name), &config);
+            assert_eq!(stem.slug(), "post", "{name}");
+            assert_eq!(stem.lang(), Some("fr"), "{name}");
+            assert!(stem.is_draft(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_bare_stem_carries_neither_marker() {
+        let config = config();
+        let stem = Stem::of(Path::new("post.typ"), &config);
+        assert_eq!(stem.slug(), "post");
+        assert_eq!(stem.lang(), None);
+        assert!(!stem.is_draft());
+    }
+
+    /// An undeclared trailing segment is part of the slug, not a language.
+    #[test]
+    fn an_undeclared_trailing_code_stays_in_the_slug() {
+        let config = config();
+        let stem = Stem::of(Path::new("post.de.typ"), &config);
+        assert_eq!(stem.slug(), "post.de");
+        assert_eq!(stem.lang(), None);
+    }
+
+    /// ...but on a multilingual site it is flagged rather than published as a
+    /// default-language page: `post.de.typ` without a `de` entry is a typo the
+    /// same way `lang: "de"` is, and that one always stopped the build.
+    #[test]
+    fn an_undeclared_code_is_reported_on_a_multilingual_site() {
+        let config = config();
+        assert_eq!(
+            Stem::of(Path::new("post.de.typ"), &config).undeclared(&config),
+            Some("de")
+        );
+        // A declared one resolves, and the default language is always known.
+        assert_eq!(
+            Stem::of(Path::new("post.fr.typ"), &config).undeclared(&config),
+            None
+        );
+        assert_eq!(
+            Stem::of(Path::new("post.en.typ"), &config).undeclared(&config),
+            None
+        );
+        // An ordinary dotted filename is left alone.
+        for name in [
+            "notes.v2.typ",
+            "report.2024.typ",
+            "a.LONG.typ",
+            "x.abcd.typ",
+        ] {
+            assert_eq!(
+                Stem::of(Path::new(name), &config).undeclared(&config),
+                None,
+                "{name}"
+            );
+        }
+    }
+
+    /// A single-language site never guesses: it has no `languages` block to
+    /// compare against.
+    #[test]
+    fn a_monolingual_site_never_flags_a_suffix() {
+        let config = Config::parse("lang \"en\"\n").expect("config");
+        assert_eq!(
+            Stem::of(Path::new("post.de.typ"), &config).undeclared(&config),
+            None
+        );
     }
 }

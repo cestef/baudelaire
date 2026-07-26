@@ -1,26 +1,45 @@
-use miette::{Diagnostic, SourceSpan};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 #[error("{kind}")]
 pub struct ConfigError {
-    text: String,
+    /// The config text, named so the rendered snippet says *which* file it came
+    /// from. The name is the conventional one until [`ConfigError::named`]
+    /// replaces it with the path actually loaded, which is what makes
+    /// `--config prod.kdl` report `prod.kdl`.
+    file: NamedSource<String>,
     span: SourceSpan,
     kind: ConfigErrorKind,
 }
 
 impl ConfigError {
+    /// The conventional config filename, used until the loader supplies the
+    /// real one.
+    pub const FILE: &'static str = "config.kdl";
+
     pub fn at(source: &str, kind: ConfigErrorKind, span: SourceSpan) -> Self {
         Self {
-            text: source.to_owned(),
+            file: NamedSource::new(Self::FILE, source.to_owned()).with_language("KDL"),
             span,
             kind,
         }
     }
 
+    /// Name this diagnostic's source after the file it was really loaded from.
+    /// Applied once, where the path is known, so no error has to carry it.
+    #[must_use]
+    pub fn named(self, path: &std::path::Path) -> Self {
+        Self {
+            file: NamedSource::new(path.display().to_string(), self.file.inner().clone())
+                .with_language("KDL"),
+            ..self
+        }
+    }
+
     pub fn not_found(path: &str) -> Self {
         Self {
-            text: String::new(),
+            file: NamedSource::new(path, String::new()),
             span: SourceSpan::new(0.into(), 0),
             kind: ConfigErrorKind::NotFound {
                 path: path.to_owned(),
@@ -30,7 +49,7 @@ impl ConfigError {
 
     pub fn unknown_feature(name: &str, valid: &str) -> Self {
         Self {
-            text: String::new(),
+            file: NamedSource::new(Self::FILE, String::new()),
             span: SourceSpan::new(0.into(), 0),
             kind: ConfigErrorKind::UnknownFeature {
                 name: name.to_owned(),
@@ -99,6 +118,17 @@ impl ConfigError {
     /// An integer outside an allowed `[min, max]` range.
     pub fn out_of_range(source: &str, min: i64, max: i64, got: i64, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::OutOfRange { min, max, got }, span)
+    }
+
+    /// A credential-bearing URL on a plaintext scheme.
+    pub fn insecure_url(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::InsecureUrl {
+                got: got.to_owned(),
+            },
+            span,
+        )
     }
 
     /// A TCP port outside `0..=65535`.
@@ -212,7 +242,7 @@ impl ConfigError {
             .first()
             .map_or_else(|| SourceSpan::new(0.into(), 0), |d| d.span);
         Self {
-            text: source.to_owned(),
+            file: NamedSource::new(Self::FILE, source.to_owned()).with_language("KDL"),
             span,
             kind: ConfigErrorKind::Parse(Box::new(error)),
         }
@@ -239,13 +269,13 @@ impl miette::Diagnostic for ConfigError {
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
         // Errors raised outside any config text (missing file, missing profile)
         // carry no source; suppress the snippet instead of pointing at nothing.
-        (!self.text.is_empty()).then_some(&self.text as &dyn miette::SourceCode)
+        (!self.file.inner().is_empty()).then_some(&self.file as &dyn miette::SourceCode)
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
         // For a parse error the nested kdl diagnostics carry their own spans,
         // and a sourceless error has nothing to label.
-        if self.text.is_empty() || matches!(self.kind, ConfigErrorKind::Parse(_)) {
+        if self.file.inner().is_empty() || matches!(self.kind, ConfigErrorKind::Parse(_)) {
             return None;
         }
         Some(Box::new(std::iter::once(
@@ -270,11 +300,11 @@ impl miette::Diagnostic for ConfigError {
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum ConfigErrorKind {
-    #[error("failed to parse config.kdl")]
+    #[error("failed to parse the config")]
     #[diagnostic(code(baudelaire::config::parse))]
     Parse(Box<kdl::KdlError>),
 
-    #[error("unknown key `{key}` in config.kdl")]
+    #[error("unknown config key `{key}`")]
     #[diagnostic(code(baudelaire::config::unknown_key))]
     UnknownKey {
         key: String,
@@ -315,6 +345,15 @@ pub enum ConfigErrorKind {
     #[error("port must be 0-65535, got {got}")]
     #[diagnostic(code(baudelaire::config::port_range))]
     PortRange { got: i64 },
+
+    #[error("`{got}` is not https")]
+    #[diagnostic(
+        code(baudelaire::config::insecure_url),
+        help(
+            "credentials are sent to this host; use `https://`, or `http://localhost` for a local service"
+        )
+    )]
+    InsecureUrl { got: String },
 
     #[error("`{field}` must not be negative, got {got}")]
     #[diagnostic(code(baudelaire::config::negative_count))]
@@ -375,7 +414,7 @@ pub enum ConfigErrorKind {
         valid: String,
     },
 
-    #[error("profile `{name}` not found in config.kdl")]
+    #[error("profile `{name}` not found")]
     #[diagnostic(code(baudelaire::config::missing_profile))]
     MissingProfile {
         name: String,
@@ -394,5 +433,5 @@ pub enum ConfigErrorKind {
     /// span. Transparent: message, code, and help come from [`PermalinkError`].
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Permalink(#[from] crate::content::PermalinkError),
+    Permalink(#[from] crate::config::PermalinkError),
 }

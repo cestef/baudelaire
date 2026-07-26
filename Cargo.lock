@@ -394,6 +394,7 @@ dependencies = [
  "typst-html",
  "typst-kit",
  "typst-svg",
+ "unicode-normalization",
  "ureq 3.3.0",
  "wax",
 ]

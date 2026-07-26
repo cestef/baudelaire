@@ -120,7 +120,7 @@ impl<'a> Auth<'a> {
             Err(_) => {
                 let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
                 load_secret_key(&path, Some(&passphrase))
-                    .map_err(|e| DeployError::transfer("load key", e).into())
+                    .map_err(|e| DeployError::local("loading the private key", e).into())
             }
         }
     }

@@ -35,17 +35,17 @@ use crate::content::{Data, Page, Section, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
-use crate::engine::check::{CheckedPage, Checks, Compiled};
+use crate::engine::check::{CheckedPage, Compiled, Links};
 use crate::engine::hook::Hooks;
 use crate::engine::image::Images;
 use crate::engine::layout::{Bind, Body, Layout};
 use crate::engine::process::{Emitter, Processors, Site};
-use crate::engine::statics::Static;
+use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
-use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Reads, RenderInputs, Root};
-use crate::render::{AssetMap, ImageRef, Renderer, SrcSets};
+use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root};
+use crate::render::{AssetMap, Renderer, SrcSets};
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
 use crate::world::{PageWorld, Project, Tracked};
@@ -56,6 +56,13 @@ use crate::world::{PageWorld, Project, Tracked};
 pub struct Stats {
     pub pages: usize,
     pub cached: usize,
+}
+
+/// What the post-build processors emitted, for the summary and the prune.
+struct Generated {
+    count: usize,
+    bytes: u64,
+    paths: Vec<PathBuf>,
 }
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
@@ -88,9 +95,24 @@ impl Engine {
 
     /// Build the site incrementally: reuse cached output for unchanged pages,
     /// recompile the rest in parallel, then copy assets.
+    ///
+    /// Failure leaves `dist` as the previous build left it, staged assets
+    /// included: `deploy` walks the whole directory, so a leftover staging tree
+    /// would be uploaded as a duplicate copy of the site's assets.
     pub fn build(&self, ui: &Ui) -> Result<Stats> {
+        let built = self.run(ui);
+        if built.is_err() {
+            let _ = std::fs::remove_dir_all(self.config.asset_staging());
+        }
+        built
+    }
+
+    fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         fs::create_dir_all(&self.config.dist)?;
+        // A staging tree here is a previous build's failure; clear it before the
+        // static copy, which writes into it (see `Static::destination`).
+        let _ = std::fs::remove_dir_all(self.config.asset_staging());
         // Copy the static tree first, so a generated page or asset at the same
         // output path overwrites it; static is the lowest-priority source.
         let statics = Static::new(&self.config).copy()?;
@@ -114,10 +136,18 @@ impl Engine {
 
         // Build the section trees and the `sys.inputs.baudelaire` value once: both
         // feed templates (`page.sections`, `sys.inputs`) AND the `baudelaire:*`
-        // JS modules, which reuse these rather than recompute them. The JS module
-        // exposes the default language's tree; per-page nav is language-picked.
+        // JS modules, which reuse these rather than recompute them.
         let trees = self.trees(&pages);
-        let sections = self.sections(&pages, &self.config.lang);
+        // Keyed by language: one bundle serves the whole site, so a
+        // default-language-only tree left every translation without a nav.
+        // Only the JS modules read this; templates get their own from `trees`.
+        #[cfg(feature = "js")]
+        let sections = crate::codegen::Value::dict(
+            self.config
+                .langs()
+                .into_iter()
+                .map(|lang| (lang.to_owned(), self.sections(&pages, lang))),
+        );
         // The codegen `Value` view of the build context exists only to feed the
         // `baudelaire:*` JS modules; Typst reads `sys.inputs` from the raw context.
         #[cfg(feature = "js")]
@@ -134,12 +164,17 @@ impl Engine {
                 context: &context,
                 sections: &sections,
             },
-        )
-        .process()?;
-        let asset_count = assets.count;
-        let asset_bytes = assets.bytes;
+        );
+        let processed = assets.process()?;
+        let asset_count = processed.count;
+        let asset_bytes = processed.bytes;
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
-        let renderer = Renderer::new(&pages, assets.map, assets.srcsets, self.project.root());
+        let renderer = Renderer::new(
+            &pages,
+            processed.map,
+            processed.srcsets,
+            self.project.root(),
+        );
         // render-side cache inputs: asset renames, the link map, the responsive
         // variant manifest, and, only when pages inline asset bytes, the embedded
         // contents (the per-page dependency tracker can't see them, since typst
@@ -155,7 +190,7 @@ impl Engine {
                 .config
                 .html
                 .embed
-                .then(|| Hash::of_dir(&self.config.asset_dist())),
+                .then(|| Hash::of_dir(&self.config.asset_staging())),
         };
         // The injected values whose per-page reads drive fine-grained metadata
         // invalidation: the analyzer records them from each page's syntax, the
@@ -167,18 +202,24 @@ impl Engine {
             .map(|(base, tree)| Root { base, tree })
             .collect();
         let analyzer = Analyzer::new(roots, &self.project);
-        let mut cache = Cache::load(&self.config, &render, tracked.clone(), ui)?;
+        let mut cache = Cache::load(
+            &self.config,
+            &render,
+            tracked.clone(),
+            self.project.root(),
+            ui,
+        )?;
 
         // split cache hits from stale pages. `prepare` produces each page's
         // text + fingerprint without parsing it; the parse into a typst
         // `Source` is deferred to `compile`, so a hit never pays to parse a
         // page it won't render.
-        let mut cached: Vec<(&Page, String, Vec<ImageRef>)> = Vec::new();
+        let mut cached: Vec<(&Page, String, Outputs)> = Vec::new();
         let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
         for page in &pages {
             match self.prepare(page, &trees) {
                 Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
-                    Some((html, images)) => cached.push((page, html, images)),
+                    Some((html, outputs)) => cached.push((page, html, outputs)),
                     None => stale.push((page, Ok((id, text, fingerprint)))),
                 },
                 Err(e) => stale.push((page, Err(e))),
@@ -198,19 +239,27 @@ impl Engine {
         })?;
 
         for r in &rendered {
-            cache.record(r.page, r.fingerprint, &r.html, &r.deps, &r.reads, &r.images);
+            cache.record(
+                r.page,
+                r.fingerprint,
+                &r.html,
+                &r.deps,
+                &r.reads,
+                &r.outputs,
+            );
         }
         for (page, _, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);
         }
+        self.validate(&rendered, &cached, ui)?;
         // Copy every page's externalized images into the (freshly regenerated)
         // asset directory: fresh pages carry their refs, cache hits their stored
         // ones, so the files are present regardless of what recompiled.
-        let images = Images::new(&self.config).copy(
+        let images = Images::new(&self.config, self.project.root()).copy(
             rendered
                 .iter()
-                .flat_map(|r| &r.images)
-                .chain(cached.iter().flat_map(|(_, _, images)| images)),
+                .flat_map(|r| &r.outputs.images)
+                .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
             ui,
         )?;
         // pair every page (rendered and cache-served alike) with its final
@@ -224,41 +273,13 @@ impl Engine {
         outputs
             .par_iter()
             .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
+        // Every page is on disk pointing at the new asset filenames, so the
+        // staged asset tree can replace the published one. Before this line a
+        // failure leaves `dist` exactly as the previous build left it.
+        assets.publish()?;
         cache.save(&outputs)?;
-        let (generated, generated_bytes, generated_paths) = {
-            let site = Site {
-                config: &self.config,
-                pages: &pages,
-                outputs: &outputs,
-            };
-            let mut emitter = Emitter::new(ui);
-            Processors::builtin().run(&site, &mut emitter)?;
-            (emitter.written(), emitter.bytes(), emitter.paths().to_vec())
-        };
-        let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
-
-        // Drop orphaned outputs from earlier builds (a removed page or taxonomy
-        // term, a renamed permalink) so `dist` never serves stale files. Gated
-        // on `clean` so a user managing `dist` by hand can opt out. The keep-set
-        // is every file this build produced: page HTML, static passthrough,
-        // generated files; the asset tree the pipeline already regenerates
-        // wholesale, so the prune skips it. Runs before `after` hooks, whose
-        // outputs (Pagefind..) aren't ours to prune.
-        if self.config.clean {
-            let keep: Vec<PathBuf> = outputs
-                .iter()
-                .map(|(page, _)| page.output.clone())
-                .chain(statics.paths.iter().cloned())
-                .chain(generated_paths)
-                .collect();
-            let pruned = prune::Prune::new(
-                &self.config.dist,
-                &self.config.asset_dist(),
-                &self.config.cache.dir,
-            )
-            .run(&keep)?;
-            debug!(pruned, "orphaned outputs removed");
-        }
+        let generated = self.generate(&pages, &outputs, &statics, ui)?;
+        self.sweep(&outputs, &statics, &generated)?;
 
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
@@ -266,13 +287,14 @@ impl Engine {
         // Warnings render as a block ahead of the result line, cargo-style.
         ui.flush();
         let total = rendered.len() + cached.len();
+        let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
         Summary {
             pages: total,
             cached: cached.len(),
             assets: asset_count + images.count(),
             statics: statics.count,
-            generated,
-            bytes: page_bytes + asset_bytes + images.bytes() + generated_bytes + statics.bytes,
+            generated: generated.count,
+            bytes: page_bytes + asset_bytes + images.bytes() + generated.bytes + statics.bytes,
             warnings: ui.warnings() - warned,
             dist: &self.config.dist,
             elapsed: timer.elapsed(),
@@ -282,6 +304,61 @@ impl Engine {
             pages: total,
             cached: cached.len(),
         })
+    }
+
+    /// Run the post-build processors over the finished site.
+    fn generate(
+        &self,
+        pages: &[Page],
+        outputs: &[(&Page, &str)],
+        statics: &Copied,
+        ui: &Ui,
+    ) -> Result<Generated> {
+        let site = Site {
+            config: &self.config,
+            pages,
+            outputs,
+        };
+        let mut emitter = Emitter::new(ui, statics.paths.iter().cloned());
+        Processors::builtin().run(&site, &mut emitter)?;
+        Ok(Generated {
+            count: emitter.written(),
+            bytes: emitter.bytes(),
+            paths: emitter.paths().to_vec(),
+        })
+    }
+
+    /// Drop orphaned outputs from earlier builds (a removed page or taxonomy
+    /// term, a renamed permalink) so `dist` never serves stale files.
+    ///
+    /// Gated on `clean` so a user managing `dist` by hand can opt out. The
+    /// keep-set is every file this build produced: page HTML, static
+    /// passthrough, generated files. The asset tree is regenerated wholesale, so
+    /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
+    /// are not ours to prune.
+    fn sweep(
+        &self,
+        outputs: &[(&Page, &str)],
+        statics: &Copied,
+        generated: &Generated,
+    ) -> Result<()> {
+        if !self.config.clean {
+            return Ok(());
+        }
+        let keep: Vec<PathBuf> = outputs
+            .iter()
+            .map(|(page, _)| page.output.clone())
+            .chain(statics.paths.iter().cloned())
+            .chain(generated.paths.iter().cloned())
+            .collect();
+        let pruned = prune::Prune::new(
+            &self.config.dist,
+            &self.config.asset_dist(),
+            &self.config.cache.dir,
+        )
+        .run(&keep)?;
+        debug!(pruned, "orphaned outputs removed");
+        Ok(())
     }
 
     /// Compile every page and report diagnostics without writing any output.
@@ -315,6 +392,7 @@ impl Engine {
                 }),
             )
         })?;
+        self.validate(&rendered, &[], ui)?;
         ui.flush();
         ui.done(format_args!(
             "checked {} in {}",
@@ -334,9 +412,11 @@ impl Engine {
     /// Compile a batch of pages in parallel and reduce to their rendered
     /// outputs: a progress bar, a rayon map producing one `(page, outcome)` per
     /// item, then [`Engine::collect`] (status lines + diagnostics) and
-    /// [`Engine::validate`] (link checks). The shared spine of `build` (over the
-    /// stale subset, already prepared) and `check` (every page, prepared inline);
-    /// `outcome` supplies the only difference: how one item renders.
+    /// then [`Engine::collect`] (status lines + diagnostics). The shared spine of
+    /// `build` (over the stale subset, already prepared) and `check` (every page,
+    /// prepared inline); `outcome` supplies the only difference: how one item
+    /// renders. Validation is the caller's, since only `build` has cached pages
+    /// to replay.
     fn render_pages<'a, T: Send>(
         &self,
         label: &'static str,
@@ -354,9 +434,7 @@ impl Engine {
             })
             .collect();
         progress.finish();
-        let rendered = self.collect(outcomes, ui)?;
-        self.validate(&rendered, ui)?;
-        Ok(rendered)
+        self.collect(outcomes, ui)
     }
 
     fn collect<'a>(
@@ -441,7 +519,15 @@ impl Engine {
             translations: &translations,
             strings: &strings,
         };
-        let text = Layout::new(&self.config.templates, template, &vpath, context, body).to_string();
+        // The import is project-root-absolute in typst's own terms, so the
+        // template directory has to be expressed relative to the root rather
+        // than however the config spelled it.
+        let templates = self
+            .config
+            .templates
+            .strip_prefix(self.project.root())
+            .unwrap_or(&self.config.templates);
+        let text = Layout::new(templates, template, &vpath, context, body).to_string();
         // hash the exact text typst compiles; the parse into a `Source` is
         // deferred to `compile`, run only for stale pages.
         let fingerprint = Hash::of_bytes(text.as_bytes());
@@ -580,33 +666,53 @@ impl Engine {
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.
-        let reads = analyzer.reads(&source, &deps);
+        let mut reads = analyzer.reads(&source, &deps);
+        // `datetime.today()` goes through the `World`, which records files
+        // only, so nothing else sees it: a page printing the current year stayed
+        // a cache hit into the next one. It reads the same clock as
+        // `sys.inputs.baudelaire.date`, so record it as that key.
+        if world.reads_clock() {
+            reads.insert(Project::clock());
+        }
         Ok(Rendered {
             page,
             fingerprint,
             html,
             deps,
             reads,
-            broken: rewrite.broken,
-            images: rewrite.images,
+            outputs: Outputs {
+                images: rewrite.images,
+                broken: rewrite.broken,
+            },
             warnings,
         })
     }
 
-    /// Run the post-render validation passes over the freshly compiled pages.
-    /// Maps each [`Rendered`] into the decoupled [`Compiled`] view and hands it
-    /// to the [`Checks`] registry; the passes themselves live in [`check`].
-    /// Cached pages are omitted: they kept their links from when they built.
-    fn validate(&self, rendered: &[Rendered], ui: &Ui) -> Result<()> {
+    /// Run the post-render validation passes over every page, compiled and
+    /// cached alike. Maps each into the decoupled [`Compiled`] view and hands it
+    /// to [`Links`]; the pass itself lives in [`check`].
+    ///
+    /// A cache hit replays the broken links it was built with, because checking
+    /// only fresh pages made the gate weaken on rebuild: a second build of a
+    /// site with a dangling link reported nothing and `links { strict #true }`
+    /// passed.
+    fn validate(
+        &self,
+        rendered: &[Rendered],
+        cached: &[(&Page, String, Outputs)],
+        ui: &Ui,
+    ) -> Result<()> {
         let pages: Vec<CheckedPage> = rendered
             .iter()
-            .map(|r| CheckedPage {
-                label: self.relative(r.page),
-                source: &r.page.source,
-                broken: &r.broken,
+            .map(|r| (r.page, &r.outputs))
+            .chain(cached.iter().map(|(page, _, outputs)| (*page, outputs)))
+            .map(|(page, outputs)| CheckedPage {
+                label: self.relative(page),
+                source: &page.source,
+                broken: &outputs.broken,
             })
             .collect();
-        Checks::builtin().run(
+        Links::run(
             &Compiled {
                 config: &self.config,
                 pages: &pages,
@@ -642,8 +748,8 @@ struct Rendered<'a> {
     html: String,
     deps: Deps,
     reads: Reads,
-    broken: Vec<String>,
-    /// Images this page externalized out of the DOM, for the copy pass.
-    images: Vec<ImageRef>,
+    /// The render pass's own results (externalized images, broken links), the
+    /// same shape the cache stores and replays for a hit.
+    outputs: Outputs,
     warnings: Vec<TypstSourceDiagnostic>,
 }

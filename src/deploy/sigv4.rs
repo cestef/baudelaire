@@ -168,6 +168,28 @@ mod tests {
             .1
     }
 
+    /// A session token has to be a *signed* header, not just a sent one:
+    /// temporary credentials (GitHub OIDC, instance roles, `aws sso login`)
+    /// otherwise produce a well-formed signature the server rejects.
+    #[test]
+    fn a_session_token_is_covered_by_the_signature() {
+        fn request<'a>(headers: &'a [(&'a str, &'a str)]) -> Request<'a> {
+            Request {
+                method: "GET",
+                host: "example.amazonaws.com",
+                uri: "/",
+                query: "",
+                headers,
+                payload_hash: EMPTY,
+            }
+        }
+        let plain = signer().sign(&request(&[]));
+        let tokened = signer().sign(&request(&[("x-amz-security-token", "SESSION")]));
+
+        assert!(tokened.contains("x-amz-security-token"), "{tokened}");
+        assert_ne!(signature(&plain), signature(&tokened));
+    }
+
     #[test]
     fn sha256_of_empty_is_the_known_constant() {
         assert_eq!(Signer::sha256_hex(b""), EMPTY);

@@ -17,6 +17,9 @@ use crate::fs;
 /// Deletes files under `dist` that are not in the produced set.
 pub struct Prune<'a> {
     dist: &'a Path,
+    /// `dist` on disk, to test containment against: the one boundary the sweep
+    /// may not delete outside of.
+    root: PathBuf,
     /// Directory prefixes owned by another stage (the asset pipeline) or outside
     /// the build (the cache): never walked, never pruned.
     protected: Vec<PathBuf>,
@@ -26,7 +29,11 @@ impl<'a> Prune<'a> {
     /// Prune `dist`, keeping the asset tree and the build cache untouched.
     pub fn new(dist: &'a Path, asset_dist: &Path, cache: &Path) -> Self {
         let protected = [asset_dist, cache].into_iter().map(fs::canonical).collect();
-        Self { dist, protected }
+        Self {
+            dist,
+            root: fs::canonical(dist),
+            protected,
+        }
     }
 
     /// Delete every file under `dist` whose canonical path is not in `keep`,
@@ -35,36 +42,35 @@ impl<'a> Prune<'a> {
     /// canonicalized here so it compares equal to the walked paths regardless of
     /// how each was spelled. Returns the number of files removed.
     pub fn run(&self, keep: &[PathBuf]) -> Result<usize> {
+        if !self.owns(self.dist) {
+            return Ok(0);
+        }
         let keep: BTreeSet<PathBuf> = keep.iter().map(fs::canonical).collect();
+        let tree = fs::Walk::new(self.dist)
+            .skipping(|dir| !self.owns(dir))
+            .tree()?;
         let mut removed = 0;
-        self.sweep(self.dist, &keep, &mut removed)?;
+        for file in &tree.files {
+            if !keep.contains(&fs::canonical(file)) {
+                fs::remove_file(file)?;
+                removed += 1;
+            }
+        }
+        // `dirs` comes back children-first, so a directory the sweep emptied is
+        // dropped after its contents; a still-populated one (kept files, or a
+        // skipped subtree) errors and is ignored.
+        for dir in &tree.dirs {
+            let _ = std::fs::remove_dir(dir);
+        }
         Ok(removed)
     }
 
-    /// Recurse into `dir`, removing orphaned files depth-first so a directory is
-    /// visited after its children and can be dropped once emptied.
-    fn sweep(&self, dir: &Path, keep: &BTreeSet<PathBuf>, removed: &mut usize) -> Result<()> {
-        if self.is_protected(dir) {
-            return Ok(());
-        }
-        for entry in fs::read_dir(dir)? {
-            if entry.is_dir() {
-                self.sweep(&entry, keep, removed)?;
-                // Remove the directory if the sweep emptied it; a still-populated
-                // one (kept files, or a protected subtree) errors and is ignored.
-                let _ = std::fs::remove_dir(&entry);
-            } else if !keep.contains(&fs::canonical(&entry)) {
-                fs::remove_file(&entry)?;
-                *removed += 1;
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether `dir` is (or sits inside) a protected subtree.
-    fn is_protected(&self, dir: &Path) -> bool {
+    /// Whether the sweep may enter `dir`: it resolves inside `dist` and sits
+    /// outside every protected subtree. Symlinks are followed, so containment is
+    /// what stops `ln -s ~/docs dist/docs` deleting outside the project.
+    fn owns(&self, dir: &Path) -> bool {
         let canon = fs::canonical(dir);
-        self.protected.iter().any(|p| canon.starts_with(p))
+        canon.starts_with(&self.root) && !self.protected.iter().any(|p| canon.starts_with(p))
     }
 }
 
@@ -112,6 +118,26 @@ mod tests {
             .unwrap();
         assert_eq!(removed, 0);
         assert!(root.join("assets/app.abc123.js").exists());
+    }
+
+    /// A symlinked directory inside `dist` pointing elsewhere used to be swept
+    /// like any other: `ln -s ~/docs dist/docs` deleted files outside the
+    /// project entirely.
+    #[test]
+    #[cfg(unix)]
+    fn does_not_sweep_through_a_symlink_out_of_dist() {
+        let (_g, root) = dist(&["a/index.html"]);
+        let outside = root.parent().unwrap().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.txt"), b"x").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
+
+        let removed = Prune::new(&root, &root.join("assets"), &root.join(".cache"))
+            .run(&[root.join("a/index.html")])
+            .unwrap();
+
+        assert_eq!(removed, 0);
+        assert!(outside.join("secret.txt").exists());
     }
 
     #[test]

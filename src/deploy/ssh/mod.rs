@@ -35,17 +35,29 @@ impl Ssh {
         Self { config }
     }
 
-    /// The user to authenticate as: the configured one, else `$USER`.
-    fn user(&self) -> String {
-        self.config
-            .user
-            .clone()
-            .unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "root".into()))
+    /// The user to authenticate as: the configured one, else `login` (the
+    /// caller's `$USER`), passed in so the rule is testable without touching
+    /// the process environment.
+    ///
+    /// An error when neither is available, rather than the old fallback to
+    /// **`root`**: in a container, a CI job or a systemd unit `$USER` is
+    /// routinely unset, and the docs and the config both promise `$USER`, so
+    /// that was an undocumented root login attempt nobody asked for.
+    fn user(&self, login: Option<&str>) -> Result<String> {
+        match (&self.config.user, login) {
+            (Some(user), _) => Ok(user.clone()),
+            (None, Some(login)) => Ok(login.to_owned()),
+            (None, None) => Err(DeployError::NoUser.into()),
+        }
     }
 
     /// Reconcile the remote directory with `dist` over one connection.
     async fn sync(&self, dist: &Dist, local: &Digests, opts: &Options<'_>, ui: &Ui) -> Result<()> {
-        let session = Session::connect(&self.config, &self.user(), opts).await?;
+        // An empty `$USER` is as absent as an unset one: it would authenticate
+        // with no username at all.
+        let login = std::env::var("USER").ok().filter(|user| !user.is_empty());
+        let user = self.user(login.as_deref())?;
+        let session = Session::connect(&self.config, &user, opts, ui).await?;
         let plan = Plan::compute(local, &session.digests().await?, self.config.delete);
         plan.preview(ui, opts.dry_run);
         if opts.dry_run {
@@ -69,7 +81,7 @@ impl Ssh {
     }
 }
 
-impl Backend for Ssh {
+impl Backend<Dist> for Ssh {
     fn name(&self) -> &'static str {
         "ssh"
     }
@@ -81,7 +93,37 @@ impl Backend for Ssh {
         let runtime = Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| DeployError::transfer("start runtime", e))?;
+            .map_err(|e| DeployError::local("starting the async runtime", e))?;
         runtime.block_on(self.sync(dist, &local, opts, ui))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Ssh;
+    use crate::config::SshConfig;
+
+    /// An absent `$USER` with no configured `user` is an error, not a silent
+    /// root login: containers, CI jobs and systemd units routinely have no
+    /// `$USER`, and both the docs and the config say it defaults to it.
+    #[test]
+    fn a_missing_user_is_an_error_not_root() {
+        let err = Ssh::new(SshConfig::default()).user(None).unwrap_err();
+        let err = err.to_string();
+        assert!(err.contains("no ssh user"), "{err}");
+        assert!(!err.contains("root"), "{err}");
+    }
+
+    #[test]
+    fn a_configured_user_wins_over_the_login() {
+        let ssh = Ssh::new(SshConfig {
+            user: Some("deploy".into()),
+            ..SshConfig::default()
+        });
+        assert_eq!(ssh.user(Some("ada")).unwrap(), "deploy");
+        assert_eq!(
+            Ssh::new(SshConfig::default()).user(Some("ada")).unwrap(),
+            "ada"
+        );
     }
 }

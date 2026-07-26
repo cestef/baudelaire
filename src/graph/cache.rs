@@ -23,11 +23,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::codegen::Value;
 use crate::config::Config;
-use crate::content::Page;
+use crate::content::{Data, Page};
 use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{self, Root};
-use crate::graph::{Deps, FileDigests, Hash, Reads};
+use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::ImageRef;
 use crate::ui::Ui;
 
@@ -36,6 +36,11 @@ const MANIFEST: &str = "manifest.json";
 
 /// Subdirectory holding content-addressed HTML blobs.
 const OBJECTS: &str = "objects";
+
+/// Manifest key prefix reserved for generated listings, which have no real
+/// source file. Not a valid relative path under the project root, so it cannot
+/// collide with a real page's key.
+const GENERATED: &str = "<generated>";
 
 /// A page's cached compile result and the fingerprints that validate it. The
 /// rendered HTML is not inlined: [`Entry::blob`] points at it in the object
@@ -47,7 +52,10 @@ struct Entry {
     /// Dependency files and their hashes at compile time. Keyed by `PathBuf`
     /// (serde-serialized, not `Display`) so a non-UTF-8 path round-trips
     /// exactly instead of being lossily replaced and permanently missing.
-    deps: BTreeMap<PathBuf, Hash>,
+    ///
+    /// `None` records a dependency that could not be hashed, so its later
+    /// appearance still invalidates; dropping it would leave it unchecked.
+    deps: BTreeMap<PathBuf, Option<Hash>>,
     /// Injected values the page read (`sys.inputs.baudelaire.git.hash`, ..) and
     /// their digests at compile time, so a new commit or day rebuilds only the
     /// pages that display the value that changed. `None` records a read of an
@@ -57,11 +65,29 @@ struct Entry {
     meta: BTreeMap<String, Option<Hash>>,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
-    /// Images this page externalized out of the DOM. Re-copied into `dist` on a
-    /// cache hit, since the asset directory is regenerated every build. Absent
-    /// from manifests written before externalization existed, hence `default`.
+    /// What the render pass produced besides the markup, replayed on a hit.
+    /// Defaulted so a manifest written by an older layout still *parses*: the
+    /// schema in the fingerprint (see [`crate::graph::Renderer`]) is what
+    /// decides it is unusable, and that path rebuilds silently instead of
+    /// warning every user once per upgrade.
     #[serde(default)]
-    images: Vec<ImageRef>,
+    outputs: Outputs,
+}
+
+/// The render-side results of compiling a page, stored alongside its markup
+/// because nothing here can be recovered from the markup afterwards.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Outputs {
+    /// Images the page externalized out of the DOM. Re-copied into `dist` on a
+    /// cache hit, since the asset directory is regenerated every build.
+    pub images: Vec<ImageRef>,
+    /// Raw targets of the broken internal links the page produced.
+    ///
+    /// Stored so the link check sees a cached page too. Feeding it only
+    /// freshly-compiled pages meant a second build reported nothing and
+    /// `links { strict #true }` *passed*: a gate that silently weakened on
+    /// rebuild.
+    pub broken: Vec<String>,
 }
 
 /// The serialized cache manifest: metadata only, no page markup.
@@ -97,6 +123,9 @@ pub struct RenderInputs {
 /// accumulates the next manifest as pages are reused or recompiled.
 pub struct Cache {
     dir: PathBuf,
+    /// The project root, so every path stored in the manifest can be recorded
+    /// relative to it.
+    root: PathBuf,
     enabled: bool,
     config: Hash,
     prev: Manifest,
@@ -109,13 +138,19 @@ pub struct Cache {
     /// digest of a page's recorded value reads. Owned so the cache is
     /// self-contained across the build.
     roots: Vec<(String, Value)>,
+    /// Blobs found on disk not matching their own content address, to be
+    /// rewritten by [`Cache::save`] rather than left broken forever.
+    corrupt: std::collections::HashSet<Hash>,
 }
 
 impl Cache {
     /// Load the cache for a build. When incremental builds are disabled the
-    /// cache still records the next manifest but never reports a hit.
+    /// cache still records the next manifest but never reports a hit, and
+    /// fingerprints it identically to a normal build's, so `--no-cache` costs
+    /// one cold build rather than poisoning the next.
     ///
-    /// The manifest fingerprint mixes the config, the asset map, the link map,
+    /// The manifest fingerprint mixes the config, the renderer's own identity,
+    /// the asset map, the link map,
     /// and (when `embed` is on) the embedded asset contents: the site-wide
     /// inputs that can alter any page. Build metadata (a new commit or day) is
     /// deliberately *not* here: it's tracked per page against `roots`, so it
@@ -125,6 +160,7 @@ impl Cache {
         config: &Config,
         render: &RenderInputs,
         roots: Vec<(String, Value)>,
+        root: &Path,
         ui: &Ui,
     ) -> Result<Self> {
         let dir = config.cache.dir.clone();
@@ -146,9 +182,10 @@ impl Cache {
             // absent manifest is the normal first-build case, stay silent.
             Err(_) => Manifest::default(),
         };
-        let fingerprint = Hash::of(&(config, render));
+        let fingerprint = Hash::of(&(config, render, Renderer::current()));
         Ok(Self {
             dir,
+            root: crate::fs::canonical(root),
             enabled: config.cache.incremental,
             next: Manifest {
                 config: Some(fingerprint),
@@ -158,6 +195,7 @@ impl Cache {
             prev,
             digests: FileDigests::default(),
             roots,
+            corrupt: std::collections::HashSet::new(),
         })
     }
 
@@ -177,18 +215,19 @@ impl Cache {
     /// `fingerprint` hashes the exact text typst compiles, so it validates
     /// generated pages (taxonomies, paginated indexes) too, whose synthetic
     /// sources never touch disk and so have no file to hash.
-    pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<(String, Vec<ImageRef>)> {
+    pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<(String, Outputs)> {
         if !self.enabled || self.prev.config.as_ref() != Some(&self.config) {
             return None;
         }
-        let entry = self.prev.pages.get(Self::key(page))?;
+        let key = self.key(page);
+        let entry = self.prev.pages.get(&key)?;
         if &entry.hash != fingerprint {
             return None;
         }
         if !entry
             .deps
             .iter()
-            .all(|(path, hash)| self.digests.of(path).as_ref() == Some(hash))
+            .all(|(path, hash)| self.digests.of(&self.resolve(path)) == *hash)
         {
             return None;
         }
@@ -205,15 +244,19 @@ impl Cache {
         }
         let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
         // verify the blob against its content address: a torn write leaves bytes
-        // not matching the name that claims their hash. mismatch is a miss.
+        // not matching the name that claims their hash. mismatch is a miss, and
+        // the bad file is remembered so `save` overwrites it: it is still
+        // referenced (so the prune keeps it) and its path already exists (so a
+        // write would be skipped), which left that page missing on every build
+        // from then on with no way to self-heal.
         if Hash::of_bytes(html.as_bytes()) != entry.blob {
+            self.corrupt.insert(entry.blob);
             return None;
         }
-        let images = entry.images.clone();
-        self.next
-            .pages
-            .insert(Self::key(page).to_path_buf(), entry.clone());
-        Some((html, images))
+        let entry = entry.clone();
+        let outputs = entry.outputs.clone();
+        self.next.pages.insert(key, entry);
+        Some((html, outputs))
     }
 
     /// Record a freshly compiled page against its content fingerprint, its
@@ -226,23 +269,23 @@ impl Cache {
         html: &str,
         deps: &Deps,
         reads: &Reads,
-        images: &[ImageRef],
+        outputs: &Outputs,
     ) {
         let meta = access::digests(&self.roots(), reads);
         let deps = deps
             .files()
             .iter()
-            .filter_map(|p| Some((p.clone(), self.digests.of(p)?)))
+            .map(|p| (self.portable(p), self.digests.of(p)))
             .collect();
         let blob = Hash::of_bytes(html.as_bytes());
         self.next.pages.insert(
-            Self::key(page).to_path_buf(),
+            self.key(page),
             Entry {
                 hash: fingerprint,
                 deps,
                 meta,
                 blob,
-                images: images.to_vec(),
+                outputs: outputs.clone(),
             },
         );
     }
@@ -253,9 +296,9 @@ impl Cache {
     /// for freshly recorded pages (cache hits already have their blob on disk).
     pub fn save(&self, outputs: &[(&Page, &str)]) -> Result<()> {
         crate::fs::create_dir_all(&self.dir)?;
-        let html: BTreeMap<&Path, &str> = outputs
+        let html: BTreeMap<PathBuf, &str> = outputs
             .iter()
-            .map(|(page, html)| (Self::key(page), *html))
+            .map(|(page, html)| (self.key(page), *html))
             .collect();
         // collect blobs needing a write (new content only), keyed by path so
         // two pages sharing identical markup stage one write (a duplicate
@@ -267,10 +310,10 @@ impl Cache {
             .iter()
             .filter_map(|(key, entry)| {
                 let path = self.object(&entry.blob);
-                if path.exists() {
+                if path.exists() && !self.corrupt.contains(&entry.blob) {
                     return None;
                 }
-                html.get(key.as_path()).map(|contents| (path, *contents))
+                html.get(key).map(|contents| (path, *contents))
             })
             .collect();
         pending
@@ -334,7 +377,102 @@ impl Cache {
         }
     }
 
-    fn key(page: &Page) -> &Path {
-        &page.source
+    /// The manifest key for a page.
+    ///
+    /// Portable (see [`Cache::portable`]), and generated listings sit under a
+    /// reserved prefix: their source path is fabricated, so a real page written
+    /// at the same path would share one entry with the listing, overwrite it
+    /// every build, and leave both missing forever.
+    fn key(&self, page: &Page) -> PathBuf {
+        let path = self.portable(&page.source);
+        match page.data {
+            Data::Generated(_) => Path::new(GENERATED).join(path),
+            Data::Export | Data::Empty => path,
+        }
+    }
+
+    /// A path as the manifest stores it: relative to the project root when it
+    /// lies inside it (so a warm cache survives the site moving), unchanged
+    /// otherwise — the typst package cache is machine-global anyway.
+    fn portable(&self, path: &Path) -> PathBuf {
+        let absolute = crate::fs::canonical(path);
+        absolute
+            .strip_prefix(&self.root)
+            .unwrap_or(&absolute)
+            .to_path_buf()
+    }
+
+    /// The inverse of [`Cache::portable`]: a stored key back to a real path.
+    fn resolve(&self, path: &Path) -> PathBuf {
+        self.root.join(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cache, GENERATED, RenderInputs};
+    use crate::config::Config;
+    use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+    use crate::graph::Hash;
+    use crate::ui::{Level, Ui};
+    use std::path::{Path, PathBuf};
+
+    fn page(source: &str, data: Data) -> Page {
+        Page {
+            id: PageId::new("posts", source),
+            source: PathBuf::from(source),
+            frontmatter: Frontmatter::default(),
+            body: String::new(),
+            data,
+            collection: "posts".into(),
+            permalink: "/p/".into(),
+            output: PathBuf::new(),
+            template: None,
+            lang: "en".into(),
+            siblings: Siblings::default(),
+            translations: Vec::new(),
+        }
+    }
+
+    fn cache(root: &Path) -> Cache {
+        let mut config = Config::default();
+        config.cache.dir = root.join(".cache");
+        let render = RenderInputs {
+            assets: Hash::of_bytes(b""),
+            links: Hash::of_bytes(b""),
+            srcsets: Hash::of_bytes(b""),
+            embeds: None,
+        };
+        Cache::load(&config, &render, Vec::new(), root, &Ui::new(Level::Silent)).expect("cache")
+    }
+
+    /// A generated listing fabricates a source path that never exists on disk.
+    /// Sharing one manifest entry with a real page at that path made the two
+    /// overwrite each other every build, so both missed forever.
+    #[test]
+    fn a_generated_listing_cannot_collide_with_a_real_page() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = cache(tmp.path());
+        let path = tmp.path().join("content/tags/rust.typ");
+        let path = path.to_str().expect("utf-8 tempdir");
+
+        let real = cache.key(&page(path, Data::Empty));
+        let listing = cache.key(&page(path, Data::Generated(String::new())));
+
+        assert_ne!(real, listing);
+        assert!(listing.starts_with(GENERATED), "{listing:?}");
+    }
+
+    /// Manifest keys are relative to the project root, so a warm cache still
+    /// matches after the site moves on disk.
+    #[test]
+    fn keys_are_relative_to_the_project_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = cache(tmp.path());
+        let path = tmp.path().join("content/posts/a.typ");
+
+        let key = cache.key(&page(path.to_str().expect("utf-8 tempdir"), Data::Empty));
+
+        assert_eq!(key, Path::new("content/posts/a.typ"));
     }
 }

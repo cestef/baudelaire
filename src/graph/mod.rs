@@ -8,7 +8,7 @@ mod digest;
 mod hash;
 
 pub use access::{Analyzer, Reads, Root};
-pub use cache::{Cache, RenderInputs};
+pub use cache::{Cache, Outputs, RenderInputs};
 pub use deps::Deps;
 pub use digest::FileDigests;
-pub use hash::{Fingerprint, Hash};
+pub use hash::{Fingerprint, Hash, Renderer};

@@ -15,7 +15,7 @@ use md5::{Digest, Md5};
 use time::OffsetDateTime;
 
 use super::sigv4::{Request, Signer};
-use super::{Backend, Dist, Plan};
+use super::{Backend, Dist, Listed, Plan};
 use crate::config::S3Config;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
@@ -35,7 +35,7 @@ impl S3 {
     }
 }
 
-impl Backend for S3 {
+impl Backend<Dist> for S3 {
     fn name(&self) -> &'static str {
         "s3"
     }
@@ -46,7 +46,7 @@ impl Backend for S3 {
         // and the interactive prompt all work.
         let access_key = Self::credential(ACCESS_KEY_ENV)?;
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
-        let bucket = Bucket::new(&self.config, access_key, secret_key);
+        let bucket = Bucket::new(&self.config, access_key, secret_key, Self::session_token());
 
         let local = dist.digests(Bucket::etag)?;
         let plan = Plan::compute(&local, &bucket.list()?, self.config.delete);
@@ -71,6 +71,13 @@ impl Backend for S3 {
 impl S3 {
     /// Read a required credential from the environment, erroring with the
     /// variable's name when it is unset or empty.
+    /// The session token accompanying temporary credentials, if any.
+    fn session_token() -> Option<String> {
+        std::env::var(SESSION_TOKEN_ENV)
+            .ok()
+            .filter(|token| !token.is_empty())
+    }
+
     fn credential(var: &str) -> Result<String> {
         match std::env::var(var) {
             Ok(value) if !value.is_empty() => Ok(value),
@@ -87,11 +94,20 @@ impl S3 {
 pub const ACCESS_KEY_ENV: &str = "AWS_ACCESS_KEY_ID";
 pub const SECRET_KEY_ENV: &str = "AWS_SECRET_ACCESS_KEY";
 
+/// Session token for temporary credentials. Set by every mechanism that issues
+/// them: GitHub OIDC, EC2/ECS instance roles, `aws sso login`, `sts
+/// assume-role`. Without sending it, those credentials produce a
+/// perfectly-formed signature the server rejects as `SignatureDoesNotMatch`.
+pub const SESSION_TOKEN_ENV: &str = "AWS_SESSION_TOKEN";
+
 /// An S3-compatible bucket client.
 pub struct Bucket {
     agent: ureq::Agent,
     access_key: String,
     secret_key: String,
+    /// Present only for temporary credentials; signed and sent as
+    /// `x-amz-security-token`.
+    token: Option<String>,
     region: String,
     /// Key prefix every object is placed under (no leading/trailing slash).
     prefix: String,
@@ -110,7 +126,12 @@ impl Bucket {
     /// Build a client for `config` with credentials resolved from the
     /// environment. A custom `endpoint` selects path-style addressing (R2,
     /// MinIO); its absence targets AWS virtual-hosted addressing.
-    pub fn new(config: &S3Config, access_key: String, secret_key: String) -> Self {
+    pub fn new(
+        config: &S3Config,
+        access_key: String,
+        secret_key: String,
+        token: Option<String>,
+    ) -> Self {
         let (authority, host, root) = match &config.endpoint {
             Some(endpoint) => {
                 let endpoint = endpoint.trim_end_matches('/');
@@ -132,6 +153,7 @@ impl Bucket {
                 .into(),
             access_key,
             secret_key,
+            token,
             region: config.region.clone(),
             prefix: config.prefix.trim_matches('/').to_owned(),
             authority,
@@ -255,10 +277,14 @@ impl Bucket {
         request: ureq::RequestBuilder<Any>,
         auth: &Authorization,
     ) -> ureq::RequestBuilder<Any> {
-        request
+        let request = request
             .header("Authorization", &auth.header)
             .header("x-amz-date", &auth.timestamp)
-            .header("x-amz-content-sha256", &auth.payload_hash)
+            .header("x-amz-content-sha256", &auth.payload_hash);
+        match &self.token {
+            Some(token) => request.header(TOKEN_HEADER, token),
+            None => request,
+        }
     }
 
     /// The full URL for a signing `uri` (which already carries the root/prefix).
@@ -277,12 +303,18 @@ impl Bucket {
             service: "s3",
             timestamp: &timestamp,
         };
+        // The session token is part of the signature, not just a header: a
+        // signature computed without it is rejected.
+        let mut headers = vec![("x-amz-content-sha256", payload_hash.as_str())];
+        if let Some(token) = &self.token {
+            headers.push((TOKEN_HEADER, token.as_str()));
+        }
         let header = signer.sign(&Request {
             method,
             host: &self.host,
             uri,
             query,
-            headers: &[("x-amz-content-sha256", &payload_hash)],
+            headers: &headers,
             payload_hash: &payload_hash,
         });
         Authorization {
@@ -304,16 +336,14 @@ impl Bucket {
         if (200..300).contains(&status) {
             return Ok(());
         }
-        let message = response.body_mut().read_to_string().unwrap_or_default();
-        Err(DeployError::Request {
-            operation,
-            key: uri.to_owned(),
-            status,
-            message: message.trim().to_owned(),
-        }
-        .into())
+        let body = response.body_mut().read_to_string().unwrap_or_default();
+        Err(DeployError::request(operation, uri, status, &body).into())
     }
 }
+
+/// The header carrying a temporary credential's session token, signed and sent
+/// together so the two can never disagree.
+const TOKEN_HEADER: &str = "x-amz-security-token";
 
 /// The signed-request headers to attach.
 struct Authorization {
@@ -405,10 +435,11 @@ impl Listing {
             .descendants()
             .filter(|node| node.has_tag_name("Contents"))
             .filter_map(|node| {
-                Some((
-                    text(node, "Key")?,
-                    Self::unquote(&text(node, "ETag")?).to_owned(),
-                ))
+                // The key came off the network and feeds a delete request, so
+                // it only leaves here as a `Listed`.
+                let key = Listed::try_from(text(node, "Key")?.as_str()).ok()?;
+                let etag = Self::unquote(&text(node, "ETag")?).to_owned();
+                Some((key.into_string(), etag))
             })
             .collect();
         let next = document
@@ -440,7 +471,12 @@ mod tests {
     }
 
     fn bucket(endpoint: Option<&str>, prefix: &str) -> Bucket {
-        Bucket::new(&config(endpoint, prefix), "AKID".into(), "secret".into())
+        Bucket::new(
+            &config(endpoint, prefix),
+            "AKID".into(),
+            "secret".into(),
+            None,
+        )
     }
 
     #[test]

@@ -1,4 +1,5 @@
-//! Resolves the `baudelaire:asset:` image markers left by [`super::IMAGE_RULE`].
+//! Resolves the `baudelaire:asset:` image markers left by
+//! [`crate::image_rule::IMAGE_RULE`].
 //!
 //! The image show rule replaces typst's inline base64 with a marker carrying the
 //! source file's project-relative path. This transform rewrites each marked
@@ -15,8 +16,8 @@ use typst_html::{HtmlDocument, attr, tag};
 use crate::config::Config;
 use crate::graph::Hash;
 
-use super::MARKER;
 use super::transform::{Cx, ElementExt, Transform};
+use crate::image_rule::MARKER;
 
 /// Length of the hex fingerprint spliced into a filename, matching the asset
 /// pipeline so externalized and pipeline assets are named the same way.

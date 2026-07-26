@@ -22,7 +22,7 @@ use typst::foundations::Module;
 use crate::config::Config;
 use crate::content::Frontmatter;
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::{FileDigests, Hash};
+use crate::graph::{FileDigests, Hash, Renderer};
 use crate::world::Project;
 
 /// The on-disk discovery manifest, beside the compile cache's `manifest.json`.
@@ -190,16 +190,17 @@ impl DiscoveryCache {
         Ok(())
     }
 
-    /// Fingerprint the config inputs that change frontmatter interpretation: the
-    /// set of configured taxonomy keys (which keys are collected as taxonomies
-    /// rather than passed through to `extra`).
+    /// Fingerprint the inputs that change frontmatter interpretation: the set of
+    /// configured taxonomy keys (which keys are collected as taxonomies rather
+    /// than passed through to `extra`), and the renderer that parsed them, so an
+    /// upgrade that changes how a frontmatter value is read is not a cache hit.
     fn salt(config: &Config) -> Hash {
         let keys: Vec<&str> = config
             .taxonomies
             .iter()
             .map(|(_, t)| t.key.as_str())
             .collect();
-        Hash::of(&keys)
+        Hash::of(&(keys, Renderer::current()))
     }
 }
 

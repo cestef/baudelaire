@@ -9,6 +9,7 @@ pub mod deploy;
 pub mod fs;
 pub mod hook;
 pub mod link;
+pub mod output;
 pub mod remote;
 pub mod scaffold;
 pub mod serialize;
@@ -25,6 +26,7 @@ pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks};
+pub use output::BaseUrlRequired;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
 pub use serialize::{Artifact, SerializeError};
@@ -79,6 +81,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Serve(Box<crate::error::serve::ServeError>),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Generated(#[from] crate::error::BaseUrlRequired),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

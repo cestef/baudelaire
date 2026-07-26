@@ -5,13 +5,8 @@
 mod common;
 
 use baudelaire::engine::{Engine, Mode};
-use baudelaire::ui::{Level, Ui};
 
-use common::Site;
-
-fn silent() -> Ui {
-    Ui::new(Level::Silent)
-}
+use common::{Site, silent};
 
 const CONFIG: &str = r#"
 site "T"
@@ -99,6 +94,7 @@ paths {
 }
 output {
     urls "flat"
+    sitemap #true
     search {
         formats "json"
         fields "title" "body"
@@ -130,9 +126,24 @@ fn flat_urls_with_redirects_search_and_llms() {
     // Flat URLs write `.html` files rather than `dir/index.html`.
     assert!(site.exists("public/about.html"), "flat about page");
 
+    // ...and every emitted URL names that file. The style used to decide the
+    // output path only, so permalinks, canonicals, the sitemap, feeds and
+    // redirect targets all still said `/about/`, which nothing serves.
+    let about = site.read("public/about.html");
+    assert!(
+        about.contains("/about.html") && !about.contains("\"/about/\""),
+        "canonical does not name the file written: {about}"
+    );
+    let sitemap = site.read("public/sitemap.xml");
+    assert!(sitemap.contains("/about.html"), "{sitemap}");
+    assert!(!sitemap.contains("/about/<"), "{sitemap}");
+    let search = site.read("public/search.json");
+    assert!(search.contains("/about.html"), "{search}");
+
     // A redirect stub forwards the stale path to the page's permalink.
     let stub = site.read("public/old-about.html");
     assert!(stub.contains("http-equiv"), "meta-refresh redirect: {stub}");
+    assert!(stub.contains("/about.html"), "redirect target: {stub}");
     assert!(
         stub.to_lowercase().contains("redirecting"),
         "redirect body: {stub}"

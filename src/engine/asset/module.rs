@@ -164,15 +164,16 @@ impl Module for Search {
             SearchFormat::Json
         };
         let base = cx.config.base_path();
+        // The bundled client is site-wide, so it defaults to the default
+        // language's index; `createSearch(url)` takes another language's.
+        let lang = &cx.config.lang;
+        let module = |format: SearchFormat| format.module(base, &format.index(cx.config, lang));
         vec![
-            ("baudelaire:search".into(), default.module(base)),
-            (
-                "baudelaire:search/json".into(),
-                SearchFormat::Json.module(base),
-            ),
+            ("baudelaire:search".into(), module(default)),
+            ("baudelaire:search/json".into(), module(SearchFormat::Json)),
             (
                 "baudelaire:search/inverted".into(),
-                SearchFormat::Inverted.module(base),
+                module(SearchFormat::Inverted),
             ),
         ]
     }
@@ -247,6 +248,7 @@ impl Module for Pages {
                     ("url", Value::str(&page.permalink)),
                     ("title", Value::str(page.title())),
                     ("collection", Value::str(&page.collection)),
+                    ("lang", Value::str(&page.lang)),
                     (
                         "date",
                         Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
@@ -258,9 +260,10 @@ impl Module for Pages {
     }
 }
 
-/// `baudelaire:sections`: the site's section tree: `{ id, pages: [{ url, title
-/// }], children: [...] }` per content directory, nested, exactly what templates
-/// get as `page.sections`, for building menus and command palettes client-side.
+/// `baudelaire:sections`: the site's section trees keyed by language code
+/// (`sections.fr`), each `{ id, pages: [{ url, title }], children: [...] }` per
+/// content directory, nested, exactly what a page of that language gets as
+/// `page.sections`, for building menus and command palettes client-side.
 struct Sections;
 
 impl Module for Sections {
@@ -287,6 +290,7 @@ impl Module for Taxonomies {
             let link = Value::dict([
                 ("url", Value::str(&page.permalink)),
                 ("title", Value::str(page.title())),
+                ("lang", Value::str(&page.lang)),
             ]);
             for (taxonomy, terms) in &page.frontmatter.taxonomies {
                 let by_term = taxos.entry(taxonomy).or_default();
@@ -314,18 +318,25 @@ struct Feed;
 
 impl Module for Feed {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let items = Page::recent(cx.pages, &cx.config.lang, cx.config.feed.limit)
-            .into_iter()
-            .map(|page| {
-                Value::dict([
-                    ("url", Value::str(&page.permalink)),
-                    ("title", Value::str(page.title())),
-                    (
-                        "date",
-                        Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
-                    ),
-                ])
-            });
+        // Every language's recent pages, each tagged, rather than only the
+        // default language's: one bundle serves the whole site, so a French
+        // page's widget had nothing of its own to show.
+        let items = cx.config.langs().into_iter().flat_map(|lang| {
+            Page::recent(cx.pages, lang, cx.config.feed.limit)
+                .into_iter()
+                .map(|page| {
+                    Value::dict([
+                        ("url", Value::str(&page.permalink)),
+                        ("title", Value::str(page.title())),
+                        ("lang", Value::str(&page.lang)),
+                        (
+                            "date",
+                            Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
+                        ),
+                    ])
+                })
+                .collect::<Vec<_>>()
+        });
         vec![("baudelaire:feed".into(), Esm::value(&Value::array(items)))]
     }
 }
@@ -342,6 +353,7 @@ impl Module for I18n {
             Value::dict([
                 ("code", Value::str(code)),
                 ("name", Value::str(cx.config.name(code).unwrap_or(code))),
+                ("dir", Value::str(cx.config.dir(code).unwrap_or("ltr"))),
             ])
         }));
         let strings = Value::dict(codes.iter().map(|code| {

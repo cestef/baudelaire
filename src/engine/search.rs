@@ -25,6 +25,8 @@ use serde::Serialize;
 
 use super::process::{Emit, Processor, Site};
 use super::text::Text;
+use crate::codegen::{Js, Value};
+use crate::config::Permalink;
 use crate::config::{Config, SearchField, SearchFormat};
 use crate::error::{Artifact, Result, SerializeError};
 
@@ -38,24 +40,33 @@ impl Processor for SearchIndex {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let cfg = &site.config.search;
-        let corpus = Corpus::build(site, &cfg.fields);
-        for &format in &cfg.formats {
-            let json = match format {
-                SearchFormat::Json => corpus.documents_json()?,
-                SearchFormat::Inverted => corpus.inverted_json(&cfg.stopwords, cfg.min_length)?,
-            };
-            out.file(&site.config.dist.join(format.file()), &json)?;
-            out.note(format_args!(
-                "wrote {} ({} docs)",
-                format.file(),
-                corpus.len()
-            ));
-            if cfg.client {
-                out.file(
-                    &site.config.dist.join(format.client_file()),
-                    &format.client(site.config.base_path()),
-                )?;
-                out.note(format_args!("wrote {}", format.client_file()));
+        // One index per language, alongside that language's feeds. A single
+        // global index served English hits to a visitor searching from `/fr/`.
+        for lang in site.config.langs() {
+            let scope = site.config.scope(lang, "");
+            let corpus = Corpus::build(site, &cfg.fields, lang);
+            let dir = site.config.dist.join(&scope);
+            for &format in &cfg.formats {
+                let json = match format {
+                    SearchFormat::Json => corpus.documents_json()?,
+                    SearchFormat::Inverted => {
+                        corpus.inverted_json(&cfg.stopwords, cfg.min_length)?
+                    }
+                };
+                out.file(&dir.join(format.file()), &json)?;
+                out.note(format_args!(
+                    "wrote {}/{} ({} docs)",
+                    scope,
+                    format.file(),
+                    corpus.len()
+                ));
+                if cfg.client {
+                    out.file(
+                        &dir.join(format.client_file()),
+                        &format.client(site.config.base_path(), &format.index(site.config, lang)),
+                    )?;
+                    out.note(format_args!("wrote {}/{}", scope, format.client_file()));
+                }
             }
         }
         Ok(())
@@ -68,12 +79,17 @@ struct Corpus {
 }
 
 impl Corpus {
-    /// Build a document per page, including only the configured `fields`.
-    fn build(site: &Site, fields: &[SearchField]) -> Self {
+    /// Build a document per page, including only the configured `fields`,
+    /// ordered by URL.
+    ///
+    /// The order is load-bearing: the inverted index keys postings by document
+    /// *position*, and `site.outputs` is ordered by which pages hit the cache.
+    fn build(site: &Site, fields: &[SearchField], lang: &str) -> Self {
         let has = |field| fields.contains(&field);
-        let documents = site
+        let mut documents: Vec<Document> = site
             .outputs
             .iter()
+            .filter(|(page, _)| page.lang == lang)
             .map(|(page, html)| Document {
                 url: page.permalink.clone(),
                 title: has(SearchField::Title)
@@ -99,6 +115,7 @@ impl Corpus {
                 },
             })
             .collect();
+        documents.sort_by(|a, b| a.url.cmp(&b.url));
         Self { documents }
     }
 
@@ -218,10 +235,10 @@ impl SearchFormat {
     }
 
     /// The standalone generated client: engine + palette UI + auto-mount.
-    fn client(self, base: &str) -> String {
+    fn client(self, base: &str, index: &str) -> String {
         format!(
             "{}{}\n{PALETTE}{AUTO_MOUNT}",
-            Self::prelude(base),
+            Self::prelude(base, index),
             self.engine()
         )
     }
@@ -229,14 +246,30 @@ impl SearchFormat {
     /// The composable module source (engine + palette, no auto-mount) served to
     /// bundlers through the `baudelaire:search` virtual module.
     #[cfg(feature = "js")]
-    pub(crate) fn module(self, base: &str) -> String {
-        format!("{}{}\n{PALETTE}", Self::prelude(base), self.engine())
+    pub(crate) fn module(self, base: &str, index: &str) -> String {
+        format!("{}{}\n{PALETTE}", Self::prelude(base, index), self.engine())
     }
 
-    /// The `BASE` constant the engine and palette prepend to the index fetch URL
-    /// and each hit's href, so a subdirectory-hosted site resolves both.
-    fn prelude(base: &str) -> String {
-        format!("const BASE = {base:?};\n")
+    /// The served URL of this format's index for `lang`: what the generated
+    /// client fetches, and the single spelling shared by the emitted client and
+    /// the `baudelaire:search` virtual module.
+    pub(crate) fn index(self, config: &Config, lang: &str) -> String {
+        let dir = config.prefixed(&Permalink::join(&[&config.scope(lang, "")]));
+        format!("{dir}{}", self.file())
+    }
+
+    /// The two constants the generated client closes over: `BASE`, prepended to
+    /// each hit's href so a subdirectory-hosted site resolves it, and `INDEX`,
+    /// the URL of the index this client fetches.
+    ///
+    /// Separate because they scope differently: hits carry already-localized
+    /// permalinks, so folding the language into `BASE` would double it.
+    fn prelude(base: &str, index: &str) -> String {
+        format!(
+            "const BASE = {};\nconst INDEX = {};\n",
+            Js(&Value::str(base)),
+            Js(&Value::str(index))
+        )
     }
 }
 
@@ -251,6 +284,48 @@ mod tests {
             tags: tags.iter().map(|s| (*s).to_owned()).collect(),
             body: body.into(),
         }
+    }
+
+    /// Document ids index the inverted postings, so the corpus must not
+    /// inherit `site.outputs`' cache-split order: a cold and an incremental
+    /// build of identical content have to produce byte-identical indexes.
+    #[test]
+    fn corpus_is_ordered_by_url_not_by_cache_split() {
+        use crate::config::Config;
+        use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+        use std::path::PathBuf;
+
+        let page = |slug: &str| Page {
+            id: PageId::new("posts", slug),
+            source: PathBuf::from(format!("content/{slug}.typ")),
+            frontmatter: Frontmatter::default(),
+            body: String::new(),
+            data: Data::Empty,
+            collection: "posts".into(),
+            permalink: format!("/{slug}/"),
+            output: PathBuf::new(),
+            template: None,
+            lang: "en".into(),
+            siblings: Siblings::default(),
+            translations: Vec::new(),
+        };
+        let (a, b) = (page("a"), page("b"));
+        let config = Config::default();
+        let corpus = |outputs: &[(&Page, &str)]| {
+            let site = Site {
+                config: &config,
+                pages: &[],
+                outputs,
+            };
+            Corpus::build(&site, &[SearchField::Title], "en")
+                .documents
+                .iter()
+                .map(|d| d.url.clone())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(corpus(&[(&a, ""), (&b, "")]), ["/a/", "/b/"]);
+        assert_eq!(corpus(&[(&b, ""), (&a, "")]), ["/a/", "/b/"]);
     }
 
     #[test]

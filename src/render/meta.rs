@@ -72,7 +72,10 @@ impl Card<'_> {
         if let Some(description) = &description {
             tags.push(Self::named("description", description));
         }
-        if let Some(author) = fm.text("author").or_else(|| self.config.author.clone()) {
+        let author = fm
+            .text("author")
+            .or_else(|| self.config.author(&self.page.lang).map(str::to_owned));
+        if let Some(author) = author {
             tags.push(Self::named("author", &author));
         }
 
@@ -87,10 +90,13 @@ impl Card<'_> {
         if let Some(url) = &canonical {
             tags.push(Self::property("og:url", url));
         }
-        if let Some(site) = &self.config.site {
-            tags.push(Self::property("og:site_name", site));
+        if self.config.site.is_some() {
+            tags.push(Self::property(
+                "og:site_name",
+                self.config.title(&self.page.lang),
+            ));
         }
-        tags.push(Self::property("og:locale", &self.page.lang));
+        tags.push(Self::property("og:locale", &Self::locale(&self.page.lang)));
         if let Some(image) = &image {
             tags.push(Self::property("og:image", image));
         }
@@ -160,6 +166,33 @@ impl Card<'_> {
         Self::meta(attr::name, name, content)
     }
 
+    /// A BCP-47 code as OpenGraph spells a locale: `fr-CA` -> `fr_CA`.
+    ///
+    /// A bare `fr` is passed through rather than given an invented territory:
+    /// `fr_FR` would be wrong for a Belgian or Canadian site, and a guess is
+    /// worse than an incomplete tag. Declare the region in `lang` to get the
+    /// full form.
+    fn locale(code: &str) -> String {
+        let mut parts = code.split(['-', '_']);
+        let Some(language) = parts.next() else {
+            return code.to_owned();
+        };
+        // A two-letter or three-digit subtag is the region; a four-letter one is
+        // the script, which OpenGraph has no place for.
+        let region = parts.find(|part| {
+            (part.len() == 2 && part.chars().all(|c| c.is_ascii_alphabetic()))
+                || (part.len() == 3 && part.chars().all(|c| c.is_ascii_digit()))
+        });
+        match region {
+            Some(region) => format!(
+                "{}_{}",
+                language.to_ascii_lowercase(),
+                region.to_uppercase()
+            ),
+            None => language.to_ascii_lowercase(),
+        }
+    }
+
     /// A `<meta property=".." content="..">` tag (OpenGraph).
     fn property(property: &str, content: &str) -> HtmlNode {
         Self::meta(HtmlAttr::constant("property"), property, content)
@@ -187,5 +220,25 @@ impl Card<'_> {
         el.attrs.push(HtmlAttr::constant("hreflang"), hreflang);
         el.attrs.push(attr::href, href);
         HtmlNode::Element(el)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Card;
+
+    #[test]
+    fn locale_uses_the_opengraph_separator() {
+        assert_eq!(Card::locale("fr-CA"), "fr_CA");
+        assert_eq!(Card::locale("pt-br"), "pt_BR");
+        assert_eq!(Card::locale("es-419"), "es_419");
+    }
+
+    /// A script subtag is not a territory, and a bare code gets no invented one.
+    #[test]
+    fn locale_leaves_out_what_opengraph_has_no_place_for() {
+        assert_eq!(Card::locale("zh-Hant"), "zh");
+        assert_eq!(Card::locale("zh-Hant-TW"), "zh_TW");
+        assert_eq!(Card::locale("fr"), "fr");
     }
 }

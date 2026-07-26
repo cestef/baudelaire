@@ -7,9 +7,9 @@ use std::path::PathBuf;
 
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
-    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config,
-    SearchConfig, SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
+    FeedConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
+    OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config, SearchConfig,
+    SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -19,6 +19,9 @@ impl Default for Config {
             url: None,
             lang: "en".into(),
             author: None,
+            // The process cwd, which `Root::enter` has already moved to the
+            // project directory.
+            root: PathBuf::from("."),
             content: PathBuf::from("content"),
             index: Some("index".into()),
             dist: PathBuf::from("public"),
@@ -28,7 +31,8 @@ impl Default for Config {
             urls: UrlStyle::default(),
             clean: true,
             future: false,
-            sitemap: true,
+            // opt-in like robots/llms/search; also needs a `url`
+            sitemap: false,
             robots: RobotsConfig::default(),
             llms: LlmsConfig::default(),
             draft: DraftConfig::default(),
@@ -134,7 +138,8 @@ impl Default for LinkConfig {
 impl Default for FeedConfig {
     fn default() -> Self {
         Self {
-            formats: vec![FeedKind::Rss],
+            // opt-in like search: no feed until a format is named
+            formats: Vec::new(),
             limit: 20,
         }
     }
@@ -262,10 +267,24 @@ pub enum UrlStyle {
 }
 
 impl UrlStyle {
-    /// Whether this style produces directory-per-page (clean) URLs.
-    pub fn is_clean(self) -> bool {
-        matches!(self, UrlStyle::Clean)
+    /// Shape a page URL for this style.
+    ///
+    /// This is the half that used to be missing: the style only decided the
+    /// output *file*, while every permalink kept the clean trailing-slash form.
+    /// A flat site wrote `about.html` and then told the canonical tag, `og:url`,
+    /// the sitemap, the feeds, the redirects and every rewritten `.typ` link
+    /// that the page lived at `/about/`, which nothing serves. The site root is
+    /// `/` under both styles.
+    pub fn url(self, path: &str) -> String {
+        match self {
+            Self::Clean => path.to_owned(),
+            Self::Flat if path == "/" || path.ends_with(Self::PAGE) => path.to_owned(),
+            Self::Flat => format!("{}{}", path.trim_end_matches('/'), Self::PAGE),
+        }
     }
+
+    /// The extension a flat URL names its file with.
+    const PAGE: &'static str = ".html";
 }
 
 /// Ordering key for a collection's pages.

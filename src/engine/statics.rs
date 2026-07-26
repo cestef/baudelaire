@@ -9,7 +9,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
-use crate::engine::asset::Walk;
 use crate::error::Result;
 use crate::fs;
 
@@ -17,6 +16,11 @@ use crate::fs;
 pub struct Static<'a> {
     src: &'a Path,
     dist: &'a Path,
+    /// The served asset directory and the tree the pipeline stages it in. A
+    /// static file landing inside the asset directory is written to the staging
+    /// tree, so [`crate::engine::asset::Assets::publish`] carries it into place
+    /// instead of deleting it with the directory it replaces.
+    assets: (PathBuf, PathBuf),
 }
 
 /// The outcome of a static copy: files written this build and their byte size.
@@ -35,26 +39,28 @@ impl<'a> Static<'a> {
         Self {
             src: &config.r#static,
             dist: &config.dist,
+            assets: (config.asset_dist(), config.asset_staging()),
         }
     }
 
     /// Copy every file under `src` to the same relative path under `dist`,
-    /// skipping any already present with an identical size and no older than
-    /// its source, so an unchanged tree costs no writes on rebuild, and the
-    /// dev server's live-reload isn't churned by untouched files. A missing
-    /// `src` is not an error: the directory is optional.
+    /// skipping any already [`current`](Static::current), so an unchanged tree
+    /// costs no writes on rebuild and the dev server's live-reload isn't churned
+    /// by untouched files. A missing `src` is not an error: the directory is
+    /// optional.
     pub fn copy(&self) -> Result<Copied> {
         let mut out = Copied::default();
         if !self.src.exists() {
             return Ok(out);
         }
-        for file in Walk::files(self.src)? {
+        for file in fs::Walk::new(self.src).files()? {
             let rel = file
                 .strip_prefix(self.src)
                 .expect("Walk yields paths under src");
-            let dst = self.dist.join(rel);
             let len = file.metadata().map(|m| m.len()).unwrap_or(0);
-            out.paths.push(dst.clone());
+            // The prune keeps the *served* path; the write may go elsewhere.
+            out.paths.push(self.dist.join(rel));
+            let dst = self.destination(rel);
             if Self::current(&file, &dst) {
                 continue;
             }
@@ -62,18 +68,108 @@ impl<'a> Static<'a> {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(&file, &dst)?;
+            Self::stamp(&file, &dst);
             out.count += 1;
             out.bytes += len;
         }
         Ok(out)
     }
 
-    /// Whether `dst` already holds `src` verbatim: same size and last modified
-    /// no earlier than the source. Best-effort; any metadata error means copy.
+    /// Where a static file at `rel` is written: its place under `dist`, unless
+    /// that falls inside the asset directory, which the pipeline replaces
+    /// wholesale — those go to the staging tree and are published with it.
+    fn destination(&self, rel: &Path) -> PathBuf {
+        let (served, staging) = &self.assets;
+        let direct = self.dist.join(rel);
+        match direct.strip_prefix(served) {
+            Ok(inside) => staging.join(inside),
+            Err(_) => direct,
+        }
+    }
+
+    /// Whether `dst` already holds `src` verbatim: same size and the *same*
+    /// mtime, which [`Static::stamp`] gave it when it was copied.
+    ///
+    /// The old rule was `dst` no *older* than `src`, which a same-size edit
+    /// defeats: a `git checkout` or `stash`, an archive extraction or `touch -d`
+    /// leaves the destination newer, and the file is never copied again.
+    /// Equality instead, against a timestamp this pass controls, so an edit
+    /// always shows up while an unchanged tree still costs two `stat`s per file
+    /// rather than a full read of both. Best-effort; any error means copy.
     fn current(src: &Path, dst: &Path) -> bool {
         let (Ok(s), Ok(d)) = (src.metadata(), dst.metadata()) else {
             return false;
         };
-        s.len() == d.len() && matches!((s.modified(), d.modified()), (Ok(sm), Ok(dm)) if dm >= sm)
+        s.len() == d.len() && matches!((s.modified(), d.modified()), (Ok(sm), Ok(dm)) if sm == dm)
+    }
+
+    /// Give `dst` the source's mtime, so [`Static::current`] can compare the two
+    /// directly. `fs::copy` copies permissions but not timestamps, so without
+    /// this every destination looks newer than its source and the cheap check
+    /// could never say "unchanged".
+    fn stamp(src: &Path, dst: &Path) {
+        let Ok(modified) = src.metadata().and_then(|meta| meta.modified()) else {
+            return;
+        };
+        // Best-effort: a filesystem that refuses the timestamp costs a re-copy
+        // next build, nothing worse.
+        if let Ok(file) = std::fs::File::options().write(true).open(dst) {
+            let _ = file.set_modified(modified);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Static;
+    use std::fs;
+    use std::time::Duration;
+
+    /// A same-size edit whose destination is *newer* than the source used to be
+    /// skipped forever: exactly what `git checkout` between two branches
+    /// produces.
+    #[test]
+    fn a_same_size_edit_is_copied_even_when_the_destination_is_newer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("CNAME"), tmp.path().join("out/CNAME"));
+        fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        fs::write(&src, b"a.example.com").unwrap();
+        fs::write(&dst, b"b.example.com").unwrap();
+        // Whatever the clock did, the destination is at least as new.
+        let newer = fs::metadata(&src).unwrap().modified().unwrap() + Duration::from_secs(60);
+        fs::File::options()
+            .write(true)
+            .open(&dst)
+            .unwrap()
+            .set_modified(newer)
+            .unwrap();
+
+        assert!(!Static::current(&src, &dst));
+    }
+
+    /// A copied file is stamped with its source's mtime, so the next build skips
+    /// it on two `stat`s rather than reading both files in full.
+    #[test]
+    fn a_stamped_copy_reads_as_current() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (src, dst) = (tmp.path().join("CNAME"), tmp.path().join("out/CNAME"));
+        fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        fs::write(&src, b"a.example.com").unwrap();
+        fs::copy(&src, &dst).unwrap();
+
+        Static::stamp(&src, &dst);
+        assert!(Static::current(&src, &dst));
+
+        // ...and an edit of the same length still shows up.
+        fs::write(&src, b"b.example.com").unwrap();
+        assert!(!Static::current(&src, &dst));
+    }
+
+    #[test]
+    fn a_missing_destination_is_never_current() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("robots.txt");
+        fs::write(&src, b"x").unwrap();
+        assert!(!Static::current(&src, &tmp.path().join("absent.txt")));
     }
 }

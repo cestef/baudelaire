@@ -6,6 +6,7 @@
 use ureq::tls::{TlsConfig, TlsProvider};
 
 use crate::error::{RemoteError, Result};
+use crate::ui::Ui;
 
 /// The TLS configuration every `ureq` agent baudelaire builds must use.
 ///
@@ -100,6 +101,43 @@ impl Options<'_> {
         std::io::stdin().lock().read_line(&mut line)?;
         Ok(line.trim_end_matches(['\r', '\n']).to_owned())
     }
+}
+
+/// One publishing destination for a payload of type `P` (the built files for a
+/// deploy, the publishable documents for an announce).
+///
+/// Generic over the payload because `announce` and `deploy` had a trait, a
+/// registry and a run loop each, identical but for what they carried.
+pub trait Backend<P> {
+    /// Stable, human-facing name, shown in progress output.
+    fn name(&self) -> &'static str;
+
+    /// Publish `payload` under `opts`, reporting progress. Honors
+    /// `opts.dry_run` by computing and reporting the plan without writing.
+    fn run(&self, payload: &P, opts: &Options, ui: &Ui) -> Result<()>;
+}
+
+/// Run every configured backend over `payload` in turn, confirming before each
+/// one writes anything. `verb` names the action in the prompt, `summary` the
+/// size of the payload in the section header.
+pub fn publish<P>(
+    verb: &str,
+    backends: Vec<Box<dyn Backend<P>>>,
+    payload: &P,
+    summary: impl Fn(&P) -> String,
+    opts: &Options,
+    ui: &Ui,
+) -> Result<()> {
+    for backend in backends {
+        ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
+        // Confirm before any network mutation, unless previewing or `--yes`.
+        if !opts.dry_run && !opts.confirm(&format!("{verb} to {}?", backend.name()))? {
+            ui.detail(format_args!("skipped {}", backend.name()));
+            continue;
+        }
+        backend.run(payload, opts, ui)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

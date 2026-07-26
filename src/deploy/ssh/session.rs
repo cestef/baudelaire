@@ -1,7 +1,9 @@
 //! The SSH transport: one authenticated connection with an open SFTP session,
 //! and the remote directory it reconciles into.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use russh::client::{self, Handle};
 use russh::{ChannelMsg, Disconnect};
@@ -9,11 +11,13 @@ use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
 
 use super::auth::Auth;
-use super::hosts::{Client, Rejected};
+use super::hosts::{Client, Verdict};
 use crate::config::SshConfig;
-use crate::deploy::Digests;
+use crate::deploy::{Digests, Listed};
+use crate::error::warning::HostKeyAccepted;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
+use crate::ui::Ui;
 
 /// A live, authenticated SSH connection with an open SFTP session.
 pub struct Session {
@@ -24,18 +28,34 @@ pub struct Session {
 
 impl Session {
     /// Connect, verify the host key, authenticate, and open the SFTP subsystem.
-    pub async fn connect(config: &SshConfig, user: &str, opts: &Options<'_>) -> Result<Self> {
+    pub async fn connect(
+        config: &SshConfig,
+        user: &str,
+        opts: &Options<'_>,
+        ui: &Ui,
+    ) -> Result<Self> {
         let rc = Arc::new(client::Config::default());
-        // The handler records a changed-key rejection here, since it can only
-        // return a bool; a plain connection failure otherwise stays generic.
-        let rejected = Arc::new(Mutex::new(None));
-        let client = Client::new(config, rejected.clone());
+        // The handler records its verdict here, since it can only return a
+        // bool; a plain connection failure otherwise stays generic.
+        let verdict = Arc::new(Mutex::new(None));
+        let client = Client::new(config, verdict.clone());
         let mut handle = client::connect(rc, (config.host.as_str(), config.port), client)
             .await
-            .map_err(|e| match *rejected.lock().unwrap() {
-                Some(Rejected::Changed) => DeployError::host_key_changed(&config.host),
-                None => DeployError::connect(&config.host, e),
+            .map_err(|e| match *verdict.lock() {
+                Some(Verdict::Changed) => DeployError::host_key_changed(&config.host),
+                _ => DeployError::connect(&config.host, e),
             })?;
+        // Connected despite a changed key: only `strict #false` gets here, and
+        // it must not do so quietly.
+        if *verdict.lock() == Some(Verdict::Changed) {
+            ui.warn(HostKeyAccepted {
+                host: config.host.clone(),
+            });
+            // Rendered now, not at the end of the run: warnings are buffered,
+            // and every file would otherwise be uploaded to the new host before
+            // the operator was told the key had changed.
+            ui.flush();
+        }
         Auth::new(config, opts).run(&mut handle, user).await?;
 
         let channel = handle
@@ -102,7 +122,14 @@ impl Session {
     }
 
     /// Run `command` over an exec channel and collect its stdout.
+    ///
+    /// Capped: the output is the host's own answer, and an endless stream (a
+    /// hostile host, or a `find` pointed at something enormous) would otherwise
+    /// grow this buffer until the process died. The same ceiling reasoning as
+    /// `atproto::Repo`'s page limit. 64 MiB of `sha256sum` output is roughly a
+    /// million files, far past any site this reconciles.
     async fn exec(&self, command: &str) -> Result<String> {
+        const LIMIT: usize = 64 << 20;
         let mut channel = self
             .handle
             .channel_open_session()
@@ -115,7 +142,18 @@ impl Session {
         let mut out = Vec::new();
         while let Some(msg) = channel.wait().await {
             match msg {
-                ChannelMsg::Data { data } => out.extend_from_slice(&data),
+                ChannelMsg::Data { data } => {
+                    if out.len() + data.len() > LIMIT {
+                        return Err(DeployError::transfer(
+                            "exec",
+                            std::io::Error::other(format!(
+                                "host sent more than {LIMIT} bytes of output"
+                            )),
+                        )
+                        .into());
+                    }
+                    out.extend_from_slice(&data);
+                }
                 ChannelMsg::Eof | ChannelMsg::Close => break,
                 _ => {}
             }
@@ -173,17 +211,19 @@ impl Remote {
 
     /// Parse `sha256sum` output (`<hex>  ./path` per line) into digests keyed by
     /// the relative path, dropping the `./` prefix `find` emits.
+    ///
+    /// Paths that would escape the deploy root are dropped here, the one place
+    /// the host's own answer becomes a path this client joins and deletes: see
+    /// [`Listed`].
     fn parse(output: &str) -> Digests {
         output
             .lines()
             .filter_map(|line| line.split_once("  "))
-            .map(|(hash, path)| {
-                (
-                    path.trim().trim_start_matches("./").to_owned(),
-                    hash.to_owned(),
-                )
+            .filter(|(hash, _)| !hash.is_empty())
+            .filter_map(|(hash, path)| {
+                let path = Listed::try_from(path.trim().trim_start_matches("./")).ok()?;
+                Some((path.into_string(), hash.to_owned()))
             })
-            .filter(|(path, hash)| !path.is_empty() && !hash.is_empty())
             .collect()
     }
 }

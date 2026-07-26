@@ -89,6 +89,13 @@ pub struct BuildContext {
     client: codegen::Value,
 }
 
+impl BuildContext {
+    /// The field naming the build date inside the metadata dictionary. Named
+    /// once: the dictionary is built from it and [`Project::clock`] composes the
+    /// tracked key from it.
+    const DATE: &'static str = "date";
+}
+
 /// Git state of the site repository at build time.
 #[derive(Debug, Clone)]
 struct GitInfo {
@@ -151,7 +158,7 @@ impl From<&BuildContext> for codegen::Value {
         use codegen::Value;
         let mut fields = vec![
             ("version", Value::str(cx.version)),
-            ("date", Value::str(&cx.date)),
+            (BuildContext::DATE, Value::str(&cx.date)),
             ("mode", Value::str(cx.mode.as_str())),
         ];
         if let Some(profile) = &cx.profile {
@@ -169,18 +176,23 @@ impl From<&BuildContext> for codegen::Value {
 impl GitInfo {
     /// Read git state via the `git` CLI, or `None` outside a repository.
     fn detect(root: &Path) -> Option<Self> {
-        let hash = Self::run(root, &["rev-parse", "HEAD"])?;
+        // One call for the commit's own fields: `git` startup dominates each of
+        // these, so asking for two lines beats two processes.
+        let head = Self::run(root, &["log", "-1", "--format=%H%n%cI"])?;
+        let (hash, committed) = head.split_once('\n')?;
         Some(Self {
-            hash,
+            hash: hash.to_owned(),
+            committed: Some(committed.to_owned()),
             rev: Self::run(root, &["rev-list", "--count", "HEAD"]),
             branch: Self::run(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
             // No `--always`: it falls back to a bare commit hash in a tagless
             // repo, which would populate `git.tag` with a non-tag. An empty
             // output (no tag reachable) becomes `None` instead.
             tag: Self::run(root, &["describe", "--tags"]),
-            committed: Self::run(root, &["log", "-1", "--format=%cI"]),
             // A non-empty `status --porcelain` means uncommitted changes.
-            dirty: Self::run(root, &["status", "--porcelain"]).is_some(),
+            // `--no-renames` skips rename detection, which is pure overhead
+            // when the answer is only "is anything different at all".
+            dirty: Self::run(root, &["status", "--porcelain", "--no-renames"]).is_some(),
         })
     }
 
@@ -252,11 +264,7 @@ impl From<&SiteInfo> for codegen::Value {
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.
     pub fn new(config: &Config, mode: Mode) -> Result<Self> {
-        let root = crate::fs::canonical(&config.content);
-        let project_root = root
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
+        let project_root = crate::fs::canonical(&config.root);
 
         let now = OffsetDateTime::now_utc();
         let context = BuildContext::detect(&project_root, now, config, mode);
@@ -307,9 +315,10 @@ impl Project {
         // overriding typst-html's native image rule. Off by default and skipped
         // when `html.embed` inlines everything anyway.
         if config.images.externalize(&config.html) {
-            library
-                .rules
-                .replace(typst::foundations::Target::Html, crate::render::IMAGE_RULE);
+            library.rules.replace(
+                typst::foundations::Target::Html,
+                crate::image_rule::IMAGE_RULE,
+            );
         }
 
         Ok(Self {
@@ -354,9 +363,24 @@ impl Project {
     /// fine-grained invalidation is added here.
     pub fn tracked(&self) -> Vec<(String, codegen::Value)> {
         vec![(
-            "sys.inputs.baudelaire".to_string(),
+            Self::METADATA.to_string(),
             codegen::Value::from(&self.context),
         )]
+    }
+
+    /// The dotted base naming build metadata in typst source.
+    const METADATA: &'static str = "sys.inputs.baudelaire";
+
+    /// The tracked key standing for "this build's clock".
+    ///
+    /// `datetime.today()` reads the same instant as
+    /// `sys.inputs.baudelaire.date` but through the [`World`], where nothing
+    /// records it: [`Tracked`] captures `source` and `file` only. A page
+    /// printing the current year was therefore a cache hit into the next one.
+    /// Recording the call as a read of this key reuses the value-digest
+    /// invalidation already in place instead of inventing a second mechanism.
+    pub fn clock() -> String {
+        format!("{}.{}", Self::METADATA, BuildContext::DATE)
     }
 
     /// Project root directory.
@@ -488,6 +512,9 @@ impl Project {
 pub struct Tracked<W> {
     inner: W,
     accessed: parking_lot::Mutex<std::collections::HashSet<FileId>>,
+    /// Whether the compilation asked for the current date. Not a file access,
+    /// so it needs its own flag; see [`Project::clock`] for why it is recorded.
+    clock: std::sync::atomic::AtomicBool,
 }
 
 impl<W> Tracked<W> {
@@ -496,6 +523,7 @@ impl<W> Tracked<W> {
         Self {
             inner,
             accessed: parking_lot::Mutex::new(std::collections::HashSet::new()),
+            clock: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -513,6 +541,11 @@ impl<W> Tracked<W> {
     /// The file ids accessed so far.
     pub fn accessed(&self) -> Vec<FileId> {
         self.accessed.lock().iter().copied().collect()
+    }
+
+    /// Whether the compilation read the build clock (`datetime.today()`).
+    pub fn reads_clock(&self) -> bool {
+        self.clock.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn record(&self, id: FileId) {
@@ -548,6 +581,7 @@ impl<W: World> World for Tracked<W> {
     }
 
     fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
+        self.clock.store(true, std::sync::atomic::Ordering::Relaxed);
         self.inner.today(offset)
     }
 }

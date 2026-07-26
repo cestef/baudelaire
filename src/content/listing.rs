@@ -10,7 +10,7 @@ use std::fmt::{self, Write};
 
 use crate::codegen::{Content, Str, Value};
 use crate::config::Config;
-use crate::content::{Frontmatter, Page, PageId};
+use crate::content::{Frontmatter, Page, PageId, Strings};
 
 /// Displays a lowercase section id as a title by capitalizing its first letter
 /// (`tags` -> `Tags`), the single display rule for generated listing titles,
@@ -196,7 +196,7 @@ impl Listing {
                 title: Some(self.title.clone()),
                 ..Frontmatter::default()
             },
-            self.body(),
+            self.body(&Strings::new(config, &lang)),
             // A bound template receives this structured data as `page.frontmatter`;
             // without one, the default body renders and this is unused.
             crate::content::Data::Generated(crate::codegen::Typst(&self.data()).to_string()),
@@ -240,7 +240,7 @@ impl Listing {
     }
 
     /// The generated typst markup: a heading, the link list, then any nav.
-    fn body(&self) -> String {
+    fn body(&self, strings: &Strings) -> String {
         let mut out = format!("#heading(level: 1)[{}]\n\n", Content(&self.title));
         for item in &self.items {
             let _ = write!(out, "- #link({})[{}]", Str(&item.url), Content(&item.label));
@@ -252,10 +252,12 @@ impl Listing {
         if !self.nav.is_empty() {
             out.push('\n');
             if let Some(prev) = &self.nav.prev {
-                let _ = write!(out, "#link({})[← Previous] ", Str(prev));
+                let label = Content(strings.get("previous"));
+                let _ = write!(out, "#link({})[{label}] ", Str(prev));
             }
             if let Some(next) = &self.nav.next {
-                let _ = write!(out, "#link({})[Next →]", Str(next));
+                let label = Content(strings.get("next"));
+                let _ = write!(out, "#link({})[{label}]", Str(next));
             }
             out.push('\n');
         }

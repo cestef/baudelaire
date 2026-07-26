@@ -1,10 +1,10 @@
 //! Prefixes on-page root-absolute URLs with the site's base path.
 
-use typst_html::{HtmlDocument, attr};
+use typst_html::HtmlDocument;
 
 use crate::config::Config;
 
-use super::transform::{Cx, ElementExt, Transform};
+use super::transform::{Cx, ElementExt, Transform, URL_ATTRS};
 
 /// The final [`Transform`]: shifts every on-page root-absolute URL under the
 /// site's [`base_path`](Config::base_path) for subdirectory hosting. Runs after
@@ -21,7 +21,7 @@ impl Transform for BasePath {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let config = cx.config;
         doc.root_mut().walk(&mut |element| {
-            element.assets(&[attr::href, attr::src, attr::poster], |value| {
+            element.assets(URL_ATTRS, |value| {
                 let prefixed = config.prefixed(value);
                 (prefixed != value).then_some(prefixed)
             });

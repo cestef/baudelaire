@@ -8,7 +8,7 @@
 const tokenize = (text) =>
   text.toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
 
-export async function createSearch(url = `${BASE}/search.inverted.json`) {
+export async function createSearch(url = INDEX) {
   let documents = [];
   let postings = {};
   let failed = false;

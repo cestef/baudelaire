@@ -17,9 +17,8 @@ use baudelaire::config::{Config, S3Config};
 use baudelaire::deploy;
 use baudelaire::error::{BaudelaireErrorKind, DeployError, Result as BResult};
 use baudelaire::remote::{Interaction, Options};
-use baudelaire::ui::{Level, Ui};
 
-use common::Site;
+use common::{Site, silent};
 
 /// A headless [`Interaction`]: confirms everything, never supplies a secret.
 struct Headless;
@@ -37,10 +36,6 @@ impl Interaction for Headless {
 type Store = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 /// A shared log of `METHOD path` lines the server received.
 type Log = Arc<Mutex<Vec<String>>>;
-
-fn silent() -> Ui {
-    Ui::new(Level::Silent)
-}
 
 /// Set the AWS credential env vars the S3 backend reads.
 #[allow(unsafe_code)]

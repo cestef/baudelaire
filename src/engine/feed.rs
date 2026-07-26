@@ -43,9 +43,7 @@ impl Processor for Feeds {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let Some(base) = site.base("feeds", out)? else {
-            return Ok(());
-        };
+        let base = site.base("feeds")?;
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
@@ -53,13 +51,10 @@ impl Processor for Feeds {
             if dated.is_empty() {
                 continue;
             }
-            let feed = Feed::new(&base, site.config.title(lang), &dated);
+            let scope = site.config.scope(lang, "");
+            let feed = Feed::new(&base, site.config.title(lang), &dated, &scope);
             for kind in &site.config.feed.formats {
-                let path = site
-                    .config
-                    .dist
-                    .join(site.config.scope(lang, ""))
-                    .join(kind.file());
+                let path = site.config.dist.join(&scope).join(kind.file());
                 out.file(&path, &feed.render(*kind)?)?;
                 out.note(format_args!("wrote {}", path.display()));
             }
@@ -74,11 +69,27 @@ pub(super) struct Feed<'a> {
     base: &'a BaseUrl,
     title: &'a str,
     items: &'a [&'a Page],
+    /// This feed's language path segment (empty for the default language).
+    ///
+    /// Every feed used to advertise the site root as its `<link>` and `<id>`.
+    /// Atom requires a unique feed id, so to an aggregator `/rss.xml` and
+    /// `/fr/rss.xml` were one feed with two sets of entries.
+    scope: &'a str,
 }
 
 impl<'a> Feed<'a> {
-    pub(super) fn new(base: &'a BaseUrl, title: &'a str, items: &'a [&'a Page]) -> Self {
-        Self { base, title, items }
+    pub(super) fn new(
+        base: &'a BaseUrl,
+        title: &'a str,
+        items: &'a [&'a Page],
+        scope: &'a str,
+    ) -> Self {
+        Self {
+            base,
+            title,
+            items,
+            scope,
+        }
     }
 
     /// Serialize in the requested format. Item timestamps are rendered up
@@ -104,8 +115,17 @@ impl<'a> Feed<'a> {
         xml.finish()
     }
 
+    /// This feed's language home, the site root for the default language.
     fn home(&self) -> String {
-        self.base.home()
+        match self.scope.is_empty() {
+            true => self.base.home(),
+            false => self.base.join(format!("/{}/", self.scope)),
+        }
+    }
+
+    /// This feed's own absolute URL, its stable identity.
+    fn url(&self, kind: FeedKind) -> String {
+        format!("{}{}", self.home(), kind.file())
     }
 
     fn link(&self, page: &Page) -> String {
@@ -138,7 +158,7 @@ impl<'a> Feed<'a> {
         let updated = stamps.iter().flatten().next();
         xml.nest("feed", &[("xmlns", "http://www.w3.org/2005/Atom")], |xml| {
             xml.leaf("title", self.title);
-            xml.leaf("id", &self.home());
+            xml.leaf("id", &self.url(FeedKind::Atom));
             xml.empty("link", &[("href", &self.home())]);
             if let Some(updated) = updated {
                 xml.leaf("updated", updated);
@@ -163,7 +183,7 @@ impl<'a> Feed<'a> {
             version: "https://jsonfeed.org/version/1.1",
             title: self.title,
             home_page_url: self.home(),
-            feed_url: self.base.join(format!("/{}", FeedKind::Json.file())),
+            feed_url: self.url(FeedKind::Json),
             items: self
                 .items
                 .iter()

@@ -11,7 +11,6 @@ mod embed;
 mod externalize;
 mod fingerprint;
 mod image;
-mod image_rule;
 mod lang;
 mod links;
 mod meta;
@@ -23,7 +22,6 @@ mod transform;
 
 pub use asset::AssetMap;
 pub use externalize::ImageRef;
-pub use image_rule::{IMAGE_RULE, MARKER};
 pub use links::LinkMap;
 pub use srcset::SrcSets;
 

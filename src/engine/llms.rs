@@ -29,35 +29,55 @@ impl Processor for Llms {
                 effect: "emitted with relative links",
             },
         )?;
-        let mut md = format!("# {}\n", site.config.label());
-        if let Some(summary) = &site.config.llms.summary {
-            let _ = write!(md, "\n> {summary}\n");
-        }
-        for (collection, pages) in Self::sections(site.pages) {
-            let _ = write!(md, "\n## {collection}\n\n");
-            for page in pages {
-                let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
-                let _ = writeln!(md, "- [{}]({link})", page.title());
+        // One file per language, beside that language's feeds and search index.
+        // A single flat file interleaved every language under one `## blog`
+        // heading, and split taxonomies into `## tags` and `## fr/tags` because
+        // generated listings carry the scoped collection id.
+        for lang in site.config.langs() {
+            let scope = site.config.scope(lang, "");
+            let pages: Vec<&Page> = site.pages.iter().filter(|p| p.lang == lang).collect();
+            if pages.is_empty() {
+                continue;
             }
+            let mut md = format!("# {}\n", site.config.title(lang));
+            if let Some(summary) = &site.config.llms.summary {
+                let _ = write!(md, "\n> {summary}\n");
+            }
+            for (collection, pages) in Self::sections(&pages, lang) {
+                let _ = write!(md, "\n## {collection}\n\n");
+                for page in pages {
+                    let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
+                    let _ = writeln!(md, "- [{}]({link})", page.title());
+                }
+            }
+            let path = site.config.dist.join(&scope).join(Self::FILE);
+            out.file(&path, &md)?;
+            out.note(format_args!("wrote {}", path.display()));
         }
-        out.file(&site.config.dist.join("llms.txt"), &md)?;
-        out.note(format_args!("wrote llms.txt"));
         Ok(())
     }
 }
 
 impl Llms {
+    const FILE: &'static str = "llms.txt";
+
     /// Group pages by collection, preserving first-seen order for both the
     /// sections and the pages within them.
-    fn sections(pages: &[Page]) -> Vec<(&str, Vec<&Page>)> {
+    ///
+    /// A generated listing's collection is the language-scoped section
+    /// (`fr/tags`), so the scope is stripped here: within one language's file
+    /// it is noise, and it split what is one section into two headings.
+    fn sections<'a>(pages: &[&'a Page], lang: &str) -> Vec<(&'a str, Vec<&'a Page>)> {
+        let prefix = format!("{lang}/");
         let mut sections: Vec<(&str, Vec<&Page>)> = Vec::new();
         for page in pages {
-            match sections
-                .iter_mut()
-                .find(|(name, _)| *name == page.collection)
-            {
+            let name = page
+                .collection
+                .strip_prefix(&prefix)
+                .unwrap_or(&page.collection);
+            match sections.iter_mut().find(|(seen, _)| *seen == name) {
                 Some((_, list)) => list.push(page),
-                None => sections.push((&page.collection, vec![page])),
+                None => sections.push((name, vec![page])),
             }
         }
         sections

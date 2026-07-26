@@ -6,10 +6,10 @@
 //! with prev/next navigation; without it, all members sit on the single index
 //! page. A collection that configures neither gets no index at all.
 
-use crate::config::Config;
+use crate::config::{Config, Permalink};
 use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Nav, Titlecase};
-use crate::content::{Collection, Page, Permalink};
+use crate::content::{Collection, Page, Strings};
 use crate::error::Result;
 
 /// Builds collection index pages (paginated when the collection sets a count).
@@ -104,7 +104,11 @@ impl<'a> Section<'a> {
         let items = members.iter().map(|p| Item::of(p)).collect();
         let title = match number {
             1 => Titlecase(self.id).to_string(),
-            n => format!("{} - page {n}", Titlecase(self.id)),
+            n => format!(
+                "{} - {} {n}",
+                Titlecase(self.id),
+                Strings::new(self.config, self.lang).get("page")
+            ),
         };
         Listing::new(self.id, self.slug(number), self.url(number), title)
             .items(items)

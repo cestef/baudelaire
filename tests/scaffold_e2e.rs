@@ -153,8 +153,17 @@ fn verbose_shows_per_page_progress() {
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let out = t.run(&["-v", "build"]);
     assert!(out.status.success());
-    let logs = String::from_utf8_lossy(&out.stderr);
-    assert!(logs.contains("built"));
+    let verbose = String::from_utf8_lossy(&out.stderr).into_owned();
+    // The per-page lines are what `-v` adds; asserting on the summary alone
+    // would pass with `-v` wired to nothing.
+    assert!(verbose.contains("index.typ"), "no per-page line: {verbose}");
+
+    let quiet = t.run(&["build"]);
+    let quiet = String::from_utf8_lossy(&quiet.stderr).into_owned();
+    assert!(
+        !quiet.contains("index.typ"),
+        "per-page lines are not verbose-only: {quiet}"
+    );
 }
 
 #[test]
@@ -176,7 +185,13 @@ fn build_reports_timing() {
     // The summary ends `.. in 132ms` / `.. in 1.24s`.
     let logs = String::from_utf8_lossy(&out.stderr);
     assert!(
-        logs.contains(" in ") && (logs.contains("ms") || logs.contains("s")),
-        "{logs}"
+        // `contains("s")` matched almost anything; require a digit followed by a
+        // unit, which is what a duration actually looks like.
+        logs.split(" in ").skip(1).any(|tail| {
+            let unit = tail.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+            tail.starts_with(|c: char| c.is_ascii_digit())
+                && (unit.starts_with("ms") || unit.starts_with('s') || unit.starts_with("µs"))
+        }),
+        "no duration in summary: {logs}"
     );
 }

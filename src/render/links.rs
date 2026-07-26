@@ -37,7 +37,18 @@ impl Fingerprint for LinkMap {
     /// permalink changes are rare and this mirrors how the asset map is folded
     /// in.
     fn fingerprint(&self) -> Hash {
-        let sorted: BTreeMap<&PathBuf, &String> = self.by_source.iter().collect();
+        // Keyed by path *relative to the project root*. The map itself indexes
+        // by canonical absolute path (that is what a resolved link produces),
+        // but folding those in would tie the cache fingerprint to where the
+        // site happens to sit, so a warm cache would miss entirely after
+        // `mv site site2` or a CI checkout at a different workspace path.
+        let sorted: BTreeMap<&Path, &String> = self
+            .by_source
+            .iter()
+            .map(|(source, permalink)| {
+                (source.strip_prefix(&self.root).unwrap_or(source), permalink)
+            })
+            .collect();
         Hash::of(&sorted)
     }
 }
@@ -63,7 +74,13 @@ impl LinkMap {
 
     /// Classify a raw link written in `from`'s body: passthrough, resolved to a
     /// permalink, or a broken internal `.typ` reference.
-    pub fn classify(&self, raw: &str, from: &Path) -> Link {
+    ///
+    /// `lang` is the linking page's language on a multilingual site, `None`
+    /// otherwise. A translated page writes the same `#link("b.typ")` as its
+    /// original, and means its own edition of `b`; resolving language-blind sent
+    /// every French link to the English page, silently and with no warning,
+    /// since the link did resolve.
+    pub fn classify(&self, raw: &str, from: &Path, lang: Option<&str>) -> Link {
         if Self::is_external(raw) {
             return Link::Passthrough;
         }
@@ -80,13 +97,22 @@ impl LinkMap {
                 .unwrap_or_else(|| Path::new("."))
                 .join(split.path),
         };
-        match crate::fs::canonicalize(target)
-            .ok()
-            .and_then(|canon| self.by_source.get(&canon))
-        {
+        let edition = lang.and_then(|lang| self.edition(&target, lang));
+        match edition.or_else(|| self.lookup(&target)) {
             Some(permalink) => Link::Resolved(format!("{permalink}{}", split.tail)),
             None => Link::Broken,
         }
+    }
+
+    /// The `{stem}.{lang}.typ` sibling of `target`, when the site has one.
+    fn edition(&self, target: &Path, lang: &str) -> Option<&String> {
+        let stem = target.file_stem()?.to_str()?;
+        self.lookup(&target.with_file_name(format!("{stem}.{lang}.typ")))
+    }
+
+    /// The permalink of the page whose source is `path`.
+    fn lookup(&self, path: &Path) -> Option<&String> {
+        self.by_source.get(&crate::fs::canonicalize(path).ok()?)
     }
 
     /// Whether a link points outside the site (scheme, protocol-relative,
@@ -140,9 +166,12 @@ mod tests {
         use super::Link;
         let map = LinkMap::default();
         let from = std::path::Path::new("a.typ");
-        assert_eq!(map.classify("missing.typ", from), Link::Broken);
-        assert_eq!(map.classify("https://x.com", from), Link::Passthrough);
-        assert_eq!(map.classify("#section", from), Link::Passthrough);
-        assert_eq!(map.classify("/already/a/url/", from), Link::Passthrough);
+        assert_eq!(map.classify("missing.typ", from, None), Link::Broken);
+        assert_eq!(map.classify("https://x.com", from, None), Link::Passthrough);
+        assert_eq!(map.classify("#section", from, None), Link::Passthrough);
+        assert_eq!(
+            map.classify("/already/a/url/", from, None),
+            Link::Passthrough
+        );
     }
 }

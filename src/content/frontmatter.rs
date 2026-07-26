@@ -1,3 +1,4 @@
+use crate::config::PermalinkCtx;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -80,6 +81,18 @@ pub struct Frontmatter {
 }
 
 impl Frontmatter {
+    /// The permalink context for a page with this frontmatter, at an
+    /// already-resolved `slug` (frontmatter-else-stem precedence is decided
+    /// once, in `Page::load`).
+    pub fn permalink(&self, collection: &str, slug: &str) -> PermalinkCtx {
+        PermalinkCtx {
+            slug: slug.to_owned(),
+            collection: collection.to_owned(),
+            date: self.date,
+            order: self.order,
+        }
+    }
+
     /// A string value from `extra` (arbitrary frontmatter), if present and a
     /// string, e.g. `description`, `summary`, `image`, `author`.
     pub fn text(&self, key: &str) -> Option<String> {

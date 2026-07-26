@@ -1,9 +1,8 @@
 //! Command-line interface: per-subcommand args, dispatch, and the wiring of
 //! terminal output ([`crate::ui`]) and debug logging (`tracing`).
 
-pub mod announce;
-pub mod deploy;
 pub mod prompt;
+pub mod remote;
 pub mod scaffold;
 pub mod serve;
 
@@ -13,6 +12,7 @@ use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
+use crate::error::warning::CleanRefused;
 use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result};
 use crate::ui::{Level, Ui};
 
@@ -177,10 +177,24 @@ pub struct GlobalArgs {
 /// commands don't advertise irrelevant `--drafts`/`--no-cache` flags.
 #[derive(Args, Debug, Clone, Default)]
 pub struct BuildOverrides {
+    #[command(flatten)]
+    pub common: CommonOverrides,
+
     /// Override the output directory.
     #[arg(short, long, help_heading = group::OUTPUT)]
     pub out: Option<PathBuf>,
 
+    /// Skip the cache (full rebuild).
+    #[arg(long, help_heading = group::BUILD)]
+    pub no_cache: bool,
+}
+
+/// The overrides that apply to any command reading the config, including the
+/// ones that write nothing. `--out` and `--no-cache` are *not* here: `check`
+/// writes no file and loads no cache, so advertising them there offered
+/// settings that did nothing.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CommonOverrides {
     /// Override the base URL.
     #[arg(long, help_heading = group::OUTPUT)]
     pub base_url: Option<String>,
@@ -193,13 +207,21 @@ pub struct BuildOverrides {
     #[arg(long, help_heading = group::BUILD)]
     pub future: bool,
 
-    /// Skip the cache (full rebuild).
-    #[arg(long, help_heading = group::BUILD)]
-    pub no_cache: bool,
-
     /// Error on broken internal links (default true; pass `false` to warn).
     #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
     pub strict_links: Option<bool>,
+}
+
+impl remote::Flags for DeployArgs {
+    fn dry_run(&self) -> bool {
+        self.dry_run
+    }
+    fn yes(&self) -> bool {
+        self.yes
+    }
+    fn secret(&self) -> Option<String> {
+        self.secret.clone()
+    }
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -233,7 +255,7 @@ pub struct BuildArgs {
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
     #[command(flatten)]
-    pub overrides: BuildOverrides,
+    pub overrides: CommonOverrides,
 }
 
 /// Arguments for `baudelaire serve`.
@@ -273,6 +295,18 @@ pub struct AnnounceArgs {
     /// Report what would change without writing to any destination.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+impl remote::Flags for AnnounceArgs {
+    fn dry_run(&self) -> bool {
+        self.dry_run
+    }
+    fn yes(&self) -> bool {
+        self.yes
+    }
+    fn secret(&self) -> Option<String> {
+        self.password.clone()
+    }
 }
 
 /// Arguments for `baudelaire deploy`.
@@ -336,6 +370,40 @@ impl CleanArgs {
     /// No explicit target means sweep everything.
     fn all(&self) -> bool {
         CLEAN_TARGETS.iter().all(|t| !(t.selected)(self))
+    }
+
+    /// Remove this invocation's targets, skipping any that would take the
+    /// project with them.
+    fn sweep(&self, ui: &Ui, config: &Config, root: &Path) -> Result<()> {
+        let mut removed = 0;
+        for dir in self.targets(config) {
+            if !dir.exists() {
+                continue;
+            }
+            if !Self::removable(&dir, root) {
+                ui.warn(CleanRefused { dir });
+                continue;
+            }
+            ui.detail(format_args!("- {}", dir.display()));
+            crate::fs::remove_dir_all(&dir)?;
+            removed += 1;
+        }
+        match removed {
+            0 => ui.done("nothing to clean"),
+            _ => ui.done("clean"),
+        }
+        Ok(())
+    }
+
+    /// Whether `dir` may be removed: it must not be the project root, nor an
+    /// ancestor of it.
+    ///
+    /// The paths come from config with no containment check of their own, so
+    /// `paths { dist "." }` deleted the whole project and `cache { dir "/" }`
+    /// everything above it. A `dist` deliberately placed outside the project
+    /// stays cleanable: only swallowing the project is refused.
+    fn removable(dir: &Path, root: &Path) -> bool {
+        !crate::fs::canonical(root).starts_with(crate::fs::canonical(dir))
     }
 
     /// The directories to remove for this invocation. A full sweep clears the
@@ -406,9 +474,18 @@ impl Cli {
     /// by the caller, not here, so `new`/`clean` load the same untouched config.
     pub fn config(&self) -> Result<Config> {
         let text = self.read()?;
-        let mut config = Config::parse(&text)?;
+        // Name every config diagnostic after the file actually loaded, the one
+        // place the path is known: otherwise no config error says which file it
+        // came from, and `--config prod.kdl` reported `config.kdl`.
+        let named = |e: BaudelaireErrorKind| match e {
+            BaudelaireErrorKind::Config(config) => {
+                BaudelaireErrorKind::Config(Box::new(config.named(&self.global.config)))
+            }
+            other => other,
+        };
+        let mut config = Config::parse(&text).map_err(named)?;
         if let Some(profile) = &self.global.profile {
-            config = config.with_profile(profile)?;
+            config = config.with_profile(profile).map_err(named)?;
         }
         Ok(config)
     }
@@ -442,11 +519,25 @@ impl Cli {
     }
 }
 
-impl BuildOverrides {
+/// A set of CLI flags that overlay the loaded config.
+trait Overrides {
+    fn apply(&self, config: &mut Config);
+}
+
+impl Overrides for BuildOverrides {
     fn apply(&self, config: &mut Config) {
+        self.common.apply(config);
         if let Some(out) = &self.out {
             config.dist = out.clone();
         }
+        if self.no_cache {
+            config.cache.incremental = false;
+        }
+    }
+}
+
+impl Overrides for CommonOverrides {
+    fn apply(&self, config: &mut Config) {
         if let Some(url) = &self.base_url {
             config.url = Some(url.clone());
         }
@@ -458,9 +549,6 @@ impl BuildOverrides {
         }
         if let Some(strict) = self.strict_links {
             config.links.strict = strict;
-        }
-        if self.no_cache {
-            config.cache.incremental = false;
         }
     }
 }
@@ -504,7 +592,11 @@ impl Cx<'_> {
     /// Load config and announce the run: the shared front matter of every
     /// command that operates on an existing project.
     fn announced(&self, verb: &str) -> Result<Config> {
-        let config = self.cli.config()?;
+        let mut config = self.cli.config()?;
+        // `Root::enter` has already moved the cwd, so every relative config path
+        // resolves under it; record it so nothing has to re-derive the root from
+        // one of those paths.
+        config.root = self.root.path().to_path_buf();
         self.ui.banner(format_args!("{verb} {}", config.label()));
         Ok(config)
     }
@@ -512,7 +604,7 @@ impl Cx<'_> {
     /// [`Cx::announced`] plus the build-shaping overrides: the front matter of
     /// the build-shaped commands (`build`, `check`). Overrides never touch the
     /// site name, so applying them after the banner leaves its text unchanged.
-    fn configured(&self, overrides: &BuildOverrides, verb: &str) -> Result<Config> {
+    fn configured(&self, overrides: &impl Overrides, verb: &str) -> Result<Config> {
         let mut config = self.announced(verb)?;
         overrides.apply(&mut config);
         Ok(config)
@@ -595,21 +687,21 @@ impl Run for NewArgs {
 impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("announcing")?;
-        announce::run(cx.ui, &config, self)
+        remote::run(cx.ui, &config, self, crate::announce::run)
     }
 }
 
 impl Run for DeployArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("deploying")?;
-        deploy::run(cx.ui, &config, self)
+        remote::run(cx.ui, &config, self, crate::deploy::run)
     }
 }
 
 impl Run for CleanArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("cleaning")?;
-        clean(cx.ui, &config, self)
+        self.sweep(cx.ui, &config, cx.root.path())
     }
 }
 
@@ -667,22 +759,6 @@ impl ServeArgs {
     }
 }
 
-fn clean(ui: &Ui, config: &Config, args: &CleanArgs) -> Result<()> {
-    let mut removed = 0;
-    for dir in args.targets(config) {
-        if dir.exists() {
-            ui.detail(format_args!("- {}", dir.display()));
-            crate::fs::remove_dir_all(&dir)?;
-            removed += 1;
-        }
-    }
-    match removed {
-        0 => ui.done("nothing to clean"),
-        _ => ui.done("clean"),
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -693,6 +769,23 @@ mod tests {
             cache,
             announce,
         }
+    }
+
+    /// A target that would take the project with it is refused: `paths { dist
+    /// "." }` used to delete the whole project, `cache { dir "/" }` everything
+    /// above it.
+    #[test]
+    fn a_target_containing_the_project_is_not_removable() {
+        let root = Path::new("/home/me/site");
+        assert!(!CleanArgs::removable(Path::new("/home/me/site"), root));
+        assert!(!CleanArgs::removable(Path::new("/home/me"), root));
+        assert!(!CleanArgs::removable(Path::new("/"), root));
+        assert!(CleanArgs::removable(
+            Path::new("/home/me/site/public"),
+            root
+        ));
+        // A dist deliberately placed outside the project stays cleanable.
+        assert!(CleanArgs::removable(Path::new("/srv/www"), root));
     }
 
     #[test]

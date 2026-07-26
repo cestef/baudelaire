@@ -69,8 +69,14 @@ for f in "$asset" "$asset.sha256"; do
 done
 
 # verify + install
+# The checksum is fetched from the same origin as the tarball, so it proves the
+# transfer was not truncated or corrupted; it is not a signature and does not
+# prove authenticity.
 step "verifying checksum"
-sum=sha256sum; command -v sha256sum >/dev/null 2>&1 || sum="shasum -a 256"
+if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"
+elif command -v shasum >/dev/null 2>&1; then sum="shasum -a 256"
+else die "no ${b}sha256sum${x} or ${b}shasum${x} found, cannot verify the download"
+fi
 ( cd "$tmp" && $sum -c "$asset.sha256" >/dev/null 2>&1 ) || die "checksum mismatch, aborting"
 tar -xzf "$tmp/$asset" -C "$tmp"
 mkdir -p "$PREFIX"

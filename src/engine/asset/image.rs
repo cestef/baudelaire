@@ -21,6 +21,13 @@ use super::{Ctx, Handler, PathExt, Variant};
 pub(super) struct Raster;
 
 impl Handler for Raster {
+    /// Re-encoding an image depends on its own bytes and the `images` options
+    /// and nothing else, so the result memoizes across builds and the files
+    /// render in parallel.
+    fn pure(&self) -> bool {
+        true
+    }
+
     fn claims(&self, file: &Path, config: &Config) -> bool {
         // claimed when optimization is on for the format, or responsive variants
         // are wanted for any raster: either way this handler owns the bytes.

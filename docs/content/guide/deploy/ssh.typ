@@ -21,12 +21,14 @@ deploy {
 / `host`: server hostname or IP. Required.
 / `path`: absolute remote directory the build is mirrored into. Required.
 / `port` (`22`): SSH port.
-/ `user`: user to authenticate as. Defaults to `$USER`.
+/ `user`: user to authenticate as. Defaults to `$USER`; the deploy fails if that
+  is unset or empty rather than guessing an account.
 / `key`: path to a private key (absolute, `~`-relative, or under the project
   root). Unset tries the ssh-agent, then a password.
 / `strict` (`#true`): verify the server's host key against `~/.ssh/known_hosts`:
   learning an unseen host on first connect and refusing a changed key. Set
-  `#false` to accept any key (`StrictHostKeyChecking=no`).
+  `#false` to accept any key (`StrictHostKeyChecking=no`); the key is still
+  checked, and a changed one warns before anything is uploaded.
 / `delete` (`#true`): remove remote files under `path` that the build no longer
   produces.
 

@@ -12,6 +12,7 @@ use console::{Key, Term};
 use owo_colors::OwoColorize;
 
 use crate::error::Result;
+use crate::remote::Interaction;
 
 /// One selectable option: the words that choose it (the first is shown as the
 /// label, all are accepted as input) and the value it yields when picked.
@@ -226,5 +227,24 @@ impl<'a> Input<'a> {
         } else {
             answer.to_owned()
         })
+    }
+}
+
+/// Terminal-backed [`Interaction`]: yes/no confirmation through [`Prompt`] and
+/// hidden secret entry through [`Secret`]. One impl, shared by every command
+/// that prompts, rather than a copy per command.
+pub struct Tty;
+
+impl Interaction for Tty {
+    fn confirm(&self, prompt: &str) -> Result<bool> {
+        Prompt::new(prompt)
+            .option(&["yes"], true)
+            .option(&["no"], false)
+            .default()
+            .ask()
+    }
+
+    fn secret(&self, label: &str) -> Result<Option<String>> {
+        Secret::new(label).ask()
     }
 }

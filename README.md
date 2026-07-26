@@ -17,8 +17,10 @@ less install.sh          # read before you run
 sh install.sh
 ```
 
-It downloads the release tarball, verifies its `sha256`, and installs into
-`~/.local/bin` (override with `PREFIX=`, pin a release with `VERSION=`).
+It downloads the release tarball, checks it against the `sha256` published
+alongside it, and installs into `~/.local/bin` (override with `PREFIX=`, pin a
+release with `VERSION=`). The checksum comes from the same origin as the
+tarball, so it catches a corrupted or truncated download; it is not a signature.
 
 **With Cargo:**
 

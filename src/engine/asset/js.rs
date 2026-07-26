@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use rolldown::plugin::Pluginable;
 use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinifyOptions};
+use rolldown_common::CodeSplittingMode;
 use rolldown_common::Output;
 
 use crate::config::Config;
@@ -37,6 +38,11 @@ impl Handler for Script {
 
     fn phase(&self) -> Phase {
         Phase::Bundle
+    }
+
+    /// A bundle is JavaScript whatever its entry was written in.
+    fn rename(&self, rel: &Path) -> PathBuf {
+        rel.with_extension("js")
     }
 
     fn render(
@@ -76,19 +82,23 @@ pub(super) struct Js {
 impl Js {
     /// Build the bundler against the finalized site context: call once the
     /// asset map is complete, so `baudelaire:assets` resolves every asset.
-    pub(super) fn new(cx: &ModuleCx) -> Self {
+    /// Fallible: building the runtime spawns threads, which a constrained CI
+    /// container refuses (EMFILE, `RLIMIT_NPROC`). That used to abort the whole
+    /// build with a bare SIGABRT and no message, release builds being
+    /// `panic = "abort"` and stripped.
+    pub(super) fn new(cx: &ModuleCx) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("build tokio runtime");
+            .map_err(|e| AssetError::js("javascript bundler", e))?;
         // Absolute so rolldown resolves entries regardless of its `cwd`.
         let cwd = fs::canonical(&cx.config.assets);
-        Self {
+        Ok(Self {
             runtime,
             cwd,
             minify: cx.config.asset.minify,
             plugin: Arc::new(Virtual::new(cx)),
-        }
+        })
     }
 
     /// Bundle a single entry to its output code.
@@ -101,6 +111,11 @@ impl Js {
             }]),
             cwd: Some(self.cwd.clone()),
             format: Some(OutputFormat::Esm),
+            // One entry in, one file out. With splitting on, a dynamic
+            // `import()` produced extra chunks the pipeline had no place to
+            // write, so they were dropped and the emitted entry imported files
+            // that did not exist in `dist`.
+            code_splitting: Some(CodeSplittingMode::Bool(false)),
             minify: self.minify.then(|| RawMinifyOptions::Bool(true)),
             ..BundlerOptions::default()
         };
@@ -113,13 +128,26 @@ impl Js {
             .runtime
             .block_on(bundler.generate())
             .map_err(|e| AssetError::js(entry.display(), e))?;
-        output
-            .assets
-            .iter()
-            .find_map(|out| match out {
-                Output::Chunk(chunk) if chunk.is_entry => Some(chunk.code.clone().into_bytes()),
-                _ => None,
-            })
-            .ok_or_else(|| AssetError::js(entry.display(), "no entry chunk produced").into())
+        // Code splitting is off, so exactly one chunk is expected. Anything
+        // else would be silently discarded, so say so instead.
+        let mut code = None;
+        for asset in &output.assets {
+            match asset {
+                Output::Chunk(chunk) if chunk.is_entry && code.is_none() => {
+                    code = Some(chunk.code.clone().into_bytes());
+                }
+                other => {
+                    let name = other.filename();
+                    return Err(AssetError::js(
+                        entry.display(),
+                        format!(
+                            "bundler produced an extra output this pipeline cannot emit: {name}"
+                        ),
+                    )
+                    .into());
+                }
+            }
+        }
+        code.ok_or_else(|| AssetError::js(entry.display(), "no entry chunk produced").into())
     }
 }

@@ -61,6 +61,13 @@ pub enum ContentError {
     )]
     EmptySlug { name: String },
 
+    #[error("{path} has a filename that is not valid UTF-8")]
+    #[diagnostic(
+        code(baudelaire::content::non_utf8_source),
+        help("rename it: a page's filename becomes its slug, and a URL is text")
+    )]
+    NonUtf8Source { path: String },
+
     #[error("{path} declares unknown language `{lang}`")]
     #[diagnostic(code(baudelaire::content::unknown_language))]
     UnknownLanguage {
@@ -99,10 +106,12 @@ pub enum ContentError {
 impl ContentError {
     /// Lower wax's own span-annotated glob error into an [`Annotated`] so its
     /// labels point straight at the offending part of the pattern.
-    pub fn bad_glob(pattern: &str, error: wax::BuildError) -> Self {
+    /// `noun` names what the pattern configures, so a bad `serve { exclude }`
+    /// does not report itself as a collection glob.
+    pub fn bad_glob(noun: &'static str, pattern: &str, error: wax::BuildError) -> Self {
         let mut diag = Annotated::new(
             "baudelaire::content::bad_glob",
-            format!("invalid collection glob `{pattern}`"),
+            format!("invalid {noun} glob `{pattern}`"),
             pattern.to_owned(),
         )
         .help(error.to_string());
@@ -162,6 +171,13 @@ impl ContentError {
     pub fn empty_slug(name: &str) -> Self {
         Self::EmptySlug {
             name: name.to_owned(),
+        }
+    }
+
+    /// A content file whose name cannot be read as text.
+    pub fn non_utf8_source(path: &std::path::Path) -> Self {
+        Self::NonUtf8Source {
+            path: path.display().to_string(),
         }
     }
 

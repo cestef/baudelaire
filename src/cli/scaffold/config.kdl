@@ -23,6 +23,12 @@ output {
   // Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
   clean #true
 
+  // Generated files are opt-in, and these two need the `url` above.
+  sitemap #true
+  feed {
+    formats "rss"
+  }
+
   html {
     pretty #true
     meta #true

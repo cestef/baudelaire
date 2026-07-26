@@ -28,13 +28,10 @@ fn second_build_reuses_all_pages() {
         "#let frontmatter = (title: \"B\",)\nbeta",
     );
 
-    site.build();
-    let second = site.build();
+    site.stats();
+    let second = site.stats();
     // Nothing changed -> every page served from cache.
-    assert!(
-        second.contains("2 cached"),
-        "expected all pages cached: {second}"
-    );
+    assert_eq!((second.pages, second.cached), (2, 2));
 }
 
 #[test]
@@ -76,16 +73,16 @@ fn editing_a_page_rebuilds_only_it() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\",)\nbeta",
     );
-    site.build();
+    site.stats();
 
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nALPHA2",
     );
-    let out = site.build();
+    let stats = site.stats();
 
     // One page recompiled, the other reused.
-    assert!(out.contains("1 cached"), "expected 1 cached: {out}");
+    assert_eq!((stats.pages, stats.cached), (2, 1));
     assert!(site.output("posts/a/index.html").contains("ALPHA2"));
 }
 
@@ -107,7 +104,7 @@ fn retitling_a_page_invalidates_its_sibling() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", order: 2,)\nbeta",
     );
-    site.build();
+    site.stats();
     assert!(site.output("posts/a/index.html").contains("B"));
 
     // Retitle b; a's next-link title must follow.
@@ -115,14 +112,14 @@ fn retitling_a_page_invalidates_its_sibling() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"BEE\", order: 2,)\nbeta",
     );
-    let out = site.build();
+    let stats = site.stats();
     assert!(
         site.output("posts/a/index.html").contains("BEE"),
         "sibling nav should reflect the neighbour's new title"
     );
-    assert!(
-        !out.contains("1 cached"),
-        "retitling b must recompile a (its sibling nav changed): {out}"
+    assert_eq!(
+        stats.cached, 0,
+        "retitling b must recompile a (its sibling nav changed)"
     );
 }
 
@@ -138,20 +135,20 @@ fn editing_transitive_import_invalidates_page() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\n#import \"/b.typ\": msg\n#msg",
     );
-    site.build();
+    site.stats();
     assert!(site.output("posts/a/index.html").contains("ORIGINAL"));
 
     // Change only the leaf module.
     site.write("c.typ", "#let value = \"CHANGED\"");
-    let out = site.build();
+    let stats = site.stats();
 
     assert!(
         site.output("posts/a/index.html").contains("CHANGED"),
         "transitive dep change did not propagate: c was not tracked as a dep of a"
     );
-    assert!(
-        !out.contains("1 cached"),
-        "page a should have been recompiled, not cached: {out}"
+    assert_eq!(
+        stats.cached, 0,
+        "page a should have been recompiled, not cached"
     );
 }
 
@@ -201,19 +198,19 @@ fn editing_layout_template_rebuilds_dependent_pages() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\", template: \"post.typ\",)\nalpha",
     );
-    site.build();
+    site.stats();
     assert!(site.output("posts/a/index.html").contains("<main>"));
 
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"section\", body)",
     );
-    let out = site.build();
+    let stats = site.stats();
     assert!(
         site.output("posts/a/index.html").contains("<section>"),
         "template change did not invalidate the page"
     );
-    assert!(!out.contains("1 cached"), "page should have rebuilt: {out}");
+    assert_eq!(stats.cached, 0, "page should have rebuilt");
 }
 
 #[test]
@@ -414,14 +411,174 @@ fn no_cache_flag_forces_full_rebuild() {
         "#let frontmatter = (title: \"A\",)\nalpha",
     );
     site.build();
+    let warm = site.build();
+    // The flag is a `build` option, not a global one: passed before the
+    // subcommand it is a usage error, and this test used to assert against
+    // clap's help text rather than a build.
+    assert!(
+        warm.contains("cached"),
+        "cache not warm to begin with: {warm}"
+    );
 
-    let out = site.run(&["--no-cache", "build", "-v"]);
+    let out = site.run(&["build", "--no-cache", "-v"]);
     let logs = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "no-cache build failed: {logs}");
     // A forced full rebuild serves nothing from cache: no page nor the summary
     // mentions caching (the summary omits the cached count when it is zero).
     assert!(
         !logs.contains("cached"),
         "no-cache must rebuild everything: {logs}"
+    );
+}
+
+/// A blob whose bytes no longer match its own content address is a miss, and
+/// the build must repair it: it stays referenced (so the prune keeps it) and its
+/// path exists (so a write is skipped), which left that page missing on every
+/// build from then on.
+#[test]
+fn a_corrupt_blob_is_rewritten_not_missed_forever() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.build();
+
+    // Corrupt the one stored blob, leaving its content-addressed name intact.
+    let objects = site.path(".baudelaire/cache/objects");
+    let shard = fs::read_dir(&objects)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let blob = fs::read_dir(&shard)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    fs::write(&blob, "<html>tampered</html>").unwrap();
+
+    let repaired = site.build();
+    assert!(
+        !repaired.contains("1 cached"),
+        "a corrupt blob must be a miss: {repaired}"
+    );
+
+    let healed = site.build();
+    assert!(
+        healed.contains("1 cached"),
+        "the rebuild did not repair the blob: {healed}"
+    );
+    assert!(site.output("posts/a/index.html").contains("alpha"));
+}
+
+/// A warm cache must survive the site moving on disk: `mv site site2`, or a CI
+/// runner checking out at a different workspace path. Manifest keys are
+/// therefore stored relative to the project root, not absolute.
+#[test]
+fn a_warm_cache_survives_the_site_moving() {
+    fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let (src, dst) = (entry.path(), to.join(entry.file_name()));
+            if entry.file_type().unwrap().is_dir() {
+                copy_tree(&src, &dst);
+            } else {
+                fs::copy(&src, &dst).unwrap();
+            }
+        }
+    }
+
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.build();
+
+    let moved = tempfile::tempdir().unwrap();
+    let root = moved.path().join("elsewhere");
+    copy_tree(&site.root, &root);
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_baudelaire"))
+        .args(["build", "-v"])
+        .current_dir(&root)
+        .output()
+        .expect("run binary");
+    let logs = String::from_utf8_lossy(&out.stderr);
+
+    assert!(out.status.success(), "build failed after move: {logs}");
+    assert!(
+        logs.contains("2 cached"),
+        "cache did not survive the move: {logs}"
+    );
+}
+
+/// `datetime.today()` is a build input the file-dependency tracker cannot see:
+/// it goes through the `World`, which records `source`/`file` only. Recording it
+/// as a read of `sys.inputs.baudelaire.date` is what makes a page printing the
+/// current year rebuild when the day rolls over instead of serving last year's
+/// markup forever.
+#[test]
+fn a_page_reading_the_clock_records_the_date_as_a_dependency() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/clock.typ",
+        "#let frontmatter = (title: \"C\",)\n#datetime.today().year()",
+    );
+    site.write(
+        "content/posts/plain.typ",
+        "#let frontmatter = (title: \"P\",)\nno clock here",
+    );
+    site.build();
+
+    let manifest = site.read(".baudelaire/cache/manifest.json");
+    let entries: serde_json::Value = serde_json::from_str(&manifest).expect("manifest parses");
+    let meta = |page: &str| {
+        entries["pages"][format!("content/posts/{page}.typ")]["meta"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(
+        meta("clock").contains_key("sys.inputs.baudelaire.date"),
+        "clock read not recorded: {manifest}"
+    );
+    assert!(
+        !meta("plain").contains_key("sys.inputs.baudelaire.date"),
+        "a page that never asks for the date must not depend on it: {manifest}"
+    );
+}
+
+/// `--no-cache` costs one cold build, not two: the manifest it writes must be
+/// fingerprinted like any other, or the next normal build sees a mismatch and
+/// rebuilds the whole site.
+#[test]
+fn no_cache_does_not_poison_the_next_build() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.build();
+    site.run(&["build", "--no-cache"]);
+
+    let next = site.build();
+
+    assert!(
+        next.contains("2 cached"),
+        "a --no-cache run left the cache unusable: {next}"
     );
 }
 
@@ -702,4 +859,32 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
         site.output("reader/index.html"),
         "the reader page must show the new commit hash after a rebuild"
     );
+}
+
+/// The cache stays portable when `content` is not a direct child of the project
+/// root: the root used to be inferred as `content`'s parent, so with
+/// `paths { content "src/content" }` everything outside `src/` stored an
+/// absolute path and the cache stopped surviving a move.
+#[test]
+fn a_nested_content_dir_keeps_the_cache_portable() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"src/content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
+    );
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = html.elem(\"main\", body)\n",
+    );
+    site.write(
+        "src/content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", template: \"post.typ\",)\nalpha",
+    );
+    site.build();
+
+    let manifest = site.read(".baudelaire/cache/manifest.json");
+    assert!(
+        !manifest.contains(site.root.to_str().expect("utf-8 tempdir")),
+        "manifest stored an absolute project path: {manifest}"
+    );
+    assert!(manifest.contains("src/content/posts/a.typ"), "{manifest}");
+    assert!(manifest.contains("templates/post.typ"), "{manifest}");
 }

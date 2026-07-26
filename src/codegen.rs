@@ -61,6 +61,28 @@ pub enum Value {
     None,
 }
 
+/// A real `Hash`, so nothing has to take a serialization as identity to
+/// fingerprint a value (the cache key of every config-injected value and every
+/// tracked `sys.inputs` read goes through here). The match destructures every
+/// variant, so a new one fails to compile until it is handled; the discriminant
+/// keeps `Str("x")` and `Raw("x")` apart. `f64` hashes by bit pattern: `Value`
+/// is only `PartialEq`, and two encodings that differ in bits are different
+/// generated output.
+impl std::hash::Hash for Value {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Str(s) | Self::Raw(s) => s.hash(state),
+            Self::Int(i) => i.hash(state),
+            Self::Float(f) => f.to_bits().hash(state),
+            Self::Bool(b) => b.hash(state),
+            Self::Array(items) => items.hash(state),
+            Self::Dict(entries) => entries.hash(state),
+            Self::None => {}
+        }
+    }
+}
+
 impl Value {
     pub fn str(value: impl AsRef<str>) -> Self {
         Self::Str(value.as_ref().to_owned())

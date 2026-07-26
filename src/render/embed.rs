@@ -7,13 +7,13 @@
 
 use std::path::PathBuf;
 
-use typst_html::{HtmlDocument, attr};
+use typst_html::HtmlDocument;
 
 use crate::config::Config;
 use crate::mime::Mime;
 
 use super::AssetMap;
-use super::transform::{Cx, ElementExt, Transform};
+use super::transform::{Cx, ElementExt, Transform, URL_ATTRS};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
 pub(super) struct Embed;
@@ -26,9 +26,7 @@ impl Transform for Embed {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let inliner = Inliner::new(cx.config, cx.assets);
         doc.root_mut().walk(&mut |element| {
-            element.assets(&[attr::href, attr::src, attr::poster], |value| {
-                inliner.inline(value)
-            });
+            element.assets(URL_ATTRS, |value| inliner.inline(value));
         });
     }
 }
@@ -51,7 +49,7 @@ struct Inliner<'a> {
 impl<'a> Inliner<'a> {
     fn new(config: &Config, assets: &'a AssetMap) -> Self {
         Self {
-            dst: config.asset_dist(),
+            dst: config.asset_staging(),
             prefix: format!("/{}/", config.asset_name()),
             assets,
         }

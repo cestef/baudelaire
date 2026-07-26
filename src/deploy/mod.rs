@@ -13,12 +13,53 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::error::{DeployError, Result};
-use crate::remote::Options;
+use crate::remote::{self, Backend, Options};
 use crate::ui::{Count, Ui};
 
 /// Files keyed by dist-relative path, each mapped to a content digest. The
 /// currency every [`Backend`] reconciles in: local digests versus remote.
 pub type Digests = BTreeMap<String, String>;
+
+/// A path the *remote* named, admitted only if it stays inside the deploy root.
+///
+/// Both backends learn the remote's file list from the remote itself: SSH parses
+/// the host's own `sha256sum` output, S3 a `ListObjectsV2` response. Those paths
+/// feed straight into a delete, so a hostile or broken host answering
+/// `../../etc/nginx/sites-enabled/x` would have the client remove a file well
+/// outside the deploy root, as whichever user it authenticated as. Every
+/// remote-supplied path is filtered through here before it reaches a path join.
+/// Constructed only by [`Listed::try_from`], so the check cannot be skipped:
+/// every function that turns a remote path into a request takes one of these
+/// rather than a `&str`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Listed(String);
+
+impl TryFrom<&str> for Listed {
+    type Error = ();
+
+    /// Accepts a plain relative path confined to the root: not absolute, no
+    /// `..`, no empty or bare-`.` component, no backslash (which a Windows-ish
+    /// remote could use as a separator we do not split on).
+    fn try_from(path: &str) -> Result<Self, Self::Error> {
+        let confined = !path.is_empty()
+            && !path.starts_with('/')
+            && !path.contains('\\')
+            && path
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..");
+        confined.then(|| Self(path.to_owned())).ok_or(())
+    }
+}
+
+impl Listed {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
 
 #[cfg(test)]
 use crate::ui::Level;
@@ -38,28 +79,26 @@ pub struct Dist {
 }
 
 impl Dist {
-    /// Walk `root` into the set of relative file paths, following subdirectories.
+    /// Walk `root` into the set of relative file paths.
+    ///
+    /// Subdirectories are followed, but not out of `dist`: a symlink pointing
+    /// elsewhere would otherwise have the deploy upload files the build never
+    /// produced, the mirror image of what [`crate::engine::prune::Prune::owns`]
+    /// refuses to delete.
     fn scan(root: &Path) -> Result<Self> {
-        let mut files = Vec::new();
-        Self::walk(root, root, &mut files)?;
+        let contained = crate::fs::canonical(root);
+        let mut files: Vec<String> = crate::fs::Walk::new(root)
+            .skipping(|dir| !crate::fs::canonical(dir).starts_with(&contained))
+            .files()?
+            .iter()
+            .filter_map(|path| path.strip_prefix(root).ok())
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .collect();
         files.sort();
         Ok(Self {
             root: root.to_owned(),
             files,
         })
-    }
-
-    /// Append every file under `dir` to `out`, as a path relative to `base` with
-    /// forward slashes, recursing into subdirectories.
-    fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
-        for path in crate::fs::read_dir(dir)? {
-            if path.is_dir() {
-                Self::walk(base, &path, out)?;
-            } else if let Ok(rel) = path.strip_prefix(base) {
-                out.push(rel.to_string_lossy().replace('\\', "/"));
-            }
-        }
-        Ok(())
     }
 
     /// Read one file's bytes by its relative path.
@@ -78,16 +117,6 @@ impl Dist {
     }
 }
 
-/// A file destination the built site can be deployed to.
-pub trait Backend {
-    /// Stable, human-facing name, shown in progress output.
-    fn name(&self) -> &'static str;
-
-    /// Reconcile `dist` with this destination under `opts`, reporting progress.
-    /// Honors `opts.dry_run` by computing and reporting the plan without writing.
-    fn run(&self, dist: &Dist, opts: &Options, ui: &Ui) -> Result<()>;
-}
-
 /// Deploy to every configured destination in turn. Errors if none is configured,
 /// so `baudelaire deploy` on an unconfigured project explains itself rather than
 /// silently doing nothing.
@@ -97,26 +126,20 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
         return Err(DeployError::Unconfigured.into());
     }
     let dist = Dist::scan(&config.dist)?;
-    for backend in backends {
-        ui.section(format_args!(
-            "{} - {}",
-            backend.name(),
-            Count::files(dist.files.len())
-        ));
-        // Confirm before any network mutation, unless previewing or `--yes`.
-        if !opts.dry_run && !opts.confirm(&format!("deploy to {}?", backend.name()))? {
-            ui.detail(format_args!("skipped {}", backend.name()));
-            continue;
-        }
-        backend.run(&dist, opts, ui)?;
-    }
-    Ok(())
+    remote::publish(
+        "deploy",
+        backends,
+        &dist,
+        |dist| Count::files(dist.files.len()).to_string(),
+        opts,
+        ui,
+    )
 }
 
 /// The enabled destinations, from config alone. THE single source of what a
 /// `deploy` run targets: add a backend by adding one line here.
-fn configured(config: &Config) -> Vec<Box<dyn Backend>> {
-    let mut out: Vec<Box<dyn Backend>> = Vec::new();
+fn configured(config: &Config) -> Vec<Box<dyn Backend<Dist>>> {
+    let mut out: Vec<Box<dyn Backend<Dist>>> = Vec::new();
     if let Some(s3) = &config.deploy.s3 {
         out.push(Box::new(S3::new(s3.clone())));
     }
@@ -190,6 +213,32 @@ impl Plan {
 
 #[cfg(test)]
 mod tests {
+    /// Remote-supplied paths that would escape the deploy root are refused: a
+    /// hostile host answering with one used to have the client delete a file
+    /// outside the project.
+    #[test]
+    fn listed_refuses_paths_escaping_the_root() {
+        for path in [
+            "../etc/passwd",
+            "a/../../etc/passwd",
+            "/etc/nginx/sites-enabled/x",
+            "",
+            "a//b",
+            "a/./b",
+            "..",
+            r"a\..\..\windows",
+        ] {
+            assert!(super::Listed::try_from(path).is_err(), "accepted {path:?}");
+        }
+    }
+
+    #[test]
+    fn listed_accepts_ordinary_relative_paths() {
+        for path in ["index.html", "posts/a/index.html", "assets/app.abc123.css"] {
+            assert!(super::Listed::try_from(path).is_ok(), "refused {path:?}");
+        }
+    }
+
     use super::*;
 
     #[test]

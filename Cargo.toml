@@ -12,12 +12,24 @@ documentation = "https://baudelaire.cstef.dev"
 readme = "README.md"
 keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
-exclude = ["/docs", "/.forgejo", "/public", "/.jj", "/.claude", "/install.sh"]
+exclude = [
+    "/docs",
+    "/.forgejo",
+    "/public",
+    "/.jj",
+    "/.claude",
+    "/install.sh",
+    "/tests",
+    "/benches",
+]
 
 # Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
 # target to its codeberg tarball. Falls back to a source build otherwise.
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/{ version }/baudelaire-{ target-family }-{ arch }.tar.gz"
+# The default never matched a real asset: `{ target-family }` renders `unix`,
+# and the `v` prefix was missing, so every target fell through to a source
+# build. Each shipped target is spelled out instead.
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-{ arch }.tar.gz"
 pkg-fmt = "tgz"
 bin-dir = "baudelaire"
 
@@ -26,6 +38,12 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-x86_64.tar.g
 
 [package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64.tar.gz"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-x86_64-musl.tar.gz"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl.tar.gz"
 
 [features]
 default = ["embedded-fonts", "js", "css", "images"]
@@ -73,6 +91,10 @@ time = { version = "0.3", features = ["parsing", "formatting", "serde"] }
 itertools = "0.15.0"
 kdl = { version = "6" }
 serde = { version = "1", features = ["derive"] }
+# Slugs normalize to NFC first: a macOS filename arrives decomposed, and a
+# combining mark is not a letter, so `café` would otherwise slug to `cafe`
+# depending only on which normalization form the author's OS produced.
+unicode-normalization = "0.1"
 serde_json = "1"
 blake3 = "1"
 parking_lot = "0.12"
@@ -127,7 +149,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 russh = "0.62.2"
 russh-sftp = "2.3.0"
 rand = "0.10"
-tokio = { version = "1.52.3", features = ["rt", "macros", "net", "io-util"] }
+tokio = { version = "1.52.3", features = ["rt", "net", "io-util"] }
 
 [[bench]]
 name = "text"

@@ -22,11 +22,13 @@ impl Transform for Links {
             links,
             page,
             broken,
+            config,
             ..
         } = cx;
+        let lang = config.multilingual().then_some(page.lang.as_str());
         doc.root_mut().walk(&mut |element| {
             element.rewrite(&[attr::href, attr::src], |value| {
-                match links.classify(value, &page.source) {
+                match links.classify(value, &page.source, lang) {
                     Link::Resolved(url) => Some(url),
                     Link::Broken => {
                         broken.push(value.to_owned());

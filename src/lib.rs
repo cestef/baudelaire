@@ -9,6 +9,7 @@ pub mod engine;
 pub mod error;
 pub mod fs;
 pub mod graph;
+pub mod image_rule;
 pub mod mime;
 pub mod remote;
 pub mod render;

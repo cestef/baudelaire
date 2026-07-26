@@ -257,8 +257,15 @@ impl Ui {
     /// Collect a warning: a full diagnostic with code, spans, and help,
     /// rendered by the next [`Ui::flush`] and counted in the build summary.
     pub fn warn(&self, warning: impl Diagnostic + Send + Sync + 'static) {
+        self.report(Box::new(warning));
+    }
+
+    /// Collect an already-boxed warning, for callers reached through a trait
+    /// object that cannot name the concrete type (see
+    /// [`crate::engine::process::Emit::warn`]).
+    pub fn report(&self, warning: Box<dyn Diagnostic + Send + Sync>) {
         let mut s = self.state.lock();
-        let note = Note(Box::new(warning));
+        let note = Note(warning);
         s.warned += usize::from(note.is_warning());
         s.notes.push(note);
     }

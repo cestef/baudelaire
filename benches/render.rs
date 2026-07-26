@@ -25,7 +25,7 @@ fn link_classify(c: &mut Criterion) {
     c.bench_function("link_classify_200", |b| {
         b.iter(|| {
             for link in &links {
-                black_box(map.classify(black_box(link), &from));
+                black_box(map.classify(black_box(link), &from, None));
             }
         });
     });

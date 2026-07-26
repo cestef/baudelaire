@@ -5,13 +5,14 @@
 //! what runs, in order: a new site-level output (search index, robots.txt) is
 //! one `impl Processor` plus one line in that list.
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
-use crate::error::Result;
 use crate::error::warning::BaseUrlMissing;
+use crate::error::{BaseUrlRequired, Result};
 use crate::ui::Ui;
 
 use super::feed::Feeds;
@@ -32,20 +33,13 @@ pub(super) struct Site<'a> {
 }
 
 impl Site<'_> {
-    /// The base URL for a URL-requiring processor: the one warn-and-skip
-    /// policy for a missing `url`, naming the `feature` that needs it.
-    pub(super) fn base(
-        &self,
-        feature: &'static str,
-        out: &mut dyn Emit,
-    ) -> Result<Option<BaseUrl>> {
-        self.warn_missing_base(
-            out,
-            BaseUrlMissing {
-                feature,
-                effect: "skipped",
-            },
-        )
+    /// The base URL a processor cannot work without. An error, not a warning:
+    /// these features are opt-in, so reaching here means the site asked for
+    /// output that cannot be produced, and warning let CI go green with no feed.
+    pub(super) fn base(&self, feature: &'static str) -> Result<BaseUrl> {
+        self.config
+            .base()
+            .ok_or_else(|| BaseUrlRequired { feature }.into())
     }
 
     /// The base URL, warning with `missing` when absent. The single "is a `url`
@@ -77,8 +71,22 @@ pub(super) trait Emit {
     /// A progress note (e.g. `wrote sitemap.xml`): a debug log line in
     /// production, captured verbatim by test sinks.
     fn note(&mut self, msg: fmt::Arguments);
-    /// A typed warning: an enabled feature missing its `url` precondition.
-    fn warn(&mut self, warning: BaseUrlMissing);
+    /// A warning from a processor, already boxed. Call [`Warn::warn`] instead:
+    /// this is the object-safe primitive it forwards to, the same split [`Ui`]
+    /// makes between `warn` and `report`.
+    fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>);
+}
+
+/// Typed `warn` over any [`Emit`], so a processor names the diagnostic it is
+/// raising instead of boxing at the call site. Blanket, so every sink gets it.
+pub(super) trait Warn {
+    fn warn(&mut self, warning: impl miette::Diagnostic + Send + Sync + 'static);
+}
+
+impl<T: Emit + ?Sized> Warn for T {
+    fn warn(&mut self, warning: impl miette::Diagnostic + Send + Sync + 'static) {
+        self.report(Box::new(warning));
+    }
 }
 
 /// One post-build pass over the site.
@@ -128,14 +136,22 @@ pub(super) struct Emitter<'a> {
     bytes: u64,
     /// Every generated file written this build, so the prune pass keeps them.
     paths: Vec<PathBuf>,
+    /// Destinations the static tree already owns. A processor never overwrites
+    /// one: `static/` is documented as the override escape hatch, yet
+    /// processors run *after* the static copy, so with `sitemap` on by default a
+    /// hand-authored `static/sitemap.xml` was clobbered on every build, out of
+    /// the box. Pages still win over static; only these whole-site derived
+    /// files yield.
+    reserved: BTreeSet<PathBuf>,
 }
 
 impl<'a> Emitter<'a> {
-    pub(super) fn new(ui: &'a Ui) -> Self {
+    pub(super) fn new(ui: &'a Ui, reserved: impl IntoIterator<Item = PathBuf>) -> Self {
         Self {
             ui,
             bytes: 0,
             paths: Vec::new(),
+            reserved: reserved.into_iter().collect(),
         }
     }
 
@@ -158,6 +174,10 @@ impl<'a> Emitter<'a> {
 
 impl Emit for Emitter<'_> {
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
+        if self.reserved.contains(path) {
+            tracing::debug!(path = %path.display(), "kept the static file over generated output");
+            return Ok(());
+        }
         crate::fs::write_all(path, contents)?;
         self.bytes += contents.len() as u64;
         self.paths.push(path.to_path_buf());
@@ -168,39 +188,41 @@ impl Emit for Emitter<'_> {
         tracing::debug!("{msg}");
     }
 
-    fn warn(&mut self, warning: BaseUrlMissing) {
-        self.ui.warn(warning);
+    fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>) {
+        self.ui.report(warning);
+    }
+}
+
+/// In-memory [`Emit`] sink capturing everything a processor emits. Lives at
+/// module scope so every processor's own tests share one sink instead of each
+/// re-declaring it.
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct Recorder {
+    pub files: Vec<(PathBuf, String)>,
+    pub notes: Vec<String>,
+    pub warns: Vec<String>,
+}
+
+#[cfg(test)]
+impl Emit for Recorder {
+    fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
+        self.files.push((path.to_path_buf(), contents.to_owned()));
+        Ok(())
+    }
+
+    fn note(&mut self, msg: fmt::Arguments) {
+        self.notes.push(msg.to_string());
+    }
+
+    fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>) {
+        self.warns.push(warning.to_string());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::*;
-
-    /// In-memory [`Emit`] sink capturing everything a processor emits.
-    #[derive(Default)]
-    struct Recorder {
-        files: Vec<(PathBuf, String)>,
-        notes: Vec<String>,
-        warns: Vec<String>,
-    }
-
-    impl Emit for Recorder {
-        fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
-            self.files.push((path.to_path_buf(), contents.to_owned()));
-            Ok(())
-        }
-
-        fn note(&mut self, msg: fmt::Arguments) {
-            self.notes.push(msg.to_string());
-        }
-
-        fn warn(&mut self, warning: BaseUrlMissing) {
-            self.warns.push(warning.to_string());
-        }
-    }
 
     /// A processor that records its label when it runs, gated by a fixed flag.
     struct Marker(&'static str, bool);

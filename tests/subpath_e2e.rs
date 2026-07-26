@@ -133,3 +133,78 @@ fn serve_previews_under_the_base_path() {
     assert_eq!(server.get("/docs/posts/hello/").0, 200);
     assert_eq!(server.get("/docs/posts/world/").0, 200);
 }
+
+/// Fingerprint rewriting inside CSS emits a root-absolute URL, and the
+/// `BasePath` transform only walks the DOM, so without prefixing here every
+/// rewritten `url()` / `@import` 404s on a subpath-hosted site.
+#[test]
+#[cfg(feature = "css")]
+fn css_references_carry_the_subpath() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://host.test/docs"
+        paths {
+            content "content"
+            dist "public"
+            assets "assets"
+        }
+        output {
+            assets { fingerprint #true }
+        }
+        "#,
+    );
+    site.write("assets/logo.svg", "<svg/>\n");
+    site.write("assets/app.css", "body { background: url(logo.svg) }\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome\n",
+    );
+    let out = site.run(&["build"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let sheet = site
+        .files("public/assets")
+        .into_iter()
+        .find(|name| name.starts_with("app.") && name.ends_with(".css"))
+        .expect("fingerprinted stylesheet");
+    let css = site.read(&format!("public/assets/{sheet}"));
+    assert!(css.contains("/docs/assets/logo."), "{css}");
+}
+
+/// `og:image` carries its URL in a `content` attribute, which only the
+/// fingerprint transform used to look at: the social card pointed at an
+/// unprefixed path on a subpath-hosted site.
+#[test]
+fn og_image_carries_the_subpath() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://host.test/docs"
+        paths {
+            content "content"
+            dist "public"
+            assets "assets"
+        }
+        "#,
+    );
+    site.write("assets/card.png", "not really a png");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\", image: \"/assets/card.png\",)\nhome\n",
+    );
+    let out = site.run(&["build"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let html = site.output("index.html");
+    assert!(html.contains("og:image"), "{html}");
+    assert!(html.contains("/docs/assets/card.png"), "{html}");
+}

@@ -2,6 +2,7 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::dispatch::{Attrs, Block, Keys};
+use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
@@ -10,7 +11,6 @@ use crate::config::{
     S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
     TaxonomyConfig, VerifyConfig,
 };
-use crate::content::Permalink;
 use crate::error::{ConfigError, Result};
 
 impl Config {
@@ -88,6 +88,30 @@ impl Config {
     ]);
 }
 
+/// The loopback interface, by the spellings a URL authority can name it.
+struct Loopback;
+
+impl Loopback {
+    /// Whether a URL's post-scheme remainder names loopback.
+    ///
+    /// Userinfo is stripped at the *last* `@` first: the authority of
+    /// `http://localhost:9000@evil.com` is `evil.com`, and matching the prefix
+    /// would have shipped credentials there in cleartext.
+    fn at(rest: &str) -> bool {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        let host = host.rsplit_once(':').map_or(host, |(head, port)| {
+            match port.chars().all(|c| c.is_ascii_digit()) {
+                true => head,
+                false => host,
+            }
+        });
+        matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")
+    }
+}
+
 /// Typed accessors over a [`KdlNode`], plus the parent-section builders that map
 /// a `{ .. }` block onto its config struct. Shared with [`super::dispatch`],
 /// which needs [`NodeExt::span`] and [`NodeExt::block`].
@@ -99,6 +123,7 @@ pub(super) trait NodeExt {
     fn int(&self, text: &str, idx: usize) -> Result<i64>;
     fn count(&self, text: &str, idx: usize) -> Result<usize>;
     fn port(&self, text: &str, idx: usize) -> Result<u16>;
+    fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
     /// duplicate id: the single dedup rule for collections, taxonomies, and
@@ -197,6 +222,28 @@ impl NodeExt for KdlNode {
     fn port(&self, text: &str, idx: usize) -> Result<u16> {
         let n = self.int(text, idx)?;
         u16::try_from(n).map_err(|_| ConfigError::port_range(text, n, NodeExt::span(self)).into())
+    }
+
+    /// A base-URL argument, required to be `https://` unless it names the
+    /// loopback interface.
+    ///
+    /// Credentials travel to these hosts: the app password in an atproto
+    /// `createSession` body and every Bearer token after it, an AWS signature
+    /// and its headers. A plaintext scheme puts them on the wire, and nothing
+    /// downstream re-checks: `remote::tls()` keeps verification on and then
+    /// hands the URL to `ureq` unexamined. Loopback stays allowed so a local
+    /// MinIO or PDS on `http://localhost:9000` still works.
+    fn url(&self, text: &str, idx: usize) -> Result<String> {
+        let value = self.string(text, idx)?;
+        let bad = || ConfigError::insecure_url(text, &value, NodeExt::span(self)).into();
+        let Some((scheme, rest)) = value.split_once("://") else {
+            return Err(bad());
+        };
+        match scheme.to_ascii_lowercase().as_str() {
+            "https" => Ok(value),
+            "http" if Loopback::at(rest) => Ok(value),
+            _ => Err(bad()),
+        }
     }
 
     fn block(&self, text: &str) -> Result<&KdlDocument> {
@@ -689,7 +736,7 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
             ("endpoint", |c, n, t| {
-                c.endpoint = Some(n.string(t, 0)?);
+                c.endpoint = Some(n.url(t, 0)?);
                 Ok(())
             }),
             ("region", |c, n, t| {
@@ -724,7 +771,7 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
             ("port", |c, n, t| {
-                c.port = n.count(t, 0)? as u16;
+                c.port = n.port(t, 0)?;
                 Ok(())
             }),
             ("user", |c, n, t| {
@@ -763,7 +810,7 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
             ("pds", |c, n, t| {
-                c.pds = n.string(t, 0)?;
+                c.pds = n.url(t, 0)?;
                 Ok(())
             }),
             ("discover", |c, n, t| {
@@ -953,5 +1000,71 @@ impl EntryExt for KdlEntry {
     fn span(&self) -> SourceSpan {
         let s = KdlEntry::span(self);
         SourceSpan::new(s.offset().into(), s.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::Config;
+
+    /// An out-of-range SSH port is rejected with the port diagnostic, not
+    /// truncated into a different, reachable port (`70000` used to parse as
+    /// `4464`).
+    #[test]
+    fn an_out_of_range_ssh_port_is_rejected() {
+        let err = Config::parse("deploy {\n  ssh {\n    host \"h\"\n    port 70000\n  }\n}")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("port"), "{err}");
+    }
+
+    /// Credentials travel to `pds` and `endpoint`, so a plaintext scheme is
+    /// rejected where the span can point at it, not silently honoured.
+    #[test]
+    fn a_plaintext_credential_host_is_rejected() {
+        for kdl in [
+            "announce {\n  standard {\n    handle \"a.example\"\n    pds \"http://evil.local\"\n  }\n}",
+            "deploy {\n  s3 {\n    bucket \"b\"\n    endpoint \"http://evil.local\"\n  }\n}",
+        ] {
+            let err = Config::parse(kdl).unwrap_err().to_string();
+            assert!(err.contains("not https"), "{kdl}: {err}");
+        }
+    }
+
+    /// A host that merely *starts* with a loopback spelling is not loopback:
+    /// URL userinfo made `http://localhost:9000@evil.com` pass, which shipped
+    /// the credentials to `evil.com` in cleartext.
+    #[test]
+    fn userinfo_cannot_forge_a_loopback_host() {
+        for host in [
+            "http://localhost:9000@evil.com",
+            "http://127.0.0.1@evil.com",
+            "http://localhost.evil.com",
+            "http://localhost@evil.com/path",
+        ] {
+            let kdl =
+                format!("deploy {{\n  s3 {{\n    bucket \"b\"\n    endpoint \"{host}\"\n  }}\n}}");
+            assert!(Config::parse(&kdl).is_err(), "accepted {host}");
+        }
+    }
+
+    /// A local service is the one case plaintext is legitimate.
+    #[test]
+    fn a_loopback_url_stays_plaintext() {
+        let config = Config::parse(
+            "deploy {\n  s3 {\n    bucket \"b\"\n    endpoint \"http://localhost:9000\"\n  }\n}",
+        )
+        .unwrap();
+        assert_eq!(
+            config.deploy.s3.expect("s3").endpoint.as_deref(),
+            Some("http://localhost:9000")
+        );
+    }
+
+    #[test]
+    fn an_in_range_ssh_port_is_kept() {
+        let config =
+            Config::parse("deploy {\n  ssh {\n    host \"h\"\n    port 2222\n  }\n}").unwrap();
+        assert_eq!(config.deploy.ssh.expect("ssh block").port, 2222);
     }
 }

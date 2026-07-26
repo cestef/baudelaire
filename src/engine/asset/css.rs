@@ -88,6 +88,10 @@ impl Stylesheet {
     fn resolve(rel: &Path, raw: &str, map: &AssetMap, ctx: &Ctx) -> Option<String> {
         let key = Self::key(rel, raw, ctx)?;
         let mapped = map.resolve(&key)?;
+        // Prefix the served base path here: the `BasePath` transform only walks
+        // the DOM, so a root-absolute URL emitted into CSS would 404 on a
+        // subpath-hosted site.
+        let mapped = ctx.config.prefixed(&mapped);
         Some(format!("{mapped}{}", Tail::of(raw).tail))
     }
 
@@ -108,7 +112,7 @@ impl Stylesheet {
             path.to_owned()
         } else {
             let dir = rel.parent().unwrap_or_else(|| Path::new(""));
-            ctx.url(&Ctx::normalize(&dir.join(path)))
+            ctx.url(&Ctx::normalize(&dir.join(path))?)
         })
     }
 

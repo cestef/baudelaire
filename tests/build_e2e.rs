@@ -250,7 +250,10 @@ fn compile_error_reports_with_context() {
     let out = site.run(&["build"]);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("typst") || stderr.contains("error"));
+    // The context is the point: which file, which line, and the offending text.
+    assert!(stderr.contains("bad.typ"), "no source named: {stderr}");
+    assert!(stderr.contains("invalid_func"), "no span excerpt: {stderr}");
+    assert!(stderr.contains("bad.typ:2"), "no line number: {stderr}");
 }
 
 #[test]
@@ -440,10 +443,13 @@ fn nested_content_dirs_build_a_section_tree() {
         "content/guide/advanced/deep.typ",
         "#let frontmatter = (title: \"Deep\", order: 2,)\nbody",
     );
+    // One build: the failure message used to run a *second*, different build, so
+    // on failure it showed that build's (warm-cache) stderr instead.
+    let out = site.run(&["build"]);
     assert!(
-        site.run(&["build"]).status.success(),
+        out.status.success(),
         "stderr: {}",
-        String::from_utf8_lossy(&site.run(&["build"]).stderr)
+        String::from_utf8_lossy(&out.stderr)
     );
     let html = fs::read_to_string(site.root.join("public/guide/intro/index.html")).unwrap();
     assert!(html.contains("S:guide"), "top section: {html}");
@@ -473,10 +479,13 @@ fn client_constants_reach_templates_via_sys_inputs() {
         "content/a.typ",
         "#let frontmatter = (title: \"A\",)\nTracker: #sys.inputs.baudelaire.client.analytics, every #sys.inputs.baudelaire.client.revalidate",
     );
+    // One build: the failure message used to run a *second*, different build, so
+    // on failure it showed that build's (warm-cache) stderr instead.
+    let out = site.run(&["build"]);
     assert!(
-        site.run(&["build"]).status.success(),
+        out.status.success(),
         "stderr: {}",
-        String::from_utf8_lossy(&site.run(&["build"]).stderr)
+        String::from_utf8_lossy(&out.stderr)
     );
     let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
     assert!(html.contains("Tracker: plausible, every 3600"), "{html}");
@@ -1078,7 +1087,7 @@ fn sitemap_and_rss_emitted_when_url_set() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  sitemap #true\n  feed { formats \"rss\" }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1317,7 +1326,7 @@ fn robots_txt_emitted_when_block_present() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  robots {\n    disallow \"/private/\"\n  }\n}\n",
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  sitemap #true\n  robots {\n    disallow \"/private/\"\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -1955,4 +1964,105 @@ fn anchors_disabled_leaves_headings_bare() {
     );
     let html = fs::read_to_string(site.root.join("public/docs/guide/index.html")).unwrap();
     assert!(!html.contains(r#"id="setup""#), "{html}");
+}
+
+/// Assets are fingerprinted before pages compile, so a page failing to compile
+/// used to abort *after* the asset tree had been regenerated: `dist` kept the
+/// previous build's HTML pointing at asset filenames that no longer existed, and
+/// every stylesheet 404'd. A failed build must leave `dist` exactly as it was.
+#[test]
+fn a_failed_build_leaves_the_previous_assets_in_place() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\noutput {\n  assets { fingerprint #true }\n}\n",
+    );
+    site.write("assets/app.css", "body { color: red }\n");
+    site.write("templates/broken.typ", "#let broken(page, body) = body\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\", template: \"broken.typ\",)\nhome",
+    );
+    site.build();
+    let served = site.files("public/assets");
+    assert_eq!(served.len(), 1, "{served:?}");
+    let html = site.output("index.html");
+    assert!(
+        html.contains(&served[0]) || !html.contains("app."),
+        "{html}"
+    );
+
+    // Edit the stylesheet (so a regenerated tree would be named differently)
+    // and break the layout in the same build. The break has to be one that
+    // survives discovery and fails at compile, which is where the window is.
+    site.write("assets/app.css", "body { color: blue }\n");
+    site.write("templates/broken.typ", "#let broken(page, body) = #(");
+    let out = site.run(&["build"]);
+    assert!(!out.status.success(), "build should have failed");
+    assert_eq!(
+        site.files("public/assets"),
+        served,
+        "a failed build replaced the assets the existing HTML references"
+    );
+}
+
+/// The broken-link check must not weaken on rebuild. Feeding it only
+/// freshly-compiled pages meant a second, fully-cached build reported nothing,
+/// and with `links { strict #true }` the gate passed outright.
+#[test]
+fn broken_links_are_still_reported_on_a_cached_rebuild() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks { strict #false }\n",
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#link(\"missing.typ\")[gone]",
+    );
+
+    let first = site.run(&["build"]);
+    let logs = String::from_utf8_lossy(&first.stderr).into_owned();
+    assert!(logs.contains("missing.typ"), "first build: {logs}");
+
+    let second = site.run(&["build", "-v"]);
+    let logs = String::from_utf8_lossy(&second.stderr).into_owned();
+    assert!(logs.contains("1 cached"), "rebuild was not cached: {logs}");
+    assert!(
+        logs.contains("missing.typ"),
+        "the broken-link check went quiet on a cached rebuild: {logs}"
+    );
+}
+
+/// Sitemap and feeds are opt-in, so enabling one without a `url` is a request
+/// that cannot be met: an error, not a warning that let CI go green with no feed.
+#[test]
+fn an_opt_in_output_without_a_url_fails_the_build() {
+    for output in ["sitemap #true", "feed { formats \"rss\" }"] {
+        let site = Site::with(&format!(
+            "site \"T\"\npaths {{\n  content \"content\"\n  dist \"public\"\n}}\noutput {{\n  {output}\n}}\n"
+        ));
+        site.write(
+            "content/index.typ",
+            "#let frontmatter = (title: \"H\",)\nhome",
+        );
+        let out = site.run(&["build"]);
+        let logs = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success(),
+            "{output} built without a url: {logs}"
+        );
+        assert!(logs.contains("needs a site `url`"), "{output}: {logs}");
+    }
+}
+
+/// ...and a site that asks for neither emits neither, silently.
+#[test]
+fn no_sitemap_or_feed_without_opting_in() {
+    let site = Site::with(
+        "site \"T\"\nurl \"https://example.com\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    assert!(site.run(&["build"]).status.success());
+    assert!(!site.exists("public/sitemap.xml"));
+    assert!(!site.exists("public/rss.xml"));
 }

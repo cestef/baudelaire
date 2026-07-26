@@ -6,6 +6,7 @@
 pub mod defaults;
 pub(crate) mod dispatch;
 pub mod parse;
+pub mod permalink;
 pub mod profile;
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ use std::path::PathBuf;
 use kdl::KdlDocument;
 
 pub use defaults::{SortKey, UrlStyle};
+pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 
 /// Top-level site configuration.
 #[derive(Debug, Clone)]
@@ -28,6 +30,11 @@ pub struct Config {
     pub lang: String,
     /// Default author.
     pub author: Option<String>,
+    /// The project root: what every other path is relative to, and what typst
+    /// resolves `/`-absolute imports against. Explicit rather than inferred from
+    /// `content`'s parent, which is only the root when `content` sits directly
+    /// under it.
+    pub root: PathBuf,
     /// Content source directory.
     pub content: PathBuf,
     /// Bundle index basename. A content file with this stem takes its slug from
@@ -156,6 +163,14 @@ impl Config {
             .unwrap_or_else(|| self.label())
     }
 
+    /// The author in a given language: the language's `author` override if it
+    /// has one, else the site-wide author.
+    pub fn author(&self, code: &str) -> Option<&str> {
+        self.language(code)
+            .and_then(|lang| lang.author.as_deref())
+            .or(self.author.as_deref())
+    }
+
     /// A language's display name, if declared (e.g. `Français`), else `None`.
     pub fn name(&self, code: &str) -> Option<&str> {
         self.language(code).and_then(|lang| lang.name.as_deref())
@@ -164,7 +179,9 @@ impl Config {
     /// The writing direction (`rtl`) declared for a language, if any; `None`
     /// means the default `ltr`.
     pub fn dir(&self, code: &str) -> Option<&str> {
-        self.language(code).and_then(|lang| lang.dir.as_deref())
+        self.language(code)
+            .and_then(|lang| lang.dir.as_deref())
+            .or_else(|| Rtl::of(code))
     }
 
     /// A language's UI-string table (empty when it declares none), exposed to
@@ -242,10 +259,18 @@ impl Config {
             .unwrap_or("assets")
     }
 
-    /// The processed assets directory under `dist`: where the pipeline writes
-    /// and the embed transform reads.
+    /// The processed assets directory under `dist`: the *published* location,
+    /// read by the dev server and by whatever hosts `dist`.
     pub fn asset_dist(&self) -> PathBuf {
         self.dist.join(self.asset_name())
+    }
+
+    /// Where the asset pipeline writes during a build, published over
+    /// [`Config::asset_dist`] by a rename once every page is on disk, so a
+    /// failed build leaves the served assets the existing HTML references.
+    /// Everything reading processed assets mid-build reads here.
+    pub fn asset_staging(&self) -> PathBuf {
+        self.dist.join(format!(".{}.staging", self.asset_name()))
     }
 
     /// The file a URL path is written to under `dist`, honoring clean URLs.
@@ -265,14 +290,27 @@ impl Config {
             .filter(|segment| !segment.is_empty() && *segment != "..")
             .collect::<Vec<_>>()
             .join("/");
-        // 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't served as not-found
-        if trimmed == "404" {
+        // 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't
+        // served as not-found. A translated `404.fr.typ` localizes to
+        // `/{lang}/404/` and belongs at `{lang}/404.html` for the same reason.
+        // Only a language scope counts: `/notes/404/` is an ordinary page.
+        let stem = trimmed.strip_suffix(".html").unwrap_or(&trimmed);
+        if stem == "404" {
             return self.dist.join(Self::NOT_FOUND);
         }
-        if self.urls.is_clean() {
-            self.dist.join(&trimmed).join("index.html")
-        } else {
-            self.dist.join(format!("{trimmed}.html"))
+        if let Some(scope) = stem
+            .strip_suffix("/404")
+            .filter(|scope| self.languages.iter().any(|(code, _)| code == scope))
+        {
+            return self.dist.join(scope).join(Self::NOT_FOUND);
+        }
+        match self.urls {
+            UrlStyle::Clean => self.dist.join(&trimmed).join("index.html"),
+            // A flat page URL already names its file; a raw path (a frontmatter
+            // `redirect` old-path) still needs the extension.
+            UrlStyle::Flat => self
+                .dist
+                .join(self.urls.url(&trimmed).trim_start_matches('/')),
         }
     }
 
@@ -328,9 +366,15 @@ impl Config {
 pub struct BaseUrl(String);
 
 impl BaseUrl {
-    /// Absolute URL for a root-relative path (a permalink or `/file`).
+    /// Absolute URL for a root-relative path (a permalink or `/file`),
+    /// percent-encoded.
+    ///
+    /// Slugs keep Unicode letters, so a permalink carries raw UTF-8. Browsers
+    /// cope, but an XML sitemap's `<loc>` and a feed's `<id>`/`<link>` are
+    /// specified as URIs and consumers reject or mangle raw bytes there. Every
+    /// absolute URL the site emits goes through here, so it is encoded once.
     pub fn join(&self, path: impl AsRef<str>) -> String {
-        format!("{}{}", self.0, path.as_ref())
+        format!("{}{}", self.0, Percent::encode(path.as_ref()))
     }
 
     /// Absolute URL for a bare output file name sitting at the site root, e.g.
@@ -362,6 +406,67 @@ impl std::fmt::Display for BaseUrl {
     }
 }
 
+/// Percent-encoding, as a URL path carries it.
+pub struct Percent;
+
+impl Percent {
+    /// Encode the bytes a URI path may not carry literally, leaving an existing
+    /// `%XX` triplet alone so a path is never encoded twice.
+    pub fn encode(path: &str) -> String {
+        let bytes = path.as_bytes();
+        let mut out = String::with_capacity(path.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            let byte = bytes[i];
+            if byte == b'%' && Self::triplet(bytes, i).is_some() {
+                out.push_str(&path[i..i + 3]);
+                i += 3;
+                continue;
+            }
+            match Self::literal(byte) {
+                true => out.push(byte as char),
+                false => out.push_str(&format!("%{byte:02X}")),
+            }
+            i += 1;
+        }
+        out
+    }
+
+    /// `%XX` triplets decoded back to bytes, everything else left alone. An
+    /// invalid triplet is kept verbatim: it cannot name a real file either way,
+    /// and rejecting the request would turn a typo into a 400.
+    pub fn decode(path: &str) -> String {
+        let bytes = path.as_bytes();
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            match Self::triplet(bytes, i).filter(|_| bytes[i] == b'%') {
+                Some(byte) => {
+                    out.push(byte);
+                    i += 3;
+                }
+                None => {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+        }
+        String::from_utf8(out).unwrap_or_else(|_| path.to_owned())
+    }
+
+    /// The byte a `%XX` at `i` encodes, if it is a well-formed triplet.
+    fn triplet(bytes: &[u8], i: usize) -> Option<u8> {
+        let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
+        u8::from_str_radix(hex, 16).ok()
+    }
+
+    /// Whether a byte may appear literally in a path: RFC 3986 `unreserved`,
+    /// plus the sub-delimiters and separators a site URL legitimately uses.
+    fn literal(byte: u8) -> bool {
+        byte.is_ascii_alphanumeric() || b"-._~/:@!$&'()*+,;=".contains(&byte)
+    }
+}
+
 /// Feeds every build-affecting setting into the hasher so a config change
 /// invalidates the build cache (a permalink or template tweak can alter every
 /// page). Destructuring means a newly added field fails to compile until it is
@@ -369,6 +474,9 @@ impl std::fmt::Display for BaseUrl {
 impl std::hash::Hash for Config {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
+            // where the project sits, not what it builds: including it would
+            // undo the portable manifest keys (`mv site site2` must still hit)
+            root: _,
             site,
             url,
             lang,
@@ -422,16 +530,7 @@ impl std::hash::Hash for Config {
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, announce, deploy, profile).hash(state);
-        // `serde_json::Value` isn't `Hash`; its serialization is a faithful,
-        // deterministic stand-in for the cache fingerprint.
-        // `client` and `languages` both carry `codegen::Value` (not `Hash`); their
-        // deterministic serialization is a faithful stand-in for the fingerprint.
-        for json in [
-            serde_json::to_string(client),
-            serde_json::to_string(languages),
-        ] {
-            json.unwrap_or_default().hash(state);
-        }
+        (client, languages).hash(state);
     }
 }
 
@@ -461,8 +560,30 @@ pub struct CollectionConfig {
     pub prefix: String,
 }
 
+/// Languages written right to left, so `dir="rtl"` is right without the site
+/// having to say so. A monolingual `lang "ar"` site has no `languages` block to
+/// declare `dir` in, and so could never get it.
+struct Rtl;
+
+impl Rtl {
+    /// Primary subtags, and the script subtags that imply the direction
+    /// whatever the language (`az-Arab`).
+    const LANGS: &'static [&'static str] = &[
+        "ar", "arc", "ckb", "dv", "fa", "he", "khw", "ks", "ps", "sd", "ug", "ur", "yi",
+    ];
+    const SCRIPTS: &'static [&'static str] = &["adlm", "arab", "hebr", "nkoo", "thaa"];
+
+    fn of(code: &str) -> Option<&'static str> {
+        let mut parts = code.split(['-', '_']).map(str::to_ascii_lowercase);
+        let primary = parts.next()?;
+        let rtl = Self::LANGS.contains(&primary.as_str())
+            || parts.any(|part| Self::SCRIPTS.contains(&part.as_str()));
+        rtl.then_some("rtl")
+    }
+}
+
 /// One declared language in a multi-language site.
-#[derive(Debug, Clone, Default, serde::Serialize)]
+#[derive(Debug, Clone, Default, Hash, serde::Serialize)]
 pub struct LanguageConfig {
     /// Display name for a language switcher, e.g. `Français`. Falls back to the
     /// code when unset.
@@ -766,12 +887,26 @@ pub struct AssetConfig {
 }
 
 /// Cache options.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct CacheConfig {
     /// Cache directory.
     pub dir: PathBuf,
     /// Enable incremental builds.
     pub incremental: bool,
+}
+
+/// Hand-written so `incremental` stays *out* of the fingerprint, for the same
+/// reason [`Mode`] does: a `--no-cache` run still writes the next manifest, and
+/// keying it on "caching was off" makes the following normal build a whole-site
+/// miss. Destructured, so a new field fails to compile until it is placed.
+impl std::hash::Hash for CacheConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            dir,
+            incremental: _,
+        } = self;
+        dir.hash(state);
+    }
 }
 
 /// External command hooks. Each command runs through the system shell in the

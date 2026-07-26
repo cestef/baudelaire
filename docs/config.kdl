@@ -58,6 +58,8 @@ output {
     fields "title" "body" "tags"
   }
 
+  sitemap #true
+
   robots {
     disallow "/drafts/"
   }

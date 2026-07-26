@@ -2,6 +2,7 @@
 //! every error (see [`crate::error::FsError`]). Prefer these over `std::fs`
 //! wherever a failure should tell the user *which* file and *what* operation.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::error::fs::FsError;
@@ -67,8 +68,15 @@ pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
     std::fs::create_dir_all(path).map_err(|e| FsError::new(Op::CreateDir, path, e).into())
 }
 
-/// List a directory's immediate entries as paths. The open *and* each entry are
-/// context-wrapped, so a mid-iteration failure still names the directory.
+/// List a directory's immediate entries as paths, sorted by path. The open *and*
+/// each entry are context-wrapped, so a mid-iteration failure still names the
+/// directory.
+///
+/// The sort is load-bearing: the OS returns entries in an arbitrary order that
+/// differs between machines and shifts as a directory is edited, and that order
+/// otherwise reaches feeds, listings, pagination membership and the layout
+/// wrapper text, making output nondeterministic and refingerprinting pages that
+/// did not change.
 pub fn read_dir(path: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     let read = std::fs::read_dir(path).map_err(|e| FsError::new(Op::ReadDir, path, e))?;
@@ -77,6 +85,7 @@ pub fn read_dir(path: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
         let entry = entry.map_err(|e| FsError::new(Op::ReadDir, path, e))?;
         entries.push(entry.path());
     }
+    entries.sort();
     Ok(entries)
 }
 
@@ -94,8 +103,188 @@ pub fn remove_dir_all(path: impl AsRef<Path>) -> Result<()> {
     std::fs::remove_dir_all(path).map_err(|e| FsError::new(Op::Remove, path, e).into())
 }
 
+/// A recursive walk of a directory tree: the one implementation behind "every
+/// file under here", shared by content discovery, the asset and static
+/// pipelines, embed fingerprinting, deploy scanning and the `dist` prune.
+///
+/// Symlinked directories are followed, but each directory is entered at most
+/// once by canonical path, so a link pointing at an ancestor (`ln -s .
+/// content/loop`) ends that branch instead of recursing until the stack
+/// overflows. Release builds are `panic = "abort"` and stripped, so that
+/// overflow would be a bare SIGSEGV with no diagnostic at all.
+///
+/// Yielded paths are `root`-joined, never canonicalized, so they keep the
+/// spelling the caller asked for and always strip back to a relative path.
+pub struct Walk<'a> {
+    root: &'a Path,
+    skip: Option<Skip<'a>>,
+}
+
+/// A predicate over directories a walk must not enter: see [`Walk::skipping`].
+type Skip<'a> = Box<dyn Fn(&Path) -> bool + 'a>;
+
+/// What a walk does with a directory it cannot read.
+enum OnError {
+    /// Fail the whole walk.
+    Fail,
+    /// End that branch and keep going.
+    Prune,
+}
+
+/// The result of a [`Walk`].
+#[derive(Debug, Default)]
+pub struct Tree {
+    /// Every file found, parents before children.
+    pub files: Vec<PathBuf>,
+    /// Every directory entered except the root, children before parents, so
+    /// removing them in order drops a parent only after its contents.
+    pub dirs: Vec<PathBuf>,
+}
+
+impl<'a> Walk<'a> {
+    pub fn new(root: &'a Path) -> Self {
+        Self { root, skip: None }
+    }
+
+    /// Do not enter directories for which `skip` holds, nor list their
+    /// contents: a subtree owned by another stage, or one that escapes the tree
+    /// being walked. Skipped directories are absent from the result entirely.
+    #[must_use]
+    pub fn skipping(mut self, skip: impl Fn(&Path) -> bool + 'a) -> Self {
+        self.skip = Some(Box::new(skip));
+        self
+    }
+
+    /// Walk the tree, failing if any directory cannot be read.
+    pub fn tree(&self) -> Result<Tree> {
+        self.collect(OnError::Fail)
+    }
+
+    /// Every file under the root.
+    pub fn files(&self) -> Result<Vec<PathBuf>> {
+        Ok(self.tree()?.files)
+    }
+
+    /// Walk best-effort: an unreadable directory contributes nothing instead of
+    /// failing the walk. For callers whose result is advisory (a fingerprint of
+    /// whatever is readable) rather than an output the build depends on.
+    pub fn lossy(&self) -> Tree {
+        self.collect(OnError::Prune).unwrap_or_default()
+    }
+
+    fn collect(&self, on_error: OnError) -> Result<Tree> {
+        let mut tree = Tree::default();
+        let mut seen = BTreeSet::from([canonical(self.root)]);
+        self.descend(self.root, &on_error, &mut seen, &mut tree)?;
+        Ok(tree)
+    }
+
+    fn descend(
+        &self,
+        dir: &Path,
+        on_error: &OnError,
+        seen: &mut BTreeSet<PathBuf>,
+        tree: &mut Tree,
+    ) -> Result<()> {
+        let entries = match (read_dir(dir), on_error) {
+            (Ok(entries), _) => entries,
+            (Err(e), OnError::Fail) => return Err(e),
+            (Err(_), OnError::Prune) => return Ok(()),
+        };
+        for path in entries {
+            if !path.is_dir() {
+                tree.files.push(path);
+            } else if self.enters(&path, seen) {
+                self.descend(&path, on_error, seen, tree)?;
+                tree.dirs.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether to descend into `dir`: not skipped, and not already visited by
+    /// canonical path (the cycle guard).
+    fn enters(&self, dir: &Path, seen: &mut BTreeSet<PathBuf>) -> bool {
+        !self.skip.as_ref().is_some_and(|skip| skip(dir)) && seen.insert(canonical(dir))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
+    /// A symlinked directory pointing at an ancestor used to recurse until the
+    /// stack overflowed, which release builds report as a bare SIGSEGV.
+    #[test]
+    #[cfg(unix)]
+    fn walk_terminates_on_a_symlink_cycle() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("content");
+        super::create_dir_all(root.join("posts")).unwrap();
+        super::write(root.join("posts/a.typ"), "").unwrap();
+        std::os::unix::fs::symlink(&root, root.join("posts/loop")).unwrap();
+
+        let files = super::Walk::new(&root).files().unwrap();
+
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert!(files[0].ends_with("posts/a.typ"), "{files:?}");
+    }
+
+    /// A skipped directory is neither entered nor reported, so a caller that
+    /// deletes what the walk returns cannot reach into it.
+    #[test]
+    fn walk_omits_skipped_subtrees() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        super::create_dir_all(root.join("keep")).unwrap();
+        super::create_dir_all(root.join("skip/nested")).unwrap();
+        super::write(root.join("keep/a.html"), "").unwrap();
+        super::write(root.join("skip/nested/b.html"), "").unwrap();
+
+        let tree = super::Walk::new(root)
+            .skipping(|dir: &Path| dir.ends_with("skip"))
+            .tree()
+            .unwrap();
+
+        assert_eq!(tree.files, [root.join("keep/a.html")]);
+        assert_eq!(tree.dirs, [root.join("keep")]);
+    }
+
+    /// Directories come back deepest-first, so removing them in order drops a
+    /// parent only once its children are gone.
+    #[test]
+    fn walk_reports_directories_children_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        super::create_dir_all(root.join("a/b/c")).unwrap();
+
+        let tree = super::Walk::new(root).tree().unwrap();
+
+        assert_eq!(
+            tree.dirs,
+            [root.join("a/b/c"), root.join("a/b"), root.join("a")]
+        );
+    }
+
+    #[test]
+    fn read_dir_returns_entries_sorted() {
+        let dir = std::env::temp_dir().join("baudelaire-read-dir-sorted");
+        let _ = std::fs::remove_dir_all(&dir);
+        super::create_dir_all(&dir).unwrap();
+        for name in ["c.typ", "a.typ", "b.typ"] {
+            super::write(dir.join(name), "").unwrap();
+        }
+
+        let entries = super::read_dir(&dir).unwrap();
+        let names: Vec<_> = entries
+            .iter()
+            .filter_map(|p| p.file_name()?.to_str())
+            .collect();
+        assert_eq!(names, ["a.typ", "b.typ", "c.typ"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn error_names_the_path_and_operation() {
         let err = super::read_to_string("does/not/exist.typ").unwrap_err();
