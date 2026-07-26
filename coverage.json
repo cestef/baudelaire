@@ -1,5 +1,5 @@
 {
- "commit": "d163b19e95f8e099099fd19f8803001cff15f050",
+ "commit": "42d4468bafe05233eed840c2569cd190358f1332",
  "covered": 5479,
  "files": {
   "src/announce/mod.rs": [
@@ -430,5 +430,5 @@
  "percent": 82.24,
  "schema": 1,
  "total": 6662,
- "updated": "2026-07-26T15:43:50+00:00"
+ "updated": "2026-07-26T15:51:28+00:00"
 }
