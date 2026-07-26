@@ -28,9 +28,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
       - name: mold linker
-        uses: cestef/actions/mold@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
         with:
           rustflags: "false"
 
@@ -54,7 +54,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test
-        uses: cestef/actions/nextest@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/nextest@935daef118fec7424a279746b70b3dcfe99da54e
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -88,11 +88,11 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
         with:
           targets: ${{ matrix.target }}
       - name: mold linker
-        uses: cestef/actions/mold@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
@@ -100,12 +100,12 @@ jobs:
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
       - name: musl toolchain
-        uses: cestef/actions/musl@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/musl@935daef118fec7424a279746b70b3dcfe99da54e
         if: matrix.musl
 
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/cargo-cache@935daef118fec7424a279746b70b3dcfe99da54e
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -145,7 +145,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/cargo-cache@935daef118fec7424a279746b70b3dcfe99da54e
         if: always()
         with:
           mode: save
@@ -287,12 +287,12 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
       # RUSTFLAGS carries `-fuse-ld=mold` for every job, so this one needs mold
       # too: without it `cc` fails with "cannot find 'ld'" during the verify
       # build, after the registry token has already been issued.
       - name: mold linker
-        uses: cestef/actions/mold@422d6bed78275189e5891cce0b83e6c0d6c05201
+        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
         with:
           rustflags: "false"
 
