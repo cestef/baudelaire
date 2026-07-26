@@ -45,19 +45,19 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
       - name: mold linker
-        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       # Restore the crate registry, so a warm run downloads no crates.
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
       # Restore target/ (dep rlibs, build-script outputs, fingerprint DB).
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           prefix: target-cache
           toolchain-key: "true"
@@ -80,7 +80,8 @@ jobs:
           done
 
       - name: test
-        uses: cestef/actions/nextest@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        id: test
+        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -91,13 +92,13 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test (slim)
-        uses: cestef/actions/nextest@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           run: "true"
           args: --workspace --no-default-features --no-tests warn
 
       - name: memory diagnostics
-        uses: cestef/actions/mem-diagnostics@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mem-diagnostics@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: failure()
 
       # Facts worth publishing, read from what this job already has to hand.
@@ -108,20 +109,24 @@ jobs:
           {
             echo "typst=$(grep -m1 'typst = {' Cargo.toml | sed -n 's/.*version = "\([^"]*\)".*/\1/p')"
             echo "msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
-            echo "tests=$(cargo nextest list --workspace 2>/dev/null | grep -cE '^ +[a-z_0-9:]+')"
           } >> "$GITHUB_OUTPUT"
 
+      # `always()` so a failing suite still publishes: a red badge showing
+      # 490/493 is the whole point of tracking a ratio.
       - name: badge (tests)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        if: always()
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: tests
-          value: ${{ steps.facts.outputs.tests }} passing
-          color: "#3fb950"
+          value: ${{ steps.test.outputs.passed }}/${{ steps.test.outputs.total }} passing
+          percent: ${{ steps.test.outputs.percent }}
+          # Green only at a clean sweep; any failure at all reads red.
+          thresholds: "100:#3fb950,0:#e5534b"
           file: tests.svg
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (typst)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: typst
           value: ${{ steps.facts.outputs.typst }}
@@ -130,7 +135,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (msrv)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: rust
           value: ${{ steps.facts.outputs.msrv }}+
@@ -141,12 +146,12 @@ jobs:
       # Only on a miss: the key is immutable, so saving over an exact hit is
       # gigabytes of tar for a reservation that is guaranteed to be refused.
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: always() && steps.registry.outputs.hit != 'true'
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: always() && steps.build-cache.outputs.hit != 'true'
         with:
           mode: save
@@ -171,16 +176,16 @@ jobs:
 
       # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
       - name: rust toolchain
-        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           components: llvm-tools-preview
       - name: mold linker
-        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
 
       # No target/ cache here on purpose. The instrumented tree was 6.2 GB of a
       # 10 GB repo-wide budget, so it evicted the caches that do pay for
@@ -193,7 +198,7 @@ jobs:
       # ever changes.
       - name: coverage
         id: cov
-        uses: cestef/actions/tarpaulin@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/tarpaulin@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           args: --workspace --exclude-files benches/* --engine llvm
           out: Stdout Xml
@@ -202,7 +207,7 @@ jobs:
       # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
       # below main's, minus a small tolerance.
       - name: coverage report
-        uses: cestef/actions/coverage-report@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/coverage-report@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}

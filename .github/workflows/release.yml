@@ -28,9 +28,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
       - name: mold linker
-        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           rustflags: "false"
 
@@ -54,7 +54,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test
-        uses: cestef/actions/nextest@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -88,11 +88,11 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           targets: ${{ matrix.target }}
       - name: mold linker
-        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
@@ -100,12 +100,12 @@ jobs:
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
       - name: musl toolchain
-        uses: cestef/actions/musl@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/musl@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: matrix.musl
 
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -145,7 +145,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: always()
         with:
           mode: save
@@ -278,7 +278,7 @@ jobs:
           fi
 
       - name: badge (binary size)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: binary
           value: ${{ steps.notes.outputs.size_full }}
@@ -287,7 +287,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (binary size, slim)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: binary (slim)
           value: ${{ steps.notes.outputs.size_slim }}
@@ -296,7 +296,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (crates.io)
-        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           label: crates.io
           value: v${{ steps.notes.outputs.version }}
@@ -323,12 +323,12 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
       # RUSTFLAGS carries `-fuse-ld=mold` for every job, so this one needs mold
       # too: without it `cc` fails with "cannot find 'ld'" during the verify
       # build, after the registry token has already been issued.
       - name: mold linker
-        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           rustflags: "false"
 
