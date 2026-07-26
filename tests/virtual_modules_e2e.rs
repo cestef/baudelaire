@@ -12,19 +12,10 @@ fn fingerprint(bytes: &[u8]) -> String {
     Hash::of_bytes(bytes).hex()[..16].to_owned()
 }
 
-fn build(site: &Site) {
-    let out = site.run(&["build"]);
-    assert!(
-        out.status.success(),
-        "build failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 /// Build `site` (fingerprinting off) and return its bundled entry, read at its
 /// stable name.
 fn bundle(site: &Site) -> String {
-    build(site);
+    site.stats();
     site.read("public/assets/main.js")
 }
 
@@ -82,7 +73,7 @@ fn assets_module_resolves_fingerprinted_urls() {
         "import { url } from \"baudelaire:assets\";\nglobalThis.L = url(\"/assets/logo.svg\");\n",
     );
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx");
-    build(&site);
+    site.stats();
     // The logo's fingerprinted name is derived from its bytes, not discovered
     // by scanning the output directory.
     let hashed = format!("logo.{}.svg", fingerprint(logo));
@@ -214,7 +205,7 @@ fn a_typescript_entry_is_served_as_javascript() {
         "assets/main.ts",
         "const greet: string = \"hi\";\nexport { greet };\n",
     );
-    build(&site);
+    site.stats();
 
     assert!(
         site.exists("public/assets/main.js"),
@@ -239,7 +230,7 @@ fn a_dynamic_import_lands_in_the_entry() {
         "assets/main.js",
         "import(\"./_lazy.js\").then((m) => console.log(m.answer));\n",
     );
-    build(&site);
+    site.stats();
 
     let served = site.files("public/assets");
     assert_eq!(
@@ -265,7 +256,7 @@ fn a_renamed_entry_resolves_under_both_names() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\n#html.elem(\"script\", attrs: (src: \"/assets/main.ts\", type: \"module\"))[]\n#html.elem(\"script\", attrs: (src: \"/assets/main.js\", type: \"module\"))[]\n",
     );
-    build(&site);
+    site.stats();
 
     let served = site
         .files("public/assets")

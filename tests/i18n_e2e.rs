@@ -43,7 +43,7 @@ fn multilingual() -> Site {
 #[test]
 fn default_language_stays_at_the_root() {
     let site = multilingual();
-    site.build();
+    site.stats();
     assert!(site.exists("public/index.html"));
     assert!(site.exists("public/posts/hello/index.html"));
 }
@@ -51,7 +51,7 @@ fn default_language_stays_at_the_root() {
 #[test]
 fn other_languages_are_prefixed_by_code() {
     let site = multilingual();
-    site.build();
+    site.stats();
     assert!(site.exists("public/fr/index.html"));
     assert!(site.exists("public/fr/posts/hello/index.html"));
 }
@@ -60,7 +60,7 @@ fn other_languages_are_prefixed_by_code() {
 fn untranslated_pages_are_omitted() {
     // German is declared but has no content, so nothing builds under /de/.
     let site = multilingual();
-    site.build();
+    site.stats();
     assert!(!site.exists("public/de/index.html"));
     assert!(!site.exists("public/de/posts/hello/index.html"));
 }
@@ -77,7 +77,7 @@ fn frontmatter_lang_overrides_the_filename() {
         "content/about-de.typ",
         "#let frontmatter = (title: \"Über\", slug: \"about\", lang: \"de\",)\nÜber.\n",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/about/index.html"));
     assert!(site.exists("public/de/about/index.html"));
 }
@@ -89,13 +89,8 @@ fn unknown_language_is_rejected() {
         "content/bad.typ",
         "#let frontmatter = (title: \"Bad\", lang: \"xx\",)\n",
     );
-    let out = site.run(&["build"]);
-    assert!(
-        !out.status.success(),
-        "build should reject an unknown language"
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("unknown language"), "{stderr}");
+    let err = site.build_error().to_string();
+    assert!(err.contains("unknown language"), "{err}");
 }
 
 /// A site with a paginated, tagged blog in two languages.
@@ -133,7 +128,7 @@ fn tagged_blog() -> Site {
 #[test]
 fn taxonomies_do_not_merge_across_languages() {
     let site = tagged_blog();
-    site.build();
+    site.stats();
     // Each language gets its own tag pages; the term is never merged.
     assert!(site.exists("public/tags/rust/index.html"));
     assert!(site.exists("public/fr/tags/rust/index.html"));
@@ -143,7 +138,7 @@ fn taxonomies_do_not_merge_across_languages() {
 #[test]
 fn pagination_is_per_language() {
     let site = tagged_blog();
-    site.build();
+    site.stats();
     // English has two posts at paginate=1 -> page 1 + page 2; French has one.
     assert!(site.exists("public/blog/index.html"));
     assert!(site.exists("public/blog/page/2/index.html"));
@@ -185,7 +180,7 @@ fn hosted() -> Site {
 #[test]
 fn feeds_are_emitted_per_language() {
     let site = hosted();
-    site.build();
+    site.stats();
     assert!(site.exists("public/rss.xml"));
     assert!(site.exists("public/fr/rss.xml"));
 }
@@ -193,7 +188,7 @@ fn feeds_are_emitted_per_language() {
 #[test]
 fn html_lang_reflects_the_page_language() {
     let site = hosted();
-    site.build();
+    site.stats();
     assert!(site.output("index.html").contains("lang=\"en\""));
     assert!(site.output("fr/index.html").contains("lang=\"fr\""));
 }
@@ -201,7 +196,7 @@ fn html_lang_reflects_the_page_language() {
 #[test]
 fn hreflang_alternates_link_the_translations() {
     let site = hosted();
-    site.build();
+    site.stats();
     let en = site.output("index.html");
     // Both editions plus an x-default, on the page and in the sitemap.
     assert!(en.contains("hreflang=\"en\"") && en.contains("hreflang=\"fr\""));
@@ -232,7 +227,7 @@ fn template_receives_lang_translations_and_strings() {
             "#let frontmatter = (title: \"H\", template: \"layout.typ\")\nx\n",
         );
     }
-    site.build();
+    site.stats();
     assert!(site.output("index.html").contains("L=en"));
     let fr = site.output("fr/index.html");
     assert!(fr.contains("L=fr") && fr.contains("S=Lire") && fr.contains("T=2"));
@@ -260,7 +255,7 @@ fn i18n_module_inlines_languages_and_strings() {
         "assets/main.js",
         "import { languages, strings } from \"baudelaire:i18n\";\nglobalThis.x = { languages, strings };\n",
     );
-    site.build();
+    site.stats();
     let bundle = site
         .files("public/assets")
         .into_iter()
@@ -284,7 +279,7 @@ fn an_undeclared_suffix_is_part_of_the_slug() {
         "content/notes.fr.typ",
         "#let frontmatter = (title: \"Notes\",)\nPlain.\n",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/notes-fr/index.html"));
     assert!(!site.exists("public/fr/notes/index.html"));
 }
@@ -317,7 +312,7 @@ fn feeds_and_search_are_per_language() {
         "content/posts/hello.fr.typ",
         "#let frontmatter = (title: \"Bonjour\", slug: \"hello\", date: datetime(year: 2024, month: 1, day: 2),)\nSalut.\n",
     );
-    site.build();
+    site.stats();
 
     // Distinct Atom feed ids, each naming its own feed.
     let en = site.output("atom.xml");
@@ -379,7 +374,7 @@ fn generated_listings_are_translated_and_localized() {
         "content/posts/a.fr.typ",
         "#let frontmatter = (title: \"A fr\", tags: (\"rust\",),)\nA fr.\n",
     );
-    site.build();
+    site.stats();
 
     // The sitemap pairs the two taxonomy indexes as alternates.
     let map = site.output("sitemap.xml");
@@ -405,7 +400,7 @@ fn typ_links_resolve_to_the_linking_page_s_language() {
         "content/posts/linker.fr.typ",
         "#let frontmatter = (title: \"Lieur\",)\n#link(\"hello.typ\")[aller]\n",
     );
-    site.build();
+    site.stats();
 
     assert!(
         site.output("posts/linker/index.html")
@@ -428,7 +423,7 @@ fn unicode_names_survive_slugging() {
         "content/posts/café.typ",
         "#let frontmatter = (title: \"Café\", tags: (\"日本語\",),)\n= Ünïcödé heading\n",
     );
-    site.build();
+    site.stats();
 
     assert!(
         site.exists("public/posts/café/index.html"),

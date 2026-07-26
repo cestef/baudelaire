@@ -1,7 +1,7 @@
 # Baudelaire 
 
 <p align="center">
-    <img src="https://pub-5363e10fff4a4996aefc53c255177c80.r2.dev/coverage.svg"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/coverage.svg" alt="coverage"/>
 </p>
 
 A static site generator where everything is just [Typst](https://typst.app).
@@ -27,7 +27,7 @@ tarball, so it catches a corrupted or truncated download; it is not a signature.
 ```sh
 cargo binstall baudelaire     # prebuilt tarball, no compile
 cargo install baudelaire      # build from crates.io
-cargo install --git https://codeberg.org/cstef/baudelaire   # build from git
+cargo install --git https://github.com/cestef/baudelaire   # build from git
 ```
 
 ## Quickstart

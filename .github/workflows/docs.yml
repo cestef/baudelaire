@@ -1,0 +1,80 @@
+# First-party actions are pinned to a commit, not `@github`: the deploy step
+# runs with this repo's Cloudflare API token, so a push to the actions repo
+# would otherwise change what runs with that secret. Bump with:
+#   git ls-remote https://github.com/cestef/actions github
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "install.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 0
+  RUSTFLAGS: -C link-arg=-fuse-ld=mold
+
+jobs:
+  # The docs site is built by this repo's own binary, and this workflow fires on
+  # any `src/**` push, so without a gate a commit that fails CI still shipped a
+  # site built from it.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          rustflags: "false"
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - uses: cestef/actions/nextest@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          run: "true"
+          args: --workspace --no-tests warn
+
+  ship:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: cestef/actions/sccache@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+
+      - name: build baudelaire
+        run: cargo build
+
+      - name: build docs site
+        working-directory: docs
+        run: ../target/debug/baudelaire build
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        if: always()
+        with:
+          mode: save
+
+      - uses: cestef/actions/wrangler@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          command: pages deploy public --project-name=baudelaire --branch=main
+          working-directory: docs
+          api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

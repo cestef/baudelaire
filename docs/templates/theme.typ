@@ -189,7 +189,7 @@
   meta.push(html.elem("span")[Typst #sys.version])
   if git != none {
     let short = git.hash.slice(0, 7)
-    meta.push(html.elem("span")[commit #html.a(href: "https://codeberg.org/cstef/baudelaire/commit/"+git.hash)[#html.code[#short]]])
+    meta.push(html.elem("span")[commit #html.a(href: "https://github.com/cestef/baudelaire/commit/"+git.hash)[#html.code[#short]]])
   }
 
   html.elem("footer", attrs: (class: "site-footer"))[

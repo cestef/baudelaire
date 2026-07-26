@@ -35,20 +35,6 @@ pub enum HookError {
         source: std::io::Error,
     },
 
-    /// The working directory could not be resolved, so hooks have nowhere to
-    /// run. Surfaced instead of spawning in an empty path, which would produce
-    /// a baffling error from the shell.
-    #[error("could not resolve the working directory for {phase}-build hooks")]
-    #[diagnostic(
-        code(baudelaire::hook::cwd),
-        help("the current directory may have been removed or is inaccessible")
-    )]
-    Cwd {
-        phase: Phase,
-        #[source]
-        source: std::io::Error,
-    },
-
     /// The command ran but exited non-zero. Its output already streamed to the
     /// terminal, so the diagnostic only needs to name the failure.
     #[error("{phase}-build hook `{command}` failed ({status})")]
@@ -61,10 +47,6 @@ pub enum HookError {
 }
 
 impl HookError {
-    pub fn cwd(phase: Phase, source: std::io::Error) -> Self {
-        Self::Cwd { phase, source }
-    }
-
     pub fn spawn(phase: Phase, command: impl Into<String>, source: std::io::Error) -> Self {
         Self::Spawn {
             phase,

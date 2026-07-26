@@ -1,0 +1,150 @@
+# First-party actions are pinned to a commit, not `@github`: the coverage job
+# hands one a token with write access to this repo, so a push to the actions
+# repo would otherwise change what runs with it. Bump with:
+#   git ls-remote https://github.com/cestef/actions github
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
+  RUST_BACKTRACE: 1
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: cestef/actions/sccache@6fddb45986f1cd76136a2625625fad533633c347
+      # Restore the crate registry (sccache caches compiler output, not downloads).
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+      # Restore target/ (dep rlibs, build-script outputs, fingerprint DB; not sccache's).
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          prefix: target-cache
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+      # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
+      - name: fmt
+        run: cargo fmt --all --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # End-to-end tests shell out to these; a missing one looks like a product
+      # bug rather than a missing tool.
+      - name: test prerequisites
+        run: |
+          for tool in curl base64 git; do
+            command -v "$tool" >/dev/null || { echo "$tool is required"; exit 1; }
+          done
+
+      - uses: cestef/actions/nextest@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          run: "true"
+          args: --workspace --no-tests warn
+
+      # The `slim` flavour ships for every target but nothing else builds it, so
+      # a feature-gated break stayed invisible until a tag was pushed.
+      - name: clippy (slim)
+        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+
+      - uses: cestef/actions/nextest@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          run: "true"
+          args: --workspace --no-default-features --no-tests warn
+
+      - uses: cestef/actions/mem-diagnostics@6fddb45986f1cd76136a2625625fad533633c347
+        if: failure()
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Persist any newly downloaded crates (immutable key: skips if unchanged).
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        if: always()
+        with:
+          mode: save
+      # Persist target/ (immutable per Cargo.lock + rustc: skips if unchanged).
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        if: always()
+        with:
+          mode: save
+          prefix: target-cache
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+  coverage:
+    runs-on: ubuntu-latest
+    # `contents` to push the badge branch, `pull-requests` to comment.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
+      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          components: llvm-tools-preview
+      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+      # Separate target/ cache: instrumented artifacts don't match the check job's.
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          prefix: target-cache-cov
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+      # Coverage recompiles with instrumentation, so it doesn't share sccache's
+      # entries. The LLVM engine avoids ptrace/ASLR and is the faster of the two.
+      - id: cov
+        uses: cestef/actions/tarpaulin@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          args: --workspace --exclude-files benches/* --engine llvm
+          out: Stdout Xml
+
+      # Publish the badge and baseline to the `badges` branch (default branch
+      # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
+      # below main's, minus a small tolerance.
+      - uses: cestef/actions/coverage-report@6fddb45986f1cd76136a2625625fad533633c347
+        with:
+          file: cobertura.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ratchet: "true"
+          badge-label: baudelaire cov
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: cobertura.xml
+
+      # Persist the instrumented target/ (immutable per Cargo.lock + rustc).
+      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+        if: always()
+        with:
+          mode: save
+          prefix: target-cache-cov
+          toolchain-key: "true"
+          base: "."
+          paths: target

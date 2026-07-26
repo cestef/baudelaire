@@ -12,9 +12,7 @@ mod common;
 
 use std::fs;
 
-use common::Site;
-
-const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
+use common::{CONFIG, Site};
 
 #[test]
 fn second_build_reuses_all_pages() {
@@ -168,13 +166,14 @@ fn shared_module_tracked_for_every_page() {
         "content/posts/y.typ",
         "#let frontmatter = (title: \"Y\",)\n#import \"/shared.typ\": v\n#v",
     );
-    site.build();
+    site.stats();
     assert!(site.output("posts/x/index.html").contains("V1"));
     assert!(site.output("posts/y/index.html").contains("V1"));
 
     site.write("shared.typ", "#let v = \"V2\"");
-    site.build();
+    let stats = site.stats();
 
+    assert_eq!(stats.cached, 0, "neither page may be served from cache");
     assert!(
         site.output("posts/x/index.html").contains("V2"),
         "x not invalidated by shared module change"
@@ -233,12 +232,13 @@ fn generated_pages_are_cached() {
         "#let frontmatter = (title: \"B\", tags: (\"x\",),)\nbeta",
     );
 
-    site.build();
-    let second = site.build();
+    site.stats();
+    let second = site.stats();
     // 2 posts + tags/index + tags/x = 4 pages, all served from cache.
-    assert!(
-        second.contains("4 cached"),
-        "generated pages must be cached on an unchanged rebuild: {second}"
+    assert_eq!(
+        (second.pages, second.cached),
+        (4, 4),
+        "generated pages must be cached on an unchanged rebuild"
     );
 }
 
@@ -260,13 +260,13 @@ fn retitling_invalidates_taxonomy_listing() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", tags: (\"x\",),)\nbeta",
     );
-    site.build();
+    site.stats();
 
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"AA\", tags: (\"x\",),)\nalpha",
     );
-    let out = site.build();
+    let stats = site.stats();
 
     assert!(
         site.output("tags/x/index.html").contains("AA"),
@@ -276,7 +276,7 @@ fn retitling_invalidates_taxonomy_listing() {
     // source: the page can render its own metadata) and so does the tags/x
     // listing that embeds the title. tags/index shows unchanged per-term counts
     // and stays cached; page b is untouched.
-    assert!(out.contains("2 cached"), "expected 2 cached: {out}");
+    assert_eq!((stats.pages, stats.cached), (4, 2));
 }
 
 #[test]
@@ -293,7 +293,7 @@ fn changing_a_slug_updates_links_from_cached_pages() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", slug: \"b\",)\nbeta",
     );
-    site.build();
+    site.stats();
     assert!(
         site.output("posts/a/index.html").contains("/posts/b/"),
         "a's link should resolve to b's permalink"
@@ -304,7 +304,7 @@ fn changing_a_slug_updates_links_from_cached_pages() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", slug: \"bee\",)\nbeta",
     );
-    site.build();
+    site.stats();
 
     let a = site.output("posts/a/index.html");
     assert!(
@@ -331,7 +331,7 @@ fn editing_an_embedded_asset_invalidates_the_page() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\n#html.elem(\"img\", attrs: (src: \"/assets/note.svg\"))",
     );
-    site.build();
+    site.stats();
     let first = site.output("posts/a/index.html");
     assert!(
         first.contains("data:image/svg"),
@@ -339,11 +339,11 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     );
 
     site.write("assets/note.svg", "<svg>TWO</svg>");
-    let out = site.build();
+    let stats = site.stats();
 
-    assert!(
-        !out.contains("1 cached"),
-        "page must rebuild when its embedded asset changes: {out}"
+    assert_eq!(
+        stats.cached, 0,
+        "page must rebuild when its embedded asset changes"
     );
     // The freshly inlined bytes differ from the original.
     assert_ne!(
@@ -363,14 +363,14 @@ fn discovery_cache_persisted_and_reused() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\", summary: \"hello\",)\nalpha",
     );
-    site.build();
+    site.stats();
     assert!(
         site.exists(".baudelaire/cache/discovery.json"),
         "discovery manifest should be written"
     );
 
     let before = site.output("posts/a/index.html");
-    site.build();
+    site.stats();
     // Frontmatter served from the discovery cache: output is unchanged.
     assert_eq!(before, site.output("posts/a/index.html"));
 }
@@ -390,12 +390,12 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
         "content/posts/a.typ",
         "#import \"/titles.typ\": title\n#let frontmatter = (title: title,)\nbody",
     );
-    site.build();
+    site.stats();
     assert!(site.output("posts/a/index.html").contains("FIRST"));
 
     // Change only the imported module the frontmatter reads from.
     site.write("titles.typ", "#let title = \"SECOND\"");
-    site.build();
+    site.stats();
     assert!(
         site.output("posts/a/index.html").contains("SECOND"),
         "frontmatter dependency change did not propagate: the import was not \
@@ -442,7 +442,7 @@ fn a_corrupt_blob_is_rewritten_not_missed_forever() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nalpha",
     );
-    site.build();
+    site.stats();
 
     // Corrupt the one stored blob, leaving its content-addressed name intact.
     let objects = site.path(".baudelaire/cache/objects");
@@ -460,17 +460,11 @@ fn a_corrupt_blob_is_rewritten_not_missed_forever() {
         .path();
     fs::write(&blob, "<html>tampered</html>").unwrap();
 
-    let repaired = site.build();
-    assert!(
-        !repaired.contains("1 cached"),
-        "a corrupt blob must be a miss: {repaired}"
-    );
+    let repaired = site.stats();
+    assert_eq!(repaired.cached, 0, "a corrupt blob must be a miss");
 
-    let healed = site.build();
-    assert!(
-        healed.contains("1 cached"),
-        "the rebuild did not repair the blob: {healed}"
-    );
+    let healed = site.stats();
+    assert_eq!(healed.cached, 1, "the rebuild did not repair the blob");
     assert!(site.output("posts/a/index.html").contains("alpha"));
 }
 
@@ -537,7 +531,7 @@ fn a_page_reading_the_clock_records_the_date_as_a_dependency() {
         "content/posts/plain.typ",
         "#let frontmatter = (title: \"P\",)\nno clock here",
     );
-    site.build();
+    site.stats();
 
     let manifest = site.read(".baudelaire/cache/manifest.json");
     let entries: serde_json::Value = serde_json::from_str(&manifest).expect("manifest parses");
@@ -601,12 +595,12 @@ fn deleted_page_is_pruned_from_dist() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\",)\nbeta",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/posts/b/index.html"));
 
     // Remove one source and rebuild: its output must not linger.
     fs::remove_file(site.path("content/posts/b.typ")).unwrap();
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/posts/a/index.html"),
         "surviving page was wrongly pruned"
@@ -626,7 +620,7 @@ fn renamed_page_prunes_the_old_permalink() {
         "content/posts/old.typ",
         "#let frontmatter = (title: \"P\",)\nbody",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/posts/old/index.html"));
 
     // Rename the source (slug -> permalink), which moves the output.
@@ -635,7 +629,7 @@ fn renamed_page_prunes_the_old_permalink() {
         site.path("content/posts/new.typ"),
     )
     .unwrap();
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/posts/new/index.html"),
         "renamed page's new output missing"
@@ -656,7 +650,7 @@ fn dropped_taxonomy_term_prunes_its_index() {
         "content/a.typ",
         "#let frontmatter = (title: \"A\", tags: (\"keep\", \"drop\"))\nhi",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/tags/keep/index.html"));
     assert!(site.exists("public/tags/drop/index.html"));
 
@@ -665,7 +659,7 @@ fn dropped_taxonomy_term_prunes_its_index() {
         "content/a.typ",
         "#let frontmatter = (title: \"A\", tags: (\"keep\",))\nhi",
     );
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/tags/keep/index.html"),
         "surviving term wrongly pruned"
@@ -687,7 +681,7 @@ fn changed_site_url_refreshes_canonical_on_rebuild() {
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nalpha",
     );
-    site.build();
+    site.stats();
     assert!(
         site.output("posts/a/index.html")
             .contains("https://one.example/posts/a/"),
@@ -698,7 +692,7 @@ fn changed_site_url_refreshes_canonical_on_rebuild() {
         "config.kdl",
         &format!("{base}url \"https://two.example\"\n"),
     );
-    site.build();
+    site.stats();
     let html = site.output("posts/a/index.html");
     assert!(
         html.contains("https://two.example/posts/a/"),
@@ -719,7 +713,7 @@ fn pruning_spares_assets_and_static_files() {
     );
     site.write("assets/app.css", "body{color:red}");
     site.write("static/CNAME", "example.com");
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/CNAME"),
         "static file missing after build"
@@ -727,7 +721,7 @@ fn pruning_spares_assets_and_static_files() {
     assert!(!site.files("public/assets").is_empty(), "asset missing");
 
     // A no-op rebuild must not sweep away the asset tree or static passthrough.
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/CNAME"),
         "static passthrough wrongly pruned"
@@ -752,11 +746,11 @@ fn clean_false_disables_pruning() {
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\",)\nbeta",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/posts/b/index.html"));
 
     fs::remove_file(site.path("content/posts/b.typ")).unwrap();
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/posts/b/index.html"),
         "clean #false must leave orphaned outputs in place"
@@ -773,7 +767,7 @@ fn flat_urls_still_prune_on_rename() {
         "content/posts/old.typ",
         "#let frontmatter = (title: \"P\",)\nbody",
     );
-    site.build();
+    site.stats();
     assert!(site.exists("public/posts/old.html"));
 
     fs::rename(
@@ -781,7 +775,7 @@ fn flat_urls_still_prune_on_rename() {
         site.path("content/posts/new.typ"),
     )
     .unwrap();
-    site.build();
+    site.stats();
     assert!(
         site.exists("public/posts/new.html"),
         "new flat output missing"
@@ -831,7 +825,7 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
         "#let frontmatter = (title: \"P\",)\njust text",
     );
 
-    site.build();
+    site.stats();
     let reader_before = site.output("reader/index.html");
     assert!(
         !reader_before.contains("none"),
@@ -839,20 +833,22 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
     );
 
     // Unchanged rebuild: both pages served from cache.
-    let unchanged = site.build();
-    assert!(
-        unchanged.contains("2 cached"),
-        "an unchanged rebuild must reuse both pages: {unchanged}"
+    let unchanged = site.stats();
+    assert_eq!(
+        (unchanged.pages, unchanged.cached),
+        (2, 2),
+        "an unchanged rebuild must reuse both pages"
     );
 
     // A new commit changes only git.hash: no page source touched.
     git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
-    let after = site.build();
+    let after = site.stats();
 
     // The reader rebuilt (its value changed); the plain page stayed cached.
-    assert!(
-        after.contains("1 cached"),
-        "exactly the metadata reader should rebuild: {after}"
+    assert_eq!(
+        (after.pages, after.cached),
+        (2, 1),
+        "exactly the metadata reader should rebuild"
     );
     assert_ne!(
         reader_before,
@@ -878,7 +874,7 @@ fn a_nested_content_dir_keeps_the_cache_portable() {
         "src/content/posts/a.typ",
         "#let frontmatter = (title: \"A\", template: \"post.typ\",)\nalpha",
     );
-    site.build();
+    site.stats();
 
     let manifest = site.read(".baudelaire/cache/manifest.json");
     assert!(

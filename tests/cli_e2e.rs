@@ -1,13 +1,8 @@
 mod common;
 
 use baudelaire::content::discover;
-use baudelaire::world::{Mode, Project};
-/// A [`Project`] for a test config: module evaluation needs the real world.
-fn project(cfg: &baudelaire::config::Config) -> Project {
-    Project::new(cfg, Mode::Build).expect("project")
-}
 
-use common::{Site, free_port, wait_for_port};
+use common::{Site, free_port, project, wait_for_port};
 
 #[test]
 fn root_flag_builds_from_that_directory() {

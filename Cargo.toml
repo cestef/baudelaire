@@ -6,7 +6,7 @@ rust-version = "1.95"
 description = "A Typst-native static site generator: write pages in Typst, get incremental builds, live reload, feeds, search, taxonomies, and an asset pipeline."
 authors = ["cstef <root@cstef.dev>"]
 license = "MIT OR Apache-2.0"
-repository = "https://codeberg.org/cstef/baudelaire"
+repository = "https://github.com/cestef/baudelaire"
 homepage = "https://baudelaire.cstef.dev"
 documentation = "https://baudelaire.cstef.dev"
 readme = "README.md"
@@ -14,7 +14,7 @@ keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = [
     "/docs",
-    "/.forgejo",
+    "/.github",
     "/public",
     "/.jj",
     "/.claude",
@@ -24,7 +24,7 @@ exclude = [
 ]
 
 # Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
-# target to its codeberg tarball. Falls back to a source build otherwise.
+# target to its GitHub release tarball. Falls back to a source build otherwise.
 [package.metadata.binstall]
 # The default never matched a real asset: `{ target-family }` renders `unix`,
 # and the `v` prefix was missing, so every target fell through to a source

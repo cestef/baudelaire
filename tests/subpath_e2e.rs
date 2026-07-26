@@ -39,7 +39,7 @@ fn subsite() -> Site {
 #[test]
 fn on_page_urls_shift_under_the_base_path() {
     let site = subsite();
-    site.build();
+    site.stats();
     let html = site.output("posts/hello/index.html");
 
     // Internal `.typ` link and a raw absolute link both gain the prefix.
@@ -56,7 +56,7 @@ fn on_page_urls_shift_under_the_base_path() {
 #[test]
 fn disk_layout_is_unprefixed() {
     let site = subsite();
-    site.build();
+    site.stats();
     // Files land at their canonical path, never under a `docs/` directory.
     assert!(site.exists("public/posts/hello/index.html"));
     assert!(!site.exists("public/docs"));
@@ -65,7 +65,7 @@ fn disk_layout_is_unprefixed() {
 #[test]
 fn absolute_urls_carry_the_subpath() {
     let site = subsite();
-    site.build();
+    site.stats();
     let html = site.output("posts/hello/index.html");
     assert!(
         html.contains("href=\"https://host.test/docs/posts/hello/\""),
@@ -81,7 +81,7 @@ fn absolute_urls_carry_the_subpath() {
 #[test]
 fn redirect_target_is_prefixed() {
     let site = subsite();
-    site.build();
+    site.stats();
     let stub = site.output("old/index.html");
     assert!(
         stub.contains("/docs/posts/hello/"),
@@ -92,7 +92,7 @@ fn redirect_target_is_prefixed() {
 #[test]
 fn search_client_carries_the_base() {
     let site = subsite();
-    site.build();
+    site.stats();
     let js = site.output("search.js");
     assert!(
         js.contains("const BASE = \"/docs\""),
@@ -115,7 +115,7 @@ fn root_hosting_leaves_urls_untouched() {
         "content/posts/hello.typ",
         "#let frontmatter = (title: \"H\",)\n#link(\"/manual/\")[m]\n",
     );
-    site.build();
+    site.stats();
     let html = site.output("posts/hello/index.html");
     assert!(
         html.contains("href=\"/manual/\""),
@@ -126,7 +126,7 @@ fn root_hosting_leaves_urls_untouched() {
 #[test]
 fn serve_previews_under_the_base_path() {
     let site = subsite();
-    site.build();
+    site.stats();
     let server = Serve::start(&site, &["--no-watch"]);
     assert!(wait_for_port(server.port(), 5000));
     // The prefixed request resolves to the unprefixed file on disk.
@@ -160,12 +160,7 @@ fn css_references_carry_the_subpath() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhome\n",
     );
-    let out = site.run(&["build"]);
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    site.stats();
 
     let sheet = site
         .files("public/assets")
@@ -197,12 +192,7 @@ fn og_image_carries_the_subpath() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\", image: \"/assets/card.png\",)\nhome\n",
     );
-    let out = site.run(&["build"]);
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    site.stats();
 
     let html = site.output("index.html");
     assert!(html.contains("og:image"), "{html}");

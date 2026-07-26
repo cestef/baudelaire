@@ -12,15 +12,6 @@ const CONFIG: &str = r#"
     }
 "#;
 
-fn built(site: &Site) {
-    let out = site.run(&["build"]);
-    assert!(
-        out.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 #[test]
 fn copies_files_verbatim_to_dist_root() {
     let site = Site::with(CONFIG);
@@ -29,7 +20,7 @@ fn copies_files_verbatim_to_dist_root() {
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
     site.write("static/install.sh", "#!/bin/sh\necho hi\n");
-    built(&site);
+    site.stats();
     // Same path at the site root, byte-identical, name untouched (no fingerprint).
     assert_eq!(site.read("public/install.sh"), "#!/bin/sh\necho hi\n");
 }
@@ -42,7 +33,7 @@ fn preserves_nested_layout() {
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
     site.write("static/.well-known/security.txt", "Contact: x@y.z\n");
-    built(&site);
+    site.stats();
     assert_eq!(
         site.read("public/.well-known/security.txt"),
         "Contact: x@y.z\n"
@@ -58,7 +49,7 @@ fn a_generated_page_overrides_a_static_file() {
     );
     // A static index.html at the same output path must lose to the page.
     site.write("static/index.html", "STATIC");
-    built(&site);
+    site.stats();
     let html = site.read("public/index.html");
     assert!(html.contains("generated"), "page should win: {html}");
     assert!(!html.contains("STATIC"));
@@ -72,7 +63,7 @@ fn missing_static_dir_is_not_an_error() {
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
     // No `static/` directory at all.
-    built(&site);
+    site.stats();
     assert!(site.exists("public/index.html"));
 }
 
@@ -103,7 +94,7 @@ fn a_static_file_overrides_generated_processor_output() {
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
     site.write("static/sitemap.xml", "<!-- mine -->\n");
-    built(&site);
+    site.stats();
     assert_eq!(site.read("public/sitemap.xml"), "<!-- mine -->\n");
 }
 
@@ -129,7 +120,7 @@ fn a_static_file_under_the_asset_dir_survives_the_pipeline() {
     );
     site.write("assets/app.css", "body { color: red }\n");
     site.write("static/assets/vendor.js", "// vendored\n");
-    built(&site);
+    site.stats();
 
     assert_eq!(site.read("public/assets/vendor.js"), "// vendored\n");
     assert!(
@@ -159,7 +150,7 @@ fn a_failed_build_leaves_no_staging_tree() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\", template: \"broken.typ\",)\nx\n",
     );
-    assert!(!site.run(&["build"]).status.success(), "build should fail");
+    site.build_error();
 
     let leftovers: Vec<_> = site
         .files("public")

@@ -3,13 +3,8 @@ mod common;
 use std::fs;
 
 use baudelaire::content::{DiscoveryCache, Page, discover};
-use baudelaire::world::{Mode, Project};
-/// A [`Project`] for a test config: module evaluation needs the real world.
-fn project(cfg: &baudelaire::config::Config) -> Project {
-    Project::new(cfg, Mode::Build).expect("project")
-}
 
-use common::Site;
+use common::{Site, project};
 
 fn frontmatter_post(title: &str, slug: &str, date: &str, tags: &[&str]) -> String {
     let tags_str = tags

@@ -29,7 +29,7 @@ If you have a Rust toolchain, Cargo can install it three ways:
 ```sh
 cargo binstall baudelaire     # prebuilt tarball, no compile
 cargo install baudelaire      # build from crates.io
-cargo install --git https://codeberg.org/cstef/baudelaire   # build from git
+cargo install --git https://github.com/cestef/baudelaire   # build from git
 ```
 
 `cargo binstall` pulls the same release tarballs as the installer script;

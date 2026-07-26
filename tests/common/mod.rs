@@ -8,9 +8,11 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
+use baudelaire::BaudelaireErrorKind;
 use baudelaire::config::Config;
 use baudelaire::engine::{Engine, Mode, Stats};
 use baudelaire::ui::{Level, Ui};
+use baudelaire::world::Project;
 
 /// The minimal config nearly every test starts from: content in, `public` out,
 /// clean URLs on. Tests needing more compose their own.
@@ -99,7 +101,13 @@ impl Site {
         Child(self.cmd(args).spawn().expect("spawn binary"))
     }
 
-    /// Verbose build that must succeed; stdout comes back for cache-count asserts.
+    /// Verbose build through the real binary, which must succeed; its logs come
+    /// back for tests that assert on the CLI's own output.
+    ///
+    /// Prefer [`Site::stats`] for anything else. The two are not interchangeable
+    /// within one test: the binary resolves paths relative to its cwd while
+    /// `config()` rebases them absolute, and `Config::hash` covers the path
+    /// fields, so the two never share a cache.
     pub fn build(&self) -> String {
         let out = self.run(&["build", "-v"]);
         assert!(
@@ -119,10 +127,28 @@ impl Site {
     /// coverage tool sees this path (it instruments the test binary, not a
     /// spawned subprocess).
     pub fn stats(&self) -> Stats {
-        Engine::new(self.config(), Mode::Build)
-            .expect("engine")
-            .build(&Ui::new(Level::Silent))
-            .expect("build")
+        self.stats_with(|_| {})
+    }
+
+    /// [`Site::stats`] with the config adjusted first, standing in for the CLI
+    /// overrides a subprocess run would pass (`--drafts`, `--base-url`).
+    pub fn stats_with(&self, tweak: impl FnOnce(&mut Config)) -> Stats {
+        self.try_stats(tweak).expect("build")
+    }
+
+    /// The in-process build's own `Result`, for tests asserting on a failure:
+    /// the typed diagnostic and its code, rather than the words the CLI printed.
+    pub fn build_error(&self) -> BaudelaireErrorKind {
+        match self.try_stats(|_| {}) {
+            Err(err) => err,
+            Ok(stats) => panic!("build should have failed, but produced {stats:?}"),
+        }
+    }
+
+    fn try_stats(&self, tweak: impl FnOnce(&mut Config)) -> baudelaire::Result<Stats> {
+        let mut config = self.config();
+        tweak(&mut config);
+        Engine::new(config, Mode::Build)?.build(&Ui::new(Level::Silent))
     }
 
     /// A built page under the default `public` dist.
@@ -134,6 +160,11 @@ impl Site {
 /// A `Ui` that prints nothing, for tests that drive the library in-process.
 pub fn silent() -> Ui {
     Ui::new(Level::Silent)
+}
+
+/// A [`Project`] for a test config: module evaluation needs the real world.
+pub fn project(cfg: &Config) -> Project {
+    Project::new(cfg, baudelaire::world::Mode::Build).expect("project")
 }
 
 /// A spawned child process, killed and reaped on drop so an early panic never

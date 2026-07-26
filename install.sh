@@ -2,7 +2,10 @@
 # baudelaire installer: a prebuilt, checksum-verified binary onto your path.
 set -eu
 
-REPO="${REPO:-https://codeberg.org/cstef/baudelaire}"
+REPO="${REPO:-https://github.com/cestef/baudelaire}"
+# Release metadata lives on a different host than the release downloads, so the
+# API base is its own knob rather than a suffix on $REPO.
+API="${API:-https://api.github.com/repos/cestef/baudelaire}"
 PREFIX="${PREFIX:-$HOME/.local/bin}"
 VERSION="${VERSION:-}"
 FLAVOR="${FLAVOR:-full}" # full, or slim: only system fonts + assets copied as-is
@@ -56,7 +59,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 # latest tag
 if [ -z "$VERSION" ]; then
   step "resolving latest release"
-  dl "$REPO/api/v1/repos/cstef/baudelaire/releases/latest" "$tmp/rel" || die "release lookup failed"
+  dl "$API/releases/latest" "$tmp/rel" || die "release lookup failed"
   VERSION=$(tr ',' '\n' < "$tmp/rel" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
   [ -n "$VERSION" ] || die "couldn't resolve latest tag, pin one with ${b}VERSION=${x}"
 fi

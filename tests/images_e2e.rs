@@ -3,9 +3,7 @@
 
 mod common;
 
-use baudelaire::engine::{Engine, Mode};
-
-use common::{Site, silent};
+use common::Site;
 
 /// A tiny PNG of the given size, its pixels varying with position so two
 /// different sizes never share bytes (and so collide only when we mean them to).
@@ -20,13 +18,6 @@ fn png(w: u32, h: u32) -> Vec<u8> {
     buf.into_inner()
 }
 
-fn build(site: &Site) -> baudelaire::engine::Stats {
-    Engine::new(site.config(), Mode::Build)
-        .expect("engine")
-        .build(&silent())
-        .expect("build")
-}
-
 const EXTRACT: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  images { extract #true }\n}\n";
 
 #[test]
@@ -35,7 +26,7 @@ fn typst_image_externalizes_to_a_file() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(
         html.contains("src=\"/assets/pic.png\""),
@@ -60,7 +51,7 @@ fn extract_is_the_default() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
-    build(&site);
+    site.stats();
     assert!(
         site.output("index.html")
             .contains("src=\"/assets/pic.png\"")
@@ -77,7 +68,7 @@ fn extract_false_keeps_typst_inlining() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(html.contains("data:image"), "image stays inline: {html}");
     assert!(!site.exists("public/assets/pic.png"));
@@ -91,7 +82,7 @@ fn extract_preserves_typst_image_sizing() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\", width: 50%)\n");
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(html.contains("width:50%"), "sizing is kept as CSS: {html}");
 }
@@ -104,7 +95,7 @@ fn fingerprint_hashes_the_externalized_name() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     // pic.<16 hex>.png
     let marker = "src=\"/assets/pic.";
@@ -123,8 +114,8 @@ fn cached_rebuild_keeps_the_externalized_file() {
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
 
-    build(&site);
-    let second = build(&site);
+    site.stats();
+    let second = site.stats();
     assert!(second.cached >= 1, "the page was served from cache");
     assert!(
         site.exists("public/assets/pic.png"),
@@ -143,7 +134,7 @@ fn image_from_bytes_has_no_file_and_stays_inline() {
         "#image(read(\"pic.png\", encoding: none))\n",
     );
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(
         html.contains("data:image"),
@@ -168,7 +159,7 @@ fn responsive_adds_srcset_and_writes_width_variants() {
         "#html.elem(\"img\", attrs: (src: \"/assets/big.png\"))\n",
     );
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(html.contains("srcset="), "a srcset was added: {html}");
     assert!(
@@ -196,7 +187,7 @@ fn responsive_skips_widths_at_or_above_the_source() {
         "#html.elem(\"img\", attrs: (src: \"/assets/small.png\"))\n",
     );
 
-    build(&site);
+    site.stats();
     let html = site.output("index.html");
     assert!(
         !html.contains("srcset="),
@@ -238,12 +229,12 @@ fn an_unchanged_image_is_not_re_encoded() {
         "content/index.typ",
         "#html.elem(\"img\", attrs: (src: \"/assets/big.png\"))\n",
     );
-    build(&site);
+    site.stats();
     let first = std::fs::read(site.path("public/assets/big.png")).unwrap();
     let variant = std::fs::read(site.path("public/assets/big-20.png")).unwrap();
 
     // The memo survives the asset tree being regenerated wholesale.
-    build(&site);
+    site.stats();
     assert_eq!(
         std::fs::read(site.path("public/assets/big.png")).unwrap(),
         first,
@@ -256,7 +247,7 @@ fn an_unchanged_image_is_not_re_encoded() {
 
     // ...and a changed source is re-encoded rather than served from the memo.
     site.write_bytes("assets/big.png", &png(60, 41));
-    build(&site);
+    site.stats();
     assert_ne!(
         std::fs::read(site.path("public/assets/big.png")).unwrap(),
         first,

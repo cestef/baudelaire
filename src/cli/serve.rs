@@ -610,7 +610,17 @@ impl Filter {
     /// rebuilds. Registering the resolved path keeps the two spellings equal by
     /// construction rather than by each backend's normalization.
     fn absolute(root: &Path, path: &Path) -> PathBuf {
-        crate::fs::canonicalize(path).unwrap_or_else(|_| root.join(path))
+        // Resolve against the project root, not the process cwd: a configured
+        // path is root-relative by definition. Canonicalizing the bare path
+        // happened to work only because the CLI has already chdir'd to the
+        // root, and silently resolved to a same-named directory next to
+        // wherever the process started when it had not.
+        let joined = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            root.join(path)
+        };
+        crate::fs::canonicalize(&joined).unwrap_or(joined)
     }
 
     /// Compile a list of patterns into owned globs.
