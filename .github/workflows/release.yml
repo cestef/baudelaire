@@ -22,14 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
       - name: mold linker
-        uses: cestef/actions/mold@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
         with:
           rustflags: "false"
 
@@ -53,7 +53,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test
-        uses: cestef/actions/nextest@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/nextest@89a983890dcc70bde6a81189d7a07d50b197d722
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -82,16 +82,16 @@ jobs:
             musl: true
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
         with:
           targets: ${{ matrix.target }}
       - name: mold linker
-        uses: cestef/actions/mold@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
@@ -99,14 +99,14 @@ jobs:
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
       - name: musl toolchain
-        uses: cestef/actions/musl@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/musl@89a983890dcc70bde6a81189d7a07d50b197d722
         if: matrix.musl
 
       - name: sccache
-        uses: cestef/actions/sccache@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/sccache@89a983890dcc70bde6a81189d7a07d50b197d722
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -140,7 +140,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: upload tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: baudelaire-${{ matrix.name }}
           path: |
@@ -150,7 +150,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
         if: always()
         with:
           mode: save
@@ -163,12 +163,12 @@ jobs:
       contents: write
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: download tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
 
@@ -287,12 +287,12 @@ jobs:
       id-token: write
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@32dae470a3e9f50567502973f2e0ae1f23018c77
+        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
 
       - name: crates.io token
         id: auth
