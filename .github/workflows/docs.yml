@@ -28,33 +28,43 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        uses: actions/checkout@v4
 
-      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
-      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: rust toolchain
+        uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: mold linker
+        uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false"
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: test
+        uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           run: "true"
           args: --workspace --no-tests warn
 
   ship:
+    name: build & deploy
     needs: gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        uses: actions/checkout@v4
 
-      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
-      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: rust toolchain
+        uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: mold linker
+        uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      - uses: cestef/actions/sccache@c6803a251df5473d8bfa8b00afd7743795767159
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: sccache
+        uses: cestef/actions/sccache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
 
       - name: build baudelaire
         run: cargo build
@@ -67,12 +77,14 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         if: always()
         with:
           mode: save
 
-      - uses: cestef/actions/wrangler@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: deploy to cloudflare pages
+        uses: cestef/actions/wrangler@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           command: pages deploy public --project-name=baudelaire --branch=main
           working-directory: docs

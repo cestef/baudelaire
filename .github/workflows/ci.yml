@@ -19,19 +19,26 @@ env:
 
 jobs:
   check:
+    name: lint & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        uses: actions/checkout@v4
 
-      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
-      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: rust toolchain
+        uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: mold linker
+        uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      - uses: cestef/actions/sccache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: sccache
+        uses: cestef/actions/sccache@c6803a251df5473d8bfa8b00afd7743795767159
       # Restore the crate registry (sccache caches compiler output, not downloads).
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
       # Restore target/ (dep rlibs, build-script outputs, fingerprint DB; not sccache's).
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: restore build cache
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           prefix: target-cache
           toolchain-key: "true"
@@ -53,7 +60,8 @@ jobs:
             command -v "$tool" >/dev/null || { echo "$tool is required"; exit 1; }
           done
 
-      - uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: test
+        uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -63,12 +71,14 @@ jobs:
       - name: clippy (slim)
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
-      - uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: test (slim)
+        uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           run: "true"
           args: --workspace --no-default-features --no-tests warn
 
-      - uses: cestef/actions/mem-diagnostics@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: memory diagnostics
+        uses: cestef/actions/mem-diagnostics@c6803a251df5473d8bfa8b00afd7743795767159
         if: failure()
 
       - name: sccache stats
@@ -76,12 +86,14 @@ jobs:
         run: sccache --show-stats || true
 
       # Persist any newly downloaded crates (immutable key: skips if unchanged).
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         if: always()
         with:
           mode: save
       # Persist target/ (immutable per Cargo.lock + rustc: skips if unchanged).
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: save build cache
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         if: always()
         with:
           mode: save
@@ -91,24 +103,30 @@ jobs:
           paths: target
 
   coverage:
+    name: coverage
     runs-on: ubuntu-latest
     # `contents` to push the badge branch, `pull-requests` to comment.
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        uses: actions/checkout@v4
 
       # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
-      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: rust toolchain
+        uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           components: llvm-tools-preview
-      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: mold linker
+        uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
       # Separate target/ cache: instrumented artifacts don't match the check job's.
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: restore coverage build cache
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           prefix: target-cache-cov
           toolchain-key: "true"
@@ -117,7 +135,8 @@ jobs:
 
       # Coverage recompiles with instrumentation, so it doesn't share sccache's
       # entries. The LLVM engine avoids ptrace/ASLR and is the faster of the two.
-      - id: cov
+      - name: coverage
+        id: cov
         uses: cestef/actions/tarpaulin@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           args: --workspace --exclude-files benches/* --engine llvm
@@ -126,21 +145,24 @@ jobs:
       # Publish the badge and baseline to the `badges` branch (default branch
       # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
       # below main's, minus a small tolerance.
-      - uses: cestef/actions/coverage-report@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: coverage report
+        uses: cestef/actions/coverage-report@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}
           ratchet: "true"
           badge-label: baudelaire cov
 
-      - uses: actions/upload-artifact@v4
+      - name: upload coverage xml
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage
           path: cobertura.xml
 
       # Persist the instrumented target/ (immutable per Cargo.lock + rustc).
-      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
+      - name: save coverage build cache
+        uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         if: always()
         with:
           mode: save
