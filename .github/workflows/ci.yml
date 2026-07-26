@@ -10,12 +10,22 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A new push makes the in-flight run for the same ref obsolete, so stop paying
+# for it. Release is deliberately excluded: cancelling mid-publish is worse than
+# a redundant run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   RUST_BACKTRACE: 1
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
+  # sccache used to set this. Incremental artifacts are worthless to a
+  # fresh runner and would bloat the cached target/ tree.
+  CARGO_INCREMENTAL: 0
 
 jobs:
   check:
@@ -26,19 +36,19 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/rust@9529739bb491d398cc8572b4f8aef223a32fbc68
       - name: mold linker
-        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/mold@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      - name: sccache
-        uses: cestef/actions/sccache@89a983890dcc70bde6a81189d7a07d50b197d722
-      # Restore the crate registry (sccache caches compiler output, not downloads).
+      # Restore the crate registry, so a warm run downloads no crates.
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-      # Restore target/ (dep rlibs, build-script outputs, fingerprint DB; not sccache's).
+        id: registry
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+      # Restore target/ (dep rlibs, build-script outputs, fingerprint DB).
       - name: restore build cache
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
+        id: build-cache
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           prefix: target-cache
           toolchain-key: "true"
@@ -61,7 +71,7 @@ jobs:
           done
 
       - name: test
-        uses: cestef/actions/nextest@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/nextest@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -72,29 +82,25 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test (slim)
-        uses: cestef/actions/nextest@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/nextest@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           run: "true"
           args: --workspace --no-default-features --no-tests warn
 
       - name: memory diagnostics
-        uses: cestef/actions/mem-diagnostics@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/mem-diagnostics@9529739bb491d398cc8572b4f8aef223a32fbc68
         if: failure()
 
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      # Persist any newly downloaded crates (immutable key: skips if unchanged).
+      # Only on a miss: the key is immutable, so saving over an exact hit is
+      # gigabytes of tar for a reservation that is guaranteed to be refused.
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-        if: always()
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        if: always() && steps.registry.outputs.hit != 'true'
         with:
           mode: save
-      # Persist target/ (immutable per Cargo.lock + rustc: skips if unchanged).
       - name: save build cache
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-        if: always()
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        if: always() && steps.build-cache.outputs.hit != 'true'
         with:
           mode: save
           prefix: target-cache
@@ -115,29 +121,29 @@ jobs:
 
       # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
       - name: rust toolchain
-        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/rust@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           components: llvm-tools-preview
       - name: mold linker
-        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/mold@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-      # Separate target/ cache: instrumented artifacts don't match the check job's.
-      - name: restore coverage build cache
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-        with:
-          prefix: target-cache-cov
-          toolchain-key: "true"
-          base: "."
-          paths: target
+        id: registry
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
 
-      # Coverage recompiles with instrumentation, so it doesn't share sccache's
-      # entries. The LLVM engine avoids ptrace/ASLR and is the faster of the two.
+      # No target/ cache here on purpose. The instrumented tree was 6.2 GB of a
+      # 10 GB repo-wide budget, so it evicted the caches that do pay for
+      # themselves, while tarpaulin re-instruments regardless: measured across
+      # four runs it bought 75-186s of cache I/O for no reliable saving.
+      #
+      # cargo-llvm-cov was measured as the alternative and rejected: 905s cold
+      # against tarpaulin's ~490s, and its 280s warm path needs a target dir far
+      # past what GitHub will cache. `cestef/actions/llvm-cov` exists if that
+      # ever changes.
       - name: coverage
         id: cov
-        uses: cestef/actions/tarpaulin@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/tarpaulin@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           args: --workspace --exclude-files benches/* --engine llvm
           out: Stdout Xml
@@ -146,7 +152,7 @@ jobs:
       # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
       # below main's, minus a small tolerance.
       - name: coverage report
-        uses: cestef/actions/coverage-report@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/coverage-report@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -160,13 +166,3 @@ jobs:
           name: coverage
           path: cobertura.xml
 
-      # Persist the instrumented target/ (immutable per Cargo.lock + rustc).
-      - name: save coverage build cache
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
-        if: always()
-        with:
-          mode: save
-          prefix: target-cache-cov
-          toolchain-key: "true"
-          base: "."
-          paths: target

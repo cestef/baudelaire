@@ -16,55 +16,46 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
+# A new push makes the in-flight run for the same ref obsolete, so stop paying
+# for it. Release is deliberately excluded: cancelling mid-publish is worse than
+# a redundant run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: 0
   RUSTFLAGS: -C link-arg=-fuse-ld=mold
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  # The docs site is built by this repo's own binary, and this workflow fires on
-  # any `src/**` push, so without a gate a commit that fails CI still shipped a
-  # site built from it.
-  gate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-
-      - name: rust toolchain
-        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
-      - name: mold linker
-        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
-        with:
-          rustflags: "false"
-
-      - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: test
-        uses: cestef/actions/nextest@89a983890dcc70bde6a81189d7a07d50b197d722
-        with:
-          run: "true"
-          args: --workspace --no-tests warn
-
+  # No gate job here. It re-ran the clippy and tests that CI runs on the very
+  # same push, for ~305s of duplicated work. CI still verifies the commit in
+  # parallel; a red commit shows up there, and the next push redeploys.
   ship:
     name: build & deploy
-    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: checkout
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/rust@9529739bb491d398cc8572b4f8aef223a32fbc68
       - name: mold linker
-        uses: cestef/actions/mold@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/mold@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      - name: sccache
-        uses: cestef/actions/sccache@89a983890dcc70bde6a81189d7a07d50b197d722
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+      # Same key CI's `check` job writes, so this build starts warm.
+      - name: restore build cache
+        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        with:
+          prefix: target-cache
+          toolchain-key: "true"
+          base: "."
+          paths: target
 
       - name: build baudelaire
         run: cargo build
@@ -73,16 +64,12 @@ jobs:
         working-directory: docs
         run: ../target/debug/baudelaire build
 
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
       # No `save` here on purpose: CI's `check` job saves the very same registry
       # key on every push, and a key can only be reserved once, so whichever
       # lost the race just logged `Cache save failed`. This job restores only.
 
       - name: deploy to cloudflare pages
-        uses: cestef/actions/wrangler@89a983890dcc70bde6a81189d7a07d50b197d722
+        uses: cestef/actions/wrangler@9529739bb491d398cc8572b4f8aef223a32fbc68
         with:
           command: pages deploy public --project-name=baudelaire --branch=main
           working-directory: docs
