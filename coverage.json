@@ -1,5 +1,5 @@
 {
- "badge": "gauge|baudelaire cov|#7bc62d|#24292f",
+ "badge": "e20a2e16125ca0f3",
  "commit": "e3cf29a518455c36fd2847fc931867f5e9b3b186",
  "covered": 5479,
  "files": {
@@ -429,7 +429,7 @@
   ]
  },
  "percent": 82.24,
- "schema": 1,
+ "schema": 2,
  "total": 6662,
  "updated": "2026-07-26T16:08:00+00:00"
 }
