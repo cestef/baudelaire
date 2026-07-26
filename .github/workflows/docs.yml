@@ -26,7 +26,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: 0
-  RUSTFLAGS: -C link-arg=-fuse-ld=mold
+  # Byte-identical to CI's, deliberately: cargo folds RUSTFLAGS into every
+  # fingerprint, so a single differing flag means this job shares nothing
+  # with the target cache CI populated and rebuilds the whole dep graph.
+  RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   CARGO_INCREMENTAL: 0
 
 jobs:
