@@ -8,13 +8,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Coverage is ~490s, far and away the slowest thing here, and its value on a
+  # main push is only to refresh the baseline. Nightly does that just as well.
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 # A new push makes the in-flight run for the same ref obsolete, so stop paying
 # for it. Release is deliberately excluded: cancelling mid-publish is worse than
 # a redundant run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # The event is part of the group so a push to main cannot cancel the nightly
+  # coverage run, which shares the same ref.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -36,19 +42,19 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/rust@422d6bed78275189e5891cce0b83e6c0d6c05201
       - name: mold linker
-        uses: cestef/actions/mold@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/mold@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       # Restore the crate registry, so a warm run downloads no crates.
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
       # Restore target/ (dep rlibs, build-script outputs, fingerprint DB).
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           prefix: target-cache
           toolchain-key: "true"
@@ -71,7 +77,7 @@ jobs:
           done
 
       - name: test
-        uses: cestef/actions/nextest@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/nextest@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -82,24 +88,24 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test (slim)
-        uses: cestef/actions/nextest@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/nextest@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           run: "true"
           args: --workspace --no-default-features --no-tests warn
 
       - name: memory diagnostics
-        uses: cestef/actions/mem-diagnostics@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/mem-diagnostics@422d6bed78275189e5891cce0b83e6c0d6c05201
         if: failure()
 
       # Only on a miss: the key is immutable, so saving over an exact hit is
       # gigabytes of tar for a reservation that is guaranteed to be refused.
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
         if: always() && steps.registry.outputs.hit != 'true'
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
         if: always() && steps.build-cache.outputs.hit != 'true'
         with:
           mode: save
@@ -111,6 +117,9 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
+    # Everywhere but a push: pull requests need the ratchet, the nightly keeps
+    # the baseline and badge current, and a push to main gets the fast lane.
+    if: github.event_name != 'push'
     # `contents` to push the badge branch, `pull-requests` to comment.
     permissions:
       contents: write
@@ -121,16 +130,16 @@ jobs:
 
       # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
       - name: rust toolchain
-        uses: cestef/actions/rust@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/rust@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           components: llvm-tools-preview
       - name: mold linker
-        uses: cestef/actions/mold@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/mold@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/cargo-cache@422d6bed78275189e5891cce0b83e6c0d6c05201
 
       # No target/ cache here on purpose. The instrumented tree was 6.2 GB of a
       # 10 GB repo-wide budget, so it evicted the caches that do pay for
@@ -143,7 +152,7 @@ jobs:
       # ever changes.
       - name: coverage
         id: cov
-        uses: cestef/actions/tarpaulin@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/tarpaulin@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           args: --workspace --exclude-files benches/* --engine llvm
           out: Stdout Xml
@@ -152,7 +161,7 @@ jobs:
       # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
       # below main's, minus a small tolerance.
       - name: coverage report
-        uses: cestef/actions/coverage-report@9529739bb491d398cc8572b4f8aef223a32fbc68
+        uses: cestef/actions/coverage-report@422d6bed78275189e5891cce0b83e6c0d6c05201
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}
