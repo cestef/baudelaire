@@ -25,8 +25,8 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
-      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
+      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false"
 
@@ -49,7 +49,7 @@ jobs:
       - name: clippy (slim)
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
-      - uses: cestef/actions/nextest@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/nextest@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -81,22 +81,22 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - uses: cestef/actions/rust@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/rust@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           targets: ${{ matrix.target }}
-      - uses: cestef/actions/mold@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/mold@c6803a251df5473d8bfa8b00afd7743795767159
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
       # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
-      - uses: cestef/actions/musl@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/musl@c6803a251df5473d8bfa8b00afd7743795767159
         if: matrix.musl
 
-      - uses: cestef/actions/sccache@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/sccache@c6803a251df5473d8bfa8b00afd7743795767159
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
-      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -138,7 +138,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
-      - uses: cestef/actions/cargo-cache@6fddb45986f1cd76136a2625625fad533633c347
+      - uses: cestef/actions/cargo-cache@c6803a251df5473d8bfa8b00afd7743795767159
         if: always()
         with:
           mode: save
