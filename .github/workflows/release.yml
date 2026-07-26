@@ -28,9 +28,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
       - name: mold linker
-        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         with:
           rustflags: "false"
 
@@ -54,7 +54,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test
-        uses: cestef/actions/nextest@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/nextest@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -88,11 +88,11 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         with:
           targets: ${{ matrix.target }}
       - name: mold linker
-        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         with:
           rustflags: "false" # RUSTFLAGS already carries the mold link-arg
 
@@ -100,12 +100,12 @@ jobs:
       # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
       # rustc's self-contained musl handles the final static link.
       - name: musl toolchain
-        uses: cestef/actions/musl@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/musl@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         if: matrix.musl
 
       # Restore the crate registry (one key across targets; keyed on Cargo.lock).
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
 
       # Each matrix row runs on its native-arch runner, so no cross-linking is
       # needed. Two flavors per target: the default `full` binary and a `slim`
@@ -145,7 +145,7 @@ jobs:
             baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/cargo-cache@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         if: always()
         with:
           mode: save
@@ -178,6 +178,7 @@ jobs:
           ls -la release
 
       - name: release notes
+        id: notes
         run: |
           set -euo pipefail
           VERSION="${{ inputs.tag || github.ref_name }}"
@@ -252,6 +253,14 @@ jobs:
           EOF
           cat release-notes.md
 
+          # Reuse the same measurements for the badges, so the notes and the
+          # badge can never quote different numbers.
+          {
+            echo "size_full=${SIZE_X86}"
+            echo "size_slim=${SIZE_X86_SLIM}"
+            echo "version=${VERSION#v}"
+          } >> "$GITHUB_OUTPUT"
+
       # `gh` is preinstalled on the runner, so the upload needs no third-party
       # action. Re-running a tag replaces the assets rather than failing.
       - name: publish release
@@ -267,6 +276,33 @@ jobs:
             gh release create "$tag" release/* \
               --title "$tag" --notes-file release-notes.md
           fi
+
+      - name: badge (binary size)
+        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        with:
+          label: binary
+          value: ${{ steps.notes.outputs.size_full }}
+          color: "#58a6ff"
+          file: binary-size.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: badge (binary size, slim)
+        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        with:
+          label: binary (slim)
+          value: ${{ steps.notes.outputs.size_slim }}
+          color: "#58a6ff"
+          file: binary-size-slim.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: badge (crates.io)
+        uses: cestef/actions/badge@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
+        with:
+          label: crates.io
+          value: v${{ steps.notes.outputs.version }}
+          color: "#e0902f"
+          file: crates-io.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   # crates.io Trusted Publishing: the runner exchanges its OIDC identity for a
   # short-lived registry token, so no long-lived CARGO_REGISTRY_TOKEN is ever
@@ -287,12 +323,12 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/rust@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
       # RUSTFLAGS carries `-fuse-ld=mold` for every job, so this one needs mold
       # too: without it `cc` fails with "cannot find 'ld'" during the verify
       # build, after the registry token has already been issued.
       - name: mold linker
-        uses: cestef/actions/mold@935daef118fec7424a279746b70b3dcfe99da54e
+        uses: cestef/actions/mold@aafe7ef9d13a19cfe46d7218648f256a868e5c1a
         with:
           rustflags: "false"
 

@@ -2,6 +2,13 @@
 
 <p align="center">
     <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/coverage.svg" alt="coverage"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/tests.svg" alt="tests"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/crates-io.svg" alt="crates.io"/>
+    <br/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/binary-size.svg" alt="binary size"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/binary-size-slim.svg" alt="binary size, slim"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/typst.svg" alt="typst"/>
+    <img src="https://raw.githubusercontent.com/cestef/baudelaire/badges/msrv.svg" alt="minimum supported rust version"/>
 </p>
 
 A static site generator where everything is just [Typst](https://typst.app).
