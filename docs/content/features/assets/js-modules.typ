@@ -50,6 +50,9 @@ aren't legal identifiers stay reachable through the default export only.
 / #raw("baudelaire:i18n"): the declared `languages` (`{ code, name }`) and their
   UI-string tables keyed by code, for a client-side language switcher. See
   #link("../content/i18n.typ")[internationalization].
+/ #raw("baudelaire:spa"): the client-side navigation runtime, exporting
+  `mountSpa(options)` and the lower-level `mountRouter`. See
+  #link("../build/navigating.typ")[SPA and single-file export].
 
 == Client constants
 

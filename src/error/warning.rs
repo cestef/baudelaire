@@ -68,6 +68,33 @@ pub struct ImageCollision {
     pub dropped: PathBuf,
 }
 
+/// The single-file export's entry permalink matches no built page, so there is
+/// no head or body to build the shell around and nothing is written.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("no page at `{entry}`, single-file export skipped")]
+#[diagnostic(
+    code(baudelaire::output::standalone_entry),
+    severity(warning),
+    help("point `output {{ standalone {{ entry }} }}` at a permalink the site builds")
+)]
+pub struct StandaloneEntryMissing {
+    pub entry: String,
+}
+
+/// The single-file export ran with `html { embed }` off, so its pages still
+/// reference `/assets/..` by URL. The file is one document but not a
+/// self-contained one: opened from disk, it loses its styles and images.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("`{file}` links its assets instead of carrying them")]
+#[diagnostic(
+    code(baudelaire::output::standalone_linked),
+    severity(warning),
+    help("turn on `output {{ html {{ embed #true }} }}` to inline them into the file")
+)]
+pub struct StandaloneLinked {
+    pub file: String,
+}
+
 /// Two pages claimed the same `redirect` old-path. Only the first stub is
 /// written, so the second page's redirect silently does not exist. The common
 /// cause is translating a page by copying its frontmatter, which copies the

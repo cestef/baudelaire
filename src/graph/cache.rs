@@ -28,7 +28,7 @@ use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{self, Root};
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
-use crate::render::ImageRef;
+use crate::render::{Fragments, ImageRef};
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
@@ -88,6 +88,12 @@ pub struct Outputs {
     /// `links { strict #true }` *passed*: a gate that silently weakened on
     /// rebuild.
     pub broken: Vec<String>,
+    /// The page's head and body markup, captured only while the single-file
+    /// export is on. Stored because it cannot be recovered from the rendered
+    /// page afterwards without parsing it, and a cache-served page has to be
+    /// bundled just like a freshly compiled one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragments: Option<Fragments>,
 }
 
 /// The serialized cache manifest: metadata only, no page markup.
@@ -294,11 +300,11 @@ impl Cache {
     /// longer referenced. Blobs are content-addressed and written write-once, so
     /// an unchanged page's markup is never rewritten. `outputs` supplies the HTML
     /// for freshly recorded pages (cache hits already have their blob on disk).
-    pub fn save(&self, outputs: &[(&Page, &str)]) -> Result<()> {
+    pub fn save<'a>(&self, outputs: impl IntoIterator<Item = (&'a Page, &'a str)>) -> Result<()> {
         crate::fs::create_dir_all(&self.dir)?;
         let html: BTreeMap<PathBuf, &str> = outputs
-            .iter()
-            .map(|(page, html)| (self.key(page), *html))
+            .into_iter()
+            .map(|(page, html)| (self.key(page), html))
             .collect();
         // collect blobs needing a write (new content only), keyed by path so
         // two pages sharing identical markup stage one write (a duplicate

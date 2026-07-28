@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
-    OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig, S3Config, SearchConfig,
-    SearchField, ServeConfig, SshConfig, StandardConfig, VerifyConfig,
+    OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig, Router,
+    S3Config, SearchConfig, SearchField, ServeConfig, SpaConfig, SshConfig, StandaloneConfig,
+    StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -39,6 +40,8 @@ impl Default for Config {
             links: LinkConfig::default(),
             feed: FeedConfig::default(),
             search: SearchConfig::default(),
+            standalone: StandaloneConfig::default(),
+            spa: SpaConfig::default(),
             inputs: Default::default(),
             client: Default::default(),
             // HTML is forced on in `world.rs`; this list is purely additive
@@ -69,6 +72,34 @@ impl Default for HtmlConfig {
             embed: false,
             meta: true,
             anchors: true,
+        }
+    }
+}
+
+impl Default for StandaloneConfig {
+    fn default() -> Self {
+        // opt-in: the presence of a `standalone { .. }` block flips `enabled`.
+        // The rest are the values that block inherits when it stays silent.
+        Self {
+            enabled: false,
+            file: "site.html".into(),
+            // no default entry: the site home, resolved against the pages that
+            // actually built, so a site with no `/` still gets a shell.
+            entry: None,
+            router: Router::default(),
+        }
+    }
+}
+
+impl Default for SpaConfig {
+    fn default() -> Self {
+        // opt-in like `standalone`. `main` is the element typst-html templates
+        // conventionally wrap page content in; anything shared (header, nav)
+        // sits outside it and survives a navigation.
+        Self {
+            enabled: false,
+            root: "main".into(),
+            prefetch: Prefetch::default(),
         }
     }
 }

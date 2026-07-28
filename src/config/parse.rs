@@ -7,9 +7,9 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
     FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig,
-    LinkConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig, RobotsConfig,
-    S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SshConfig, StandardConfig,
-    TaxonomyConfig, VerifyConfig,
+    LinkConfig, LlmsConfig, Named, OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig,
+    SpaConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::error::{ConfigError, Result};
 
@@ -149,6 +149,11 @@ pub(super) trait NodeExt {
     fn as_taxonomy(&self, text: &str) -> Result<(String, TaxonomyConfig)>;
     fn as_language(&self, text: &str) -> Result<(String, LanguageConfig)>;
     fn html(&self, target: &mut HtmlConfig, text: &str) -> Result<()>;
+    /// This node's first argument as a file name that stays inside the output
+    /// directory: no leading `/`, no `..`, no Windows drive prefix.
+    fn contained(&self, text: &str) -> Result<String>;
+    fn standalone(&self, target: &mut StandaloneConfig, text: &str) -> Result<()>;
+    fn spa(&self, target: &mut SpaConfig, text: &str) -> Result<()>;
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()>;
     fn responsive(&self, target: &mut ResponsiveConfig, text: &str) -> Result<()>;
     fn widths(&self, text: &str) -> Result<Vec<u32>>;
@@ -390,6 +395,56 @@ impl NodeExt for KdlNode {
         HTML.fill(target, self, text)
     }
 
+    fn contained(&self, text: &str) -> Result<String> {
+        let path = self.string(text, 0)?;
+        let escapes = std::path::Path::new(&path)
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)));
+        match escapes {
+            true => Err(ConfigError::escaping_file(text, &path, NodeExt::span(self)).into()),
+            false => Ok(path),
+        }
+    }
+
+    /// The `standalone { file ..; entry ..; router .. }` block. Its presence
+    /// enables the single-file export; the rest keep their defaults unless
+    /// named.
+    fn standalone(&self, target: &mut StandaloneConfig, text: &str) -> Result<()> {
+        const STANDALONE: Block<StandaloneConfig> = Block(&[
+            ("file", |c, n, t| {
+                c.file = n.contained(t)?;
+                Ok(())
+            }),
+            ("entry", |c, n, t| {
+                c.entry = Some(n.string(t, 0)?);
+                Ok(())
+            }),
+            ("router", |c, n, t| {
+                c.router = n.arg(t, 0)?.one(t, NodeExt::span(n), Router::NAMES)?;
+                Ok(())
+            }),
+        ]);
+        target.enabled = true;
+        STANDALONE.fill(target, self, text)
+    }
+
+    /// The `spa { root ..; prefetch .. }` block. Its presence enables the
+    /// client-side navigation runtime.
+    fn spa(&self, target: &mut SpaConfig, text: &str) -> Result<()> {
+        const SPA: Block<SpaConfig> = Block(&[
+            ("root", |c, n, t| {
+                c.root = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("prefetch", |c, n, t| {
+                c.prefetch = n.arg(t, 0)?.one(t, NodeExt::span(n), Prefetch::NAMES)?;
+                Ok(())
+            }),
+        ]);
+        target.enabled = true;
+        SPA.fill(target, self, text)
+    }
+
     /// The `images { lazy; optimize { .. } }` section.
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()> {
         const IMAGES: Block<ImagesConfig> = Block(&[
@@ -597,6 +652,8 @@ impl NodeExt for KdlNode {
             ("llms", |c, n, t| n.llms(&mut c.llms, t)),
             ("feed", |c, n, t| n.feed(&mut c.feed, t)),
             ("search", |c, n, t| n.search(&mut c.search, t)),
+            ("standalone", |c, n, t| n.standalone(&mut c.standalone, t)),
+            ("spa", |c, n, t| n.spa(&mut c.spa, t)),
         ]);
         OUTPUT.fill(config, self, text)
     }

@@ -19,6 +19,8 @@ pub enum Artifact {
     AnnounceCache,
     /// A JSON Feed.
     Feed,
+    /// The single-file export's route table.
+    Standalone,
 }
 
 impl std::fmt::Display for Artifact {
@@ -28,6 +30,7 @@ impl std::fmt::Display for Artifact {
             Self::SearchIndex => "search index",
             Self::AnnounceCache => "publish cache",
             Self::Feed => "JSON feed",
+            Self::Standalone => "single-file export",
         })
     }
 }

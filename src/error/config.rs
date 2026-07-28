@@ -178,6 +178,18 @@ impl ConfigError {
         )
     }
 
+    /// A generated file named by something other than a plain name under
+    /// `dist`: an absolute path, or one walking out of it.
+    pub fn escaping_file(source: &str, path: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::EscapingFile {
+                path: path.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// An unrecognized image format under `optimize`.
     pub fn unknown_image_format(source: &str, format: &str, span: SourceSpan) -> Self {
         Self::at(
@@ -374,6 +386,13 @@ pub enum ConfigErrorKind {
     #[error("unknown image format `{format}` (valid: png, jpeg)")]
     #[diagnostic(code(baudelaire::config::unknown_image_format))]
     UnknownImageFormat { format: String },
+
+    #[error("`{path}` would be written outside the output directory")]
+    #[diagnostic(
+        code(baudelaire::config::escaping_file),
+        help("name a file relative to `dist`, with no leading `/` and no `..`")
+    )]
+    EscapingFile { path: String },
 
     #[error("feature `{name}` is required and cannot be disabled")]
     #[diagnostic(

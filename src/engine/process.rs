@@ -13,6 +13,7 @@ use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::warning::BaseUrlMissing;
 use crate::error::{BaseUrlRequired, Result};
+use crate::render::Fragments;
 use crate::ui::Ui;
 
 use super::feed::Feeds;
@@ -21,15 +22,44 @@ use super::redirect::Redirects;
 use super::robots::Robots;
 use super::search::SearchIndex;
 use super::sitemap::SiteMap;
+use super::spa::Spa;
+use super::standalone::Standalone;
 use super::standard::WellKnown;
+
+/// One built page: everything the render pass produced for it, whether it was
+/// freshly compiled or served from the cache. Named rather than a tuple because
+/// processors read different parts of it (search wants the text, the
+/// single-file export wants the fragments) and a widening tuple made every call
+/// site restate the ones it ignores.
+pub(super) struct Output<'a> {
+    pub page: &'a Page,
+    /// The page's rendered HTML, exactly as written to `dist`.
+    pub html: &'a str,
+    /// Its head and body markup, present only while the single-file export is
+    /// on (nothing else pays to capture them).
+    pub fragments: Option<&'a Fragments>,
+}
+
+impl<'a> Output<'a> {
+    /// A page and its markup, with no fragments: what a test builds when the
+    /// processor under it never looks at the single-file export's half.
+    #[cfg(test)]
+    pub(super) fn new(page: &'a Page, html: &'a str) -> Self {
+        Self {
+            page,
+            html,
+            fragments: None,
+        }
+    }
+}
 
 /// Read-only view of the fully built site handed to every processor.
 pub(super) struct Site<'a> {
     pub config: &'a Config,
     pub pages: &'a [Page],
-    /// Each page paired with its rendered HTML (cached and freshly compiled
-    /// alike), for processors that derive from page text, e.g. search.
-    pub outputs: &'a [(&'a Page, &'a str)],
+    /// Every built page (cached and freshly compiled alike), for processors
+    /// that derive from what the render pass produced.
+    pub outputs: &'a [Output<'a>],
 }
 
 impl Site<'_> {
@@ -115,6 +145,9 @@ impl Processors {
             Box::new(Feeds),
             Box::new(SearchIndex),
             Box::new(WellKnown),
+            Box::new(Spa),
+            // last: it reads every other page's markup, not what they emit
+            Box::new(Standalone),
         ])
     }
 

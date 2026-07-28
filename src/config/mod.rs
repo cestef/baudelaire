@@ -75,6 +75,10 @@ pub struct Config {
     pub feed: FeedConfig,
     /// Client-side search indexes.
     pub search: SearchConfig,
+    /// Single-file (standalone) HTML export.
+    pub standalone: StandaloneConfig,
+    /// Client-side navigation between the built pages.
+    pub spa: SpaConfig,
     /// Typst `sys.inputs` entries.
     pub inputs: Vec<(String, String)>,
     /// Build-time constants exposed to client JS through the `baudelaire:config`
@@ -497,6 +501,8 @@ impl std::hash::Hash for Config {
             links,
             feed,
             search,
+            standalone,
+            spa,
             inputs,
             client,
             features,
@@ -530,7 +536,7 @@ impl std::hash::Hash for Config {
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, announce, deploy, profile).hash(state);
-        (client, languages).hash(state);
+        (client, languages, standalone, spa).hash(state);
     }
 }
 
@@ -719,6 +725,96 @@ pub struct HtmlConfig {
     /// Give every heading a slug `id` (when it lacks one), so sections are
     /// deep-linkable and a table of contents can target them.
     pub anchors: bool,
+}
+
+/// Single-file export: the whole site inlined into one HTML document, each
+/// page a route the bundled router swaps in. Enabled by the presence of a
+/// `standalone { .. }` block.
+#[derive(Debug, Clone, Hash)]
+pub struct StandaloneConfig {
+    /// Whether to emit the single-file export.
+    pub enabled: bool,
+    /// Output file name, relative to `dist`.
+    pub file: String,
+    /// Permalink of the page whose `<head>` and body seed the shell: the route
+    /// shown before any navigation, and the only one that renders without
+    /// JavaScript. `None` means the site home (`/`, localized to `lang`).
+    pub entry: Option<String>,
+    /// How the router encodes the current route in the address bar.
+    pub router: Router,
+}
+
+/// Client-side navigation over the ordinary multi-file output: a runtime
+/// intercepts internal link clicks, fetches the target page, and swaps one
+/// container instead of reloading. Enabled by the presence of a `spa { .. }`
+/// block.
+#[derive(Debug, Clone, Hash)]
+pub struct SpaConfig {
+    /// Whether to emit the navigation runtime.
+    pub enabled: bool,
+    /// CSS selector of the element swapped on navigation. Everything outside it
+    /// (a header, a sidebar) survives untouched, so it must be the one element
+    /// whose contents differ between pages.
+    pub root: String,
+    /// When to warm a link's target before it is clicked.
+    pub prefetch: Prefetch,
+}
+
+/// How a router represents the active route in the URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Router {
+    /// `#/blog/post/`: the only mode that survives `file://`, where a single
+    /// file is normally opened, since it never asks the browser for a path the
+    /// filesystem has to have.
+    #[default]
+    Hash,
+    /// `/blog/post/`, through the History API. Needs the file served by a host
+    /// that answers every route with it.
+    History,
+}
+
+/// When the router warms a link's target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Prefetch {
+    /// Never: every navigation pays its own fetch.
+    None,
+    /// On pointer-over or keyboard focus, the moment intent is visible.
+    #[default]
+    Hover,
+    /// As soon as the link scrolls into view. Warms far more than is clicked.
+    Visible,
+}
+
+/// An enum spelled out in config as one of a fixed set of names.
+///
+/// [`Named::NAMES`] is that set: config parsing maps through it, its
+/// unknown-value suggestions are derived from it, and [`Named::name`] reads
+/// back out of it. One table, so a variant can never parse under one spelling
+/// and be generated under another.
+pub trait Named: Copy + PartialEq + Sized + 'static {
+    const NAMES: &'static [(&'static str, Self)];
+
+    /// The name this variant is configured as, and the one generated code sees.
+    fn name(self) -> &'static str {
+        Self::NAMES
+            .iter()
+            .find(|(_, variant)| *variant == self)
+            .map(|(name, _)| *name)
+            .expect("NAMES lists every variant")
+    }
+}
+
+impl Named for Router {
+    const NAMES: &'static [(&'static str, Self)] =
+        &[("hash", Self::Hash), ("history", Self::History)];
+}
+
+impl Named for Prefetch {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("none", Self::None),
+        ("hover", Self::Hover),
+        ("visible", Self::Visible),
+    ];
 }
 
 /// Image handling: markup annotations and build-time optimization. Grouped so

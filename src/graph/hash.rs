@@ -86,10 +86,11 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// 3: `Entry` groups the render pass's results under `outputs`, which now
-    /// also carries the page's broken links. 2: `Entry::deps` values became
-    /// `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 3;
+    /// 4: `Outputs` carries the page's head/body fragments for the single-file
+    /// export. 3: `Entry` groups the render pass's results under `outputs`,
+    /// which now also carries the page's broken links. 2: `Entry::deps` values
+    /// became `Option<Hash>`, and manifest keys became project-relative.
+    const SCHEMA: u32 = 4;
 
     pub fn current() -> Self {
         Self {

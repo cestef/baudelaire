@@ -46,6 +46,16 @@ impl Xml {
         self.write(Event::Text(BytesText::new(text)));
     }
 
+    /// Write already-serialized markup verbatim, escaping nothing.
+    ///
+    /// The one escape hatch, for content this build produced through a
+    /// serializer of its own: the single-file export's shell splices in page
+    /// fragments that typst-html wrote, and re-escaping them would render the
+    /// site as source code. Never reach for it with authored text.
+    pub(super) fn raw(&mut self, markup: &str) {
+        self.write(Event::Text(BytesText::from_escaped(markup)));
+    }
+
     /// Write `<name attrs..>` .. `</name>`, its body produced by `content`.
     pub(super) fn nest(
         &mut self,

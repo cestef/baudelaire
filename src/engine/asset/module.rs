@@ -40,9 +40,10 @@ trait Module {
 }
 
 /// The registered virtual modules.
-fn builtin() -> [Box<dyn Module>; 9] {
+fn builtin() -> [Box<dyn Module>; 10] {
     [
         Box::new(Search),
+        Box::new(Navigation),
         Box::new(Site),
         Box::new(Settings),
         Box::new(Assets),
@@ -176,6 +177,19 @@ impl Module for Search {
                 module(SearchFormat::Inverted),
             ),
         ]
+    }
+}
+
+/// `baudelaire:spa`: the client-side navigation runtime, so a site bundling its
+/// own entry can mount it (and pick its own container) instead of loading the
+/// generated `spa.js` separately. Served whether or not `output { spa { } }` is
+/// set: importing it is itself the opt-in, and the block's fields are only the
+/// defaults `mountSpa()` starts from.
+struct Navigation;
+
+impl Module for Navigation {
+    fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
+        vec![("baudelaire:spa".into(), cx.config.spa.module())]
     }
 }
 

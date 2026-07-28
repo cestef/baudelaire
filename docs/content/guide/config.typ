@@ -40,6 +40,8 @@ output {
   assets { minify #true; bundle #true; fingerprint #true }
   search { formats "json"; fields "title" "body" "tags" }
   feed { formats "rss" "atom"; limit 20 }
+  spa { root "main"; prefetch "hover" }
+  standalone { file "site.html"; entry "/"; router "hash" }
 }
 ```
 
@@ -49,6 +51,11 @@ give every heading a slug `id` for deep links); the `images` block handles lazy
 loading, externalizing embedded images, responsive `srcset` variants, and
 per-format optimization. See
 #link("../features/discovery/meta.typ")[meta and images].
+
+`spa` and `standalone` are both off unless their block is present: the first
+adds a client-side navigation runtime beside the ordinary pages, the second
+folds the whole site into one file. See
+#link("../features/build/navigating.typ")[SPA and single-file export].
 
 Every field has a sensible default, so a minimal `config.kdl` is just
 `site "My Site"`. The rest overrides only what you name.

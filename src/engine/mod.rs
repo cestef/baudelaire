@@ -15,6 +15,8 @@ mod redirect;
 mod robots;
 mod search;
 mod sitemap;
+mod spa;
+mod standalone;
 mod standard;
 mod statics;
 mod summary;
@@ -39,13 +41,13 @@ use crate::engine::check::{CheckedPage, Compiled, Links};
 use crate::engine::hook::Hooks;
 use crate::engine::image::Images;
 use crate::engine::layout::{Bind, Body, Layout};
-use crate::engine::process::{Emitter, Processors, Site};
+use crate::engine::process::{Emitter, Output, Processors, Site};
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root};
-use crate::render::{AssetMap, Renderer, SrcSets};
+use crate::render::{AssetMap, Fragments, Renderer, SrcSets};
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
 use crate::world::{PageWorld, Project, Tracked};
@@ -262,22 +264,31 @@ impl Engine {
                 .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
             ui,
         )?;
-        // pair every page (rendered and cache-served alike) with its final
-        // HTML once: write pass, blob staging, and processors share this view.
-        let outputs: Vec<(&Page, &str)> = rendered
+        // pair every page (rendered and cache-served alike) with what the render
+        // pass produced for it once: write pass, blob staging, and processors
+        // share this view.
+        let outputs: Vec<Output> = rendered
             .iter()
-            .map(|r| (r.page, r.html.as_str()))
-            .chain(cached.iter().map(|(page, html, _)| (*page, html.as_str())))
+            .map(|r| Output {
+                page: r.page,
+                html: r.html.as_str(),
+                fragments: r.outputs.fragments.as_ref(),
+            })
+            .chain(cached.iter().map(|(page, html, out)| Output {
+                page,
+                html: html.as_str(),
+                fragments: out.fragments.as_ref(),
+            }))
             .collect();
         // write page HTML in parallel: independent files, no shared state.
         outputs
             .par_iter()
-            .try_for_each(|(page, html)| fs::write_all(&page.output, html))?;
+            .try_for_each(|out| fs::write_all(&out.page.output, out.html))?;
         // Every page is on disk pointing at the new asset filenames, so the
         // staged asset tree can replace the published one. Before this line a
         // failure leaves `dist` exactly as the previous build left it.
         assets.publish()?;
-        cache.save(&outputs)?;
+        cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
         let generated = self.generate(&pages, &outputs, &statics, ui)?;
         self.sweep(&outputs, &statics, &generated)?;
 
@@ -287,7 +298,7 @@ impl Engine {
         // Warnings render as a block ahead of the result line, cargo-style.
         ui.flush();
         let total = rendered.len() + cached.len();
-        let page_bytes: u64 = outputs.iter().map(|(_, html)| html.len() as u64).sum();
+        let page_bytes: u64 = outputs.iter().map(|out| out.html.len() as u64).sum();
         Summary {
             pages: total,
             cached: cached.len(),
@@ -310,7 +321,7 @@ impl Engine {
     fn generate(
         &self,
         pages: &[Page],
-        outputs: &[(&Page, &str)],
+        outputs: &[Output],
         statics: &Copied,
         ui: &Ui,
     ) -> Result<Generated> {
@@ -336,18 +347,13 @@ impl Engine {
     /// passthrough, generated files. The asset tree is regenerated wholesale, so
     /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
     /// are not ours to prune.
-    fn sweep(
-        &self,
-        outputs: &[(&Page, &str)],
-        statics: &Copied,
-        generated: &Generated,
-    ) -> Result<()> {
+    fn sweep(&self, outputs: &[Output], statics: &Copied, generated: &Generated) -> Result<()> {
         if !self.config.clean {
             return Ok(());
         }
         let keep: Vec<PathBuf> = outputs
             .iter()
-            .map(|(page, _)| page.output.clone())
+            .map(|out| out.page.output.clone())
             .chain(statics.paths.iter().cloned())
             .chain(generated.paths.iter().cloned())
             .collect();
@@ -659,9 +665,20 @@ impl Engine {
         let options = HtmlOptions {
             pretty: self.config.html.pretty,
         };
-        let html = typst_html::html(&doc, &options).map_err(|errs| {
+        // Shared by both serializations below, so a failure in either reports
+        // with the page's own spans.
+        let serialization_failed = |errs| {
             BaudelaireErrorKind::TypstHtml(self.diagnostics(errs, page, &source, world.inner()))
-        })?;
+        };
+        let html = typst_html::html(&doc, &options).map_err(&serialization_failed)?;
+        // Only the single-file export consumes these, and capturing them costs
+        // a second pass over the DOM, so nothing else pays for it.
+        let fragments = self
+            .config
+            .standalone
+            .enabled
+            .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
+            .transpose()?;
         let deps = self.project.dependencies(&world);
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
@@ -683,6 +700,7 @@ impl Engine {
             outputs: Outputs {
                 images: rewrite.images,
                 broken: rewrite.broken,
+                fragments,
             },
             warnings,
         })

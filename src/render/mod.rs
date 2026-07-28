@@ -10,6 +10,7 @@ mod base;
 mod embed;
 mod externalize;
 mod fingerprint;
+mod fragment;
 mod image;
 mod lang;
 mod links;
@@ -22,6 +23,7 @@ mod transform;
 
 pub use asset::AssetMap;
 pub use externalize::ImageRef;
+pub use fragment::Fragments;
 pub use links::LinkMap;
 pub use srcset::SrcSets;
 

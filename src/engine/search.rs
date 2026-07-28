@@ -89,17 +89,18 @@ impl Corpus {
         let mut documents: Vec<Document> = site
             .outputs
             .iter()
-            .filter(|(page, _)| page.lang == lang)
-            .map(|(page, html)| Document {
-                url: page.permalink.clone(),
+            .filter(|out| out.page.lang == lang)
+            .map(|out| Document {
+                url: out.page.permalink.clone(),
                 title: has(SearchField::Title)
-                    .then(|| page.frontmatter.title.clone())
+                    .then(|| out.page.frontmatter.title.clone())
                     .flatten()
                     .unwrap_or_default(),
                 // every configured taxonomy's terms, not a hardcoded key: a
                 // site classifying by `topics` indexes just as well as `tags`.
                 tags: if has(SearchField::Tags) {
-                    page.frontmatter
+                    out.page
+                        .frontmatter
                         .taxonomies
                         .values()
                         .flatten()
@@ -109,7 +110,7 @@ impl Corpus {
                     Vec::new()
                 },
                 body: if has(SearchField::Body) {
-                    Text::extract(html)
+                    Text::extract(out.html)
                 } else {
                     String::new()
                 },
@@ -276,6 +277,7 @@ impl SearchFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::process::Output;
 
     fn doc(title: &str, body: &str, tags: &[&str]) -> Document {
         Document {
@@ -311,7 +313,7 @@ mod tests {
         };
         let (a, b) = (page("a"), page("b"));
         let config = Config::default();
-        let corpus = |outputs: &[(&Page, &str)]| {
+        let corpus = |outputs: &[Output]| {
             let site = Site {
                 config: &config,
                 pages: &[],
@@ -324,8 +326,14 @@ mod tests {
                 .collect::<Vec<_>>()
         };
 
-        assert_eq!(corpus(&[(&a, ""), (&b, "")]), ["/a/", "/b/"]);
-        assert_eq!(corpus(&[(&b, ""), (&a, "")]), ["/a/", "/b/"]);
+        assert_eq!(
+            corpus(&[Output::new(&a, ""), Output::new(&b, "")]),
+            ["/a/", "/b/"]
+        );
+        assert_eq!(
+            corpus(&[Output::new(&b, ""), Output::new(&a, "")]),
+            ["/a/", "/b/"]
+        );
     }
 
     #[test]
