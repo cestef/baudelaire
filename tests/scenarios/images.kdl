@@ -1,0 +1,160 @@
+// Externalizing typst-embedded images out of the DOM into files, and the
+// responsive variants the pipeline derives from an asset.
+
+scenario "extract is the default: a typst image becomes a file reference" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png")
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains #"src="/assets/pic.png""#
+      missing "data:image"
+    }
+    file "assets/pic.png"
+  }
+}
+
+scenario "extract off restores typst's native base64 inlining" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #false }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png")
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "data:image" }
+    absent "assets/pic.png"
+  }
+}
+
+scenario "externalizing preserves typst's image sizing as inline css" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #true }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png", width: 50%)
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "width:50%" }
+  }
+}
+
+scenario "an image built from bytes has no file, so it stays inline" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #true }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image(read("pic.png", encoding: none))
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "data:image" }
+    absent "assets/pic.png"
+  }
+}
+
+scenario "a responsive width smaller than the source becomes a srcset candidate" {
+  // Variants are re-encoded by the image handler, which the `images` feature
+  // owns; the slim flavour copies verbatim and emits no srcset.
+  requires "images"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images {
+            responsive { widths 30 }
+          }
+      }
+      """#
+    // A 60px-wide asset referenced by URL, which path externalization does not
+    // cover: the pipeline generates a 30px variant and a srcset.
+    "assets/big.png" png="60x40"
+    "content/index.typ" #"""
+      #html.elem("img", attrs: (src: "/assets/big.png"))
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains "srcset="
+      contains "/assets/big-30.png 30w"
+      // No sizes attribute unless the config sets one (100vw is the default).
+      missing "sizes="
+    }
+    file "assets/big-30.png"
+  }
+}
+
+scenario "a responsive width at or above the source would upscale, so it is dropped" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images {
+            responsive { widths 100 }
+          }
+      }
+      """#
+    "assets/small.png" png="40x40"
+    "content/index.typ" #"""
+      #html.elem("img", attrs: (src: "/assets/small.png"))
+      """#
+  }
+  expect {
+    ok
+    // With no smaller widths left, no srcset is produced at all.
+    file "index.html" { missing "srcset=" }
+    absent "assets/small-100.png"
+  }
+}

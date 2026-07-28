@@ -18,7 +18,7 @@ fn site() -> Site {
     );
     site.write(
         "themes/plume/theme.kdl",
-        "site \"Theme default\"\nlang \"fr\"\noutput {\n  html { pretty #false }\n}\n",
+        "site \"Theme default\"\nlang \"fr\"\nhtml {\n  pretty #false\n}\n",
     );
     site.write(
         "themes/plume/templates/page.typ",

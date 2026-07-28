@@ -52,7 +52,7 @@ list is expected) stops the build with an explanation.
 
 == Taxonomy keys
 
-Any key you declare under `taxonomies` in `config.kdl` is recognized too, and
+Any key you declare under `content { taxonomies }` in `config.kdl` is recognized too, and
 collects a list of terms:
 
 ```typ

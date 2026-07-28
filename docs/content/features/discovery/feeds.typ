@@ -12,7 +12,7 @@ Both are opt-in, and both need a canonical `url`.
 ```kdl
 url "https://example.com"
 
-output {
+generate {
   sitemap #true
   feed {
     formats "rss" "atom" "json"
@@ -36,7 +36,7 @@ of the newest appear. The footer of this site links its
 == A feed per tag
 
 ```kdl
-output {
+generate {
   feed {
     formats "rss"
     terms #true

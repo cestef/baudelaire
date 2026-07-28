@@ -89,7 +89,9 @@ fn retitling_a_page_invalidates_its_sibling() {
     // A page's prev/next links carry its neighbour's title, baked into the
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
     // sibling whose nav points at it; otherwise its "next" link goes stale.
-    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
+    let site = Site::with(
+        "site \"T\"\ncontent {\n  collections {\n    posts template=\"post.typ\"\n  }\n}\n",
+    );
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
@@ -220,8 +222,7 @@ fn generated_pages_are_cached() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
-         taxonomies {\n  tags index=#true\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags index=#true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -249,8 +250,7 @@ fn retitling_invalidates_taxonomy_listing() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
-         taxonomies {\n  tags index=#true\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags index=#true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -323,8 +323,7 @@ fn editing_an_embedded_asset_invalidates_the_page() {
     // bytes typst never reads, so the per-page tracker is blind to them. Editing
     // the asset must still rebuild the page (its inlined copy is now stale).
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n\
-         output {\n  html {\n    embed #true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n\\\nhtml {\n  embed #true\n}\n",
     );
     site.write("assets/note.svg", "<svg>ONE</svg>");
     site.write(
@@ -380,7 +379,9 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     // A page's frontmatter reads a value from an imported module, so the cached
     // frontmatter depends on that module. Editing it must re-evaluate the page's
     // frontmatter: a missed dependency would serve the stale title from cache.
-    let site = Site::with("site \"T\"\ncollections {\n  posts template=\"post.typ\"\n}\n");
+    let site = Site::with(
+        "site \"T\"\ncontent {\n  collections {\n    posts template=\"post.typ\"\n  }\n}\n",
+    );
     site.write(
         "templates/post.typ",
         "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",
@@ -644,7 +645,7 @@ fn renamed_page_prunes_the_old_permalink() {
 fn dropped_taxonomy_term_prunes_its_index() {
     // The exact shape of the original bug: a term page lingering after no page
     // carries the term anymore.
-    let config = format!("{CONFIG}taxonomies {{\n  tags index=#true\n}}\n");
+    let config = format!("{CONFIG}content {{\n  taxonomies {{\n    tags index=#true\n  }}\n}}\n");
     let site = Site::with(&config);
     site.write(
         "content/a.typ",
@@ -736,7 +737,7 @@ fn pruning_spares_assets_and_static_files() {
 fn clean_false_disables_pruning() {
     // The prune is opt-out: with `clean #false` an orphaned output survives, for
     // users who manage `dist/` by hand.
-    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  clean #false\n}\n";
+    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nprune #false\n";
     let site = Site::with(config);
     site.write(
         "content/posts/a.typ",
@@ -761,7 +762,7 @@ fn clean_false_disables_pruning() {
 fn flat_urls_still_prune_on_rename() {
     // Pruning is independent of URL style: a renamed page under flat URLs must
     // still drop its old `.html` output.
-    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\noutput {\n  urls \"flat\"\n}\n";
+    let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  style \"flat\"\n}\n";
     let site = Site::with(config);
     site.write(
         "content/posts/old.typ",

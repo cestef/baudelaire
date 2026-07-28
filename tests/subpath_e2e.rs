@@ -14,14 +14,14 @@ fn subsite() -> Site {
         site "T"
         url "https://host.test/docs"
         paths {
-            content "content"
-            dist "public"
-        }
-        output {
-            sitemap #true
-            search { formats "json"; client #true }
+          content "content"
+          dist "public"
         }
         serve { open #false }
+        generate {
+          sitemap #true
+          search { formats "json"; client #true }
+        }
         "#,
     );
     site.write(
@@ -145,12 +145,12 @@ fn css_references_carry_the_subpath() {
         site "T"
         url "https://host.test/docs"
         paths {
-            content "content"
-            dist "public"
-            assets "assets"
+          content "content"
+          dist "public"
+          assets "assets"
         }
-        output {
-            assets { fingerprint #true }
+        assets {
+          fingerprint #true
         }
         "#,
     );

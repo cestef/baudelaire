@@ -187,7 +187,7 @@ impl Listing {
         // localized by the generator). Absolute so the world can virtualize it
         // under the project root; the file need not exist.
         let section = config.scope(&lang, &self.section);
-        let base = crate::fs::canonical(&config.content);
+        let base = crate::fs::canonical(&config.paths.content);
         let source = base.join(&section).join(format!("{}.typ", self.slug));
         Page::assemble(
             PageId::new(&section, &self.slug),

@@ -1,4 +1,4 @@
-//! The asset pipeline: classify each file under `config.assets`, transform it
+//! The asset pipeline: classify each file under `config.paths.assets`, transform it
 //! through the [`Handler`] that claims it, and write the result into `dist`.
 //!
 //! Each asset kind is one handler ([`Stylesheet`], [`Script`], [`Raster`], or
@@ -300,7 +300,7 @@ impl<'a> Assets<'a> {
             config,
             #[cfg(feature = "js")]
             js,
-            sources: Layers::new(theme.map(Theme::assets), &config.assets),
+            sources: Layers::new(theme.map(Theme::assets), &config.paths.assets),
             dst: config.asset_staging(),
             memo: Memo::new(config),
             prefix: format!("/{}", config.asset_name()),
@@ -514,7 +514,7 @@ impl<'a> Assets<'a> {
     /// The relative output path for an asset, splicing a content hash into the
     /// filename when fingerprinting is enabled (`app.css` -> `app.<hash>.css`).
     fn fingerprint(&self, rel: &Path, bytes: &[u8]) -> PathBuf {
-        if !self.config.asset.fingerprint {
+        if !self.config.assets.fingerprint {
             return rel.to_path_buf();
         }
         let hash = Hash::of_bytes(bytes);

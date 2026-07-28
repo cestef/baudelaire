@@ -48,7 +48,8 @@ impl<T> Block<T> {
 }
 
 /// An attribute-keyed scope (a node's `key=value` entries), e.g. a single
-/// `collections { posts sort=... }` line. Same single-source-of-truth contract
+/// `content { collections { posts sort=... } }` line. Same single-source-of-truth
+/// contract
 /// as [`Block`], but handlers receive the attribute value.
 pub(super) struct Attrs<T: 'static>(pub(super) &'static [Attr<T>]);
 

@@ -358,7 +358,7 @@ struct CleanTarget {
 const CLEAN_TARGETS: &[CleanTarget] = &[
     CleanTarget {
         selected: |a| a.dist,
-        dirs: |c| vec![c.dist.clone()],
+        dirs: |c| vec![c.paths.dist.clone()],
     },
     CleanTarget {
         selected: |a| a.cache,
@@ -417,7 +417,7 @@ impl CleanArgs {
     /// only the [`CLEAN_TARGETS`] whose flags were set.
     fn targets(&self, config: &Config) -> Vec<PathBuf> {
         if self.all() {
-            let mut dirs = vec![config.dist.clone(), PathBuf::from(Config::SCRATCH)];
+            let mut dirs = vec![config.paths.dist.clone(), PathBuf::from(Config::SCRATCH)];
             if !config.cache.dir.starts_with(Config::SCRATCH) {
                 dirs.push(config.cache.dir.clone());
             }
@@ -534,7 +534,7 @@ impl Overrides for BuildOverrides {
     fn apply(&self, config: &mut Config) {
         self.common.apply(config);
         if let Some(out) = &self.out {
-            config.dist = out.clone();
+            config.paths.dist = out.clone();
         }
         if self.no_cache {
             config.cache.incremental = false;
@@ -548,10 +548,10 @@ impl Overrides for CommonOverrides {
             config.url = Some(url.clone());
         }
         if self.drafts {
-            config.draft.build = true;
+            config.content.draft.build = true;
         }
         if self.future {
-            config.future = true;
+            config.content.future = true;
         }
         if let Some(strict) = self.strict_links {
             config.links.strict = strict;
@@ -727,16 +727,16 @@ impl NewArgs {
     /// `content/posts/foo.typ` is not double-prefixed), and `.typ` is appended
     /// when the name does not already carry it.
     pub(crate) fn target(&self, config: &Config) -> PathBuf {
-        let mut path = if self.path.is_absolute() || self.path.starts_with(&config.content) {
+        let mut path = if self.path.is_absolute() || self.path.starts_with(&config.paths.content) {
             self.path.clone()
         } else {
-            config.content.join(&self.path)
+            config.paths.content.join(&self.path)
         };
         // A bundle is a directory holding an `index.typ` (the collection's
         // configured index name), so images and data can sit beside the page.
         if self.bundle {
             path.set_extension("");
-            let index = config.index.as_deref().unwrap_or("index");
+            let index = config.content.index.as_deref().unwrap_or("index");
             return path.join(format!("{index}.typ"));
         }
         if path.extension().is_none_or(|e| e != "typ") {
@@ -801,7 +801,7 @@ mod tests {
     fn full_sweep_clears_output_and_scratch_root() {
         let config = Config::default();
         let targets = args(false, false, false).targets(&config);
-        assert!(targets.contains(&config.dist));
+        assert!(targets.contains(&config.paths.dist));
         assert!(targets.contains(&PathBuf::from(Config::SCRATCH)));
         // The default cache lives under the scratch root, so it is not named
         // separately: the root sweep already covers it.
@@ -832,7 +832,7 @@ mod tests {
         );
         assert_eq!(
             args(true, false, false).targets(&config),
-            vec![config.dist.clone()]
+            vec![config.paths.dist.clone()]
         );
     }
 }

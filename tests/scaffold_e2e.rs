@@ -27,7 +27,7 @@ fn init_config_is_valid() {
     // filled (no `{{..}}` left behind).
     assert!(cfg.contains("site \""), "has a site name: {cfg}");
     assert!(!cfg.contains("{{"), "placeholders filled: {cfg}");
-    assert!(cfg.contains("clean #true"));
+    assert!(cfg.contains("prune #true"));
     assert!(cfg.contains("collections"));
 }
 
@@ -73,7 +73,7 @@ fn new_infers_frontmatter_from_the_collection() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        "site \"T\"\ncollections {\n  blog sort=\"date\"\n  guide sort=\"order\"\n}\n",
+        "site \"T\"\ncontent {\n  collections {\n    blog sort=\"date\"\n    guide sort=\"order\"\n  }\n}\n",
     );
     // A dated collection gets today's date stamped; no order field.
     let blog = t.run(&["new", "blog/launch-day"]);

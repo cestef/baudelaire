@@ -125,7 +125,7 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     if backends.is_empty() {
         return Err(DeployError::Unconfigured.into());
     }
-    let dist = Dist::scan(&config.dist)?;
+    let dist = Dist::scan(&config.paths.dist)?;
     remote::publish(
         "deploy",
         backends,

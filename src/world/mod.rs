@@ -271,6 +271,7 @@ impl Project {
         // and served to the `@baudelaire/*` module registry.
         let tree = codegen::Value::from(&context);
         let mut inputs: Dict = config
+            .typst
             .inputs
             .iter()
             .map(|(k, v)| (Str::from(k.as_str()), v.clone().into_value()))
@@ -283,7 +284,7 @@ impl Project {
         // disabled (`-html` is rejected at parse). Every other feature is a
         // `+name`/`-name` toggle resolved here in order, so a later entry wins.
         let mut features = vec![Feature::Html];
-        for token in &config.features {
+        for token in &config.typst.features {
             let (enable, name) = match token.strip_prefix('-') {
                 Some(rest) => (false, rest),
                 None => (true, token.as_str()),
@@ -313,7 +314,7 @@ impl Project {
         // Externalize typst-embedded images (base64 -> file reference) by
         // overriding typst-html's native image rule. Off by default and skipped
         // when `html.embed` inlines everything anyway.
-        if config.images.externalize(&config.html) {
+        if config.assets.images.externalize(&config.html) {
             library
                 .rules
                 .replace(typst::foundations::Target::Html, image_rule::IMAGE_RULE);

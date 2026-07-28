@@ -1,0 +1,52 @@
+// Build hooks. Their redirects are relative, so these also pin where hooks run:
+// the configured project root, not the process cwd.
+
+scenario "the before and after hooks both run" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      hooks {
+        before "mkdir -p assets && echo b > assets/hook-before.txt"
+        after "echo a > public/hook-after.txt"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // The before hook ran early enough for the asset scan to see its output...
+    file "assets/hook-before.txt" { contains "b" }
+    // ...and the after hook ran once dist was final.
+    file "hook-after.txt" { contains "a" }
+  }
+}
+
+scenario "a hook exiting non-zero fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      hooks {
+        before "exit 7"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      b
+      """#
+  }
+  expect {
+    fails { code "baudelaire::hook::status" }
+  }
+}

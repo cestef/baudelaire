@@ -1,0 +1,87 @@
+// The build-time half of standard.site verification: a `.well-known` record and
+// a per-page backlink on dated pages. Nothing here touches the network.
+
+scenario "a configured did emits the wellknown file and links dated pages" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content" dist "public"
+      }
+      announce {
+          standard {
+              handle "me.example"
+              did "did:plc:test123"
+          }
+      }
+      """#
+    "content/posts/dated.typ" #"""
+      #let frontmatter = (title: "Dated", date: datetime(year: 2026, month: 1, day: 2))
+      body
+      """#
+    "content/posts/undated.typ" #"""
+      #let frontmatter = (title: "Undated",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file ".well-known/site.standard.publication" {
+      equals "at://did:plc:test123/site.standard.publication/self"
+    }
+    file "posts/dated/index.html" {
+      contains #"rel="site.standard.document""#
+      contains "at://did:plc:test123/site.standard.document/"
+    }
+    // An undated page is not a document, so it carries no backlink.
+    file "posts/undated/index.html" { missing "site.standard.document" }
+  }
+}
+
+scenario "without a did, nothing standard.site-related touches the output" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content" dist "public"
+      }
+      announce { standard { handle "me.example" } }
+      """#
+    "content/posts/dated.typ" #"""
+      #let frontmatter = (title: "Dated", date: datetime(year: 2026, month: 1, day: 2))
+      body
+      """#
+  }
+  expect {
+    ok
+    absent ".well-known/site.standard.publication"
+    file "posts/dated/index.html" { missing "site.standard.document" }
+  }
+}
+
+scenario "the wellknown toggle drops the file and keeps the per-page link" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content" dist "public"
+      }
+      announce {
+          standard {
+              handle "me.example"
+              did "did:plc:test123"
+              verify { wellknown #false }
+          }
+      }
+      """#
+    "content/posts/dated.typ" #"""
+      #let frontmatter = (title: "Dated", date: datetime(year: 2026, month: 1, day: 2))
+      body
+      """#
+  }
+  expect {
+    ok
+    absent ".well-known/site.standard.publication"
+    file "posts/dated/index.html" { contains #"rel="site.standard.document""# }
+  }
+}

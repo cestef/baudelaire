@@ -18,7 +18,7 @@ pub(super) struct Speculation;
 
 impl Transform for Speculation {
     fn enabled(&self, config: &Config) -> bool {
-        config.speculation.enabled
+        config.navigation.speculation.enabled
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
@@ -75,8 +75,8 @@ impl Rules {
             }],
         };
         let rules = Self {
-            prefetch: rule(config.speculation.prefetch),
-            prerender: rule(config.speculation.prerender),
+            prefetch: rule(config.navigation.speculation.prefetch),
+            prerender: rule(config.navigation.speculation.prerender),
         };
         (!rules.prefetch.is_empty() || !rules.prerender.is_empty()).then_some(rules)
     }
@@ -101,9 +101,9 @@ mod tests {
 
     fn config(prefetch: Eagerness, prerender: Eagerness) -> Config {
         let mut config = Config::default();
-        config.speculation.enabled = true;
-        config.speculation.prefetch = prefetch;
-        config.speculation.prerender = prerender;
+        config.navigation.speculation.enabled = true;
+        config.navigation.speculation.prefetch = prefetch;
+        config.navigation.speculation.prerender = prerender;
         config
     }
 

@@ -51,16 +51,14 @@ pub struct VcsMissing {
 
 /// Two different externalized images resolved to the same served filename. Only
 /// the first is kept, so one image would be wrong; the author must rename a
-/// source or enable `output { assets { fingerprint } }` to disambiguate by
+/// source or enable `assets { fingerprint }` to disambiguate by
 /// content hash.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("two images map to `{name}`: `{kept}` and `{dropped}`")]
 #[diagnostic(
     code(baudelaire::images::collision),
     severity(warning),
-    help(
-        "rename one source, or turn on `output {{ assets {{ fingerprint }} }}` to name by content"
-    )
+    help("rename one source, or turn on `assets {{ fingerprint }}` to name by content")
 )]
 pub struct ImageCollision {
     pub name: String,
@@ -105,7 +103,7 @@ impl From<Vec<Unreachable>> for UnreachableLinks {
 #[diagnostic(
     code(baudelaire::output::standalone_entry),
     severity(warning),
-    help("point `output {{ standalone {{ entry }} }}` at a permalink the site builds")
+    help("point `navigation {{ standalone {{ entry }} }}` at a permalink the site builds")
 )]
 pub struct StandaloneEntryMissing {
     pub entry: String,
@@ -119,7 +117,7 @@ pub struct StandaloneEntryMissing {
 #[diagnostic(
     code(baudelaire::output::standalone_linked),
     severity(warning),
-    help("turn on `output {{ html {{ embed #true }} }}` to inline them into the file")
+    help("turn on `html {{ embed #true }}` to inline them into the file")
 )]
 pub struct StandaloneLinked {
     pub file: String,

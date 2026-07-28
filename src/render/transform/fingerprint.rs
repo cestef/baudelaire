@@ -1,6 +1,6 @@
 //! Rewrites asset references to their content-addressed (fingerprinted) URLs.
 //!
-//! When `output { assets { fingerprint #true } }` is set, the engine copies each
+//! When `assets { fingerprint #true }` is set, the engine copies each
 //! asset to a content-hashed name (`style.css` -> `style.<hash>.css`) and records
 //! the mapping in an [`super::AssetMap`]. This transform rewrites every `href`/
 //! `src` that names an original asset to its hashed URL, so caches can serve
@@ -23,7 +23,7 @@ pub(super) struct Fingerprint;
 
 impl Transform for Fingerprint {
     fn enabled(&self, config: &Config) -> bool {
-        config.asset.fingerprint
+        config.assets.fingerprint
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {

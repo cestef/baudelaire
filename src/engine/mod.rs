@@ -142,7 +142,7 @@ impl Engine {
 
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        fs::create_dir_all(&self.config.dist)?;
+        fs::create_dir_all(&self.config.paths.dist)?;
         // A staging tree here is a previous build's failure; clear it before the
         // static copy, which writes into it (see `Static::destination`).
         let _ = std::fs::remove_dir_all(self.config.asset_staging());
@@ -230,6 +230,7 @@ impl Engine {
             // never reaches a silent cache hit.
             cards: self
                 .config
+                .generate
                 .cards
                 .active()
                 .then(|| Hash::of_file(&self.card_template()))
@@ -332,7 +333,10 @@ impl Engine {
         #[cfg(feature = "cards")]
         rendered.par_iter().try_for_each(|r| match &r.card {
             Some(png) => fs::write_all(
-                self.config.cards.path(&self.config.dist, &r.page.permalink),
+                self.config
+                    .generate
+                    .cards
+                    .path(&self.config.paths.dist, &r.page.permalink),
                 png,
             ),
             None => Ok(()),
@@ -367,7 +371,7 @@ impl Engine {
                 + statics.bytes
                 + cards.bytes,
             warnings: ui.warnings() - warned,
-            dist: &self.config.dist,
+            dist: &self.config.paths.dist,
             elapsed: timer.elapsed(),
         }
         .report(ui);
@@ -408,12 +412,13 @@ impl Engine {
     fn template_root(&self, template: &str) -> String {
         let project = self
             .config
+            .paths
             .templates
             .strip_prefix(self.project.root())
-            .unwrap_or(&self.config.templates);
+            .unwrap_or(&self.config.paths.templates);
         match &self.theme {
             Some(theme)
-                if !self.config.templates.join(template).is_file()
+                if !self.config.paths.templates.join(template).is_file()
                     && theme.has_template(template) =>
             {
                 theme.templates()
@@ -425,19 +430,22 @@ impl Engine {
     /// The card template's path on disk, for the fingerprint that ties every
     /// page's card to the template that drew it.
     fn card_template(&self) -> PathBuf {
-        self.config.templates.join(&self.config.cards.template)
+        self.config
+            .paths
+            .templates
+            .join(&self.config.generate.cards.template)
     }
 
     /// Drop orphaned outputs from earlier builds (a removed page or taxonomy
     /// term, a renamed permalink) so `dist` never serves stale files.
     ///
-    /// Gated on `clean` so a user managing `dist` by hand can opt out. The
+    /// Gated on `prune` so a user managing `dist` by hand can opt out. The
     /// keep-set is every file this build produced: page HTML, static
     /// passthrough, generated files. The asset tree is regenerated wholesale, so
     /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
     /// are not ours to prune.
     fn sweep(&self, outputs: &[Output], statics: &Copied, generated: &Generated) -> Result<()> {
-        if !self.config.clean {
+        if !self.config.prune {
             return Ok(());
         }
         // A card belongs to its page whether or not this build re-rendered it,
@@ -446,7 +454,12 @@ impl Engine {
             .iter()
             .map(|out| out.page)
             .filter(|page| page.wants_card(&self.config))
-            .map(|page| self.config.cards.path(&self.config.dist, &page.permalink));
+            .map(|page| {
+                self.config
+                    .generate
+                    .cards
+                    .path(&self.config.paths.dist, &page.permalink)
+            });
         let keep: Vec<PathBuf> = outputs
             .iter()
             .map(|out| out.page.output.clone())
@@ -455,7 +468,7 @@ impl Engine {
             .chain(generated.paths.iter().cloned())
             .collect();
         let pruned = prune::Prune::new(
-            &self.config.dist,
+            &self.config.paths.dist,
             &self.config.asset_dist(),
             &self.config.cache.dir,
         )
@@ -572,10 +585,10 @@ impl Engine {
     /// both discovered pages (content-relative) and generated pages (whose
     /// synthetic sources are canonical-absolute).
     fn relative(&self, page: &Page) -> String {
-        let canonical = fs::canonical(&self.config.content);
+        let canonical = fs::canonical(&self.config.paths.content);
         page.source
             .strip_prefix(canonical)
-            .or_else(|_| page.source.strip_prefix(&self.config.content))
+            .or_else(|_| page.source.strip_prefix(&self.config.paths.content))
             .unwrap_or(&page.source)
             .display()
             .to_string()
@@ -778,6 +791,7 @@ impl Engine {
         // a second pass over the DOM, so nothing else pays for it.
         let fragments = self
             .config
+            .navigation
             .standalone
             .enabled
             .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))

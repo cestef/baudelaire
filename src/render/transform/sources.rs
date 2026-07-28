@@ -1,7 +1,7 @@
 //! Turns each `<img>` that names a responsive source into one carrying a
 //! `srcset`.
 //!
-//! When `images { responsive { .. } }` is set, the asset pipeline generates
+//! When `assets { images { responsive { .. } } }` is set, the asset pipeline generates
 //! downscaled copies and records them in a [`super::SrcSets`] manifest. This
 //! transform looks up each image's `src`, and when the manifest has variants for
 //! it, fills a `srcset` (the variant URLs with their width descriptors). It adds
@@ -26,7 +26,7 @@ pub(super) struct Sources;
 
 impl Transform for Sources {
     fn enabled(&self, config: &Config) -> bool {
-        config.images.responsive.enabled
+        config.assets.images.responsive.enabled
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
@@ -55,7 +55,7 @@ impl Transform for Sources {
             element.attrs.push(attr::srcset, srcset);
             // only emit sizes the config provides; an absent sizes is 100vw by
             // spec, and an author-set one is left as is.
-            if let Some(sizes) = &cx.config.images.responsive.sizes
+            if let Some(sizes) = &cx.config.assets.images.responsive.sizes
                 && element.attrs.get(attr::sizes).is_none()
             {
                 element.attrs.push(attr::sizes, sizes.clone());

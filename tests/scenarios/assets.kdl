@@ -1,0 +1,101 @@
+// The asset pipeline: inlining, minification, bundling.
+
+scenario "embed inlines a local asset as a data uri" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      html {
+        embed #true
+      }
+      """#
+    "assets/style.css" #"""
+      body{color:red}
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.css"))
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains "data:text/css;base64,"
+      missing #"href="/assets/style.css""#
+    }
+  }
+}
+
+scenario "minify compacts css" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+      }
+      """#
+    "assets/style.css" #"""
+      /* a comment */
+      body {
+        color: red;
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" {
+      missing "/*"
+      missing "\n"
+      contains "red"
+    }
+  }
+}
+
+scenario "bundling inlines js imports and drops the partials" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+      }
+      """#
+    "assets/_util.js" #"""
+      export function hi() { return 42; }
+      """#
+    "assets/main.js" #"""
+      import { hi } from './_util.js';
+      console.log(hi());
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // The imported function body is bundled into the entry...
+    file "assets/main.js" { contains "42" }
+    // ...and the partial is never emitted standalone.
+    absent "assets/_util.js"
+  }
+}

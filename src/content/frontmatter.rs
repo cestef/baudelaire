@@ -134,6 +134,7 @@ impl Frontmatter {
     /// error; anything else passes through to `extra`.
     fn from_dict(dict: Dict, path: &Path, config: &Config) -> Result<Self> {
         let taxonomies: Vec<&str> = config
+            .content
             .taxonomies
             .iter()
             .map(|(_, t)| t.key.as_str())

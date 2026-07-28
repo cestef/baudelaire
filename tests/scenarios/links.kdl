@@ -1,0 +1,98 @@
+// Internal `.typ` links become permalinks; unresolvable ones are a gate.
+
+scenario "an internal typ link is rewritten and an external one is left alone" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      See #link("b.typ")[B] and #link("https://example.com")[ext].
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      B body
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains #"href="/posts/b/""#
+      contains "https://example.com"
+    }
+  }
+}
+
+scenario "a broken internal link fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      See #link("missing.typ")[gone].
+      """#
+  }
+  expect {
+    fails { code "baudelaire::links::broken" }
+  }
+}
+
+scenario "a broken internal link only warns when strictness is off" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      links {
+        strict #false
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      See #link("missing.typ")[gone].
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html"
+  }
+}
+
+scenario "frontmatter redirects emit stub pages beside the real one" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new", redirect: ("/old", "/legacy/post"),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "old/index.html" {
+      contains #"http-equiv="refresh""#
+      contains "url=/posts/new/"
+    }
+    file "legacy/post/index.html" {
+      contains #"http-equiv="refresh""#
+      contains "url=/posts/new/"
+    }
+    file "posts/new/index.html"
+  }
+}

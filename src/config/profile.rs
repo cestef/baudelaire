@@ -83,7 +83,7 @@ mod tests {
             lang "fr"
             profiles {
               prod {
-                future #true
+                content { future #true }
               }
             }
         "#,
@@ -91,24 +91,20 @@ mod tests {
         let prod = cfg.with_profile("prod").expect("profile exists");
         assert_eq!(prod.site.as_deref(), Some("Baudelaire"));
         assert_eq!(prod.lang, "fr");
-        assert!(prod.future);
+        assert!(prod.content.future);
     }
 
     #[test]
     fn profile_overrides_nested_html() {
         let cfg = parse(
             r#"
-            output {
-              html {
-                pretty #true
-              }
+            html {
+              pretty #true
             }
             profiles {
               prod {
-                output {
-                  html {
-                    pretty #false
-                  }
+                html {
+                  pretty #false
                 }
               }
             }
@@ -123,12 +119,10 @@ mod tests {
         // overriding one field of a nested section must inherit the base's others, not reset them
         let cfg = parse(
             r#"
-            output {
-              html { pretty #true; embed #true; meta #true }
-            }
+            html { pretty #true; embed #true; meta #true }
             profiles {
               prod {
-                output { html { pretty #false } }
+                html { pretty #false }
               }
             }
         "#,
@@ -137,6 +131,41 @@ mod tests {
         assert!(!prod.html.pretty, "pretty overridden");
         assert!(prod.html.embed, "embed inherited from base");
         assert!(prod.html.meta, "meta inherited from base");
+    }
+
+    /// Fill-in-place has to hold all the way down, not just one level: the
+    /// grouped tree makes `a { b { c .. } }` the common shape (a `dev` profile
+    /// flipping `content { draft { build } }`), and an override there must leave
+    /// every untouched sibling at *each* level alone.
+    #[test]
+    fn profile_overrides_three_levels_deep() {
+        let cfg = parse(
+            r#"
+            content {
+              index "_index"
+              draft { build #false; suffix ".wip" }
+            }
+            assets {
+              minify #true
+              images { lazy #false; responsive { quality 70; widths 320 640 } }
+            }
+            profiles {
+              dev {
+                content { draft { build #true } }
+                assets { images { responsive { quality 55 } } }
+              }
+            }
+        "#,
+        );
+        let dev = cfg.with_profile("dev").expect("profile exists");
+        assert!(dev.content.draft.build, "overridden three levels down");
+        assert_eq!(dev.content.draft.suffix, ".wip", "sibling key inherited");
+        assert_eq!(dev.content.index.as_deref(), Some("_index"), "uncle key");
+        let responsive = &dev.assets.images.responsive;
+        assert_eq!(responsive.quality, 55, "overridden four levels down");
+        assert_eq!(responsive.widths, vec![320, 640], "sibling list inherited");
+        assert!(!dev.assets.images.lazy, "sibling section inherited");
+        assert!(dev.assets.minify, "grandparent sibling inherited");
     }
 
     #[test]
@@ -175,7 +204,7 @@ mod tests {
 
     #[test]
     fn profile_not_found_help_lists_configured_names() {
-        let cfg = parse("profiles {\n  dev { future #true }\n  prod { future #false }\n}\n");
+        let cfg = parse("profiles {\n  dev { prune #true }\n  prod { prune #false }\n}\n");
         let err = cfg.with_profile("prd").expect_err("unknown profile");
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(rendered.contains("profile `prd` not found"), "{rendered}");
@@ -185,7 +214,7 @@ mod tests {
 
     #[test]
     fn profile_rejects_nested_profiles() {
-        let cfg = parse("profiles {\n  dev {\n    profiles { inner { future #true } }\n  }\n}\n");
+        let cfg = parse("profiles {\n  dev {\n    profiles { inner { prune #true } }\n  }\n}\n");
         let err = cfg.with_profile("dev").expect_err("nested profiles");
         assert!(
             err.to_string()
@@ -196,8 +225,7 @@ mod tests {
 
     #[test]
     fn profile_overlay_error_points_at_original_config_text() {
-        let text =
-            "site \"x\"\nprofiles {\n  dev {\n    output {\n      clean \"yes\"\n    }\n  }\n}\n";
+        let text = "site \"x\"\nprofiles {\n  dev {\n    prune \"yes\"\n  }\n}\n";
         let err = parse(text).with_profile("dev").expect_err("bad boolean");
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(
@@ -206,12 +234,12 @@ mod tests {
         );
         // The label must excerpt the original config.kdl, not a re-serialized
         // profile subtree with mismatched offsets.
-        assert!(rendered.contains("clean \"yes\""), "{rendered}");
+        assert!(rendered.contains("prune \"yes\""), "{rendered}");
     }
 
     #[test]
     fn profile_partials_survive_application() {
-        let cfg = parse("profiles {\n  dev { future #true }\n}\n");
+        let cfg = parse("profiles {\n  dev { content { future #true } }\n}\n");
         let dev = cfg.with_profile("dev").expect("profile exists");
         assert_eq!(dev.profiles.len(), 1, "partials are restored after overlay");
     }
@@ -220,16 +248,16 @@ mod tests {
     fn profile_future_flag() {
         let cfg = parse(
             r#"
-            future #false
+            content { future #false }
             profiles {
               dev {
-                future #true
+                content { future #true }
               }
             }
         "#,
         );
         let dev = cfg.clone().with_profile("dev").expect("profile exists");
-        assert!(dev.future);
-        assert!(!cfg.future);
+        assert!(dev.content.future);
+        assert!(!cfg.content.future);
     }
 }

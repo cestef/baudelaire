@@ -159,7 +159,7 @@ impl Module for Search {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
         // The bare specifier follows the emitted index: inverted only when that
         // is the sole configured format, else the flat client (it has snippets).
-        let default = if cx.config.search.formats == [SearchFormat::Inverted] {
+        let default = if cx.config.generate.search.formats == [SearchFormat::Inverted] {
             SearchFormat::Inverted
         } else {
             SearchFormat::Json
@@ -182,14 +182,14 @@ impl Module for Search {
 
 /// `baudelaire:spa`: the client-side navigation runtime, so a site bundling its
 /// own entry can mount it (and pick its own container) instead of loading the
-/// generated `spa.js` separately. Served whether or not `output { spa { } }` is
+/// generated `spa.js` separately. Served whether or not `navigation { spa { } }` is
 /// set: importing it is itself the opt-in, and the block's fields are only the
 /// defaults `mountSpa()` starts from.
 struct Navigation;
 
 impl Module for Navigation {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        vec![("baudelaire:spa".into(), cx.config.spa.module())]
+        vec![("baudelaire:spa".into(), cx.config.navigation.spa.module())]
     }
 }
 
@@ -336,7 +336,7 @@ impl Module for Feed {
         // default language's: one bundle serves the whole site, so a French
         // page's widget had nothing of its own to show.
         let items = cx.config.langs().into_iter().flat_map(|lang| {
-            Page::recent(cx.pages, lang, cx.config.feed.limit)
+            Page::recent(cx.pages, lang, cx.config.generate.feed.limit)
                 .into_iter()
                 .map(|page| {
                     Value::dict([

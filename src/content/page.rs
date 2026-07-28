@@ -191,7 +191,7 @@ impl Page {
         // Shape the URL for the site's style here, the one funnel every page
         // (authored and generated) passes through, so the permalink and the
         // file it maps to can never disagree.
-        let permalink = config.urls.url(&permalink);
+        let permalink = config.links.style.url(&permalink);
         Self {
             output: config.destination(&permalink),
             id,
@@ -218,7 +218,7 @@ impl Page {
     }
 
     /// The default slug for a page: its parent directory's name when the file is
-    /// a bundle index (stem equals `config.index`) in a real collection, else
+    /// a bundle index (stem equals `config.content.index`) in a real collection, else
     /// the file stem. The root `index.typ` keeps its stem, so it still maps to
     /// `/` rather than to the content directory's name.
     fn bundle_slug(path: &Path, collection: &str, stem: &Stem, config: &Config) -> String {
@@ -241,7 +241,7 @@ impl Page {
     pub(crate) fn section_path(&self, config: &Config) -> Vec<String> {
         let rel = self
             .source
-            .strip_prefix(&config.content)
+            .strip_prefix(&config.paths.content)
             .unwrap_or(&self.source);
         let mut dirs: Vec<String> = rel
             .parent()
@@ -285,7 +285,7 @@ impl Page {
     /// is real content rather than a generated listing (nobody shares a tag
     /// index, and one render per term would dominate the build).
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
-        config.cards.active()
+        config.generate.cards.active()
             && self.frontmatter.text("image").is_none()
             && !matches!(self.data, Data::Generated(_))
     }
@@ -377,7 +377,7 @@ impl Page {
     /// Whether this page builds under the current draft/future config, the
     /// one eligibility predicate, shared by the engine and page generators.
     pub fn eligible(&self, config: &Config) -> bool {
-        !self.skipped(config.draft.build, config.future)
+        !self.skipped(config.content.draft.build, config.content.future)
     }
 
     /// Whether this page should be skipped given draft/future flags.
@@ -495,7 +495,9 @@ impl<'a> Stem<'a> {
             if let (None, Some((head, code))) = (lang, Self::language(slug, config)) {
                 slug = head;
                 lang = Some(code);
-            } else if let (false, Some(head)) = (draft, Self::undraft(slug, &config.draft.suffix)) {
+            } else if let (false, Some(head)) =
+                (draft, Self::undraft(slug, &config.content.draft.suffix))
+            {
                 slug = head;
                 draft = true;
             }
@@ -548,10 +550,14 @@ impl<'a> Stem<'a> {
         (shaped && !config.knows(code)).then_some(code)
     }
 
-    /// Whether this stem names a bundle index (`config.index`), so the file's
+    /// Whether this stem names a bundle index (`config.content.index`), so the file's
     /// parent directory supplies the slug rather than the file name.
     fn is_index(&self, config: &Config) -> bool {
-        config.index.as_deref().is_some_and(|idx| self.slug == idx)
+        config
+            .content
+            .index
+            .as_deref()
+            .is_some_and(|idx| self.slug == idx)
     }
 
     fn slug(&self) -> &'a str {
@@ -562,14 +568,14 @@ impl<'a> Stem<'a> {
 /// Special collection id for root-level pages (directly under `content/`).
 const ROOT: &str = "_root";
 
-/// Discover all collections and pages under `config.content`.
+/// Discover all collections and pages under `config.paths.content`.
 ///
 /// A collection whose config carries a `glob` claims every content file that
 /// pattern matches, wherever it lives. Files no glob claims fall back to
 /// convention: one in a subdirectory joins a collection named after that top
 /// directory; one directly under `content/` joins `_root` (mapped to `/`).
 pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
-    if !config.content.exists() {
+    if !config.paths.content.exists() {
         return Ok(Vec::new());
     }
     let cache = DiscoveryCache::load(config);
@@ -597,7 +603,7 @@ impl<'a> Discovery<'a> {
     }
 
     fn run(mut self, cache: &DiscoveryCache) -> Result<Vec<Collection>> {
-        self.files = Self::gather(&self.config.content)?
+        self.files = Self::gather(&self.config.paths.content)?
             .into_iter()
             .map(|path| (path, false))
             .collect();
@@ -646,6 +652,7 @@ impl<'a> Discovery<'a> {
         let mut out = Vec::new();
         let globs: Vec<(String, String)> = self
             .config
+            .content
             .collections
             .iter()
             .filter_map(|(id, cfg)| Some((id.clone(), cfg.glob.clone()?)))
@@ -654,7 +661,9 @@ impl<'a> Discovery<'a> {
             let pattern =
                 Glob::new(&glob).map_err(|e| ContentError::bad_glob("collection", &glob, e))?;
             for (path, taken) in &mut self.files {
-                let rel = path.strip_prefix(&self.config.content).unwrap_or(path);
+                let rel = path
+                    .strip_prefix(&self.config.paths.content)
+                    .unwrap_or(path);
                 if !*taken && pattern.is_match(rel) {
                     *taken = true;
                     out.push((id.clone(), path.clone()));
@@ -663,7 +672,9 @@ impl<'a> Discovery<'a> {
         }
         for (path, taken) in &self.files {
             if !taken {
-                let rel = path.strip_prefix(&self.config.content).unwrap_or(path);
+                let rel = path
+                    .strip_prefix(&self.config.paths.content)
+                    .unwrap_or(path);
                 out.push((Self::convention_id(rel), path.clone()));
             }
         }

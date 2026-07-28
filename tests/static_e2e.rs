@@ -82,12 +82,14 @@ fn a_static_file_overrides_generated_processor_output() {
         site "T"
         url "https://host.test"
         paths {
-            content "content"
-            dist "public"
-            static "static"
+          content "content"
+          dist "public"
+          static "static"
         }
-        output { sitemap #true }
-    "#,
+        generate {
+          sitemap #true
+        }
+        "#,
     );
     site.write(
         "content/index.typ",

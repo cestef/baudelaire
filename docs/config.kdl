@@ -3,6 +3,8 @@ url "https://baudelaire.cstef.dev"
 author "cstef"
 lang "en"
 
+// Where things live on disk. `assets` here is the source directory; the
+// top-level `assets` block below is the pipeline that processes it.
 paths {
   content "content"
   dist "public"
@@ -10,6 +12,69 @@ paths {
   templates "templates"
   static "static"
 }
+
+// What is a page and how pages group. Collections and taxonomies read from
+// `paths { content }`, so they belong next to it.
+content {
+  collections {
+    guide sort="order" template="page.typ"
+    features sort="order" template="page.typ" list="list.typ"
+    blog sort="date" reverse=#true template="page.typ" paginate=5 list="list.typ"
+  }
+
+  taxonomies {
+    tags index=#true template="list.typ"
+  }
+}
+
+html {
+  pretty #true
+}
+
+// Permalink shape and link checking are one subject. `style "clean"` gives
+// directory-per-page URLs (`/guide/` not `/guide.html`); use "flat" for `.html`
+// files instead.
+links {
+  style "clean"
+}
+
+// Asset pipeline: minify CSS (lightningcss), bundle + minify JS (rolldown), and
+// content-hash filenames for far-future caching.
+assets {
+  minify #true
+  bundle #true
+  fingerprint #true
+}
+
+// Files the build emits beside the pages themselves.
+generate {
+  sitemap #true
+
+  // Client-side search: a flat document index. The palette UI is the generated
+  // client, imported into assets/main.js as the `baudelaire:search` virtual
+  // module and bundled by rolldown. The `body` field powers result snippets.
+  search {
+    formats "json"
+    fields "title" "body" "tags"
+  }
+
+  robots {
+    disallow "/drafts/"
+  }
+
+  llms {
+    summary "Baudelaire is a Typst-native static site generator: write pages in Typst, get incremental builds, clean URLs, taxonomies, pagination, feeds, search, and an asset pipeline."
+  }
+
+  feed {
+    formats "rss" "atom"
+    limit 20
+  }
+}
+
+// Sweep orphaned outputs (a deleted page, a renamed permalink, a dropped
+// taxonomy term) out of the output directory on every build.
+prune #true
 
 // The icons `theme.typ` inlines with `svg()` live outside `assets/`, so they are
 // never published as standalone files. The dev server watches content,
@@ -27,74 +92,19 @@ client {
   edits #true
 }
 
-collections {
-  guide sort="order" template="page.typ"
-  features sort="order" template="page.typ" list="list.typ"
-  blog sort="date" reverse=#true template="page.typ" paginate=5 list="list.typ"
-}
-
-taxonomies {
-  tags index=#true template="list.typ"
-}
-
-output {
-  // Directory-per-page permalinks (`/guide/` not `/guide.html`). Use "flat"
-  // for `.html` files instead.
-  urls "clean"
-
-  // Sweep orphaned files (a deleted page, a renamed permalink, a dropped
-  // taxonomy term) out of the output directory on every build.
-  clean #true
-
-  html {
-    pretty #true
-  }
-
-  // Asset pipeline: minify CSS (lightningcss), bundle + minify JS (rolldown),
-  // and content-hash filenames for far-future caching.
-  assets {
-    minify #true
-    bundle #true
-    fingerprint #true
-  }
-
-  // Client-side search: a flat document index. The palette UI is the generated
-  // client, imported into assets/main.js as the `baudelaire:search` virtual
-  // module and bundled by rolldown. The `body` field powers result snippets.
-  search {
-    formats "json"
-    fields "title" "body" "tags"
-  }
-
-  sitemap #true
-
-  robots {
-    disallow "/drafts/"
-  }
-
-  llms {
-    summary "Baudelaire is a Typst-native static site generator: write pages in Typst, get incremental builds, clean URLs, taxonomies, pagination, feeds, search, and an asset pipeline."
-  }
-
-  feed {
-    formats "rss" "atom"
-    limit 20
-  }
-}
-
 // `baudelaire build --profile dev` skips the asset pipeline (faster rebuilds)
 // and includes draft pages.
 profiles {
   dev {
-    draft {
-      build #true
-    }
-    output {
-      assets {
-        minify #false
-        bundle #false
-        fingerprint #false
+    content {
+      draft {
+        build #true
       }
+    }
+    assets {
+      minify #false
+      bundle #false
+      fingerprint #false
     }
   }
 }

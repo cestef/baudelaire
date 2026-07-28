@@ -54,12 +54,7 @@ impl Memo {
     pub(super) fn new(config: &Config) -> Self {
         Self {
             dir: config.cache.dir.join("assets"),
-            salt: Hash::of(&(
-                &config.asset,
-                &config.images,
-                config.asset_name(),
-                Renderer::current(),
-            )),
+            salt: Hash::of(&(&config.assets, config.asset_name(), Renderer::current())),
             enabled: config.cache.incremental,
         }
     }

@@ -5,12 +5,13 @@ use crate::config::dispatch::{Attrs, Block, Keys};
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, DeployConfig,
-    DraftConfig, Eagerness, FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig,
-    JpegConfig, LanguageConfig, LinkConfig, LlmsConfig, Named, OptimizeConfig, PngConfig, PngStrip,
-    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
-    SearchFormat, ServeConfig, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
-    StandardConfig, TaxonomyConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig,
+    DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig, HooksConfig,
+    HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig, Named,
+    NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig,
+    SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig,
+    TypstConfig, VerifyConfig,
 };
 use crate::error::{ConfigError, Result};
 
@@ -52,32 +53,27 @@ impl Config {
             c.author = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("paths", |c, n, t| n.paths(c, t)),
         ("theme", |c, n, t| {
             c.theme = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("future", |c, n, t| {
-            c.future = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("draft", |c, n, t| n.draft(&mut c.draft, t)),
-        ("links", |c, n, t| n.links(&mut c.links, t)),
-        ("cache", |c, n, t| n.cache(&mut c.cache, t)),
-        ("typst", |c, n, t| n.typst(c, t)),
-        ("output", |c, n, t| n.output(c, t)),
-        ("collections", |c, n, t| {
-            c.collections = n.collections(t)?;
-            Ok(())
-        }),
-        ("taxonomies", |c, n, t| {
-            c.taxonomies = n.taxonomies(t)?;
-            Ok(())
-        }),
+        ("paths", |c, n, t| n.paths(&mut c.paths, t)),
+        ("content", |c, n, t| n.content(&mut c.content, t)),
         ("languages", |c, n, t| {
             c.languages = n.languages(t)?;
             Ok(())
         }),
+        ("assets", |c, n, t| n.assets(&mut c.assets, t)),
+        ("html", |c, n, t| n.html(&mut c.html, t)),
+        ("links", |c, n, t| n.links(&mut c.links, t)),
+        ("generate", |c, n, t| n.generate(&mut c.generate, t)),
+        ("navigation", |c, n, t| n.navigation(&mut c.navigation, t)),
+        ("prune", |c, n, t| {
+            c.prune = n.boolean(t, 0)?;
+            Ok(())
+        }),
+        ("cache", |c, n, t| n.cache(&mut c.cache, t)),
+        ("typst", |c, n, t| n.typst(&mut c.typst, t)),
         ("client", |c, n, t| {
             c.client = n.client(t)?;
             Ok(())
@@ -139,9 +135,11 @@ pub(super) trait NodeExt {
         noun: &'static str,
         each: fn(&KdlNode, &str) -> Result<(String, T)>,
     ) -> Result<Vec<(String, T)>>;
-    fn paths(&self, config: &mut Config, text: &str) -> Result<()>;
-    fn typst(&self, config: &mut Config, text: &str) -> Result<()>;
-    fn output(&self, config: &mut Config, text: &str) -> Result<()>;
+    fn paths(&self, target: &mut Paths, text: &str) -> Result<()>;
+    fn content(&self, target: &mut ContentConfig, text: &str) -> Result<()>;
+    fn typst(&self, target: &mut TypstConfig, text: &str) -> Result<()>;
+    fn generate(&self, target: &mut GenerateConfig, text: &str) -> Result<()>;
+    fn navigation(&self, target: &mut NavigationConfig, text: &str) -> Result<()>;
     fn inputs(&self, text: &str) -> Result<Vec<(String, String)>>;
     fn client(&self, text: &str) -> Result<Vec<(String, crate::codegen::Value)>>;
     fn features(&self, text: &str) -> Result<Vec<String>>;
@@ -206,8 +204,8 @@ impl NodeExt for KdlNode {
         }
     }
 
-    /// A flag node's boolean: a bare node (`clean`) enables, a present argument
-    /// must be a KDL boolean (`clean #false`); anything else is a type error,
+    /// A flag node's boolean: a bare node (`prune`) enables, a present argument
+    /// must be a KDL boolean (`prune #false`); anything else is a type error,
     /// never a silent coercion.
     fn boolean(&self, text: &str, idx: usize) -> Result<bool> {
         match self.get(idx) {
@@ -607,6 +605,7 @@ impl NodeExt for KdlNode {
                 c.fingerprint = n.boolean(t, 0)?;
                 Ok(())
             }),
+            ("images", |c, n, t| n.images(&mut c.images, t)),
         ]);
         ASSETS.fill(target, self, text)
     }
@@ -632,15 +631,10 @@ impl NodeExt for KdlNode {
     }
 
     /// The `paths { .. }` parent section: directory layout knobs.
-    fn paths(&self, config: &mut Config, text: &str) -> Result<()> {
-        const PATHS: Block<Config> = Block(&[
+    fn paths(&self, target: &mut Paths, text: &str) -> Result<()> {
+        const PATHS: Block<Paths> = Block(&[
             ("content", |c, n, t| {
                 c.content = n.string(t, 0)?.into();
-                Ok(())
-            }),
-            ("index", |c, n, t| {
-                let s = n.string(t, 0)?;
-                c.index = (!s.is_empty()).then_some(s);
                 Ok(())
             }),
             ("dist", |c, n, t| {
@@ -660,12 +654,38 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
         ]);
-        PATHS.fill(config, self, text)
+        PATHS.fill(target, self, text)
+    }
+
+    /// The `content { .. }` parent section: what the content tree holds and how
+    /// it is read. The directory it lives in is `paths { content }`.
+    fn content(&self, target: &mut ContentConfig, text: &str) -> Result<()> {
+        const CONTENT: Block<ContentConfig> = Block(&[
+            ("index", |c, n, t| {
+                let s = n.string(t, 0)?;
+                c.index = (!s.is_empty()).then_some(s);
+                Ok(())
+            }),
+            ("future", |c, n, t| {
+                c.future = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("draft", |c, n, t| n.draft(&mut c.draft, t)),
+            ("collections", |c, n, t| {
+                c.collections = n.collections(t)?;
+                Ok(())
+            }),
+            ("taxonomies", |c, n, t| {
+                c.taxonomies = n.taxonomies(t)?;
+                Ok(())
+            }),
+        ]);
+        CONTENT.fill(target, self, text)
     }
 
     /// The `typst { .. }` parent section: typst engine knobs.
-    fn typst(&self, config: &mut Config, text: &str) -> Result<()> {
-        const TYPST: Block<Config> = Block(&[
+    fn typst(&self, target: &mut TypstConfig, text: &str) -> Result<()> {
+        const TYPST: Block<TypstConfig> = Block(&[
             ("features", |c, n, t| {
                 c.features = n.features(t)?;
                 Ok(())
@@ -675,23 +695,14 @@ impl NodeExt for KdlNode {
                 Ok(())
             }),
         ]);
-        TYPST.fill(config, self, text)
+        TYPST.fill(target, self, text)
     }
 
-    /// The `output { .. }` parent section: everything the build emits.
-    fn output(&self, config: &mut Config, text: &str) -> Result<()> {
-        const OUTPUT: Block<Config> = Block(&[
-            ("urls", |c, n, t| {
-                c.urls = n.arg(t, 0)?.urls(t, NodeExt::span(n))?;
-                Ok(())
-            }),
-            ("clean", |c, n, t| {
-                c.clean = n.boolean(t, 0)?;
-                Ok(())
-            }),
-            ("html", |c, n, t| n.html(&mut c.html, t)),
-            ("images", |c, n, t| n.images(&mut c.images, t)),
-            ("assets", |c, n, t| n.assets(&mut c.asset, t)),
+    /// The `generate { .. }` parent section: the files a build emits beside the
+    /// pages. Each child is opt-in, either a flag or a block whose presence
+    /// turns it on.
+    fn generate(&self, target: &mut GenerateConfig, text: &str) -> Result<()> {
+        const GENERATE: Block<GenerateConfig> = Block(&[
             ("sitemap", |c, n, t| {
                 c.sitemap = n.boolean(t, 0)?;
                 Ok(())
@@ -700,14 +711,22 @@ impl NodeExt for KdlNode {
             ("llms", |c, n, t| n.llms(&mut c.llms, t)),
             ("feed", |c, n, t| n.feed(&mut c.feed, t)),
             ("search", |c, n, t| n.search(&mut c.search, t)),
-            ("standalone", |c, n, t| n.standalone(&mut c.standalone, t)),
+            ("cards", |c, n, t| n.cards(&mut c.cards, t)),
+        ]);
+        GENERATE.fill(target, self, text)
+    }
+
+    /// The `navigation { .. }` parent section: how a visitor moves between the
+    /// built pages. Each child block's presence enables that strategy.
+    fn navigation(&self, target: &mut NavigationConfig, text: &str) -> Result<()> {
+        const NAVIGATION: Block<NavigationConfig> = Block(&[
             ("spa", |c, n, t| n.spa(&mut c.spa, t)),
+            ("standalone", |c, n, t| n.standalone(&mut c.standalone, t)),
             ("speculation", |c, n, t| {
                 n.speculation(&mut c.speculation, t)
             }),
-            ("cards", |c, n, t| n.cards(&mut c.cards, t)),
         ]);
-        OUTPUT.fill(config, self, text)
+        NAVIGATION.fill(target, self, text)
     }
 
     fn draft(&self, target: &mut DraftConfig, text: &str) -> Result<()> {
@@ -726,6 +745,10 @@ impl NodeExt for KdlNode {
 
     fn links(&self, target: &mut LinkConfig, text: &str) -> Result<()> {
         const LINKS: Block<LinkConfig> = Block(&[
+            ("style", |c, n, t| {
+                c.style = n.arg(t, 0)?.urls(t, NodeExt::span(n))?;
+                Ok(())
+            }),
             ("strict", |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())

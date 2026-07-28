@@ -64,13 +64,13 @@ impl SiteMap {
 
 impl Processor for SiteMap {
     fn enabled(&self, config: &Config) -> bool {
-        config.sitemap
+        config.generate.sitemap
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base = site.base("sitemap")?;
         out.file(
-            &site.config.dist.join(Self::FILE),
+            &site.config.paths.dist.join(Self::FILE),
             &Self::render(&base, site.pages, site.config),
         )?;
         out.note(format_args!("wrote {}", Self::FILE));

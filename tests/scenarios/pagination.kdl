@@ -1,0 +1,152 @@
+// Collection index pages: split, prefixed, or a single page when `paginate` is
+// left out.
+
+scenario "paginate splits a collection into numbered index pages" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          posts sort="title" paginate=2
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "P0", slug: "a",)
+      body
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "P1", slug: "b",)
+      body
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "P2", slug: "c",)
+      body
+      """#
+    "content/posts/d.typ" #"""
+      #let frontmatter = (title: "P3", slug: "d",)
+      body
+      """#
+    "content/posts/e.typ" #"""
+      #let frontmatter = (title: "P4", slug: "e",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // 5 items / 2 per page -> 3 index pages.
+    file "posts/index.html" {
+      contains #"href="/posts/page/2/""#
+      missing "← Previous"
+    }
+    file "posts/page/2/index.html"
+    file "posts/page/3/index.html" {
+      contains #"href="/posts/page/2/""#
+      missing "Next →"
+    }
+  }
+}
+
+scenario "the pagination prefix is configurable, empty included" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          a sort="title" paginate=2 prefix="p"
+          b sort="title" paginate=2 prefix=""
+        }
+      }
+      """#
+    "content/a/x.typ" #"""
+      #let frontmatter = (title: "P0", slug: "x",)
+      body
+      """#
+    "content/a/y.typ" #"""
+      #let frontmatter = (title: "P1", slug: "y",)
+      body
+      """#
+    "content/a/z.typ" #"""
+      #let frontmatter = (title: "P2", slug: "z",)
+      body
+      """#
+    "content/b/x.typ" #"""
+      #let frontmatter = (title: "P0", slug: "x",)
+      body
+      """#
+    "content/b/y.typ" #"""
+      #let frontmatter = (title: "P1", slug: "y",)
+      body
+      """#
+    "content/b/z.typ" #"""
+      #let frontmatter = (title: "P2", slug: "z",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // Custom prefix: /a/p/2/.
+    file "a/p/2/index.html"
+    file "a/index.html" { contains #"href="/a/p/2/""# }
+    // Empty prefix: /b/2/, no `page` segment.
+    file "b/2/index.html"
+    absent "b/page/2/index.html"
+    file "b/index.html" { contains #"href="/b/2/""# }
+  }
+}
+
+scenario "a list template with no paginate yields one index holding everything" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          posts sort="title" list="list.typ"
+        }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = html.elem("html", html.elem("body", {
+        for entry in page.frontmatter.entries {
+          html.elem("a", attrs: (href: entry.url), entry.label)
+        }
+      }))
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "P0", slug: "a",)
+      body
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "P1", slug: "b",)
+      body
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "P2", slug: "c",)
+      body
+      """#
+    "content/posts/d.typ" #"""
+      #let frontmatter = (title: "P3", slug: "d",)
+      body
+      """#
+    "content/posts/e.typ" #"""
+      #let frontmatter = (title: "P4", slug: "e",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "posts/index.html" {
+      contains #"href="/posts/a/""#
+      contains #"href="/posts/b/""#
+      contains #"href="/posts/c/""#
+      contains #"href="/posts/d/""#
+      contains #"href="/posts/e/""#
+      missing "page/2"
+    }
+    absent "posts/page/2/index.html"
+  }
+}

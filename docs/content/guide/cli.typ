@@ -135,6 +135,10 @@ state.
 / #raw("--cache"): Remove only the build cache.
 / #raw("--announce"): Remove only the announce state.
 
+This is the wholesale wipe, and it is not the config's
+#link("config.typ")[`prune`], which sweeps only files no page claims any more
+and runs as part of every build.
+
 == Global flags <global-flags>
 
 Accepted by every command.

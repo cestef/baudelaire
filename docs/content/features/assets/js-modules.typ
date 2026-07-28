@@ -5,7 +5,7 @@
 )
 #import "/templates/theme.typ": callout
 
-When you bundle JavaScript (`output { assets { bundle #true } }`), baudelaire
+When you bundle JavaScript (`assets { bundle #true }`), baudelaire
 serves the site's build data as `baudelaire:*` modules. Import one and rolldown
 inlines the data into your bundle, so there is no runtime fetch and nothing to
 keep in sync by hand.

@@ -38,6 +38,7 @@ impl Taxonomy {
     /// URL and neither can drift from the other's idea of what a term contains.
     pub(crate) fn groups<'a>(config: &'a Config, pages: &'a [Page]) -> Vec<Group<'a>> {
         config
+            .content
             .taxonomies
             .iter()
             .filter(|(_, cfg)| cfg.index)

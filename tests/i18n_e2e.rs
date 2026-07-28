@@ -100,11 +100,16 @@ fn tagged_blog() -> Site {
         site "T"
         lang "en"
         languages { fr { name "Français" } }
-        paths { content "content"; dist "public" }
-        collections {
-            blog "blog/**/*.typ" sort="date" reverse=#true list="layout.typ" paginate=1
+        paths {
+          content "content"
+          dist "public"
         }
-        taxonomies { tags index=#true template="layout.typ" }
+        content {
+          collections {
+              blog "blog/**/*.typ" sort="date" reverse=#true list="layout.typ" paginate=1
+          }
+          taxonomies { tags index=#true template="layout.typ" }
+        }
         "#,
     );
     site.write("templates/layout.typ", "#let layout(page, body) = body\n");
@@ -154,8 +159,14 @@ fn hosted() -> Site {
         url "https://ex.test"
         lang "en"
         languages { fr { name "Français" } }
-        paths { content "content"; dist "public" }
-        output { sitemap #true; feed { formats "rss" } }
+        paths {
+          content "content"
+          dist "public"
+        }
+        generate {
+          sitemap #true
+          feed { formats "rss" }
+        }
         "#,
     );
     site.write(
@@ -243,8 +254,14 @@ fn i18n_module_inlines_languages_and_strings() {
         site "T"
         lang "en"
         languages { fr { name "Français"; strings { more "Lire la suite" } } }
-        paths { content "content"; dist "public"; assets "assets" }
-        output { assets { bundle #true } }
+        paths {
+          content "content"
+          dist "public"
+          assets "assets"
+        }
+        assets {
+          bundle #true
+        }
         "#,
     );
     site.write(
@@ -297,10 +314,13 @@ fn feeds_and_search_are_per_language() {
         languages {
             fr { name "Français"; site "T (fr)" }
         }
-        paths { content "content"; dist "public" }
-        output {
-            feed { formats "atom" "json" }
-            search { formats "json"; client #true }
+        paths {
+          content "content"
+          dist "public"
+        }
+        generate {
+          feed { formats "atom" "json" }
+          search { formats "json"; client #true }
         }
         "#,
     );
@@ -361,9 +381,16 @@ fn generated_listings_are_translated_and_localized() {
                 strings { previous "← Précédent"; next "Suivant →"; page "page" }
             }
         }
-        paths { content "content"; dist "public" }
-        taxonomies { tags index=#true }
-        output { sitemap #true }
+        paths {
+          content "content"
+          dist "public"
+        }
+        content {
+          taxonomies { tags index=#true }
+        }
+        generate {
+          sitemap #true
+        }
         "#,
     );
     site.write(
@@ -417,7 +444,7 @@ fn typ_links_resolve_to_the_linking_page_s_language() {
 #[test]
 fn unicode_names_survive_slugging() {
     let site = Site::with(
-        "site \"T\"\npaths { content \"content\"; dist \"public\" }\ntaxonomies { tags index=#true }\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncontent {\n  taxonomies { tags index=#true }\n}\n",
     );
     site.write(
         "content/posts/café.typ",

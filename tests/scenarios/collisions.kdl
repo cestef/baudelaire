@@ -1,0 +1,43 @@
+// Two outputs cannot share a URL, and a slug has to survive being one.
+
+scenario "two pages resolving to one url are rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", slug: "same",)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", slug: "same",)
+      b
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::collision" }
+  }
+}
+
+scenario "a slug with no url-safe characters is rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/p.typ" #"""
+      #let frontmatter = (title: "P", slug: "🎉",)
+      p
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::empty_slug" }
+  }
+}

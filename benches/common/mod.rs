@@ -28,10 +28,10 @@ pub fn mksite(dir: &Path, n: usize) -> Config {
     let kdl = "site \"Bench\"\n\
         url \"https://bench.example\"\n\
         paths { content \"content\"; dist \"public\"; assets \"assets\"; templates \"templates\" }\n\
-        clean #true\n\
-        taxonomies { tags }\n\
-        output {\n\
-          assets { minify #true; fingerprint #true; bundle #true }\n\
+        prune #true\n\
+        content { taxonomies { tags } }\n\
+        assets { minify #true; fingerprint #true; bundle #true }\n\
+        generate {\n\
           feed { formats rss atom }\n\
           search { formats json }\n\
         }\n";
@@ -71,9 +71,9 @@ pub fn mksite(dir: &Path, n: usize) -> Config {
     .unwrap();
 
     let mut cfg = Config::parse(kdl).unwrap();
-    cfg.content = dir.join(&cfg.content);
-    cfg.dist = dir.join(&cfg.dist);
-    cfg.assets = dir.join(&cfg.assets);
+    cfg.paths.content = dir.join(&cfg.paths.content);
+    cfg.paths.dist = dir.join(&cfg.paths.dist);
+    cfg.paths.assets = dir.join(&cfg.paths.assets);
     cfg.cache.dir = dir.join(&cfg.cache.dir);
     cfg
 }

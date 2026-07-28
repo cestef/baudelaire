@@ -26,6 +26,7 @@ impl Processor for WellKnown {
         };
         let path = site
             .config
+            .paths
             .dist
             .join(".well-known")
             .join(PUBLICATION.as_str());

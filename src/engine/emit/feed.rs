@@ -39,7 +39,7 @@ pub(super) struct Feeds;
 
 impl Processor for Feeds {
     fn enabled(&self, config: &Config) -> bool {
-        !config.feed.formats.is_empty()
+        !config.generate.feed.formats.is_empty()
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
@@ -47,12 +47,12 @@ impl Processor for Feeds {
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
-            let dated = Page::recent(site.pages, lang, site.config.feed.limit);
+            let dated = Page::recent(site.pages, lang, site.config.generate.feed.limit);
             let scope = site.config.scope(lang, "");
             let feed = Feed::new(&base, site.config.title(lang), &dated, &scope);
             Self::emit(site, out, &feed)?;
         }
-        if site.config.feed.terms {
+        if site.config.generate.feed.terms {
             self.terms(site, out, &base)?;
         }
         Ok(())
@@ -70,7 +70,10 @@ impl Feeds {
         for group in Taxonomy::groups(site.config, site.pages) {
             let lang = group.lang();
             for term in group.resolve()? {
-                let dated = Page::newest(term.members.iter().copied(), site.config.feed.limit);
+                let dated = Page::newest(
+                    term.members.iter().copied(),
+                    site.config.generate.feed.limit,
+                );
                 // The term's own URL is the feed's home, so its scope is that
                 // URL's path: `/fr/tags/rust/` -> `fr/tags/rust`.
                 let scope = term.url.trim_matches('/');
@@ -88,8 +91,8 @@ impl Feeds {
         if feed.is_empty() {
             return Ok(());
         }
-        for kind in &site.config.feed.formats {
-            let path = site.config.dist.join(feed.scope).join(kind.file());
+        for kind in &site.config.generate.feed.formats {
+            let path = site.config.paths.dist.join(feed.scope).join(kind.file());
             out.file(&path, &feed.render(*kind)?)?;
             out.note(format_args!("wrote {}", path.display()));
         }

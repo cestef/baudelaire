@@ -49,22 +49,22 @@ impl Stylesheet {
     /// points at its assets after they are content-hashed. Copied verbatim when
     /// neither minify nor fingerprint is on.
     fn transform(file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Vec<u8>> {
-        if !ctx.config.asset.minify && !ctx.config.asset.fingerprint {
+        if !ctx.config.assets.minify && !ctx.config.assets.fingerprint {
             return fs::read(file);
         }
         let code = fs::read_to_string(file)?;
         let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
             .map_err(|e| AssetError::css(file.display(), e))?;
-        if ctx.config.asset.minify {
+        if ctx.config.assets.minify {
             sheet
                 .minify(MinifyOptions::default())
                 .map_err(|e| AssetError::css(file.display(), e))?;
         }
         // Only fingerprinting renames assets, so only then analyze `url()`s.
-        let analyze = ctx.config.asset.fingerprint;
+        let analyze = ctx.config.assets.fingerprint;
         let printed = sheet
             .to_css(PrinterOptions {
-                minify: ctx.config.asset.minify,
+                minify: ctx.config.assets.minify,
                 analyze_dependencies: analyze.then(DependencyOptions::default),
                 ..PrinterOptions::default()
             })
@@ -123,7 +123,7 @@ impl Stylesheet {
     /// their members keep input order and cross-references fall back to the
     /// original (unmapped) names.
     fn order(files: Vec<Layered>, ctx: &Ctx) -> Vec<Layered> {
-        if !ctx.config.asset.fingerprint || files.len() < 2 {
+        if !ctx.config.assets.fingerprint || files.len() < 2 {
             return files;
         }
         let key_of = |file: &Layered| ctx.url(&file.rel);

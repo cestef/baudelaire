@@ -1,0 +1,112 @@
+// The search indexes and the client that mounts over them.
+
+scenario "one index per configured search format, plus a self-mounting client" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags
+        }
+      }
+      generate {
+        search {
+            formats "json" "inverted"
+            stopwords "the"
+            client #true
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", tags: ("intro",),)
+      The quick brown fox
+      """#
+  }
+  expect {
+    ok
+    file "search.json" {
+      contains #""url":"/posts/a/""#
+      contains #""title":"Alpha""#
+      contains "quick brown fox"
+      contains #""intro""#
+    }
+    file "search.inverted.json" {
+      contains #""postings""#
+      contains #""quick""#
+      // The stopword is excluded from the inverted index.
+      missing #""the""#
+    }
+    // `client #true` emits a self-mounting command palette per format: the
+    // engine, the palette UI, and an auto-mount, so one `<script>` is a working
+    // search box.
+    file "search.js" {
+      contains "export async function createSearch"
+      contains "export function mountSearch"
+      contains "mountSearch();"
+    }
+    file "search.inverted.js"
+  }
+}
+
+scenario "the search client bundles into a user entry through its virtual module" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+      }
+      generate {
+        search { formats "json" }
+      }
+      """#
+    "assets/main.js" #"""
+      import { mountSearch } from "baudelaire:search";
+      mountSearch({ hotkey: "k" });
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // rolldown resolves the virtual specifier and inlines the palette into the
+    // user's own bundle, rather than leaving a fetch for the browser.
+    file "assets/main.js" {
+      contains "bd-palette"
+      contains "search.json"
+      missing "import {"
+    }
+  }
+}
+
+scenario "no search index without configured formats" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    absent "search.json"
+    absent "search-index.json"
+  }
+}

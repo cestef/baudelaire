@@ -6,11 +6,12 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, DeployConfig,
-    DraftConfig, Eagerness, FeedConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
-    LinkConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
-    RobotsConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig, SpaConfig,
-    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig,
+    DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig, HooksConfig, HtmlConfig,
+    ImagesConfig, JpegConfig, LinkConfig, NavigationConfig, OptimizeConfig, Paths, PngConfig,
+    PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig,
+    SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TypstConfig,
+    VerifyConfig,
 };
 
 impl Default for Config {
@@ -23,39 +24,18 @@ impl Default for Config {
             // The process cwd, which `Root::enter` has already moved to the
             // project directory.
             root: PathBuf::from("."),
-            content: PathBuf::from("content"),
-            index: Some("index".into()),
-            dist: PathBuf::from("public"),
-            assets: PathBuf::from("assets"),
-            r#static: PathBuf::from("static"),
-            templates: PathBuf::from("templates"),
+            paths: Paths::default(),
             theme: None,
-            urls: UrlStyle::default(),
-            clean: true,
-            future: false,
-            // opt-in like robots/llms/search; also needs a `url`
-            sitemap: false,
-            robots: RobotsConfig::default(),
-            llms: LlmsConfig::default(),
-            draft: DraftConfig::default(),
-            links: LinkConfig::default(),
-            feed: FeedConfig::default(),
-            search: SearchConfig::default(),
-            standalone: StandaloneConfig::default(),
-            spa: SpaConfig::default(),
-            speculation: SpeculationConfig::default(),
-            cards: CardsConfig::default(),
-            inputs: Default::default(),
-            client: Default::default(),
-            // HTML is forced on in `world.rs`; this list is purely additive
-            // extras, empty by default.
-            features: Vec::new(),
-            collections: Default::default(),
-            taxonomies: Default::default(),
+            content: ContentConfig::default(),
             languages: Default::default(),
+            assets: AssetConfig::default(),
             html: HtmlConfig::default(),
-            images: ImagesConfig::default(),
-            asset: AssetConfig::default(),
+            links: LinkConfig::default(),
+            generate: GenerateConfig::default(),
+            navigation: NavigationConfig::default(),
+            prune: true,
+            typst: TypstConfig::default(),
+            client: Default::default(),
             cache: CacheConfig::default(),
             hooks: HooksConfig::default(),
             announce: AnnounceConfig::default(),
@@ -64,6 +44,30 @@ impl Default for Config {
             profile: None,
             profiles: Default::default(),
             source: String::new(),
+        }
+    }
+}
+
+impl Default for Paths {
+    fn default() -> Self {
+        Self {
+            content: PathBuf::from("content"),
+            dist: PathBuf::from("public"),
+            assets: PathBuf::from("assets"),
+            r#static: PathBuf::from("static"),
+            templates: PathBuf::from("templates"),
+        }
+    }
+}
+
+impl Default for ContentConfig {
+    fn default() -> Self {
+        Self {
+            index: Some("index".into()),
+            future: false,
+            draft: DraftConfig::default(),
+            collections: Default::default(),
+            taxonomies: Default::default(),
         }
     }
 }
@@ -195,6 +199,7 @@ impl Default for LinkConfig {
         // typo, and the build knows it for certain. External checking is opt-in
         // and needs the network, so it can never be a default.
         Self {
+            style: UrlStyle::default(),
             strict: true,
             external: false,
         }

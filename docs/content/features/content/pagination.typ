@@ -6,14 +6,17 @@
 
 == Defining a collection
 
-A `collections` entry groups pages that share sorting, permalinks, and a default
-template. The node name is the collection id; a leading string argument is a glob
-selecting its members, and the keys tune the rest:
+A `content { collections }` entry groups pages that share sorting, permalinks,
+and a default template. It sits under `content` because a collection is a way of
+reading the content directory. The node name is the collection id; a leading
+string argument is a glob selecting its members, and the keys tune the rest:
 
 ```kdl
-collections {
-  posts "posts/**/*.typ" sort="date" reverse=#true \
-    permalink="/posts/{slug}/" template="post.typ"
+content {
+  collections {
+    posts "posts/**/*.typ" sort="date" reverse=#true \
+      permalink="/posts/{slug}/" template="post.typ"
+  }
 }
 ```
 
@@ -35,8 +38,10 @@ Give a collection a `list` template and Baudelaire generates an index page at
 `/{collection}/` listing its members:
 
 ```kdl
-collections {
-  features sort="order" list="list.typ"
+content {
+  collections {
+    features sort="order" list="list.typ"
+  }
 }
 ```
 
@@ -47,8 +52,10 @@ That single page holds every member: no pagination. This site's
 Add `paginate = N` when a collection is long enough to split:
 
 ```kdl
-collections {
-  blog sort="date" reverse=#true paginate=5 list="list.typ"
+content {
+  collections {
+    blog sort="date" reverse=#true paginate=5 list="list.typ"
+  }
 }
 ```
 
@@ -59,9 +66,11 @@ splitting modifier on top of a listing: the same `list` template renders both.
 The `page` segment in the URL is configurable per collection with `prefix`:
 
 ```kdl
-collections {
-  blog paginate=5 prefix="p"    // → /blog/p/2/
-  news paginate=5 prefix=""     // → /news/2/
+content {
+  collections {
+    blog paginate=5 prefix="p"    // → /blog/p/2/
+    news paginate=5 prefix=""     // → /news/2/
+  }
 }
 ```
 

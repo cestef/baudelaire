@@ -70,18 +70,23 @@ impl Card {
     /// is exactly the configured card.
     fn source(config: &Config, page: &Page, rooted: &RootedPath) -> Result<String> {
         let templates = config
+            .paths
             .templates
             .strip_prefix(&config.root)
-            .unwrap_or(&config.templates);
+            .unwrap_or(&config.paths.templates);
         Ok(Template {
-            import: format!("/{}/{}", templates.display(), config.cards.template),
-            func: std::path::Path::new(&config.cards.template)
+            import: format!(
+                "/{}/{}",
+                templates.display(),
+                config.generate.cards.template
+            ),
+            func: std::path::Path::new(&config.generate.cards.template)
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("card")
                 .to_owned(),
-            width: config.cards.width,
-            height: config.cards.height,
+            width: config.generate.cards.width,
+            height: config.generate.cards.height,
             data: Typst(&Self::data(config, page)).to_string(),
             frontmatter: matches!(page.data, Data::Export)
                 .then(|| format!("/{}", rooted.vpath().get_without_slash())),

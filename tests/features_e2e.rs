@@ -12,23 +12,25 @@ const CONFIG: &str = r#"
 site "T"
 url "https://example.com"
 paths {
-    content "content"
-    dist "public"
+  content "content"
+  dist "public"
 }
-collections {
-    blog sort="date" reverse=#true paginate=2
+content {
+  collections {
+      blog sort="date" reverse=#true paginate=2
+  }
+  taxonomies {
+      tags index=#true
+  }
 }
-taxonomies {
-    tags index=#true
-}
-output {
-    sitemap #true
-    robots {
-        disallow "/drafts/"
-    }
-    feed {
-        formats "rss" "atom"
-    }
+generate {
+  sitemap #true
+  robots {
+          disallow "/drafts/"
+      }
+  feed {
+          formats "rss" "atom"
+      }
 }
 "#;
 
@@ -89,19 +91,21 @@ const FLAT_CONFIG: &str = r#"
 site "T"
 url "https://example.com"
 paths {
-    content "content"
-    dist "public"
+  content "content"
+  dist "public"
 }
-output {
-    urls "flat"
-    sitemap #true
-    search {
-        formats "json"
-        fields "title" "body"
-    }
-    llms {
-        summary "A test site."
-    }
+links {
+  style "flat"
+}
+generate {
+  sitemap #true
+  search {
+          formats "json"
+          fields "title" "body"
+      }
+  llms {
+          summary "A test site."
+      }
 }
 "#;
 
@@ -156,16 +160,14 @@ fn flat_urls_with_redirects_search_and_llms() {
 const ASSET_CONFIG: &str = r#"
 site "T"
 paths {
-    content "content"
-    dist "public"
-    assets "assets"
+  content "content"
+  dist "public"
+  assets "assets"
 }
-output {
-    assets {
-        minify #true
-        bundle #true
-        fingerprint #true
-    }
+assets {
+  minify #true
+          bundle #true
+          fingerprint #true
 }
 "#;
 

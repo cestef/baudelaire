@@ -1,0 +1,274 @@
+// Sitemap and syndication: opt-in, and only in the formats asked for.
+
+scenario "a sitemap and an rss feed are emitted when a url is set" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #true
+        feed { formats "rss" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", slug: "a", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "sitemap.xml" { contains "<loc>https://example.com/posts/a/</loc>" }
+    file "rss.xml" {
+      contains "<item>"
+      contains "https://example.com/posts/a/"
+      contains "<pubDate>"
+    }
+  }
+}
+
+scenario "a feed entry with no title falls back to the page id" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        feed {
+            formats "rss" "atom"
+          }
+      }
+      """#
+    "content/posts/untitled.typ" #"""
+      #let frontmatter = (date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" { contains "<title>posts/untitled</title>" }
+    file "atom.xml" {
+      contains "<title>posts/untitled</title>"
+      missing "<title></title>"
+    }
+  }
+}
+
+scenario "a term feed sits beside its term page and carries only that term" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        taxonomies {
+          tags index=#true
+        }
+      }
+      generate {
+        feed { formats "rss"; terms #true }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2), tags: ("rust",),)
+      body
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", date: datetime(year: 2024, month: 1, day: 3), tags: ("typst",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "tags/rust/rss.xml" {
+      contains "https://example.com/posts/a/"
+      missing "/posts/b/"
+      contains "<title>T - Tags: rust</title>"
+      // A term feed identifies itself by its own URL, so an aggregator does not
+      // merge it with the site feed.
+      contains "<link>https://example.com/tags/rust/</link>"
+    }
+    file "tags/typst/rss.xml"
+    file "rss.xml" {
+      contains "/posts/a/"
+      contains "/posts/b/"
+    }
+  }
+}
+
+scenario "term feeds stay off by default" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        taxonomies {
+          tags index=#true
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2), tags: ("rust",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml"
+    absent "tags/rust/rss.xml"
+  }
+}
+
+scenario "only the configured feed format is emitted: atom" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed {
+            formats "atom"
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", slug: "a", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "atom.xml" {
+      contains "http://www.w3.org/2005/Atom"
+      contains "<entry>"
+    }
+    absent "rss.xml"
+  }
+}
+
+scenario "only the configured feed format is emitted: json" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed {
+            formats "json"
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", slug: "a", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "feed.json" {
+      contains "https://jsonfeed.org/version/1.1"
+      contains #""url":"https://example.com/posts/a/""#
+      contains #""date_published":"2024-01-02T00:00:00Z""#
+      contains #""feed_url":"https://example.com/feed.json""#
+    }
+    absent "rss.xml"
+    absent "atom.xml"
+  }
+}
+
+scenario "nothing syndicated is emitted without a url" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    absent "sitemap.xml"
+    absent "rss.xml"
+  }
+}
+
+scenario "a site that opts into neither gets neither, silently" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    absent "sitemap.xml"
+    absent "rss.xml"
+  }
+}
+
+scenario "a sitemap without a url is a request that cannot be met" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #true
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    fails { code "baudelaire::output::url_required" }
+  }
+}
+
+scenario "a feed without a url is a request that cannot be met" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    fails { code "baudelaire::output::url_required" }
+  }
+}

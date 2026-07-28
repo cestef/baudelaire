@@ -8,8 +8,10 @@ A taxonomy groups pages by a shared frontmatter list: tags, categories, a series
 Declare one and Baudelaire generates the index pages for it.
 
 ```kdl
-taxonomies {
-  tags index=#true template="list.typ"
+content {
+  taxonomies {
+    tags index=#true template="list.typ"
+  }
 }
 ```
 
@@ -29,8 +31,10 @@ the same content more than one way, or to name the taxonomy independently of the
 field:
 
 ```kdl
-taxonomies {
-  tags index=#true template="list.typ"
-  topics key="categories" index=#true template="list.typ"
+content {
+  taxonomies {
+    tags index=#true template="list.typ"
+    topics key="categories" index=#true template="list.typ"
+  }
 }
 ```

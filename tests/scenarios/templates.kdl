@@ -1,0 +1,224 @@
+// What a template is handed: the page, its siblings, the section tree, and the
+// build-time constants from `client { }`.
+
+scenario "a frontmatter template wraps the page body" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = {
+        html.elem("article", attrs: (class: "post"))[
+          #html.elem("h1", page.frontmatter.title)
+          #body
+        ]
+      }
+      """#
+    "content/posts/hello.typ" #"""
+      #let frontmatter = (title: "Hi", template: "post.typ",)
+      Hello body
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" {
+      contains #"<article class="post">"#
+      // Headings carry an anchor id, so pin the text rather than the attributes.
+      contains ">Hi</h1>"
+      contains "Hello body"
+    }
+  }
+}
+
+scenario "a collection's template applies without frontmatter asking for it" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          posts template="post.typ"
+        }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", body)
+      """#
+    "content/posts/hello.typ" #"""
+      #let frontmatter = (title: "Hi",)
+      body here
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" { contains "<main>" }
+  }
+}
+
+scenario "prev and next siblings reach the template" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          posts template="post.typ"
+        }
+      }
+      """#
+    // Render `page.nav` prev/next as rel-tagged links.
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("html", html.elem("body", {
+        body
+        if page.nav.prev != none { html.elem("a", attrs: (rel: "prev", href: page.nav.prev.url), page.nav.prev.title) }
+        if page.nav.next != none { html.elem("a", attrs: (rel: "next", href: page.nav.next.url), page.nav.next.title) }
+      }))
+      """#
+    // Default collection sort is `order`; three pages in a known sequence.
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "First", order: 1,)
+      body a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Second", order: 2,)
+      body b
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "Third", order: 3,)
+      body c
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      missing #"rel="prev""#
+      contains #"rel="next" href="/posts/b/""#
+      contains "Second"
+    }
+    file "posts/b/index.html" {
+      contains #"rel="prev" href="/posts/a/""#
+      contains "First"
+      contains #"rel="next" href="/posts/c/""#
+      contains "Third"
+    }
+    file "posts/c/index.html" {
+      contains #"rel="prev" href="/posts/b/""#
+      contains "Second"
+      missing #"rel="next""#
+    }
+  }
+}
+
+scenario "sections expose the ordered page set, not filesystem order" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          guide sort="order" template="page.typ"
+        }
+      }
+      """#
+    // Every section id and its pages' titles, in order, as a flat trail.
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("html", html.elem("body", {
+        body
+        for section in page.sections {
+          for entry in section.pages {
+            html.elem("span", attrs: (class: "nav"), section.id + ":" + entry.title)
+          }
+        }
+      }))
+      """#
+    "content/guide/b.typ" #"""
+      #let frontmatter = (title: "Second", order: 2,)
+      body
+      """#
+    "content/guide/a.typ" #"""
+      #let frontmatter = (title: "First", order: 1,)
+      body
+      """#
+    "content/guide/c.typ" #"""
+      #let frontmatter = (title: "Third", order: 3,)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "guide/a/index.html" {
+      order "guide:First" "guide:Second" "guide:Third"
+    }
+  }
+}
+
+scenario "a subdirectory becomes a nested child section" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          guide sort="order" template="page.typ"
+        }
+      }
+      """#
+    // Each section's id + direct-page titles, then one level of children.
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("html", html.elem("body", {
+        for s in page.sections {
+          html.elem("span", "S:" + s.id)
+          for p in s.pages { html.elem("span", "P:" + s.id + "/" + p.title) }
+          for c in s.children {
+            html.elem("span", "C:" + s.id + ">" + c.id)
+            for p in c.pages { html.elem("span", "P:" + c.id + "/" + p.title) }
+          }
+        }
+      }))
+      """#
+    "content/guide/intro.typ" #"""
+      #let frontmatter = (title: "Intro", order: 1,)
+      body
+      """#
+    "content/guide/advanced/deep.typ" #"""
+      #let frontmatter = (title: "Deep", order: 2,)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "guide/intro/index.html" {
+      contains "S:guide"
+      contains "P:guide/Intro"
+      contains "C:guide>advanced"
+      contains "P:advanced/Deep"
+      // The nested page is not also a direct child of guide.
+      missing "P:guide/Deep"
+    }
+  }
+}
+
+scenario "client constants reach pages through sys.inputs" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      client {
+        analytics "plausible"
+        revalidate 3600
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      Tracker: #sys.inputs.baudelaire.client.analytics, every #sys.inputs.baudelaire.client.revalidate
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" { contains "Tracker: plausible, every 3600" }
+  }
+}

@@ -1,0 +1,95 @@
+// Drafts are excluded unless asked for, whether marked in frontmatter or by the
+// file-stem suffix.
+
+scenario "a draft is skipped and its siblings still build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/draft.typ" #"""
+      #let frontmatter = (title: "D", draft: true,)
+      draft body text
+      """#
+    "content/posts/real.typ" #"""
+      #let frontmatter = (title: "R",)
+      real body text
+      """#
+  }
+  expect {
+    ok
+    absent "posts/draft/index.html"
+    file "posts/real/index.html"
+  }
+}
+
+scenario "draft build turns drafts on" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        draft { build #true }
+      }
+      """#
+    "content/posts/draft.typ" #"""
+      #let frontmatter = (title: "D", draft: true,)
+      draft body text
+      """#
+  }
+  expect {
+    ok
+    file "posts/draft/index.html" { contains "draft body text" }
+  }
+}
+
+scenario "the draft suffix implies draft, so the page is skipped" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/wip.draft.typ" #"""
+      #let frontmatter = (title: "W",)
+      work in progress
+      """#
+  }
+  expect {
+    ok
+    absent "posts/wip/index.html"
+    absent "posts/wip.draft/index.html"
+  }
+}
+
+scenario "the draft suffix is stripped from the slug when drafts build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        draft { build #true }
+      }
+      """#
+    "content/posts/wip.draft.typ" #"""
+      #let frontmatter = (title: "W",)
+      work in progress
+      """#
+  }
+  expect {
+    ok
+    file "posts/wip/index.html" { contains "work in progress" }
+    absent "posts/wip.draft/index.html"
+  }
+}

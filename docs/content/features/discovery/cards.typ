@@ -10,7 +10,7 @@ template. No headless browser, no image editor, no service: the typesetter is
 already in the binary, so a card is one more thing it lays out.
 
 ```kdl
-output {
+generate {
   cards {
     template "card.typ"
     width 1200

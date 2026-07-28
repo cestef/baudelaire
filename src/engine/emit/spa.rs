@@ -22,12 +22,12 @@ pub(super) struct Spa;
 
 impl Processor for Spa {
     fn enabled(&self, config: &Config) -> bool {
-        config.spa.enabled
+        config.navigation.spa.enabled
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let cfg = &site.config.spa;
-        out.file(&site.config.dist.join(SpaConfig::FILE), &cfg.client())?;
+        let cfg = &site.config.navigation.spa;
+        out.file(&site.config.paths.dist.join(SpaConfig::FILE), &cfg.client())?;
         out.note(format_args!("wrote {}", SpaConfig::FILE));
         Ok(())
     }
@@ -87,9 +87,9 @@ mod tests {
 
     fn config() -> Config {
         let mut config = Config::default();
-        config.spa.enabled = true;
-        config.spa.root = "#content".into();
-        config.spa.prefetch = Prefetch::Visible;
+        config.navigation.spa.enabled = true;
+        config.navigation.spa.root = "#content".into();
+        config.navigation.spa.prefetch = Prefetch::Visible;
         config
     }
 
@@ -117,7 +117,7 @@ mod tests {
     #[cfg(feature = "js")]
     #[test]
     fn module_exports_instead_of_auto_mounting() {
-        let js = config().spa.module();
+        let js = config().navigation.spa.module();
         assert!(js.contains("export { mountSpa, mountRouter };"), "{js}");
         assert!(!js.contains("mountSpa();"), "no auto-mount: {js}");
     }

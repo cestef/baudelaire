@@ -196,6 +196,7 @@ impl DiscoveryCache {
     /// upgrade that changes how a frontmatter value is read is not a cache hit.
     fn salt(config: &Config) -> Hash {
         let keys: Vec<&str> = config
+            .content
             .taxonomies
             .iter()
             .map(|(_, t)| t.key.as_str())

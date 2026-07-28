@@ -37,71 +37,16 @@ pub struct Config {
     /// `content`'s parent, which is only the root when `content` sits directly
     /// under it.
     pub root: PathBuf,
-    /// Content source directory.
-    pub content: PathBuf,
-    /// Bundle index basename. A content file with this stem takes its slug from
-    /// its parent directory instead of its filename, so `posts/hello/index.typ`
-    /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
-    /// resources). `None` disables it: every page is keyed by its filename.
-    pub index: Option<String>,
-    /// Output (distribution) directory.
-    pub dist: PathBuf,
-    /// Asset pipeline source directory (minified, bundled, fingerprinted).
-    pub assets: PathBuf,
-    /// Static passthrough directory: copied verbatim to the `dist` root, with no
-    /// processing, no fingerprint, no URL prefix.
-    pub r#static: PathBuf,
-    /// Layout / template directory.
-    pub templates: PathBuf,
+    /// Directory layout: where each kind of source lives, and where the build
+    /// lands.
+    pub paths: Paths,
     /// A theme package supplying templates, assets, and config defaults, named
     /// like any Typst dependency (`@preview/plume:1.0.0`). Everything it
     /// provides is a default the project overrides.
     pub theme: Option<String>,
-    /// How permalinks map onto output files: clean (directory-per-page) or flat
-    /// (`.html`). Set under `output { urls "clean" | "flat" }`.
-    pub urls: UrlStyle,
-    /// Remove orphaned outputs from `dist` on each build: files a previous
-    /// build wrote that this one no longer produces (a deleted page, a renamed
-    /// permalink, a dropped taxonomy term). The asset tree and build cache are
-    /// never touched. Set under `output { clean #true | #false }`.
-    pub clean: bool,
-    /// Build future-dated posts.
-    pub future: bool,
-    /// Emit `sitemap.xml` (requires `url`).
-    pub sitemap: bool,
-    /// `robots.txt` generation.
-    pub robots: RobotsConfig,
-    /// `llms.txt` generation.
-    pub llms: LlmsConfig,
-    /// Draft handling.
-    pub draft: DraftConfig,
-    /// Link checking.
-    pub links: LinkConfig,
-    /// Syndication feeds.
-    pub feed: FeedConfig,
-    /// Client-side search indexes.
-    pub search: SearchConfig,
-    /// Single-file (standalone) HTML export.
-    pub standalone: StandaloneConfig,
-    /// Client-side navigation between the built pages.
-    pub spa: SpaConfig,
-    /// Browser-native prefetch/prerender hints.
-    pub speculation: SpeculationConfig,
-    /// Generated social cards.
-    pub cards: CardsConfig,
-    /// Typst `sys.inputs` entries.
-    pub inputs: Vec<(String, String)>,
-    /// Build-time constants exposed to client JS through the `baudelaire:config`
-    /// virtual module: arbitrary scalars keyed by name.
-    pub client: Vec<(String, crate::codegen::Value)>,
-    /// Extra experimental Typst features to enable (e.g. `a11y-extras`). `html`
-    /// is always forced on in `world.rs`, so this list is purely additive and
-    /// never needs to include it.
-    pub features: Vec<String>,
-    /// Collection overrides keyed by id.
-    pub collections: Vec<(String, CollectionConfig)>,
-    /// Taxonomy definitions.
-    pub taxonomies: Vec<(String, TaxonomyConfig)>,
+    /// What the content tree contains and how it is read: bundles, drafts,
+    /// future dating, collections, taxonomies.
+    pub content: ContentConfig,
     /// Declared languages keyed by code, for a multi-language site. Empty means
     /// a single-language site (only `lang`); a non-empty block turns on i18n:
     /// filename suffixes (`post.fr.typ`) are recognized, non-default languages
@@ -109,12 +54,28 @@ pub struct Config {
     /// text direction, and a UI-string table. The default `lang` is always a
     /// known language whether or not it appears here.
     pub languages: Vec<(String, LanguageConfig)>,
+    /// Asset pipeline options (minify, bundle, fingerprint, images).
+    pub assets: AssetConfig,
     /// HTML output options.
     pub html: HtmlConfig,
-    /// Image handling (lazy loading, optimization).
-    pub images: ImagesConfig,
-    /// Asset pipeline options (minify, bundle, fingerprint).
-    pub asset: AssetConfig,
+    /// Link shape and link checking.
+    pub links: LinkConfig,
+    /// Files the build generates beside the pages: sitemap, robots, llms,
+    /// feeds, search indexes, social cards.
+    pub generate: GenerateConfig,
+    /// How a visitor moves between the built pages: SPA runtime, single-file
+    /// export, browser speculation hints.
+    pub navigation: NavigationConfig,
+    /// Remove orphaned outputs from `dist` on each build: files a previous
+    /// build wrote that this one no longer produces (a deleted page, a renamed
+    /// permalink, a dropped taxonomy term). The asset tree and build cache are
+    /// never touched. Set with `prune #true | #false`.
+    pub prune: bool,
+    /// Typst engine knobs (`sys.inputs`, experimental features).
+    pub typst: TypstConfig,
+    /// Build-time constants exposed to client JS through the `baudelaire:config`
+    /// virtual module: arbitrary scalars keyed by name.
+    pub client: Vec<(String, crate::codegen::Value)>,
     /// Cache options.
     pub cache: CacheConfig,
     /// External command hooks run around the build.
@@ -133,6 +94,82 @@ pub struct Config {
     /// errors are reported against it: the retained profile nodes carry spans
     /// into this exact string.
     pub(crate) source: String,
+}
+
+/// Directory layout, every entry relative to [`Config::root`].
+#[derive(Debug, Clone, Hash)]
+pub struct Paths {
+    /// Content source directory.
+    pub content: PathBuf,
+    /// Output (distribution) directory.
+    pub dist: PathBuf,
+    /// Asset pipeline source directory (minified, bundled, fingerprinted).
+    pub assets: PathBuf,
+    /// Static passthrough directory: copied verbatim to the `dist` root, with no
+    /// processing, no fingerprint, no URL prefix.
+    pub r#static: PathBuf,
+    /// Layout / template directory.
+    pub templates: PathBuf,
+}
+
+/// What the content tree holds and how it is read. The directory itself is
+/// [`Paths::content`]; everything here is about the pages inside it.
+#[derive(Debug, Clone, Hash)]
+pub struct ContentConfig {
+    /// Bundle index basename. A content file with this stem takes its slug from
+    /// its parent directory instead of its filename, so `posts/hello/index.typ`
+    /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
+    /// resources). `None` disables it: every page is keyed by its filename.
+    pub index: Option<String>,
+    /// Build future-dated posts.
+    pub future: bool,
+    /// Draft handling.
+    pub draft: DraftConfig,
+    /// Collection overrides keyed by id.
+    pub collections: Vec<(String, CollectionConfig)>,
+    /// Taxonomy definitions.
+    pub taxonomies: Vec<(String, TaxonomyConfig)>,
+}
+
+/// The files a build emits beside the pages themselves. Each one is opt-in:
+/// either a flag or a block whose presence turns it on.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct GenerateConfig {
+    /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
+    pub sitemap: bool,
+    /// `robots.txt` generation.
+    pub robots: RobotsConfig,
+    /// `llms.txt` generation.
+    pub llms: LlmsConfig,
+    /// Syndication feeds.
+    pub feed: FeedConfig,
+    /// Client-side search indexes.
+    pub search: SearchConfig,
+    /// Generated social cards.
+    pub cards: CardsConfig,
+}
+
+/// How a visitor moves between the built pages. Three independent strategies,
+/// each enabled by the presence of its block.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct NavigationConfig {
+    /// Client-side navigation between the built pages.
+    pub spa: SpaConfig,
+    /// Single-file (standalone) HTML export.
+    pub standalone: StandaloneConfig,
+    /// Browser-native prefetch/prerender hints.
+    pub speculation: SpeculationConfig,
+}
+
+/// Typst engine knobs.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct TypstConfig {
+    /// Extra experimental Typst features to enable (e.g. `a11y-extras`). `html`
+    /// is always forced on in `world.rs`, so this list is purely additive and
+    /// never needs to include it.
+    pub features: Vec<String>,
+    /// Typst `sys.inputs` entries.
+    pub inputs: Vec<(String, String)>,
 }
 
 impl Config {
@@ -295,7 +332,8 @@ impl Config {
 
     /// Look up a collection override by id.
     pub fn collection(&self, id: &str) -> Option<&CollectionConfig> {
-        self.collections
+        self.content
+            .collections
             .iter()
             .find(|(n, _)| n == id)
             .map(|(_, c)| c)
@@ -305,7 +343,8 @@ impl Config {
     /// the leading segment of every asset URL. The single derivation shared by
     /// the asset pipeline and the embed transform.
     pub fn asset_name(&self) -> &str {
-        self.assets
+        self.paths
+            .assets
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("assets")
@@ -314,7 +353,7 @@ impl Config {
     /// The processed assets directory under `dist`: the *published* location,
     /// read by the dev server and by whatever hosts `dist`.
     pub fn asset_dist(&self) -> PathBuf {
-        self.dist.join(self.asset_name())
+        self.paths.dist.join(self.asset_name())
     }
 
     /// Where the asset pipeline writes during a build, published over
@@ -322,7 +361,9 @@ impl Config {
     /// failed build leaves the served assets the existing HTML references.
     /// Everything reading processed assets mid-build reads here.
     pub fn asset_staging(&self) -> PathBuf {
-        self.dist.join(format!(".{}.staging", self.asset_name()))
+        self.paths
+            .dist
+            .join(format!(".{}.staging", self.asset_name()))
     }
 
     /// The file a URL path is written to under `dist`, honoring clean URLs.
@@ -335,7 +376,7 @@ impl Config {
     /// written outside `dist`.
     pub fn destination(&self, url: &str) -> PathBuf {
         if url == "/" {
-            return self.dist.join("index.html");
+            return self.paths.dist.join("index.html");
         }
         let trimmed = url
             .split('/')
@@ -348,21 +389,22 @@ impl Config {
         // Only a language scope counts: `/notes/404/` is an ordinary page.
         let stem = trimmed.strip_suffix(".html").unwrap_or(&trimmed);
         if stem == "404" {
-            return self.dist.join(Self::NOT_FOUND);
+            return self.paths.dist.join(Self::NOT_FOUND);
         }
         if let Some(scope) = stem
             .strip_suffix("/404")
             .filter(|scope| self.languages.iter().any(|(code, _)| code == scope))
         {
-            return self.dist.join(scope).join(Self::NOT_FOUND);
+            return self.paths.dist.join(scope).join(Self::NOT_FOUND);
         }
-        match self.urls {
-            UrlStyle::Clean => self.dist.join(&trimmed).join("index.html"),
+        match self.links.style {
+            UrlStyle::Clean => self.paths.dist.join(&trimmed).join("index.html"),
             // A flat page URL already names its file; a raw path (a frontmatter
             // `redirect` old-path) still needs the extension.
             UrlStyle::Flat => self
+                .paths
                 .dist
-                .join(self.urls.url(&trimmed).trim_start_matches('/')),
+                .join(self.links.style.url(&trimmed).trim_start_matches('/')),
         }
     }
 
@@ -533,36 +575,18 @@ impl std::hash::Hash for Config {
             url,
             lang,
             author,
-            content,
-            index,
-            dist,
-            assets,
-            r#static,
-            templates,
+            paths,
             theme,
-            urls,
-            clean,
-            future,
-            sitemap,
-            robots,
-            llms,
-            draft,
-            links,
-            feed,
-            search,
-            standalone,
-            spa,
-            speculation,
-            cards,
-            inputs,
-            client,
-            features,
-            collections,
-            taxonomies,
+            content,
             languages,
+            assets,
             html,
-            images,
-            asset,
+            links,
+            generate,
+            navigation,
+            prune,
+            typst,
+            client,
             cache,
             hooks,
             announce,
@@ -577,17 +601,9 @@ impl std::hash::Hash for Config {
             // raw config text, kept only for error spans; a comment-only edit must not bust the cache
             source: _,
         } = self;
-        (
-            site, url, lang, author, content, index, dist, assets, r#static, templates, theme,
-        )
-            .hash(state);
-        (
-            urls, clean, future, sitemap, robots, llms, draft, links, feed, search,
-        )
-            .hash(state);
-        (inputs, features, collections, taxonomies, html, images).hash(state);
-        (asset, cache, hooks, announce, deploy, profile).hash(state);
-        (client, languages, standalone, spa, speculation, cards).hash(state);
+        (site, url, lang, author, paths, theme, content, languages).hash(state);
+        (assets, html, links, generate, navigation, prune).hash(state);
+        (typst, client, cache, hooks, announce, deploy, profile).hash(state);
     }
 }
 
@@ -676,9 +692,13 @@ pub struct DraftConfig {
     pub suffix: String,
 }
 
-/// Internal link checking.
+/// Link shape and link checking: what a page's URL looks like, and how hard the
+/// build tries to prove every reference to one resolves.
 #[derive(Debug, Clone, Hash)]
 pub struct LinkConfig {
+    /// How permalinks map onto output files: clean (directory-per-page) or flat
+    /// (`.html`). Set under `links { style "clean" | "flat" }`.
+    pub style: UrlStyle,
     /// Treat unresolved internal `.typ` links as errors (else warnings).
     pub strict: bool,
     /// Also verify outbound `http(s)` links over the network.
@@ -791,7 +811,7 @@ pub struct HtmlConfig {
 
 /// Single-file export: the whole site inlined into one HTML document, each
 /// page a route the bundled router swaps in. Enabled by the presence of a
-/// `standalone { .. }` block.
+/// `navigation { standalone { .. } }` block.
 #[derive(Debug, Clone, Hash)]
 pub struct StandaloneConfig {
     /// Whether to emit the single-file export.
@@ -807,8 +827,8 @@ pub struct StandaloneConfig {
 }
 
 /// Generated social cards: the image a link to this site unfurls into, rendered
-/// per page from a Typst template. Enabled by the presence of a `cards { .. }`
-/// block.
+/// per page from a Typst template. Enabled by the presence of a
+/// `generate { cards { .. } }` block.
 ///
 /// The template is compiled to a *paged* document, not an HTML one, so it is
 /// ordinary Typst: `html.elem` does not exist there, and page layout does.
@@ -860,7 +880,8 @@ impl CardsConfig {
 
 /// Browser-native navigation hints: a `<script type="speculationrules">` telling
 /// the browser to fetch, or fully render, an internal link's target before it is
-/// clicked. Enabled by the presence of a `speculation { .. }` block.
+/// clicked. Enabled by the presence of a `navigation { speculation { .. } }`
+/// block.
 ///
 /// The zero-JavaScript neighbour of [`SpaConfig`]: the browser does the work, so
 /// nothing has to be shipped, mounted, or maintained. Unsupported browsers
@@ -905,8 +926,8 @@ impl Named for Eagerness {
 
 /// Client-side navigation over the ordinary multi-file output: a runtime
 /// intercepts internal link clicks, fetches the target page, and swaps one
-/// container instead of reloading. Enabled by the presence of a `spa { .. }`
-/// block.
+/// container instead of reloading. Enabled by the presence of a
+/// `navigation { spa { .. } }` block.
 #[derive(Debug, Clone, Hash)]
 pub struct SpaConfig {
     /// Whether to emit the navigation runtime.
@@ -977,7 +998,7 @@ impl Named for Prefetch {
 }
 
 /// Image handling: markup annotations and build-time optimization. Grouped so
-/// every image setting lives in one `images { .. }` block.
+/// every image setting lives in one `assets { images { .. } }` block.
 #[derive(Debug, Clone, Hash)]
 pub struct ImagesConfig {
     /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
@@ -1103,7 +1124,8 @@ pub struct JpegConfig {
     pub quality: u8,
 }
 
-/// `robots.txt` generation. Enabled by the presence of a `robots` block.
+/// `robots.txt` generation. Enabled by the presence of a `generate { robots }`
+/// block.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct RobotsConfig {
     /// Whether to emit `robots.txt`.
@@ -1113,7 +1135,7 @@ pub struct RobotsConfig {
 }
 
 /// `llms.txt` generation ([llmstxt.org]): a Markdown index of the site's pages
-/// for LLM consumption. Enabled by the presence of an `llms` block.
+/// for LLM consumption. Enabled by the presence of a `generate { llms }` block.
 ///
 /// [llmstxt.org]: https://llmstxt.org
 #[derive(Debug, Clone, Hash, Default)]
@@ -1139,6 +1161,9 @@ pub struct AssetConfig {
     /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
     /// rewrite references, for far-future caching.
     pub fingerprint: bool,
+    /// Image handling (lazy loading, extraction, optimization, responsive
+    /// variants), for both pipeline assets and typst-embedded rasters.
+    pub images: ImagesConfig,
 }
 
 /// Cache options.

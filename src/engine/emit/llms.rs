@@ -18,7 +18,7 @@ pub(super) struct Llms;
 
 impl Processor for Llms {
     fn enabled(&self, config: &Config) -> bool {
-        config.llms.enabled
+        config.generate.llms.enabled
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
@@ -40,7 +40,7 @@ impl Processor for Llms {
                 continue;
             }
             let mut md = format!("# {}\n", site.config.title(lang));
-            if let Some(summary) = &site.config.llms.summary {
+            if let Some(summary) = &site.config.generate.llms.summary {
                 let _ = write!(md, "\n> {summary}\n");
             }
             for (collection, pages) in Self::sections(&pages, lang) {
@@ -50,7 +50,7 @@ impl Processor for Llms {
                     let _ = writeln!(md, "- [{}]({link})", page.title());
                 }
             }
-            let path = site.config.dist.join(&scope).join(Self::FILE);
+            let path = site.config.paths.dist.join(&scope).join(Self::FILE);
             out.file(&path, &md)?;
             out.note(format_args!("wrote {}", path.display()));
         }

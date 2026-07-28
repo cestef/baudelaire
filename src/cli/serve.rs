@@ -136,10 +136,10 @@ impl Dev<'_> {
     /// banner can wrap them to the terminal width.
     fn watched(&self) -> Vec<String> {
         let mut parts = vec![
-            self.config.content.display().to_string(),
-            self.config.templates.display().to_string(),
-            self.config.assets.display().to_string(),
-            self.config.r#static.display().to_string(),
+            self.config.paths.content.display().to_string(),
+            self.config.paths.templates.display().to_string(),
+            self.config.paths.assets.display().to_string(),
+            self.config.paths.r#static.display().to_string(),
             self.config_path.display().to_string(),
         ];
         parts.extend(self.config.serve.include.iter().cloned());
@@ -320,7 +320,7 @@ struct Route {
 
 impl Route {
     fn new(config: &Config) -> Self {
-        let dist = config.dist.clone();
+        let dist = config.paths.dist.clone();
         Self {
             dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
             base: config.base_path().to_owned(),
@@ -561,11 +561,11 @@ impl Filter {
     fn new(config: &Config, root: &Root, config_path: &Path) -> Result<Self> {
         use notify::RecursiveMode::{NonRecursive, Recursive};
         let root = root.path().to_path_buf();
-        let assets = Self::absolute(&root, &config.assets);
-        let statics = Self::absolute(&root, &config.r#static);
+        let assets = Self::absolute(&root, &config.paths.assets);
+        let statics = Self::absolute(&root, &config.paths.r#static);
         let mut watches = vec![
-            (Self::absolute(&root, &config.content), Recursive),
-            (Self::absolute(&root, &config.templates), Recursive),
+            (Self::absolute(&root, &config.paths.content), Recursive),
+            (Self::absolute(&root, &config.paths.templates), Recursive),
             (assets.clone(), Recursive),
             (statics.clone(), Recursive),
         ];
@@ -751,8 +751,20 @@ mod tests {
             "relative watch root: {:?}",
             filter.watches()
         );
-        assert!(filter.is_relevant(&Path::new("/proj").join(&config.assets).join("style.css")));
-        assert!(filter.is_relevant(&Path::new("/proj").join(&config.r#static).join("CNAME")));
+        assert!(
+            filter.is_relevant(
+                &Path::new("/proj")
+                    .join(&config.paths.assets)
+                    .join("style.css")
+            )
+        );
+        assert!(
+            filter.is_relevant(
+                &Path::new("/proj")
+                    .join(&config.paths.r#static)
+                    .join("CNAME")
+            )
+        );
         assert!(!filter.is_relevant(Path::new("/proj/elsewhere/style.css")));
     }
 

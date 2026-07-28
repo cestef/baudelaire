@@ -10,14 +10,16 @@ the way into the build. Every switch is off by default, so assets are copied
 verbatim until you ask for more.
 
 ```kdl
-output {
-  assets {
-    minify #true
-    bundle #true
-    fingerprint #true
-  }
+assets {
+  minify #true
+  bundle #true
+  fingerprint #true
 }
 ```
+
+The top-level `assets` block is the pipeline. The directory it reads is named
+separately, by `paths { assets }`, so you can point the pipeline at
+`src/assets/` without touching any of the switches below.
 
 == What each switch does
 
@@ -31,8 +33,8 @@ output {
   into `style.9f3c1a2b4d6e8f01.css`, and every reference in your pages is rewritten to
   match. Now you can cache assets forever and never serve a stale one.
 
-Image optimization lives in its own #link("../discovery/meta.typ")[images] block, separate
-from these switches.
+Image handling lives in a nested #link("../discovery/meta.typ")[#raw("images")]
+block inside this one, independent of the three switches above.
 
 #callout(kind: "note")[
   JavaScript is only processed when `bundle` is on, because a bundler owns the

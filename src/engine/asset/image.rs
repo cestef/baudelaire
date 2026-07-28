@@ -31,8 +31,9 @@ impl Handler for Raster {
     fn claims(&self, file: &Path, config: &Config) -> bool {
         // claimed when optimization is on for the format, or responsive variants
         // are wanted for any raster: either way this handler owns the bytes.
-        config.images.optimize.format(file.ext()).is_some()
-            || (config.images.responsive.enabled && ImageFormat::from_ext(file.ext()).is_some())
+        config.assets.images.optimize.format(file.ext()).is_some()
+            || (config.assets.images.responsive.enabled
+                && ImageFormat::from_ext(file.ext()).is_some())
     }
 
     fn render(
@@ -45,7 +46,7 @@ impl Handler for Raster {
         let bytes = fs::read(file)?;
         // Optimize when configured for this format; otherwise (claimed only for
         // responsive variants) the original is the fallback, copied verbatim.
-        let Some(format) = ctx.config.images.optimize.format(file.ext()) else {
+        let Some(format) = ctx.config.assets.images.optimize.format(file.ext()) else {
             return Ok(Some(bytes));
         };
         let optimized = Self::encoder(format, ctx.config).optimize(&bytes, file)?;
@@ -57,7 +58,7 @@ impl Handler for Raster {
     }
 
     fn variants(&self, file: &Path, rel: &Path, ctx: &Ctx) -> Result<Vec<Variant>> {
-        let responsive = &ctx.config.images.responsive;
+        let responsive = &ctx.config.assets.images.responsive;
         let Some(format) = ImageFormat::from_ext(file.ext()) else {
             return Ok(Vec::new());
         };
@@ -105,7 +106,7 @@ impl Raster {
     /// The codec for a format, bound to its config. Adding a format is a new
     /// [`Encoder`] impl and an arm here.
     fn encoder(format: ImageFormat, config: &Config) -> Box<dyn Encoder + '_> {
-        let optimize = &config.images.optimize;
+        let optimize = &config.assets.images.optimize;
         match format {
             ImageFormat::Png => Box::new(Png(optimize.png.as_ref().expect("png enabled"))),
             ImageFormat::Jpeg => Box::new(Jpeg(optimize.jpeg.as_ref().expect("jpeg enabled"))),

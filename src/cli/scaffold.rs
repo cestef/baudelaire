@@ -82,7 +82,7 @@ impl Config {
     /// root page, which belongs to no collection). Mirrors discovery's
     /// convention so `new` infers the same collection the build later will.
     fn collection_for(&self, path: &Path) -> Option<String> {
-        let rel = path.strip_prefix(&self.content).unwrap_or(path);
+        let rel = path.strip_prefix(&self.paths.content).unwrap_or(path);
         let mut components = rel.components();
         match (components.next(), components.next()) {
             (Some(dir), Some(_)) => Some(dir.as_os_str().to_str()?.to_owned()),
@@ -355,7 +355,7 @@ impl Draft {
     /// "Hello", not "Index".
     fn raw_name(path: &Path, config: &Config) -> String {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
-        let index = config.index.as_deref().unwrap_or("index");
+        let index = config.content.index.as_deref().unwrap_or("index");
         if stem == index {
             path.parent()
                 .and_then(|p| p.file_name())
@@ -620,7 +620,33 @@ mod templates {
 
     #[cfg(test)]
     mod tests {
-        use super::render;
+        use super::{CONFIG, render};
+
+        /// The starter config is what every new site begins from, so it has to
+        /// stay valid against the dispatch tables. Nothing else here reads it,
+        /// which is exactly how a key rename would ship a broken `init`.
+        #[test]
+        fn the_scaffolded_config_parses() {
+            let text = render(
+                CONFIG,
+                &[
+                    ("site", "My Site"),
+                    ("author", "Me"),
+                    ("url", "https://example.com"),
+                ],
+            );
+            let config = crate::config::Config::parse(&text).expect("starter config parses");
+            assert!(config.prune);
+            assert!(config.generate.sitemap);
+            assert_eq!(config.content.collections.len(), 1);
+            // every declared profile has to apply, not just parse
+            for (name, _) in config.profiles.clone() {
+                config
+                    .clone()
+                    .with_profile(&name)
+                    .unwrap_or_else(|e| panic!("profile `{name}`: {e}"));
+            }
+        }
 
         #[test]
         fn fills_known_placeholders() {

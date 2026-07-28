@@ -59,7 +59,7 @@ fn dist(site: &Site) {
 
 fn s3_config(site: &Site, port: u16) -> Config {
     let mut config = Config::default();
-    config.dist = site.path("public");
+    config.paths.dist = site.path("public");
     config.deploy.s3 = Some(S3Config {
         bucket: "bucket".into(),
         endpoint: Some(format!("http://127.0.0.1:{port}")),
@@ -239,7 +239,7 @@ const PASSWORD: &str = "hunter2";
 
 fn ssh_config(site: &Site, port: u16) -> Config {
     let mut config = Config::default();
-    config.dist = site.path("public");
+    config.paths.dist = site.path("public");
     config.deploy.ssh = Some(SshConfig {
         host: "127.0.0.1".into(),
         path: REMOTE.into(),

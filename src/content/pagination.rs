@@ -39,7 +39,8 @@ impl Generate for Pagination {
 struct Section<'a> {
     id: &'a str,
     template: Option<String>,
-    /// Permalink of page 1 (`config.index`); later pages hang under it.
+    /// Permalink of page 1 ([`crate::config::CollectionConfig::index`]); later
+    /// pages hang under it.
     index: Option<String>,
     /// Path segment before a page number (`/{id}/{prefix}/{n}/`); empty drops it.
     prefix: &'a str,

@@ -28,7 +28,7 @@ fn config(extra: &str) -> String {
 #[test]
 fn site_module_exposes_identity_and_version() {
     let site = Site::new();
-    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write("config.kdl", &config("assets { bundle #true }"));
     site.write(
         "assets/main.js",
         "import site from \"baudelaire:site\";\nglobalThis.S = site;\n",
@@ -45,7 +45,7 @@ fn config_module_exposes_client_constants() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        &config("client {\n  env \"prod\"\n  retries 3\n  beta #true\n}\noutput { assets { bundle #true } }"),
+        &config("client {\n  env \"prod\"\n  retries 3\n  beta #true\n}\nassets { bundle #true }"),
     );
     site.write(
         "assets/main.js",
@@ -64,7 +64,7 @@ fn assets_module_resolves_fingerprinted_urls() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        &config("output { assets { bundle #true; fingerprint #true } }"),
+        &config("assets { bundle #true; fingerprint #true }"),
     );
     let logo = b"<svg></svg>";
     site.write("assets/logo.svg", std::str::from_utf8(logo).unwrap());
@@ -92,7 +92,7 @@ fn pages_module_lists_authored_content() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        &config("taxonomies { tags }\noutput { assets { bundle #true } }"),
+        &config("content { taxonomies { tags } }\nassets { bundle #true }"),
     );
     site.write(
         "assets/main.js",
@@ -111,7 +111,7 @@ fn pages_module_lists_authored_content() {
 #[test]
 fn sections_module_groups_by_collection() {
     let site = Site::new();
-    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write("config.kdl", &config("assets { bundle #true }"));
     site.write(
         "assets/main.js",
         "import sections from \"baudelaire:sections\";\nglobalThis.N = sections;\n",
@@ -133,7 +133,7 @@ fn taxonomies_module_maps_terms_to_pages() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        &config("taxonomies { tags }\noutput { assets { bundle #true } }"),
+        &config("content { taxonomies { tags } }\nassets { bundle #true }"),
     );
     site.write(
         "assets/main.js",
@@ -158,7 +158,7 @@ fn taxonomies_module_maps_terms_to_pages() {
 #[test]
 fn feed_module_lists_recent_dated_pages_newest_first() {
     let site = Site::new();
-    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write("config.kdl", &config("assets { bundle #true }"));
     site.write(
         "assets/main.js",
         "import feed from \"baudelaire:feed\";\nglobalThis.F = feed;\n",
@@ -196,7 +196,7 @@ fn entry(site: &Site, ext: &str) -> String {
 #[test]
 fn a_typescript_entry_is_served_as_javascript() {
     let site = Site::new();
-    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write("config.kdl", &config("assets { bundle #true }"));
     site.write(
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhome",
@@ -220,7 +220,7 @@ fn a_typescript_entry_is_served_as_javascript() {
 #[test]
 fn a_dynamic_import_lands_in_the_entry() {
     let site = Site::new();
-    site.write("config.kdl", &config("output { assets { bundle #true } }"));
+    site.write("config.kdl", &config("assets { bundle #true }"));
     site.write(
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhome",
@@ -249,7 +249,7 @@ fn a_renamed_entry_resolves_under_both_names() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        &config("output { assets { bundle #true; fingerprint #true } }"),
+        &config("assets { bundle #true; fingerprint #true }"),
     );
     site.write("assets/main.ts", "export const greet: string = \"hi\";\n");
     site.write(

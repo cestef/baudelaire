@@ -75,15 +75,22 @@ impl Site {
     /// Parsed `config.kdl` with its paths rebased into the tempdir, so library
     /// calls resolve against this site instead of the test runner's cwd.
     pub fn config(&self) -> Config {
-        let mut cfg = Config::load(&self.read("config.kdl"), &self.root).unwrap();
+        self.try_config().expect("config")
+    }
+
+    /// [`Site::config`] as a `Result`, for callers that must report a malformed
+    /// config rather than panic on it (the scenario runner, whose whole job is
+    /// to survive one broken case and report the rest).
+    pub fn try_config(&self) -> baudelaire::Result<Config> {
+        let mut cfg = Config::load(&self.read("config.kdl"), &self.root)?;
         cfg.root = self.root.clone();
-        cfg.content = self.root.join(&cfg.content);
-        cfg.dist = self.root.join(&cfg.dist);
-        cfg.assets = self.root.join(&cfg.assets);
-        cfg.templates = self.root.join(&cfg.templates);
-        cfg.r#static = self.root.join(&cfg.r#static);
+        cfg.paths.content = self.root.join(&cfg.paths.content);
+        cfg.paths.dist = self.root.join(&cfg.paths.dist);
+        cfg.paths.assets = self.root.join(&cfg.paths.assets);
+        cfg.paths.templates = self.root.join(&cfg.paths.templates);
+        cfg.paths.r#static = self.root.join(&cfg.paths.r#static);
         cfg.cache.dir = self.root.join(&cfg.cache.dir);
-        cfg
+        Ok(cfg)
     }
 
     fn cmd(&self, args: &[&str]) -> Command {
@@ -145,8 +152,14 @@ impl Site {
         }
     }
 
+    /// The plain in-process build as a `Result`: neither success nor failure is
+    /// assumed, so a caller can decide which one the case wanted.
+    pub fn try_build(&self) -> baudelaire::Result<Stats> {
+        self.try_stats(|_| {})
+    }
+
     fn try_stats(&self, tweak: impl FnOnce(&mut Config)) -> baudelaire::Result<Stats> {
-        let mut config = self.config();
+        let mut config = self.try_config()?;
         tweak(&mut config);
         Engine::new(config, Mode::Build)?.build(&Ui::new(Level::Silent))
     }

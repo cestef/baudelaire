@@ -1,0 +1,100 @@
+// Term pages, their index, and the template that can replace both.
+
+scenario "a taxonomy index lists its terms and each term lists its pages" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags index=#true
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", tags: ("intro", "rust"),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", tags: ("intro",),)
+      b
+      """#
+  }
+  expect {
+    ok
+    file "tags/index.html" {
+      contains #"href="/tags/intro/""#
+      contains #"href="/tags/rust/""#
+    }
+    file "tags/intro/index.html" {
+      contains #"href="/posts/a/""#
+      contains #"href="/posts/b/""#
+      contains "Alpha"
+      contains "Beta"
+    }
+    file "tags/rust/index.html"
+  }
+}
+
+scenario "a taxonomy template renders the listing from its structured data" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags index=#true template="tag.typ"
+        }
+      }
+      """#
+    "templates/tag.typ" #"""
+      #let tag(page, body) = html.elem("main", attrs: (class: "tax"))[
+        #html.elem("h2", page.frontmatter.title)
+        #for e in page.frontmatter.entries [ #html.elem("a", attrs: (href: e.url), e.label) ]
+      ]
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", tags: ("intro",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "tags/intro/index.html" {
+      contains #"<main class="tax">"#
+      contains ">Tags: intro</h2>"
+      contains #"href="/posts/a/""#
+      contains "Alpha"
+    }
+  }
+}
+
+scenario "two terms that slug alike are rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags index=#true
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", tags: ("C++", "C--"),)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::term_collision" }
+  }
+}

@@ -29,7 +29,7 @@ pub(super) struct Script;
 
 impl Handler for Script {
     fn claims(&self, file: &Path, config: &Config) -> bool {
-        config.asset.bundle
+        config.assets.bundle
             && matches!(
                 file.ext().to_ascii_lowercase().as_str(),
                 "js" | "mjs" | "ts"
@@ -92,11 +92,11 @@ impl Js {
             .build()
             .map_err(|e| AssetError::js("javascript bundler", e))?;
         // Absolute so rolldown resolves entries regardless of its `cwd`.
-        let cwd = fs::canonical(&cx.config.assets);
+        let cwd = fs::canonical(&cx.config.paths.assets);
         Ok(Self {
             runtime,
             cwd,
-            minify: cx.config.asset.minify,
+            minify: cx.config.assets.minify,
             plugin: Arc::new(Virtual::new(cx)),
         })
     }

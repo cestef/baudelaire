@@ -6,7 +6,7 @@
 //! `<img src>` to the URL the file is served at (`/assets/<name>`) and records
 //! the `(name, source)` pair so the engine can copy the file into `dist`. Naming
 //! follows the asset pipeline: fingerprinted (`photo.<hash>.png`) when
-//! `output { assets { fingerprint } }` is on, else the plain filename.
+//! `assets { fingerprint }` is on, else the plain filename.
 
 use std::path::{Path, PathBuf};
 
@@ -34,7 +34,7 @@ pub(super) struct Externalize;
 
 impl Transform for Externalize {
     fn enabled(&self, config: &Config) -> bool {
-        config.images.externalize(&config.html)
+        config.assets.images.externalize(&config.html)
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
@@ -69,7 +69,7 @@ impl Transform for Externalize {
 fn resolve(vpath: &str, root: &Path, config: &Config) -> (String, PathBuf) {
     let source = root.join(vpath);
     let digest = config
-        .asset
+        .assets
         .fingerprint
         .then(|| crate::fs::read(&source).ok())
         .flatten()

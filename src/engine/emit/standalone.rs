@@ -28,11 +28,11 @@ pub(super) struct Standalone;
 
 impl Processor for Standalone {
     fn enabled(&self, config: &Config) -> bool {
-        config.standalone.enabled
+        config.navigation.standalone.enabled
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let cfg = &site.config.standalone;
+        let cfg = &site.config.navigation.standalone;
         let entry = site.config.prefixed(cfg.entry());
         let routes = Routes::build(site);
         let Some(shell) = routes.entry(&entry) else {
@@ -57,7 +57,7 @@ impl Processor for Standalone {
             script: &cfg.script(&entry),
         }
         .render();
-        out.file(&site.config.dist.join(&cfg.file), &document)?;
+        out.file(&site.config.paths.dist.join(&cfg.file), &document)?;
         out.note(format_args!(
             "wrote {} ({} routes, {} bytes)",
             cfg.file,
@@ -285,7 +285,7 @@ mod tests {
 
     fn config() -> Config {
         let mut config = Config::default();
-        config.standalone.enabled = true;
+        config.navigation.standalone.enabled = true;
         config.html.embed = true;
         config
     }
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn an_unknown_entry_warns_and_writes_nothing() {
         let mut config = config();
-        config.standalone.entry = Some("/nope/".into());
+        config.navigation.standalone.entry = Some("/nope/".into());
         let rec = export(&config, &Built::of(&[("about", "About", "<p>about</p>")]));
 
         assert!(rec.files.is_empty(), "{:?}", rec.files);

@@ -14,7 +14,7 @@
 //!   The server does the tokenizing; the client resolves a query by looking up
 //!   its terms and intersecting the posting lists.
 //!
-//! With `search { client true }` each format also emits a matching tiny
+//! With `generate { search { client #true } }` each format also emits a matching tiny
 //! ES-module client (`search.js` / `search.inverted.js`, see `js/`) exporting
 //! `createSearch(url?) -> search(query, { limit })`.
 
@@ -35,17 +35,17 @@ pub(super) struct SearchIndex;
 
 impl Processor for SearchIndex {
     fn enabled(&self, config: &Config) -> bool {
-        !config.search.formats.is_empty()
+        !config.generate.search.formats.is_empty()
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let cfg = &site.config.search;
+        let cfg = &site.config.generate.search;
         // One index per language, alongside that language's feeds. A single
         // global index served English hits to a visitor searching from `/fr/`.
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
             let corpus = Corpus::build(site, &cfg.fields, lang);
-            let dir = site.config.dist.join(&scope);
+            let dir = site.config.paths.dist.join(&scope);
             for &format in &cfg.formats {
                 let json = match format {
                     SearchFormat::Json => corpus.documents_json()?,

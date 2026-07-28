@@ -18,6 +18,10 @@ whole site to someone as a file; the export carries its own copy of the router,
 so it needs nothing else in the build. They share an implementation, not a
 dependency: set either, both, or neither.
 
+Both, along with browser-native `speculation` below, live in the top-level
+`navigation` block: everything there answers the same question, how the browser
+gets from one page to the next.
+
 #callout(kind: "note")[
   With both on, the exported file uses its own inlined router and ignores the
   `spa.js` your pages load. Only one router ever drives a document, and the
@@ -27,7 +31,7 @@ dependency: set either, both, or neither.
 == Client-side navigation
 
 ```kdl
-output {
+navigation {
   spa {
     root "main"        // the element swapped on navigation
     prefetch "hover"   // "none" | "hover" | "visible"
@@ -86,15 +90,16 @@ import { mountSpa } from "baudelaire:spa";
 mountSpa({ select: "#content", prefetch: "visible" });
 ```
 
-The module is served whether or not the `spa { }` block is set: importing it is
+The module is served whether or not the `navigation { spa }` block is set: importing it is
 itself the opt-in, and the block only supplies the defaults `mountSpa()` starts
 from.
 
 == One file, whole site
 
 ```kdl
-output {
-  html { embed #true }
+html { embed #true }
+
+navigation {
   standalone {
     file "site.html"   // written to dist
     entry "/"          // the page the file opens on
@@ -136,7 +141,7 @@ path with it.
 == Browser-native prefetch, no runtime
 
 ```kdl
-output {
+navigation {
   speculation {
     prefetch "moderate"      // none | conservative | moderate | eager | immediate
     prerender "conservative"
@@ -157,6 +162,7 @@ its own prefetch already warms the same links.
 
 == What gets written
 
-/ #raw("dist/spa.js"): the navigation client, when `spa { }` is set.
-/ #raw("dist/site.html"): the single-file export, when `standalone { }` is set.
+/ #raw("dist/spa.js"): the navigation client, when `navigation { spa }` is set.
+/ #raw("dist/site.html"): the single-file export, when `navigation { standalone }`
+  is set.
 / #raw("baudelaire:spa"): the virtual module, always available to bundlers.

@@ -9,7 +9,10 @@ use common::Site;
 /// frontmatter is the page module's `frontmatter` export, so extraction goes
 /// through real module evaluation.
 fn try_load(text: &str) -> baudelaire::error::Result<Page> {
-    try_load_with(text, "site \"T\"\ntaxonomies {\n  tags\n  series\n}\n")
+    try_load_with(
+        text,
+        "site \"T\"\ncontent {\n  taxonomies {\n    tags\n    series\n  }\n}\n",
+    )
 }
 
 fn try_load_with(text: &str, config: &str) -> baudelaire::error::Result<Page> {
@@ -215,7 +218,7 @@ fn configured_taxonomy_key_is_recognized() {
     // silently land in `extra`.
     let page = try_load_with(
         "#let frontmatter = (categories: (\"rust\", \"cli\"))",
-        "site \"T\"\ntaxonomies {\n  categories\n}\n",
+        "site \"T\"\ncontent {\n  taxonomies {\n    categories\n  }\n}\n",
     )
     .expect("load");
     assert_eq!(

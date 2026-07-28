@@ -27,7 +27,7 @@ fn full_build_cold(c: &mut Criterion) {
             // Untimed: wipe the cache and prior output so the build is truly cold.
             || {
                 let _ = fs::remove_dir_all(&cfg.cache.dir);
-                let _ = fs::remove_dir_all(&cfg.dist);
+                let _ = fs::remove_dir_all(&cfg.paths.dist);
                 Ui::new(Level::Silent)
             },
             |ui| {

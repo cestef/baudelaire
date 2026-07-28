@@ -13,7 +13,7 @@ this site (press `/` or `Ctrl` `K`) is exactly that, no custom code.
 == Turn it on
 
 ```kdl
-output {
+generate {
   search {
     formats "inverted"
     fields "title" "body" "tags"
@@ -58,7 +58,7 @@ The palette ships only a minimal, neutral stylesheet, expressed entirely through
 
 == Bundle it into your own JavaScript
 
-If you already bundle JavaScript (`output { assets { bundle } }`), import the same
+If you already bundle JavaScript (`assets { bundle }`), import the same
 client from the #raw("baudelaire:search") virtual module and rolldown inlines it,
 tree-shakes it, and fingerprints it alongside your code, no extra network request:
 

@@ -61,7 +61,7 @@ impl Card<'_> {
     fn generated_card(&self) -> Option<String> {
         self.page
             .wants_card(self.config)
-            .then(|| self.config.cards.url(&self.page.permalink))
+            .then(|| self.config.generate.cards.url(&self.page.permalink))
     }
 
     fn tags(&self) -> Vec<HtmlNode> {

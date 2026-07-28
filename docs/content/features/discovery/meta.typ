@@ -7,11 +7,14 @@
 
 Baudelaire enriches the HTML it emits: every page gets SEO and social meta tags
 in its `<head>`, images load lazily, and raster images can be optimized at build
-time. Meta tags live in the `html` block; image handling in the `images` block.
+time. Meta tags live in the top-level `html` block; image handling in
+`assets { images }`, because images go through the
+#link("../assets/assets.typ")[asset pipeline] like anything else.
 
 ```kdl
-output {
-  html { meta #true }
+html { meta #true }
+
+assets {
   images {
     lazy #true          // loading="lazy" + decoding="async"
     optimize {
@@ -66,7 +69,7 @@ cache-busted file.
 
 == Images
 
-The `images` block does four independent things.
+The `assets { images }` block does four independent things.
 
 / #raw("lazy"): every `<img>` gains `loading="lazy"` (offscreen images defer
   until needed) and `decoding="async"` (decoding never blocks rendering). On by
@@ -78,7 +81,7 @@ The `images` block does four independent things.
   (`/assets/photo.png`), so the markup stays small and the image caches like any
   asset. Sizing (`#image("x", width: 50%)`) is preserved as inline CSS, so the
   output matches Typst's own. The original filename is kept; with
-  `output.assets.fingerprint` the served name carries a content hash. Set
+  `assets { fingerprint }` on, the served name carries a content hash. Set
   `extract #false` to keep Typst's inlining.
 / #raw("responsive"): pre-generate downscaled copies of each raster and emit a
   `srcset`, so a browser fetches the smallest size that fits its screen. Enabled
@@ -93,15 +96,17 @@ The `images` block does four independent things.
   emits a file larger than the original.
 
 ```kdl
-images {
-  extract #true
-  responsive {
-    widths 480 960 1440
-    sizes "(min-width: 60rem) 640px, 100vw"
-  }
-  optimize {
-    png level=4 strip="all"
-    jpeg quality=75
+assets {
+  images {
+    extract #true
+    responsive {
+      widths 480 960 1440
+      sizes "(min-width: 60rem) 640px, 100vw"
+    }
+    optimize {
+      png level=4 strip="all"
+      jpeg quality=75
+    }
   }
 }
 ```

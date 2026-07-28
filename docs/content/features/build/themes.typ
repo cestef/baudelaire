@@ -45,8 +45,8 @@ The rule is the same for all four, and it is the only rule: *your file wins*.
 
 #callout(kind: "note")[
   Because a theme's config is only a default, you can adopt one and keep your
-  `site`, `url`, `collections`, and everything else you already had. A theme
-  that sets `output { html { pretty #false } }` changes your build; a theme that
+  `site`, `url`, `content { collections }`, and everything else you already had.
+  A theme that sets `html { pretty #false }` changes your build; a theme that
   sets `site` does not, because you set it too.
 ]
 

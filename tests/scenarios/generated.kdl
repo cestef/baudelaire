@@ -1,0 +1,83 @@
+// Generated site files that are opt-in: present only when their block is.
+
+scenario "robots.txt is emitted when its block is present" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #true
+        robots {
+            disallow "/private/"
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "robots.txt" {
+      contains "User-agent: *"
+      contains "Disallow: /private/"
+      contains "Sitemap: https://example.com/sitemap.xml"
+    }
+  }
+}
+
+scenario "no robots.txt without the block" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    absent "robots.txt"
+  }
+}
+
+scenario "llms.txt indexes pages by collection" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        llms {
+            summary "A test site."
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "llms.txt" {
+      contains "# T"
+      contains "> A test site."
+      contains "## posts"
+      contains "- [Alpha](https://example.com/posts/a/)"
+    }
+  }
+}

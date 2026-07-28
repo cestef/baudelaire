@@ -14,14 +14,16 @@ fn site() -> Site {
         r#"
         site "T"
         paths {
-            content "content"
-            dist "public"
-            assets "assets"
+          content "content"
+          dist "public"
+          assets "assets"
         }
-        output {
-            html { embed #true }
-            standalone { file "site.html" }
-            spa { root "main"; prefetch "visible" }
+        html {
+          embed #true
+        }
+        navigation {
+          standalone { file "site.html" }
+          spa { root "main"; prefetch "visible" }
         }
         "#,
     );
@@ -114,10 +116,15 @@ fn the_export_stands_alone_without_the_spa_runtime() {
     let site = Site::with(
         r#"
         site "T"
-        paths { content "content"; dist "public" }
-        output {
-            html { embed #true }
-            standalone { file "site.html" }
+        paths {
+          content "content"
+          dist "public"
+        }
+        html {
+          embed #true
+        }
+        navigation {
+          standalone { file "site.html" }
         }
         "#,
     );
@@ -146,8 +153,13 @@ fn the_spa_runtime_stands_alone_without_the_export() {
     let site = Site::with(
         r#"
         site "T"
-        paths { content "content"; dist "public" }
-        output { spa { root "main" } }
+        paths {
+          content "content"
+          dist "public"
+        }
+        navigation {
+          spa { root "main" }
+        }
         "#,
     );
     site.write(
@@ -166,8 +178,13 @@ fn speculation_rules_land_in_the_head() {
     let site = Site::with(
         r#"
         site "T"
-        paths { content "content"; dist "public" }
-        output { speculation { prefetch "eager"; prerender "conservative" } }
+        paths {
+          content "content"
+          dist "public"
+        }
+        navigation {
+          speculation { prefetch "eager"; prerender "conservative" }
+        }
         "#,
     );
     site.write(

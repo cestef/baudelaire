@@ -1,0 +1,150 @@
+// The head tags and the per-element annotations the DOM pass adds.
+
+scenario "meta tags come from frontmatter and config" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hello", summary: "A short summary.")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" {
+      contains #"name="description" content="A short summary.""#
+      contains #"property="og:title" content="Hello""#
+      contains #"property="og:site_name" content="S""#
+      // URL-absolute tags appear because a base `url` is set.
+      contains #"rel="canonical" href="https://s.example/post/""#
+      contains #"property="og:url" content="https://s.example/post/""#
+    }
+  }
+}
+
+scenario "meta tags are omitted when html meta is off" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      html {
+        meta #false
+      }
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hi", summary: "s")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" { missing "og:title" }
+  }
+}
+
+scenario "an og:image is absolute and follows the fingerprinted name" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        fingerprint #true
+      }
+      """#
+    "assets/pic.png" png="4x4"
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hi", image: "/assets/pic.png")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" {
+      contains #"property="og:image""#
+      contains #"content="https://s.example/assets/pic."#
+      // The raw name was replaced by the hashed one.
+      missing #"assets/pic.png""#
+    }
+  }
+}
+
+scenario "images are annotated for lazy decoding" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      """#
+    "content/p.typ" #"""
+      #let frontmatter = (title: "P")
+      #html.elem("img", attrs: (src: "/photo.png"))
+      """#
+  }
+  expect {
+    ok
+    file "p/index.html" {
+      contains #"loading="lazy""#
+      contains #"decoding="async""#
+    }
+  }
+}
+
+scenario "headings get unique slug anchors" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      = Guide
+
+      == Setup
+      one
+
+      == Setup
+      two
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      contains #"id="guide""#
+      // Two headings slugging alike are disambiguated, not duplicated.
+      contains #"id="setup""#
+      contains #"id="setup-2""#
+    }
+  }
+}
+
+scenario "anchors off leaves headings bare" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors #false
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" { missing #"id="setup""# }
+  }
+}

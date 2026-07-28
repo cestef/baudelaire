@@ -10,29 +10,34 @@ paths {
   templates "templates"
 }
 
-collections {
-  posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ"
+content {
+  collections {
+    posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ"
+  }
+
+  taxonomies {
+    tags index=#true
+  }
 }
 
-taxonomies {
-  tags index=#true
+links {
+  style "clean"
 }
 
-output {
-  urls "clean"
-  // Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
-  clean #true
+// Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
+prune #true
 
-  // Generated files are opt-in, and these two need the `url` above.
+// Generated files are opt-in, and these two need the `url` above.
+generate {
   sitemap #true
   feed {
     formats "rss"
   }
+}
 
-  html {
-    pretty #true
-    meta #true
-  }
+html {
+  pretty #true
+  meta #true
 }
 
 serve {
@@ -45,13 +50,13 @@ serve {
 profiles {
   dev {
     url "http://localhost:1821"
-    future #true
+    content {
+      future #true
+    }
   }
   prod {
-    output {
-      html {
-        pretty #false
-      }
+    html {
+      pretty #false
     }
   }
 }

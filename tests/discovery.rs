@@ -32,13 +32,15 @@ fn collection_sort_and_reverse_applied() {
         r#"
             site "T"
             paths {
-                content "content"
-                dist "public"
+              content "content"
+              dist "public"
             }
-            collections {
-              posts sort="date" reverse=#true
+            content {
+              collections {
+                posts sort="date" reverse=#true
+              }
             }
-        "#,
+            "#,
     );
     site.write(
         "content/posts/old.typ",
@@ -67,13 +69,15 @@ fn discovers_collections_and_pages() {
         r#"
             site "Test"
             paths {
-                content "content"
-                dist "public"
+              content "content"
+              dist "public"
             }
-            collections {
-              posts "posts/**/*.typ" sort="date"
+            content {
+              collections {
+                posts "posts/**/*.typ" sort="date"
+              }
             }
-        "#,
+            "#,
     );
     site.write(
         "content/posts/hello.typ",
@@ -105,13 +109,15 @@ fn glob_assigns_files_to_its_collection_regardless_of_directory() {
         r#"
             site "T"
             paths {
-                content "content"
-                dist "public"
+              content "content"
+              dist "public"
             }
-            collections {
-              blog "articles/**/*.typ"
+            content {
+              collections {
+                blog "articles/**/*.typ"
+              }
             }
-        "#,
+            "#,
     );
     // Files live under `articles/` but the glob routes them to `blog`.
     site.write(
@@ -138,7 +144,7 @@ fn invalid_glob_reports_error() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n}\ncollections {\n  x \"a/{unclosed\"\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n}\ncontent {\n  collections {\n    x \"a/{unclosed\"\n  }\n}\n",
     );
     site.write("content/a/p.typ", "#let frontmatter = (title: \"P\",)\np");
     let err = discover(&site.config(), &project(&site.config())).unwrap_err();
@@ -220,7 +226,7 @@ fn flat_urls_output_path() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\noutput {\n  urls \"flat\"\n}\npaths {\n  dist \"public\"\n}",
+        "site \"T\"\npaths {\n  dist \"public\"\n}\nlinks {\n  style \"flat\"\n}\n",
     );
     site.write(
         "content/posts/hello.typ",
@@ -247,12 +253,14 @@ fn custom_permalink_template() {
         r#"
             site "T"
             paths {
-                dist "public"
+              dist "public"
             }
-            collections {
-              posts permalink="/posts/{year}/{slug}/"
+            content {
+              collections {
+                posts permalink="/posts/{year}/{slug}/"
+              }
             }
-        "#,
+            "#,
     );
     site.write(
         "content/posts/hello.typ",
@@ -387,9 +395,13 @@ fn bundle_index_takes_slug_from_its_directory() {
         "config.kdl",
         r#"
             site "T"
-            paths { content "content" dist "public" }
-            collections { posts "posts/**/*.typ" permalink="/posts/{slug}/" }
-        "#,
+            paths {
+              content "content" dist "public"
+            }
+            content {
+              collections { posts "posts/**/*.typ" permalink="/posts/{slug}/" }
+            }
+            "#,
     );
     // A page bundle: the directory name is the slug, not the `index` filename.
     site.write(

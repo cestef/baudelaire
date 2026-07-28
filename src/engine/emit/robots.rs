@@ -15,19 +15,19 @@ pub(super) struct Robots;
 
 impl Processor for Robots {
     fn enabled(&self, config: &Config) -> bool {
-        config.robots.enabled
+        config.generate.robots.enabled
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let mut body = String::from("User-agent: *\n");
-        if site.config.robots.disallow.is_empty() {
+        if site.config.generate.robots.disallow.is_empty() {
             body.push_str("Disallow:\n");
         } else {
-            for path in &site.config.robots.disallow {
+            for path in &site.config.generate.robots.disallow {
                 let _ = writeln!(body, "Disallow: {path}");
             }
         }
-        if site.config.sitemap
+        if site.config.generate.sitemap
             && let Some(base) = site.warn_missing_base(
                 out,
                 BaseUrlMissing {
@@ -38,7 +38,7 @@ impl Processor for Robots {
         {
             let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));
         }
-        out.file(&site.config.dist.join("robots.txt"), &body)?;
+        out.file(&site.config.paths.dist.join("robots.txt"), &body)?;
         out.note(format_args!("wrote robots.txt"));
         Ok(())
     }

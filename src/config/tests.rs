@@ -53,8 +53,8 @@ fn client_block_parses_json_scalars() {
 fn empty_uses_defaults() {
     let cfg = parse("");
     assert_eq!(cfg.lang, "en");
-    assert_eq!(cfg.urls, crate::config::UrlStyle::Clean);
-    assert!(cfg.clean);
+    assert_eq!(cfg.links.style, crate::config::UrlStyle::Clean);
+    assert!(cfg.prune);
     assert!(cfg.html.pretty);
     assert_eq!(cfg.serve.port, 1821);
     assert!(cfg.cache.incremental);
@@ -89,13 +89,16 @@ fn announce_standard_did_and_verify_toggles() {
 
 #[test]
 fn bundle_index_defaults_to_index_and_is_configurable() {
-    assert_eq!(parse("").index.as_deref(), Some("index"));
+    assert_eq!(parse("").content.index.as_deref(), Some("index"));
     assert_eq!(
-        parse("paths {\n  index \"_index\"\n}").index.as_deref(),
+        parse("content {\n  index \"_index\"\n}")
+            .content
+            .index
+            .as_deref(),
         Some("_index")
     );
     // an empty basename disables bundle slugs
-    assert_eq!(parse("paths {\n  index \"\"\n}").index, None);
+    assert_eq!(parse("content {\n  index \"\"\n}").content.index, None);
 }
 
 #[test]
@@ -106,14 +109,14 @@ fn scalars() {
         url "https://example.net"
         lang "fr"
         author "Claude"
-        future #true
+        content { future #true }
     "#,
     );
     assert_eq!(cfg.site.as_deref(), Some("Baudelaire"));
     assert_eq!(cfg.url.as_deref(), Some("https://example.net"));
     assert_eq!(cfg.lang, "fr");
     assert_eq!(cfg.author.as_deref(), Some("Claude"));
-    assert!(cfg.future);
+    assert!(cfg.content.future);
 }
 
 #[test]
@@ -130,20 +133,23 @@ fn inputs_and_features() {
     "#,
     );
     assert_eq!(
-        cfg.inputs,
+        cfg.typst.inputs,
         vec![
             ("site".into(), "https://example.net".into()),
             ("env".into(), "prod".into())
         ]
     );
-    assert_eq!(cfg.features, vec!["html".to_owned(), "pdf".to_owned()]);
+    assert_eq!(
+        cfg.typst.features,
+        vec!["html".to_owned(), "pdf".to_owned()]
+    );
 }
 
 #[test]
 fn feature_disable_parses_as_negated_token() {
     let cfg = parse("typst {\n  features \"+a11y-extras\" \"-bundle\"\n}\n");
     assert_eq!(
-        cfg.features,
+        cfg.typst.features,
         vec!["a11y-extras".to_owned(), "-bundle".to_owned()]
     );
 }
@@ -162,18 +168,30 @@ fn err_html_feature_removal_rejected() {
 fn collections_overrides() {
     let cfg = parse(
         r#"
-        collections {
-          posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/"
-          notes "notes/**/*.typ" sort="order"
+        content {
+          collections {
+            posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/"
+            notes "notes/**/*.typ" sort="order"
+          }
         }
     "#,
     );
-    let posts = cfg.collections.iter().find(|(n, _)| n == "posts").unwrap();
+    let posts = cfg
+        .content
+        .collections
+        .iter()
+        .find(|(n, _)| n == "posts")
+        .unwrap();
     assert_eq!(posts.1.glob.as_deref(), Some("posts/**/*.typ"));
     assert_eq!(posts.1.sort, SortKey::Date);
     assert!(posts.1.reverse);
     assert_eq!(posts.1.permalink.as_deref(), Some("/posts/{slug}/"));
-    let notes = cfg.collections.iter().find(|(n, _)| n == "notes").unwrap();
+    let notes = cfg
+        .content
+        .collections
+        .iter()
+        .find(|(n, _)| n == "notes")
+        .unwrap();
     assert_eq!(notes.1.sort, SortKey::Order);
     assert!(!notes.1.reverse);
 }
@@ -182,7 +200,7 @@ fn collections_overrides() {
 fn images_optimize_per_format_with_params_and_lax_extensions() {
     let cfg = parse(
         r#"
-        output {
+        assets {
           images {
             lazy #false
             optimize {
@@ -193,8 +211,8 @@ fn images_optimize_per_format_with_params_and_lax_extensions() {
         }
     "#,
     );
-    assert!(!cfg.images.lazy);
-    let opt = &cfg.images.optimize;
+    assert!(!cfg.assets.images.lazy);
+    let opt = &cfg.assets.images.optimize;
     let png = opt.png.as_ref().unwrap();
     assert_eq!(png.level, 4);
     assert_eq!(png.strip, PngStrip::All);
@@ -208,35 +226,47 @@ fn images_optimize_per_format_with_params_and_lax_extensions() {
 
 #[test]
 fn images_optimize_defaults_when_empty() {
-    let cfg = parse("output { images { optimize { png } } }");
-    let png = cfg.images.optimize.png.as_ref().unwrap();
+    let cfg = parse("assets { images { optimize { png } } }");
+    let png = cfg.assets.images.optimize.png.as_ref().unwrap();
     assert_eq!(png.level, 2);
     assert_eq!(png.strip, PngStrip::Safe);
     // an unlisted format stays off
-    assert!(cfg.images.optimize.jpeg.is_none());
-    assert!(cfg.images.lazy, "lazy defaults on");
+    assert!(cfg.assets.images.optimize.jpeg.is_none());
+    assert!(cfg.assets.images.lazy, "lazy defaults on");
 }
 
 #[test]
 fn taxonomies() {
     let cfg = parse(
         r#"
-        taxonomies {
-          tags   index=#true
-          series key="series" index=#false
+        content {
+          taxonomies {
+            tags   index=#true
+            series key="series" index=#false
+          }
         }
     "#,
     );
-    let tags = cfg.taxonomies.iter().find(|(n, _)| n == "tags").unwrap();
+    let tags = cfg
+        .content
+        .taxonomies
+        .iter()
+        .find(|(n, _)| n == "tags")
+        .unwrap();
     assert!(tags.1.index);
-    let series = cfg.taxonomies.iter().find(|(n, _)| n == "series").unwrap();
+    let series = cfg
+        .content
+        .taxonomies
+        .iter()
+        .find(|(n, _)| n == "series")
+        .unwrap();
     assert_eq!(series.1.key, "series");
     assert!(!series.1.index);
 }
 
 #[test]
 fn html_pretty_toggle() {
-    let cfg = parse("output {\n  html {\n    pretty #false\n  }\n}\n");
+    let cfg = parse("html {\n  pretty #false\n}\n");
     assert!(!cfg.html.pretty);
 }
 
@@ -249,7 +279,7 @@ fn nested_parent_sections() {
           dist "out"
           static "public-files"
         }
-        output {
+        generate {
           sitemap #false
           robots {
             disallow "/private/"
@@ -260,15 +290,15 @@ fn nested_parent_sections() {
         }
     "#,
     );
-    assert_eq!(cfg.content.to_str(), Some("src"));
-    assert_eq!(cfg.dist.to_str(), Some("out"));
-    assert_eq!(cfg.r#static.to_str(), Some("public-files"));
-    assert!(!cfg.sitemap);
+    assert_eq!(cfg.paths.content.to_str(), Some("src"));
+    assert_eq!(cfg.paths.dist.to_str(), Some("out"));
+    assert_eq!(cfg.paths.r#static.to_str(), Some("public-files"));
+    assert!(!cfg.generate.sitemap);
     assert!(cfg.client.is_empty());
-    assert!(cfg.robots.enabled);
-    assert_eq!(cfg.robots.disallow, vec!["/private/".to_owned()]);
-    assert!(cfg.llms.enabled);
-    assert_eq!(cfg.llms.summary.as_deref(), Some("A test site."));
+    assert!(cfg.generate.robots.enabled);
+    assert_eq!(cfg.generate.robots.disallow, vec!["/private/".to_owned()]);
+    assert!(cfg.generate.llms.enabled);
+    assert_eq!(cfg.generate.llms.summary.as_deref(), Some("A test site."));
 }
 
 #[test]
@@ -306,7 +336,8 @@ fn err_unknown_top_key() {
 
 #[test]
 fn err_bad_sort_key() {
-    let err = Config::parse("collections {\n  posts sort=\"wat\"\n}\n").unwrap_err();
+    let err =
+        Config::parse("content {\n  collections {\n    posts sort=\"wat\"\n  }\n}\n").unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
     // an unknown enum *value* reads as "unknown value", not "unknown key"
     assert!(rendered.contains("unknown value `wat`"), "{rendered}");
@@ -327,15 +358,15 @@ fn err_missing_children() {
 
 #[test]
 fn bare_flag_node_enables() {
-    // A bare flag node inside a block enables; the top-level default is on too.
-    assert!(parse("").clean);
-    assert!(parse("output {\n  clean\n}").clean);
-    assert!(!parse("output {\n  clean #false\n}").clean);
+    // A bare flag node enables; the default is on too.
+    assert!(parse("").prune);
+    assert!(parse("prune").prune);
+    assert!(!parse("prune #false").prune);
 }
 
 #[test]
 fn err_boolean_type() {
-    let err = Config::parse("output {\n  clean \"yes\"\n}").unwrap_err();
+    let err = Config::parse("prune \"yes\"").unwrap_err();
     assert!(
         err.to_string().contains("expected boolean, got string"),
         "{err}"
@@ -343,15 +374,21 @@ fn err_boolean_type() {
 }
 
 #[test]
-fn url_style_parsed_from_output_block() {
+fn url_style_parsed_from_links_block() {
     use crate::config::UrlStyle;
-    assert_eq!(parse("output {\n  urls \"clean\"\n}").urls, UrlStyle::Clean);
-    assert_eq!(parse("output {\n  urls \"flat\"\n}").urls, UrlStyle::Flat);
+    assert_eq!(
+        parse("links {\n  style \"clean\"\n}").links.style,
+        UrlStyle::Clean
+    );
+    assert_eq!(
+        parse("links {\n  style \"flat\"\n}").links.style,
+        UrlStyle::Flat
+    );
 }
 
 #[test]
 fn err_unknown_url_style() {
-    let err = Config::parse("output {\n  urls \"pretty\"\n}").unwrap_err();
+    let err = Config::parse("links {\n  style \"pretty\"\n}").unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
     // The value table drives the "did you mean" hint, listing the valid styles.
     assert!(rendered.contains("unknown value `pretty`"), "{rendered}");
@@ -360,7 +397,8 @@ fn err_unknown_url_style() {
 
 #[test]
 fn err_boolean_attr_type() {
-    let err = Config::parse("collections {\n  posts reverse=\"yes\"\n}\n").unwrap_err();
+    let err = Config::parse("content {\n  collections {\n    posts reverse=\"yes\"\n  }\n}\n")
+        .unwrap_err();
     assert!(
         err.to_string().contains("expected boolean, got string"),
         "{err}"
@@ -384,13 +422,13 @@ fn err_integer_overflows_i64() {
 
 #[test]
 fn err_negative_limit_and_minimum() {
-    let err = Config::parse("output {\n  feed {\n    limit -1\n  }\n}\n").unwrap_err();
+    let err = Config::parse("generate {\n  feed {\n    limit -1\n  }\n}\n").unwrap_err();
     assert!(
         err.to_string()
             .contains("`limit` must not be negative, got -1"),
         "{err}"
     );
-    let err = Config::parse("output {\n  search {\n    minimum -2\n  }\n}\n").unwrap_err();
+    let err = Config::parse("generate {\n  search {\n    minimum -2\n  }\n}\n").unwrap_err();
     assert!(
         err.to_string()
             .contains("`minimum` must not be negative, got -2"),
@@ -402,11 +440,11 @@ fn err_negative_limit_and_minimum() {
 fn err_paginate_below_one() {
     for (config, detail) in [
         (
-            "collections {\n  posts paginate=0\n}\n",
+            "content {\n  collections {\n    posts paginate=0\n  }\n}\n",
             "paginate must be at least 1, got 0",
         ),
         (
-            "collections {\n  posts paginate=-3\n}\n",
+            "content {\n  collections {\n    posts paginate=-3\n  }\n}\n",
             "paginate must be at least 1, got -3",
         ),
     ] {
@@ -418,7 +456,7 @@ fn err_paginate_below_one() {
 #[test]
 fn err_duplicate_format() {
     let err =
-        Config::parse("output {\n  feed {\n    formats \"rss\" \"rss\"\n  }\n}\n").unwrap_err();
+        Config::parse("generate {\n  feed {\n    formats \"rss\" \"rss\"\n  }\n}\n").unwrap_err();
     assert!(
         err.to_string().contains("duplicate `rss` in `formats`"),
         "{err}"
@@ -427,7 +465,9 @@ fn err_duplicate_format() {
 
 #[test]
 fn err_duplicate_collection() {
-    let err = Config::parse("collections {\n  posts\n  posts sort=\"date\"\n}\n").unwrap_err();
+    let err =
+        Config::parse("content {\n  collections {\n    posts\n    posts sort=\"date\"\n  }\n}\n")
+            .unwrap_err();
     assert!(
         err.to_string().contains("duplicate collection `posts`"),
         "{err}"
@@ -436,7 +476,8 @@ fn err_duplicate_collection() {
 
 #[test]
 fn err_duplicate_taxonomy() {
-    let err = Config::parse("taxonomies {\n  tags\n  tags index=#true\n}\n").unwrap_err();
+    let err = Config::parse("content {\n  taxonomies {\n    tags\n    tags index=#true\n  }\n}\n")
+        .unwrap_err();
     assert!(
         err.to_string().contains("duplicate taxonomy `tags`"),
         "{err}"
@@ -445,14 +486,14 @@ fn err_duplicate_taxonomy() {
 
 #[test]
 fn err_duplicate_profile() {
-    let err = Config::parse("profiles {\n  dev { future #true }\n  dev { future #false }\n}\n")
+    let err = Config::parse("profiles {\n  dev { prune #true }\n  dev { prune #false }\n}\n")
         .unwrap_err();
     assert!(err.to_string().contains("duplicate profile `dev`"), "{err}");
 }
 
 #[test]
 fn err_unknown_permalink_placeholder_is_spanned() {
-    let text = "collections {\n  posts permalink=\"/{bogus}/\"\n}\n";
+    let text = "content {\n  collections {\n    posts permalink=\"/{bogus}/\"\n  }\n}\n";
     let err = Config::parse(text).unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
     assert!(
@@ -466,23 +507,28 @@ fn err_unknown_permalink_placeholder_is_spanned() {
 
 #[test]
 fn err_unterminated_permalink_placeholder() {
-    let err = Config::parse("collections {\n  posts permalink=\"/{slug\"\n}\n").unwrap_err();
+    let err = Config::parse("content {\n  collections {\n    posts permalink=\"/{slug\"\n  }\n}\n")
+        .unwrap_err();
     assert!(err.to_string().contains("unterminated `{slug`"), "{err}");
 }
 
 #[test]
 fn err_permalink_parent_dir_segment() {
-    let err = Config::parse("collections {\n  posts permalink=\"/../{slug}/\"\n}\n").unwrap_err();
+    let err =
+        Config::parse("content {\n  collections {\n    posts permalink=\"/../{slug}/\"\n  }\n}\n")
+            .unwrap_err();
     assert!(err.to_string().contains("must not contain `..`"), "{err}");
 }
 
 #[test]
 fn err_unexpected_positional_argument() {
     // taxonomies take no positional arguments
-    let err = Config::parse("taxonomies {\n  tags \"extra\"\n}\n").unwrap_err();
+    let err = Config::parse("content {\n  taxonomies {\n    tags \"extra\"\n  }\n}\n").unwrap_err();
     assert!(err.to_string().contains("unexpected argument"), "{err}");
     // collections consume exactly one (the glob); a second is discarded today
-    let err = Config::parse("collections {\n  posts \"posts/*.typ\" \"extra\"\n}\n").unwrap_err();
+    let err =
+        Config::parse("content {\n  collections {\n    posts \"posts/*.typ\" \"extra\"\n  }\n}\n")
+            .unwrap_err();
     assert!(err.to_string().contains("unexpected argument"), "{err}");
 }
 
@@ -500,7 +546,7 @@ fn err_unset_env_var_without_default() {
 #[test]
 fn destination_never_escapes_dist() {
     let cfg = parse("");
-    let dist = cfg.dist.clone();
+    let dist = cfg.paths.dist.clone();
     for url in ["/../../etc/passwd/", "/posts/../../secret/"] {
         let dest = cfg.destination(url);
         assert!(dest.starts_with(&dist), "{url} -> {}", dest.display());
@@ -530,17 +576,20 @@ fn client_and_language_values_key_the_fingerprint() {
 #[test]
 fn a_localized_404_stays_a_flat_page() {
     let cfg = parse("lang \"en\"\nlanguages {\n  fr { }\n}");
-    assert_eq!(cfg.destination("/404/"), cfg.dist.join("404.html"));
-    assert_eq!(cfg.destination("/fr/404/"), cfg.dist.join("fr/404.html"));
+    assert_eq!(cfg.destination("/404/"), cfg.paths.dist.join("404.html"));
+    assert_eq!(
+        cfg.destination("/fr/404/"),
+        cfg.paths.dist.join("fr/404.html")
+    );
     // Only a language scope counts: an ordinary page that happens to be called
     // `404` keeps the site's URL style.
     assert_eq!(
         cfg.destination("/notes/404/"),
-        cfg.dist.join("notes/404/index.html")
+        cfg.paths.dist.join("notes/404/index.html")
     );
     assert_eq!(
         cfg.destination("/posts/4040/"),
-        cfg.dist.join("posts/4040/index.html")
+        cfg.paths.dist.join("posts/4040/index.html")
     );
 }
 
@@ -610,46 +659,46 @@ fn prefixed_shifts_only_root_absolute_paths() {
 
 #[test]
 fn images_extract_defaults_on_and_parses() {
-    assert!(parse("").images.extract);
-    let cfg = parse("output {\n  images {\n    extract #false\n  }\n}\n");
-    assert!(!cfg.images.extract);
+    assert!(parse("").assets.images.extract);
+    let cfg = parse("assets {\n  images {\n    extract #false\n  }\n}\n");
+    assert!(!cfg.assets.images.extract);
 }
 
 #[test]
 fn externalize_gate_yields_to_embed() {
     // `extract` alone externalizes; `html.embed` (which re-inlines assets)
     // overrides it so the two never fight.
-    let extract = parse("output {\n  images { extract #true }\n}\n");
-    assert!(extract.images.externalize(&extract.html));
-    let both = parse("output {\n  html { embed #true }\n  images { extract #true }\n}\n");
-    assert!(!both.images.externalize(&both.html));
+    let extract = parse("assets {\n  images { extract #true }\n}\n");
+    assert!(extract.assets.images.externalize(&extract.html));
+    let both = parse("html { embed #true }\nassets {\n  images { extract #true }\n}\n");
+    assert!(!both.assets.images.externalize(&both.html));
 }
 
 #[test]
 fn responsive_block_enables_with_default_widths() {
-    assert!(!parse("").images.responsive.enabled);
-    let cfg = parse("output {\n  images {\n    responsive { }\n  }\n}\n");
-    assert!(cfg.images.responsive.enabled);
+    assert!(!parse("").assets.images.responsive.enabled);
+    let cfg = parse("assets {\n  images {\n    responsive { }\n  }\n}\n");
+    assert!(cfg.assets.images.responsive.enabled);
     // silent block keeps the built-in breakpoints and quality.
-    assert_eq!(cfg.images.responsive.widths, vec![480, 960, 1440]);
-    assert_eq!(cfg.images.responsive.quality, 80);
-    assert!(cfg.images.responsive.sizes.is_none());
+    assert_eq!(cfg.assets.images.responsive.widths, vec![480, 960, 1440]);
+    assert_eq!(cfg.assets.images.responsive.quality, 80);
+    assert!(cfg.assets.images.responsive.sizes.is_none());
 }
 
 #[test]
 fn responsive_widths_and_sizes_override() {
     let cfg = parse(
-        "output {\n  images {\n    responsive {\n      widths 320 640\n      quality 70\n      sizes \"50vw\"\n    }\n  }\n}\n",
+        "assets {\n  images {\n    responsive {\n      widths 320 640\n      quality 70\n      sizes \"50vw\"\n    }\n  }\n}\n",
     );
-    assert_eq!(cfg.images.responsive.widths, vec![320, 640]);
-    assert_eq!(cfg.images.responsive.quality, 70);
-    assert_eq!(cfg.images.responsive.sizes.as_deref(), Some("50vw"));
+    assert_eq!(cfg.assets.images.responsive.widths, vec![320, 640]);
+    assert_eq!(cfg.assets.images.responsive.quality, 70);
+    assert_eq!(cfg.assets.images.responsive.sizes.as_deref(), Some("50vw"));
 }
 
 #[test]
 fn responsive_rejects_a_zero_width() {
     // widths are 1..=16384; a 0 (or negative) is a hard error, not a silent drop.
-    assert!(Config::parse("output {\n  images {\n    responsive { widths 0 }\n  }\n}\n").is_err());
+    assert!(Config::parse("assets {\n  images {\n    responsive { widths 0 }\n  }\n}\n").is_err());
 }
 
 /// A monolingual right-to-left site has no `languages` block to declare `dir`

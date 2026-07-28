@@ -16,7 +16,7 @@ pub(super) struct Images;
 
 impl Transform for Images {
     fn enabled(&self, config: &Config) -> bool {
-        config.images.lazy
+        config.assets.images.lazy
     }
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {

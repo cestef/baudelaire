@@ -1,0 +1,178 @@
+// The core of a build: sources in, pages out, at the URLs the config asks for.
+
+scenario "a page compiles to html under its permalink" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/hello.typ" #"""
+      #let frontmatter = (title: "Hello",)
+      Hello, world!
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" {
+      contains "<!DOCTYPE html>"
+      contains "Hello, world!"
+    }
+  }
+}
+
+scenario "every page in a collection is built" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/p0.typ" #"""
+      #let frontmatter = (title: "P0",)
+      Page 0
+      """#
+    "content/posts/p1.typ" #"""
+      #let frontmatter = (title: "P1",)
+      Page 1
+      """#
+    "content/posts/p2.typ" #"""
+      #let frontmatter = (title: "P2",)
+      Page 2
+      """#
+    "content/posts/p3.typ" #"""
+      #let frontmatter = (title: "P3",)
+      Page 3
+      """#
+  }
+  expect {
+    ok
+    file "posts/p0/index.html" { contains "Page 0" }
+    file "posts/p1/index.html" { contains "Page 1" }
+    file "posts/p2/index.html" { contains "Page 2" }
+    file "posts/p3/index.html" { contains "Page 3" }
+  }
+}
+
+scenario "flat urls produce html files rather than index directories" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      links {
+        style "flat"
+      }
+      """#
+    "content/posts/hello.typ" #"""
+      #let frontmatter = (title: "Hi",)
+      body text
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello.html"
+    absent "posts/hello/index.html"
+  }
+}
+
+scenario "pages in a nested content directory join the collection above them" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/2024/jan.typ" #"""
+      #let frontmatter = (title: "Jan",)
+      January
+      """#
+    "content/posts/2024/feb.typ" #"""
+      #let frontmatter = (title: "Feb",)
+      February
+      """#
+  }
+  expect {
+    ok
+    // The subdirectory is a section, not a URL segment: both land under /posts/.
+    file "posts/jan/index.html" { contains "January" }
+    file "posts/feb/index.html" { contains "February" }
+  }
+}
+
+scenario "a collection permalink template moves the whole collection" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          posts permalink="/blog/{slug}/"
+        }
+      }
+      """#
+    "content/posts/hello.typ" #"""
+      #let frontmatter = (title: "Hi",)
+      body text
+      """#
+  }
+  expect {
+    ok
+    file "blog/hello/index.html"
+    absent "posts/hello/index.html"
+  }
+}
+
+scenario "assets are copied into dist, nesting preserved" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      """#
+    "content/posts/p.typ" #"""
+      #let frontmatter = (title: "P",)
+      body text
+      """#
+    "assets/style.css" #"""
+      body { color: red; }
+      """#
+    "assets/img/logo.png" #"""
+      fake-png
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css"
+    file "assets/img/logo.png"
+  }
+}
+
+scenario "a site with no content builds without error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+  }
+  expect {
+    ok
+  }
+}

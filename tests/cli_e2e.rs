@@ -72,7 +72,7 @@ fn clean_removes_dist_and_cache() {
     sb.write("public/index.html", "<html></html>");
     sb.write(".baudelaire/cache/hashes.json", "{}");
     let cfg = sb.config();
-    assert!(cfg.dist.exists());
+    assert!(cfg.paths.dist.exists());
     assert!(cfg.cache.dir.exists());
     // call the clean logic directly via the CLI
     let out = sb.run(&["-c", sb.path("config.kdl").to_str().unwrap(), "clean"]);
@@ -81,7 +81,7 @@ fn clean_removes_dist_and_cache() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!cfg.dist.exists(), "dist still exists");
+    assert!(!cfg.paths.dist.exists(), "dist still exists");
     assert!(!cfg.cache.dir.exists(), "cache still exists");
 }
 
@@ -90,14 +90,14 @@ fn clean_idempotent_when_dirs_absent() {
     let sb = Site::new();
     sb.write("config.kdl", "site \"T\"\npaths {\n  dist \"public\"\n}\n");
     let cfg = sb.config();
-    assert!(!cfg.dist.exists());
+    assert!(!cfg.paths.dist.exists());
     let out = sb.run(&["-c", sb.path("config.kdl").to_str().unwrap(), "clean"]);
     assert!(
         out.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!cfg.dist.exists());
+    assert!(!cfg.paths.dist.exists());
 }
 
 #[test]
@@ -116,11 +116,13 @@ fn config_collection_lookup() {
         "config.kdl",
         r#"
             site "T"
-            collections {
-              posts "posts/**/*.typ" sort="date"
-              notes "notes/**/*.typ"
+            content {
+              collections {
+                posts "posts/**/*.typ" sort="date"
+                notes "notes/**/*.typ"
+              }
             }
-        "#,
+            "#,
     );
     let cfg = sb.config();
     let posts = cfg.collection("posts").expect("posts exists");
@@ -191,13 +193,15 @@ fn discover_with_collection_override() {
         r#"
             site "T"
             paths {
-                content "content"
-                dist "public"
+              content "content"
+              dist "public"
             }
-            collections {
-              posts permalink="/blog/{slug}/"
+            content {
+              collections {
+                posts permalink="/blog/{slug}/"
+              }
             }
-        "#,
+            "#,
     );
     sb.write(
         "content/posts/hello.typ",
