@@ -48,6 +48,47 @@ cargo install --git https://github.com/cestef/baudelaire   # build from git
 `cargo install` builds from source (slower, but works on any platform Rust
 targets).
 
+== Slim builds
+
+Every release ships in two flavors. `full` is the default; `slim` drops the
+optional capabilities, and with them the bulk of the binary: the bundled fonts
+alone are ~9 MiB, the CSS and JavaScript toolchains ~3.2 and ~2.5 MiB, the card
+renderer ~1 MiB.
+
+```sh
+FLAVOR=slim sh install.sh
+```
+
+Building it yourself is `cargo install baudelaire --no-default-features`, and
+you can re-add any single capability with `--features css`.
+
+What `slim` leaves out:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Feature], [Off means]),
+  [`embedded-fonts`], [Text renders only with fonts found on the host, so keep
+    it on for containers and CI images that ship none.],
+  [`js`], [`assets { bundle }` warns and `.js` files are copied verbatim.],
+  [`css`], [`assets { minify }` warns and `.css` files are copied verbatim.],
+  [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and
+    PNG/JPEG assets are copied verbatim. Lazy-loading attributes are markup
+    only, so they stay.],
+  [`cards`], [A `generate { cards { } }` block warns and produces nothing.],
+)
+
+Each of these is a capability, not a behaviour switch: turning one off never
+changes what a site that does not ask for it produces. A site that *does* ask
+gets a `baudelaire::feature::missing` warning naming the setting, the feature to
+rebuild with, and what was emitted instead. Nothing fails silently.
+
+One capability is contagious. `assets { fingerprint }` needs the `css` feature,
+because a verbatim stylesheet keeps naming its images by their pre-hash
+filenames; hashing them anyway would leave the sheet pointing at files that no
+longer exist. A slim build therefore turns fingerprinting off for the whole
+build and says so, rather than emitting a site whose stylesheets 404.
+
 == From a checkout
 
 Working on baudelaire itself? Build and install from the repo:

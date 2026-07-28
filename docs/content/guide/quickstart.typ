@@ -12,8 +12,19 @@ cd my-site
 baudelaire serve
 ```
 
-`init` writes a `config.kdl`, a starter page post under `content/`, a
-`templates/layout.typ`, and an `assets/style.css`. `baudelaire serve` compiles & watches changes. Live-reloading happenns over Server-Sent Events on every save.
+`init` writes a `config.kdl`, a starter page under `content/`, the templates that
+render it, and an `assets/style.css`. `baudelaire serve` compiles and watches for
+changes; live-reloading happens over Server-Sent Events on every save.
+
+The default shape is a blog. Pass `-t` for another one, and `--with` to switch on
+optional features while scaffolding:
+
+```sh
+baudelaire init my-docs -t docs --with search,spa
+```
+
+The four shapes are `blog`, `docs`, `book` and `minimal`; see the
+#link("cli.typ")[CLI reference] for what each one carries.
 
 == Write a page
 

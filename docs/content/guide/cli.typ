@@ -116,13 +116,42 @@ reconciles the remote records with your pages.
 
 === init \[dir\]
 
-Scaffold a whole project (config, a layout, a starter page and post, and a
-stylesheet) into `dir`, or the current directory. It prompts for the site
-name, author (defaulted from your git config), and base URL, then offers to set
-up version control with a `.gitignore`.
+Scaffold a whole project (config, templates, a starter page, and a stylesheet)
+into `dir`, or the current directory. It prompts for the site name, author
+(defaulted from your git config), and base URL, then offers to set up version
+control with a `.gitignore`.
 
+Four starter shapes ship with the binary, selected with `-t`:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Template], [What you get]),
+  [`blog` (default)], [Dated posts, tags, pagination and feeds.],
+  [`docs`], [Ordered sections, sidebar nav and client-side search.],
+  [`book`], [Ordered chapters, also exported as one HTML file.],
+  [`minimal`], [One page and one template, nothing else.],
+)
+
+/ #raw("-t, --template <name>"): Starter shape to scaffold. Defaults to `blog`.
+/ #raw("--with <feature,..>"): Switch on optional features, appending their
+  config blocks: `spa` and `standalone`
+  (#link("../features/build/navigating.typ")[client-side navigation and
+  single-file export]), `speculation` (prefetch hints), and `search`
+  (#link("../features/discovery/search.typ")[a client-side search index]).
+/ #raw("--theme <spec>"): Take templates and assets from a
+  #link("../features/build/themes.typ")[theme package] instead of scaffolding
+  copies of them. Only the shape's content and config are written.
+/ #raw("--no-sample"): Scaffold the shape without its example pages. The home
+  page stays: a site with no content at all builds to nothing.
+/ #raw("--title <text>"), #raw("--author <name>"), #raw("--url <url>"): Fill the
+  config without being prompted.
+/ #raw("--lang <code>"): Default language code (default `en`).
 / #raw("--vcs <git|jujutsu>"): Choose a VCS instead of being prompted.
 / #raw("-y"): Accept every default non-interactively.
+
+Existing files are never overwritten: `init` in a populated directory skips what
+is already there and reports it.
 
 === clean
 

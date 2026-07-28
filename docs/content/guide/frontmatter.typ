@@ -39,6 +39,9 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
 / #raw("draft:bool"): Draft pages are skipped unless you pass `--drafts`
   (or a profile turns them on).
 / #raw("slug:str"): Override the URL slug, otherwise derived from the filename.
+/ #raw("lang:str"): Override the page's language, beating the filename suffix and
+  the site default. Only meaningful once a `languages` block exists; see
+  #link("../features/content/i18n.typ")[multi-language sites].
 / #raw("template:str"): The template that wraps this page, overriding the
   collection's default.
 / #raw("order:int"): An integer sort key for a `sort="order"` collection (the guide
