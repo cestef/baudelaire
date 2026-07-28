@@ -71,7 +71,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 if [ -z "$VERSION" ]; then
   step "resolving latest release"
   dl "$API/releases/latest" "$tmp/rel" || die "release lookup failed"
-  VERSION=$(tr ',' '\n' < "$tmp/rel" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
+  VERSION=$(tr ',' '\n' < "$tmp/rel" | sed -n 's/.*"tag_name"[ 	]*:[ 	]*"\([^"]*\)".*/\1/p' | head -1)
   [ -n "$VERSION" ] || die "couldn't resolve latest tag, pin one with ${b}VERSION=${x}"
 fi
 
