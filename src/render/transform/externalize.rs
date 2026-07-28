@@ -14,14 +14,11 @@ use serde::{Deserialize, Serialize};
 use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
+use crate::engine::asset::FINGERPRINT_LEN;
 use crate::graph::Hash;
 
 use super::{Cx, ElementExt, Transform};
 use crate::world::image_rule::MARKER;
-
-/// Length of the hex fingerprint spliced into a filename, matching the asset
-/// pipeline so externalized and pipeline assets are named the same way.
-const FINGERPRINT_LEN: usize = 16;
 
 /// A typst-embedded image lifted out to a file: the filename it is served under
 /// (relative to the asset directory) and the source file to copy from. Recorded
@@ -60,7 +57,7 @@ impl Transform for Externalize {
                 Some(format!("/{}/{name}", config.asset_name()))
             });
         });
-        cx.images.extend(refs);
+        cx.found.images.extend(refs);
     }
 }
 
@@ -76,7 +73,7 @@ fn resolve(vpath: &str, root: &Path, config: &Config) -> (String, PathBuf) {
         .fingerprint
         .then(|| crate::fs::read(&source).ok())
         .flatten()
-        .map(|bytes| Hash::of_bytes(&bytes).hex()[..FINGERPRINT_LEN].to_owned());
+        .map(|bytes| Hash::of_bytes(&bytes).short(FINGERPRINT_LEN));
     (name(vpath, digest.as_deref()), source)
 }
 

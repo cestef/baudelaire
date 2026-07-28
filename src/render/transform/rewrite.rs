@@ -21,10 +21,11 @@ impl Transform for Links {
         let Cx {
             links,
             page,
-            broken,
             config,
+            found,
             ..
         } = cx;
+        let broken = &mut found.broken;
         let lang = config.multilingual().then_some(page.lang.as_str());
         doc.root_mut().walk(&mut |element| {
             element.rewrite(&[attr::href, attr::src], |value| {

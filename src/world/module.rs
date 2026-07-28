@@ -212,13 +212,22 @@ impl FileLoader for Files {
     }
 }
 
-/// `@baudelaire/html`: an emmet-style element constructor, so a template writes
-/// `h("span.entry-title")[..]` instead of
-/// `html.elem("span", attrs: (class: "entry-title"), ..)`.
+/// `@baudelaire/html`: element construction without `html.elem`'s ceremony, and
+/// `svg()`, which inlines an SVG file as real DOM.
 ///
-/// Pure Typst with no build data in it: everything it does could be written by
-/// hand in a template, and it ships here so every site gets it.
-struct Html;
+/// Everything but `svg()` is pure Typst that a template could have written
+/// itself; it ships here so every site gets it. `svg()` leaves the markers
+/// below for [`crate::render`] to resolve.
+pub(crate) struct Html;
+
+impl Html {
+    /// The transient attribute `svg()` leaves on the element, naming the file
+    /// to inline. Removed when [`crate::render`] splices the file in, so it
+    /// never reaches the output. Bound into the module source rather than
+    /// written into `typ/html.typ`, so the name lives in one place across both
+    /// sides of the marker.
+    pub(crate) const MARKER: &'static str = "data-baudelaire-svg";
+}
 
 impl Module for Html {
     fn name(&self) -> &'static str {
@@ -226,7 +235,11 @@ impl Module for Html {
     }
 
     fn source(&self, _cx: &ModuleCx) -> String {
-        include_str!("typ/html.typ").to_owned()
+        format!(
+            "#let _svg-marker = \"{}\"\n{}",
+            Html::MARKER,
+            include_str!("typ/html.typ")
+        )
     }
 }
 

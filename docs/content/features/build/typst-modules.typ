@@ -68,6 +68,66 @@ attributes are data:
   never get a stray `class=""`.
 ]
 
+=== Inlining an SVG
+
+`svg()` puts an SVG file's own markup into the page as real DOM:
+
+```typ
+#svg("/icons/search.svg", class: "icon", aria-hidden: "true")
+```
+
+That is not the same as `image("/icons/search.svg")`, which produces an `<img>`.
+An `<img>` is an opaque replaced element: CSS cannot reach inside it, so an icon
+drawn that way cannot inherit `currentColor`, cannot be recoloured by a dark-mode
+toggle, and cannot carry your own `class` or ARIA attributes. Inlining is the
+only way to get those. Use `image()` for photographs, `svg()` for icons.
+
+The file's own root attributes fill in under yours, so one file serves every
+call site and you override only what differs:
+
+```typ
+#svg("/icons/search.svg", width: 16, height: 16)   // the file's viewBox, your size
+```
+
+The path is from the project root and starts with `/`. It cannot be relative to
+the calling template: baudelaire reads the file after the compile, not typst, so
+there is no template to resolve it against. Any project file works, so icons can
+live outside `assets/` and never be published as standalone files.
+
+Comments, XML declarations, DOCTYPEs, and an editor's private namespaces
+(Inkscape's `sodipodi:*`, `dc:title` inside `<metadata>`) are dropped on the way
+in, so an unedited export costs nothing extra. `xlink:href` becomes plain `href`,
+the SVG 2 spelling.
+
+#callout(kind: "warning")[
+  A file carrying a `<script>`, an `on*` handler, or a `javascript:` URL is
+  refused. Inlining makes it part of the page, so it would execute with your
+  origin, which is rarely what an icon set from a package is expected to do. Put
+  the script in your template instead, where a reader can see it.
+
+  A `<style>` inside the file *is* kept, because Illustrator exports rely on one.
+  Its rules are confined to the icon, so an export's `.st0` cannot repaint a
+  `.st0` elsewhere on your page.
+]
+
+Confining is why an icon with a stylesheet gains a `data-svg` attribute: each
+rule is rewritten to match only inside that element.
+
+```css
+/* authored */   .st0{fill:#231F20}
+/* emitted  */   :where([data-svg="051c4bdc"]) .st0{fill:#231F20}
+```
+
+The wrapper is `:where()`, which adds no specificity, so a confined rule loses to
+your page CSS exactly as it did before. `@media`, `@supports`, `@container` and
+`@layer` blocks are descended into; `@keyframes` and `@font-face` name their own
+thing rather than selecting elements, so they are left alone. An icon with no
+stylesheet gains no attribute.
+
+A selector that targets the icon's own root element (`svg { .. }` inside the
+file) is not confined to it and will not match, since the rules are rewritten as
+descendants. Style the shapes instead.
+
 == #raw("@baudelaire/site")
 
 Site identity as plain bindings, rather than a chain of guarded `.at` reads into

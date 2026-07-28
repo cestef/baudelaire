@@ -14,7 +14,7 @@ use typst::{
     utils::LazyHash,
 };
 pub mod image_rule;
-mod module;
+pub(crate) mod module;
 
 use typst_kit::{
     downloader::SystemDownloader, files::FileStore, files::FsRoot, fonts::FontStore,

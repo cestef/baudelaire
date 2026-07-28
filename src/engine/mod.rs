@@ -1,6 +1,6 @@
 //! Build pipeline: discover -> compile -> render -> write, parallelized via rayon.
 
-mod asset;
+pub(crate) mod asset;
 mod check;
 mod compile;
 mod emit;
@@ -757,7 +757,14 @@ impl Engine {
         let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
         })?;
-        let rewrite = renderer.rewrite(&mut doc, page, &self.config);
+        let mut rewrite = renderer.rewrite(&mut doc, page, &self.config);
+        // An icon that could not be inlined leaves an empty `<svg>` in the DOM,
+        // so the page cannot be shipped: fail on the first one.
+        // Only the first is reported: the files are independent, and stopping
+        // at one error is the contract every other pass has.
+        if let Some(invalid) = std::mem::take(&mut rewrite.invalid).into_iter().next() {
+            return Err(invalid.into());
+        }
         let options = HtmlOptions {
             pretty: self.config.html.pretty,
         };
@@ -782,7 +789,12 @@ impl Engine {
             .wants_card(&self.config)
             .then(|| Card::render(&self.project, &self.config, page))
             .transpose()?;
-        let deps = self.project.dependencies(&world);
+        let mut deps = self.project.dependencies(&world);
+        // Inlined icons are read by the render pass, not by typst, so they are
+        // absent from the compilation's own accesses. Adding them here puts
+        // them under the same content-hash check as every other dependency,
+        // instead of needing a mechanism of their own.
+        deps.extend(std::mem::take(&mut rewrite.icons));
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.

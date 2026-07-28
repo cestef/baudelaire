@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 24" role="img">
+  <title>A &amp; B &#169; caf&#233;</title>
+  <desc>Some &lt;description&gt;</desc>
+  <text x="0" y="12">Caf&#233; &quot;quoted&quot; &amp; more<tspan dx="2" font-weight="bold">bold</tspan></text>
+</svg>

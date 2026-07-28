@@ -15,6 +15,7 @@ pub mod remote;
 pub mod scaffold;
 pub mod serialize;
 pub mod serve;
+pub mod svg;
 pub mod theme;
 pub mod typ;
 pub mod warning;
@@ -34,6 +35,7 @@ pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
 pub use serialize::{Artifact, SerializeError};
 pub use serve::ServeError;
+pub use svg::SvgError;
 pub use theme::ThemeError;
 pub use typ::TypstSourceDiagnostic;
 
@@ -81,6 +83,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Theme(#[from] crate::error::theme::ThemeError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Svg(#[from] crate::error::svg::SvgError),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

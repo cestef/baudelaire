@@ -19,6 +19,7 @@ mod rewrite;
 mod sources;
 mod speculation;
 mod standard;
+mod svg;
 
 pub use externalize::ImageRef;
 
@@ -43,6 +44,7 @@ use rewrite::Links;
 use sources::Sources;
 use speculation::Speculation;
 use standard::Verify;
+use svg::Svg;
 
 /// Per-page context handed to every transform. Transforms run sequentially for
 /// a page, so they share this one mutable accumulator.
@@ -57,13 +59,9 @@ pub(super) struct Cx<'a> {
     /// Project root, so the externalize transform resolves image markers to
     /// source files.
     pub root: &'a std::path::Path,
-    /// Raw targets of internal `.typ` links with no matching page, collected for
-    /// link checking.
-    pub broken: Vec<String>,
-    /// Images the externalize transform lifted out of the DOM into files.
-    pub images: Vec<super::ImageRef>,
-    /// Outbound `http(s)` anchors the page carries, for `check --external`.
-    pub external: Vec<String>,
+    /// What the pipeline has found so far. This is the value the caller gets
+    /// back, accumulated in place rather than copied out field by field.
+    pub found: super::Rewrite,
 }
 
 /// The one shared walker over the typed DOM, so every transform visits
@@ -76,6 +74,24 @@ pub(super) struct Cx<'a> {
 /// pointed at a file that was not there. `srcset` is handled separately by
 /// [`ElementExt::assets`], which parses its candidate list.
 pub(super) const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
+
+/// The one replace-or-push rule for an attribute list, shared by
+/// [`ElementExt::set`] and by any pass still assembling attributes that has no
+/// element to hang them off yet.
+pub(super) trait AttrsExt {
+    /// Set `key` to `value`, replacing an existing entry rather than appending
+    /// a duplicate (which is invalid HTML).
+    fn set(&mut self, key: HtmlAttr, value: &str);
+}
+
+impl AttrsExt for typst_html::HtmlAttrs {
+    fn set(&mut self, key: HtmlAttr, value: &str) {
+        match self.get_mut(key) {
+            Some(existing) => *existing = value.into(),
+            None => self.push(key, value),
+        }
+    }
+}
 
 pub(super) trait ElementExt {
     /// Visit this element, then every descendant element, depth-first.
@@ -119,10 +135,7 @@ impl ElementExt for HtmlElement {
     }
 
     fn set(&mut self, key: HtmlAttr, value: &str) {
-        match self.attrs.get_mut(key) {
-            Some(existing) => *existing = value.into(),
-            None => self.attrs.push(key, value),
-        }
+        self.attrs.set(key, value);
     }
 
     fn rewrite(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
@@ -219,6 +232,10 @@ impl Transforms {
         // URLs among them), then shift them under the base path.
         Self(vec![
             Box::new(Links),
+            // Early, so every later pass sees an inlined icon as ordinary DOM:
+            // an `<image href>` inside one is fingerprinted and base-pathed
+            // like any other reference.
+            Box::new(Svg),
             Box::new(Lang),
             Box::new(Anchors),
             Box::new(Meta),

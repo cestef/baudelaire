@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+<style><![CDATA[
+@keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+.ring { animation: spin 1s linear infinite; fill: none }
+@media (prefers-reduced-motion: reduce) { .ring { animation: none } }
+]]></style>
+<circle class="ring" cx="12" cy="12" r="10"/>
+</svg>

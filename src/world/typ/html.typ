@@ -31,6 +31,26 @@
   html.elem(tag, attrs: attrs, args.pos().join())
 }
 
+// Inline an SVG file as real DOM, with any attributes you pass on the root:
+//
+//   svg("/assets/icons/search.svg", class: "icon", aria-hidden: "true")
+//
+// `image()` and `<img>` both produce an opaque element that CSS cannot reach
+// into, so an icon drawn that way cannot inherit `currentColor` or be recoloured
+// by a theme toggle. This inlines the file's own markup instead.
+//
+// The path is from the project root, starting with `/`. It cannot be relative
+// to the calling template: a path inside a Typst package resolves against the
+// package, so baudelaire reads the file itself after the compile, and records
+// it as a dependency of the page so editing an icon rebuilds what shows it.
+//
+// The marker attribute is stripped once the file is spliced in.
+#let svg(path, ..attrs) = {
+  let marker = (:)
+  marker.insert(_svg-marker, path)
+  h("svg", ..attrs.named(), ..marker)
+}
+
 // Join class names, dropping anything absent and taking a `(name, condition)`
 // pair for a conditional one:
 //

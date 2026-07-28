@@ -11,6 +11,14 @@ paths {
   static "static"
 }
 
+// The icons `theme.typ` inlines with `svg()` live outside `assets/`, so they are
+// never published as standalone files. The dev server watches content,
+// templates, assets and static; anything else a build reads has to say so here
+// or an edit to it will not reload.
+serve {
+  include "icons/**/*.svg"
+}
+
 // Build-time constants handed to client JavaScript through the
 // `baudelaire:config` virtual module. The config page renders this very block
 // live from that module, dogfooding the define-style injection.

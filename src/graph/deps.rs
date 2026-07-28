@@ -15,6 +15,13 @@ impl Deps {
     pub fn files(&self) -> &[PathBuf] {
         &self.files
     }
+
+    /// Add files the compilation itself never read, for the passes that load
+    /// something typst does not see (an inlined SVG icon). They are validated
+    /// exactly like a tracked dependency, by content hash.
+    pub fn extend(&mut self, files: impl IntoIterator<Item = PathBuf>) {
+        self.files.extend(files);
+    }
 }
 
 impl From<Vec<PathBuf>> for Deps {

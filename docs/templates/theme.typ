@@ -1,4 +1,4 @@
-#import "@baudelaire/html:0.1.0": classes, h
+#import "@baudelaire/html:0.1.0": classes, h, svg
 
 #let link-to(href, label) = h("a", href: href, label)
 
@@ -8,45 +8,13 @@
 #let build = sys.inputs.at("baudelaire", default: (:))
 #let git = build.at("git", default: none)
 
-#let _icons = (
-  search: (("circle", (cx: "11", cy: "11", r: "8")), ("path", (d: "m21 21-4.3-4.3"))),
-  sun: (
-    ("circle", (cx: "12", cy: "12", r: "4")),
-    ("path", (d: "M12 2v2")), ("path", (d: "M12 20v2")),
-    ("path", (d: "m4.93 4.93 1.41 1.41")), ("path", (d: "m17.66 17.66 1.41 1.41")),
-    ("path", (d: "M2 12h2")), ("path", (d: "M20 12h2")),
-    ("path", (d: "m6.34 17.66-1.41 1.41")), ("path", (d: "m19.07 4.93-1.41 1.41")),
-  ),
-  moon: (("path", (d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z")),),
-  menu: (("path", (d: "M4 12h16")), ("path", (d: "M4 6h16")), ("path", (d: "M4 18h16"))),
-  "arrow-right": (("path", (d: "M5 12h14")), ("path", (d: "m12 5 7 7-7 7"))),
-  "chevron-right": (("path", (d: "m9 18 6-6-6-6")),),
-  zap: (("path", (d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z")),),
-  package: (
-    ("path", (d: "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z")),
-    ("path", (d: "M12 22V12")), ("path", (d: "m3.3 7 8.7 5 8.7-5")), ("path", (d: "m7.5 4.27 9 5.15")),
-  ),
-  tag: (
-    ("path", (d: "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z")),
-    ("circle", (cx: "7.5", cy: "7.5", r: "1.5")),
-  ),
-  rss: (("path", (d: "M4 11a9 9 0 0 1 9 9")), ("path", (d: "M4 4a16 16 0 0 1 16 16")), ("circle", (cx: "5", cy: "19", r: "1"))),
-  "sliders": (
-    ("path", (d: "M4 21v-7")), ("path", (d: "M4 10V3")), ("path", (d: "M12 21v-9")),
-    ("path", (d: "M12 8V3")), ("path", (d: "M20 21v-5")), ("path", (d: "M20 12V3")),
-    ("path", (d: "M2 14h4")), ("path", (d: "M10 8h4")), ("path", (d: "M18 16h4")),
-  ),
-)
-
-#let lucide(name, size: 18) = h(
-  "svg",
-  xmlns: "http://www.w3.org/2000/svg",
-  width: size, height: size, viewBox: "0 0 24 24",
-  fill: "none", stroke: "currentColor", stroke-width: 2,
-  stroke-linecap: "round", stroke-linejoin: "round",
-  aria-hidden: "true", class: "icon",
-  // The shape dicts are computed, so they spread into named arguments.
-  for (tag, attrs) in _icons.at(name) { h(tag, ..attrs) },
+// Lucide icons, inlined from `icons/` as real DOM so they inherit
+// `currentColor` and recolour with the theme toggle. They were transcribed by
+// hand into a Typst dict until `svg()` existed, because an `<img>` cannot be
+// styled from the page.
+#let lucide(name, size: 18) = svg(
+  "/icons/" + name + ".svg",
+  width: size, height: size, class: "icon", aria-hidden: "true",
 )
 
 #let search-trigger = h(

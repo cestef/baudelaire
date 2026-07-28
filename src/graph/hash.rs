@@ -22,6 +22,15 @@ impl Hash {
         blake3::Hash::from(self.0).to_hex().to_string()
     }
 
+    /// The leading `len` hex digits, for the short forms spliced into names
+    /// (an asset fingerprint, a scope id). Saturates rather than slicing, so a
+    /// caller can never index past the digest.
+    pub fn short(&self, len: usize) -> String {
+        let mut hex = self.hex();
+        hex.truncate(len);
+        hex
+    }
+
     /// Hash a file's bytes, or `None` if it can't be read.
     pub fn of_file(path: &Path) -> Option<Self> {
         Some(Self::of_bytes(&std::fs::read(path).ok()?))

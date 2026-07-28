@@ -13,6 +13,12 @@ fn diagnostics(site: &Site) -> String {
     format!("{:?}", site.build_error())
 }
 
+/// A failed build's top-level message. Typed baudelaire errors carry their text
+/// in `Display`; only the typst-compile variant hides it in a nested field.
+fn message(site: &Site) -> String {
+    site.build_error().to_string()
+}
+
 /// A site whose single template is `body`, wrapped so each test writes only the
 /// markup it cares about.
 fn site(template: &str) -> Site {
@@ -142,4 +148,188 @@ fn a_page_importing_a_module_still_caches() {
     let site = site("import \"@baudelaire/html:0.1.0\": h\nh(\"p\")[x]");
     assert_eq!(site.stats().cached, 0, "first build compiles");
     assert_eq!(site.stats().cached, 1, "second build reuses");
+}
+
+/// An icon file, and a template that inlines it with `svg()`.
+fn icons(icon: &str, call: &str) -> Site {
+    let site = site(&format!("import \"@baudelaire/html:0.1.0\": svg\n{call}"));
+    site.write("icons/i.svg", icon);
+    site
+}
+
+/// The headline case: the file's own nodes land in the page as real DOM, which
+/// is what lets `stroke=\"currentColor\"` resolve and a theme toggle recolour it.
+#[test]
+fn an_svg_file_is_inlined_as_dom() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n\
+         <!-- dropped -->\n<circle cx=\"11\" cy=\"11\" r=\"8\"/>\n<path d=\"m21 21-4.3-4.3\"/>\n</svg>\n",
+        "svg(\"/icons/i.svg\", class: \"icon\")",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(html.contains(r#"<circle cx="11" cy="11" r="8">"#), "{html}");
+    assert!(html.contains(r#"<path d="m21 21-4.3-4.3">"#), "{html}");
+    assert!(html.contains(r#"stroke="currentColor""#), "{html}");
+    assert!(html.contains(r#"class="icon""#), "{html}");
+    // The marker is transient, and XML comments are not DOM.
+    assert!(!html.contains("data-baudelaire-svg"), "{html}");
+    assert!(!html.contains("dropped"), "{html}");
+}
+
+/// The caller's attributes win over the file's, so one file serves every size
+/// without a variant per call site.
+#[test]
+fn caller_attributes_override_the_files() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" fill=\"none\"/>\n",
+        "svg(\"/icons/i.svg\", width: 16, height: 16)",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(html.contains(r#"width="16" height="16""#), "{html}");
+    assert!(!html.contains(r#"width="24""#), "{html}");
+    // Untouched attributes still come through as authored.
+    assert!(html.contains(r#"fill="none""#), "{html}");
+}
+
+/// A camelCase SVG tag is fine: typst only reserves *hyphenated* names, so
+/// gradients and filters inline like anything else.
+#[test]
+fn camel_case_svg_tags_inline() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\">\n\
+         <linearGradient id=\"g\"><stop offset=\"0\"/></linearGradient>\n\
+         <filter><feGaussianBlur stdDeviation=\"2\"/></filter>\n</svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(html.contains(r#"<linearGradient id="g">"#), "{html}");
+    assert!(
+        html.contains(r#"<feGaussianBlur stdDeviation="2">"#),
+        "{html}"
+    );
+}
+
+/// The SVG 1.1 tags typst's HTML writer refuses, each by name. These are real
+/// elements a font-bearing SVG can carry, so the failure has to say which one
+/// and why rather than silently dropping it.
+#[test]
+fn reserved_svg_tags_fail_by_name() {
+    for tag in [
+        "font-face",
+        "font-face-src",
+        "font-face-uri",
+        "font-face-format",
+        "font-face-name",
+        "missing-glyph",
+        "color-profile",
+        "annotation-xml",
+    ] {
+        let site = icons(
+            &format!("<svg xmlns=\"http://www.w3.org/2000/svg\"><{tag}/></svg>\n"),
+            "svg(\"/icons/i.svg\")",
+        );
+        let err = message(&site);
+        assert!(err.contains(tag), "should name the tag: {err}");
+        assert!(err.contains("reserved"), "should say why: {err}");
+    }
+}
+
+/// A hyphenated tag that is not reserved but is still unwriteable: to typst a
+/// hyphen means a custom element, and a custom element name may not carry
+/// uppercase. Valid XML, valid SVG, no legal HTML spelling.
+#[test]
+fn an_unwriteable_hyphenated_tag_fails_by_name() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><my-Icon/></svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    let err = message(&site);
+    assert!(err.contains("my-Icon"), "should name the tag: {err}");
+    assert!(err.contains("uppercase"), "should explain: {err}");
+}
+
+/// A tag that is not even valid XML is the parser's to reject, not the tag
+/// check's, so the message points at the syntax rather than at HTML rules.
+#[test]
+fn an_invalid_xml_name_is_caught_while_parsing() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><-icon/></svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    assert!(message(&site).contains("well-formed"), "{}", message(&site));
+}
+
+/// A reserved tag nested deep still fails: the walk is recursive, so a bad
+/// element cannot hide inside a `<defs>`.
+#[test]
+fn a_reserved_tag_nested_deep_still_fails() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><g><font-face/></g></defs></svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    let err = message(&site);
+    assert!(err.contains("font-face"), "{err}");
+}
+
+/// Malformed XML fails the build rather than shipping an empty `<svg>`.
+#[test]
+fn a_malformed_svg_fails_the_build() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"1\"</svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    let err = message(&site);
+    assert!(err.contains("well-formed"), "{err}");
+}
+
+/// The path is read by the build, not by typst, so it must be project-absolute
+/// and must not escape the project.
+#[test]
+fn a_path_outside_the_project_is_rejected() {
+    for path in ["icons/i.svg", "/../i.svg", "/icons/../../i.svg"] {
+        let site = icons(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+            &format!("svg({path:?})"),
+        );
+        let err = message(&site);
+        assert!(err.contains("inside the project"), "{path}: {err}");
+    }
+}
+
+/// A path that resolves but has no file names the file it wanted.
+#[test]
+fn a_missing_icon_names_itself() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        "svg(\"/icons/gone.svg\")",
+    );
+    let err = message(&site);
+    assert!(err.contains("/icons/gone.svg"), "{err}");
+    assert!(err.contains("could not be read"), "{err}");
+}
+
+/// typst never reads an inlined icon, so the engine records it as a page
+/// dependency itself. Without that, editing an icon would leave every page
+/// showing it a cache hit on the old drawing.
+#[test]
+fn editing_an_icon_invalidates_the_page() {
+    let site = icons(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"8\"/></svg>\n",
+        "svg(\"/icons/i.svg\")",
+    );
+    assert_eq!(site.stats().cached, 0, "first build compiles");
+    assert_eq!(site.stats().cached, 1, "unchanged icon stays cached");
+
+    site.write(
+        "icons/i.svg",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"8\"/></svg>\n",
+    );
+    assert_eq!(site.stats().cached, 0, "an edited icon rebuilds the page");
+    assert!(site.output("index.html").contains("<rect"), "redrawn");
 }

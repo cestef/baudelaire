@@ -52,7 +52,11 @@ use module::ModuleCx;
 
 /// Length of the hex fingerprint spliced into asset filenames. 16 hex chars =
 /// 64 bits of blake3: collision-free in practice for a site's asset set.
-const FINGERPRINT_LEN: usize = 16;
+///
+/// Shared with [`crate::render`], which names externalized images the same way:
+/// an asset that arrives through the render pass must be indistinguishable from
+/// one the pipeline emitted.
+pub(crate) const FINGERPRINT_LEN: usize = 16;
 
 /// The outcome of processing the asset tree: the request->served URL map (only
 /// entries renamed by fingerprinting appear), the count of files emitted
@@ -514,7 +518,7 @@ impl<'a> Assets<'a> {
             return rel.to_path_buf();
         }
         let hash = Hash::of_bytes(bytes);
-        let digest = &hash.hex()[..FINGERPRINT_LEN];
+        let digest = hash.short(FINGERPRINT_LEN);
         let stem = rel.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
         let name = match rel.extension().and_then(|e| e.to_str()) {
             Some(ext) => format!("{stem}.{digest}.{ext}"),

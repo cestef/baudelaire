@@ -11,6 +11,7 @@
 mod asset;
 mod fragment;
 mod links;
+mod scope;
 mod srcset;
 mod transform;
 
@@ -59,8 +60,12 @@ pub struct Renderer {
     transforms: Transforms,
 }
 
-/// The findings of running the transform pipeline over one page: internal links
-/// with no target, and images externalized out of the DOM into files.
+/// The findings of running the transform pipeline over one page.
+///
+/// Transforms accumulate into this directly (as [`transform::Cx::found`]), so
+/// adding a finding is one field here rather than one field in two places and a
+/// copy between them.
+#[derive(Default)]
 pub struct Rewrite {
     /// Raw targets of internal `.typ` links that point at a non-existent page.
     pub broken: Vec<String>,
@@ -69,6 +74,13 @@ pub struct Rewrite {
     /// Outbound `http(s)` link targets the page carries, collected only when
     /// external checking is on.
     pub external: Vec<String>,
+    /// Icon files the svg transform inlined, to add to the page's dependencies:
+    /// baudelaire reads them, not typst, so nothing else would notice an edit.
+    pub icons: Vec<std::path::PathBuf>,
+    /// SVG files `svg()` marked that could not be turned into DOM nodes. The
+    /// element is already in the page, so the caller must fail rather than ship
+    /// an empty `<svg>` where an icon was asked for.
+    pub invalid: Vec<crate::error::SvgError>,
 }
 
 impl Renderer {
@@ -113,15 +125,9 @@ impl Renderer {
             assets: &self.assets,
             srcsets: &self.srcsets,
             root: &self.root,
-            broken: Vec::new(),
-            images: Vec::new(),
-            external: Vec::new(),
+            found: Rewrite::default(),
         };
         self.transforms.apply(doc, &mut cx);
-        Rewrite {
-            broken: cx.broken,
-            images: cx.images,
-            external: cx.external,
-        }
+        cx.found
     }
 }
