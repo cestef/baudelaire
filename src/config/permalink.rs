@@ -117,9 +117,14 @@ impl Permalink {
     /// *generated* (non-template) URLs, taxonomy, pagination, and root pages,
     /// so trailing-slash and separator policy lives in one place instead of a
     /// `format!` at each call site.
+    ///
+    /// An empty segment contributes nothing rather than a bare separator. A
+    /// caller passing one is naming "no scope" (the default language's, which
+    /// is `""`), and `//search.json` is not that path: a browser reads a
+    /// leading `//` as protocol-relative and fetches `http://search.json/`.
     pub fn join(segments: &[&str]) -> String {
         let mut url = String::from("/");
-        for segment in segments {
+        for segment in segments.iter().filter(|s| !s.is_empty()) {
             url.push_str(segment);
             url.push('/');
         }
@@ -353,6 +358,12 @@ mod tests {
     fn join_roots_and_trailing_slashes_segments() {
         assert_eq!(Permalink::join(&[]), "/");
         assert_eq!(Permalink::join(&["notes"]), "/notes/");
+        // The default language's scope is `""`, and a bare `//` is not "the
+        // site root": a browser reads it as protocol-relative and fetches
+        // `http://search.json/`, so the search client silently found nothing.
+        assert_eq!(Permalink::join(&[""]), "/");
+        assert_eq!(Permalink::join(&["", "notes"]), "/notes/");
+        assert_eq!(Permalink::join(&["notes", ""]), "/notes/");
         assert_eq!(Permalink::join(&["notes", "rust"]), "/notes/rust/");
         assert_eq!(Permalink::join(&["tags", "page", "2"]), "/tags/page/2/");
     }
