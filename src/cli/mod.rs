@@ -464,6 +464,40 @@ pub struct NewArgs {
 pub struct InitArgs {
     /// Directory to scaffold into (default: current directory).
     pub dir: Option<PathBuf>,
+
+    /// Starter shape: `blog`, `docs`, `book` or `minimal`.
+    #[arg(short = 't', long, default_value = "blog", help_heading = group::PROJECT)]
+    pub template: String,
+
+    /// Site title (default: prompted, or the directory name).
+    #[arg(long, help_heading = group::PROJECT)]
+    pub title: Option<String>,
+
+    /// Site author (default: prompted, or your git `user.name`).
+    #[arg(long, help_heading = group::PROJECT)]
+    pub author: Option<String>,
+
+    /// Canonical base URL (default: prompted).
+    #[arg(long, help_heading = group::PROJECT)]
+    pub url: Option<String>,
+
+    /// Default language code.
+    #[arg(long, default_value = "en", help_heading = group::PROJECT)]
+    pub lang: String,
+
+    /// Take templates and assets from a theme package instead of scaffolding
+    /// copies of them.
+    #[arg(long, value_name = "SPEC", help_heading = group::PROJECT)]
+    pub theme: Option<String>,
+
+    /// Switch on optional features: `spa`, `standalone`, `speculation`, `search`.
+    #[arg(long, value_name = "FEATURE", value_delimiter = ',', help_heading = group::PROJECT)]
+    pub with: Vec<String>,
+
+    /// Scaffold the shape without the example pages.
+    #[arg(long, help_heading = group::PROJECT)]
+    pub no_sample: bool,
+
     /// Skip the prompt and set up version control (default: git).
     #[arg(short = 'y', long)]
     pub yes: bool,
@@ -717,7 +751,7 @@ impl Run for CleanArgs {
 impl Run for InitArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         cx.ui.banner("init");
-        scaffold::init(cx.ui, self.dir.as_deref(), cx.root, self.yes, self.vcs)
+        scaffold::init(cx.ui, cx.root, self)
     }
 }
 

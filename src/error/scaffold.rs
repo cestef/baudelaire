@@ -16,9 +16,22 @@ pub enum ScaffoldError {
         help("expected `YYYY-MM-DD`, e.g. 2026-07-13")
     )]
     BadDate { input: String },
+
+    #[error("unknown starter template `{name}`")]
+    #[diagnostic(code(baudelaire::scaffold::unknown_template), help("{help}"))]
+    UnknownTemplate { name: String, help: String },
 }
 
 impl ScaffoldError {
+    /// `help` comes from the same table that lists the templates, so a typo's
+    /// suggestion can never name one that does not exist.
+    pub fn unknown_template(name: &str, help: String) -> Self {
+        Self::UnknownTemplate {
+            name: name.to_owned(),
+            help,
+        }
+    }
+
     pub fn already_exists(path: &std::path::Path) -> Self {
         Self::AlreadyExists {
             path: path.display().to_string(),

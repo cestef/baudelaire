@@ -1,0 +1,276 @@
+:root {
+  --fg: #1a1a1a;
+  --muted: #5b6470;
+  --bg: #ffffff;
+  --sunken: #f6f7f9;
+  --accent: #2563eb;
+  --rule: #e6e8eb;
+  --sidebar: 15rem;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e7e9ec;
+    --muted: #9aa3af;
+    --bg: #15161a;
+    --sunken: #1c1e24;
+    --accent: #7aa2f7;
+    --rule: #282a30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+pre,
+code,
+kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+pre {
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+/* Header */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  height: 3.75rem;
+  padding-inline: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.top-nav {
+  display: flex;
+  gap: 1rem;
+  margin-right: auto;
+  font-size: 0.95rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: -100vw;
+}
+
+.skip-link:focus {
+  left: 1rem;
+}
+
+.search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  background: var(--sunken);
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+}
+
+.search-trigger kbd {
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+/* Layout: sidebar + content, stacking on narrow screens. */
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  gap: 2.5rem;
+  max-width: 68rem;
+  margin-inline: auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+@media (max-width: 48rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+.sidebar {
+  align-self: start;
+  font-size: 0.92rem;
+}
+
+@media (min-width: 48rem) {
+  .sidebar {
+    position: sticky;
+    top: 2.5rem;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+  }
+}
+
+.nav-group + .nav-group {
+  margin-top: 1.5rem;
+}
+
+.nav-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidebar ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar li a {
+  display: block;
+  padding: 0.2rem 0.6rem;
+  color: var(--fg);
+  text-decoration: none;
+  border-left: 2px solid var(--rule);
+}
+
+.sidebar li a:hover {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+/* Article */
+
+.content h1:first-child {
+  margin-top: 0;
+}
+
+/* typst-html offsets headings under the document title, so a `==` section in a
+   page becomes an <h3>. Style both, so a template that emits its own <h2> and a
+   page that writes `==` look the same. */
+.content :is(h2, h3) {
+  margin-top: 2.5rem;
+  padding-top: 0.75rem;
+  font-size: 1.4rem;
+  border-top: 1px solid var(--rule);
+}
+
+.content h4 {
+  margin-top: 2rem;
+  font-size: 1.1rem;
+}
+
+/* `html { anchors }` gives every heading an id, so each section is linkable. */
+.content :is(h2, h3, h4):hover::after {
+  content: " #";
+  color: var(--muted);
+}
+
+.callout {
+  margin: 1.5rem 0;
+  padding: 0.25rem 1rem;
+  background: var(--sunken);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+}
+
+.callout-warning {
+  border-left-color: #d97706;
+}
+
+.callout-label {
+  margin-bottom: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* Generated listing (/guide/) */
+
+.listing {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: block;
+  padding: 0.9rem 0;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+
+.entry-title {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.entry-summary {
+  display: block;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* Prev/next pager */
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+
+.pager a {
+  text-decoration: none;
+}
+
+.site-footer {
+  padding: 1.5rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+  border-top: 1px solid var(--rule);
+}

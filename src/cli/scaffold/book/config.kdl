@@ -1,0 +1,92 @@
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
+lang "en"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+// One ordered collection, and nothing else. `sort="order"` reads each chapter's
+// frontmatter `order`, and that single ordering drives both the contents list
+// (`page.sections`) and the prev/next pager (`page.nav`). Renumber a chapter and
+// the two move together, because neither is written down anywhere else.
+content {
+  collections {
+    chapters sort="order" template="chapter.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+html {
+  pretty #true
+  meta #true
+
+  // Slug `id` on every heading, so `= A section` inside a chapter is
+  // deep-linkable and a contents list can target it. On by default; stated
+  // here because a book leans on it.
+  anchors #true
+
+  // Inline stylesheets and images as `data:` URIs. This is what makes the
+  // export below self-contained: without it the build warns, and the file
+  // loses its styling the moment it leaves this machine.
+  embed #true
+}
+
+// The reason this starter exists: `public/book.html` is the whole book in one
+// file. It carries its own router, so a reader can open it from a USB stick,
+// an email attachment, or a downloads folder, with no server anywhere.
+//
+// `entry "/"` makes the front page the shell (its `<head>` becomes the file's
+// `<head>`), and `router "hash"` is the only mode that works from `file://`.
+// A fragment that is not a route (`#why-typst`) is left alone, so the heading
+// links `anchors` generates keep working inside the export.
+//
+// No `spa { }` here on purpose: the export already ships a router, and a hosted
+// book is read one chapter at a time with nothing on the page worth preserving
+// across a navigation. Add it if you grow a sidebar that holds state.
+navigation {
+  standalone {
+    file "book.html"
+    entry "/"
+    router "hash"
+  }
+}
+
+// Sweep orphaned files (a deleted chapter, a renamed slug) from the output dir.
+prune #true
+
+generate {
+  sitemap #true
+}
+
+serve {
+  port 1821
+  bind "127.0.0.1"
+  open #true
+  watch #true
+}
+
+profiles {
+  dev {
+    url "http://localhost:1821"
+    // Chapters you are still drafting: name one `03-outline.draft.typ` and it
+    // builds under this profile and no other.
+    content {
+      draft {
+        build #true
+      }
+    }
+  }
+  prod {
+    html {
+      pretty #false
+    }
+  }
+}

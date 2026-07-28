@@ -1,0 +1,165 @@
+:root {
+  --fg: #1a1a1a;
+  --muted: #5b6470;
+  --bg: #ffffff;
+  --accent: #2563eb;
+  --rule: #e6e8eb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e7e9ec;
+    --muted: #9aa3af;
+    --bg: #15161a;
+    --accent: #7aa2f7;
+    --rule: #282a30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.site-header,
+main,
+.site-footer {
+  max-width: 44rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.site-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  height: 4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.site-nav {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.95rem;
+}
+
+main {
+  padding-block: 3rem 4rem;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
+
+a {
+  color: var(--accent);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+pre,
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+pre {
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+}
+
+/* `html { anchors }` slugs every heading into an id, so a section is
+   deep-linkable. Keep the target clear of the top of the viewport. */
+:is(h1, h2, h3, h4, h5, h6)[id] {
+  scroll-margin-top: 2rem;
+}
+
+.meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Tag chips under a post, and the listing pages generated from the same tags. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 3rem;
+}
+
+.chip {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+/* templates/list.typ: the post archive, the tag index, and each tag page. */
+.listing {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  padding-block: 1.1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.entry-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.entry-summary {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+/* Prev/next between posts, and between pages of a split listing. */
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.site-footer {
+  display: flex;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-block: 2rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-footer a {
+  color: inherit;
+}

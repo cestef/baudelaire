@@ -32,11 +32,6 @@ impl<'a> Scaffold<'a> {
         }
     }
 
-    fn dir(mut self, rel: impl Into<PathBuf>) -> Self {
-        self.dirs.push(rel.into());
-        self
-    }
-
     fn file(mut self, rel: impl Into<PathBuf>, contents: impl Into<String>) -> Self {
         self.files.push((rel.into(), contents.into()));
         self
@@ -102,30 +97,35 @@ impl Config {
 /// scaffold a new project where `dir` is the explicit positional argument, if any
 /// when `None` & interactive, the user is prompted for a site name which
 /// doubles as the target directory. `yes` skips prompts; `vcs` pins the vcs
-pub(crate) fn init(
-    ui: &Ui,
-    dir: Option<&Path>,
-    root: &Root,
-    yes: bool,
-    vcs: Option<Vcs>,
-) -> Result<()> {
-    let interactive = !yes && std::io::stdin().is_terminal();
-    let (target, details) = Details::gather(dir, root, interactive)?;
-    let repo = Repo::wanted(yes, interactive, vcs)?;
+pub(crate) fn init(ui: &Ui, root: &Root, args: &crate::cli::InitArgs) -> Result<()> {
+    let template = templates::Template::find(&args.template)?;
+    let interactive = !args.yes && std::io::stdin().is_terminal();
+    let (target, details) = Details::gather(args, root, interactive)?;
+    let repo = Repo::wanted(args.yes, interactive, args.vcs)?;
     if interactive {
         ui.blank();
     }
 
-    Scaffold::new(&target)
-        .dir("content")
-        .dir("assets")
-        .dir("templates")
-        .file("config.kdl", details.config())
-        .file("content/index.typ", templates::INDEX)
-        .file("content/posts/hello.typ", templates::HELLO)
-        .file("templates/layout.typ", templates::LAYOUT)
-        .file("assets/style.css", templates::STYLE)
-        .apply(ui)?;
+    let mut scaffold = Scaffold::new(&target);
+    for (rel, body) in template.files(&details.vars()) {
+        // A theme supplies templates and assets, so scaffolding copies of them
+        // would shadow it on the very first build.
+        let shadowed =
+            args.theme.is_some() && (rel.starts_with("templates") || rel.starts_with("assets"));
+        // `--no-sample` keeps the shape and drops the demo pages, except the
+        // home page: a site with no content at all does not build to anything.
+        let sample = rel.starts_with("content") && rel != Path::new("content/index.typ");
+        if shadowed || (args.no_sample && sample) {
+            continue;
+        }
+        let body = if rel == Path::new("config.kdl") {
+            details.config(&body, args)
+        } else {
+            body
+        };
+        scaffold = scaffold.file(rel, body);
+    }
+    scaffold.apply(ui)?;
 
     if let Some(vcs) = repo {
         Repo::new(&target, vcs).setup(ui)?;
@@ -133,9 +133,11 @@ pub(crate) fn init(
 
     ui.blank();
     ui.done_plain(format_args!(
-        "project ready in {}",
+        "{} project ready in {}",
+        template.name,
         Paths(&target.display().to_string())
     ));
+    ui.detail(format_args!("{}", template.about));
     ui.detail(format_args!(
         "run {} to build, {} for a live preview",
         "baudelaire build".cyan(),
@@ -150,66 +152,89 @@ struct Details {
     site: String,
     author: String,
     url: String,
+    lang: String,
 }
 
 impl Details {
-    /// explicit `dir`: derive site name from last component, skip site name prompt
-    /// no `dir` + interactive: prompt for site name; that name becomes the target directory
-    /// no `dir` + non-interactive (--yes / CI): scaffold into `.`, derive name from cwd
-    fn gather(dir: Option<&Path>, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
-        let author = Self::git_author().unwrap_or_default();
+    /// Where to scaffold, and what to fill the placeholders with.
+    ///
+    /// A flag always wins. What a flag did not supply is prompted for when
+    /// there is a terminal to prompt at, and otherwise defaulted, so `--yes` in
+    /// CI is fully scriptable rather than silently accepting `example.com`.
+    ///
+    /// The target directory follows the same three cases as before: an explicit
+    /// `dir` names it, an interactive run without one takes the site name for
+    /// it, and a non-interactive run without one scaffolds into `.`.
+    fn gather(
+        args: &crate::cli::InitArgs,
+        root: &Root,
+        interactive: bool,
+    ) -> Result<(PathBuf, Self)> {
+        let git = Self::git_author().unwrap_or_default();
+        // Only prompt for what was not given, and only when someone is there.
+        let ask = |label: &str, default: &str, given: Option<&String>| -> Result<String> {
+            match given {
+                Some(v) => Ok(v.clone()),
+                None if interactive => Input::new(label).default(default).ask(),
+                None => Ok(default.to_owned()),
+            }
+        };
 
-        match dir {
-            Some(d) => {
-                let site = Self::dir_name(d, root);
-                let (author, url) = if interactive {
-                    (
-                        Input::new("Author").default(&author).ask()?,
-                        Input::new("Base URL")
-                            .default("https://example.com")
-                            .ask()?,
-                    )
-                } else {
-                    (author, "https://example.com".into())
-                };
-                Ok((d.to_path_buf(), Self { site, author, url }))
+        let (target, site) = match &args.dir {
+            Some(d) => (d.clone(), Self::dir_name(d, root)),
+            None if interactive && args.title.is_none() => {
+                let site = Input::new("Site name").default("my-site").ask()?;
+                (PathBuf::from(&site), site)
             }
-            None => {
-                if interactive {
-                    let site = Input::new("Site name").default("my-site").ask()?;
-                    let author = Input::new("Author").default(&author).ask()?;
-                    let url = Input::new("Base URL")
-                        .default("https://example.com")
-                        .ask()?;
-                    let target = PathBuf::from(&site);
-                    Ok((target, Self { site, author, url }))
-                } else {
-                    // non-interactive / CI: preserve old behavior & scaffold into the current directory & derive the site name from it
-                    let dot = Path::new(".");
-                    let site = Self::dir_name(dot, root);
-                    Ok((
-                        dot.to_path_buf(),
-                        Self {
-                            site,
-                            author,
-                            url: "https://example.com".into(),
-                        },
-                    ))
-                }
-            }
-        }
+            // No directory, but a title (or no terminal): scaffold into `.`, the
+            // shape `baudelaire init --yes` has always had in CI.
+            None => (PathBuf::from("."), Self::dir_name(Path::new("."), root)),
+        };
+        let site = match &args.title {
+            Some(t) => t.clone(),
+            None => site,
+        };
+        let author = ask("Author", &git, args.author.as_ref())?;
+        let url = ask("Base URL", "https://example.com", args.url.as_ref())?;
+
+        Ok((
+            target,
+            Self {
+                site,
+                author,
+                url,
+                lang: args.lang.clone(),
+            },
+        ))
     }
 
-    /// The scaffolded `config.kdl`, its placeholders filled in.
-    fn config(&self) -> String {
-        templates::render(
-            templates::CONFIG,
-            &[
-                ("site", &self.site),
-                ("author", &self.author),
-                ("url", &self.url),
-            ],
-        )
+    /// The placeholder values every scaffolded file is rendered against.
+    fn vars(&self) -> Vec<(&str, &str)> {
+        vec![
+            ("site", self.site.as_str()),
+            ("author", self.author.as_str()),
+            ("url", self.url.as_str()),
+            ("lang", self.lang.as_str()),
+        ]
+    }
+
+    /// The scaffolded `config.kdl`: the template's own, plus whatever the flags
+    /// bolt on. Both additions are appended rather than spliced, which a KDL
+    /// config tolerates because a repeated section fills in place.
+    fn config(&self, rendered: &str, args: &crate::cli::InitArgs) -> String {
+        let mut out = rendered.to_owned();
+        if let Some(theme) = &args.theme {
+            out.push_str(&format!(
+                "\n// Templates, assets and config defaults come from this package.\ntheme \"{}\"\n",
+                theme.replace('\\', "\\\\").replace('"', "\\\"")
+            ));
+        }
+        for name in &args.with {
+            if let Some((_, fragment)) = templates::EXTRAS.iter().find(|(n, _)| n == name) {
+                out.push_str(fragment);
+            }
+        }
+        out
     }
 
     /// A sensible default site name from the target directory's last component.
@@ -574,12 +599,108 @@ impl<'a> Repo<'a> {
 /// Scaffold templates, embedded from `scaffold/` at build time. Editing those
 /// files (not string literals here) changes what `init`/`new` produce.
 mod templates {
-    /// Site config; `{{site}}`, `{{author}}`, `{{url}}` are filled by [`render`].
-    pub const CONFIG: &str = include_str!("scaffold/config.kdl");
-    pub const INDEX: &str = include_str!("scaffold/index.typ");
-    pub const HELLO: &str = include_str!("scaffold/hello.typ");
-    pub const LAYOUT: &str = include_str!("scaffold/layout.typ");
-    pub const STYLE: &str = include_str!("scaffold/style.css");
+    use include_dir::{Dir, include_dir};
+
+    /// One starter project shape.
+    ///
+    /// The directory *is* the manifest: every file under it is written at the
+    /// same relative path, so adding a file to a template is adding a file, not
+    /// a file plus a table entry.
+    pub struct Template {
+        /// What `--template` accepts, and what the summary reports.
+        pub name: &'static str,
+        /// One line for `--help` and for the unknown-name suggestion.
+        pub about: &'static str,
+        files: Dir<'static>,
+    }
+
+    /// The registered starter templates.
+    ///
+    /// Single source of truth: the `--template` value parser, the help listing
+    /// and the "did you mean" on a typo all read this one table, so a new
+    /// template is one entry and cannot drift out of the help text.
+    pub const TEMPLATES: &[Template] = &[
+        Template {
+            name: "blog",
+            about: "dated posts, tags, pagination and feeds",
+            files: include_dir!("$CARGO_MANIFEST_DIR/src/cli/scaffold/blog"),
+        },
+        Template {
+            name: "docs",
+            about: "ordered sections, sidebar nav and client-side search",
+            files: include_dir!("$CARGO_MANIFEST_DIR/src/cli/scaffold/docs"),
+        },
+        Template {
+            name: "book",
+            about: "ordered chapters, also exported as one HTML file",
+            files: include_dir!("$CARGO_MANIFEST_DIR/src/cli/scaffold/book"),
+        },
+        Template {
+            name: "minimal",
+            about: "one page and one template, nothing else",
+            files: include_dir!("$CARGO_MANIFEST_DIR/src/cli/scaffold/minimal"),
+        },
+    ];
+
+    /// Optional features `--with` switches on, as `(name, KDL fragment)`.
+    ///
+    /// Appended verbatim to the rendered config. A duplicate top-level block is
+    /// not a conflict: [`crate::config`] dispatches every node in order and a
+    /// nested section fills in place, so a second `generate { .. }` merges into
+    /// the first rather than replacing it.
+    pub const EXTRAS: &[(&str, &str)] = &[
+        (
+            "spa",
+            "\n// Client-side navigation between the built pages.\nnavigation {\n  spa { }\n}\n",
+        ),
+        (
+            "standalone",
+            "\n// Also emit the whole site as one self-contained HTML file.\nnavigation {\n  standalone { }\n}\n",
+        ),
+        (
+            "speculation",
+            "\n// Browser-native prefetch hints for same-site links.\nnavigation {\n  speculation { }\n}\n",
+        ),
+        (
+            "search",
+            "\n// Client-side search index.\ngenerate {\n  search { formats \"json\" }\n}\n",
+        ),
+    ];
+
+    impl Template {
+        /// The template `name` selects, or an error naming the valid ones.
+        pub fn find(name: &str) -> crate::error::Result<&'static Self> {
+            TEMPLATES.iter().find(|t| t.name == name).ok_or_else(|| {
+                let names: Vec<&str> = TEMPLATES.iter().map(|t| t.name).collect();
+                crate::error::ScaffoldError::unknown_template(
+                    name,
+                    crate::config::dispatch::Keys::of(&names).help(name, "templates"),
+                )
+                .into()
+            })
+        }
+
+        /// The template's files as `(relative path, contents)`, placeholders
+        /// already substituted. Ordered so the scaffold summary is stable.
+        pub fn files(&self, vars: &[(&str, &str)]) -> Vec<(std::path::PathBuf, String)> {
+            let mut out = Vec::new();
+            Self::walk(&self.files, vars, &mut out);
+            out.sort_by(|a, b| a.0.cmp(&b.0));
+            out
+        }
+
+        fn walk(dir: &Dir<'_>, vars: &[(&str, &str)], out: &mut Vec<(std::path::PathBuf, String)>) {
+            for file in dir.files() {
+                // Every scaffolded file is text we authored, so a non-UTF-8 one
+                // is a bug here rather than something to degrade over.
+                let body = file.contents_utf8().expect("scaffold files are UTF-8");
+                out.push((file.path().to_path_buf(), render(body, vars)));
+            }
+            for sub in dir.dirs() {
+                Self::walk(sub, vars, out);
+            }
+        }
+    }
 
     /// Substitute `{{key}}` placeholders in a template, in a single left-to-
     /// right pass: a substituted value is never rescanned, so a site name
@@ -620,32 +741,96 @@ mod templates {
 
     #[cfg(test)]
     mod tests {
-        use super::{CONFIG, render};
+        use super::{EXTRAS, TEMPLATES, Template, render};
 
-        /// The starter config is what every new site begins from, so it has to
-        /// stay valid against the dispatch tables. Nothing else here reads it,
-        /// which is exactly how a key rename would ship a broken `init`.
+        const VARS: &[(&str, &str)] = &[
+            ("site", "My Site"),
+            ("author", "Me"),
+            ("url", "https://example.com"),
+            ("lang", "en"),
+        ];
+
+        /// A starter config is what a new site begins from, so every one has to
+        /// stay valid against the dispatch tables. Nothing else reads them,
+        /// which is exactly how a key rename ships a broken `init`.
         #[test]
-        fn the_scaffolded_config_parses() {
-            let text = render(
-                CONFIG,
-                &[
-                    ("site", "My Site"),
-                    ("author", "Me"),
-                    ("url", "https://example.com"),
-                ],
-            );
-            let config = crate::config::Config::parse(&text).expect("starter config parses");
-            assert!(config.prune);
-            assert!(config.generate.sitemap);
-            assert_eq!(config.content.collections.len(), 1);
-            // every declared profile has to apply, not just parse
-            for (name, _) in config.profiles.clone() {
-                config
-                    .clone()
-                    .with_profile(&name)
-                    .unwrap_or_else(|e| panic!("profile `{name}`: {e}"));
+        fn every_scaffolded_config_parses() {
+            for template in TEMPLATES {
+                let files = template.files(VARS);
+                let (_, text) = files
+                    .iter()
+                    .find(|(p, _)| p == std::path::Path::new("config.kdl"))
+                    .unwrap_or_else(|| panic!("`{}` has no config.kdl", template.name));
+                let config = crate::config::Config::parse(text)
+                    .unwrap_or_else(|e| panic!("`{}` config: {e}", template.name));
+                // every declared profile has to apply, not merely parse
+                for (name, _) in config.profiles.clone() {
+                    config
+                        .clone()
+                        .with_profile(&name)
+                        .unwrap_or_else(|e| panic!("`{}` profile `{name}`: {e}", template.name));
+                }
             }
+        }
+
+        /// Every template ships a home page and a template to render it with,
+        /// the two files without which the scaffold does not build.
+        #[test]
+        fn every_template_is_complete() {
+            for template in TEMPLATES {
+                let files = template.files(VARS);
+                let has = |p: &str| files.iter().any(|(f, _)| f == std::path::Path::new(p));
+                assert!(has("config.kdl"), "`{}` has no config", template.name);
+                assert!(
+                    has("content/index.typ"),
+                    "`{}` has no home page",
+                    template.name
+                );
+                assert!(
+                    files
+                        .iter()
+                        .any(|(f, _)| f.starts_with("templates") && f.extension().is_some()),
+                    "`{}` ships no template",
+                    template.name
+                );
+                assert!(
+                    !files.iter().any(|(_, body)| body.contains("{{")),
+                    "`{}` left a placeholder unfilled",
+                    template.name
+                );
+            }
+        }
+
+        /// A `--with` fragment is appended to a config that may already carry
+        /// the same section, so each has to survive the merge on its own.
+        #[test]
+        fn every_extra_parses_onto_every_template() {
+            for template in TEMPLATES {
+                let files = template.files(VARS);
+                let (_, base) = files
+                    .iter()
+                    .find(|(p, _)| p == std::path::Path::new("config.kdl"))
+                    .expect("config");
+                for (name, fragment) in EXTRAS {
+                    let text = format!("{base}{fragment}");
+                    crate::config::Config::parse(&text)
+                        .unwrap_or_else(|e| panic!("`{}` + --with {name}: {e}", template.name));
+                }
+            }
+        }
+
+        /// An unknown template names the real ones rather than failing bare.
+        #[test]
+        fn an_unknown_template_suggests_a_real_one() {
+            let Err(err) = Template::find("blogg") else {
+                panic!("`blogg` is not a template");
+            };
+            let rendered = format!("{err:?}");
+            assert!(rendered.contains("blogg"), "{rendered}");
+            assert!(
+                rendered.contains("blog"),
+                "suggests the real one: {rendered}"
+            );
         }
 
         #[test]

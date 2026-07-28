@@ -1,0 +1,79 @@
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
+lang "en"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+content {
+  // A collection is a set of pages sharing an order, a URL shape and a layout.
+  // `list` generates an index page at /posts/ rendered by templates/list.typ;
+  // `paginate` splits that index once it outgrows one page, adding
+  // /posts/page/2/ and on, each with previous/next links.
+  collections {
+    posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ" list="list.typ" paginate=5
+  }
+
+  // Any page whose frontmatter carries `tags` is grouped automatically.
+  // `listing` adds /tags/ (every term with its count) and /tags/<term>/ (the
+  // pages under it). Both are ordinary templated pages, so the same list.typ
+  // that renders the post index renders these.
+  taxonomies {
+    tags listing=#true template="list.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+// Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
+prune #true
+
+// Generated files are opt-in. The feed and the sitemap need absolute links, so
+// all three of these depend on the `url` above.
+generate {
+  sitemap #true
+  robots { }
+  feed {
+    formats "rss" "atom"
+    limit 20
+    // A feed per tag, beside each term page: /tags/typst/rss.xml. Worth it
+    // while the tag list is short; drop this line once it is not, since it
+    // costs one file per term per format.
+    terms #true
+  }
+}
+
+html {
+  pretty #true
+  meta #true
+  // Slug every heading into an id, so a reader can deep-link a section.
+  anchors #true
+}
+
+serve {
+  port 1821
+  bind "127.0.0.1"
+  open #true
+  watch #true
+}
+
+profiles {
+  dev {
+    url "http://localhost:1821"
+    content {
+      future #true
+    }
+  }
+  prod {
+    html {
+      pretty #false
+    }
+  }
+}

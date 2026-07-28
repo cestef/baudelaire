@@ -1,0 +1,12 @@
+// The whole config. Everything else has a default: content lives in `content`,
+// templates in `templates`, the build lands in `public`, and links resolve
+// relative to the `url` below.
+//
+// Nothing is generated that you did not ask for, so there is no feed, no
+// sitemap, no robots.txt and no taxonomy here. Add a `generate { }` block when
+// you want them.
+
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
+lang "en"

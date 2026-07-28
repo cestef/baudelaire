@@ -1,0 +1,85 @@
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
+lang "en"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+// Documentation is ordered, not dated: `sort="order"` reads the `order` key
+// from each page's frontmatter, and everything downstream (the sidebar, the
+// prev/next pager, the generated `/guide/` index) follows that one order.
+// `list` names the template for that generated index.
+content {
+  collections {
+    guide sort="order" template="page.typ" list="list.typ"
+  }
+}
+
+html {
+  pretty #true
+  meta #true
+  // Give every heading an `id`, so a reader can deep-link a section.
+  anchors #true
+}
+
+links {
+  style "clean"
+}
+
+// Minify the stylesheet and content-hash its filename. Templates keep writing
+// `/assets/style.css`; the reference is rewritten to the hashed name for you.
+assets {
+  minify #true
+  fingerprint #true
+}
+
+generate {
+  sitemap #true
+
+  // Client-side search. `formats "json"` writes `/search.json`, one document
+  // per page; `client #true` writes `/search.js` next to it, a self-mounting
+  // command palette that wires every `[data-search-open]` button and binds
+  // Ctrl+K and `/`. `templates/theme.typ` loads it and renders the button.
+  search {
+    formats "json"
+    fields "title" "body" "tags"
+    client #true
+  }
+
+  // `/llms.txt`: the site as one Markdown outline, for tools that read docs.
+  llms {
+    summary "Documentation for {{site}}."
+  }
+}
+
+// Sweep orphaned files (deleted pages, renamed permalinks) from the output dir.
+prune #true
+
+serve {
+  port 1821
+  bind "127.0.0.1"
+  open #true
+  watch #true
+}
+
+// `--profile dev` skips the asset pipeline, so an edit does not re-fingerprint
+// every page, and shows drafts.
+profiles {
+  dev {
+    url "http://localhost:1821"
+    content {
+      draft {
+        build #true
+      }
+    }
+    assets {
+      minify #false
+      fingerprint #false
+    }
+  }
+}
