@@ -41,7 +41,7 @@ impl Taxonomy {
             .content
             .taxonomies
             .iter()
-            .filter(|(_, cfg)| cfg.index)
+            .filter(|(_, cfg)| cfg.listing)
             .flat_map(|(name, cfg)| {
                 config
                     .langs()

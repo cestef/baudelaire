@@ -50,6 +50,6 @@ Each carries only that term's dated pages, in the same order and under the same
 `limit` as the site feed, and identifies itself by its own URL so an aggregator
 never merges it with another.
 
-Term feeds follow the term pages, so a taxonomy needs `index=#true` to have
+Term feeds follow the term pages, so a taxonomy needs `listing=#true` to have
 them. They are off by default: one more file per term per format multiplies the
 output of a heavily tagged site.

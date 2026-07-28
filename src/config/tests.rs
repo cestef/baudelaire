@@ -241,8 +241,8 @@ fn taxonomies() {
         r#"
         content {
           taxonomies {
-            tags   index=#true
-            series key="series" index=#false
+            tags   listing=#true
+            series key="series" listing=#false
           }
         }
     "#,
@@ -253,7 +253,7 @@ fn taxonomies() {
         .iter()
         .find(|(n, _)| n == "tags")
         .unwrap();
-    assert!(tags.1.index);
+    assert!(tags.1.listing);
     let series = cfg
         .content
         .taxonomies
@@ -261,7 +261,7 @@ fn taxonomies() {
         .find(|(n, _)| n == "series")
         .unwrap();
     assert_eq!(series.1.key, "series");
-    assert!(!series.1.index);
+    assert!(!series.1.listing);
 }
 
 #[test]
@@ -476,8 +476,9 @@ fn err_duplicate_collection() {
 
 #[test]
 fn err_duplicate_taxonomy() {
-    let err = Config::parse("content {\n  taxonomies {\n    tags\n    tags index=#true\n  }\n}\n")
-        .unwrap_err();
+    let err =
+        Config::parse("content {\n  taxonomies {\n    tags\n    tags listing=#true\n  }\n}\n")
+            .unwrap_err();
     assert!(
         err.to_string().contains("duplicate taxonomy `tags`"),
         "{err}"

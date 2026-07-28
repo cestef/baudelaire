@@ -10,13 +10,13 @@ Declare one and Baudelaire generates the index pages for it.
 ```kdl
 content {
   taxonomies {
-    tags index=#true template="list.typ"
+    tags listing=#true template="list.typ"
   }
 }
 ```
 
 Now any page with `tags: ("rust", "cli")` in its frontmatter is grouped
-automatically. With `index=#true` you get:
+automatically. With `listing=#true` you get:
 
 / #raw("/tags/"): an index of every term with its page count,
 / #raw("/tags/rust/"): a page listing everything tagged `rust`.
@@ -33,8 +33,8 @@ field:
 ```kdl
 content {
   taxonomies {
-    tags index=#true template="list.typ"
-    topics key="categories" index=#true template="list.typ"
+    tags listing=#true template="list.typ"
+    topics key="categories" listing=#true template="list.typ"
   }
 }
 ```

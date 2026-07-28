@@ -324,7 +324,7 @@ impl Default for CollectionConfig {
             template: None,
             paginate: None,
             list: None,
-            index: None,
+            mount: None,
             prefix: "page".into(),
         }
     }

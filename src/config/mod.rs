@@ -624,9 +624,9 @@ pub struct CollectionConfig {
     pub paginate: Option<usize>,
     /// Template for the generated paginated index pages.
     pub list: Option<String>,
-    /// Permalink of the paginated index's first page. `None` = `/{id}/`; set to
-    /// `/` to mount a collection's index at the site root (a blog home).
-    pub index: Option<String>,
+    /// Where the collection's listing is served: the permalink of its first
+    /// page. `None` = `/{id}/`; set to `/` to mount a blog at the site root.
+    pub mount: Option<String>,
     /// Path segment before a paginated page number: `/{id}/{prefix}/{n}/`.
     /// Defaults to `page` (`/blog/page/2/`); an empty string drops the segment
     /// entirely (`/blog/2/`).
@@ -677,8 +677,8 @@ pub struct LanguageConfig {
 pub struct TaxonomyConfig {
     /// Frontmatter key to read terms from.
     pub key: String,
-    /// Auto-generate index pages for each term.
-    pub index: bool,
+    /// Generate a page per term, plus one listing every term appears on.
+    pub listing: bool,
     /// Template for the generated taxonomy index + term pages.
     pub template: Option<String>,
 }

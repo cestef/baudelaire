@@ -95,6 +95,6 @@ dates and tags while a tag index shows counts, all from one template. Because it
 is a template, paginated indexes look like the rest of your site. This site's
 #link("/blog/")[blog] is paginated exactly this way.
 
-Give a collection an `index` to mount its first listing page at a custom URL: set
-`index="/"` on a blog collection and page 1 becomes the site home, while
+Give a collection a `mount` to serve its first listing page at a custom URL: set
+`mount="/"` on a blog collection and page 1 becomes the site home, while
 `/blog/page/2/` and on keep the normal layout.

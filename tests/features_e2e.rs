@@ -20,7 +20,7 @@ content {
       blog sort="date" reverse=#true paginate=2
   }
   taxonomies {
-      tags index=#true
+      tags listing=#true
   }
 }
 generate {

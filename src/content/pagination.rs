@@ -39,9 +39,9 @@ impl Generate for Pagination {
 struct Section<'a> {
     id: &'a str,
     template: Option<String>,
-    /// Permalink of page 1 ([`crate::config::CollectionConfig::index`]); later
+    /// Permalink of page 1 ([`crate::config::CollectionConfig::mount`]); later
     /// pages hang under it.
-    index: Option<String>,
+    mount: Option<String>,
     /// Path segment before a page number (`/{id}/{prefix}/{n}/`); empty drops it.
     prefix: &'a str,
     members: Vec<&'a Page>,
@@ -71,7 +71,7 @@ impl<'a> Section<'a> {
         Some(Self {
             id: &collection.id,
             template: collection.config.list.clone(),
-            index: collection.config.index.clone(),
+            mount: collection.config.mount.clone(),
             prefix: &collection.config.prefix,
             members,
             per_page,
@@ -121,13 +121,13 @@ impl<'a> Section<'a> {
             .lang(self.lang)
     }
 
-    /// Page 1 lives at the collection root (or the configured `index`, e.g. `/`
+    /// Page 1 lives at the collection root (or the configured `mount`, e.g. `/`
     /// for a blog home); later pages under `{prefix}/{n}/`, or just `{n}/` when
     /// `prefix` is empty. Every URL is localized to the section's language.
     fn url(&self, number: usize) -> String {
         let raw = match number {
             1 => self
-                .index
+                .mount
                 .clone()
                 .unwrap_or_else(|| Permalink::join(&[self.id])),
             n => {

@@ -10,7 +10,7 @@ scenario "a taxonomy index lists its terms and each term lists its pages" {
       }
       content {
         taxonomies {
-          tags index=#true
+          tags listing=#true
         }
       }
       """#
@@ -49,7 +49,7 @@ scenario "a taxonomy template renders the listing from its structured data" {
       }
       content {
         taxonomies {
-          tags index=#true template="tag.typ"
+          tags listing=#true template="tag.typ"
         }
       }
       """#
@@ -85,7 +85,7 @@ scenario "two terms that slug alike are rejected" {
       }
       content {
         taxonomies {
-          tags index=#true
+          tags listing=#true
         }
       }
       """#

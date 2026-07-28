@@ -43,7 +43,7 @@ fn fixture_config() -> &'static str {
             notes "notes/**/*.typ" sort="order"
           }
           taxonomies {
-            tags index=#true
+            tags listing=#true
           }
         }
         html {

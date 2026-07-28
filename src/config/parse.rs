@@ -1057,8 +1057,8 @@ impl NodeExt for KdlNode {
                 c.list = Some(v.as_str(t, s)?);
                 Ok(())
             }),
-            ("index", |c, v, t, s| {
-                c.index = Some(v.as_str(t, s)?);
+            ("mount", |c, v, t, s| {
+                c.mount = Some(v.as_str(t, s)?);
                 Ok(())
             }),
             ("prefix", |c, v, t, s| {
@@ -1081,8 +1081,8 @@ impl NodeExt for KdlNode {
                 x.key = v.as_str(t, s)?;
                 Ok(())
             }),
-            ("index", |x, v, t, s| {
-                x.index = v.boolean(t, s)?;
+            ("listing", |x, v, t, s| {
+                x.listing = v.boolean(t, s)?;
                 Ok(())
             }),
             ("template", |x, v, t, s| {
@@ -1093,7 +1093,7 @@ impl NodeExt for KdlNode {
         let id = self.name().value().to_owned();
         let mut tax = TaxonomyConfig {
             key: id.clone(),
-            index: false,
+            listing: false,
             template: None,
         };
         ATTRS.apply(&mut tax, self, text, 0)?;

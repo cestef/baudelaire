@@ -23,7 +23,7 @@ content {
   }
 
   taxonomies {
-    tags index=#true template="list.typ"
+    tags listing=#true template="list.typ"
   }
 }
 

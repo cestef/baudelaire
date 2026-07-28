@@ -31,7 +31,7 @@ content {
     posts sort="date" reverse=#true paginate=10 template="post.typ"
   }
   taxonomies {
-    tags index=#true
+    tags listing=#true
   }
 }
 
@@ -109,8 +109,9 @@ Two consequences of the grouping are worth knowing before you write anything:
   `assets` block. Files under `static/` are copied verbatim to the output root
   (no processing, no fingerprint) for a `robots.txt` override, `.well-known/`, a
   `CNAME`, or an `install.sh`.
-/ #raw("content"): What the content directory means. `index` names the file
-  serving a directory's own page, `future` and `draft { }` decide whether
+/ #raw("content"): What the content directory means. `index` names the file that
+  serves a directory's own page (`posts/hello/index.typ` becomes `/posts/hello/`,
+  so a page can sit beside its images), `future` and `draft { }` decide whether
   future-dated and draft pages are built (both off by default; the `--future` /
   `--drafts` flags override per build), `collections { }` sets per-group
   sorting, permalinks, pagination, and the default template

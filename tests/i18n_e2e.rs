@@ -108,7 +108,7 @@ fn tagged_blog() -> Site {
           collections {
               blog "blog/**/*.typ" sort="date" reverse=#true list="layout.typ" paginate=1
           }
-          taxonomies { tags index=#true template="layout.typ" }
+          taxonomies { tags listing=#true template="layout.typ" }
         }
         "#,
     );
@@ -386,7 +386,7 @@ fn generated_listings_are_translated_and_localized() {
           dist "public"
         }
         content {
-          taxonomies { tags index=#true }
+          taxonomies { tags listing=#true }
         }
         generate {
           sitemap #true
@@ -444,7 +444,7 @@ fn typ_links_resolve_to_the_linking_page_s_language() {
 #[test]
 fn unicode_names_survive_slugging() {
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncontent {\n  taxonomies { tags index=#true }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncontent {\n  taxonomies { tags listing=#true }\n}\n",
     );
     site.write(
         "content/posts/café.typ",

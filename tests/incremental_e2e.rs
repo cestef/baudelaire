@@ -222,7 +222,7 @@ fn generated_pages_are_cached() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags index=#true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags listing=#true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -250,7 +250,7 @@ fn retitling_invalidates_taxonomy_listing() {
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags index=#true\n  }\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags listing=#true\n  }\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -645,7 +645,7 @@ fn renamed_page_prunes_the_old_permalink() {
 fn dropped_taxonomy_term_prunes_its_index() {
     // The exact shape of the original bug: a term page lingering after no page
     // carries the term anymore.
-    let config = format!("{CONFIG}content {{\n  taxonomies {{\n    tags index=#true\n  }}\n}}\n");
+    let config = format!("{CONFIG}content {{\n  taxonomies {{\n    tags listing=#true\n  }}\n}}\n");
     let site = Site::with(&config);
     site.write(
         "content/a.typ",

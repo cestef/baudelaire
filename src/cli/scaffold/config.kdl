@@ -16,7 +16,7 @@ content {
   }
 
   taxonomies {
-    tags index=#true
+    tags listing=#true
   }
 }
 
