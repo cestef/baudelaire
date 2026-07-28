@@ -45,12 +45,15 @@ impl Scoped {
     /// Copy the rules in `css` into `out`, confining each style rule's selector
     /// and descending into the at-rules that contain style rules.
     fn rules(&self, css: &str, out: &mut String) {
+        let src = Css(css);
         let bytes = css.as_bytes();
         let (mut start, mut i) = (0, 0);
         while i < bytes.len() {
+            if let Some(next) = src.skip(i) {
+                i = next;
+                continue;
+            }
             match bytes[i] {
-                b'/' if bytes.get(i + 1) == Some(&b'*') => i = comment(css, i),
-                b'"' | b'\'' => i = string(css, i),
                 // A statement at-rule (`@import ..;`, `@layer a, b;`) or a
                 // stray semicolon: nothing to confine, nothing to descend into.
                 b';' => {
@@ -62,7 +65,7 @@ impl Scoped {
                     // An unterminated block is a stylesheet we cannot read;
                     // copy the rest verbatim rather than guess where it ended
                     // and silently drop a declaration.
-                    let Some(end) = block(css, i) else { break };
+                    let Some(end) = src.block(i) else { break };
                     self.rule(&css[start..i], &css[i + 1..end - 1], out);
                     i = end;
                     start = i;
@@ -80,9 +83,9 @@ impl Scoped {
     fn rule(&self, prelude: &str, body: &str, out: &mut String) {
         // Leading whitespace and comments belong before the rule, not inside
         // the selector we are about to rewrite.
-        let selectors = &prelude[lead(prelude)..];
+        let selectors = &prelude[Css(prelude).lead()..];
         out.push_str(&prelude[..prelude.len() - selectors.len()]);
-        match at_rule(selectors) {
+        match Css(selectors).at_rule() {
             Some(at) => {
                 out.push_str(selectors);
                 out.push('{');
@@ -106,7 +109,7 @@ impl Scoped {
     /// A selector list with every selector in it confined to the scope.
     fn selectors(&self, list: &str) -> String {
         let mut out = String::new();
-        for (i, selector) in commas(list).into_iter().enumerate() {
+        for (i, selector) in Css(list).commas().into_iter().enumerate() {
             if i > 0 {
                 out.push(',');
             }
@@ -118,110 +121,125 @@ impl Scoped {
     }
 }
 
-/// The length of the whitespace and comments a prelude opens with, which belong
-/// before the rule rather than inside its selector.
-fn lead(prelude: &str) -> usize {
-    let mut i = 0;
-    loop {
-        let rest = &prelude[i..];
-        let trimmed = rest.trim_start();
-        i += rest.len() - trimmed.len();
-        if !prelude[i..].starts_with("/*") {
-            return i;
-        }
-        i = comment(prelude, i);
-    }
-}
+/// A stretch of CSS being scanned by byte index.
+///
+/// Every scan below has to agree on where a comment and a string end, or a
+/// brace or comma inside one splits a rule in half. Hanging them all off one
+/// type is what makes that agreement structural instead of three copies of the
+/// same two match arms.
+#[derive(Clone, Copy)]
+struct Css<'a>(&'a str);
 
-/// The at-rule name a prelude opens with, or `None` when it is a selector list.
-fn at_rule(prelude: &str) -> Option<&str> {
-    let rest = prelude.strip_prefix('@')?;
-    let end = rest
-        .find(|c: char| c.is_whitespace() || c == '(' || c == '{')
-        .unwrap_or(rest.len());
-    Some(&rest[..end])
-}
-
-/// Split a selector list on its top-level commas, so a comma inside `:is(a, b)`
-/// or `[title="a,b"]` does not split a selector in half.
-fn commas(list: &str) -> Vec<&str> {
-    let bytes = list.as_bytes();
-    let (mut out, mut start, mut i, mut depth) = (Vec::new(), 0, 0, 0usize);
-    while i < bytes.len() {
+impl<'a> Css<'a> {
+    /// The index just past the comment or string starting at `i`, or `None`
+    /// when `i` starts neither and the caller should read the byte itself.
+    fn skip(self, i: usize) -> Option<usize> {
+        let bytes = self.0.as_bytes();
         match bytes[i] {
-            b'/' if bytes.get(i + 1) == Some(&b'*') => {
-                i = comment(list, i);
-                continue;
-            }
-            b'"' | b'\'' => {
-                i = string(list, i);
-                continue;
-            }
-            b'(' | b'[' => depth += 1,
-            b')' | b']' => depth = depth.saturating_sub(1),
-            b',' if depth == 0 => {
-                out.push(&list[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    out.push(&list[start..]);
-    out
-}
-
-/// The index just past a `/* .. */` comment starting at `i`, or the end of
-/// input when it is unterminated.
-fn comment(css: &str, i: usize) -> usize {
-    css[i + 2..]
-        .find("*/")
-        .map_or(css.len(), |end| i + 2 + end + 2)
-}
-
-/// The index just past the string starting at `i`, honouring backslash escapes.
-fn string(css: &str, i: usize) -> usize {
-    let bytes = css.as_bytes();
-    let quote = bytes[i];
-    let mut j = i + 1;
-    while j < bytes.len() {
-        match bytes[j] {
-            b'\\' => j += 2,
-            c if c == quote => return j + 1,
-            _ => j += 1,
+            b'/' if bytes.get(i + 1) == Some(&b'*') => Some(self.comment(i)),
+            b'"' | b'\'' => Some(self.string(i)),
+            _ => None,
         }
     }
-    css.len()
-}
 
-/// The index just past the `{ .. }` block whose opening brace is at `i`, or
-/// `None` when it is never closed. Strings and comments are skipped, so a brace
-/// inside either does not count.
-fn block(css: &str, i: usize) -> Option<usize> {
-    let bytes = css.as_bytes();
-    let (mut j, mut depth) = (i, 0usize);
-    while j < bytes.len() {
-        match bytes[j] {
-            b'/' if bytes.get(j + 1) == Some(&b'*') => {
-                j = comment(css, j);
+    /// The index just past a `/* .. */` comment starting at `i`, or the end of
+    /// input when it is unterminated.
+    fn comment(self, i: usize) -> usize {
+        self.0[i + 2..]
+            .find("*/")
+            .map_or(self.0.len(), |end| i + 2 + end + 2)
+    }
+
+    /// The index just past the string starting at `i`, honouring backslash
+    /// escapes.
+    fn string(self, i: usize) -> usize {
+        let bytes = self.0.as_bytes();
+        let quote = bytes[i];
+        let mut j = i + 1;
+        while j < bytes.len() {
+            match bytes[j] {
+                b'\\' => j += 2,
+                c if c == quote => return j + 1,
+                _ => j += 1,
+            }
+        }
+        self.0.len()
+    }
+
+    /// The index just past the `{ .. }` block whose opening brace is at `i`, or
+    /// `None` when it is never closed.
+    fn block(self, i: usize) -> Option<usize> {
+        let bytes = self.0.as_bytes();
+        let (mut j, mut depth) = (i, 0usize);
+        while j < bytes.len() {
+            if let Some(next) = self.skip(j) {
+                j = next;
                 continue;
             }
-            b'"' | b'\'' => {
-                j = string(css, j);
-                continue;
-            }
-            b'{' => depth += 1,
-            b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(j + 1);
+            match bytes[j] {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(j + 1);
+                    }
                 }
+                _ => {}
             }
-            _ => {}
+            j += 1;
         }
-        j += 1;
+        None
     }
-    None
+
+    /// This selector list split on its top-level commas, so a comma inside
+    /// `:is(a, b)` or `[title="a,b"]` does not split a selector in half.
+    fn commas(self) -> Vec<&'a str> {
+        let bytes = self.0.as_bytes();
+        let (mut out, mut start, mut i, mut depth) = (Vec::new(), 0, 0, 0usize);
+        while i < bytes.len() {
+            if let Some(next) = self.skip(i) {
+                i = next;
+                continue;
+            }
+            match bytes[i] {
+                b'(' | b'[' => depth += 1,
+                b')' | b']' => depth = depth.saturating_sub(1),
+                b',' if depth == 0 => {
+                    out.push(&self.0[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        out.push(&self.0[start..]);
+        out
+    }
+
+    /// The length of the whitespace and comments this prelude opens with, which
+    /// belong before the rule rather than inside its selector.
+    fn lead(self) -> usize {
+        let mut i = 0;
+        loop {
+            let rest = &self.0[i..];
+            let trimmed = rest.trim_start();
+            i += rest.len() - trimmed.len();
+            if !self.0[i..].starts_with("/*") {
+                return i;
+            }
+            i = self.comment(i);
+        }
+    }
+
+    /// The at-rule name this prelude opens with, or `None` when it is a
+    /// selector list.
+    fn at_rule(self) -> Option<&'a str> {
+        let rest = self.0.strip_prefix('@')?;
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '(' || c == '{')
+            .unwrap_or(rest.len());
+        Some(&rest[..end])
+    }
 }
 
 #[cfg(test)]

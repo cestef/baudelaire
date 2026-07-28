@@ -14,7 +14,7 @@ use crate::content::{Frontmatter, Page, PageId, Strings};
 
 /// Displays a lowercase section id as a title by capitalizing its first letter
 /// (`tags` -> `Tags`), the single display rule for generated listing titles,
-/// in the `Display`-newtype style of `cli::output::Paths`.
+/// in the `Display`-newtype style of [`crate::ui::Paths`].
 pub struct Titlecase<'a>(pub &'a str);
 
 impl fmt::Display for Titlecase<'_> {
@@ -139,6 +139,12 @@ pub struct Listing {
 }
 
 impl Listing {
+    /// The slug of a section's own index listing (`/tags/`, `/blog/`), as
+    /// opposed to a term or a numbered page. Named once: every generator that
+    /// emits a section index reads it, and it also names the listing's
+    /// synthetic source file.
+    pub(crate) const INDEX: &'static str = "index";
+
     pub fn new(
         section: impl Into<String>,
         slug: impl Into<String>,

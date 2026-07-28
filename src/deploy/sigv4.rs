@@ -9,6 +9,22 @@
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
+use time::OffsetDateTime;
+
+/// The signing algorithm, named identically in the string-to-sign and in the
+/// `Authorization` header, so it is spelled once.
+const ALGORITHM: &str = "AWS4-HMAC-SHA256";
+
+/// The fixed last element of both the credential scope and the signing-key
+/// chain: they must terminate the same way or the signature will not verify.
+const TERMINATOR: &str = "aws4_request";
+
+/// The prefix the secret key is seeded with before the key chain is derived.
+const SEED: &str = "AWS4";
+
+/// The header carrying the request time. Always signed, and sent by the caller
+/// with the same value the signature committed to.
+pub const DATE_HEADER: &str = "x-amz-date";
 
 /// A request to sign. `uri` is the already-encoded absolute path; `query` is the
 /// canonical (sorted, encoded) query string, or empty; `headers` are extra
@@ -38,7 +54,7 @@ impl Signer<'_> {
         let (canonical, headers) = self.canonical(req);
         let scope = self.scope();
         let to_sign = [
-            "AWS4-HMAC-SHA256",
+            ALGORITHM,
             self.timestamp,
             &scope,
             &Self::sha256_hex(canonical.as_bytes()),
@@ -46,9 +62,18 @@ impl Signer<'_> {
         .join("\n");
         let signature = Self::hex(&Self::hmac(&self.key(), to_sign.as_bytes()));
         format!(
-            "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
+            "{ALGORITHM} Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
             self.access_key,
         )
+    }
+
+    /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`, the shape a
+    /// [`Signer::timestamp`] must carry: [`Signer::date`] slices its date out,
+    /// so the two cannot disagree.
+    pub fn timestamp(now: OffsetDateTime) -> String {
+        let (year, month, day) = (now.year(), now.month() as u8, now.day());
+        let (hour, minute, second) = (now.hour(), now.minute(), now.second());
+        format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
     }
 
     /// The canonical request and its `;`-joined signed-header list. `host` and
@@ -57,7 +82,7 @@ impl Signer<'_> {
     fn canonical(&self, req: &Request) -> (String, String) {
         let mut headers = vec![
             ("host", req.host.to_owned()),
-            ("x-amz-date", self.timestamp.to_owned()),
+            (DATE_HEADER, self.timestamp.to_owned()),
         ];
         headers.extend(
             req.headers
@@ -90,7 +115,7 @@ impl Signer<'_> {
     /// The credential scope: `YYYYMMDD/region/service/aws4_request`.
     fn scope(&self) -> String {
         format!(
-            "{}/{}/{}/aws4_request",
+            "{}/{}/{}/{TERMINATOR}",
             self.date(),
             self.region,
             self.service
@@ -98,10 +123,10 @@ impl Signer<'_> {
     }
 
     /// The signing key: HMAC-chained from the secret through date, region, and
-    /// service to the `aws4_request` terminator.
+    /// service to the terminator.
     fn key(&self) -> Vec<u8> {
-        let seed = format!("AWS4{}", self.secret_key);
-        [self.date(), self.region, self.service, "aws4_request"]
+        let seed = format!("{SEED}{}", self.secret_key);
+        [self.date(), self.region, self.service, TERMINATOR]
             .into_iter()
             .fold(seed.into_bytes(), |key, part| {
                 Self::hmac(&key, part.as_bytes())
@@ -276,6 +301,17 @@ mod tests {
              SignedHeaders=host;x-amz-date, \
              Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31"
         );
+    }
+
+    #[test]
+    fn timestamp_formats_utc_and_carries_its_own_date() {
+        let t = OffsetDateTime::from_unix_timestamp(1_440_938_160).unwrap(); // 2015-08-30T12:36:00Z
+        let timestamp = Signer::timestamp(t);
+        assert_eq!(timestamp, "20150830T123600Z");
+        // the scope's date is sliced out of it, so the two always agree.
+        let mut signer = signer();
+        signer.timestamp = &timestamp;
+        assert_eq!(signer.date(), "20150830");
     }
 
     #[test]

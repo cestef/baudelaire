@@ -135,8 +135,12 @@ impl Memo {
 
     /// Content-addressed blob path, sharded by hash prefix like the page store.
     fn object(&self, blob: &Hash) -> PathBuf {
+        // 2 hex digits: 256 directories, so even a site with tens of thousands
+        // of processed assets keeps every directory small enough that a listing
+        // stays cheap on every filesystem. The page store shards the same way.
+        const SHARD: usize = 2;
         let hex = blob.hex();
-        let (shard, _) = hex.split_at(2.min(hex.len()));
+        let (shard, _) = hex.split_at(SHARD.min(hex.len()));
         self.dir.join("objects").join(shard).join(hex)
     }
 

@@ -110,7 +110,7 @@ impl DiscoveryCache {
         // Fast path: unchanged source and dependencies reuse the stored
         // frontmatter with no typst parse or evaluation at all.
         if self.enabled
-            && let Some(body) = decode(&crate::fs::read(path)?)
+            && let Some(body) = Self::decode(&crate::fs::read(path)?)
         {
             let hash = Hash::of_bytes(body.as_bytes());
             if let Some(entry) = self.reuse(path, hash) {
@@ -167,6 +167,16 @@ impl DiscoveryCache {
         Some(entry.clone())
     }
 
+    /// Decode file bytes to text exactly as typst does when it builds a
+    /// `Source`: a leading UTF-8 BOM is stripped, nothing else is transformed.
+    /// `None` for non-UTF-8 input, which routes the caller to the parse path
+    /// where typst raises the proper diagnostic.
+    fn decode(bytes: &[u8]) -> Option<String> {
+        const BOM: &[u8] = b"\xef\xbb\xbf";
+        let rest = bytes.strip_prefix(BOM).unwrap_or(bytes);
+        std::str::from_utf8(rest).ok().map(str::to_owned)
+    }
+
     /// Read the `frontmatter` export from an evaluated module, defaulting when
     /// the module exports none.
     fn interpret(module: &Module, path: &Path, config: &Config) -> Result<(Frontmatter, bool)> {
@@ -205,19 +215,13 @@ impl DiscoveryCache {
     }
 }
 
-/// Decode file bytes to text exactly as typst does when it builds a `Source`:
-/// a leading UTF-8 BOM is stripped, nothing else is transformed. `None` for
-/// non-UTF-8 input, which routes the caller to the parse path where typst
-/// raises the proper diagnostic.
-fn decode(bytes: &[u8]) -> Option<String> {
-    const BOM: &[u8] = b"\xef\xbb\xbf";
-    let rest = bytes.strip_prefix(BOM).unwrap_or(bytes);
-    std::str::from_utf8(rest).ok().map(str::to_owned)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::decode;
+    use super::DiscoveryCache;
+
+    fn decode(bytes: &[u8]) -> Option<String> {
+        DiscoveryCache::decode(bytes)
+    }
 
     #[test]
     fn decode_matches_typst_source_text() {

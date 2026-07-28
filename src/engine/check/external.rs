@@ -146,17 +146,26 @@ impl Probe {
         }
     }
 
-    /// Whether a status says "not like that" rather than "not there".
+    /// Whether a status says "not like that" rather than "not there":
+    /// 403 (hosts and CDNs that gate anything but `GET`), 405 (the method is
+    /// not allowed) and 501 (the server never implemented it).
     fn method_rejected(code: u16) -> bool {
-        matches!(code, 403 | 405 | 501)
+        const REJECTED: [u16; 3] = [403, 405, 501];
+        REJECTED.contains(&code)
     }
 
+    /// A 2xx or 3xx answer is the link working: a redirect that resolves is a
+    /// live target, and following the chain is the agent's business, not this
+    /// pass's.
     fn request(result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Self {
         match result {
-            Ok(response) => match response.status().as_u16() {
-                code if (200..400).contains(&code) => Self::Alive,
-                code => Self::Status(code),
-            },
+            Ok(response) => {
+                let status = response.status();
+                match status.is_success() || status.is_redirection() {
+                    true => Self::Alive,
+                    false => Self::Status(status.as_u16()),
+                }
+            }
             Err(e) => Self::Unreachable(e.to_string()),
         }
     }

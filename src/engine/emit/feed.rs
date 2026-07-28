@@ -6,9 +6,9 @@ use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
-use crate::config::{BaseUrl, Config, FeedKind};
+use crate::config::{BaseUrl, Config, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
-use crate::error::{Artifact, FeedDateError, Result, SerializeError};
+use crate::error::{Artifact, FeedDateError, Result};
 
 /// The timestamp behavior each feed standard mandates: RSS wants RFC 2822
 /// `pubDate`s, Atom and JSON Feed RFC 3339. An inherent extension here (rather
@@ -92,7 +92,7 @@ impl Feeds {
             return Ok(());
         }
         for kind in &site.config.generate.feed.formats {
-            let path = site.config.paths.dist.join(feed.scope).join(kind.file());
+            let path = site.dist(&[feed.scope, kind.file()]);
             out.file(&path, &feed.render(*kind)?)?;
             out.note(format_args!("wrote {}", path.display()));
         }
@@ -102,7 +102,7 @@ impl Feeds {
 
 /// Renders a feed of the given items (already selected, newest-first) with
 /// absolute links under `base`.
-pub(super) struct Feed<'a> {
+struct Feed<'a> {
     base: &'a BaseUrl,
     title: &'a str,
     items: &'a [&'a Page],
@@ -115,12 +115,7 @@ pub(super) struct Feed<'a> {
 }
 
 impl<'a> Feed<'a> {
-    pub(super) fn new(
-        base: &'a BaseUrl,
-        title: &'a str,
-        items: &'a [&'a Page],
-        scope: &'a str,
-    ) -> Self {
+    fn new(base: &'a BaseUrl, title: &'a str, items: &'a [&'a Page], scope: &'a str) -> Self {
         Self {
             base,
             title,
@@ -130,14 +125,14 @@ impl<'a> Feed<'a> {
     }
 
     /// Whether this feed has nothing to syndicate.
-    pub(super) fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
     /// Serialize in the requested format. Item timestamps are rendered up
     /// front: for XML the only fallible step, so the building itself stays
     /// infallible.
-    pub(super) fn render(&self, kind: FeedKind) -> Result<String> {
+    fn render(&self, kind: FeedKind) -> Result<String> {
         let stamps = self.stamps(kind)?;
         match kind {
             FeedKind::Rss => Ok(self.xml(Self::rss, &stamps)),
@@ -157,12 +152,11 @@ impl<'a> Feed<'a> {
         xml.finish()
     }
 
-    /// This feed's language home, the site root for the default language.
+    /// This feed's language home, the site root for the default language (whose
+    /// scope is empty, and which [`Permalink::join`] already reads as "no
+    /// segment" rather than as a bare separator).
     fn home(&self) -> String {
-        match self.scope.is_empty() {
-            true => self.base.home(),
-            false => self.base.join(format!("/{}/", self.scope)),
-        }
+        self.base.join(Permalink::join(&[self.scope]))
     }
 
     /// This feed's own absolute URL, its stable identity.
@@ -241,7 +235,7 @@ impl<'a> Feed<'a> {
                 })
                 .collect(),
         };
-        serde_json::to_string(&feed).map_err(|e| SerializeError::new(Artifact::Feed, e).into())
+        Artifact::Feed.json(&feed)
     }
 
     /// Every item's date rendered in `kind`'s timestamp format (as UTC

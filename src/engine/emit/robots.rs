@@ -13,6 +13,11 @@ use crate::error::warning::BaseUrlMissing;
 /// line when a base `url` and the sitemap are both enabled.
 pub(super) struct Robots;
 
+impl Robots {
+    /// The output file name, at the `dist` root.
+    const FILE: &'static str = "robots.txt";
+}
+
 impl Processor for Robots {
     fn enabled(&self, config: &Config) -> bool {
         config.generate.robots.enabled
@@ -38,8 +43,8 @@ impl Processor for Robots {
         {
             let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));
         }
-        out.file(&site.config.paths.dist.join("robots.txt"), &body)?;
-        out.note(format_args!("wrote robots.txt"));
+        out.file(&site.dist(&[Self::FILE]), &body)?;
+        out.note(format_args!("wrote {}", Self::FILE));
         Ok(())
     }
 }

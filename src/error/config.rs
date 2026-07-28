@@ -190,17 +190,6 @@ impl ConfigError {
         )
     }
 
-    /// An unrecognized image format under `optimize`.
-    pub fn unknown_image_format(source: &str, format: &str, span: SourceSpan) -> Self {
-        Self::at(
-            source,
-            ConfigErrorKind::UnknownImageFormat {
-                format: format.to_owned(),
-            },
-            span,
-        )
-    }
-
     /// A `-html` entry: HTML export is required and cannot be disabled (other
     /// features may be toggled off with `-name`).
     pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
@@ -382,10 +371,6 @@ pub enum ConfigErrorKind {
     #[error("duplicate `{name}` in `{scope}`")]
     #[diagnostic(code(baudelaire::config::duplicate_entry))]
     DuplicateEntry { name: String, scope: String },
-
-    #[error("unknown image format `{format}` (valid: png, jpeg)")]
-    #[diagnostic(code(baudelaire::config::unknown_image_format))]
-    UnknownImageFormat { format: String },
 
     #[error("`{path}` would be written outside the output directory")]
     #[diagnostic(

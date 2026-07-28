@@ -7,12 +7,12 @@
 //! single source of the record shapes, so the build names exactly what the
 //! publisher writes.
 
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
+use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 
 use crate::announce::standard::{DOCUMENT, document_uri};
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 
 /// The transform that adds each dated page's `site.standard.document` backlink.
 pub(super) struct Verify;
@@ -31,16 +31,13 @@ impl Transform for Verify {
             return;
         };
         let href = document_uri(did, &cx.page.permalink).to_string();
-        if let Some(head) = doc.root_mut().head() {
-            head.children.push(link(&href));
+        if let Some(head) = doc.head() {
+            head.children.push(
+                HtmlElement::new(tag::link)
+                    .with_attr(attr::rel, DOCUMENT.as_str())
+                    .with_attr(attr::href, href)
+                    .into(),
+            );
         }
     }
-}
-
-/// A `<link rel="site.standard.document" href="..">` node.
-fn link(href: &str) -> HtmlNode {
-    let mut el = HtmlElement::new(tag::link);
-    el.attrs.push(attr::rel, DOCUMENT.as_str());
-    el.attrs.push(attr::href, href);
-    HtmlNode::Element(el)
 }

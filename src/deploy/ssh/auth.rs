@@ -13,6 +13,7 @@ use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
 
 use super::hosts::Client;
 use crate::config::SshConfig;
+use crate::error::deploy::{Setup, Step};
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
 
@@ -106,7 +107,7 @@ impl<'a> Auth<'a> {
     /// Whether an authentication attempt succeeded, mapping a transport failure.
     fn ok(result: Result<AuthResult, russh::Error>) -> Result<bool> {
         Ok(result
-            .map_err(|e| DeployError::transfer("authenticate", e))?
+            .map_err(|e| DeployError::transfer(Step::Authenticate, e))?
             .success())
     }
 
@@ -120,7 +121,7 @@ impl<'a> Auth<'a> {
             Err(_) => {
                 let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
                 load_secret_key(&path, Some(&passphrase))
-                    .map_err(|e| DeployError::local("loading the private key", e).into())
+                    .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
             }
         }
     }

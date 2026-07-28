@@ -1,8 +1,10 @@
 //! Deploying the built site's *files* to a host, the counterpart to
 //! [`crate::announce`], which publishes metadata records. A destination
 //! implements one [`Backend`]; it receives the built [`Dist`] and reconciles the
-//! remote with it (upload changed, delete removed). Adding a destination is one
-//! `impl Backend` plus one line in [`configured`]; nothing else learns about it.
+//! remote with it (upload changed, delete removed). Reconciling itself is
+//! [`Dist::reconcile`], shared by every destination: a backend only supplies the
+//! [`Store`] it talks to. Adding a destination is one `impl Backend`, one `impl
+//! Store`, plus one line in [`configured`]; nothing else learns about it.
 
 mod s3;
 mod sigv4;
@@ -14,7 +16,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::error::{DeployError, Result};
 use crate::remote::{self, Backend, Options};
-use crate::ui::{Count, Ui};
+use crate::ui::{Count, Marker, Ui};
 
 /// Files keyed by dist-relative path, each mapped to a content digest. The
 /// currency every [`Backend`] reconciles in: local digests versus remote.
@@ -52,10 +54,8 @@ impl TryFrom<&str> for Listed {
 }
 
 impl Listed {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
+    /// Give up the checked path. Consuming, so a `Listed` cannot be checked
+    /// once and then used twice over.
     pub fn into_string(self) -> String {
         self.0
     }
@@ -115,6 +115,60 @@ impl Dist {
             .map(|rel| Ok((rel.clone(), hash(&self.read(rel)?))))
             .collect()
     }
+
+    /// Mirror this tree into `store`: digest every local file, diff it against
+    /// what the store holds, then upload and delete what the [`Plan`] calls for,
+    /// one reported line per file. A dry run stops after the preview.
+    ///
+    /// THE reconcile loop: every backend runs this one, so a deploy reports the
+    /// same lines and honours `--dry-run` and `delete` the same way whichever
+    /// destination it targets.
+    pub fn reconcile(
+        &self,
+        store: &dyn Store,
+        delete: bool,
+        opts: &Options,
+        ui: &Ui,
+    ) -> Result<()> {
+        let local = self.digests(|bytes| store.digest(bytes))?;
+        let plan = Plan::compute(&local, &store.list()?, delete);
+        plan.preview(ui, opts.dry_run);
+        if opts.dry_run {
+            return Ok(());
+        }
+        for key in &plan.uploads {
+            store.upload(key, &self.read(key)?)?;
+            ui.item(format_args!("{} {key}", Marker::Uploaded));
+        }
+        for key in &plan.deletes {
+            store.delete(key)?;
+            ui.item(format_args!("{} {key}", Marker::Removed));
+        }
+        plan.done(ui, store.target());
+        Ok(())
+    }
+}
+
+/// The remote side of a deploy: the store a [`Dist`] is mirrored into. Only the
+/// wire differs between destinations (S3 over signed HTTP, SSH over SFTP), so a
+/// backend supplies these operations and [`Dist::reconcile`] drives them.
+pub trait Store {
+    /// Digest a local file's bytes with the same algorithm [`Store::list`]
+    /// reports, so the two are comparable: S3 compares MD5 ETags, SSH the
+    /// host's SHA-256.
+    fn digest(&self, bytes: &[u8]) -> String;
+
+    /// Everything the store currently holds, keyed by dist-relative path.
+    fn list(&self) -> Result<Digests>;
+
+    /// Write `body` at the dist-relative `key`.
+    fn upload(&self, key: &str, body: &[u8]) -> Result<()>;
+
+    /// Remove the dist-relative `key`.
+    fn delete(&self, key: &str) -> Result<()>;
+
+    /// The destination as the summary line names it.
+    fn target(&self) -> String;
 }
 
 /// Deploy to every configured destination in turn. Errors if none is configured,

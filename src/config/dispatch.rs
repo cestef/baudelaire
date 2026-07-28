@@ -5,13 +5,17 @@
 //! that scope's valid keys: [`Keys`] derives "unknown key" errors (with a
 //! nearest-match hint) from the very same table, so suggestions never drift from
 //! what actually parses.
+//!
+//! A config struct carries its own table by implementing [`Section`] (a `{ .. }`
+//! block) or [`Attributed`] (a `key=value` line), which is also where the merge
+//! policy lives: sections fill in place, lists replace wholesale.
 
 use kdl::{KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::error::{BaudelaireErrorKind, ConfigError, Result};
 
-use super::parse::{EntryExt, NodeExt};
+use super::node::{EntryExt, NodeExt};
 
 /// A `(key, handler)` rule for a node-keyed [`Block`] scope.
 type Rule<T> = (&'static str, fn(&mut T, &KdlNode, &str) -> Result<()>);
@@ -47,10 +51,69 @@ impl<T> Block<T> {
     }
 }
 
+/// A config section: a struct filled from a node's `{ .. }` block, whose
+/// [`RULES`](Section::RULES) table is the single source of truth for the keys
+/// that block accepts. Every node-keyed scope in the config is one of these, so
+/// the fill-in-place, presence-enables, and optional-backend policies are
+/// written once here instead of once per section.
+pub(super) trait Section: Sized + 'static {
+    /// This section's `(key, handler)` table.
+    const RULES: Block<Self>;
+
+    /// Run before a block's keys are applied. A section that is turned on by the
+    /// mere presence of its block flips its `enabled` flag here, so that rule
+    /// lives with the section rather than at every parent mentioning it.
+    fn enable(&mut self) {}
+
+    /// Apply a node's `{ .. }` children onto `self`, *filling in place*: a key
+    /// the block omits keeps the value it already had, which is what lets a
+    /// profile override one key of a section and inherit its siblings.
+    fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
+        self.enable();
+        Self::RULES.fill(self, node, text)
+    }
+
+    /// Apply a sequence of nodes onto `self`: the top-level document, or the
+    /// single node of a profile overlaid on it.
+    fn apply(&mut self, nodes: &[KdlNode], text: &str) -> Result<()> {
+        Self::RULES.apply(self, nodes, text)
+    }
+
+    /// Fill a section that is absent until configured (a deploy or announce
+    /// backend): the block's presence creates it, and an existing value is
+    /// filled onto rather than replaced, so a profile tuning one key keeps the
+    /// rest.
+    fn optional(target: &mut Option<Self>, node: &KdlNode, text: &str) -> Result<()>
+    where
+        Self: Default,
+    {
+        let mut section = target.take().unwrap_or_default();
+        section.fill(node, text)?;
+        *target = Some(section);
+        Ok(())
+    }
+}
+
+/// A config item written as a single node carrying `key=value` attributes (a
+/// collection, a taxonomy, an image format's tuning). The [`Attrs`] counterpart
+/// of [`Section`].
+pub(super) trait Attributed: Sized + 'static {
+    /// This item's `(attribute, handler)` table.
+    const ATTRS: Attrs<Self>;
+
+    /// How many leading positional arguments the caller consumes itself (a
+    /// collection's glob); any other positional is an error.
+    const LEADING: usize = 0;
+
+    /// Apply the node's named attributes onto `self`.
+    fn read(&mut self, node: &KdlNode, text: &str) -> Result<()> {
+        Self::ATTRS.apply(self, node, text, Self::LEADING)
+    }
+}
+
 /// An attribute-keyed scope (a node's `key=value` entries), e.g. a single
 /// `content { collections { posts sort=... } }` line. Same single-source-of-truth
-/// contract
-/// as [`Block`], but handlers receive the attribute value.
+/// contract as [`Block`], but handlers receive the attribute value.
 pub(super) struct Attrs<T: 'static>(pub(super) &'static [Attr<T>]);
 
 impl<T> Attrs<T> {

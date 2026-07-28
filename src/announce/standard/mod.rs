@@ -1,57 +1,39 @@
 //! The [standard.site] announcing backend.
 //!
 //! Maps a [`SiteView`] onto AT Protocol records (one `site.standard.publication`
-//! for the site and one `site.standard.document` per dated page) and writes them
-//! to a PDS over XRPC. The remote repository is the source of truth: every
-//! an announce lists the existing document records and deletes those no longer
-//! backed by a page, so nothing is orphaned. A local [`SkipCache`] only spares
-//! re-sending records whose content is unchanged.
+//! for the site and one `site.standard.document` per dated page, both shaped by
+//! [`record`]) and writes them to a PDS over XRPC. The remote repository is the
+//! source of truth: every announce lists the existing document records and
+//! deletes those no longer backed by a page, so nothing is orphaned. A local
+//! [`SkipCache`] only spares re-sending records whose content is unchanged.
 //!
 //! Everything standard.site-specific lives here; the [`super`] layer stays
 //! protocol-neutral.
 //!
 //! [standard.site]: https://standard.site
 
-use std::collections::BTreeSet;
+mod record;
 
-use serde::Serialize;
+use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
 
-use crate::atproto::{AtUri, Blob, Did, Nsid, Repo, Rkey, Session};
-use crate::config::{BaseUrl, StandardConfig};
+use crate::atproto::{AtUri, Blob, Did, Repo, Rkey, Session};
+use crate::config::StandardConfig;
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{AnnounceError, Result};
-use crate::graph::{Fingerprint, Hash};
+use crate::graph::Fingerprint;
 use crate::mime::Mime;
 use crate::ui::Ui;
 
-use super::{Backend, Doc, SiteView, SkipCache};
+use self::record::{Document, PUBLICATION_RKEY, Publication};
+use super::{Backend, SiteView, SkipCache};
 use crate::remote::Options;
 
-/// The lexicon ids, which double as repository collection names. Public so the
-/// build-time verification artifacts (an engine processor for `.well-known`, a
-/// render transform for `<link>` tags) share this one source of the record
-/// shapes instead of re-spelling the NSIDs and key scheme.
-pub const PUBLICATION: Nsid = Nsid::new("site.standard.publication");
-pub const DOCUMENT: Nsid = Nsid::new("site.standard.document");
-/// The conventional single record key for a site's publication.
-const PUBLICATION_RKEY: &str = "self";
+pub use self::record::{DOCUMENT, PUBLICATION, document_uri, publication_uri};
+
 /// Environment variable holding the app password (never stored in config).
 const PASSWORD_ENV: &str = "BAUDELAIRE_ATPROTO_PASSWORD";
-
-/// The publication record's `at://` URI under `did`: the single definition of
-/// where a site's publication lives, shared by announcing and verification.
-pub fn publication_uri(did: &str) -> AtUri {
-    AtUri::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
-}
-
-/// A document's `at://` URI under `did`, keyed by its page `path`. The key is a
-/// pure function of the path (see [`Rkey::derived`]), so the build names the
-/// same record the backend writes, without any coordination.
-pub fn document_uri(did: &str, path: &str) -> AtUri {
-    AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
-}
 
 /// The standard.site backend, configured from a `announce { standard { .. } }`
 /// block.
@@ -77,7 +59,7 @@ impl Backend<SiteView<'_>> for Standard {
         let base = site.config.base().ok_or(AnnounceError::NoUrl)?;
 
         let target = self.connect(opts, ui)?;
-        if let Some(advice) = reconcile(self.config.did.as_deref(), target.did())? {
+        if let Some(advice) = Self::pinned(self.config.did.as_deref(), target.did())? {
             ui.advice(advice);
         }
         let publication = publication_uri(target.did().as_str());
@@ -97,8 +79,8 @@ impl Standard {
     /// Connect to the destination. A dry run resolves a read-only [`Repo`]
     /// from the handle without credentials (`listRecords` and `resolveHandle`
     /// are public XRPC); a real run authenticates a writable [`Session`] with the
-    /// app password. Either way the resolved DID flows through [`reconcile`], so
-    /// the identity check is the same on both paths.
+    /// app password. Either way the resolved DID flows through
+    /// [`Standard::pinned`], so the identity check is the same on both paths.
     fn connect(&self, opts: &Options, ui: &Ui) -> Result<Target> {
         if opts.dry_run {
             ui.detail("dry run: no records will be written");
@@ -108,6 +90,25 @@ impl Standard {
         let password = opts.secret(PASSWORD_ENV, "standard.site app password")?;
         let session = Session::login(&self.config.pds, &self.config.handle, &password)?;
         Ok(Target::Live(session))
+    }
+
+    /// Check the configured `did` pin against the identity an announce
+    /// `resolved`. A pin that disagrees is fatal: the build emitted verification
+    /// artifacts for the wrong account. No pin is fine, but the resolved DID
+    /// comes back as [`DidUnpinned`] advice so the user can pin it and get those
+    /// artifacts; `Ok(None)` means the pin held. Takes the pin rather than
+    /// reading it off `self`, so it is testable without a `Ui` or a network.
+    fn pinned(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, AnnounceError> {
+        match pin {
+            Some(did) if did == resolved.as_str() => Ok(None),
+            Some(did) => Err(AnnounceError::DidMismatch {
+                configured: did.to_owned(),
+                actual: resolved.to_string(),
+            }),
+            None => Ok(Some(DidUnpinned {
+                did: resolved.to_string(),
+            })),
+        }
     }
 
     /// Upload the configured publication icon as a blob, if any. The path is
@@ -246,29 +247,11 @@ impl Target {
     }
 }
 
-/// Reconcile the configured `did` pin against the identity an announce `resolved`.
-/// A pin that disagrees is fatal: the build emitted verification artifacts for
-/// the wrong account. No pin is fine, but the resolved DID comes back as
-/// [`DidUnpinned`] advice so the user can pin it and get those artifacts;
-/// `Ok(None)` means the pin held. Pure (the caller surfaces the advice), so it
-/// is testable without a `Ui` or a network.
-fn reconcile(pin: Option<&str>, resolved: &Did) -> Result<Option<DidUnpinned>, AnnounceError> {
-    match pin {
-        Some(did) if did == resolved.as_str() => Ok(None),
-        Some(did) => Err(AnnounceError::DidMismatch {
-            configured: did.to_owned(),
-            actual: resolved.to_string(),
-        }),
-        None => Ok(Some(DidUnpinned {
-            did: resolved.to_string(),
-        })),
-    }
-}
-
 /// A colored one-line announce summary: the destination, then counts styled by
 /// meaning: sent in green (additive), unchanged dimmed (no-op), removed in
 /// yellow when any went (else dimmed). `--dry-run` phrases the verbs as intent.
-/// A [`Display`] newtype like [`Count`], so the styling lives in one place.
+/// A [`Display`](std::fmt::Display) newtype like [`Count`](crate::ui::Count), so
+/// the styling lives in one place.
 struct Summary<'a> {
     name: &'a str,
     sent: usize,
@@ -296,159 +279,31 @@ impl std::fmt::Display for Summary<'_> {
     }
 }
 
-/// A `site.standard.publication` record.
-#[derive(Serialize)]
-struct Publication {
-    #[serde(rename = "$type")]
-    kind: &'static str,
-    name: String,
-    url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    icon: Option<Blob>,
-    preferences: Preferences,
-}
-
-impl Publication {
-    /// The site's publication record. The display name falls back to the site's
-    /// label when `site` is unset.
-    fn new(site: &SiteView, base: &BaseUrl, icon: Option<Blob>, discover: bool) -> Self {
-        Self {
-            kind: PUBLICATION.as_str(),
-            name: site
-                .config
-                .site
-                .clone()
-                .unwrap_or_else(|| site.config.label().to_owned()),
-            url: base.to_string(),
-            description: None,
-            icon,
-            preferences: Preferences {
-                show_in_discover: discover,
-            },
-        }
-    }
-}
-
-/// Publication-level reader preferences.
-#[derive(Serialize)]
-struct Preferences {
-    #[serde(rename = "showInDiscover")]
-    show_in_discover: bool,
-}
-
-/// A `site.standard.document` record.
-#[derive(Serialize, Hash)]
-struct Document {
-    #[serde(rename = "$type")]
-    kind: &'static str,
-    site: AtUri,
-    title: String,
-    #[serde(rename = "publishedAt")]
-    published_at: String,
-    path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tags: Vec<String>,
-}
-
-impl Fingerprint for Document {
-    /// The record's structural digest, keyed into the skip-cache so an unchanged
-    /// document is not re-sent.
-    fn fingerprint(&self) -> Hash {
-        Hash::of(self)
-    }
-}
-
-impl Document {
-    /// A document record for a `doc` published on `date`, under `publication`.
-    /// The caller filters undated pages: standard.site requires `publishedAt`.
-    fn new(doc: &Doc, publication: &AtUri, date: time::Date) -> Self {
-        Self {
-            kind: DOCUMENT.as_str(),
-            site: publication.clone(),
-            title: doc.title.clone(),
-            published_at: Rfc3339(date).to_string(),
-            path: doc.path.clone(),
-            description: doc.description.clone(),
-            tags: doc.tags.clone(),
-        }
-    }
-}
-
-/// A date as an RFC 3339 timestamp at midnight UTC: the format `publishedAt`
-/// requires. A [`Display`] adapter over [`Iso`](crate::content::Iso), so it
-/// formats on demand without allocating a field.
-struct Rfc3339(time::Date);
-
-impl std::fmt::Display for Rfc3339 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}T00:00:00Z", crate::content::Iso(self.0))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn date(y: i32, m: u8, d: u8) -> time::Date {
-        time::Date::from_calendar_date(y, time::Month::try_from(m).unwrap(), d).unwrap()
-    }
-
-    fn sample(date: Option<time::Date>) -> Doc {
-        Doc {
-            path: "/posts/hi/".into(),
-            title: "Hi".into(),
-            description: Some("a post".into()),
-            date,
-            tags: vec!["rust".into()],
-        }
-    }
-
     #[test]
-    fn reconcile_accepts_a_matching_pin() {
+    fn pinned_accepts_a_matching_pin() {
         assert!(
-            reconcile(Some("did:plc:x"), &Did::new("did:plc:x"))
+            Standard::pinned(Some("did:plc:x"), &Did::new("did:plc:x"))
                 .unwrap()
                 .is_none()
         );
     }
 
     #[test]
-    fn reconcile_rejects_a_mismatched_pin() {
+    fn pinned_rejects_a_mismatched_pin() {
         assert!(matches!(
-            reconcile(Some("did:plc:x"), &Did::new("did:plc:y")),
+            Standard::pinned(Some("did:plc:x"), &Did::new("did:plc:y")),
             Err(AnnounceError::DidMismatch { .. })
         ));
     }
 
     #[test]
-    fn reconcile_advises_pinning_when_unset() {
-        let advice = reconcile(None, &Did::new("did:plc:x")).unwrap();
+    fn pinned_advises_pinning_when_unset() {
+        let advice = Standard::pinned(None, &Did::new("did:plc:x")).unwrap();
         assert_eq!(advice.unwrap().did, "did:plc:x");
-    }
-
-    #[test]
-    fn uris_have_the_canonical_shape() {
-        assert_eq!(
-            publication_uri("did:plc:x").to_string(),
-            "at://did:plc:x/site.standard.publication/self"
-        );
-        assert!(
-            document_uri("did:plc:x", "/a/")
-                .to_string()
-                .starts_with("at://did:plc:x/site.standard.document/")
-        );
-    }
-
-    #[test]
-    fn rfc3339_is_midnight_utc() {
-        assert_eq!(
-            Rfc3339(date(2026, 7, 1)).to_string(),
-            "2026-07-01T00:00:00Z"
-        );
     }
 
     fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, preview: bool) -> String {
@@ -479,54 +334,5 @@ mod tests {
             line.contains("3 to send") && line.contains("2 to remove"),
             "{line}"
         );
-    }
-
-    #[test]
-    fn document_serializes_to_the_lexicon_shape() {
-        let publication = publication_uri("did:plc:x");
-        let record = Document::new(&sample(None), &publication, date(2026, 1, 2));
-        let value = serde_json::to_value(&record).unwrap();
-        assert_eq!(value["$type"], "site.standard.document");
-        assert_eq!(
-            value["site"],
-            "at://did:plc:x/site.standard.publication/self"
-        );
-        assert_eq!(value["title"], "Hi");
-        assert_eq!(value["publishedAt"], "2026-01-02T00:00:00Z");
-        assert_eq!(value["path"], "/posts/hi/");
-        assert_eq!(value["description"], "a post");
-        assert_eq!(value["tags"], serde_json::json!(["rust"]));
-    }
-
-    #[test]
-    fn document_omits_absent_optionals() {
-        let publication = publication_uri("did:plc:x");
-        let mut doc = sample(None);
-        doc.description = None;
-        doc.tags.clear();
-        let value =
-            serde_json::to_value(Document::new(&doc, &publication, date(2026, 1, 2))).unwrap();
-        assert!(value.get("description").is_none());
-        assert!(value.get("tags").is_none());
-    }
-
-    #[test]
-    fn publication_serializes_to_the_lexicon_shape() {
-        let record = Publication {
-            kind: PUBLICATION.as_str(),
-            name: "Site".into(),
-            url: "https://example.com".into(),
-            description: None,
-            icon: None,
-            preferences: Preferences {
-                show_in_discover: true,
-            },
-        };
-        let value = serde_json::to_value(&record).unwrap();
-        assert_eq!(value["$type"], "site.standard.publication");
-        assert_eq!(value["url"], "https://example.com");
-        assert_eq!(value["preferences"]["showInDiscover"], true);
-        assert!(value.get("icon").is_none());
-        assert!(value.get("description").is_none());
     }
 }

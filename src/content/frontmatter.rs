@@ -107,10 +107,29 @@ impl Frontmatter {
     /// evaluates (`frontmatter` is undefined), and "unknown variable" would
     /// say nothing about the new syntax.
     pub fn check(source: &Source, path: &Path) -> Result<()> {
-        match legacy_call(source) {
+        match Self::legacy_call(source) {
             true => Err(ContentError::frontmatter_call(path).into()),
             false => Ok(()),
         }
+    }
+
+    /// Whether the source opens with the pre-export `#frontmatter(..)` call
+    /// form, recognized in the syntax tree purely to point migration at the
+    /// binding syntax (the call itself no longer evaluates: `frontmatter` is
+    /// undefined).
+    fn legacy_call(source: &Source) -> bool {
+        let Some(markup) = source.root().cast::<Markup>() else {
+            return false;
+        };
+        markup
+            .exprs()
+            .find(|e| !matches!(e, Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_)))
+            .is_some_and(|first| match first {
+                Expr::FuncCall(call) => {
+                    matches!(call.callee(), Expr::Ident(ident) if ident.get() == "frontmatter")
+                }
+                _ => false,
+            })
     }
 
     /// Read a page's frontmatter from its evaluated module's `frontmatter`
@@ -172,24 +191,6 @@ impl Frontmatter {
             .collect();
         Keys::of(&known).nearest(key).map(str::to_owned)
     }
-}
-
-/// Whether the source opens with the pre-export `#frontmatter(..)` call form,
-/// recognized in the syntax tree purely to point migration at the binding
-/// syntax (the call itself no longer evaluates: `frontmatter` is undefined).
-fn legacy_call(source: &Source) -> bool {
-    let Some(markup) = source.root().cast::<Markup>() else {
-        return false;
-    };
-    markup
-        .exprs()
-        .find(|e| !matches!(e, Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_)))
-        .is_some_and(|first| match first {
-            Expr::FuncCall(call) => {
-                matches!(call.callee(), Expr::Ident(ident) if ident.get() == "frontmatter")
-            }
-            _ => false,
-        })
 }
 
 /// Typed accessors over an evaluated frontmatter [`Value`]. The `path`/`key`

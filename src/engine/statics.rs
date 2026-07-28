@@ -77,7 +77,7 @@ impl<'a> Static<'a> {
 
     /// Where a static file at `rel` is written: its place under `dist`, unless
     /// that falls inside the asset directory, which the pipeline replaces
-    /// wholesale — those go to the staging tree and are published with it.
+    /// wholesale: those go to the staging tree and are published with it.
     fn destination(&self, rel: &Path) -> PathBuf {
         let (served, staging) = &self.assets;
         let direct = self.dist.join(rel);

@@ -10,12 +10,17 @@
 //! - **Debug logs** ([`trace`]): `tracing` events for `-v`/`-vv`/`RUST_LOG`,
 //!   strictly diagnostic.
 //!
+//! What a line is made of lives beside it: `marker` is the one table of status
+//! glyphs and their colours, `fmt` the count, size, duration and path adapters
+//! every line formats through, and `progress` the compile bar.
+//!
 //! Everything goes to stderr (stdout stays reserved for data), through
 //! `anstream` so color strips on pipes and under `NO_COLOR`. Output is
 //! best-effort by design: a failed terminal write never fails a build, so every
 //! method here is infallible.
 
 mod fmt;
+mod marker;
 mod progress;
 pub mod trace;
 
@@ -28,8 +33,35 @@ use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Severity};
 use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
-pub use fmt::{Bytes, Count, Dur, Paths};
+pub use fmt::{Bytes, Count, Dur, Paths, term_width, wrap};
+pub use marker::{Marker, PageStatus};
 pub use progress::Progress;
+
+/// Return the cursor to column 0 and erase the line: what makes a transient
+/// status line transient. Written raw because it is cursor control rather than
+/// styling, so `anstream` has nothing to strip; every use is guarded by a tty
+/// check, since on a pipe it would strand the escape in the log.
+const CLEAR_LINE: &str = "\r\x1b[2K";
+
+/// The width `➜` labels are padded to, so consecutive arrows line their values
+/// up. Sized to the longest label in use (`watching`).
+const ARROW_LABEL: usize = 9;
+
+/// The column an arrow's value starts at: the two-space indent, the glyph, a
+/// space, the padded label, a space. A caller laying out a multi-line value
+/// aligns its continuations here.
+pub const ARROW_VALUE_COLUMN: usize = 2 + 1 + 1 + ARROW_LABEL + 1;
+
+/// The band the diagnostic renderer's width is clamped into, and what it uses
+/// when the terminal size is unavailable (piped output). Narrower than 60
+/// columns shreds the help text; past 120 the prose is hard to track back.
+const REPORT_MIN_WIDTH: usize = 60;
+const REPORT_MAX_WIDTH: usize = 120;
+const REPORT_NO_TERMINAL_WIDTH: usize = 96;
+
+/// Columns [`Ui::flush`] spends indenting each rendered line into the report
+/// column, counted twice so the box keeps the same margin on its right.
+const REPORT_MARGIN: usize = 4;
 
 /// Output verbosity level.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -139,7 +171,7 @@ impl Ui {
         if s.level < Level::Default {
             return;
         }
-        let _ = writeln!(s.out, "\n  {} {}", "◆".cyan().bold(), msg.bold());
+        let _ = writeln!(s.out, "\n  {} {}", Marker::Section, msg.bold());
     }
 
     /// A result line: `✓ built 24 pages .. in 132ms`. Shown even at `--quiet`
@@ -148,7 +180,8 @@ impl Ui {
         self.done_inner(msg, true);
     }
 
-    /// like [`done`](Self::done) but without the leading indent (perfectionism alignment issues)
+    /// Like [`done`](Self::done) but flush left, for a result that stands on its
+    /// own rather than closing an indented stage.
     pub fn done_plain(&self, msg: impl Display) {
         self.done_inner(msg, false);
     }
@@ -159,9 +192,9 @@ impl Ui {
             return;
         }
         if indent {
-            let _ = writeln!(s.out, "  {} {}", "✓".green().bold(), msg);
+            let _ = writeln!(s.out, "  {} {}", Marker::Done, msg);
         } else {
-            let _ = writeln!(s.out, "{} {}", "✓".green().bold(), msg);
+            let _ = writeln!(s.out, "{} {}", Marker::Done, msg);
         }
     }
 
@@ -180,7 +213,7 @@ impl Ui {
         if s.level < Level::Default {
             return;
         }
-        let _ = writeln!(s.out, "    {} {}", "↳".dimmed(), msg);
+        let _ = writeln!(s.out, "    {} {}", Marker::Item, msg);
     }
 
     /// Rows hung off the preceding result as a dimmed tree: each row gets a
@@ -192,8 +225,12 @@ impl Ui {
         }
         let last = rows.len().saturating_sub(1);
         for (i, row) in rows.iter().enumerate() {
-            let connector = if i == last { "╰─" } else { "├─" };
-            let _ = writeln!(s.out, "  {} {}", connector.dimmed(), row);
+            let connector = if i == last {
+                Marker::End
+            } else {
+                Marker::Branch
+            };
+            let _ = writeln!(s.out, "  {connector} {row}");
         }
     }
 
@@ -209,8 +246,8 @@ impl Ui {
         let _ = writeln!(
             s.out,
             "  {} {} {}",
-            "➜".green().bold(),
-            format!("{label:<9}").bold(),
+            Marker::Pointer,
+            format!("{label:<ARROW_LABEL$}").bold(),
             value
         );
     }
@@ -233,7 +270,7 @@ impl Ui {
         let _ = writeln!(
             s.out,
             "    {} {} {}",
-            status.icon(),
+            status.marker(),
             Paths(&path.to_string()),
             status.label().dimmed()
         );
@@ -248,7 +285,7 @@ impl Ui {
         let _ = writeln!(
             s.out,
             "    {} {} {}",
-            "·".dimmed(),
+            Marker::Skipped,
             Paths(&path.to_string()),
             reason.dimmed()
         );
@@ -301,7 +338,7 @@ impl Ui {
         }
         // clear any pending transient status line so the first block starts clean.
         if self.tty {
-            let _ = write!(s.out, "\r\x1b[2K");
+            let _ = write!(s.out, "{CLEAR_LINE}");
         }
         for (text, count) in &seen {
             let _ = writeln!(s.out);
@@ -321,8 +358,12 @@ impl Ui {
     fn handler(&self) -> GraphicalReportHandler {
         let width = console::Term::stderr()
             .size_checked()
-            .map(|(_, cols)| (cols as usize).saturating_sub(4).clamp(60, 120))
-            .unwrap_or(96);
+            .map(|(_, cols)| {
+                (cols as usize)
+                    .saturating_sub(REPORT_MARGIN)
+                    .clamp(REPORT_MIN_WIDTH, REPORT_MAX_WIDTH)
+            })
+            .unwrap_or(REPORT_NO_TERMINAL_WIDTH);
         GraphicalReportHandler::new_themed(GraphicalTheme::unicode()).with_width(width)
     }
 
@@ -335,7 +376,7 @@ impl Ui {
         if s.level < Level::Default || !self.tty {
             return;
         }
-        let _ = write!(s.out, "\r\x1b[2K  {} {}", "⟳".cyan(), msg.dimmed());
+        let _ = write!(s.out, "{CLEAR_LINE}  {} {}", Marker::Working, msg.dimmed());
         let _ = s.out.flush();
     }
 
@@ -344,13 +385,13 @@ impl Ui {
     /// [`Ui::status`] line first, so rebuilds read as a tidy vite-style log.
     pub fn event(&self, path: impl Display, pages: usize, elapsed: Duration) {
         let mut s = self.state.lock();
-        let clear = if self.tty { "\r\x1b[2K" } else { "" };
+        let clear = if self.tty { CLEAR_LINE } else { "" };
         let _ = writeln!(
             s.out,
             "{}  {}  {} {}  {} {}",
             clear,
             fmt::clock().dimmed(),
-            "~".green(),
+            Marker::Changed,
             Paths(&path.to_string()),
             Count::pages(pages).dimmed(),
             Dur(elapsed).dimmed()
@@ -380,122 +421,6 @@ impl Ui {
             Progress::bar(verb, len as u64)
         } else {
             Progress::hidden()
-        }
-    }
-}
-
-/// The `·`-separated list separator shared by multi-item lines (the watch list,
-/// the build breakdown), so they wrap and read the same way.
-const DOT: &str = " · ";
-
-/// The usable terminal width in columns, clamped to a sane band and falling back
-/// to 100 when the size is unavailable (piped output, no tty). The single width
-/// source for [`wrap`].
-pub fn term_width() -> usize {
-    console::Term::stdout()
-        .size_checked()
-        .map(|(_, cols)| (cols as usize).clamp(40, 200))
-        .unwrap_or(100)
-}
-
-/// Lay out `·`-separated `items` so no line exceeds `width`, with every line
-/// after the first indented to `indent` columns, aligning continuations under
-/// the first item. Returns the ready-to-print value (embedded newlines and all),
-/// so a long watch list or build breakdown flows onto extra lines instead of
-/// running off-screen. A single item wider than the budget still takes its own
-/// line rather than being split.
-pub fn wrap(items: &[String], indent: usize, width: usize) -> String {
-    // Measure display columns, not bytes: the separator's middle dot is
-    // multi-byte, and an item may carry ANSI color (the build breakdown does),
-    // both of which a byte or char count would get wrong.
-    let sep = console::measure_text_width(DOT);
-    let mut lines: Vec<String> = Vec::new();
-    let mut line = String::new();
-    let mut col = indent;
-    for item in items {
-        let w = console::measure_text_width(item);
-        if line.is_empty() {
-            line.push_str(item);
-            col = indent + w;
-        } else if col + sep + w <= width {
-            line.push_str(DOT);
-            line.push_str(item);
-            col += sep + w;
-        } else {
-            lines.push(std::mem::take(&mut line));
-            line.push_str(item);
-            col = indent + w;
-        }
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines.join(&format!("\n{}", " ".repeat(indent)))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::wrap;
-
-    fn items(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn wrap_keeps_a_short_list_on_one_line() {
-        assert_eq!(wrap(&items(&["a", "b", "c"]), 2, 80), "a · b · c");
-    }
-
-    #[test]
-    fn wrap_breaks_at_width_and_aligns_continuations() {
-        // indent 2: "aaa · bbb" ends at col 11; " · ccc" would reach 17 > 14, so
-        // ccc starts a new line padded to the indent.
-        assert_eq!(
-            wrap(&items(&["aaa", "bbb", "ccc", "ddd"]), 2, 14),
-            "aaa · bbb\n  ccc · ddd"
-        );
-    }
-
-    #[test]
-    fn wrap_gives_an_overlong_item_its_own_line() {
-        // A single item wider than the budget is not split; it just sits alone.
-        assert_eq!(
-            wrap(&items(&["short", "a-very-long-single-item"]), 0, 10),
-            "short\na-very-long-single-item"
-        );
-    }
-
-    #[test]
-    fn wrap_counts_the_multibyte_separator_by_columns() {
-        // ` · ` is 3 columns but 4 bytes; two 4-char items plus a separator is
-        // 11 columns, which fits a width of 11 exactly.
-        assert_eq!(wrap(&items(&["aaaa", "bbbb"]), 0, 11), "aaaa · bbbb");
-    }
-}
-
-/// Per-page build status for progress reporting.
-#[derive(Debug, Clone, Copy)]
-pub enum PageStatus {
-    Built,
-    Cached,
-    Failed,
-}
-
-impl PageStatus {
-    /// The status glyph, already colored for its meaning.
-    fn icon(self) -> String {
-        match self {
-            Self::Built => "✓".green().to_string(),
-            Self::Cached => "→".cyan().to_string(),
-            Self::Failed => "✗".red().to_string(),
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::Built => "built",
-            Self::Cached => "cached",
-            Self::Failed => "failed",
         }
     }
 }

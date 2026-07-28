@@ -4,7 +4,7 @@ use typst_html::{HtmlDocument, attr};
 
 use crate::config::Config;
 use crate::render::links::Link;
-use crate::render::transform::{Cx, ElementExt, Transform};
+use crate::render::transform::{Cx, DocumentExt, ElementExt, Transform};
 
 /// The core [`Transform`]: resolves internal `.typ` source-path links to
 /// permalinks. Always runs (it is URL resolution, not an optional pass) and
@@ -27,7 +27,7 @@ impl Transform for Links {
         } = cx;
         let broken = &mut found.broken;
         let lang = config.multilingual().then_some(page.lang.as_str());
-        doc.root_mut().walk(&mut |element| {
+        doc.walk(|element| {
             element.rewrite(&[attr::href, attr::src], |value| {
                 match links.classify(value, &page.source, lang) {
                     Link::Resolved(url) => Some(url),

@@ -4,7 +4,7 @@ use typst_html::HtmlDocument;
 
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform, URL_ATTRS};
+use super::{Cx, DocumentExt, Transform};
 
 /// The final [`Transform`]: shifts every on-page root-absolute URL under the
 /// site's [`base_path`](Config::base_path) for subdirectory hosting. Runs after
@@ -20,11 +20,9 @@ impl Transform for BasePath {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let config = cx.config;
-        doc.root_mut().walk(&mut |element| {
-            element.assets(URL_ATTRS, |value| {
-                let prefixed = config.prefixed(value);
-                (prefixed != value).then_some(prefixed)
-            });
+        doc.assets(|value| {
+            let prefixed = config.prefixed(value);
+            (prefixed != value).then_some(prefixed)
         });
     }
 }

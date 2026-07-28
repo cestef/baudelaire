@@ -15,8 +15,12 @@ use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 use crate::render::AssetMap;
+
+/// OpenGraph names its tags with `property` where the HTML spec uses `name`.
+/// typst-html has no constant for it, since it is RDFa rather than HTML.
+const PROPERTY: HtmlAttr = HtmlAttr::constant("property");
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;
@@ -36,7 +40,7 @@ impl Transform for Meta {
         if tags.is_empty() {
             return;
         }
-        if let Some(head) = doc.root_mut().head() {
+        if let Some(head) = doc.head() {
             for node in tags {
                 head.children.push(node);
             }
@@ -54,6 +58,18 @@ struct Card<'a> {
     assets: &'a AssetMap,
 }
 
+/// What a page says about itself, resolved once and then spelled three ways.
+struct Facts {
+    title: String,
+    description: Option<String>,
+    /// Already fingerprinted and absolutized, since a social image is read by a
+    /// crawler that has no page to resolve a relative URL against.
+    image: Option<String>,
+    canonical: Option<String>,
+    /// The OpenGraph object type.
+    kind: &'static str,
+}
+
 impl Card<'_> {
     /// This page's generated card, when the build makes one for it. Named from
     /// the permalink alone, so the tag can be written while the image is still
@@ -64,44 +80,69 @@ impl Card<'_> {
             .then(|| self.config.generate.cards.url(&self.page.permalink))
     }
 
+    /// Every tag this page carries, in emission order: the plain document meta,
+    /// then OpenGraph, then the Twitter card, then the link relations.
     fn tags(&self) -> Vec<HtmlNode> {
-        let fm = &self.page.frontmatter;
-        let title = fm.title.clone().unwrap_or_default();
-        let description = fm.text("description").or_else(|| fm.text("summary"));
-        // An authored image always wins; a generated card fills in for the pages
-        // that have none, which is the whole point of generating them.
-        let image = fm
-            .text("image")
-            .or_else(|| self.generated_card())
-            .map(|src| self.absolute(&src));
-        let canonical = self.url();
-        // A dated page is an article; everything else is a plain website page.
-        let kind = if fm.date.is_some() {
-            "article"
-        } else {
-            "website"
-        };
-
+        let facts = self.facts();
         let mut tags = Vec::new();
-        if let Some(description) = &description {
+        self.document(&facts, &mut tags);
+        self.opengraph(&facts, &mut tags);
+        Self::twitter(&facts, &mut tags);
+        if let Some(url) = &facts.canonical {
+            tags.push(Self::canonical(url));
+        }
+        self.alternates(&mut tags);
+        tags
+    }
+
+    /// What every vocabulary below says the same thing about, resolved once:
+    /// each of the three spells these out differently, and a value computed per
+    /// group is a value that can disagree between them.
+    fn facts(&self) -> Facts {
+        let fm = &self.page.frontmatter;
+        Facts {
+            title: fm.title.clone().unwrap_or_default(),
+            description: fm.text("description").or_else(|| fm.text("summary")),
+            // An authored image always wins; a generated card fills in for the
+            // pages that have none, which is the whole point of generating them.
+            image: fm
+                .text("image")
+                .or_else(|| self.generated_card())
+                .map(|src| self.absolute(&src)),
+            canonical: self.url(),
+            // A dated page is an article; everything else is a plain website page.
+            kind: match fm.date.is_some() {
+                true => "article",
+                false => "website",
+            },
+        }
+    }
+
+    /// The document-level tags, which predate every social vocabulary.
+    fn document(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+        if let Some(description) = &facts.description {
             tags.push(Self::named("description", description));
         }
-        let author = fm
+        let author = self
+            .page
+            .frontmatter
             .text("author")
             .or_else(|| self.config.author(&self.page.lang).map(str::to_owned));
         if let Some(author) = author {
             tags.push(Self::named("author", &author));
         }
+    }
 
-        // OpenGraph.
-        tags.push(Self::property("og:type", kind));
-        if !title.is_empty() {
-            tags.push(Self::property("og:title", &title));
+    /// The OpenGraph tags, which is what a link preview reads.
+    fn opengraph(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+        tags.push(Self::property("og:type", facts.kind));
+        if !facts.title.is_empty() {
+            tags.push(Self::property("og:title", &facts.title));
         }
-        if let Some(description) = &description {
+        if let Some(description) = &facts.description {
             tags.push(Self::property("og:description", description));
         }
-        if let Some(url) = &canonical {
+        if let Some(url) = &facts.canonical {
             tags.push(Self::property("og:url", url));
         }
         if self.config.site.is_some() {
@@ -111,34 +152,30 @@ impl Card<'_> {
             ));
         }
         tags.push(Self::property("og:locale", &Self::locale(&self.page.lang)));
-        if let Some(image) = &image {
+        if let Some(image) = &facts.image {
             tags.push(Self::property("og:image", image));
         }
+    }
 
-        // Twitter Card.
+    /// The Twitter card tags, which only restate what OpenGraph already said,
+    /// bar the card size an image implies.
+    fn twitter(facts: &Facts, tags: &mut Vec<HtmlNode>) {
         tags.push(Self::named(
             "twitter:card",
-            if image.is_some() {
-                "summary_large_image"
-            } else {
-                "summary"
+            match facts.image.is_some() {
+                true => "summary_large_image",
+                false => "summary",
             },
         ));
-        if !title.is_empty() {
-            tags.push(Self::named("twitter:title", &title));
+        if !facts.title.is_empty() {
+            tags.push(Self::named("twitter:title", &facts.title));
         }
-        if let Some(description) = &description {
+        if let Some(description) = &facts.description {
             tags.push(Self::named("twitter:description", description));
         }
-        if let Some(image) = &image {
+        if let Some(image) = &facts.image {
             tags.push(Self::named("twitter:image", image));
         }
-
-        if let Some(url) = &canonical {
-            tags.push(Self::canonical(url));
-        }
-        self.alternates(&mut tags);
-        tags
     }
 
     /// `<link rel="alternate" hreflang="..">` for each of a translated page's
@@ -209,31 +246,31 @@ impl Card<'_> {
 
     /// A `<meta property=".." content="..">` tag (OpenGraph).
     fn property(property: &str, content: &str) -> HtmlNode {
-        Self::meta(HtmlAttr::constant("property"), property, content)
+        Self::meta(PROPERTY, property, content)
     }
 
     fn meta(key: HtmlAttr, key_value: &str, content: &str) -> HtmlNode {
-        let mut el = HtmlElement::new(tag::meta);
-        el.attrs.push(key, key_value);
-        el.attrs.push(attr::content, content);
-        HtmlNode::Element(el)
+        HtmlElement::new(tag::meta)
+            .with_attr(key, key_value)
+            .with_attr(attr::content, content)
+            .into()
     }
 
     /// A `<link rel="canonical" href="..">` tag.
     fn canonical(href: &str) -> HtmlNode {
-        let mut el = HtmlElement::new(tag::link);
-        el.attrs.push(attr::rel, "canonical");
-        el.attrs.push(attr::href, href);
-        HtmlNode::Element(el)
+        HtmlElement::new(tag::link)
+            .with_attr(attr::rel, "canonical")
+            .with_attr(attr::href, href)
+            .into()
     }
 
     /// A `<link rel="alternate" hreflang=".." href="..">` tag.
     fn alternate(hreflang: &str, href: &str) -> HtmlNode {
-        let mut el = HtmlElement::new(tag::link);
-        el.attrs.push(attr::rel, "alternate");
-        el.attrs.push(HtmlAttr::constant("hreflang"), hreflang);
-        el.attrs.push(attr::href, href);
-        HtmlNode::Element(el)
+        HtmlElement::new(tag::link)
+            .with_attr(attr::rel, "alternate")
+            .with_attr(attr::hreflang, hreflang)
+            .with_attr(attr::href, href)
+            .into()
     }
 }
 

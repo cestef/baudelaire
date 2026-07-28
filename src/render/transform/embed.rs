@@ -12,7 +12,7 @@ use typst_html::HtmlDocument;
 use crate::config::Config;
 use crate::mime::Mime;
 
-use super::{Cx, ElementExt, Transform, URL_ATTRS};
+use super::{Cx, DocumentExt, Transform};
 use crate::render::AssetMap;
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
@@ -25,9 +25,7 @@ impl Transform for Embed {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let inliner = Inliner::new(cx.config, cx.assets);
-        doc.root_mut().walk(&mut |element| {
-            element.assets(URL_ATTRS, |value| inliner.inline(value));
-        });
+        doc.assets(|value| inliner.inline(value));
     }
 }
 
@@ -70,38 +68,50 @@ impl<'a> Inliner<'a> {
         Some(format!(
             "data:{};base64,{}",
             Mime::of(&path),
-            base64(&bytes)
+            Self::base64(&bytes)
         ))
     }
-}
 
-/// Standard (RFC 4648) base64 with `=` padding.
-fn base64(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let bits = (u32::from(chunk[0]) << 16)
-            | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
-            | u32::from(chunk.get(2).copied().unwrap_or(0));
-        out.push(TABLE[(bits >> 18 & 0x3f) as usize] as char);
-        out.push(TABLE[(bits >> 12 & 0x3f) as usize] as char);
-        out.push(if chunk.len() > 1 {
-            TABLE[(bits >> 6 & 0x3f) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            TABLE[(bits & 0x3f) as usize] as char
-        } else {
-            '='
-        });
+    /// Standard (RFC 4648) base64 with `=` padding.
+    fn base64(bytes: &[u8]) -> String {
+        /// The RFC 4648 alphabet, indexed by the six-bit group it encodes.
+        const TABLE: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        /// The `n`th six-bit group of a chunk's 24 bits, most significant
+        /// first, which is the order they are written in.
+        fn sextet(bits: u32, n: u32) -> char {
+            TABLE[(bits >> (18 - n * 6) & 0x3f) as usize] as char
+        }
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let bits = (u32::from(chunk[0]) << 16)
+                | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
+                | u32::from(chunk.get(2).copied().unwrap_or(0));
+            out.push(sextet(bits, 0));
+            out.push(sextet(bits, 1));
+            // A short chunk pads rather than encoding the zero bits it never had.
+            out.push(if chunk.len() > 1 {
+                sextet(bits, 2)
+            } else {
+                '='
+            });
+            out.push(if chunk.len() > 2 {
+                sextet(bits, 3)
+            } else {
+                '='
+            });
+        }
+        out
     }
-    out
 }
 
 #[cfg(test)]
 mod tests {
-    use super::base64;
+    use super::Inliner;
+
+    fn base64(bytes: &[u8]) -> String {
+        Inliner::base64(bytes)
+    }
 
     #[test]
     fn base64_matches_rfc4648_vectors() {

@@ -252,6 +252,29 @@ pub struct BaseUrlMissing {
     pub effect: &'static str,
 }
 
+/// The site's config asked for a capability this binary was not compiled with.
+///
+/// Every optional feature removes capability silently: a `.css` file is copied
+/// verbatim, a card is never drawn, an image is never re-encoded. The build is
+/// green either way, so without this the author only learns from the output.
+/// One struct rather than one per feature, like [`BaseUrlMissing`]: the
+/// condition is the same in every case and only the nouns change.
+#[derive(thiserror::Error, miette::Diagnostic, Debug, Clone, Copy)]
+#[error("`{setting}` needs the `{cargo}` feature, which this build lacks: {effect}")]
+#[diagnostic(
+    code(baudelaire::feature::missing),
+    severity(warning),
+    help("rebuild with `--features {cargo}`, or drop `{setting}` from config.kdl")
+)]
+pub struct FeatureMissing {
+    /// The config that asked, spelled as the author writes it in `config.kdl`.
+    pub setting: &'static str,
+    /// The cargo feature that compiles the capability in.
+    pub cargo: &'static str,
+    /// What the build does instead: `stylesheets are copied unminified`, ..
+    pub effect: &'static str,
+}
+
 /// Pages a announce run skipped because they carry no publication date.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{} skipped: no publication date", crate::ui::Count::pages(*count))]

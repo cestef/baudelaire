@@ -5,21 +5,24 @@
 
 pub mod defaults;
 pub(crate) mod dispatch;
+mod node;
 pub mod parse;
 pub mod permalink;
 pub mod profile;
 #[cfg(test)]
 mod tests;
+mod url;
 mod value;
 
 use std::path::PathBuf;
 
 use kdl::KdlDocument;
 
+use crate::config::dispatch::Section;
 use crate::error::{ConfigError, Result};
 
-pub use defaults::{SortKey, UrlStyle};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
+pub use url::{BaseUrl, Percent, UrlStyle};
 
 /// Top-level site configuration.
 #[derive(Debug, Clone)]
@@ -207,7 +210,7 @@ impl Config {
             source: text.to_owned(),
             ..base
         };
-        Self::RULES.apply(&mut config, doc.nodes(), text)?;
+        config.apply(doc.nodes(), text)?;
         Ok(config)
     }
 
@@ -231,6 +234,10 @@ impl Config {
     /// static hosts serve for unmatched URLs, and what the dev server falls
     /// back to; single source for both.
     pub const NOT_FOUND: &'static str = "404.html";
+
+    /// The key holding the profile partials, shared by the top-level rule that
+    /// parses it and the guard refusing one *inside* a profile.
+    pub(crate) const PROFILES: &'static str = "profiles";
 
     /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the
     /// one builder every subsystem uses to locate its local state under
@@ -290,9 +297,7 @@ impl Config {
     /// The configured base URL, normalized for joining. `None` when `url` is
     /// unset: URL-absolute features gate on this.
     pub fn base(&self) -> Option<BaseUrl> {
-        self.url
-            .as_deref()
-            .map(|url| BaseUrl(url.trim_end_matches('/').to_owned()))
+        self.url.as_deref().map(BaseUrl::new)
     }
 
     /// The path the site is served under, from the `url`'s path component
@@ -387,12 +392,17 @@ impl Config {
         // served as not-found. A translated `404.fr.typ` localizes to
         // `/{lang}/404/` and belongs at `{lang}/404.html` for the same reason.
         // Only a language scope counts: `/notes/404/` is an ordinary page.
-        let stem = trimmed.strip_suffix(".html").unwrap_or(&trimmed);
-        if stem == "404" {
+        let stem = trimmed.strip_suffix(UrlStyle::PAGE).unwrap_or(&trimmed);
+        // the not-found page's URL stem, derived so its name is written once
+        let not_found = Self::NOT_FOUND
+            .strip_suffix(UrlStyle::PAGE)
+            .unwrap_or(Self::NOT_FOUND);
+        if stem == not_found {
             return self.paths.dist.join(Self::NOT_FOUND);
         }
         if let Some(scope) = stem
-            .strip_suffix("/404")
+            .strip_suffix(not_found)
+            .and_then(|head| head.strip_suffix('/'))
             .filter(|scope| self.languages.iter().any(|(code, _)| code == scope))
         {
             return self.paths.dist.join(scope).join(Self::NOT_FOUND);
@@ -450,114 +460,6 @@ impl Config {
         self.localize(code, &format!("/{id}"))
             .trim_matches('/')
             .to_owned()
-    }
-}
-
-/// The site base URL with its trailing slash normalized away: the single
-/// join rule for every consumer that makes root-relative paths absolute
-/// (sitemap, feeds, robots, llms, meta tags).
-#[derive(Debug, Clone)]
-pub struct BaseUrl(String);
-
-impl BaseUrl {
-    /// Absolute URL for a root-relative path (a permalink or `/file`),
-    /// percent-encoded.
-    ///
-    /// Slugs keep Unicode letters, so a permalink carries raw UTF-8. Browsers
-    /// cope, but an XML sitemap's `<loc>` and a feed's `<id>`/`<link>` are
-    /// specified as URIs and consumers reject or mangle raw bytes there. Every
-    /// absolute URL the site emits goes through here, so it is encoded once.
-    pub fn join(&self, path: impl AsRef<str>) -> String {
-        format!("{}{}", self.0, Percent::encode(path.as_ref()))
-    }
-
-    /// Absolute URL for a bare output file name sitting at the site root, e.g.
-    /// `sitemap.xml` -> `https://site/sitemap.xml`.
-    pub fn file(&self, name: &str) -> String {
-        self.join(format!("/{name}"))
-    }
-
-    /// Make a root-relative `path` absolute when a base is configured, else
-    /// leave it as-is: the one "absolutize if we can, otherwise stay relative"
-    /// rule shared by every URL emitter. Non-root-relative refs (external URLs)
-    /// pass through untouched.
-    pub fn resolve(base: Option<&BaseUrl>, path: &str) -> String {
-        match base {
-            Some(base) if path.starts_with('/') => base.join(path),
-            _ => path.to_owned(),
-        }
-    }
-
-    /// The site home page URL (base with a trailing slash).
-    pub fn home(&self) -> String {
-        format!("{}/", self.0)
-    }
-}
-
-impl std::fmt::Display for BaseUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-/// Percent-encoding, as a URL path carries it.
-pub struct Percent;
-
-impl Percent {
-    /// Encode the bytes a URI path may not carry literally, leaving an existing
-    /// `%XX` triplet alone so a path is never encoded twice.
-    pub fn encode(path: &str) -> String {
-        let bytes = path.as_bytes();
-        let mut out = String::with_capacity(path.len());
-        let mut i = 0;
-        while i < bytes.len() {
-            let byte = bytes[i];
-            if byte == b'%' && Self::triplet(bytes, i).is_some() {
-                out.push_str(&path[i..i + 3]);
-                i += 3;
-                continue;
-            }
-            match Self::literal(byte) {
-                true => out.push(byte as char),
-                false => out.push_str(&format!("%{byte:02X}")),
-            }
-            i += 1;
-        }
-        out
-    }
-
-    /// `%XX` triplets decoded back to bytes, everything else left alone. An
-    /// invalid triplet is kept verbatim: it cannot name a real file either way,
-    /// and rejecting the request would turn a typo into a 400.
-    pub fn decode(path: &str) -> String {
-        let bytes = path.as_bytes();
-        let mut out = Vec::with_capacity(bytes.len());
-        let mut i = 0;
-        while i < bytes.len() {
-            match Self::triplet(bytes, i).filter(|_| bytes[i] == b'%') {
-                Some(byte) => {
-                    out.push(byte);
-                    i += 3;
-                }
-                None => {
-                    out.push(bytes[i]);
-                    i += 1;
-                }
-            }
-        }
-        String::from_utf8(out).unwrap_or_else(|_| path.to_owned())
-    }
-
-    /// The byte a `%XX` at `i` encodes, if it is a well-formed triplet.
-    fn triplet(bytes: &[u8], i: usize) -> Option<u8> {
-        let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
-        u8::from_str_radix(hex, 16).ok()
-    }
-
-    /// Whether a byte may appear literally in a path: RFC 3986 `unreserved`,
-    /// plus the sub-delimiters and separators a site URL legitimately uses.
-    fn literal(byte: u8) -> bool {
-        byte.is_ascii_alphanumeric() || b"-._~/:@!$&'()*+,;=".contains(&byte)
     }
 }
 
@@ -631,6 +533,26 @@ pub struct CollectionConfig {
     /// Defaults to `page` (`/blog/page/2/`); an empty string drops the segment
     /// entirely (`/blog/2/`).
     pub prefix: String,
+}
+
+/// Ordering key for a collection's pages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SortKey {
+    /// Frontmatter `order` field, ascending.
+    #[default]
+    Order,
+    /// Frontmatter `date` field, ascending.
+    Date,
+    /// Frontmatter `title` field, alphabetical.
+    Title,
+}
+
+impl Named for SortKey {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("order", Self::Order),
+        ("date", Self::Date),
+        ("title", Self::Title),
+    ];
 }
 
 /// Languages written right to left, so `dir="rtl"` is right without the site
@@ -731,6 +653,14 @@ pub enum FeedKind {
     Json,
 }
 
+impl Named for FeedKind {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("rss", Self::Rss),
+        ("atom", Self::Atom),
+        ("json", Self::Json),
+    ];
+}
+
 impl FeedKind {
     /// The conventional output file name for this format.
     pub fn file(self) -> &'static str {
@@ -768,6 +698,11 @@ pub enum SearchFormat {
     Inverted,
 }
 
+impl Named for SearchFormat {
+    const NAMES: &'static [(&'static str, Self)] =
+        &[("json", Self::Json), ("inverted", Self::Inverted)];
+}
+
 impl SearchFormat {
     /// The conventional output file name for this format's index.
     pub fn file(self) -> &'static str {
@@ -792,6 +727,14 @@ pub enum SearchField {
     Title,
     Body,
     Tags,
+}
+
+impl Named for SearchField {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("title", Self::Title),
+        ("body", Self::Body),
+        ("tags", Self::Tags),
+    ];
 }
 
 /// HTML output options.
@@ -848,6 +791,10 @@ impl CardsConfig {
     /// The directory cards are written to under `dist`, and the leading segment
     /// of every card URL.
     pub const DIR: &'static str = "cards";
+
+    /// The widest and tallest a card may be. Unfurlers cap well below this; the
+    /// limit exists so a typo cannot ask for a gigapixel rasterization.
+    pub(crate) const MAX: i64 = 4096;
 
     /// The served URL of a page's card, whether or not it has been rendered
     /// yet: the meta transform names it while the file is still being made, the
@@ -982,6 +929,15 @@ pub trait Named: Copy + PartialEq + Sized + 'static {
             .map(|(name, _)| *name)
             .expect("NAMES lists every variant")
     }
+
+    /// The variant a config name spells, if any: the read direction of
+    /// [`NAMES`](Named::NAMES), and the only way a name becomes a variant.
+    fn of(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .find(|(known, _)| *known == name)
+            .map(|(_, variant)| *variant)
+    }
 }
 
 impl Named for Router {
@@ -1115,6 +1071,14 @@ pub enum PngStrip {
     Safe,
     /// Strip all non-critical chunks.
     All,
+}
+
+impl Named for PngStrip {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("none", Self::None),
+        ("safe", Self::Safe),
+        ("all", Self::All),
+    ];
 }
 
 /// JPEG optimization tuning (re-encode).

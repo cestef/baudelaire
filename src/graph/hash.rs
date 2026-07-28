@@ -1,6 +1,6 @@
 //! Content hashing for cache invalidation.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -71,6 +71,85 @@ impl Hash {
             .collect();
         files.sort_by(|(a, _), (b, _)| a.cmp(b));
         Self::of(&files)
+    }
+}
+
+/// The emitted name of an asset: the authored path with a short content digest
+/// spliced in before the extension (`css/app.css` -> `css/app.<digest>.css`).
+///
+/// One owner for the rule and for the digest's length, because two layers name
+/// the same kind of artifact and have to agree byte for byte: the asset pipeline
+/// emits `app.<digest>.css`, and the render pass lifts a typst-embedded image
+/// out to a file that must be indistinguishable from one the pipeline wrote.
+/// Living beside [`Hash`], below both, is also what keeps `render` from reaching
+/// into `engine` for a `usize`.
+///
+/// Where the name lands is the caller's choice, not the rule's: [`Self::path`]
+/// keeps the parent directories, [`Self::file`] drops them.
+pub struct AssetName<'a> {
+    path: &'a Path,
+    /// Spliced in after the stem, the extension kept. `None` means "name it as
+    /// authored", which is not the same as an empty suffix: rebuilding the name
+    /// at all would drop an extension the platform can spell but UTF-8 cannot.
+    suffix: Option<String>,
+}
+
+impl<'a> AssetName<'a> {
+    /// Hex digits of the digest spliced into a fingerprinted name. 16 hex chars
+    /// = 64 bits of blake3: collision-free in practice for a site's asset set.
+    pub const LEN: usize = 16;
+
+    /// A name for `path` carrying `suffix`, or the authored name when there is
+    /// none (`assets { fingerprint #false }`).
+    pub fn new(path: &'a Path, suffix: Option<String>) -> Self {
+        Self { path, suffix }
+    }
+
+    /// The suffix that names a file by its content: a `.` and the leading
+    /// [`Self::LEN`] hex digits of `bytes`' digest. The other suffix in play is
+    /// a responsive width (`-480`), which is the same splice with a suffix that
+    /// is not a digest.
+    pub fn digest(bytes: &[u8]) -> String {
+        format!(".{}", Hash::of_bytes(bytes).short(Self::LEN))
+    }
+
+    /// The name in place, parent directories kept: the asset pipeline writes
+    /// `css/app.<digest>.css` where it read `css/app.css`.
+    pub fn path(&self) -> PathBuf {
+        match &self.suffix {
+            Some(suffix) => self.path.with_file_name(self.spliced(suffix)),
+            None => self.path.to_path_buf(),
+        }
+    }
+
+    /// The bare file name, parent directories dropped: an externalized image is
+    /// served flat out of the asset root, whatever subdirectory of the project
+    /// it was authored in.
+    pub fn file(&self) -> String {
+        match &self.suffix {
+            Some(suffix) => self.spliced(suffix),
+            None => self
+                .path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+        }
+    }
+
+    /// The file name rebuilt: `suffix` after the stem, the extension echoed as
+    /// authored, and never invented for a file that has none (`LICENSE` must not
+    /// become `LICENSE.<digest>`).
+    fn spliced(&self, suffix: &str) -> String {
+        let stem = self
+            .path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default();
+        match self.path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) => format!("{stem}{suffix}.{ext}"),
+            None => format!("{stem}{suffix}"),
+        }
     }
 }
 
@@ -152,5 +231,88 @@ impl std::hash::Hasher for Blake3Hasher {
     /// projection. Required by the trait.
     fn finish(&self) -> u64 {
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AssetName, Hash};
+    use std::path::{Path, PathBuf};
+
+    fn name<'a>(path: &'a str, suffix: &str) -> AssetName<'a> {
+        AssetName::new(
+            Path::new(path),
+            (!suffix.is_empty()).then(|| suffix.to_owned()),
+        )
+    }
+
+    /// The suffix lands between the stem and the extension, and the parent
+    /// directories survive: this is the name the asset pipeline writes.
+    #[test]
+    fn a_path_keeps_its_directories() {
+        assert_eq!(
+            name("css/app.css", ".abc123").path(),
+            PathBuf::from("css/app.abc123.css")
+        );
+        assert_eq!(
+            name("img/photo.jpg", "-480").path(),
+            PathBuf::from("img/photo-480.jpg")
+        );
+    }
+
+    /// An extensionless file must not grow one: `LICENSE` becomes
+    /// `LICENSE.abc123`, never `LICENSE.abc123.<nothing>`.
+    #[test]
+    fn an_extensionless_name_never_gains_an_extension() {
+        assert_eq!(
+            name("LICENSE", ".abc123").path(),
+            PathBuf::from("LICENSE.abc123")
+        );
+        assert_eq!(name("dir/photo", "").file(), "photo");
+        assert_eq!(name("dir/photo", ".abc123").file(), "photo.abc123");
+    }
+
+    /// A file name drops the directories: an externalized image is served flat
+    /// out of the asset root.
+    #[test]
+    fn a_file_name_uses_the_base_name_and_keeps_the_extension() {
+        assert_eq!(name("content/blog/photo.png", "").file(), "photo.png");
+        assert_eq!(name("photo.png", "").file(), "photo.png");
+        assert_eq!(name("a/b/c.jpeg", "").file(), "c.jpeg");
+        assert_eq!(name("dir/photo.png", ".abc123").file(), "photo.abc123.png");
+    }
+
+    #[test]
+    fn a_name_preserves_extension_case_and_compound_names() {
+        // The extension is echoed verbatim (matched case-insensitively
+        // elsewhere, but never rewritten), and only the final component is
+        // dropped.
+        assert_eq!(name("dir/Photo.PNG", "").file(), "Photo.PNG");
+        assert_eq!(name("archive.tar.gz", "").file(), "archive.tar.gz");
+        assert_eq!(
+            name("archive.tar.gz", ".abc123").file(),
+            "archive.tar.abc123.gz"
+        );
+    }
+
+    /// With no suffix the authored name is handed back untouched, rather than
+    /// rebuilt from a stem and an extension.
+    #[test]
+    fn an_unsuffixed_path_is_left_as_authored() {
+        assert_eq!(name("css/app.css", "").path(), PathBuf::from("css/app.css"));
+    }
+
+    /// The digest is the content's, at the one shared length, and equal bytes
+    /// name equal files wherever they are read from.
+    #[test]
+    fn a_digest_is_derived_from_the_bytes_at_the_shared_length() {
+        let digest = AssetName::digest(b"body{}");
+        assert_eq!(digest, format!(".{}", Hash::of_bytes(b"body{}").short(16)));
+        assert_eq!(digest.len(), AssetName::LEN + 1);
+        assert_ne!(digest, AssetName::digest(b"body{ }"));
+        assert_eq!(
+            name("app.css", &digest).file(),
+            name("dir/app.css", &digest).file()
+        );
     }
 }

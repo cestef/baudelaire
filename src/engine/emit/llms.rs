@@ -50,7 +50,7 @@ impl Processor for Llms {
                     let _ = writeln!(md, "- [{}]({link})", page.title());
                 }
             }
-            let path = site.config.paths.dist.join(&scope).join(Self::FILE);
+            let path = site.dist(&[&scope, Self::FILE]);
             out.file(&path, &md)?;
             out.note(format_args!("wrote {}", path.display()));
         }

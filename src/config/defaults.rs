@@ -10,8 +10,8 @@ use crate::config::{
     DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig, HooksConfig, HtmlConfig,
     ImagesConfig, JpegConfig, LinkConfig, NavigationConfig, OptimizeConfig, Paths, PngConfig,
     PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig,
-    SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TypstConfig,
-    VerifyConfig,
+    SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig,
+    TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 
 impl Default for Config {
@@ -330,45 +330,16 @@ impl Default for CollectionConfig {
     }
 }
 
-/// How page permalinks map onto output files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum UrlStyle {
-    /// Directory-per-page: `foo.typ` -> `foo/index.html`, served at `/foo/`.
-    #[default]
-    Clean,
-    /// Flat files: `foo.typ` -> `foo.html`, served at `/foo.html`.
-    Flat,
-}
-
-impl UrlStyle {
-    /// Shape a page URL for this style.
-    ///
-    /// This is the half that used to be missing: the style only decided the
-    /// output *file*, while every permalink kept the clean trailing-slash form.
-    /// A flat site wrote `about.html` and then told the canonical tag, `og:url`,
-    /// the sitemap, the feeds, the redirects and every rewritten `.typ` link
-    /// that the page lived at `/about/`, which nothing serves. The site root is
-    /// `/` under both styles.
-    pub fn url(self, path: &str) -> String {
-        match self {
-            Self::Clean => path.to_owned(),
-            Self::Flat if path == "/" || path.ends_with(Self::PAGE) => path.to_owned(),
-            Self::Flat => format!("{}{}", path.trim_end_matches('/'), Self::PAGE),
+/// A taxonomy reads the frontmatter key that shares its id unless it names
+/// another, so its defaults depend on that id: the conversion *is* the
+/// `Default` impl it cannot have.
+impl From<String> for TaxonomyConfig {
+    fn from(id: String) -> Self {
+        Self {
+            key: id,
+            // opt-in: term pages and their index are extra output
+            listing: false,
+            template: None,
         }
     }
-
-    /// The extension a flat URL names its file with.
-    const PAGE: &'static str = ".html";
-}
-
-/// Ordering key for a collection's pages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum SortKey {
-    /// Frontmatter `order` field, ascending.
-    #[default]
-    Order,
-    /// Frontmatter `date` field, ascending.
-    Date,
-    /// Frontmatter `title` field, alphabetical.
-    Title,
 }

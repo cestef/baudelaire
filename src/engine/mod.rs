@@ -16,11 +16,12 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use tracing::debug;
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{FileId, Source};
 use typst_html::{HtmlDocument, HtmlOptions};
 
+use crate::codegen::Value;
 use crate::config::Config;
-use crate::content::{Data, Page, Section, plan};
+use crate::content::{Page, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
@@ -29,14 +30,17 @@ use crate::engine::check::{CheckedPage, Compiled, Links};
 #[cfg(feature = "cards")]
 use crate::engine::compile::card::Card;
 use crate::engine::compile::image::Images;
-use crate::engine::compile::layout::{Bind, Body, Layout};
+use crate::engine::compile::prepare::{Prepare, Prepared};
 use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
+use crate::error::warning::FeatureMissing;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
-use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root};
+use crate::graph::{
+    Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root, Roots,
+};
 use crate::render::{AssetMap, Fragments, Renderer, SrcSets};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
@@ -86,19 +90,117 @@ struct Generated {
     paths: Vec<PathBuf>,
 }
 
-/// A page reduced to what the cache check needs: its `FileId`, the exact text
-/// typst will compile, and that text's fingerprint, before the costly parse
-/// into a `Source` (deferred to [`Engine::compile`], run only for stale pages).
-type Prepared = (FileId, String, Hash);
+/// One optional capability, the config that asks for it, and what a binary
+/// built without it does instead.
+///
+/// The single source of truth for feature degradation. Every `#[cfg(feature)]`
+/// in the tree removes capability in silence: a `.css` file is copied verbatim,
+/// a card is never drawn, an image is never re-encoded, and the build is green
+/// either way. One row here is what turns that into a diagnostic, instead of a
+/// warning hand-written at each site that happens to notice.
+struct Gate {
+    /// The cargo feature that compiles the capability in.
+    cargo: &'static str,
+    /// Whether this binary has it. Spelled per row because `cfg!` takes a
+    /// feature name literally and so cannot be derived from `cargo`.
+    compiled: bool,
+    /// The config that asks for it, as the author writes it in `config.kdl`.
+    setting: &'static str,
+    /// Whether this site asked.
+    asked: fn(&Config) -> bool,
+    /// What the build produces instead.
+    effect: &'static str,
+    /// Whether this capability is what rewrites the references *inside* the
+    /// files it owns. Content-hashing renames files that other files name, so a
+    /// build that lost such a rewriter serves a stylesheet still naming its
+    /// assets by their pre-hash spelling: 404s out of a green build. Losing one
+    /// turns `assets { fingerprint }` off for the whole build instead.
+    rewrites: bool,
+}
 
-/// Per-language section-tree wrapper text, keyed by language code and picked by
-/// a page's language for its `page.sections`.
-struct Trees(std::collections::BTreeMap<String, String>);
+const GATES: &[Gate] = &[
+    Gate {
+        cargo: "css",
+        compiled: cfg!(feature = "css"),
+        setting: "assets { minify }",
+        asked: |config| config.assets.minify,
+        effect: "stylesheets are copied unminified",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "css",
+        compiled: cfg!(feature = "css"),
+        setting: "assets { fingerprint }",
+        asked: |config| config.assets.fingerprint,
+        effect: "asset filenames are left unhashed, since the `url()` and `@import` references inside stylesheets cannot be rewritten to match",
+        rewrites: true,
+    },
+    Gate {
+        cargo: "js",
+        compiled: cfg!(feature = "js"),
+        setting: "assets { bundle }",
+        asked: |config| config.assets.bundle,
+        effect: "JavaScript is copied verbatim, its imports unresolved and its output unminified",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "images",
+        compiled: cfg!(feature = "images"),
+        setting: "assets { images { optimize } }",
+        asked: |config| config.assets.images.optimize.any(),
+        effect: "PNG and JPEG assets are copied unoptimized",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "images",
+        compiled: cfg!(feature = "images"),
+        setting: "assets { images { responsive } }",
+        asked: |config| config.assets.images.responsive.enabled,
+        effect: "no width variants are written and no `srcset` is emitted",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "cards",
+        compiled: cfg!(feature = "cards"),
+        setting: "generate { cards }",
+        asked: |config| config.generate.cards.enabled,
+        effect: "no social card is rendered",
+        rewrites: false,
+    },
+];
 
-impl Trees {
-    /// This language's section tree as wrapper text (empty when none was built).
-    fn get(&self, lang: &str) -> &str {
-        self.0.get(lang).map_or("", String::as_str)
+impl Gate {
+    /// Walk the table once against a site's config: name every capability it
+    /// asked for that this binary lacks, and turn `assets { fingerprint }` off
+    /// when what would have kept it honest is missing.
+    ///
+    /// Turning it off rather than refusing the build is the same bargain every
+    /// other gate strikes: the capability goes, the site still stands. It is
+    /// applied here, before anything reads the config, so the whole build (the
+    /// pipeline's renames, the render pass's rewrites, the cache fingerprint)
+    /// agrees on one answer rather than disagreeing file by file.
+    fn resolve(mut config: Config) -> (Config, Vec<FeatureMissing>) {
+        let missing: Vec<&Gate> = GATES
+            .iter()
+            .filter(|gate| !gate.compiled && (gate.asked)(&config))
+            .collect();
+        if missing.iter().any(|gate| gate.rewrites) {
+            config.assets.fingerprint = false;
+        }
+        (
+            config,
+            missing.into_iter().map(FeatureMissing::from).collect(),
+        )
+    }
+}
+
+impl From<&Gate> for FeatureMissing {
+    fn from(gate: &Gate) -> Self {
+        Self {
+            setting: gate.setting,
+            cargo: gate.cargo,
+            effect: gate.effect,
+        }
     }
 }
 
@@ -109,10 +211,15 @@ pub struct Engine {
     /// The resolved theme, when the site names one. Resolved once here rather
     /// than per consumer, since obtaining a package can download it.
     theme: Option<Theme>,
+    /// What this binary cannot do that the site asked for, from [`Gate`].
+    gaps: Vec<FeatureMissing>,
 }
 
 impl Engine {
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
+        // Before anything else reads it: a gate can turn a setting off, and a
+        // half-applied config is what ships the broken site this guards against.
+        let (config, gaps) = Gate::resolve(config);
         let theme = config
             .theme
             .as_deref()
@@ -123,6 +230,7 @@ impl Engine {
             project,
             config,
             theme,
+            gaps,
         })
     }
 
@@ -140,52 +248,33 @@ impl Engine {
         built
     }
 
+    /// A build, phase by phase. Each phase is a method below; this is the only
+    /// place their order is spelled, and every constraint on that order is
+    /// documented where it binds.
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        fs::create_dir_all(&self.config.paths.dist)?;
-        // A staging tree here is a previous build's failure; clear it before the
-        // static copy, which writes into it (see `Static::destination`).
-        let _ = std::fs::remove_dir_all(self.config.asset_staging());
-        // Copy the static tree first, so a generated page or asset at the same
-        // output path overwrites it; static is the lowest-priority source.
-        let statics = Static::new(&self.config, self.theme.as_ref()).copy()?;
-        debug!(
-            count = statics.count,
-            bytes = statics.bytes,
-            "static copied"
-        );
-        let pages = plan(&self.config, &self.project)?;
-        debug!(
-            pages = pages.len(),
-            site = self.config.label(),
-            "planned build"
-        );
+        let statics = self.stage()?;
+        let planned = self.planned("planned build")?;
         let warned = ui.warnings();
-
-        // `before` hooks run ahead of the asset pipeline so anything they emit
-        // into `assets/` (e.g. Tailwind output) is fingerprinted like any asset.
+        // What this binary cannot do that the site asked for. Reported per build
+        // rather than per process: the dev server rebuilds in place, and the
+        // warning belongs with the output it explains. `check` stays silent,
+        // producing none of what a missing feature would have shaped.
+        for gap in &self.gaps {
+            ui.warn(*gap);
+        }
+        // `before` hooks run after the plan (a hook's output is this build's
+        // assets, not this build's content) and ahead of the asset pipeline, so
+        // anything they emit into `assets/` (e.g. Tailwind output) is
+        // fingerprinted like any asset.
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
-
-        // Build the section trees and the `sys.inputs.baudelaire` value once: both
-        // feed templates (`page.sections`, `sys.inputs`) AND the `baudelaire:*`
-        // JS modules, which reuse these rather than recompute them.
-        let trees = self.trees(&pages);
-        // Keyed by language: one bundle serves the whole site, so a
-        // default-language-only tree left every translation without a nav.
-        // Only the JS modules read this; templates get their own from `trees`.
+        // Built before the asset pipeline, whose `baudelaire:*` JS modules serve
+        // the section trees it holds, and after it in [`Pass`], which renders
+        // against what the pipeline produced.
+        let prepare = self.prepare(&planned.pages);
         #[cfg(feature = "js")]
-        let sections = crate::codegen::Value::dict(
-            self.config
-                .langs()
-                .into_iter()
-                .map(|lang| (lang.to_owned(), self.sections(&pages, lang))),
-        );
-        // The codegen `Value` view of the build context exists only to feed the
-        // `baudelaire:*` JS modules; Typst reads `sys.inputs` from the raw context.
-        #[cfg(feature = "js")]
-        let context = crate::codegen::Value::from(self.project.context());
-
+        let modules = Modules::new(self, &prepare);
         // the asset URL map feeds render-side fingerprint rewriting and folds
         // into the cache fingerprint, so a re-fingerprinted asset invalidates
         // the pages that reference it.
@@ -193,162 +282,26 @@ impl Engine {
             &self.config,
             self.theme.as_ref(),
             #[cfg(feature = "js")]
-            JsCtx {
-                pages: &pages,
-                context: &context,
-                sections: &sections,
-            },
+            modules.ctx(&planned.pages),
         );
         let processed = assets.process()?;
-        let asset_count = processed.count;
-        let asset_bytes = processed.bytes;
+        let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
-        let renderer = Renderer::new(
-            &pages,
-            processed.map,
-            processed.srcsets,
-            self.project.root(),
-        );
-        // render-side cache inputs: asset renames, the link map, the responsive
-        // variant manifest, and, only when pages inline asset bytes, the embedded
-        // contents (the per-page dependency tracker can't see them, since typst
-        // never reads them).
-        let render = RenderInputs {
-            assets: renderer.assets().fingerprint(),
-            links: renderer.links(),
-            srcsets: renderer.srcsets(),
-            // hash the *processed* asset tree, what Embed actually inlines: a
-            // bundle's bytes can change through imports outside the source
-            // assets dir (../lib, node_modules), which a source-dir hash misses.
-            embeds: self
-                .config
-                .html
-                .embed
-                .then(|| Hash::of_dir(&self.config.asset_staging())),
-            // `None` when cards are off *or* the template is missing; the
-            // second case fails the build on the first page it renders, so it
-            // never reaches a silent cache hit.
-            cards: self
-                .config
-                .generate
-                .cards
-                .active()
-                .then(|| Hash::of_file(&self.card_template()))
-                .flatten(),
-            modules: self.project.modules(),
-        };
-        // The injected values whose per-page reads drive fine-grained metadata
-        // invalidation: the analyzer records them from each page's syntax, the
-        // cache re-hashes them to decide reuse. One owned copy backs the cache;
-        // the analyzer borrows another view of the same trees.
-        let tracked = self.project.tracked();
-        let roots: Vec<Root> = tracked
-            .iter()
-            .map(|(base, tree)| Root { base, tree })
-            .collect();
-        let analyzer = Analyzer::new(roots, &self.project);
-        let mut cache = Cache::load(
-            &self.config,
-            &render,
-            tracked.clone(),
-            self.project.root(),
-            ui,
-        )?;
-
-        // split cache hits from stale pages. `prepare` produces each page's
-        // text + fingerprint without parsing it; the parse into a typst
-        // `Source` is deferred to `compile`, so a hit never pays to parse a
-        // page it won't render.
-        let mut cached: Vec<(&Page, String, Outputs)> = Vec::new();
-        let mut stale: Vec<(&Page, Result<Prepared>)> = Vec::new();
-        for page in &pages {
-            match self.prepare(page, &trees) {
-                Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
-                    Some((html, outputs)) => cached.push((page, html, outputs)),
-                    None => stale.push((page, Ok((id, text, fingerprint)))),
-                },
-                Err(e) => stale.push((page, Err(e))),
-            }
-        }
-        debug!(stale = stale.len(), reused = cached.len(), "cache split");
-
-        // Compile only the stale pages (already prepared during the cache
-        // split); cached pages keep the HTML they were built with.
-        let rendered = self.render_pages("compiling", stale, ui, |(page, prepared)| {
-            (
-                page,
-                prepared.and_then(|(id, text, fp)| {
-                    self.compile(page, id, text, fp, &renderer, &analyzer)
-                }),
-            )
-        })?;
-
-        for r in &rendered {
-            cache.record(
-                r.page,
-                r.fingerprint,
-                &r.html,
-                &r.deps,
-                &r.reads,
-                &r.outputs,
-            );
-        }
-        for (page, _, _) in &cached {
-            ui.page(self.relative(page), PageStatus::Cached);
-        }
+        let pass = Pass::new(self, &planned, prepare, processed.map, processed.srcsets);
+        let mut cache = self.cache(&pass, &planned, ui)?;
+        let (rendered, cached) = self.incremental(&pass, &mut cache, ui)?;
         self.validate(&rendered, &cached, false, ui)?;
-        // Copy every page's externalized images into the (freshly regenerated)
-        // asset directory: fresh pages carry their refs, cache hits their stored
-        // ones, so the files are present regardless of what recompiled.
-        let images = Images::new(&self.config, self.project.root()).copy(
-            rendered
-                .iter()
-                .flat_map(|r| &r.outputs.images)
-                .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
-            ui,
-        )?;
-        // pair every page (rendered and cache-served alike) with what the render
-        // pass produced for it once: write pass, blob staging, and processors
-        // share this view.
-        let outputs: Vec<Output> = rendered
-            .iter()
-            .map(|r| Output {
-                page: r.page,
-                html: r.html.as_str(),
-                fragments: r.outputs.fragments.as_ref(),
-            })
-            .chain(cached.iter().map(|(page, html, out)| Output {
-                page,
-                html: html.as_str(),
-                fragments: out.fragments.as_ref(),
-            }))
-            .collect();
-        // write page HTML in parallel: independent files, no shared state.
-        outputs
-            .par_iter()
-            .try_for_each(|out| fs::write_all(&out.page.output, out.html))?;
-        // Cards were rendered during compile, so only stale pages produced one;
-        // a cache hit leaves the file the previous build wrote in place, and the
-        // sweep below keeps it.
-        #[cfg(feature = "cards")]
-        rendered.par_iter().try_for_each(|r| match &r.card {
-            Some(png) => fs::write_all(
-                self.config
-                    .generate
-                    .cards
-                    .path(&self.config.paths.dist, &r.page.permalink),
-                png,
-            ),
-            None => Ok(()),
-        })?;
+        let images = self.images(&rendered, &cached, ui)?;
+        let outputs = Self::outputs(&rendered, &cached);
+        Self::write(&outputs)?;
+        self.cards(&rendered)?;
         // Every page is on disk pointing at the new asset filenames, so the
         // staged asset tree can replace the published one. Before this line a
         // failure leaves `dist` exactly as the previous build left it.
         assets.publish()?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
-        let generated = self.generate(&pages, &outputs, &statics, ui)?;
+        let generated = self.generate(&planned.pages, &outputs, &statics, ui)?;
         self.sweep(&outputs, &statics, &generated)?;
-
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
 
@@ -381,6 +334,181 @@ impl Engine {
         })
     }
 
+    /// Prepare `dist` and seed it with the static tree.
+    ///
+    /// A staging tree here is a previous build's failure; it is cleared before
+    /// the static copy, which writes into it (see `Static::destination`). Static
+    /// goes down first so a generated page or asset at the same output path
+    /// overwrites it: static is the lowest-priority source.
+    fn stage(&self) -> Result<Copied> {
+        fs::create_dir_all(&self.config.paths.dist)?;
+        let _ = std::fs::remove_dir_all(self.config.asset_staging());
+        let statics = Static::new(&self.config, self.theme.as_ref()).copy()?;
+        debug!(
+            count = statics.count,
+            bytes = statics.bytes,
+            "static copied"
+        );
+        Ok(statics)
+    }
+
+    /// Plan the pages this pass covers, alongside the tracked value trees every
+    /// consumer of them borrows. `what` names the pass in the trace line.
+    fn planned(&self, what: &'static str) -> Result<Planned> {
+        let pages = plan(&self.config, &self.project)?;
+        debug!(pages = pages.len(), site = self.config.label(), "{what}");
+        Ok(Planned {
+            pages,
+            tracked: self.project.tracked(),
+        })
+    }
+
+    /// The compile inputs for `pages`: the wrapper text binding each page to its
+    /// template, plus the section trees derived from the whole page set.
+    ///
+    /// Built by the caller rather than by [`Pass`], because a build feeds these
+    /// section trees to the JS bundler before the asset pipeline runs, and the
+    /// asset pipeline is what a [`Pass`] renders against.
+    fn prepare<'a>(&'a self, pages: &'a [Page]) -> Prepare<'a> {
+        Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages)
+    }
+
+    /// Load the build cache, keyed on every site-wide input the per-page
+    /// dependency tracker cannot see.
+    fn cache(&self, pass: &Pass, planned: &Planned, ui: &Ui) -> Result<Cache> {
+        // render-side cache inputs: asset renames, the link map, the responsive
+        // variant manifest, and, only when pages inline asset bytes, the embedded
+        // contents (the per-page dependency tracker can't see them, since typst
+        // never reads them).
+        let render = RenderInputs {
+            assets: pass.renderer.assets().fingerprint(),
+            links: pass.renderer.links(),
+            srcsets: pass.renderer.srcsets(),
+            // hash the *processed* asset tree, what Embed actually inlines: a
+            // bundle's bytes can change through imports outside the source
+            // assets dir (../lib, node_modules), which a source-dir hash misses.
+            embeds: self
+                .config
+                .html
+                .embed
+                .then(|| Hash::of_dir(&self.config.asset_staging())),
+            // `None` when cards are off *or* the template is missing; the
+            // second case fails the build on the first page it renders, so it
+            // never reaches a silent cache hit.
+            cards: self
+                .config
+                .generate
+                .cards
+                .active()
+                .then(|| Hash::of_file(&self.card_template()))
+                .flatten(),
+            modules: self.project.modules(),
+        };
+        Cache::load(
+            &self.config,
+            &render,
+            planned.tracked.clone(),
+            self.project.root(),
+            ui,
+        )
+    }
+
+    /// Serve what the cache still covers, compile the rest, and record every
+    /// fresh page against the manifest the next build reads.
+    fn incremental<'a>(
+        &self,
+        pass: &Pass<'a>,
+        cache: &mut Cache,
+        ui: &Ui,
+    ) -> Result<(Vec<Rendered<'a>>, Vec<Reused<'a>>)> {
+        let (cached, stale) = pass.split(cache);
+        debug!(stale = stale.len(), reused = cached.len(), "cache split");
+        // Compile only the stale pages (already prepared during the cache
+        // split); cached pages keep the HTML they were built with.
+        let rendered = self.render_pages("compiling", stale, ui, |(page, prepared)| {
+            (
+                page,
+                prepared.and_then(|(id, text, fp)| self.compile(page, id, text, fp, pass)),
+            )
+        })?;
+        for r in &rendered {
+            cache.record(
+                r.page,
+                r.fingerprint,
+                &r.html,
+                &r.deps,
+                &r.reads,
+                &r.outputs,
+            );
+        }
+        for (page, _, _) in &cached {
+            ui.page(self.relative(page), PageStatus::Cached);
+        }
+        Ok((rendered, cached))
+    }
+
+    /// Copy every page's externalized images into the (freshly regenerated)
+    /// asset directory: fresh pages carry their refs, cache hits their stored
+    /// ones, so the files are present regardless of what recompiled.
+    fn images(&self, rendered: &[Rendered], cached: &[Reused], ui: &Ui) -> Result<Images> {
+        Images::new(&self.config, self.project.root()).copy(
+            rendered
+                .iter()
+                .flat_map(|r| &r.outputs.images)
+                .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
+            ui,
+        )
+    }
+
+    /// Pair every page, rendered and cache-served alike, with what the render
+    /// pass produced for it: the write pass, the blob staging, and the
+    /// processors all read this one view.
+    fn outputs<'a>(rendered: &'a [Rendered<'a>], cached: &'a [Reused<'a>]) -> Vec<Output<'a>> {
+        rendered
+            .iter()
+            .map(|r| Output {
+                page: r.page,
+                html: r.html.as_str(),
+                fragments: r.outputs.fragments.as_ref(),
+            })
+            .chain(cached.iter().map(|(page, html, out)| Output {
+                page,
+                html: html.as_str(),
+                fragments: out.fragments.as_ref(),
+            }))
+            .collect()
+    }
+
+    /// Write every page's HTML in parallel: independent files, no shared state.
+    fn write(outputs: &[Output]) -> Result<()> {
+        outputs
+            .par_iter()
+            .try_for_each(|out| fs::write_all(&out.page.output, out.html))
+    }
+
+    /// Write the social cards this build drew. Cards are rendered during
+    /// compile, so only stale pages produced one; a cache hit leaves the file
+    /// the previous build wrote in place, and the sweep keeps it.
+    #[cfg(feature = "cards")]
+    fn cards(&self, rendered: &[Rendered]) -> Result<()> {
+        rendered.par_iter().try_for_each(|r| match &r.card {
+            Some(png) => fs::write_all(
+                self.config
+                    .generate
+                    .cards
+                    .path(&self.config.paths.dist, &r.page.permalink),
+                png,
+            ),
+            None => Ok(()),
+        })
+    }
+
+    /// Without the rasterizer nothing rendered one, so there is nothing to write.
+    #[cfg(not(feature = "cards"))]
+    fn cards(&self, _rendered: &[Rendered]) -> Result<()> {
+        Ok(())
+    }
+
     /// Run the post-build processors over the finished site.
     fn generate(
         &self,
@@ -401,30 +529,6 @@ impl Engine {
             bytes: emitter.bytes(),
             paths: emitter.paths().to_vec(),
         })
-    }
-
-    /// The import root a page's layout is loaded from.
-    ///
-    /// The project's own template directory, expressed relative to the root
-    /// because a typst import is root-absolute in the compiler's terms, not the
-    /// config's. A template the project does not have falls back to the theme's
-    /// package, which the compiler resolves by spec rather than by path.
-    fn template_root(&self, template: &str) -> String {
-        let project = self
-            .config
-            .paths
-            .templates
-            .strip_prefix(self.project.root())
-            .unwrap_or(&self.config.paths.templates);
-        match &self.theme {
-            Some(theme)
-                if !self.config.paths.templates.join(template).is_file()
-                    && theme.has_template(template) =>
-            {
-                theme.templates()
-            }
-            _ => format!("/{}", project.display()),
-        }
     }
 
     /// The card template's path on disk, for the fingerprint that ties every
@@ -480,32 +584,23 @@ impl Engine {
     /// Compile every page and report diagnostics without writing any output.
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        let pages = plan(&self.config, &self.project)?;
-        debug!(
-            pages = pages.len(),
-            site = self.config.label(),
-            "planned check"
-        );
-        let renderer = Renderer::new(
-            &pages,
+        let planned = self.planned("planned check")?;
+        // Nothing is written, so nothing was fingerprinted: the render pass has
+        // no asset renames to apply and no variants to offer.
+        let pass = Pass::new(
+            self,
+            &planned,
+            self.prepare(&planned.pages),
             AssetMap::default(),
             SrcSets::default(),
-            self.project.root(),
         );
-        let trees = self.trees(&pages);
-        let tracked = self.project.tracked();
-        let roots: Vec<Root> = tracked
-            .iter()
-            .map(|(base, tree)| Root { base, tree })
-            .collect();
-        let analyzer = Analyzer::new(roots, &self.project);
         // Prepare + compile every page inline (no cache split, no output).
-        let rendered = self.render_pages("checking", pages.iter().collect(), ui, |page| {
+        let rendered = self.render_pages("checking", pass.pages.iter().collect(), ui, |page| {
             (
                 page,
-                self.prepare(page, &trees).and_then(|(id, text, fp)| {
-                    self.compile(page, id, text, fp, &renderer, &analyzer)
-                }),
+                pass.prepare
+                    .input(page)
+                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &pass)),
             )
         })?;
         self.validate(&rendered, &[], true, ui)?;
@@ -521,18 +616,12 @@ impl Engine {
         })
     }
 
-    /// Report each compile outcome (page status lines and any typst warnings
-    /// the compiler raised), returning the rendered pages or, after every
-    /// failure has been reported, an error carrying *all* failed pages'
-    /// diagnostics (a single failure propagates unchanged).
     /// Compile a batch of pages in parallel and reduce to their rendered
     /// outputs: a progress bar, a rayon map producing one `(page, outcome)` per
-    /// item, then [`Engine::collect`] (status lines + diagnostics) and
-    /// then [`Engine::collect`] (status lines + diagnostics). The shared spine of
-    /// `build` (over the stale subset, already prepared) and `check` (every page,
-    /// prepared inline); `outcome` supplies the only difference: how one item
-    /// renders. Validation is the caller's, since only `build` has cached pages
-    /// to replay.
+    /// item, then [`Engine::collect`] (status lines + diagnostics). The shared
+    /// spine of `build` (over the stale subset) and `check` (every page);
+    /// `outcome` supplies the only difference: how one item renders. Validation
+    /// is the caller's, since only `build` has cached pages to replay.
     fn render_pages<'a, T: Send>(
         &self,
         label: &'static str,
@@ -553,6 +642,10 @@ impl Engine {
         self.collect(outcomes, ui)
     }
 
+    /// Report each compile outcome (page status lines and any typst warnings
+    /// the compiler raised), returning the rendered pages or, after every
+    /// failure has been reported, an error carrying *all* failed pages'
+    /// diagnostics (a single failure propagates unchanged).
     fn collect<'a>(
         &self,
         outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,
@@ -594,147 +687,6 @@ impl Engine {
             .to_string()
     }
 
-    /// The compile input for a page: its (possibly synthetic) source and its
-    /// content fingerprint: a hash of the exact text typst compiles. A real
-    /// page's body reaches the compiler through `#include` (a tracked file
-    /// read, so the dependency cache covers its edits); only generated
-    /// listings, which have no file, inline their body, and only their
-    /// wrapper text needs fingerprinting. Built once and shared by the cache
-    /// check and the compile.
-    fn prepare(&self, page: &Page, trees: &Trees) -> Result<Prepared> {
-        let sections = trees.get(&page.lang);
-        let rooted = self.project.virtualize(&page.source)?;
-        let Some(template) = &page.template else {
-            let text = page.body.clone();
-            let fingerprint = Hash::of_bytes(text.as_bytes());
-            return Ok((FileId::new(rooted), text, fingerprint));
-        };
-        let taxonomies = crate::codegen::Typst(&page.taxonomies()).to_string();
-        // prev/next sibling links, exposed to the template as `page.nav`. Part of
-        // the wrapper text, so a neighbour's addition, removal, or retitling
-        // refingerprints this page and rebuilds it: the cache stays correct.
-        let nav = crate::codegen::Typst(&Self::nav(&page.siblings)).to_string();
-        let translations = crate::codegen::Typst(&Self::translations(page)).to_string();
-        let strings = crate::codegen::Typst(&self.strings(&page.lang)).to_string();
-        let vpath = Self::rooted_str(&rooted);
-        let (id, bind, body) = match &page.data {
-            Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
-            Data::Empty => (Self::wrapper(&rooted), Bind::Literal("(:)"), Body::Include),
-            Data::Generated(dict) => (
-                FileId::new(rooted.clone()),
-                Bind::Literal(dict),
-                Body::Inline(&page.body),
-            ),
-        };
-        let context = compile::layout::Context {
-            data: bind,
-            taxonomies: &taxonomies,
-            nav: &nav,
-            sections,
-            lang: &page.lang,
-            translations: &translations,
-            strings: &strings,
-        };
-        let text = Layout::new(
-            &self.template_root(template),
-            template,
-            &vpath,
-            context,
-            body,
-        )
-        .to_string();
-        // hash the exact text typst compiles; the parse into a `Source` is
-        // deferred to `compile`, run only for stale pages.
-        let fingerprint = Hash::of_bytes(text.as_bytes());
-        Ok((id, text, fingerprint))
-    }
-
-    /// One language's [`Section`] tree as a value: exposed to that language's
-    /// templates as `page.sections` (the single source a site nav is built from,
-    /// so it can't drift from the pages) and reused by the `baudelaire:sections`
-    /// JS module. Each node is `(id, pages: ((url, title), ..), children: (..))`,
-    /// one per content directory; generated listings are excluded.
-    fn sections(&self, pages: &[Page], lang: &str) -> crate::codegen::Value {
-        crate::codegen::Value::array(
-            Section::tree(pages, &self.config, lang)
-                .iter()
-                .map(Section::value),
-        )
-    }
-
-    /// The section tree as wrapper text for every built language, so each page
-    /// embeds its own language's nav. Built once and shared by every page.
-    fn trees(&self, pages: &[Page]) -> Trees {
-        Trees(
-            self.config
-                .langs()
-                .iter()
-                .map(|lang| {
-                    let tree = crate::codegen::Typst(&self.sections(pages, lang)).to_string();
-                    ((*lang).to_owned(), tree)
-                })
-                .collect(),
-        )
-    }
-
-    /// The prev/next sibling links as a typst dict value:
-    /// `(prev: (url: .., title: ..), next: none)`. Each link is a dict or `none`,
-    /// so a template reads `page.nav.prev.url` / `page.nav.next` uniformly.
-    fn nav(siblings: &crate::content::Siblings) -> crate::codegen::Value {
-        use crate::codegen::Value;
-        let link = |s: &Option<crate::content::Sibling>| match s {
-            Some(s) => Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))]),
-            None => Value::None,
-        };
-        Value::dict([
-            ("prev", link(&siblings.prev)),
-            ("next", link(&siblings.next)),
-        ])
-    }
-
-    /// A page's translations as an array value:
-    /// `((lang: .., url: .., title: ..), ..)`, exposed to the template as
-    /// `page.translations` for a language switcher. Empty on a single-language
-    /// site.
-    fn translations(page: &Page) -> crate::codegen::Value {
-        use crate::codegen::Value;
-        Value::array(page.translations.iter().map(|t| {
-            Value::dict([
-                ("lang", Value::str(&t.lang)),
-                ("url", Value::str(&t.url)),
-                ("title", Value::str(&t.title)),
-            ])
-        }))
-    }
-
-    /// A language's UI-string table as a dict value, exposed to the template as
-    /// `page.strings`. Empty for a language with no `strings` block.
-    fn strings(&self, lang: &str) -> crate::codegen::Value {
-        use crate::codegen::Value;
-        Value::dict(
-            self.config
-                .strings(lang)
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone())),
-        )
-    }
-
-    /// A page's project-root-absolute virtual path (`/content/posts/a.typ`):
-    /// what the wrapper's `#import`/`#include` literals resolve against.
-    fn rooted_str(rooted: &RootedPath) -> String {
-        format!("/{}", rooted.vpath().get_without_slash())
-    }
-
-    /// The synthetic wrapper's file id: a sibling of the page (so relative
-    /// template imports resolve the same way), but distinct from it, so the
-    /// wrapper can `#include` the real file without shadowing it as `main`.
-    fn wrapper(rooted: &RootedPath) -> FileId {
-        let name = format!("{}@layout", rooted.vpath().get_without_slash());
-        let vpath = VirtualPath::new(&name)
-            .expect("a page vpath with a suffix stays a valid relative vpath");
-        FileId::new(RootedPath::new(VirtualRoot::Project, vpath))
-    }
-
     /// Compile a single page to rendered HTML, applying render post-processing
     /// (link rewriting over the typed DOM) before serialization. Records the
     /// files typst read so the cache can invalidate the page precisely, and
@@ -745,8 +697,7 @@ impl Engine {
         id: FileId,
         text: String,
         fingerprint: Hash,
-        renderer: &Renderer,
-        analyzer: &Analyzer,
+        pass: &Pass<'_>,
     ) -> Result<Rendered<'a>> {
         // parse only now, for a page actually being (re)compiled.
         let source = Source::new(id, text);
@@ -770,7 +721,7 @@ impl Engine {
         let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
         })?;
-        let mut rewrite = renderer.rewrite(&mut doc, page, &self.config);
+        let mut rewrite = pass.renderer.rewrite(&mut doc, page, &self.config);
         // An icon that could not be inlined leaves an empty `<svg>` in the DOM,
         // so the page cannot be shipped: fail on the first one.
         // Only the first is reported: the files are independent, and stopping
@@ -812,7 +763,7 @@ impl Engine {
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.
-        let mut reads = analyzer.reads(&source, &deps);
+        let mut reads = pass.analyzer.reads(&source, &deps);
         // `datetime.today()` goes through the `World`, which records files
         // only, so nothing else sees it: a page printing the current year stayed
         // a cache hit into the next one. It reads the same clock as
@@ -904,6 +855,122 @@ impl Engine {
     }
 }
 
+/// The owned inputs one pass over the site borrows: the planned pages and the
+/// build's tracked value trees. Separate from [`Pass`] because [`Pass`] holds
+/// borrows of both, and no struct can borrow from itself.
+struct Planned {
+    pages: Vec<Page>,
+    /// The injected values whose per-page reads drive fine-grained metadata
+    /// invalidation: the analyzer records them from each page's syntax, the
+    /// cache re-hashes them to decide reuse. One owned copy backs the cache; the
+    /// analyzer borrows another view of the same trees.
+    tracked: Vec<(String, Value)>,
+}
+
+/// A page served from the cache: the HTML the build that compiled it produced,
+/// and the render-pass outputs recorded alongside.
+type Reused<'a> = (&'a Page, String, Outputs);
+
+/// Everything a compile pass over the site shares: the pages it covers, their
+/// compile inputs, the render layer they are rewritten through, and the analyzer
+/// that records which injected values each one read.
+///
+/// Built once and consumed by both [`Engine::run`] and [`Engine::check`], which
+/// otherwise derived the same four values side by side and had to be kept in
+/// step by hand.
+struct Pass<'a> {
+    pages: &'a [Page],
+    prepare: Prepare<'a>,
+    renderer: Renderer,
+    analyzer: Analyzer<'a>,
+}
+
+impl<'a> Pass<'a> {
+    /// Wire a pass over `planned`, rendering against `assets` and `srcsets`:
+    /// what the asset pipeline produced for a build, empty for a check, which
+    /// rewrites nothing it will not write.
+    fn new(
+        engine: &'a Engine,
+        planned: &'a Planned,
+        prepare: Prepare<'a>,
+        assets: AssetMap,
+        srcsets: SrcSets,
+    ) -> Self {
+        Self {
+            pages: &planned.pages,
+            prepare,
+            renderer: Renderer::new(&planned.pages, assets, srcsets, engine.project.root()),
+            analyzer: Analyzer::new(
+                planned.tracked.iter().map(Root::from).collect::<Roots>(),
+                &engine.project,
+            ),
+        }
+    }
+
+    /// Split the pages into cache hits and stale ones.
+    ///
+    /// [`Prepare`] produces each page's text and fingerprint without parsing it;
+    /// the parse into a typst `Source` is deferred to the compile, so a hit
+    /// never pays to parse a page it won't render. A page whose input could not
+    /// be built is stale, so its error is reported by the compile pass with
+    /// every other page's.
+    fn split(&self, cache: &mut Cache) -> (Vec<Reused<'a>>, Vec<(&'a Page, Result<Prepared>)>) {
+        let mut cached = Vec::new();
+        let mut stale = Vec::new();
+        for page in self.pages {
+            match self.prepare.input(page) {
+                Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
+                    Some((html, outputs)) => cached.push((page, html, outputs)),
+                    None => stale.push((page, Ok((id, text, fingerprint)))),
+                },
+                Err(e) => stale.push((page, Err(e))),
+            }
+        }
+        (cached, stale)
+    }
+}
+
+/// The site values the `baudelaire:*` virtual JS modules serve, built from the
+/// same wrapper inputs the templates get rather than recomputed from scratch.
+///
+/// Owned by the build, because [`JsCtx`] borrows them for as long as the asset
+/// pipeline lives.
+#[cfg(feature = "js")]
+struct Modules {
+    /// The codegen `Value` view of the build context. It exists only for these
+    /// modules; Typst reads `sys.inputs` from the raw context.
+    context: Value,
+    /// The section trees keyed by language: one bundle serves the whole site, so
+    /// a default-language-only tree left every translation without a nav.
+    /// Templates get their own wrapper text and never read this.
+    sections: Value,
+}
+
+#[cfg(feature = "js")]
+impl Modules {
+    fn new(engine: &Engine, prepare: &Prepare) -> Self {
+        Self {
+            sections: Value::dict(
+                engine
+                    .config
+                    .langs()
+                    .into_iter()
+                    .map(|lang| (lang.to_owned(), prepare.sections(lang))),
+            ),
+            context: Value::from(engine.project.context()),
+        }
+    }
+
+    /// The bundler's view of this build, completed with the page set.
+    fn ctx<'a>(&'a self, pages: &'a [Page]) -> JsCtx<'a> {
+        JsCtx {
+            pages,
+            context: &self.context,
+            sections: &self.sections,
+        }
+    }
+}
+
 /// A compiled page ready to write, with the files its compilation depended on,
 /// the raw targets of any broken internal links it contained, and the warnings
 /// typst raised while compiling it.
@@ -923,4 +990,58 @@ struct Rendered<'a> {
     #[cfg(feature = "cards")]
     card: Option<Vec<u8>>,
     warnings: Vec<TypstSourceDiagnostic>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GATES, Gate};
+    use crate::config::Config;
+
+    fn config(text: &str) -> Config {
+        Config::parse(text).expect("should parse")
+    }
+
+    /// Content-hashing renames a file that other files name. Without the `css`
+    /// feature nothing rewrites the `url()` inside a stylesheet, so the sheet is
+    /// served naming assets that no longer exist: a green build and a 404 site.
+    /// Fingerprinting is turned off for the whole build instead, and said so.
+    #[test]
+    fn fingerprinting_without_the_stylesheet_rewriter_is_turned_off_and_reported() {
+        let asked = config("assets { fingerprint #true }");
+        assert!(asked.assets.fingerprint, "the site asked for it");
+        let (resolved, gaps) = Gate::resolve(asked);
+        assert_eq!(
+            resolved.assets.fingerprint,
+            cfg!(feature = "css"),
+            "kept where stylesheets can be rewritten, dropped where they cannot"
+        );
+        assert_eq!(
+            gaps.iter()
+                .any(|gap| gap.setting == "assets { fingerprint }" && gap.cargo == "css"),
+            !cfg!(feature = "css"),
+            "turning a setting off is never silent"
+        );
+    }
+
+    /// The walk only ever fires on a setting the site opted into, so a config
+    /// that asks for nothing optional is untouched whatever this binary lacks.
+    #[test]
+    fn a_site_asking_for_nothing_optional_is_untouched() {
+        let (resolved, gaps) = Gate::resolve(config(""));
+        assert!(!resolved.assets.fingerprint);
+        assert!(gaps.is_empty());
+    }
+
+    /// A gate names the config that asks for it, and codes read as identity, so
+    /// two rows describing the same setting would report the same gap twice.
+    #[test]
+    fn every_gate_names_a_distinct_setting() {
+        for (i, gate) in GATES.iter().enumerate() {
+            assert!(
+                !GATES[i + 1..].iter().any(|o| o.setting == gate.setting),
+                "`{}` is claimed by two gates",
+                gate.setting
+            );
+        }
+    }
 }

@@ -11,7 +11,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{Config, Eagerness, Named};
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 
 /// The [`Transform`] that appends speculation rules to `<head>`.
 pub(super) struct Speculation;
@@ -27,7 +27,7 @@ impl Transform for Speculation {
         };
         // Best-effort, like every other transform: a page that emitted its own
         // root has no `<head>` to append to, and gains no hints.
-        if let Some(head) = doc.root_mut().head() {
+        if let Some(head) = doc.head() {
             head.children.push(rules.script());
         }
     }
@@ -83,15 +83,14 @@ impl Rules {
 
     /// The rule document as the `<script>` element that carries it.
     fn script(&self) -> HtmlNode {
-        let mut el = HtmlElement::new(tag::script);
-        el.attrs.push(attr::r#type, "speculationrules");
         // Infallible: every field is a plain string or list of them, and
         // `serde_json` only fails on a serializer that can (a map with
         // non-string keys, a non-finite float, a custom error).
         let json = serde_json::to_string(self).expect("rules are plain strings");
+        let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "speculationrules");
         el.children
             .push(HtmlNode::Text(json.into(), Span::detached()));
-        HtmlNode::Element(el)
+        el.into()
     }
 }
 

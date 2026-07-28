@@ -9,7 +9,7 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 
 /// The [`Transform`] that annotates images for lazy, async loading.
 pub(super) struct Images;
@@ -20,7 +20,7 @@ impl Transform for Images {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
-        doc.root_mut().walk(&mut |element| {
+        doc.walk(|element| {
             if element.tag == tag::img {
                 // only fill what the author left unset
                 if element.attrs.get(attr::loading).is_none() {

@@ -86,12 +86,16 @@ impl Dev<'_> {
         self.ui.arrow(
             "watching",
             match self.config.serve.watch {
-                // Wrap the watched roots to the terminal, aligned under the value
-                // column (col 14), so a long list flows onto extra lines instead
-                // of running off-screen.
-                true => crate::ui::wrap(&self.watched(), 14, crate::ui::term_width())
-                    .dimmed()
-                    .to_string(),
+                // Wrap the watched roots to the terminal, aligned under the
+                // arrow's value column, so a long list flows onto extra lines
+                // instead of running off-screen.
+                true => crate::ui::wrap(
+                    &self.watched(),
+                    crate::ui::ARROW_VALUE_COLUMN,
+                    crate::ui::term_width(),
+                )
+                .dimmed()
+                .to_string(),
                 false => "off (--no-watch)".dimmed().to_string(),
             },
         );
@@ -135,13 +139,13 @@ impl Dev<'_> {
     /// file, plus any `serve.include` globs. Returned as separate items so the
     /// banner can wrap them to the terminal width.
     fn watched(&self) -> Vec<String> {
-        let mut parts = vec![
-            self.config.paths.content.display().to_string(),
-            self.config.paths.templates.display().to_string(),
-            self.config.paths.assets.display().to_string(),
-            self.config.paths.r#static.display().to_string(),
-            self.config_path.display().to_string(),
-        ];
+        // The same roots the watcher registers, so the banner cannot advertise
+        // a directory nothing watches.
+        let mut parts: Vec<String> = Filter::roots(&self.config)
+            .iter()
+            .map(|dir| dir.display().to_string())
+            .collect();
+        parts.push(self.config_path.display().to_string());
         parts.extend(self.config.serve.include.iter().cloned());
         parts
     }
@@ -454,18 +458,30 @@ struct Live {
     next_id: Arc<AtomicU64>,
 }
 
+/// The live-reload endpoint's path, as a macro so the one literal serves both
+/// [`Live::ENDPOINT`] (matched per request) and the client script that connects
+/// to it: the script is a `const`, and only a literal can be `concat!`ed into
+/// one. The two used to be separate literals that had to be kept equal by hand.
+macro_rules! live_endpoint {
+    () => {
+        "/__baudelaire/live"
+    };
+}
+
 impl Live {
     /// Endpoint the injected client connects to for the reload event stream.
-    const ENDPOINT: &'static str = "/__baudelaire/live";
+    const ENDPOINT: &'static str = live_endpoint!();
 
     /// How often an idle stream emits a keep-alive comment. Doubles as the upper
     /// bound on how long a closed connection lingers before it is reaped.
     const HEARTBEAT: Duration = Duration::from_secs(10);
 
     /// Client script appended to served HTML; reloads on each pushed event.
-    const SCRIPT: &'static str = "\n<script>\n\
-        new EventSource('/__baudelaire/live').onmessage = function () { location.reload(); };\
-        \n</script>\n";
+    const SCRIPT: &'static str = concat!(
+        "\n<script>\nnew EventSource('",
+        live_endpoint!(),
+        "').onmessage = function () { location.reload(); };\n</script>\n"
+    );
 
     /// Raw HTTP response head that opens an SSE stream, plus a comment so the
     /// client registers the connection immediately.
@@ -563,12 +579,10 @@ impl Filter {
         let root = root.path().to_path_buf();
         let assets = Self::absolute(&root, &config.paths.assets);
         let statics = Self::absolute(&root, &config.paths.r#static);
-        let mut watches = vec![
-            (Self::absolute(&root, &config.paths.content), Recursive),
-            (Self::absolute(&root, &config.paths.templates), Recursive),
-            (assets.clone(), Recursive),
-            (statics.clone(), Recursive),
-        ];
+        let mut watches: Vec<_> = Self::roots(config)
+            .iter()
+            .map(|dir| (Self::absolute(&root, dir), Recursive))
+            .collect();
         // Watch the config file via its parent directory, non-recursively:
         // editors commonly save by rename-over, which drops a watch pinned to
         // the file itself. A bare `config.kdl` has an empty parent, meaning
@@ -598,6 +612,19 @@ impl Filter {
             include,
             exclude,
         })
+    }
+
+    /// The source trees a session always watches, in the configured (relative)
+    /// spelling. THE single list of them: both the watcher and the startup
+    /// banner read it, so the two can never disagree.
+    fn roots(config: &Config) -> [&Path; 4] {
+        let paths = &config.paths;
+        [
+            &paths.content,
+            &paths.templates,
+            &paths.assets,
+            &paths.r#static,
+        ]
     }
 
     /// A path in the one form this filter compares in: absolute, canonical when

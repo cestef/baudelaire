@@ -1,7 +1,79 @@
 //! Errors from deploying built files to a host.
+//!
+//! Same discipline as [`super::fs`]: what was being done is a typed label
+//! ([`Method`], [`Step`], [`Setup`]) rather than a message the call site spells
+//! out, so every message reads the same way and a new operation is a new
+//! variant, not a new string.
+
+use std::fmt;
 
 use miette::Diagnostic;
 use thiserror::Error;
+
+/// An HTTP method the S3 client signs and sends. The whole set it uses: a
+/// listing, an upload, a removal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    Get,
+    Put,
+    Delete,
+}
+
+impl Method {
+    /// The wire spelling, which is also what a canonical request signs.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
+        }
+    }
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A step of an ssh deploy that runs on the host, named for error messages.
+#[derive(Debug, Clone, Copy)]
+pub enum Step {
+    Authenticate,
+    OpenSftp,
+    Exec,
+    Upload,
+    Delete,
+}
+
+impl fmt::Display for Step {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Authenticate => "authenticate",
+            Self::OpenSftp => "open sftp",
+            Self::Exec => "exec",
+            Self::Upload => "upload",
+            Self::Delete => "delete",
+        })
+    }
+}
+
+/// A step of an ssh deploy that runs on this machine, before anything reaches
+/// the host.
+#[derive(Debug, Clone, Copy)]
+pub enum Setup {
+    Runtime,
+    PrivateKey,
+}
+
+impl fmt::Display for Setup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Runtime => "starting the async runtime",
+            Self::PrivateKey => "loading the private key",
+        })
+    }
+}
 
 /// A failure while deploying to a destination.
 #[derive(Debug, Error, Diagnostic)]
@@ -31,19 +103,24 @@ pub enum DeployError {
     /// through (truncated) so the cause is visible, with a status-keyed hint,
     /// because the body alone leaves auth failure, a missing bucket and a rate
     /// limit indistinguishable.
-    #[error("{operation} `{key}` failed ({status}): {message}")]
+    #[error("{method} `{uri}` failed ({status}): {message}")]
     #[diagnostic(code(baudelaire::deploy::request), help("{}", Self::hint(*status)))]
     Request {
-        operation: &'static str,
-        key: String,
+        method: Method,
+        uri: String,
         status: u16,
         message: String,
     },
 
-    /// A bucket listing response could not be parsed.
+    /// A bucket listing response was not the XML a `ListObjectsV2` answer must
+    /// be. The parser's own error is kept as the source: it names the offending
+    /// position, which a flattened message would drop.
     #[error("could not parse the bucket listing")]
     #[diagnostic(code(baudelaire::deploy::listing))]
-    Listing { message: String },
+    Listing {
+        #[source]
+        source: roxmltree::Error,
+    },
 
     /// The SSH connection or transport failed (DNS, TCP, host key, protocol).
     #[error("ssh connection to `{host}` failed")]
@@ -80,10 +157,10 @@ pub enum DeployError {
     Auth { user: String },
 
     /// An SFTP transfer or remote command failed.
-    #[error("{operation} failed on the ssh host")]
+    #[error("{step} failed on the ssh host")]
     #[diagnostic(code(baudelaire::deploy::ssh::transfer))]
     Transfer {
-        operation: &'static str,
+        step: Step,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -95,13 +172,13 @@ pub enum DeployError {
     /// names the host, and reporting "start runtime failed on the ssh host" for
     /// a Tokio runtime this machine could not build sends the reader to debug
     /// the wrong end of the connection.
-    #[error("{operation} failed")]
+    #[error("{step} failed")]
     #[diagnostic(
         code(baudelaire::deploy::ssh::local),
         help("this failed locally, before contacting the host")
     )]
     Local {
-        operation: &'static str,
+        step: Setup,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -119,31 +196,25 @@ impl DeployError {
         }
     }
 
-    /// An SFTP or remote-command failure at `operation`, keeping its source.
-    pub fn transfer(
-        operation: &'static str,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    /// An SFTP or remote-command failure at `step`, keeping its source.
+    pub fn transfer(step: Step, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Transfer {
-            operation,
+            step,
             source: Box::new(source),
         }
     }
 
-    /// A failure at `operation` on this machine, before the host is involved.
-    pub fn local(
-        operation: &'static str,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    /// A failure at `step` on this machine, before the host is involved.
+    pub fn local(step: Setup, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Local {
-            operation,
+            step,
             source: Box::new(source),
         }
     }
 
     /// A non-2xx response, with the host's body clamped and a hint chosen from
     /// the status.
-    pub fn request(operation: &'static str, key: &str, status: u16, body: &str) -> Self {
+    pub fn request(method: Method, uri: &str, status: u16, body: &str) -> Self {
         /// A 403's XML blob, or a proxy's whole HTML error page, is not worth a
         /// screenful; the first line or two carries the code.
         const LIMIT: usize = 400;
@@ -153,8 +224,8 @@ impl DeployError {
             None => body.to_owned(),
         };
         Self::Request {
-            operation,
-            key: key.to_owned(),
+            method,
+            uri: uri.to_owned(),
             status,
             message,
         }
@@ -186,5 +257,11 @@ impl From<ureq::Error> for DeployError {
         Self::Http {
             source: Box::new(source),
         }
+    }
+}
+
+impl From<roxmltree::Error> for DeployError {
+    fn from(source: roxmltree::Error) -> Self {
+        Self::Listing { source }
     }
 }

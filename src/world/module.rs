@@ -23,6 +23,7 @@
 //! commit hash in would rebuild the entire site on every commit.
 
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use typst::diag::{FileError, FileResult, PackageError};
@@ -35,7 +36,8 @@ use typst::syntax::{
 use typst_kit::files::{FileLoader, FsRoot, SystemFiles};
 use typst_kit::packages::SystemPackages;
 
-use crate::codegen::{Typst, Value};
+use super::BuildContext;
+use crate::codegen::{Let, Value};
 use crate::config::dispatch::Keys;
 use crate::graph::Hash;
 
@@ -73,13 +75,30 @@ pub(super) struct ModuleCx<'a> {
     pub context: &'a Value,
 }
 
-/// One provider of an `@baudelaire/*` Typst module.
+/// One provider of an `@baudelaire/*` Typst module: a set of generated
+/// bindings over a hand-written body.
 trait Module {
     /// The name this module is imported under: `@baudelaire/<name>`.
     fn name(&self) -> &'static str;
 
-    /// The Typst source of the module's entrypoint.
-    fn source(&self, cx: &ModuleCx) -> String;
+    /// The values bound at the top of the module, in emission order. Build data
+    /// only: everything a module generates from reaches Typst through here.
+    fn bindings(&self, cx: &ModuleCx) -> Vec<(String, Value)>;
+
+    /// The module's hand-written Typst, appended after the bindings, so a
+    /// binding is always in scope for the code that closes over it.
+    fn body(&self) -> &'static str;
+
+    /// The Typst source of the module's entrypoint. Every generated value goes
+    /// through [`Let`], so no module formats Typst (or its escaping) by hand.
+    fn source(&self, cx: &ModuleCx) -> String {
+        let mut out = String::new();
+        for (name, value) in self.bindings(cx) {
+            let _ = writeln!(out, "{}", Let(&name, &value));
+        }
+        out.push_str(self.body());
+        out
+    }
 }
 
 /// The registered virtual modules.
@@ -227,6 +246,9 @@ impl Html {
     /// written into `typ/html.typ`, so the name lives in one place across both
     /// sides of the marker.
     pub(crate) const MARKER: &'static str = "data-baudelaire-svg";
+
+    /// The binding `typ/html.typ` reads the marker through.
+    const MARKER_BINDING: &'static str = "_svg-marker";
 }
 
 impl Module for Html {
@@ -234,12 +256,12 @@ impl Module for Html {
         "html"
     }
 
-    fn source(&self, _cx: &ModuleCx) -> String {
-        format!(
-            "#let _svg-marker = \"{}\"\n{}",
-            Html::MARKER,
-            include_str!("typ/html.typ")
-        )
+    fn bindings(&self, _cx: &ModuleCx) -> Vec<(String, Value)> {
+        vec![(Self::MARKER_BINDING.to_owned(), Value::str(Self::MARKER))]
+    }
+
+    fn body(&self) -> &'static str {
+        include_str!("typ/html.typ")
     }
 }
 
@@ -247,6 +269,9 @@ impl Module for Html {
 /// template writes `#import "@baudelaire/site": title` instead of
 /// `sys.inputs.at("baudelaire", default: (:)).at("site", ..).at("title", ..)`.
 /// A typo becomes an import error rather than a silent `none`.
+///
+/// The field list belongs to [`BuildContext::site_fields`], which its JavaScript
+/// counterpart `baudelaire:site` serves too, so the two cannot drift.
 ///
 /// Config-derived values only. `git` and `date` stay on `sys.inputs`; see the
 /// module-level note on why nothing volatile may be baked in.
@@ -257,20 +282,11 @@ impl Module for Site {
         "site"
     }
 
-    fn source(&self, cx: &ModuleCx) -> String {
-        let mut out = String::from(include_str!("typ/site.typ"));
-        // The build context's `site` sub-tree plus its `version`: the same
-        // value that feeds `sys.inputs`, not a second derivation from config.
-        let mut fields = match cx.context.get("site") {
-            Some(Value::Dict(pairs)) => pairs.clone(),
-            _ => Vec::new(),
-        };
-        if let Some(version) = cx.context.get("version") {
-            fields.insert(0, ("version".to_owned(), version.clone()));
-        }
-        for (name, value) in &fields {
-            out.push_str(&format!("#let {name} = {}\n", Typst(value)));
-        }
-        out
+    fn bindings(&self, cx: &ModuleCx) -> Vec<(String, Value)> {
+        BuildContext::site_fields(cx.context)
+    }
+
+    fn body(&self) -> &'static str {
+        include_str!("typ/site.typ")
     }
 }

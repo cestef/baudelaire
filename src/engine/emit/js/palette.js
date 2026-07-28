@@ -4,10 +4,10 @@
 // classes and custom properties so a host site restyles or replaces it wholesale
 // (`mountSearch({ styles: false })` turns the defaults off entirely).
 //
-// `createSearch` and `tokenize` come from the engine this file is concatenated
-// with (a single module scope, so they are in scope here). Exposes `mountSearch`,
-// which the generated standalone client auto-calls and which bundlers import from
-// the `baudelaire:search` virtual module.
+// `createSearch` comes from the engine this file is concatenated with and
+// `tokenize` from tokenize.js (a single module scope, so both are in scope
+// here). Exposes `mountSearch`, which the generated standalone client auto-calls
+// and which bundlers import from the `baudelaire:search` virtual module.
 
 const escapeHtml = (s) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

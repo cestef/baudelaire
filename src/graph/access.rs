@@ -8,11 +8,11 @@
 //! `sys.inputs.baudelaire.git.hash` alone and rebuild only when *that* value
 //! changes, not on every commit.
 //!
-//! It is generic over the root value. Give [`reads`] a set of [`Root`]s, each a
+//! It is generic over the root value. Build a [`Roots`] set of [`Root`]s, each a
 //! dotted base that names the value in source (`"sys.inputs.baudelaire"`) and
-//! its current [`Value`], and it returns the qualified paths read from each.
-//! The same roots drive [`digest`], so analysis and invalidation share one
-//! source of truth and cannot drift.
+//! its current [`Value`]; [`Roots::reads`] returns the qualified paths read from
+//! each, and [`Roots::digest`] fingerprints the value at one of those paths, so
+//! analysis and invalidation share one source of truth and cannot drift.
 //!
 //! The analysis is sound by over-approximation: it never misses a read (which
 //! would serve stale output), but where it cannot narrow an access (a dynamic
@@ -43,29 +43,64 @@ pub struct Root<'a> {
     pub tree: &'a Value,
 }
 
+/// The tracked-value form [`crate::world::Project::tracked`] hands out: an owned
+/// `(dotted base, tree)` pair borrowed as a root. The single conversion, so no
+/// consumer re-spells the field mapping.
+impl<'a> From<&'a (String, Value)> for Root<'a> {
+    fn from((base, tree): &'a (String, Value)) -> Self {
+        Self { base, tree }
+    }
+}
+
 /// The qualified value paths a source reads, e.g. `"sys.inputs.baudelaire.git.hash"`.
 /// A bare base means the whole value was read (or couldn't be narrowed).
 pub type Reads = BTreeSet<String>;
 
-/// The value paths `source` reads from `roots`.
-pub fn reads(source: &Source, roots: &[Root]) -> Reads {
-    let mut scan = Scan::new(roots);
-    scan.walk(source.root());
-    scan.out
+/// Every tracked value of one build. Analysis and invalidation both go through
+/// here, so a page's recorded reads and the digests they are validated against
+/// are always resolved from the same set.
+pub struct Roots<'a>(Vec<Root<'a>>);
+
+impl<'a> From<Vec<Root<'a>>> for Roots<'a> {
+    fn from(roots: Vec<Root<'a>>) -> Self {
+        Self(roots)
+    }
 }
 
-/// The content digest of the value at a qualified `key`, or `None` when no value
-/// lives there. Two builds agree iff the digests are equal, so a path that gains
-/// or loses a value (`None` <-> `Some`) reads as a change, no sentinel needed.
-pub fn digest(roots: &[Root], key: &str) -> Option<Hash> {
-    roots.iter().find(|root| root.owns(key))?.digest(key)
+impl<'a> FromIterator<Root<'a>> for Roots<'a> {
+    fn from_iter<T: IntoIterator<Item = Root<'a>>>(roots: T) -> Self {
+        Self(roots.into_iter().collect())
+    }
 }
 
-/// The digest of every key in `keys`, ready to store in a cache entry.
-pub fn digests(roots: &[Root], keys: &Reads) -> BTreeMap<String, Option<Hash>> {
-    keys.iter()
-        .map(|key| (key.clone(), digest(roots, key)))
-        .collect()
+impl Roots<'_> {
+    /// The value paths `source` reads from these roots.
+    pub fn reads(&self, source: &Source) -> Reads {
+        let mut scan = Scan::new(&self.0);
+        scan.walk(source.root());
+        scan.out
+    }
+
+    /// The content digest of the value at a qualified `key`, or `None` when no
+    /// value lives there. Two builds agree iff the digests are equal, so a path
+    /// that gains or loses a value (`None` <-> `Some`) reads as a change, no
+    /// sentinel needed.
+    pub fn digest(&self, key: &str) -> Option<Hash> {
+        self.0.iter().find(|root| root.owns(key))?.digest(key)
+    }
+
+    /// The digest of every key in `keys`, ready to store in a cache entry.
+    pub fn digests(&self, keys: &Reads) -> BTreeMap<String, Option<Hash>> {
+        keys.iter()
+            .map(|key| (key.clone(), self.digest(key)))
+            .collect()
+    }
+
+    /// Every root read whole: the widest sound answer, for a source that cannot
+    /// be analyzed at all.
+    fn everything(&self) -> Reads {
+        self.0.iter().map(|root| root.base.to_owned()).collect()
+    }
 }
 
 impl<'a> Root<'a> {
@@ -266,16 +301,16 @@ impl<'a> Scan<'a> {
 /// A build-scoped analyzer: the tracked roots plus a per-file memo, so a template
 /// shared by hundreds of pages is analyzed once, not once per page.
 pub struct Analyzer<'a> {
-    roots: Vec<Root<'a>>,
+    roots: Roots<'a>,
     project: &'a Project,
     memo: Mutex<HashMap<PathBuf, Arc<Reads>>>,
 }
 
 impl<'a> Analyzer<'a> {
     /// Build an analyzer over `roots` for the pages of `project`.
-    pub fn new(roots: Vec<Root<'a>>, project: &'a Project) -> Self {
+    pub fn new(roots: impl Into<Roots<'a>>, project: &'a Project) -> Self {
         Self {
-            roots,
+            roots: roots.into(),
             project,
             memo: Mutex::new(HashMap::new()),
         }
@@ -285,7 +320,7 @@ impl<'a> Analyzer<'a> {
     /// inline generated body) unioned with every `.typ` file it depends on
     /// (templates, imported modules, its `#include`d body).
     pub fn reads(&self, source: &Source, deps: &Deps) -> Reads {
-        let mut out = reads(source, &self.roots);
+        let mut out = self.roots.reads(source);
         for path in deps.files() {
             if path.extension().is_some_and(|ext| ext == "typ") {
                 out.extend(self.file(path).iter().cloned());
@@ -300,14 +335,14 @@ impl<'a> Analyzer<'a> {
             return cached.clone();
         }
         let found = match self.project.source(path) {
-            Ok(source) => reads(&source, &self.roots),
+            Ok(source) => self.roots.reads(&source),
             // A file that could not be loaded must not be recorded as reading
             // *nothing*: that is the unsound direction, and it leaves a page
             // depending on a dependency it can never be invalidated by (a
             // `@preview` theme in the package cache reading `git.hash` would go
             // stale across every commit). Widen to every root instead, the same
             // over-approximation this analysis uses for an unnarrowable access.
-            Err(_) => self.roots.iter().map(|root| root.base.to_owned()).collect(),
+            Err(_) => self.roots.everything(),
         };
         let found = Arc::new(found);
         self.memo.lock().insert(path.to_owned(), found.clone());
@@ -333,16 +368,17 @@ mod tests {
         ])
     }
 
+    fn roots(tree: &Value) -> Roots<'_> {
+        Roots::from(vec![Root {
+            base: "sys.inputs.baudelaire",
+            tree,
+        }])
+    }
+
     fn read(code: &str) -> Reads {
         let source = Source::detached(code);
         let tree = tree();
-        reads(
-            &source,
-            &[Root {
-                base: "sys.inputs.baudelaire",
-                tree: &tree,
-            }],
-        )
+        roots(&tree).reads(&source)
     }
 
     fn keys(reads: &Reads) -> Vec<&str> {
@@ -497,37 +533,27 @@ mod tests {
                 ]),
             ),
         ]);
-        let roots_before = [Root {
-            base: "sys.inputs.baudelaire",
-            tree: &before,
-        }];
-        let roots_after = [Root {
-            base: "sys.inputs.baudelaire",
-            tree: &after,
-        }];
+        let (before, after) = (roots(&before), roots(&after));
 
         // git.hash unchanged across a day boundary -> same digest -> no rebuild.
         assert_eq!(
-            digest(&roots_before, "sys.inputs.baudelaire.git.hash"),
-            digest(&roots_after, "sys.inputs.baudelaire.git.hash")
+            before.digest("sys.inputs.baudelaire.git.hash"),
+            after.digest("sys.inputs.baudelaire.git.hash")
         );
         // date changed -> its digest differs.
         assert_ne!(
-            digest(&roots_before, "sys.inputs.baudelaire.date"),
-            digest(&roots_after, "sys.inputs.baudelaire.date")
+            before.digest("sys.inputs.baudelaire.date"),
+            after.digest("sys.inputs.baudelaire.date")
         );
     }
 
     #[test]
     fn absent_and_present_digests_differ() {
         let tree = tree();
-        let roots = [Root {
-            base: "sys.inputs.baudelaire",
-            tree: &tree,
-        }];
+        let roots = roots(&tree);
         assert_ne!(
-            digest(&roots, "sys.inputs.baudelaire.missing"),
-            digest(&roots, "sys.inputs.baudelaire.version")
+            roots.digest("sys.inputs.baudelaire.missing"),
+            roots.digest("sys.inputs.baudelaire.version")
         );
     }
 }

@@ -3,7 +3,7 @@ use miette::SourceSpan;
 
 use crate::config::Config;
 use crate::config::dispatch::Keys;
-use crate::config::parse::NodeExt;
+use crate::config::node::NodeExt;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
@@ -19,7 +19,7 @@ impl Config {
         // carry spans into it, so labels point at the real config.kdl lines
         let text = self.source.clone();
         for node in partial.nodes() {
-            if node.name().value() == "profiles" {
+            if node.name().value() == Config::PROFILES {
                 return Err(ConfigError::nested_profiles(&text, NodeExt::span(node)).into());
             }
             self.overlay(&text, node)?;

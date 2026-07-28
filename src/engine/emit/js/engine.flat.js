@@ -1,11 +1,10 @@
 // Search engine for the flat `search.json` index: a document array carrying
 // title/body/tags. Ranks at query time, so hits keep their body for snippets.
-// Concatenated with palette.js to form the generated client; also served as the
-// `baudelaire:search` virtual module. Exposes `createSearch`, which the palette
-// (or a library user) calls to get a `search(query, { limit })` function.
-
-const tokenize = (text) =>
-  text.toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+// Concatenated with tokenize.js and palette.js to form the generated client;
+// also served as the `baudelaire:search` virtual module. Exposes `createSearch`,
+// which the palette (or a library user) calls to get a
+// `search(query, { limit })` function. `tokenize` comes from tokenize.js, in the
+// same module scope.
 
 export async function createSearch(url = INDEX) {
   let documents = [];

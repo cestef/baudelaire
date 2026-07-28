@@ -3,20 +3,20 @@
 //! the built `dist` directory: upload what changed, delete what the build no
 //! longer produces.
 //!
-//! The moving parts are kept pure and tested (key encoding, the listing parse,
-//! and the upload/delete [`Plan`]) while the `ureq` calls stay a thin shell
-//! around them. Change detection is stateless: S3 returns each object's ETag,
-//! which for a single-part upload is the hex MD5 of its bytes, so a local file
-//! whose MD5 matches the remote ETag is skipped without any local record.
-
-use std::collections::BTreeMap;
+//! The moving parts are kept pure and tested (key encoding, the listing parse)
+//! while the `ureq` calls stay a thin shell around them, driven by the shared
+//! [`Dist::reconcile`] loop. Change detection is stateless: S3 returns each
+//! object's ETag, which for a single-part upload is the hex MD5 of its bytes,
+//! so a local file whose MD5 matches the remote ETag is skipped without any
+//! local record.
 
 use md5::{Digest, Md5};
 use time::OffsetDateTime;
 
-use super::sigv4::{Request, Signer};
-use super::{Backend, Dist, Listed, Plan};
+use super::sigv4::{DATE_HEADER, Request, Signer};
+use super::{Backend, Digests, Dist, Listed, Store};
 use crate::config::S3Config;
+use crate::error::deploy::Method;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
 use crate::remote::Options;
@@ -47,24 +47,7 @@ impl Backend<Dist> for S3 {
         let access_key = Self::credential(ACCESS_KEY_ENV)?;
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(&self.config, access_key, secret_key, Self::session_token());
-
-        let local = dist.digests(Bucket::etag)?;
-        let plan = Plan::compute(&local, &bucket.list()?, self.config.delete);
-        plan.preview(ui, opts.dry_run);
-        if opts.dry_run {
-            return Ok(());
-        }
-
-        for key in &plan.uploads {
-            bucket.put(key, &dist.read(key)?)?;
-            ui.item(format_args!("↑ {key}"));
-        }
-        for key in &plan.deletes {
-            bucket.delete(key)?;
-            ui.item(format_args!("✕ {key}"));
-        }
-        plan.done(ui, &self.config.bucket);
-        Ok(())
+        dist.reconcile(&bucket, self.config.delete, opts, ui)
     }
 }
 
@@ -103,6 +86,8 @@ pub const SESSION_TOKEN_ENV: &str = "AWS_SESSION_TOKEN";
 /// An S3-compatible bucket client.
 pub struct Bucket {
     agent: ureq::Agent,
+    /// The bucket's name, as the deploy summary reports the destination.
+    name: String,
     access_key: String,
     secret_key: String,
     /// Present only for temporary credentials; signed and sent as
@@ -151,6 +136,7 @@ impl Bucket {
                 .tls_config(crate::remote::tls())
                 .build()
                 .into(),
+            name: config.bucket.clone(),
             access_key,
             secret_key,
             token,
@@ -164,8 +150,8 @@ impl Bucket {
 
     /// Every object currently under the prefix, keyed by object key with its
     /// ETag, following continuation tokens to the end.
-    pub fn list(&self) -> Result<BTreeMap<String, String>> {
-        let mut out = BTreeMap::new();
+    fn objects(&self) -> Result<Digests> {
+        let mut out = Digests::new();
         let mut token: Option<String> = None;
         loop {
             let mut query = vec![("list-type", "2".to_owned())];
@@ -176,7 +162,7 @@ impl Bucket {
                 query.push(("continuation-token", token.clone()));
             }
             let body = self.send(
-                "GET",
+                Method::Get,
                 &format!("{}/", self.root),
                 &Self::canonical_query(&query),
                 &[],
@@ -194,20 +180,6 @@ impl Bucket {
             }
         }
         Ok(out)
-    }
-
-    /// Upload `body` to `key` (a relative dist path), setting its content type
-    /// from the extension.
-    pub fn put(&self, key: &str, body: &[u8]) -> Result<()> {
-        let content_type = Mime::of(key).header();
-        self.write("PUT", &self.object(key), body, Some(&content_type))?;
-        Ok(())
-    }
-
-    /// Delete the object at `key` (a relative dist path).
-    pub fn delete(&self, key: &str) -> Result<()> {
-        self.write("DELETE", &self.object(key), &[], None)?;
-        Ok(())
     }
 
     /// The signing URI for an object at relative `key`: the root, the prefix, and
@@ -233,7 +205,7 @@ impl Bucket {
     }
 
     /// A signed GET returning the response body as a string (listings).
-    fn send(&self, method: &'static str, uri: &str, query: &str, body: &[u8]) -> Result<String> {
+    fn send(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Result<String> {
         let url = match query.is_empty() {
             true => self.url(uri),
             false => format!("{}?{query}", self.url(uri)),
@@ -244,21 +216,27 @@ impl Bucket {
             .call()
             .map_err(DeployError::from)?;
         self.check(method, uri, response.status().as_u16(), &mut response)?;
-        Ok(response.body_mut().read_to_string().unwrap_or_default())
+        // Unlike the error body in `check`, this one is the answer itself: a
+        // body that cannot be read is a transport failure, not an empty listing
+        // (which would read as a bucket with nothing in it).
+        response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| DeployError::from(e).into())
     }
 
     /// A signed PUT (with a body) or DELETE (without). ureq types the two builders
     /// differently, so each drives its own call.
     fn write(
         &self,
-        method: &'static str,
+        method: Method,
         uri: &str,
         body: &[u8],
         content_type: Option<&str>,
     ) -> Result<()> {
         let url = self.url(uri);
         let auth = self.authorize(method, uri, "", body);
-        let mut response = if method == "DELETE" {
+        let mut response = if method == Method::Delete {
             self.signed(self.agent.delete(&url), &auth).call()
         } else {
             let mut request = self.signed(self.agent.put(&url), &auth);
@@ -279,8 +257,8 @@ impl Bucket {
     ) -> ureq::RequestBuilder<Any> {
         let request = request
             .header("Authorization", &auth.header)
-            .header("x-amz-date", &auth.timestamp)
-            .header("x-amz-content-sha256", &auth.payload_hash);
+            .header(DATE_HEADER, &auth.timestamp)
+            .header(CONTENT_SHA_HEADER, &auth.payload_hash);
         match &self.token {
             Some(token) => request.header(TOKEN_HEADER, token),
             None => request,
@@ -293,24 +271,24 @@ impl Bucket {
     }
 
     /// Sign a request, returning the header trio to attach.
-    fn authorize(&self, method: &str, uri: &str, query: &str, body: &[u8]) -> Authorization {
-        let timestamp = Self::timestamp(OffsetDateTime::now_utc());
+    fn authorize(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Authorization {
+        let timestamp = Signer::timestamp(OffsetDateTime::now_utc());
         let payload_hash = Signer::sha256_hex(body);
         let signer = Signer {
             access_key: &self.access_key,
             secret_key: &self.secret_key,
             region: &self.region,
-            service: "s3",
+            service: SERVICE,
             timestamp: &timestamp,
         };
         // The session token is part of the signature, not just a header: a
         // signature computed without it is rejected.
-        let mut headers = vec![("x-amz-content-sha256", payload_hash.as_str())];
+        let mut headers = vec![(CONTENT_SHA_HEADER, payload_hash.as_str())];
         if let Some(token) = &self.token {
             headers.push((TOKEN_HEADER, token.as_str()));
         }
         let header = signer.sign(&Request {
-            method,
+            method: method.as_str(),
             host: &self.host,
             uri,
             query,
@@ -328,7 +306,7 @@ impl Bucket {
     /// own error body.
     fn check(
         &self,
-        operation: &'static str,
+        method: Method,
         uri: &str,
         status: u16,
         response: &mut ureq::http::Response<ureq::Body>,
@@ -336,14 +314,54 @@ impl Bucket {
         if (200..300).contains(&status) {
             return Ok(());
         }
+        // The host's error body is a courtesy: if it cannot be read, report the
+        // status on its own rather than replacing the real failure with the
+        // failure to read its explanation.
         let body = response.body_mut().read_to_string().unwrap_or_default();
-        Err(DeployError::request(operation, uri, status, &body).into())
+        Err(DeployError::request(method, uri, status, &body).into())
+    }
+}
+
+impl Store for Bucket {
+    /// S3 returns each object's ETag, which for a single-part upload is the hex
+    /// MD5 of its bytes, so change detection needs no local record.
+    fn digest(&self, bytes: &[u8]) -> String {
+        Self::etag(bytes)
+    }
+
+    fn list(&self) -> Result<Digests> {
+        self.objects()
+    }
+
+    /// Upload `body` to `key` (a relative dist path), setting its content type
+    /// from the extension.
+    fn upload(&self, key: &str, body: &[u8]) -> Result<()> {
+        let content_type = Mime::of(key).header();
+        self.write(Method::Put, &self.object(key), body, Some(&content_type))
+    }
+
+    /// Delete the object at `key` (a relative dist path).
+    fn delete(&self, key: &str) -> Result<()> {
+        self.write(Method::Delete, &self.object(key), &[], None)
+    }
+
+    fn target(&self) -> String {
+        self.name.clone()
     }
 }
 
 /// The header carrying a temporary credential's session token, signed and sent
 /// together so the two can never disagree.
 const TOKEN_HEADER: &str = "x-amz-security-token";
+
+/// The header carrying the payload digest. S3 requires it on every signed
+/// request, and it is part of the signature, so it is named once and both
+/// signed and sent from that one name.
+const CONTENT_SHA_HEADER: &str = "x-amz-content-sha256";
+
+/// The service name a signature's credential scope binds to. Every
+/// S3-compatible host expects `s3` here, whatever it calls itself.
+const SERVICE: &str = "s3";
 
 /// The signed-request headers to attach.
 struct Authorization {
@@ -410,21 +428,12 @@ impl Bucket {
     fn etag(bytes: &[u8]) -> String {
         Signer::hex(&Md5::digest(bytes))
     }
-
-    /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`.
-    fn timestamp(now: OffsetDateTime) -> String {
-        let (year, month, day) = (now.year(), now.month() as u8, now.day());
-        let (hour, minute, second) = (now.hour(), now.minute(), now.second());
-        format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
-    }
 }
 
 impl Listing {
     /// Parse a ListObjectsV2 XML response into its objects and continuation token.
     fn parse(xml: &str) -> Result<Listing> {
-        let document = roxmltree::Document::parse(xml).map_err(|e| DeployError::Listing {
-            message: e.to_string(),
-        })?;
+        let document = roxmltree::Document::parse(xml).map_err(DeployError::from)?;
         let text = |node: roxmltree::Node, tag: &str| {
             node.children()
                 .find(|c| c.has_tag_name(tag))
@@ -582,11 +591,5 @@ mod tests {
         let listing = Listing::parse(xml).unwrap();
         assert!(listing.objects.is_empty());
         assert_eq!(listing.next, None);
-    }
-
-    #[test]
-    fn amz_timestamp_formats_utc() {
-        let t = OffsetDateTime::from_unix_timestamp(1_440_938_160).unwrap(); // 2015-08-30T12:36:00Z
-        assert_eq!(Bucket::timestamp(t), "20150830T123600Z");
     }
 }

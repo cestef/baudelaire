@@ -10,15 +10,14 @@
 //!
 //! The manifest holds only metadata: hashes, dependency edges, output paths,
 //! and a pointer to each page's HTML *blob*. The HTML itself lives in a
-//! content-addressed object store, so a load parses a small manifest instead of
-//! deserializing every page's markup, identical output is stored once, and an
-//! unchanged blob is never rewritten.
+//! content-addressed object store ([`super::objects`]), so a load parses a small
+//! manifest instead of deserializing every page's markup, identical output is
+//! stored once, and an unchanged blob is never rewritten.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::codegen::Value;
@@ -26,16 +25,14 @@ use crate::config::Config;
 use crate::content::{Data, Page};
 use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::access::{self, Root};
+use crate::graph::access::{Root, Roots};
+use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{Fragments, ImageRef};
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
 const MANIFEST: &str = "manifest.json";
-
-/// Subdirectory holding content-addressed HTML blobs.
-const OBJECTS: &str = "objects";
 
 /// Manifest key prefix reserved for generated listings, which have no real
 /// source file. Not a valid relative path under the project root, so it cannot
@@ -157,9 +154,8 @@ pub struct Cache {
     /// digest of a page's recorded value reads. Owned so the cache is
     /// self-contained across the build.
     roots: Vec<(String, Value)>,
-    /// Blobs found on disk not matching their own content address, to be
-    /// rewritten by [`Cache::save`] rather than left broken forever.
-    corrupt: std::collections::HashSet<Hash>,
+    /// The content-addressed store holding every page's rendered markup.
+    objects: Objects,
 }
 
 impl Cache {
@@ -203,6 +199,7 @@ impl Cache {
         };
         let fingerprint = Hash::of(&(config, render, Renderer::current()));
         Ok(Self {
+            objects: Objects::new(&dir),
             dir,
             root: crate::fs::canonical(root),
             enabled: config.cache.incremental,
@@ -214,16 +211,12 @@ impl Cache {
             prev,
             digests: FileDigests::default(),
             roots,
-            corrupt: std::collections::HashSet::new(),
         })
     }
 
     /// Borrow the tracked roots for a value-digest resolution.
-    fn roots(&self) -> Vec<Root<'_>> {
-        self.roots
-            .iter()
-            .map(|(base, tree)| Root { base, tree })
-            .collect()
+    fn roots(&self) -> Roots<'_> {
+        self.roots.iter().map(Root::from).collect()
     }
 
     /// Cached HTML for `page` if still valid: its content fingerprint, every
@@ -257,22 +250,12 @@ impl Cache {
         if !entry
             .meta
             .iter()
-            .all(|(key, hash)| access::digest(&roots, key) == *hash)
+            .all(|(key, hash)| roots.digest(key) == *hash)
         {
             return None;
         }
-        let html = fs::read_to_string(self.object(&entry.blob)).ok()?;
-        // verify the blob against its content address: a torn write leaves bytes
-        // not matching the name that claims their hash. mismatch is a miss, and
-        // the bad file is remembered so `save` overwrites it: it is still
-        // referenced (so the prune keeps it) and its path already exists (so a
-        // write would be skipped), which left that page missing on every build
-        // from then on with no way to self-heal.
-        if Hash::of_bytes(html.as_bytes()) != entry.blob {
-            self.corrupt.insert(entry.blob);
-            return None;
-        }
         let entry = entry.clone();
+        let html = self.objects.read(&entry.blob)?;
         let outputs = entry.outputs.clone();
         self.next.pages.insert(key, entry);
         Some((html, outputs))
@@ -290,7 +273,7 @@ impl Cache {
         reads: &Reads,
         outputs: &Outputs,
     ) {
-        let meta = access::digests(&self.roots(), reads);
+        let meta = self.roots().digests(reads);
         let deps = deps
             .files()
             .iter()
@@ -319,81 +302,25 @@ impl Cache {
             .into_iter()
             .map(|(page, html)| (self.key(page), html))
             .collect();
-        // collect blobs needing a write (new content only), keyed by path so
-        // two pages sharing identical markup stage one write (a duplicate
-        // would race itself in the parallel pass), then write them in
-        // parallel: independent content-addressed files.
-        let pending: BTreeMap<PathBuf, &str> = self
+        // Only freshly recorded pages carry markup to write; a cache hit's blob
+        // is already stored under the same address.
+        let blobs = self
             .next
             .pages
             .iter()
-            .filter_map(|(key, entry)| {
-                let path = self.object(&entry.blob);
-                if path.exists() && !self.corrupt.contains(&entry.blob) {
-                    return None;
-                }
-                html.get(key).map(|contents| (path, *contents))
-            })
-            .collect();
-        pending
-            .par_iter()
-            .try_for_each(|(path, contents)| Self::write_object(path, contents))?;
+            .filter_map(|(key, entry)| Some((&entry.blob, *html.get(key)?)));
+        self.objects.write(blobs)?;
         let json = serde_json::to_vec_pretty(&self.next)
             .map_err(|e| SerializeError::new(Artifact::Cache, e))?;
-        Self::write_atomic(&self.dir.join(MANIFEST), json.as_slice())?;
-        self.prune();
+        Objects::atomic(&self.dir.join(MANIFEST), json.as_slice())?;
+        self.objects.prune(&self.live());
         Ok(())
     }
 
-    /// Absolute path of a blob in the object store, sharded by hash prefix to
-    /// keep any one directory small.
-    fn object(&self, blob: &Hash) -> PathBuf {
-        let hex = blob.hex();
-        let (shard, _) = hex.split_at(2.min(hex.len()));
-        self.dir.join(OBJECTS).join(shard).join(hex)
-    }
-
-    /// Write a blob, creating its shard directory. Atomic, so a crash can never
-    /// leave a truncated blob whose name claims a hash its bytes don't have.
-    fn write_object(path: &Path, contents: &str) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            crate::fs::create_dir_all(parent)?;
-        }
-        Self::write_atomic(path, contents.as_bytes())
-    }
-
-    /// Write `bytes` to `path` via a temporary sibling and a rename, so a reader
-    /// only ever sees the complete file (rename is atomic on the same
-    /// filesystem). Content-addressed blobs are written once per build, so the
-    /// fixed `.tmp` suffix never races itself.
-    fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-        let tmp = path.with_extension("tmp");
-        crate::fs::write(&tmp, bytes)?;
-        crate::fs::rename(&tmp, path)
-    }
-
-    /// Remove object files not referenced by the next manifest. Best-effort:
-    /// the cache is regenerable, so a housekeeping failure never fails a build.
-    fn prune(&self) {
-        let live: BTreeSet<String> = self.next.pages.values().map(|e| e.blob.hex()).collect();
-        let root = self.dir.join(OBJECTS);
-        let Ok(shards) = fs::read_dir(&root) else {
-            return;
-        };
-        for shard in shards.flatten() {
-            let Ok(blobs) = fs::read_dir(shard.path()) else {
-                continue;
-            };
-            for blob in blobs.flatten() {
-                let referenced = blob
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|name| live.contains(name));
-                if !referenced {
-                    let _ = fs::remove_file(blob.path());
-                }
-            }
-        }
+    /// The blobs the next manifest still references; everything else in the
+    /// object store is garbage.
+    fn live(&self) -> HashSet<Hash> {
+        self.next.pages.values().map(|entry| entry.blob).collect()
     }
 
     /// The manifest key for a page.

@@ -1,11 +1,10 @@
 //! The asset pipeline: classify each file under `config.paths.assets`, transform it
 //! through the [`Handler`] that claims it, and write the result into `dist`.
 //!
-//! Each asset kind is one handler ([`Stylesheet`], [`Script`], [`Raster`], or
-//! the fallback [`Verbatim`] copy), registered in [`builtin`]. A handler owns
-//! its kind end to end: which files it claims and how their bytes are produced.
-//! Adding a kind is a new `Handler` impl and one line in `builtin`; nothing in
-//! the orchestrator changes.
+//! This module is the orchestrator: bucket the files, run the handlers in phase
+//! order, memoize what is memoizable, fingerprint and write. The handler
+//! protocol and the registry of kinds live in [`handler`], so a new asset kind
+//! never touches the pipeline.
 //!
 //! Two phases order the work. [`Phase::Early`] handlers (scripts, images, plain
 //! copies) run first, so their fingerprint renames populate the [`AssetMap`].
@@ -16,6 +15,7 @@
 mod css;
 #[cfg(feature = "images")]
 mod exif;
+mod handler;
 #[cfg(feature = "images")]
 mod image;
 #[cfg(feature = "js")]
@@ -24,8 +24,6 @@ mod memo;
 #[cfg(feature = "js")]
 mod module;
 
-#[cfg(feature = "css")]
-use std::path::Component;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
@@ -33,7 +31,7 @@ use crate::config::Config;
 use crate::content::Page;
 use crate::error::Result;
 use crate::fs;
-use crate::graph::Hash;
+use crate::graph::AssetName;
 use rayon::prelude::*;
 
 use crate::engine::layers::{Layered, Layers};
@@ -41,22 +39,14 @@ use crate::render::{AssetMap, SrcSets};
 use crate::theme::Theme;
 use memo::Memo;
 
-#[cfg(feature = "css")]
-use css::Stylesheet;
-#[cfg(feature = "images")]
-use image::Raster;
+// Re-exported for the handler modules (and [`memo`]), which name these as
+// `super::*`; the protocol itself lives in [`handler`].
+use handler::{Ctx, Handler, PathExt, Phase, Variant, builtin};
+
 #[cfg(feature = "js")]
-use js::{Js, Script};
+use js::Js;
 #[cfg(feature = "js")]
 use module::ModuleCx;
-
-/// Length of the hex fingerprint spliced into asset filenames. 16 hex chars =
-/// 64 bits of blake3: collision-free in practice for a site's asset set.
-///
-/// Shared with [`crate::render`], which names externalized images the same way:
-/// an asset that arrives through the render pass must be indistinguishable from
-/// one the pipeline emitted.
-pub(crate) const FINGERPRINT_LEN: usize = 16;
 
 /// The outcome of processing the asset tree: the request->served URL map (only
 /// entries renamed by fingerprinting appear), the count of files emitted
@@ -71,134 +61,6 @@ pub struct Processed {
     pub bytes: u64,
 }
 
-/// When a handler runs, in order. `Early` assets (images, copies) provide the
-/// fingerprinted names others reference; `Late` assets (stylesheets) rewrite
-/// their references against them; `Bundle` assets (scripts) run last, so a
-/// bundle importing `baudelaire:assets` sees the finalized map.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    Early,
-    Late,
-    #[cfg(feature = "js")]
-    Bundle,
-}
-
-/// The read-only context a handler renders against: the config, the served URL
-/// prefix, and the shared JS bundler. The accumulating [`AssetMap`] is passed to
-/// [`Handler::render`] separately, so the pipeline can keep mutating it between
-/// calls.
-struct Ctx<'a> {
-    /// The site config: read by the css and image handlers for their options.
-    #[cfg(any(feature = "css", feature = "images"))]
-    config: &'a Config,
-    prefix: &'a str,
-    #[cfg(feature = "js")]
-    bundler: Option<&'a Js>,
-}
-
-impl Ctx<'_> {
-    /// The served URL for a relative asset path, e.g. `/assets/css/app.css`.
-    fn url(&self, rel: &Path) -> String {
-        let rel = rel.to_string_lossy().replace('\\', "/");
-        format!("{}/{rel}", self.prefix)
-    }
-
-    /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
-    /// (the assets live under `dist`, so there is nothing to canonicalize).
-    /// `None` when the path walks out of the asset root.
-    ///
-    /// Fallible because `PathBuf::pop` on an empty buffer is a silent no-op:
-    /// `url(../x.png)` in `assets/a.css` normalized to `assets/x.png` and so
-    /// resolved to a *different, real* file whenever one happened to exist.
-    #[cfg(feature = "css")]
-    fn normalize(path: &Path) -> Option<PathBuf> {
-        let mut out = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::ParentDir if !out.pop() => return None,
-                Component::ParentDir | Component::CurDir => {}
-                other => out.push(other),
-            }
-        }
-        Some(out)
-    }
-}
-
-/// The lowercase-comparable extension of a path, or `""` when it has none.
-/// A private extension trait so the handlers share one spelling of it. Only the
-/// css/js/image handlers claim by extension, so it is absent from a copy-only
-/// (all-features-off) build.
-#[cfg(any(feature = "css", feature = "js", feature = "images"))]
-pub(super) trait PathExt {
-    fn ext(&self) -> &str;
-}
-
-#[cfg(any(feature = "css", feature = "js", feature = "images"))]
-impl PathExt for Path {
-    fn ext(&self) -> &str {
-        self.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or_default()
-    }
-}
-
-/// One asset-processing strategy: which files it claims, when it runs, and how a
-/// claimed file becomes its emitted bytes.
-trait Handler: Sync {
-    /// Whether this handler processes `file`. The first handler in [`builtin`]
-    /// to claim a file owns it, so specific handlers come first and [`Verbatim`]
-    /// claims whatever is left.
-    fn claims(&self, file: &Path, config: &Config) -> bool;
-
-    /// When this handler runs relative to the others.
-    fn phase(&self) -> Phase {
-        Phase::Early
-    }
-
-    /// Whether this handler's output is a pure function of the file's own bytes
-    /// and the config, and so can be memoized across builds.
-    ///
-    /// False by default, and deliberately so: a stylesheet rewrites references
-    /// to *other* assets' hashed names and a script bundles a whole import
-    /// graph, so neither is determined by the bytes in front of it.
-    fn pure(&self) -> bool {
-        false
-    }
-
-    /// Reorder this handler's files before rendering. The default keeps input
-    /// order; stylesheets override it to fingerprint an imported sheet before
-    /// its importer.
-    fn order(&self, files: Vec<Layered>, _ctx: &Ctx) -> Vec<Layered> {
-        files
-    }
-
-    /// The served path for a claimed file, when this handler's output is no
-    /// longer the same kind of file as its source. Default: unchanged.
-    ///
-    /// Scripts use it: a bundled `.ts` entry holds JavaScript, and writing it as
-    /// `app.<hash>.ts` left the served file under a MIME type browsers refuse
-    /// for `type=module`, keyed in the asset map under a name no author writes.
-    fn rename(&self, rel: &Path) -> PathBuf {
-        rel.to_path_buf()
-    }
-
-    /// Transform `file` (relative path `rel`) into the bytes written to `dist`,
-    /// or `None` to emit nothing: a script partial pulled in only through
-    /// imports. `map` holds the served names of every asset processed so far.
-    fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx)
-    -> Result<Option<Vec<u8>>>;
-
-    /// Responsive width variants derived from `file`, beyond the primary
-    /// [`render`](Handler::render) output: the raster handler's downscaled
-    /// copies. The pipeline writes each variant and records the `srcset`
-    /// manifest from their widths. Default: none.
-    ///
-    /// [`Handler::render`]: Handler::render
-    fn variants(&self, _file: &Path, _rel: &Path, _ctx: &Ctx) -> Result<Vec<Variant>> {
-        Ok(Vec::new())
-    }
-}
-
 /// One file's rendered outputs, held until the serial emit pass writes them.
 struct Render {
     /// Source path relative to the asset root.
@@ -207,51 +69,6 @@ struct Render {
     served: PathBuf,
     primary: Option<Vec<u8>>,
     variants: Vec<Variant>,
-}
-
-/// One responsive candidate a handler derives from a source image: a target
-/// `width`, its output path `rel`, and the `bytes` to write. `bytes` is `None`
-/// for the source's own width, whose bytes are the handler's primary output; it
-/// still becomes the largest `srcset` candidate.
-pub(super) struct Variant {
-    pub rel: PathBuf,
-    pub width: u32,
-    pub bytes: Option<Vec<u8>>,
-}
-
-/// The registered handlers, in claim priority: [`Verbatim`] is last because it
-/// claims every file. [`Script`] is present only under the `js` feature; without
-/// it, `.js` files fall through to [`Verbatim`] and are copied unbundled.
-fn builtin() -> Vec<Box<dyn Handler>> {
-    vec![
-        #[cfg(feature = "css")]
-        Box::new(Stylesheet),
-        #[cfg(feature = "js")]
-        Box::new(Script),
-        #[cfg(feature = "images")]
-        Box::new(Raster),
-        Box::new(Verbatim),
-    ]
-}
-
-/// The fallback handler: copies a file byte-for-byte. Claims everything, so it
-/// comes last in [`builtin`].
-struct Verbatim;
-
-impl Handler for Verbatim {
-    fn claims(&self, _file: &Path, _config: &Config) -> bool {
-        true
-    }
-
-    fn render(
-        &self,
-        file: &Path,
-        _rel: &Path,
-        _map: &AssetMap,
-        _ctx: &Ctx,
-    ) -> Result<Option<Vec<u8>>> {
-        Ok(Some(fs::read(file)?))
-    }
 }
 
 /// The site data the JS bundler needs to serve its `baudelaire:*` virtual
@@ -352,11 +169,7 @@ impl<'a> Assets<'a> {
         // fingerprint renames land in the map before anything reads it.
         let ctx = self.ctx();
         for phase in [Phase::Early, Phase::Late] {
-            for (handler, bucket) in handlers.iter().zip(&mut buckets) {
-                if handler.phase() == phase && !bucket.is_empty() {
-                    self.run(handler.as_ref(), std::mem::take(bucket), &ctx, &mut out)?;
-                }
-            }
+            self.phase(phase, &handlers, &mut buckets, &ctx, &mut out)?;
         }
         // Bundle phase last: build the bundler now that the map is final, so a
         // `baudelaire:assets` import resolves every asset processed above.
@@ -377,20 +190,34 @@ impl<'a> Assets<'a> {
                     };
                     Js::new(&cx)?
                 };
+                // The same context the other phases ran against, with the
+                // bundler attached: one place spells the field list.
                 let ctx = Ctx {
-                    #[cfg(any(feature = "css", feature = "images"))]
-                    config: self.config,
-                    prefix: &self.prefix,
                     bundler: Some(&js),
+                    ..self.ctx()
                 };
-                for (handler, bucket) in handlers.iter().zip(&mut buckets) {
-                    if handler.phase() == Phase::Bundle && !bucket.is_empty() {
-                        self.run(handler.as_ref(), std::mem::take(bucket), &ctx, &mut out)?;
-                    }
-                }
+                self.phase(Phase::Bundle, &handlers, &mut buckets, &ctx, &mut out)?;
             }
         }
         Ok(out)
+    }
+
+    /// Run every handler belonging to `phase` over the files bucketed for it,
+    /// draining each bucket as it goes so a later phase sees only its own.
+    fn phase(
+        &self,
+        phase: Phase,
+        handlers: &[Box<dyn Handler>],
+        buckets: &mut [Vec<Layered>],
+        ctx: &Ctx,
+        out: &mut Processed,
+    ) -> Result<()> {
+        for (handler, bucket) in handlers.iter().zip(buckets) {
+            if handler.phase() == phase && !bucket.is_empty() {
+                self.run(handler.as_ref(), std::mem::take(bucket), ctx, out)?;
+            }
+        }
+        Ok(())
     }
 
     /// A render context borrowing this pipeline's config/paths. The bundle phase
@@ -513,40 +340,12 @@ impl<'a> Assets<'a> {
 
     /// The relative output path for an asset, splicing a content hash into the
     /// filename when fingerprinting is enabled (`app.css` -> `app.<hash>.css`).
+    /// The digest and the splice are [`AssetName`]'s, shared with the render
+    /// pass so an externalized image is named like any other asset.
     fn fingerprint(&self, rel: &Path, bytes: &[u8]) -> PathBuf {
-        if !self.config.assets.fingerprint {
-            return rel.to_path_buf();
+        match self.config.assets.fingerprint {
+            true => rel.suffixed(&AssetName::digest(bytes)),
+            false => rel.to_path_buf(),
         }
-        let hash = Hash::of_bytes(bytes);
-        let digest = hash.short(FINGERPRINT_LEN);
-        let stem = rel.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-        let name = match rel.extension().and_then(|e| e.to_str()) {
-            Some(ext) => format!("{stem}.{digest}.{ext}"),
-            None => format!("{stem}.{digest}"),
-        };
-        rel.with_file_name(name)
-    }
-}
-
-#[cfg(all(test, feature = "css"))]
-mod tests {
-    use super::Ctx;
-    use std::path::{Path, PathBuf};
-
-    /// A `..` that walks out of the asset root must not be absorbed: it used to
-    /// normalize to a sibling inside the root and resolve to a different, real
-    /// file.
-    #[test]
-    fn normalize_rejects_a_path_escaping_the_asset_root() {
-        assert_eq!(Ctx::normalize(Path::new("../x.png")), None);
-        assert_eq!(Ctx::normalize(Path::new("css/../../x.png")), None);
-    }
-
-    #[test]
-    fn normalize_collapses_interior_segments() {
-        assert_eq!(
-            Ctx::normalize(Path::new("css/../img/./logo.png")),
-            Some(PathBuf::from("img/logo.png"))
-        );
     }
 }

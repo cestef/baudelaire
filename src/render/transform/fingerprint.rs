@@ -10,7 +10,7 @@ use typst_html::HtmlDocument;
 
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform, URL_ATTRS};
+use super::{Cx, DocumentExt, Transform};
 
 /// The [`Transform`] that swaps asset references for their fingerprinted URLs.
 ///
@@ -27,8 +27,6 @@ impl Transform for Fingerprint {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        doc.root_mut().walk(&mut |element| {
-            element.assets(URL_ATTRS, |value| cx.assets.resolve(value));
-        });
+        doc.assets(|value| cx.assets.resolve(value));
     }
 }

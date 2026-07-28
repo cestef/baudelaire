@@ -14,6 +14,12 @@ use crate::error::Result;
 /// Writes `.well-known/site.standard.publication` for the configured `did`.
 pub(super) struct WellKnown;
 
+impl WellKnown {
+    /// The standard directory every well-known artifact is served from. Named
+    /// once: the emitted path and the progress note are the same location.
+    const DIR: &'static str = ".well-known";
+}
+
 impl Processor for WellKnown {
     fn enabled(&self, config: &Config) -> bool {
         config.verify_did(|v| v.wellknown).is_some()
@@ -24,14 +30,9 @@ impl Processor for WellKnown {
         let Some(did) = site.config.verify_did(|v| v.wellknown) else {
             return Ok(());
         };
-        let path = site
-            .config
-            .paths
-            .dist
-            .join(".well-known")
-            .join(PUBLICATION.as_str());
+        let path = site.dist(&[Self::DIR, PUBLICATION.as_str()]);
         out.file(&path, &publication_uri(did).to_string())?;
-        out.note(format_args!("wrote .well-known/{}", PUBLICATION.as_str()));
+        out.note(format_args!("wrote {}/{}", Self::DIR, PUBLICATION.as_str()));
         Ok(())
     }
 }

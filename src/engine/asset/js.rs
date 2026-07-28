@@ -90,7 +90,7 @@ impl Js {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .map_err(|e| AssetError::js("javascript bundler", e))?;
+            .map_err(AssetError::runtime)?;
         // Absolute so rolldown resolves entries regardless of its `cwd`.
         let cwd = fs::canonical(&cx.config.paths.assets);
         Ok(Self {

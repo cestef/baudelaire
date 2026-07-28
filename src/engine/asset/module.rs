@@ -19,6 +19,7 @@ use crate::codegen::{Js, Value};
 use crate::config::{Config, SearchFormat};
 use crate::content::{Data, Iso, Page};
 use crate::render::AssetMap;
+use crate::world::BuildContext;
 
 /// The read-only build data every virtual module generates from.
 pub(super) struct ModuleCx<'a> {
@@ -39,9 +40,11 @@ trait Module {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)>;
 }
 
-/// The registered virtual modules.
-fn builtin() -> [Box<dyn Module>; 10] {
-    [
+/// The registered virtual modules. Adding one is an impl plus a line here, so
+/// the list is a `Vec` rather than a fixed-size array whose length is a second
+/// place to edit.
+fn builtin() -> Vec<Box<dyn Module>> {
+    vec![
         Box::new(Search),
         Box::new(Navigation),
         Box::new(Site),
@@ -195,19 +198,14 @@ impl Module for Navigation {
 
 /// `baudelaire:site`: site identity and build version, mirroring what templates
 /// read from `sys.inputs.baudelaire`.
+///
+/// The field list belongs to [`BuildContext::site_fields`], which the Typst
+/// module `@baudelaire/site` serves too, so the two cannot drift.
 struct Site;
 
 impl Module for Site {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // The build context's `site` sub-tree plus its `version`: the same
-        // value that feeds `sys.inputs`, not a rebuild from config.
-        let mut fields = match cx.context.get("site") {
-            Some(Value::Dict(pairs)) => pairs.clone(),
-            _ => Vec::new(),
-        };
-        if let Some(version) = cx.context.get("version") {
-            fields.push(("version".to_owned(), version.clone()));
-        }
+        let fields = BuildContext::site_fields(cx.context);
         vec![("baudelaire:site".into(), Esm::object(&Value::Dict(fields)))]
     }
 }

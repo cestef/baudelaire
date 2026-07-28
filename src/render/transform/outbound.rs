@@ -12,7 +12,7 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 
 /// The [`Transform`] that records outbound `http(s)` anchors.
 pub(super) struct Outbound;
@@ -23,7 +23,7 @@ impl Transform for Outbound {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        doc.root_mut().walk(&mut |el| {
+        doc.walk(|el| {
             if el.tag != tag::a {
                 return;
             }

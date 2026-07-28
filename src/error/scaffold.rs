@@ -20,6 +20,10 @@ pub enum ScaffoldError {
     #[error("unknown starter template `{name}`")]
     #[diagnostic(code(baudelaire::scaffold::unknown_template), help("{help}"))]
     UnknownTemplate { name: String, help: String },
+
+    #[error("unknown optional feature `{name}`")]
+    #[diagnostic(code(baudelaire::scaffold::unknown_extra), help("{help}"))]
+    UnknownExtra { name: String, help: String },
 }
 
 impl ScaffoldError {
@@ -27,6 +31,16 @@ impl ScaffoldError {
     /// suggestion can never name one that does not exist.
     pub fn unknown_template(name: &str, help: String) -> Self {
         Self::UnknownTemplate {
+            name: name.to_owned(),
+            help,
+        }
+    }
+
+    /// The `--with` counterpart of [`Self::unknown_template`], its own class so
+    /// the message names a feature rather than a starter template; `help` again
+    /// comes from the table that defines what is valid.
+    pub fn unknown_extra(name: &str, help: String) -> Self {
+        Self::UnknownExtra {
             name: name.to_owned(),
             help,
         }

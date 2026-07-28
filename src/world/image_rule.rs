@@ -70,16 +70,16 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
 
     // Reproduce the sizing typst's native rule sets as inline CSS: pixel-hinting,
     // and the author's `width`/`height`. typst-html's own `css` builder is
-    // private, so the same values are rendered here (see [`css`]).
+    // private, so the same values are rendered here (see [`Css`]).
     let mut style = String::new();
     if let Some(rendering) = typst_svg::convert_image_scaling(image.scaling()) {
         let _ = write!(style, "image-rendering:{rendering};");
     }
     if let Smart::Custom(width) = elem.width.get(styles) {
-        let _ = write!(style, "width:{};", css(&width));
+        let _ = write!(style, "width:{};", Css(&width));
     }
     if let Sizing::Rel(height) = elem.height.get(styles) {
-        let _ = write!(style, "height:{};", css(&height));
+        let _ = write!(style, "height:{};", Css(&height));
     }
     if !style.is_empty() {
         attrs.push(attr::style, style);
@@ -93,40 +93,54 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     ))
 };
 
-/// A relative length as a CSS dimension, mirroring typst-html's own (private)
-/// `ToCss` encoding: a ratio becomes a percent, an absolute length points, an
-/// em-length ems, and a mix becomes a `calc(..)` sum. A single term is emitted
-/// bare, and an all-zero length is `0`.
-fn css(rel: &Rel<Length>) -> String {
-    let mut terms = Vec::new();
-    if rel.rel.get() != 0.0 {
-        terms.push(format!("{}%", trim(rel.rel.get() * 100.0)));
-    }
-    if rel.abs.em.get() != 0.0 {
-        terms.push(format!("{}em", trim(rel.abs.em.get())));
-    }
-    if rel.abs.abs.to_pt() != 0.0 {
-        terms.push(format!("{}pt", trim(rel.abs.abs.to_pt())));
-    }
-    match terms.len() {
-        0 => "0".into(),
-        1 => terms.pop().unwrap(),
-        _ => format!("calc({})", terms.join(" + ")),
+/// Displays a relative length as a CSS dimension, mirroring typst-html's own
+/// (private) `ToCss` encoding: a ratio becomes a percent, an absolute length
+/// points, an em-length ems, and a mix becomes a `calc(..)` sum. A single term
+/// is emitted bare, and an all-zero length is `0`.
+struct Css<'a>(&'a Rel<Length>);
+
+impl Css<'_> {
+    /// Decimals kept before trailing zeros are trimmed.
+    const PRECISION: usize = 4;
+
+    /// A finite number formatted for CSS: up to [`Css::PRECISION`] decimals,
+    /// with trailing zeros (and any bare decimal point) trimmed, so `50.0`
+    /// renders as `50`.
+    fn number(value: f64) -> String {
+        let s = format!("{value:.precision$}", precision = Self::PRECISION);
+        s.trim_end_matches('0').trim_end_matches('.').to_owned()
     }
 }
 
-/// A finite number formatted for CSS: up to four decimals, with trailing zeros
-/// (and any bare decimal point) trimmed, so `50.0` renders as `50`.
-fn trim(value: f64) -> String {
-    let s = format!("{value:.4}");
-    let s = s.trim_end_matches('0').trim_end_matches('.');
-    s.to_owned()
+impl std::fmt::Display for Css<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rel = self.0;
+        let mut terms = Vec::new();
+        if rel.rel.get() != 0.0 {
+            terms.push(format!("{}%", Self::number(rel.rel.get() * 100.0)));
+        }
+        if rel.abs.em.get() != 0.0 {
+            terms.push(format!("{}em", Self::number(rel.abs.em.get())));
+        }
+        if rel.abs.abs.to_pt() != 0.0 {
+            terms.push(format!("{}pt", Self::number(rel.abs.abs.to_pt())));
+        }
+        match terms.len() {
+            0 => f.write_str("0"),
+            1 => f.write_str(&terms[0]),
+            _ => write!(f, "calc({})", terms.join(" + ")),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::css;
+    use super::Css;
     use typst::layout::{Abs, Em, Length, Ratio, Rel};
+
+    fn css(rel: &Rel<Length>) -> String {
+        Css(rel).to_string()
+    }
 
     #[test]
     fn css_renders_a_ratio_as_a_percent() {

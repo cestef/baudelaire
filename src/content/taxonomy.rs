@@ -148,7 +148,7 @@ impl<'a> Group<'a> {
             .collect();
         Listing::new(
             self.name,
-            "index",
+            Listing::INDEX,
             self.url(&[self.name]),
             Titlecase(self.name).to_string(),
         )

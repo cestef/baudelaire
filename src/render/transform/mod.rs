@@ -56,16 +56,14 @@ pub(super) struct Cx<'a> {
     pub assets: &'a AssetMap,
     /// Responsive width-variant manifest, consumed by the sources transform.
     pub srcsets: &'a SrcSets,
-    /// Project root, so the externalize transform resolves image markers to
-    /// source files.
+    /// Project root, so the externalize and svg transforms resolve a marker's
+    /// project-relative path to the source file on disk.
     pub root: &'a std::path::Path,
     /// What the pipeline has found so far. This is the value the caller gets
     /// back, accumulated in place rather than copied out field by field.
     pub found: super::Rewrite,
 }
 
-/// The one shared walker over the typed DOM, so every transform visits
-/// elements the same way instead of hand-rolling its own recursion.
 /// The attributes that carry a URL to an asset this site owns.
 ///
 /// One list, because four hand-written copies had drifted into four different
@@ -73,7 +71,7 @@ pub(super) struct Cx<'a> {
 /// base-path-prefixed and never embedded, so a subpath-hosted site's social card
 /// pointed at a file that was not there. `srcset` is handled separately by
 /// [`ElementExt::assets`], which parses its candidate list.
-pub(super) const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
+const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
 
 /// The one replace-or-push rule for an attribute list, shared by
 /// [`ElementExt::set`] and by any pass still assembling attributes that has no
@@ -94,7 +92,9 @@ impl AttrsExt for typst_html::HtmlAttrs {
 }
 
 pub(super) trait ElementExt {
-    /// Visit this element, then every descendant element, depth-first.
+    /// Visit this element, then every descendant element, depth-first. The one
+    /// shared walk over the typed DOM, so no transform hand-rolls its own
+    /// recursion.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
     /// This element's `<head>` child, if it has one: the one place a transform
     /// appends head elements, so meta and verification tags find it the same way.
@@ -104,14 +104,10 @@ pub(super) trait ElementExt {
     /// Rewrite each attribute among `keys` that is present: `f` returns the
     /// replacement value, or `None` to leave it as authored.
     fn rewrite(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
-    /// Rewrite every asset-bearing attribute (the `keys` plus `srcset`) through
-    /// `f` in one pass, so an asset-rewriting transform states only its key list.
-    fn assets(&mut self, keys: &[HtmlAttr], f: impl FnMut(&str) -> Option<String>);
-    /// Rewrite each URL in a `srcset` attribute (a comma-separated list of
-    /// `url [descriptor]` candidates) leaving descriptors intact. `f` maps one
-    /// URL to its replacement, or `None` to keep it. So `<img srcset>` and
-    /// `<source srcset>` get the same asset rewriting as plain `src`.
-    fn rewrite_srcset(&mut self, f: impl FnMut(&str) -> Option<String>);
+    /// Rewrite every asset-bearing attribute ([`URL_ATTRS`] plus `srcset`)
+    /// through `f` in one pass, so an asset-rewriting transform names no key
+    /// list of its own.
+    fn assets(&mut self, f: impl FnMut(&str) -> Option<String>);
 }
 
 impl ElementExt for HtmlElement {
@@ -148,17 +144,54 @@ impl ElementExt for HtmlElement {
         }
     }
 
-    fn assets(&mut self, keys: &[HtmlAttr], mut f: impl FnMut(&str) -> Option<String>) {
-        self.rewrite(keys, &mut f);
-        self.rewrite_srcset(&mut f);
-    }
-
-    fn rewrite_srcset(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
+    fn assets(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
+        self.rewrite(URL_ATTRS, &mut f);
         let Some(value) = self.attrs.get_mut(attr::srcset) else {
             return;
         };
+        if let Some(rebuilt) = SrcSet(value.as_str()).rewritten(&mut f) {
+            *value = rebuilt.into();
+        }
+    }
+}
+
+/// Document-level entry points, so a transform states what it visits rather
+/// than repeating `root_mut()` and its own closure plumbing.
+pub(super) trait DocumentExt {
+    /// Visit every element in the document, depth-first.
+    fn walk(&mut self, f: impl FnMut(&mut HtmlElement));
+    /// The document's `<head>`, if the page has one.
+    fn head(&mut self) -> Option<&mut HtmlElement>;
+    /// Rewrite every asset-bearing URL in the document through `f`.
+    fn assets(&mut self, f: impl FnMut(&str) -> Option<String>);
+}
+
+impl DocumentExt for HtmlDocument {
+    fn walk(&mut self, mut f: impl FnMut(&mut HtmlElement)) {
+        self.root_mut().walk(&mut f);
+    }
+
+    fn head(&mut self) -> Option<&mut HtmlElement> {
+        self.root_mut().head()
+    }
+
+    fn assets(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
+        self.walk(|element| element.assets(&mut f));
+    }
+}
+
+/// A `srcset` attribute value: a comma-separated list of `url [descriptor]`
+/// candidates, so `<img srcset>` and `<source srcset>` get the same asset
+/// rewriting as a plain `src`.
+struct SrcSet<'a>(&'a str);
+
+impl<'a> SrcSet<'a> {
+    /// This list with each URL passed through `f`, descriptors left intact, or
+    /// `None` when `f` replaced nothing.
+    fn rewritten(&self, mut f: impl FnMut(&str) -> Option<String>) -> Option<String> {
         let mut changed = false;
-        let rebuilt = candidates(value)
+        let rebuilt = self
+            .candidates()
             .into_iter()
             .map(|(url, descriptor)| {
                 let url = match f(url) {
@@ -175,41 +208,39 @@ impl ElementExt for HtmlElement {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        if changed {
-            *value = rebuilt.into();
-        }
+        changed.then_some(rebuilt)
     }
-}
 
-/// Split a `srcset` into `(url, descriptor)` candidates by the HTML spec's
-/// whitespace-driven rule: a URL runs to the next whitespace and may itself
-/// contain commas (`data:` URIs), so only a URL's *trailing* commas (or a
-/// comma after the descriptor) terminate a candidate.
-fn candidates(srcset: &str) -> Vec<(&str, &str)> {
-    let mut out = Vec::new();
-    let mut rest = srcset;
-    loop {
-        rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == ',');
-        if rest.is_empty() {
-            break;
+    /// The `(url, descriptor)` candidates, by the HTML spec's whitespace-driven
+    /// rule: a URL runs to the next whitespace and may itself contain commas
+    /// (`data:` URIs), so only a URL's *trailing* commas (or a comma after the
+    /// descriptor) terminate a candidate.
+    fn candidates(&self) -> Vec<(&'a str, &'a str)> {
+        let mut out = Vec::new();
+        let mut rest = self.0;
+        loop {
+            rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == ',');
+            if rest.is_empty() {
+                break;
+            }
+            let split = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            let (url, tail) = rest.split_at(split);
+            let trimmed = url.trim_end_matches(',');
+            if trimmed.len() != url.len() {
+                // the comma belonged to the separator, not the URL: no descriptor.
+                out.push((trimmed, ""));
+                rest = tail;
+                continue;
+            }
+            let (descriptor, after) = match tail.find(',') {
+                Some(i) => (&tail[..i], &tail[i + 1..]),
+                None => (tail, ""),
+            };
+            out.push((url, descriptor.trim()));
+            rest = after;
         }
-        let split = rest.find(char::is_whitespace).unwrap_or(rest.len());
-        let (url, tail) = rest.split_at(split);
-        let trimmed = url.trim_end_matches(',');
-        if trimmed.len() != url.len() {
-            // the comma belonged to the separator, not the URL: no descriptor.
-            out.push((trimmed, ""));
-            rest = tail;
-            continue;
-        }
-        let (descriptor, after) = match tail.find(',') {
-            Some(i) => (&tail[..i], &tail[i + 1..]),
-            None => (tail, ""),
-        };
-        out.push((url, descriptor.trim()));
-        rest = after;
+        out
     }
-    out
 }
 
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning
@@ -263,7 +294,11 @@ impl Transforms {
 
 #[cfg(test)]
 mod tests {
-    use super::candidates;
+    use super::SrcSet;
+
+    fn candidates(srcset: &str) -> Vec<(&str, &str)> {
+        SrcSet(srcset).candidates()
+    }
 
     #[test]
     fn srcset_candidates_split_on_descriptors_and_bare_commas() {

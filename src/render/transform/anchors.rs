@@ -5,12 +5,17 @@
 //! URLs). An author-set `id` is always left untouched. A heading whose text has
 //! no URL-safe characters is skipped rather than given an empty anchor.
 
+use std::collections::HashSet;
+
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
 use crate::config::Config;
 use crate::content::Slug;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
+
+/// The elements a reader deep-links to, spelled once.
+const HEADINGS: &[HtmlTag] = &[tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag::h6];
 
 /// The [`Transform`] that adds heading `id` anchors.
 pub(super) struct Anchors;
@@ -25,13 +30,13 @@ impl Transform for Anchors {
         // Every authored id is collected up front (on any element, anywhere in
         // the document) so a derived id never collides with one, regardless of
         // which comes first in the walk.
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-        doc.root_mut().walk(&mut |element| {
+        let mut seen: HashSet<String> = HashSet::new();
+        doc.walk(|element| {
             if let Some(id) = element.attrs.get(attr::id) {
                 seen.insert(id.to_string());
             }
         });
-        doc.root_mut().walk(&mut |element| {
+        doc.walk(|element| {
             if !Self::heading(element.tag) || element.attrs.get(attr::id).is_some() {
                 return;
             }
@@ -46,12 +51,12 @@ impl Transform for Anchors {
 impl Anchors {
     /// Whether `tag` is one of `<h1>`..`<h6>`.
     fn heading(tag: HtmlTag) -> bool {
-        [tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag::h6].contains(&tag)
+        HEADINGS.contains(&tag)
     }
 
     /// `base`, or the first `base-N` (N≥2) not already taken, reserving the
     /// result in `seen`.
-    fn unique(base: String, seen: &mut std::collections::HashSet<String>) -> String {
+    fn unique(base: String, seen: &mut HashSet<String>) -> String {
         if seen.insert(base.clone()) {
             return base;
         }

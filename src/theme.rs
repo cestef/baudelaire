@@ -28,6 +28,7 @@ use typst_kit::downloader::SystemDownloader;
 use typst_kit::packages::SystemPackages;
 
 use crate::error::{Result, ThemeError};
+use crate::fs::Contained;
 
 /// A resolved theme: where its files are, and how Typst names them.
 #[derive(Debug, Clone)]
@@ -63,11 +64,11 @@ impl Theme {
     fn package(spec: &str) -> Result<Self> {
         let parsed: PackageSpec = spec
             .parse()
-            .map_err(|why: typst::ecow::EcoString| ThemeError::spec(spec, why.to_string()))?;
+            .map_err(|why: typst::ecow::EcoString| ThemeError::spec(spec, why))?;
         let packages = SystemPackages::new(SystemDownloader::new(crate::world::USER_AGENT));
         let root = packages
             .obtain(&parsed)
-            .map_err(|why| ThemeError::unavailable(spec, why.to_string()))?;
+            .map_err(|why| ThemeError::unavailable(spec, why))?;
         Ok(Self {
             root: root.path().to_path_buf(),
             // A package spec is itself a path root to the compiler, so this
@@ -82,21 +83,14 @@ impl Theme {
     /// theme elsewhere on the disk would resolve its assets but fail on its very
     /// first template, which is a worse way to find out.
     fn directory(path: &str, project: &Path) -> Result<Self> {
-        let rel = Path::new(path);
-        let escapes = rel.is_absolute()
-            || rel
-                .components()
-                .any(|c| !matches!(c, std::path::Component::Normal(_)));
-        if escapes {
-            return Err(ThemeError::outside(path).into());
-        }
-        let root = project.join(rel);
+        let rel = Contained::new(path).ok_or_else(|| ThemeError::outside(path))?;
+        let root = rel.under(project);
         if !root.is_dir() {
             return Err(ThemeError::missing(path).into());
         }
         Ok(Self {
             root,
-            import: format!("/{}", rel.display()),
+            import: format!("/{}", rel.path().display()),
         })
     }
 
@@ -168,11 +162,13 @@ mod tests {
     }
 
     /// A Typst import cannot leave the project root, so a theme that would sit
-    /// outside it is refused up front rather than half-working.
+    /// outside it is refused up front rather than half-working. An empty name is
+    /// refused with them: it used to resolve the theme to the project root
+    /// itself, making every project file a theme file.
     #[test]
     fn a_theme_outside_the_project_is_refused() {
         let tmp = project();
-        for path in ["../elsewhere", "/etc/theme", "themes/../../up"] {
+        for path in ["../elsewhere", "/etc/theme", "themes/../../up", "", "."] {
             assert!(
                 Theme::resolve(path, tmp.path()).is_err(),
                 "{path} should be refused"

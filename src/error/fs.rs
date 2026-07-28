@@ -12,7 +12,8 @@ use std::path::PathBuf;
 use miette::Diagnostic;
 use thiserror::Error;
 
-/// A filesystem operation, named for error messages.
+/// A filesystem operation, named for error messages and for the diagnostic
+/// code.
 #[derive(Debug, Clone, Copy)]
 pub enum Op {
     Read,
@@ -26,19 +27,33 @@ pub enum Op {
     Enter,
 }
 
+impl Op {
+    /// The verb a message reads with and the suffix its diagnostic code carries,
+    /// in one arm each: the code used to be the message with its spaces
+    /// substituted, so rewording a sentence renamed the code a user filters on.
+    const fn spellings(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Read => ("read", "read"),
+            Self::Write => ("write", "write"),
+            Self::CreateDir => ("create directory", "create_directory"),
+            Self::ReadDir => ("read directory", "read_directory"),
+            Self::Copy => ("copy", "copy"),
+            Self::Rename => ("rename", "rename"),
+            Self::Remove => ("remove", "remove"),
+            Self::Canonicalize => ("resolve", "resolve"),
+            Self::Enter => ("enter directory", "enter_directory"),
+        }
+    }
+
+    /// The stable identifier this operation contributes to a diagnostic code.
+    const fn code(self) -> &'static str {
+        self.spellings().1
+    }
+}
+
 impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Read => "read",
-            Self::Write => "write",
-            Self::CreateDir => "create directory",
-            Self::ReadDir => "read directory",
-            Self::Copy => "copy",
-            Self::Rename => "rename",
-            Self::Remove => "remove",
-            Self::Canonicalize => "resolve",
-            Self::Enter => "enter directory",
-        })
+        f.write_str(self.spellings().0)
     }
 }
 
@@ -98,9 +113,7 @@ impl FsError {
 
 impl Diagnostic for FsError {
     fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(
-            format!("baudelaire::fs::{}", self.op).replace(' ', "_"),
-        ))
+        Some(Box::new(format!("baudelaire::fs::{}", self.op.code())))
     }
 
     /// A remedy keyed off the OS error kind, far more actionable than the raw

@@ -3,7 +3,7 @@
 //! Post-processing operates on typst-html's own typed DOM
 //! ([`typst_html::HtmlDocument`]), never on the serialized string, honoring the
 //! project rule that HTML is never manipulated as text.
-
+//!
 //! The site-wide data a transform reads (the asset map, the link map, the
 //! responsive manifest) lives here; the passes themselves live in
 //! [`transform`], one file each.
@@ -21,7 +21,12 @@ pub use links::LinkMap;
 pub use srcset::SrcSets;
 pub use transform::ImageRef;
 
+use typst_html::HtmlDocument;
+
+use crate::config::Config;
+use crate::content::Page;
 use crate::graph::Fingerprint;
+use crate::render::transform::{Cx, Transforms};
 
 /// A raw `href`/`src` split at its `#fragment` / `?query` boundary: the one
 /// parsing rule for URL tails, shared by link and asset resolution.
@@ -41,12 +46,6 @@ impl<'a> Tail<'a> {
         Self { path, tail }
     }
 }
-
-use typst_html::HtmlDocument;
-
-use crate::config::Config;
-use crate::content::Page;
-use crate::render::transform::{Cx, Transforms};
 
 /// The site-wide render context. Built once per build from the full page set,
 /// then shared read-only across the parallel compile pool.

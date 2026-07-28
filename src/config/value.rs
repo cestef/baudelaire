@@ -4,8 +4,8 @@
 use kdl::KdlValue;
 use miette::SourceSpan;
 
+use crate::config::Named;
 use crate::config::dispatch::Keys;
-use crate::config::{SortKey, UrlStyle};
 use crate::error::{ConfigError, Result};
 
 /// A `${VAR}` reference whose variable is unset and which carries no
@@ -65,12 +65,10 @@ pub(super) trait ValueExt {
     fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64>;
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
-    fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey>;
-    fn urls(&self, text: &str, span: SourceSpan) -> Result<UrlStyle>;
-    /// Map a string value through a `(name, value)` table, erroring on an
-    /// unknown name with a nearest-match hint: the single-value counterpart of
-    /// `NodeExt::mapped`, so the table drives both parsing and error help.
-    fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T>;
+    /// Read a string value as one of `T`'s configured names, erroring on an
+    /// unknown one with a nearest-match hint: the single-value counterpart of
+    /// `NodeExt::mapped`, so [`Named::NAMES`] drives both parsing and error help.
+    fn one<T: Named>(&self, text: &str, span: SourceSpan) -> Result<T>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
     /// straight through to client JS (`baudelaire:config`). Strings expand
     /// `${VAR}` like every other config string; a non-finite float is an error.
@@ -124,26 +122,6 @@ impl ValueExt for KdlValue {
         }
     }
 
-    fn sort(&self, text: &str, span: SourceSpan) -> Result<SortKey> {
-        self.one(
-            text,
-            span,
-            &[
-                ("order", SortKey::Order),
-                ("date", SortKey::Date),
-                ("title", SortKey::Title),
-            ],
-        )
-    }
-
-    fn urls(&self, text: &str, span: SourceSpan) -> Result<UrlStyle> {
-        self.one(
-            text,
-            span,
-            &[("clean", UrlStyle::Clean), ("flat", UrlStyle::Flat)],
-        )
-    }
-
     fn scalar(&self, text: &str, span: SourceSpan) -> Result<crate::codegen::Value> {
         use crate::codegen::Value;
         Ok(match self {
@@ -160,13 +138,9 @@ impl ValueExt for KdlValue {
         })
     }
 
-    fn one<T: Copy>(&self, text: &str, span: SourceSpan, table: &[(&'static str, T)]) -> Result<T> {
+    fn one<T: Named>(&self, text: &str, span: SourceSpan) -> Result<T> {
         let name = self.as_str(text, span)?;
-        table
-            .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, value)| *value)
-            .ok_or_else(|| Keys::unknown_value(table, text, &name, span))
+        T::of(&name).ok_or_else(|| Keys::unknown_value(T::NAMES, text, &name, span))
     }
 }
 

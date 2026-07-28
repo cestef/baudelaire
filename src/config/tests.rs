@@ -224,6 +224,27 @@ fn images_optimize_per_format_with_params_and_lax_extensions() {
     assert_eq!(opt.format("gif"), None);
 }
 
+/// `jpg` is an accepted spelling of the `jpeg` block, and tuning through it
+/// lands on the same format.
+#[test]
+fn images_optimize_accepts_the_jpg_spelling() {
+    let cfg = parse("assets { images { optimize { jpg quality=70 } } }");
+    assert_eq!(
+        cfg.assets.images.optimize.jpeg.as_ref().unwrap().quality,
+        70
+    );
+}
+
+/// An unrecognized format reads like every other unknown key, suggestions
+/// included, because the same table drives parsing and the error.
+#[test]
+fn err_unknown_image_format_suggests_a_valid_one() {
+    let err = Config::parse("assets { images { optimize { pgn } } }").unwrap_err();
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(rendered.contains("unknown config key `pgn`"), "{rendered}");
+    assert!(rendered.contains("did you mean `png`?"), "{rendered}");
+}
+
 #[test]
 fn images_optimize_defaults_when_empty() {
     let cfg = parse("assets { images { optimize { png } } }");

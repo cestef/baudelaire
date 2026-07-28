@@ -14,11 +14,12 @@ mod auth;
 mod hosts;
 mod session;
 
-use tokio::runtime::Builder;
+use tokio::runtime::{Builder, Runtime};
 
 use super::sigv4::Signer;
-use super::{Backend, Digests, Dist, Plan};
+use super::{Backend, Digests, Dist, Store};
 use crate::config::SshConfig;
+use crate::error::deploy::Setup;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
 use crate::ui::Ui;
@@ -51,33 +52,13 @@ impl Ssh {
         }
     }
 
-    /// Reconcile the remote directory with `dist` over one connection.
-    async fn sync(&self, dist: &Dist, local: &Digests, opts: &Options<'_>, ui: &Ui) -> Result<()> {
+    /// Open one authenticated connection to the configured host.
+    fn connect(&self, runtime: &Runtime, opts: &Options<'_>, ui: &Ui) -> Result<Session> {
         // An empty `$USER` is as absent as an unset one: it would authenticate
         // with no username at all.
         let login = std::env::var("USER").ok().filter(|user| !user.is_empty());
         let user = self.user(login.as_deref())?;
-        let session = Session::connect(&self.config, &user, opts, ui).await?;
-        let plan = Plan::compute(local, &session.digests().await?, self.config.delete);
-        plan.preview(ui, opts.dry_run);
-        if opts.dry_run {
-            session.close().await;
-            return Ok(());
-        }
-        for key in &plan.uploads {
-            session.upload(key, &dist.read(key)?).await?;
-            ui.item(format_args!("↑ {key}"));
-        }
-        for key in &plan.deletes {
-            session.remove(key).await?;
-            ui.item(format_args!("✕ {key}"));
-        }
-        session.close().await;
-        plan.done(
-            ui,
-            format_args!("{}:{}", self.config.host, self.config.path),
-        );
-        Ok(())
+        runtime.block_on(Session::connect(&self.config, &user, opts, ui))
     }
 }
 
@@ -87,14 +68,64 @@ impl Backend<Dist> for Ssh {
     }
 
     fn run(&self, dist: &Dist, opts: &Options<'_>, ui: &Ui) -> Result<()> {
-        // Hashing is blocking (file reads); do it up front, then drive the async
-        // network exchange on a private runtime so async never leaks outward.
-        let local = dist.digests(Signer::sha256_hex)?;
+        // `russh` is async and nothing else here is, so the whole exchange runs
+        // on a private runtime and async never leaks outward.
         let runtime = Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| DeployError::local("starting the async runtime", e))?;
-        runtime.block_on(self.sync(dist, &local, opts, ui))
+            .map_err(|e| DeployError::local(Setup::Runtime, e))?;
+        let sftp = Sftp {
+            runtime: &runtime,
+            session: self.connect(&runtime, opts, ui)?,
+            config: &self.config,
+        };
+        let result = dist.reconcile(&sftp, self.config.delete, opts, ui);
+        // Disconnect cleanly when the run got that far; a failed one leaves the
+        // connection to drop with the process, since there is nothing left to
+        // say to a host that just refused something.
+        if result.is_ok() {
+            sftp.close();
+        }
+        result
+    }
+}
+
+/// The live SSH session as a blocking [`Store`]: each operation drives the
+/// runtime the backend owns, so the reconcile loop above it is the same one the
+/// S3 backend runs.
+struct Sftp<'a> {
+    runtime: &'a Runtime,
+    session: Session,
+    config: &'a SshConfig,
+}
+
+impl Sftp<'_> {
+    fn close(self) {
+        self.runtime.block_on(self.session.close());
+    }
+}
+
+impl Store for Sftp<'_> {
+    /// The host hashes its own files with `sha256sum`, so the local side must
+    /// match it exactly.
+    fn digest(&self, bytes: &[u8]) -> String {
+        Signer::sha256_hex(bytes)
+    }
+
+    fn list(&self) -> Result<Digests> {
+        self.runtime.block_on(self.session.digests())
+    }
+
+    fn upload(&self, key: &str, body: &[u8]) -> Result<()> {
+        self.runtime.block_on(self.session.upload(key, body))
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        self.runtime.block_on(self.session.remove(key))
+    }
+
+    fn target(&self) -> String {
+        format!("{}:{}", self.config.host, self.config.path)
     }
 }
 

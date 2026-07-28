@@ -3,12 +3,16 @@
 //! Each [`Processor`] reads the built [`Site`] and writes derived output
 //! through an [`Emit`] sink. [`Processors::builtin`] is the single source of
 //! what runs, in order: a new site-level output (search index, robots.txt) is
-//! one `impl Processor` plus one line in that list.
+//! one `impl Processor` in a module of its own, plus one line in that list.
+//! Processors are named through their module there rather than imported, so
+//! adding one touches nothing else here and the list doubles as the map of
+//! which module emits what.
 
 mod feed;
 mod llms;
 mod redirect;
 mod robots;
+mod script;
 mod search;
 mod sitemap;
 mod spa;
@@ -20,22 +24,14 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
 use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::warning::BaseUrlMissing;
-use crate::error::{BaseUrlRequired, Result};
+use crate::error::{Artifact, BaseUrlRequired, Result, SerializeError};
 use crate::render::Fragments;
 use crate::ui::Ui;
-
-use feed::Feeds;
-use llms::Llms;
-use redirect::Redirects;
-use robots::Robots;
-use search::SearchIndex;
-use sitemap::SiteMap;
-use spa::Spa;
-use standalone::Standalone;
-use standard::WellKnown;
 
 /// One built page: everything the render pass produced for it, whether it was
 /// freshly compiled or served from the cache. Named rather than a tuple because
@@ -74,6 +70,18 @@ pub(super) struct Site<'a> {
 }
 
 impl Site<'_> {
+    /// Where a generated file goes: `segments` under this build's `dist`.
+    ///
+    /// The single output-path rule for every processor, so none of them reaches
+    /// into `config.paths` itself. An empty segment contributes nothing, so a
+    /// caller passes a language scope (`""` for the default language) without
+    /// first deciding whether there is one.
+    pub(super) fn dist(&self, segments: &[&str]) -> PathBuf {
+        let mut path = self.config.paths.dist.clone();
+        path.extend(segments.iter().copied().filter(|s| !s.is_empty()));
+        path
+    }
+
     /// The base URL a processor cannot work without. An error, not a warning:
     /// these features are opt-in, so reaching here means the site asked for
     /// output that cannot be produced, and warning let CI go green with no feed.
@@ -97,6 +105,16 @@ impl Site<'_> {
             out.warn(missing);
         }
         Ok(base)
+    }
+}
+
+impl Artifact {
+    /// This artifact serialized to JSON, naming itself on failure. The one
+    /// serialize-and-tag step shared by the JSON feed, the search indexes, and
+    /// the single-file export's route table, so none of them restates which
+    /// artifact a `serde_json` failure belongs to.
+    pub(super) fn json<T: Serialize>(self, value: &T) -> Result<String> {
+        serde_json::to_string(value).map_err(|e| SerializeError::new(self, e).into())
     }
 }
 
@@ -149,16 +167,16 @@ pub(super) struct Processors(Vec<Box<dyn Processor>>);
 impl Processors {
     pub(super) fn builtin() -> Self {
         Self(vec![
-            Box::new(Redirects),
-            Box::new(SiteMap),
-            Box::new(Robots),
-            Box::new(Llms),
-            Box::new(Feeds),
-            Box::new(SearchIndex),
-            Box::new(WellKnown),
-            Box::new(Spa),
+            Box::new(redirect::Redirects),
+            Box::new(sitemap::SiteMap),
+            Box::new(robots::Robots),
+            Box::new(llms::Llms),
+            Box::new(feed::Feeds),
+            Box::new(search::SearchIndex),
+            Box::new(standard::WellKnown),
+            Box::new(spa::Spa),
             // last: it reads every other page's markup, not what they emit
-            Box::new(Standalone),
+            Box::new(standalone::Standalone),
         ])
     }
 

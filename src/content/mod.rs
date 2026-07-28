@@ -8,6 +8,7 @@
 
 pub mod cache;
 pub mod date;
+pub mod discovery;
 pub mod frontmatter;
 mod generate;
 pub mod listing;
@@ -15,13 +16,15 @@ pub mod page;
 pub mod pagination;
 pub mod section;
 pub mod slug;
+mod stem;
 pub mod strings;
 pub mod taxonomy;
 
 pub use cache::DiscoveryCache;
 pub use date::Iso;
+pub use discovery::{Collection, discover};
 pub use frontmatter::Frontmatter;
-pub use page::{Collection, Data, Page, PageId, Sibling, Siblings, discover};
+pub use page::{Data, Page, PageId, Sibling, Siblings};
 pub use pagination::Pagination;
 pub use section::Section;
 pub use slug::Slug;
@@ -70,32 +73,8 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
     })?;
     pages.extend(generated);
     Page::relate(&mut pages, config);
-    unique(&pages, config)?;
+    Claim::unique(&pages, config)?;
     Ok(pages)
-}
-
-/// Reject two claimants of one output file; otherwise the second silently
-/// overwrites the first. Keyed on the destination *file*, not the permalink
-/// string: [`Config::destination`] normalizes segments, so distinct permalinks
-/// can still meet on disk. Covers colliding slugs, a `posts/index.typ`
-/// shadowing a paginated `/posts/`, nested files that flatten to one URL, and
-/// a redirect stub aimed at a real page's file.
-fn unique(pages: &[Page], config: &Config) -> Result<()> {
-    let mut seen: std::collections::HashMap<std::path::PathBuf, String> =
-        std::collections::HashMap::new();
-    for page in pages {
-        for claim in Claim::of(page, config) {
-            if let Some(first) = seen.insert(claim.output.clone(), claim.origin.clone()) {
-                return Err(ContentError::collision(
-                    &claim.output.display().to_string(),
-                    &first,
-                    &claim.origin,
-                )
-                .into());
-            }
-        }
-    }
-    Ok(())
 }
 
 /// One claim on an output file, and where it came from, the single accounting
@@ -106,6 +85,30 @@ struct Claim {
 }
 
 impl Claim {
+    /// Reject two claimants of one output file; otherwise the second silently
+    /// overwrites the first. Keyed on the destination *file*, not the permalink
+    /// string: [`Config::destination`] normalizes segments, so distinct
+    /// permalinks can still meet on disk. Covers colliding slugs, a
+    /// `posts/index.typ` shadowing a paginated `/posts/`, nested files that
+    /// flatten to one URL, and a redirect stub aimed at a real page's file.
+    fn unique(pages: &[Page], config: &Config) -> Result<()> {
+        let mut seen: std::collections::HashMap<std::path::PathBuf, String> =
+            std::collections::HashMap::new();
+        for page in pages {
+            for claim in Self::of(page, config) {
+                if let Some(first) = seen.insert(claim.output.clone(), claim.origin.clone()) {
+                    return Err(ContentError::collision(
+                        &claim.output.display().to_string(),
+                        &first,
+                        &claim.origin,
+                    )
+                    .into());
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Every file `page` will write: its own HTML, plus one stub per
     /// frontmatter `redirect` entry.
     fn of<'a>(page: &'a Page, config: &'a Config) -> impl Iterator<Item = Self> + 'a {

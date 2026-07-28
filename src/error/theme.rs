@@ -41,17 +41,21 @@ pub enum ThemeError {
 }
 
 impl ThemeError {
-    pub fn spec(spec: &str, why: String) -> Self {
+    /// The parser's own message, kept as text: naming typst's error type here
+    /// would put the compiler's package API in this crate's error API for one
+    /// string.
+    pub fn spec(spec: &str, why: impl std::fmt::Display) -> Self {
         Self::Spec {
             spec: spec.to_owned(),
-            why,
+            why: why.to_string(),
         }
     }
 
-    pub fn unavailable(spec: &str, why: String) -> Self {
+    /// The package store's own message, kept as text for the same reason.
+    pub fn unavailable(spec: &str, why: impl std::fmt::Display) -> Self {
         Self::Unavailable {
             spec: spec.to_owned(),
-            why,
+            why: why.to_string(),
         }
     }
 

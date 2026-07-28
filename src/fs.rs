@@ -3,10 +3,61 @@
 //! wherever a failure should tell the user *which* file and *what* operation.
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::fs::FsError;
 use crate::error::{Op, Result};
+
+/// A relative path that cannot reach outside the tree it is joined to: the one
+/// place "this must not escape the project" is decided.
+///
+/// A theme directory, an inlined SVG's path and a generated file's name all come
+/// from text a config file or a template wrote, so each is a way to name a file
+/// the project does not own. Each site used to spell its own variant of the same
+/// component walk, which is the worst possible shape for a check whose whole job
+/// is to be identical everywhere.
+///
+/// Contained means: at least one component, and every component an ordinary
+/// name. No root, no drive prefix, no `..`, no leading `.`. Callers that accept
+/// a project-absolute spelling (`/assets/x.svg`) strip the leading `/`
+/// themselves and hand over what is left, so the leading slash is a caller's
+/// syntax rather than a hole here.
+///
+/// The test is lexical, and deliberately so: these paths need not exist yet, so
+/// nothing here touches the filesystem. A component that happens to be a symlink
+/// out of the tree is judged by its name; a caller that must also refuse those
+/// has to canonicalize after joining.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Contained<'a>(&'a Path);
+
+impl<'a> Contained<'a> {
+    /// The checked constructor: `None` for anything that could leave the tree,
+    /// leaving the caller to report it with its own diagnostic.
+    pub fn new<P: AsRef<Path> + ?Sized>(path: &'a P) -> Option<Self> {
+        let path = path.as_ref();
+        let mut named = false;
+        for component in path.components() {
+            match component {
+                Component::Normal(_) => named = true,
+                // `..`, `.`, a root, or a `C:` prefix: each either climbs out of
+                // the tree or discards the root the path is joined to.
+                _ => return None,
+            }
+        }
+        // An empty path names the root itself, which is not a file inside it.
+        named.then_some(Self(path))
+    }
+
+    /// The relative path, as written.
+    pub fn path(&self) -> &'a Path {
+        self.0
+    }
+
+    /// This path resolved under `root`, which it is now known to stay inside.
+    pub fn under(&self, root: impl AsRef<Path>) -> PathBuf {
+        root.as_ref().join(self.0)
+    }
+}
 
 /// Read a file to a string.
 pub fn read_to_string(path: impl AsRef<Path>) -> Result<String> {
@@ -212,6 +263,66 @@ impl<'a> Walk<'a> {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+
+    use super::Contained;
+
+    #[test]
+    fn contained_accepts_an_ordinary_relative_path() {
+        for path in ["x.svg", "themes/plume", "a/b/c.html", "a/./b"] {
+            let rel = Contained::new(path).unwrap_or_else(|| panic!("{path} should be contained"));
+            assert_eq!(rel.under("/site"), Path::new("/site").join(path));
+        }
+    }
+
+    /// Every shape that would resolve somewhere other than under the root: the
+    /// traversals, the absolute spellings, and the empty path, which names the
+    /// root itself rather than a file in it.
+    #[test]
+    fn contained_rejects_anything_that_could_leave_the_tree() {
+        for path in [
+            "",
+            ".",
+            "..",
+            "../x.svg",
+            "a/../../x.svg",
+            "./x.svg",
+            "/",
+            "/etc/passwd",
+        ] {
+            assert!(Contained::new(path).is_none(), "{path:?} should be refused");
+        }
+    }
+
+    /// A drive prefix discards the root it would be joined to, so it is refused
+    /// where the platform recognises one.
+    #[test]
+    #[cfg(windows)]
+    fn contained_rejects_a_drive_prefix() {
+        for path in [r"C:\Windows", r"C:x", r"\\server\share"] {
+            assert!(Contained::new(path).is_none(), "{path:?} should be refused");
+        }
+    }
+
+    /// Containment is lexical: a component that happens to be a symlink out of
+    /// the tree passes, because these paths need not exist yet. Anything that
+    /// must refuse those has to canonicalize after joining, which is a different
+    /// check and a deliberate one.
+    #[test]
+    #[cfg(unix)]
+    fn contained_judges_a_symlinked_component_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        super::create_dir_all(&project).unwrap();
+        super::create_dir_all(&outside).unwrap();
+        super::write(outside.join("secret.svg"), "").unwrap();
+        std::os::unix::fs::symlink(&outside, project.join("escape")).unwrap();
+
+        let rel = Contained::new("escape/secret.svg").expect("lexically contained");
+
+        assert_eq!(rel.under(&project), project.join("escape/secret.svg"));
+        assert!(!super::canonical(rel.under(&project)).starts_with(super::canonical(&project)));
+    }
 
     /// A symlinked directory pointing at an ancestor used to recurse until the
     /// stack overflowed, which release builds report as a bare SIGSEGV.

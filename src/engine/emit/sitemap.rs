@@ -70,7 +70,7 @@ impl Processor for SiteMap {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base = site.base("sitemap")?;
         out.file(
-            &site.config.paths.dist.join(Self::FILE),
+            &site.dist(&[Self::FILE]),
             &Self::render(&base, site.pages, site.config),
         )?;
         out.note(format_args!("wrote {}", Self::FILE));

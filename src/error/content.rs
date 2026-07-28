@@ -1,8 +1,14 @@
+//! Errors from reading the content tree: frontmatter that is not the shape a
+//! page must declare, names that cannot become URLs, and two outputs claiming
+//! one file. Each names the page it came from, since a build reports them long
+//! after the file was opened.
+
 use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::error::Annotated;
 
+/// A failure while discovering or interpreting a content file.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ContentError {
     #[error(transparent)]

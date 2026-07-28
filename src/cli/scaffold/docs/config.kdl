@@ -1,7 +1,7 @@
 site "{{site}}"
 url "{{url}}"
 author "{{author}}"
-lang "en"
+lang "{{lang}}"
 
 paths {
   content "content"

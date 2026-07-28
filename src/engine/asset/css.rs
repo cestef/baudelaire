@@ -22,7 +22,7 @@ pub(super) struct Stylesheet;
 
 impl Handler for Stylesheet {
     fn claims(&self, file: &Path, _config: &Config) -> bool {
-        file.ext().eq_ignore_ascii_case("css")
+        Self::claimed(file)
     }
 
     fn phase(&self) -> Phase {
@@ -45,6 +45,14 @@ impl Handler for Stylesheet {
 }
 
 impl Stylesheet {
+    /// The one test for "this is a stylesheet", used both to claim a file and to
+    /// decide which of a sheet's references are sheets themselves: two spellings
+    /// of it drifted apart the moment one grew a case or a suffix the other
+    /// lacked.
+    fn claimed(path: &Path) -> bool {
+        path.ext().eq_ignore_ascii_case("css")
+    }
+
     /// Minify (when enabled) and rewrite the sheet's references so it still
     /// points at its assets after they are content-hashed. Copied verbatim when
     /// neither minify nor fingerprint is on.
@@ -183,7 +191,7 @@ impl Stylesheet {
                     Dependency::Import(dep) => dep.url,
                 };
                 let key = Self::key(rel, &url, ctx)?;
-                key.to_ascii_lowercase().ends_with(".css").then_some(key)
+                Self::claimed(Path::new(&key)).then_some(key)
             })
             .collect()
     }

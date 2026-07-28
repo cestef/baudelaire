@@ -148,7 +148,7 @@ impl<'a> Section<'a> {
     /// so the slug stays a valid, collision-free identifier.
     fn slug(&self, number: usize) -> String {
         match number {
-            1 => "index".to_owned(),
+            1 => Listing::INDEX.to_owned(),
             n => {
                 let word = if self.prefix.is_empty() {
                     "page"

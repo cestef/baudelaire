@@ -12,13 +12,11 @@
 //! already gave a `srcset` is skipped, and the `src` fallback stays, so a
 //! browser without `srcset` support still loads the original.
 
-use std::fmt::Write;
-
 use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, ElementExt, Transform};
+use super::{Cx, DocumentExt, Transform};
 use crate::render::Tail;
 
 /// The [`Transform`] that annotates responsive images with a `srcset`.
@@ -30,7 +28,7 @@ impl Transform for Sources {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        doc.root_mut().walk(&mut |element| {
+        doc.walk(|element| {
             if element.tag != tag::img {
                 return;
             }
@@ -45,13 +43,12 @@ impl Transform for Sources {
             let Some(candidates) = cx.srcsets.candidates(Tail::of(src).path) else {
                 return;
             };
-            let srcset = candidates.iter().fold(String::new(), |mut acc, c| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
-                let _ = write!(acc, "{} {}w", c.url, c.width);
-                acc
-            });
+            // `url 480w` candidates, in the manifest's ascending width order.
+            let srcset = candidates
+                .iter()
+                .map(|c| format!("{} {}w", c.url, c.width))
+                .collect::<Vec<_>>()
+                .join(", ");
             element.attrs.push(attr::srcset, srcset);
             // only emit sizes the config provides; an absent sizes is 100vw by
             // spec, and an author-set one is left as is.

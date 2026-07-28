@@ -56,23 +56,33 @@ default = ["embedded-fonts", "js", "css", "images", "cards"]
 # so keep it on for portable builds (CI, containers) that lack those fonts.
 embedded-fonts = ["typst-kit/embedded-fonts"]
 
+# Every feature below is a capability, not a behaviour switch: turning one off
+# never changes what a site that does not ask for it produces. A site that *does*
+# ask gets a `baudelaire::feature::missing` warning naming the setting, the
+# feature, and what was emitted instead. The table driving those warnings is
+# `GATES` in `src/engine/mod.rs`; a new gated capability is one row there.
+
 # JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
 # the `baudelaire:*` virtual modules): ~2.5 MiB of oxc/rolldown/tokio. Off means
-# `.js` files are copied verbatim by the asset pipeline instead of bundled.
+# `assets { bundle }` warns and `.js` files are copied verbatim.
 js = ["dep:rolldown", "dep:rolldown_common"]
 
 # CSS minification and `url()`/`@import` fingerprint rewriting via lightningcss:
-# ~3.2 MiB. Off means `.css` files are copied verbatim (no minify, no rewrite).
+# ~3.2 MiB. Off means `assets { minify }` warns and `.css` files are copied
+# verbatim. It also forces `assets { fingerprint }` off, since a verbatim sheet
+# keeps naming its assets by their pre-hash filenames: see `Gate::rewrites`.
 css = ["dep:lightningcss"]
 
 # Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
-# EXIF-orientation baking (image). Off means PNG/JPEG assets are copied verbatim.
-# Note: `<img>` lazy/async annotation is attribute-only and stays on regardless.
+# EXIF-orientation baking (image), plus responsive width variants. Off means
+# `assets { images { optimize } }` and `assets { images { responsive } }` warn and
+# PNG/JPEG assets are copied verbatim. Note: `<img>` lazy/async annotation is
+# attribute-only and stays on regardless.
 images = ["dep:oxipng", "dep:image"]
 
 # Social card rendering: compiles `templates/card.typ` to a paged document and
-# rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means an
-# `output { cards { } }` block warns and produces nothing.
+# rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means a
+# `generate { cards { } }` block warns and produces nothing.
 cards = ["dep:typst-render", "dep:typst-layout"]
 
 # Build OpenSSL from source and link it statically instead of using the host's

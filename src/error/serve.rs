@@ -1,6 +1,11 @@
+//! Errors that stop the dev server coming up: the socket it could not take, and
+//! the watches it could not establish. Once it is serving, a failure is a
+//! warning instead (see [`super::warning`]), because the server stays up.
+
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// A failure while starting `baudelaire serve`.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ServeError {
     #[error("failed to bind `{addr}`")]

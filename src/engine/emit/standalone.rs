@@ -13,14 +13,14 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
+use super::script::Script;
 use super::spa::ROUTER;
 use super::xml::Xml;
 use super::{Emit, Processor, Site, Warn};
-use crate::codegen::{Js, Value};
 use crate::config::{Config, Named, StandaloneConfig};
 use crate::content::Page;
 use crate::error::warning::{StandaloneEntryMissing, StandaloneLinked};
-use crate::error::{Artifact, Result, SerializeError};
+use crate::error::{Artifact, Result};
 use crate::render::Fragments;
 
 /// Emits the whole site as one self-contained HTML file.
@@ -57,7 +57,7 @@ impl Processor for Standalone {
             script: &cfg.script(&entry),
         }
         .render();
-        out.file(&site.config.paths.dist.join(&cfg.file), &document)?;
+        out.file(&site.dist(&[&cfg.file]), &document)?;
         out.note(format_args!(
             "wrote {} ({} routes, {} bytes)",
             cfg.file,
@@ -174,8 +174,7 @@ impl<'a> Routes<'a> {
             .iter()
             .map(|(url, route)| (url.as_str(), route.swap(shared)))
             .collect();
-        let json = serde_json::to_string(&swaps)
-            .map_err(|e| SerializeError::new(Artifact::Standalone, e))?;
+        let json = Artifact::Standalone.json(&swaps)?;
         Ok(json.replace("</", "<\\/"))
     }
 }
@@ -231,20 +230,18 @@ impl StandaloneConfig {
         self.entry.as_deref().unwrap_or("/")
     }
 
-    /// The inlined router: its prelude, the shared core, and the bundle adapter.
+    /// The inlined router: the three constants it closes over, the shared core,
+    /// and the bundle adapter. It mounts itself as it is evaluated (there is
+    /// only ever this one document to drive), so nothing follows the parts.
     fn script(&self, entry: &str) -> String {
-        format!("{}{ROUTER}\n{ADAPTER}", self.prelude(entry))
-    }
-
-    /// The three constants the inlined router closes over, written through the
-    /// codegen escaper rather than interpolated.
-    fn prelude(&self, entry: &str) -> String {
-        format!(
-            "const ROUTES_ID = {};\nconst MODE = {};\nconst ENTRY = {};\n",
-            Js(&Value::str(ROUTES_ID)),
-            Js(&Value::str(self.router.name())),
-            Js(&Value::str(entry))
-        )
+        Script::new(&[
+            ("ROUTES_ID", ROUTES_ID),
+            ("MODE", self.router.name()),
+            ("ENTRY", entry),
+        ])
+        .part(ROUTER)
+        .part(ADAPTER)
+        .finish()
     }
 }
 

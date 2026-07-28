@@ -86,7 +86,9 @@ impl Handler for Raster {
             let scaled = source.resize(width, u32::MAX, FilterType::Lanczos3);
             let encoded = Self::encode(&scaled, format, responsive.quality, file)?;
             variants.push(Variant {
-                rel: Self::variant_path(rel, width),
+                // `photo.jpg` -> `photo-480.jpg`, the same splice a fingerprint
+                // uses, so a variant is named like every other asset.
+                rel: rel.suffixed(&format!("-{width}")),
                 width,
                 bytes: Some(encoded),
             });
@@ -144,16 +146,6 @@ impl Raster {
                 .map_err(|e| AssetError::image(file.display(), e))?,
         }
         Ok(out)
-    }
-
-    /// The output path of a width variant: `photo.jpg` -> `photo-480.jpg`.
-    fn variant_path(rel: &Path, width: u32) -> std::path::PathBuf {
-        let stem = rel.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-        let name = match rel.extension().and_then(|e| e.to_str()) {
-            Some(ext) => format!("{stem}-{width}.{ext}"),
-            None => format!("{stem}-{width}"),
-        };
-        rel.with_file_name(name)
     }
 }
 

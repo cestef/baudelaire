@@ -12,8 +12,8 @@
 //! virtual module for one that bundles its own entry and wants to call
 //! `mountSpa` itself.
 
+use super::script::Script;
 use super::{Emit, Processor, Site};
-use crate::codegen::{Js, Value};
 use crate::config::{Config, Named, SpaConfig};
 use crate::error::Result;
 
@@ -27,7 +27,7 @@ impl Processor for Spa {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let cfg = &site.config.navigation.spa;
-        out.file(&site.config.paths.dist.join(SpaConfig::FILE), &cfg.client())?;
+        out.file(&site.dist(&[SpaConfig::FILE]), &cfg.client())?;
         out.note(format_args!("wrote {}", SpaConfig::FILE));
         Ok(())
     }
@@ -41,41 +41,36 @@ pub(super) const ROUTER: &str = include_str!("js/router.js");
 /// The fetch adapter that turns the built site into single-page navigation.
 const ADAPTER: &str = include_str!("js/spa.js");
 
-/// Appended to the standalone client so dropping one `<script type="module">`
-/// is enough. Omitted from the virtual module, where the importer decides when
-/// to mount (and against which container).
-const AUTO_MOUNT: &str = "\nif (typeof document !== \"undefined\") mountSpa();\n";
-
-/// The named exports the virtual module offers: `mountSpa` for the configured
-/// runtime, `mountRouter` for a site driving the core itself.
-#[cfg(feature = "js")]
-const EXPORTS: &str = "\nexport { mountSpa, mountRouter };\n";
+/// The runtime's entry point: what the standalone client auto-calls and what a
+/// bundling site imports.
+const MOUNT: &str = "mountSpa";
 
 impl SpaConfig {
     /// The generated client's file name at the `dist` root. Single source, so
     /// the emitted file and the documented `<script src>` cannot drift.
     pub const FILE: &'static str = "spa.js";
 
-    /// The standalone client: core, adapter, and an auto-mount.
+    /// The standalone client: core, adapter, and an auto-mount, so dropping one
+    /// `<script type="module">` in is enough.
     fn client(&self) -> String {
-        format!("{}{ROUTER}\n{ADAPTER}{AUTO_MOUNT}", self.prelude())
+        self.script().mount(MOUNT)
     }
 
-    /// The composable module source served through `baudelaire:spa`.
+    /// The composable module source served through `baudelaire:spa`, exporting
+    /// [`MOUNT`] for the configured runtime and `mountRouter` for a site driving
+    /// the core itself. No auto-mount: the importer decides when to mount, and
+    /// against which container.
     #[cfg(feature = "js")]
     pub(crate) fn module(&self) -> String {
-        format!("{}{ROUTER}\n{ADAPTER}{EXPORTS}", self.prelude())
+        self.script().exports(&[MOUNT, "mountRouter"])
     }
 
-    /// The two constants the runtime closes over: the container selector and
-    /// the prefetch policy, both written through the codegen escaper so a
-    /// selector with a quote in it cannot break out of the literal.
-    fn prelude(&self) -> String {
-        format!(
-            "const ROOT = {};\nconst PREFETCH = {};\n",
-            Js(&Value::str(&self.root)),
-            Js(&Value::str(self.prefetch.name()))
-        )
+    /// The sources both builds share, and the two constants the runtime closes
+    /// over: the container selector and the prefetch policy.
+    fn script(&self) -> Script<'_> {
+        Script::new(&[("ROOT", &self.root), ("PREFETCH", self.prefetch.name())])
+            .part(ROUTER)
+            .part(ADAPTER)
     }
 }
 

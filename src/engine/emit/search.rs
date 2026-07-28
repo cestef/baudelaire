@@ -1,8 +1,10 @@
 //! Client-side search indexes.
 //!
 //! One [`Corpus`] is built from every page's rendered HTML, then serialized
-//! into each configured [`SearchFormat`]. Adding a format is a new match arm
-//! plus a [`crate::config::SearchFormat`] variant; the corpus is shared.
+//! into each configured [`SearchFormat`]. Adding a format is a
+//! [`crate::config::SearchFormat`] variant plus an arm in each method of the
+//! `impl SearchFormat` below, which is where everything a format decides lives;
+//! the corpus is shared.
 //!
 //! ## Output schemas
 //!
@@ -23,12 +25,12 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
+use super::script::Script;
 use super::{Emit, Processor, Site};
-use crate::codegen::{Js, Value};
 use crate::config::Permalink;
-use crate::config::{Config, SearchField, SearchFormat};
+use crate::config::{Config, SearchConfig, SearchField, SearchFormat};
 use crate::engine::text::Text;
-use crate::error::{Artifact, Result, SerializeError};
+use crate::error::{Artifact, Result};
 
 /// Emits every configured search index format from one shared corpus.
 pub(super) struct SearchIndex;
@@ -45,15 +47,11 @@ impl Processor for SearchIndex {
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
             let corpus = Corpus::build(site, &cfg.fields, lang);
-            let dir = site.config.paths.dist.join(&scope);
             for &format in &cfg.formats {
-                let json = match format {
-                    SearchFormat::Json => corpus.documents_json()?,
-                    SearchFormat::Inverted => {
-                        corpus.inverted_json(&cfg.stopwords, cfg.min_length)?
-                    }
-                };
-                out.file(&dir.join(format.file()), &json)?;
+                out.file(
+                    &site.dist(&[&scope, format.file()]),
+                    &format.json(&corpus, cfg)?,
+                )?;
                 out.note(format_args!(
                     "wrote {}/{} ({} docs)",
                     scope,
@@ -62,7 +60,7 @@ impl Processor for SearchIndex {
                 ));
                 if cfg.client {
                     out.file(
-                        &dir.join(format.client_file()),
+                        &site.dist(&[&scope, format.client_file()]),
                         &format.client(site.config.base_path(), &format.index(site.config, lang)),
                     )?;
                     out.note(format_args!("wrote {}/{}", scope, format.client_file()));
@@ -126,7 +124,7 @@ impl Corpus {
 
     /// The flat document list (`search.json`).
     fn documents_json(&self) -> Result<String> {
-        json(&self.documents)
+        Artifact::SearchIndex.json(&self.documents)
     }
 
     /// A prebuilt inverted index (`search.inverted.json`): term -> document ids,
@@ -151,7 +149,7 @@ impl Corpus {
             documents: self.documents.iter().map(Meta::from).collect(),
             postings,
         };
-        json(&index)
+        Artifact::SearchIndex.json(&index)
     }
 }
 
@@ -170,6 +168,10 @@ struct Document {
 impl Document {
     /// Normalized search tokens over every indexed field: lowercased, split on
     /// whitespace, stripped to alphanumerics, empties dropped.
+    ///
+    /// The client's `tokenize` (in `js/tokenize.js`) has to normalize a query
+    /// the same way, or a term is looked up in a form the postings were never
+    /// keyed by.
     fn tokens(&self) -> impl Iterator<Item = String> + '_ {
         std::iter::once(self.title.as_str())
             .chain(std::iter::once(self.body.as_str()))
@@ -209,23 +211,22 @@ struct Inverted<'a> {
     postings: BTreeMap<String, Vec<usize>>,
 }
 
-/// Serialize a search artifact to JSON, tagging any failure as the search index.
-fn json<T: Serialize>(value: &T) -> Result<String> {
-    serde_json::to_string(value).map_err(|e| SerializeError::new(Artifact::SearchIndex, e).into())
-}
+/// The query tokenizer, one definition for both engines and for the palette
+/// that highlights what a query matched.
+const TOKENIZE: &str = include_str!("js/tokenize.js");
 
 /// The self-mounting command-palette UI, concatenated onto whichever engine a
 /// format needs. Shared verbatim by every format and by the virtual module.
 const PALETTE: &str = include_str!("js/palette.js");
 
-/// Appended to the standalone client so dropping one `<script type=module>`
-/// yields a working Cmd/Ctrl-K palette: no markup or CSS to write. Omitted from
-/// the virtual-module source, where the importer wires the trigger itself.
-const AUTO_MOUNT: &str = "\nif (typeof document !== \"undefined\") mountSearch();\n";
+/// The generated client's entry point, called by the emitted standalone file
+/// and exported to bundlers by the virtual module.
+const MOUNT: &str = "mountSearch";
 
-/// Generated JavaScript for a search format. The engine (defining `createSearch`)
-/// and the shared [`PALETTE`] UI are real `.js` sources under `js/`, embedded and
-/// concatenated so the two composable pieces stay in one module scope.
+/// Generated JavaScript for a search format. The engine (defining `createSearch`),
+/// the shared [`TOKENIZE`] rule and the [`PALETTE`] UI are real `.js` sources
+/// under `js/`, embedded and concatenated so the composable pieces stay in one
+/// module scope.
 impl SearchFormat {
     /// The per-format engine source, defining `createSearch`.
     fn engine(self) -> &'static str {
@@ -235,20 +236,45 @@ impl SearchFormat {
         }
     }
 
-    /// The standalone generated client: engine + palette UI + auto-mount.
-    fn client(self, base: &str, index: &str) -> String {
-        format!(
-            "{}{}\n{PALETTE}{AUTO_MOUNT}",
-            Self::prelude(base, index),
-            self.engine()
-        )
+    /// This format's serialized index over `corpus`: the shape documented at
+    /// the top of this module. Here rather than at the call site so everything
+    /// a format decides (its file names, its engine, its index shape) is stated
+    /// in this one impl.
+    fn json(self, corpus: &Corpus, cfg: &SearchConfig) -> Result<String> {
+        match self {
+            Self::Json => corpus.documents_json(),
+            Self::Inverted => corpus.inverted_json(&cfg.stopwords, cfg.min_length),
+        }
     }
 
-    /// The composable module source (engine + palette, no auto-mount) served to
-    /// bundlers through the `baudelaire:search` virtual module.
+    /// The standalone generated client: tokenizer + engine + palette UI, with an
+    /// auto-mount so dropping one `<script type=module>` yields a working
+    /// Cmd/Ctrl-K palette and no markup or CSS to write.
+    fn client(self, base: &str, index: &str) -> String {
+        self.script(base, index).mount(MOUNT)
+    }
+
+    /// The composable module source (no auto-mount, the importer wires the
+    /// trigger itself) served to bundlers through the `baudelaire:search`
+    /// virtual module.
     #[cfg(feature = "js")]
     pub(crate) fn module(self, base: &str, index: &str) -> String {
-        format!("{}{}\n{PALETTE}", Self::prelude(base, index), self.engine())
+        self.script(base, index).finish()
+    }
+
+    /// The sources every build of this format's client is assembled from, and
+    /// the two constants they close over: `BASE`, prepended to each hit's href
+    /// so a subdirectory-hosted site resolves it, and `INDEX`, the URL of the
+    /// index this client fetches.
+    ///
+    /// The two are separate because they scope differently: hits carry
+    /// already-localized permalinks, so folding the language into `BASE` would
+    /// double it.
+    fn script(self, base: &str, index: &str) -> Script<'static> {
+        Script::new(&[("BASE", base), ("INDEX", index)])
+            .part(TOKENIZE)
+            .part(self.engine())
+            .part(PALETTE)
     }
 
     /// The served URL of this format's index for `lang`: what the generated
@@ -257,20 +283,6 @@ impl SearchFormat {
     pub(crate) fn index(self, config: &Config, lang: &str) -> String {
         let dir = config.prefixed(&Permalink::join(&[&config.scope(lang, "")]));
         format!("{dir}{}", self.file())
-    }
-
-    /// The two constants the generated client closes over: `BASE`, prepended to
-    /// each hit's href so a subdirectory-hosted site resolves it, and `INDEX`,
-    /// the URL of the index this client fetches.
-    ///
-    /// Separate because they scope differently: hits carry already-localized
-    /// permalinks, so folding the language into `BASE` would double it.
-    fn prelude(base: &str, index: &str) -> String {
-        format!(
-            "const BASE = {};\nconst INDEX = {};\n",
-            Js(&Value::str(base)),
-            Js(&Value::str(index))
-        )
     }
 }
 

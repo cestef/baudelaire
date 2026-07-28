@@ -1,12 +1,11 @@
 // Search engine for the prebuilt `search.inverted.json` index
 // ({ documents, postings }): resolves a query by term lookup and posting-list
 // intersection, no full scan. Documents carry only url/title (no body), so hits
-// have no snippet. Concatenated with palette.js to form the generated client;
+// have no snippet. Concatenated with tokenize.js and palette.js to form the
+// generated client;
 // also served as the `baudelaire:search/inverted` virtual module. Exposes the
-// same `createSearch` contract as the flat engine.
-
-const tokenize = (text) =>
-  text.toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+// same `createSearch` contract as the flat engine. `tokenize` comes from
+// tokenize.js, in the same module scope.
 
 export async function createSearch(url = INDEX) {
   let documents = [];

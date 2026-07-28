@@ -88,10 +88,6 @@ impl Value {
         Self::Str(value.as_ref().to_owned())
     }
 
-    pub fn float(value: f64) -> Self {
-        Self::Float(value)
-    }
-
     /// A string value, or [`Value::None`] for `Option::None`.
     pub fn opt(value: Option<impl Into<String>>) -> Self {
         value.map_or(Self::None, |v| Self::Str(v.into()))
@@ -302,6 +298,17 @@ impl fmt::Display for Js<'_> {
     }
 }
 
+/// Displays a Typst `let` binding: `#let name = <value>`, with the value
+/// rendered by [`Typst`]. The one way generated module source binds a value, so
+/// no caller ever formats a binding (and its escaping) by hand.
+pub struct Let<'a>(pub &'a str, pub &'a Value);
+
+impl fmt::Display for Let<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#let {} = {}", self.0, Typst(self.1))
+    }
+}
+
 /// Displays a string as Typst *content* that renders literally (`#"..."`), so
 /// user text can never inject markup.
 pub struct Content<'a>(pub &'a str);
@@ -314,7 +321,7 @@ impl fmt::Display for Content<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Js, Str, Typst, Value};
+    use super::{Js, Let, Str, Typst, Value};
 
     #[test]
     fn escapes_quotes_and_backslashes() {
@@ -356,6 +363,18 @@ mod tests {
         let v = Value::dict([("a b", Value::Int(1))]);
         assert_eq!(Typst(&v).to_string(), "(\"a b\": 1)");
         assert_eq!(Js(&v).to_string(), "{\"a b\": 1}");
+    }
+
+    #[test]
+    fn binds_a_value_as_typst_source() {
+        assert_eq!(
+            Let("title", &Value::str("A \"B\"")).to_string(),
+            "#let title = \"A \\\"B\\\"\""
+        );
+        assert_eq!(
+            Let("langs", &Value::array([Value::str("fr")])).to_string(),
+            "#let langs = (\"fr\", )"
+        );
     }
 
     #[test]

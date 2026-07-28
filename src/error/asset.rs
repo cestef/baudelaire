@@ -31,6 +31,23 @@ pub enum AssetError {
         detail: String,
     },
 
+    /// The bundler's async runtime could not be started, so no entry was ever
+    /// reached: its own class, since there is no asset to name and the cause is
+    /// an `io::Error` worth keeping whole.
+    #[cfg(feature = "js")]
+    #[error("failed to start the JavaScript bundler")]
+    #[diagnostic(
+        code(baudelaire::asset::runtime),
+        help(
+            "the bundler starts worker threads: check the process and thread limits \
+             (`ulimit -u`, `RLIMIT_NPROC`), or turn bundling off in the `assets` config"
+        )
+    )]
+    Runtime {
+        #[source]
+        source: std::io::Error,
+    },
+
     /// oxipng could not optimize the PNG.
     #[cfg(feature = "images")]
     #[error("failed to optimize image asset `{path}`")]
@@ -57,6 +74,13 @@ impl AssetError {
             path: path.to_string(),
             detail: detail.to_string(),
         }
+    }
+
+    /// The OS failure kept whole, rather than flattened into a hint under a
+    /// made-up asset path.
+    #[cfg(feature = "js")]
+    pub fn runtime(source: std::io::Error) -> Self {
+        Self::Runtime { source }
     }
 
     #[cfg(feature = "images")]

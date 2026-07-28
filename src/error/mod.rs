@@ -1,3 +1,16 @@
+//! Every error the crate can fail with, and the one enum that carries them.
+//!
+//! One module per error class, each a typed [`miette::Diagnostic`] with a
+//! `baudelaire::..` code, its own fields, and a `help` that says what to do
+//! about it. What was being done is a typed label ([`fs::Op`],
+//! [`serialize::Artifact`], [`deploy::Step`]) rather than a message the call
+//! site spells out. A foreign error is never flattened into a message or folded
+//! into a neighbouring variant to save writing one: it is kept as a `#[source]`
+//! under a variant of its own. [`fs`] is the model to copy.
+//!
+//! [`warning`] holds the same thing at `severity(warning)`: diagnostics that
+//! report without failing the run.
+
 use typst::syntax::VirtualizeError;
 
 pub mod annotated;
@@ -47,14 +60,22 @@ pub enum BaudelaireErrorKind {
     #[diagnostic(code(baudelaire::typst::virtualize))]
     Virtualize(#[from] VirtualizeError),
 
-    /// A terminal write failed while reporting progress. The one remaining
+    /// The terminal itself failed, reading or writing. The one remaining
     /// implicit `io::Error` conversion: every filesystem operation goes through
     /// [`crate::fs`] and carries path + operation context as [`FsError`], so
-    /// only [`crate::cli::output::Report`] (which writes to stdout) produces
-    /// bare `io::Error`s.
-    #[error("failed to write CLI output")]
-    #[diagnostic(code(baudelaire::output))]
-    Output(#[from] std::io::Error),
+    /// the only bare `io::Error`s left are the two ends of the terminal,
+    /// [`crate::cli::prompt`] drawing a prompt and reading the answer back, and
+    /// [`crate::remote::Options`] reading a piped secret from stdin. ([`crate::ui`]
+    /// itself never reaches here: its writes are infallible by design.)
+    ///
+    /// Still a blanket conversion, and so still a finding: each of those is its
+    /// own error class and wants its own variant, with the `#[from]` dropped
+    /// once the last `?` on an `io::Error` is gone. Until then the message at
+    /// least names what actually failed, rather than calling a failed stdin
+    /// read a failed write.
+    #[error("terminal I/O failed")]
+    #[diagnostic(code(baudelaire::terminal))]
+    Terminal(#[from] std::io::Error),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

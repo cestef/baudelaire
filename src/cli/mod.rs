@@ -42,53 +42,25 @@ mod group {
     pub const CONTENT: &str = "Content";
 }
 
-/// Usage examples appended to the top-level help. owo-colors gates the colour
-/// on the stdout stream itself (`if_supports_color`), so escapes never leak when
-/// piped or under `NO_COLOR`: the same policy [`crate::ui`] uses.
-fn examples() -> String {
-    use owo_colors::{OwoColorize, Stream::Stdout};
-    use std::fmt::Write;
-    // One example row: the command in green (the "literal you type" accent), then
-    // its description at a fixed column. Padding is computed from the *visible*
-    // length, so the ANSI escapes don't skew the alignment.
-    let row = |out: &mut String, command: &str, desc: &str| {
-        let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
-        // Column wide enough for the longest command, with a two-space gutter.
-        let pad = " ".repeat(33usize.saturating_sub(command.len()).max(2));
-        let _ = writeln!(out, "  {colored}{pad}{desc}");
-    };
-    let mut s = format!(
-        "{}\n",
-        "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
-    );
-    row(&mut s, "baudelaire", "Build the site from ./config.kdl");
-    row(
-        &mut s,
+/// The usage examples appended to the top-level help, as `(command, what it
+/// does)`. A table rather than a sequence of calls, so the description column is
+/// computed from the rows instead of hand-tuned to the longest one.
+const EXAMPLES: &[(&str, &str)] = &[
+    ("baudelaire", "Build the site from ./config.kdl"),
+    (
         "baudelaire serve --open",
         "Start the dev server, open a browser",
-    );
-    row(
-        &mut s,
+    ),
+    (
         "baudelaire new posts/hello",
         "Scaffold content/posts/hello.typ",
-    );
-    row(
-        &mut s,
+    ),
+    (
         "baudelaire --profile prod build",
         "Build with the prod profile",
-    );
-    row(
-        &mut s,
-        "baudelaire clean --cache",
-        "Drop the incremental cache",
-    );
-    let _ = write!(
-        s,
-        "\nRun {} for command-specific options.",
-        "baudelaire <command> --help".if_supports_color(Stdout, |t| t.green().bold().to_string())
-    );
-    s
-}
+    ),
+    ("baudelaire clean --cache", "Drop the incremental cache"),
+];
 
 /// The absolute project root: the directory `--root` selected (into which the
 /// process changes so relative config paths resolve under it) or the launch
@@ -135,7 +107,7 @@ impl Root {
                   builds, a live-reload dev server, feeds, search, taxonomies, and more, all \
                   driven by Typst templates rather than HTML string templating.",
     styles = HELP_STYLES,
-    after_help = examples(),
+    after_help = Cli::examples(),
     subcommand_value_name = "COMMAND",
 )]
 pub struct Cli {
@@ -210,18 +182,6 @@ pub struct CommonOverrides {
     /// Error on broken internal links (default true; pass `false` to warn).
     #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
     pub strict_links: Option<bool>,
-}
-
-impl remote::Flags for DeployArgs {
-    fn dry_run(&self) -> bool {
-        self.dry_run
-    }
-    fn yes(&self) -> bool {
-        self.yes
-    }
-    fn secret(&self) -> Option<String> {
-        self.secret.clone()
-    }
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -328,6 +288,18 @@ pub struct DeployArgs {
     /// Report what would change without writing to any destination.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+impl remote::Flags for DeployArgs {
+    fn dry_run(&self) -> bool {
+        self.dry_run
+    }
+    fn yes(&self) -> bool {
+        self.yes
+    }
+    fn secret(&self) -> Option<String> {
+        self.secret.clone()
+    }
 }
 
 /// Arguments for `baudelaire clean`. With no target flag every directory is
@@ -465,8 +437,15 @@ pub struct InitArgs {
     /// Directory to scaffold into (default: current directory).
     pub dir: Option<PathBuf>,
 
-    /// Starter shape: `blog`, `docs`, `book` or `minimal`.
-    #[arg(short = 't', long, default_value = "blog", help_heading = group::PROJECT)]
+    /// Starter shape. The accepted values and the default both come from the
+    /// template registry, so the help cannot name a shape that is not there.
+    #[arg(
+        short = 't',
+        long,
+        default_value = scaffold::templates::Template::DEFAULT,
+        help = scaffold::templates::Template::help(),
+        help_heading = group::PROJECT,
+    )]
     pub template: String,
 
     /// Site title (default: prompted, or the directory name).
@@ -490,8 +469,15 @@ pub struct InitArgs {
     #[arg(long, value_name = "SPEC", help_heading = group::PROJECT)]
     pub theme: Option<String>,
 
-    /// Switch on optional features: `spa`, `standalone`, `speculation`, `search`.
-    #[arg(long, value_name = "FEATURE", value_delimiter = ',', help_heading = group::PROJECT)]
+    /// Switch on optional features. Listed from the same table that resolves
+    /// them, so a new feature is documented by existing.
+    #[arg(
+        long,
+        value_name = "FEATURE",
+        value_delimiter = ',',
+        help = scaffold::templates::Extra::help(),
+        help_heading = group::PROJECT,
+    )]
     pub with: Vec<String>,
 
     /// Scaffold the shape without the example pages.
@@ -501,12 +487,44 @@ pub struct InitArgs {
     /// Skip the prompt and set up version control (default: git).
     #[arg(short = 'y', long)]
     pub yes: bool,
-    /// Set up this version-control system (implies `--yes`): `git` or `jujutsu`.
+    // The accepted values are not spelled out: `value_enum` already lists them
+    // from [`scaffold::Vcs`] itself, so a new variant documents itself.
+    /// Set up this version-control system (implies `--yes`).
     #[arg(long, value_enum)]
     pub vcs: Option<scaffold::Vcs>,
 }
 
 impl Cli {
+    /// [`EXAMPLES`] rendered for the bottom of the top-level help. owo-colors
+    /// gates the colour on the stdout stream itself (`if_supports_color`), so
+    /// escapes never leak when piped or under `NO_COLOR`: the same policy
+    /// [`crate::ui`] uses.
+    fn examples() -> String {
+        use owo_colors::{OwoColorize, Stream::Stdout};
+        use std::fmt::Write;
+        // The description column: past the longest command, with a two-space
+        // gutter. Padding is measured on the *visible* length, so the ANSI
+        // escapes cannot skew the alignment.
+        let column = EXAMPLES.iter().map(|(c, _)| c.len()).max().unwrap_or(0) + 2;
+        let mut out = format!(
+            "{}\n",
+            "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
+        );
+        for (command, desc) in EXAMPLES {
+            // The command in green: the "literal you type" accent.
+            let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
+            let pad = " ".repeat(column - command.len());
+            let _ = writeln!(out, "  {colored}{pad}{desc}");
+        }
+        let _ = write!(
+            out,
+            "\nRun {} for command-specific options.",
+            "baudelaire <command> --help"
+                .if_supports_color(Stdout, |t| t.green().bold().to_string())
+        );
+        out
+    }
+
     /// The parsed config: read from `--config`, then narrowed by the active
     /// profile. Build-time overrides ([`BuildOverrides`]) are applied per-command
     /// by the caller, not here, so `new`/`clean` load the same untouched config.
@@ -770,8 +788,7 @@ impl NewArgs {
         // configured index name), so images and data can sit beside the page.
         if self.bundle {
             path.set_extension("");
-            let index = config.content.index.as_deref().unwrap_or("index");
-            return path.join(format!("{index}.typ"));
+            return path.join(format!("{}.typ", config.bundle_index()));
         }
         if path.extension().is_none_or(|e| e != "typ") {
             let name = path

@@ -17,11 +17,12 @@
 //! **Paths are project-absolute.** `read()` cannot be used inside the module,
 //! because a path in a package file resolves against the *package* root, not
 //! the project. Baudelaire therefore reads the file itself, which also means
-//! typst never sees it: each file read here is reported through [`Cx::icons`]
-//! so the engine can add it to the page's dependencies, or an edited icon would
-//! leave every page showing it a cache hit.
+//! typst never sees it: each file read here is reported through
+//! [`crate::render::Rewrite::icons`] so the engine can add it to the page's
+//! dependencies, or an edited icon would leave every page showing it a cache
+//! hit.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use typst::ecow::EcoVec;
@@ -30,16 +31,19 @@ use typst_html::{HtmlAttr, HtmlAttrs, HtmlDocument, HtmlElement, HtmlNode, HtmlT
 
 use crate::config::Config;
 use crate::error::SvgError;
+use crate::fs::Contained;
 use crate::graph::Hash;
 use crate::render::scope::Scoped;
 use crate::world::module::Html;
 
-use super::{AttrsExt, Cx, ElementExt, Transform};
+use super::{AttrsExt, Cx, DocumentExt, ElementExt, Transform};
 
-/// The namespace an inline `<svg>` declares. HTML parsers do not require it,
-/// but it keeps the fragment valid when served as XHTML or lifted out of the
-/// page, and it is what a hand-written icon carries.
+/// The namespace an inline `<svg>` declares, and the attribute declaring it.
+/// HTML parsers do not require it, but it keeps the fragment valid when served
+/// as XHTML or lifted out of the page, and it is what a hand-written icon
+/// carries.
 const XMLNS: &str = "http://www.w3.org/2000/svg";
+const XMLNS_ATTR: HtmlAttr = HtmlAttr::constant("xmlns");
 
 /// The one foreign namespace kept, with its prefix dropped rather than its
 /// content: SVG 2 spells `xlink:href` as plain `href`, so an editor-written
@@ -48,16 +52,25 @@ const XLINK: &str = "http://www.w3.org/1999/xlink";
 
 /// The attribute an icon carries when its stylesheet had to be confined to it,
 /// and how many hex digits of the path hash identify it. Added only to a file
-/// that actually has a `<style>`, so an ordinary icon gains nothing.
+/// that actually has a `<style>`, so an ordinary icon gains nothing. Named
+/// once: the CSS rewriter matches on the name and the element carries the
+/// attribute, and the two have to be the same thing.
 const SCOPE: &str = "data-svg";
+const SCOPE_ATTR: HtmlAttr = HtmlAttr::constant(SCOPE);
 const SCOPE_LEN: usize = 8;
+
+/// The URL scheme an inlined file may never navigate to. Spelled once, so the
+/// prefix length the check compares cannot drift from the scheme it names, nor
+/// from the scheme the refusal reports.
+const SCRIPT_SCHEME: &str = "javascript:";
 
 /// How deep an icon may nest. Real drawings are a handful of levels; the cap is
 /// here because [`Icon::children`] recurses, and a file deep enough to exhaust
 /// the stack would abort the process rather than fail the build.
 const DEPTH: usize = 128;
 
-/// The marker attribute, interned once rather than per element. Its name is a
+/// The marker attribute, interned once rather than per element. Its name is too
+/// long for [`HtmlAttr::constant`]'s inline representation, but it is a
 /// compile-time constant satisfying [`HtmlAttr::intern`]'s rules, so a failure
 /// here is a bug in this file, never in a user's input.
 static MARKER: LazyLock<HtmlAttr> =
@@ -81,12 +94,12 @@ impl Transform for Svg {
         // borrows the DOM mutably, so `cx` cannot be written inside it.
         let mut read = Vec::new();
         let mut failed = Vec::new();
-        doc.root_mut().walk(&mut |element| {
+        doc.walk(|element| {
             let Some(path) = element.attrs.get(marker).cloned() else {
                 return;
             };
             element.attrs.0.retain(|(key, _)| *key != marker);
-            match inline(element, &path, root) {
+            match Self::inline(element, &path, root) {
                 Ok(source) => read.push(source),
                 Err(why) => failed.push(why),
             }
@@ -96,108 +109,75 @@ impl Transform for Svg {
     }
 }
 
-/// Read the file `path` names, splice it into `element`, and return the file it
-/// read so the caller can record the dependency.
-///
-/// The file's root attributes fill in under the caller's, so a template can
-/// override `width`, `fill` or `stroke` at the call site while everything it
-/// did not mention comes through as authored.
-fn inline(element: &mut HtmlElement, path: &str, root: &Path) -> Result<PathBuf, SvgError> {
-    let source = locate(path, root)?;
-    let text = crate::fs::read_to_string(&source).map_err(|why| SvgError::unreadable(path, why))?;
-    let parsed = roxmltree::Document::parse_with_options(&text, xml())
-        .map_err(|why| SvgError::malformed(path, why))?;
-    let icon = Icon::root(&parsed, path)?;
+impl Svg {
+    /// Read the file `path` names, splice it into `element`, and return the
+    /// file it read so the caller can record the dependency.
+    ///
+    /// The file's root attributes fill in under the caller's, so a template can
+    /// override `width`, `fill` or `stroke` at the call site while everything
+    /// it did not mention comes through as authored.
+    fn inline(element: &mut HtmlElement, path: &str, root: &Path) -> Result<PathBuf, SvgError> {
+        let source = Self::locate(path, root)?;
+        let text =
+            crate::fs::read_to_string(&source).map_err(|why| SvgError::unreadable(path, why))?;
+        let parsed = roxmltree::Document::parse_with_options(&text, Icon::options())
+            .map_err(|why| SvgError::malformed(path, why))?;
+        let icon = Icon::root(&parsed, path)?;
 
-    let mut attrs = HtmlAttrs::new();
-    attrs.push(
-        HtmlAttr::intern("xmlns").expect("xmlns is a valid attribute name"),
-        XMLNS,
-    );
-    icon.attributes(&mut attrs);
-    for (key, value) in element.attrs.0.iter() {
-        attrs.set(*key, value);
+        let mut attrs = HtmlAttrs::new();
+        attrs.push(XMLNS_ATTR, XMLNS);
+        icon.attributes(&mut attrs);
+        for (key, value) in element.attrs.0.iter() {
+            attrs.set(*key, value);
+        }
+
+        element.children = icon.children(0)?;
+        element.attrs = attrs;
+        Self::confine(element, path);
+        Ok(source)
     }
 
-    element.children = icon.children(0)?;
-    element.attrs = attrs;
-    confine(element, path);
-    Ok(source)
-}
-
-/// Confine any stylesheet the file carries to this icon.
-///
-/// An inlined `<style>` is an ordinary page stylesheet, so an Illustrator
-/// export's `.st0{fill:#231F20}` would repaint every `.st0` on the page. Each
-/// rule is rewritten to match only inside this icon, and the icon is marked so
-/// that it can be. Keyed by path, so the same icon used twice scopes the same
-/// way and two different files can never collide.
-///
-/// A file with no stylesheet gains no attribute and pays nothing.
-fn confine(element: &mut HtmlElement, path: &str) {
-    let id = Hash::of_bytes(path.as_bytes()).short(SCOPE_LEN);
-    let scoped = Scoped::attribute(SCOPE, &id);
-    let mut found = false;
-    element.walk(&mut |node| {
-        if node.tag != tag::style {
-            return;
-        }
-        for child in node.children.make_mut() {
-            if let HtmlNode::Text(css, _) = child {
-                *css = scoped.stylesheet(css).into();
-                found = true;
+    /// Confine any stylesheet the file carries to this icon.
+    ///
+    /// An inlined `<style>` is an ordinary page stylesheet, so an Illustrator
+    /// export's `.st0{fill:#231F20}` would repaint every `.st0` on the page.
+    /// Each rule is rewritten to match only inside this icon, and the icon is
+    /// marked so that it can be. Keyed by path, so the same icon used twice
+    /// scopes the same way and two different files can never collide.
+    ///
+    /// A file with no stylesheet gains no attribute and pays nothing.
+    fn confine(element: &mut HtmlElement, path: &str) {
+        let id = Hash::of_bytes(path.as_bytes()).short(SCOPE_LEN);
+        let scoped = Scoped::attribute(SCOPE, &id);
+        let mut found = false;
+        element.walk(&mut |node| {
+            if node.tag != tag::style {
+                return;
             }
+            for child in node.children.make_mut() {
+                if let HtmlNode::Text(css, _) = child {
+                    *css = scoped.stylesheet(css).into();
+                    found = true;
+                }
+            }
+        });
+        if found {
+            element.set(SCOPE_ATTR, &id);
         }
-    });
-    if found {
-        element.set(
-            HtmlAttr::intern(SCOPE).expect("scope is a valid attribute name"),
-            &id,
-        );
     }
-}
 
-/// How an icon file is parsed.
-///
-/// A DTD is allowed because Illustrator writes `<!DOCTYPE svg PUBLIC ..>` on
-/// essentially every export, and refusing it would reject a large share of
-/// real-world icons over a declaration that carries no content. roxmltree never
-/// resolves an *external* entity and caps internal expansion (depth 10, 255
-/// references), so allowing the declaration opens no entity-expansion hole.
-fn xml<'a>() -> roxmltree::ParsingOptions<'a> {
-    roxmltree::ParsingOptions {
-        allow_dtd: true,
-        ..roxmltree::ParsingOptions::default()
+    /// The project file a marker names.
+    ///
+    /// Project-absolute, then [`Contained`]: the path comes from template text
+    /// rather than from typst's own resolution, so it is the one place a marker
+    /// could otherwise reach outside the project.
+    fn locate(path: &str, root: &Path) -> Result<PathBuf, SvgError> {
+        let rel = path
+            .strip_prefix('/')
+            .and_then(Contained::new)
+            .ok_or_else(|| SvgError::path(path))?;
+        Ok(rel.under(root))
     }
-}
-
-/// The project file a marker names.
-///
-/// Project-absolute and normal components only: the path comes from template
-/// text rather than from typst's own resolution, so it is the one place a
-/// marker could otherwise reach outside the project.
-fn locate(path: &str, root: &Path) -> Result<PathBuf, SvgError> {
-    let rel = Path::new(path.strip_prefix('/').ok_or_else(|| SvgError::path(path))?);
-    if rel.components().any(|c| !matches!(c, Component::Normal(_))) {
-        return Err(SvgError::path(path));
-    }
-    Ok(root.join(rel))
-}
-
-/// Whether a URL runs script when followed.
-///
-/// A browser strips ASCII whitespace and control characters from a URL while
-/// parsing it, so `java&#9;script:` is `javascript:` by the time it is
-/// navigated. Comparing the raw text would miss exactly the spelling someone
-/// hiding a payload in an icon would reach for.
-fn executable(value: &str) -> bool {
-    let squeezed: String = value
-        .chars()
-        .filter(|c| !c.is_ascii_whitespace() && !c.is_control())
-        .collect();
-    squeezed
-        .get(..11)
-        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript:"))
 }
 
 /// One element of a parsed icon, carrying the path it came from so every
@@ -208,6 +188,21 @@ struct Icon<'a> {
 }
 
 impl<'a> Icon<'a> {
+    /// How an icon file is parsed.
+    ///
+    /// A DTD is allowed because Illustrator writes `<!DOCTYPE svg PUBLIC ..>`
+    /// on essentially every export, and refusing it would reject a large share
+    /// of real-world icons over a declaration that carries no content.
+    /// roxmltree never resolves an *external* entity and caps internal
+    /// expansion (depth 10, 255 references), so allowing the declaration opens
+    /// no entity-expansion hole.
+    fn options() -> roxmltree::ParsingOptions<'a> {
+        roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..roxmltree::ParsingOptions::default()
+        }
+    }
+
     /// The document's root element, which must actually be an `<svg>`.
     ///
     /// Without this check a file that is not an SVG inlines as an empty
@@ -290,14 +285,30 @@ impl<'a> Icon<'a> {
             if name.len() > 2 && name[..2].eq_ignore_ascii_case("on") {
                 return Err(SvgError::active(self.path, format!("an `{name}` handler")));
             }
-            if executable(attribute.value()) {
+            if Self::executable(attribute.value()) {
                 return Err(SvgError::active(
                     self.path,
-                    format!("a `javascript:` {name}"),
+                    format!("a `{SCRIPT_SCHEME}` {name}"),
                 ));
             }
         }
         Ok(())
+    }
+
+    /// Whether a URL runs script when followed.
+    ///
+    /// A browser strips ASCII whitespace and control characters from a URL
+    /// while parsing it, so `java&#9;script:` is `javascript:` by the time it
+    /// is navigated. Comparing the raw text would miss exactly the spelling
+    /// someone hiding a payload in an icon would reach for.
+    fn executable(value: &str) -> bool {
+        let squeezed: String = value
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace() && !c.is_control())
+            .collect();
+        squeezed
+            .get(..SCRIPT_SCHEME.len())
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case(SCRIPT_SCHEME))
     }
 
     /// The typed nodes for this element's children.
@@ -337,8 +348,16 @@ impl<'a> Icon<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{executable, locate};
-    use std::path::Path;
+    use super::{Icon, Svg};
+    use std::path::{Path, PathBuf};
+
+    fn locate(path: &str, root: &Path) -> Result<PathBuf, crate::error::SvgError> {
+        Svg::locate(path, root)
+    }
+
+    fn executable(url: &str) -> bool {
+        Icon::executable(url)
+    }
 
     #[test]
     fn locate_resolves_a_project_absolute_path() {
@@ -355,11 +374,15 @@ mod tests {
         // Relative, so there is no sane base to resolve it against; and every
         // shape of traversal, since the path is template text, not typst's own
         // resolution.
+        // The root itself is refused with them: it used to resolve to the
+        // project directory and fail later as an unreadable file.
         for path in [
             "assets/x.svg",
             "/../x.svg",
             "/assets/../../x.svg",
             "/./x.svg",
+            "/",
+            "",
         ] {
             assert!(locate(path, root).is_err(), "{path} should be rejected");
         }

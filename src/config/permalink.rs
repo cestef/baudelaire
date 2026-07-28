@@ -213,14 +213,10 @@ impl PermalinkError {
     /// An unknown `{placeholder}`, its help listing the valid names straight
     /// from [`PLACEHOLDERS`].
     fn unknown(name: &str) -> Self {
-        let valid = PLACEHOLDERS
-            .iter()
-            .map(|(n, _)| *n)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let names: Vec<&str> = PLACEHOLDERS.iter().map(|(n, _)| *n).collect();
         Self::UnknownPlaceholder {
             name: name.to_owned(),
-            valid: format!("valid placeholders: {valid}"),
+            valid: crate::config::dispatch::Keys::of(&names).help(name, "placeholders"),
         }
     }
 }

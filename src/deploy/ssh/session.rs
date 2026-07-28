@@ -14,6 +14,7 @@ use super::auth::Auth;
 use super::hosts::{Client, Verdict};
 use crate::config::SshConfig;
 use crate::deploy::{Digests, Listed};
+use crate::error::deploy::Step;
 use crate::error::warning::HostKeyAccepted;
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
@@ -68,7 +69,7 @@ impl Session {
             .map_err(|e| DeployError::connect(&config.host, e))?;
         let sftp = SftpSession::new(channel.into_stream())
             .await
-            .map_err(|e| DeployError::transfer("open sftp", e))?;
+            .map_err(|e| DeployError::transfer(Step::OpenSftp, e))?;
         Ok(Self {
             handle,
             sftp,
@@ -91,16 +92,16 @@ impl Session {
             .sftp
             .create(&path)
             .await
-            .map_err(|e| DeployError::transfer("upload", e))?;
+            .map_err(|e| DeployError::transfer(Step::Upload, e))?;
         file.write_all(body)
             .await
-            .map_err(|e| DeployError::transfer("upload", e))?;
+            .map_err(|e| DeployError::transfer(Step::Upload, e))?;
         file.flush()
             .await
-            .map_err(|e| DeployError::transfer("upload", e))?;
+            .map_err(|e| DeployError::transfer(Step::Upload, e))?;
         file.shutdown()
             .await
-            .map_err(|e| DeployError::transfer("upload", e))?;
+            .map_err(|e| DeployError::transfer(Step::Upload, e))?;
         Ok(())
     }
 
@@ -109,7 +110,7 @@ impl Session {
         self.sftp
             .remove_file(self.remote.path(rel))
             .await
-            .map_err(|e| DeployError::transfer("delete", e))?;
+            .map_err(|e| DeployError::transfer(Step::Delete, e))?;
         Ok(())
     }
 
@@ -134,18 +135,18 @@ impl Session {
             .handle
             .channel_open_session()
             .await
-            .map_err(|e| DeployError::transfer("exec", e))?;
+            .map_err(|e| DeployError::transfer(Step::Exec, e))?;
         channel
             .exec(true, command)
             .await
-            .map_err(|e| DeployError::transfer("exec", e))?;
+            .map_err(|e| DeployError::transfer(Step::Exec, e))?;
         let mut out = Vec::new();
         while let Some(msg) = channel.wait().await {
             match msg {
                 ChannelMsg::Data { data } => {
                     if out.len() + data.len() > LIMIT {
                         return Err(DeployError::transfer(
-                            "exec",
+                            Step::Exec,
                             std::io::Error::other(format!(
                                 "host sent more than {LIMIT} bytes of output"
                             )),

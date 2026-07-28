@@ -5,6 +5,15 @@ use std::borrow::Cow;
 
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
+/// The bar's own width in columns: wide enough to show progress at a glance,
+/// narrow enough that the label, the counter and the current item still fit on
+/// one line of a narrow terminal.
+const WIDTH: usize = 24;
+
+/// The 256-colour index the unfilled part of the bar is drawn in: a dark grey
+/// that reads as "not yet" without competing with the magenta fill.
+const TRACK: u8 = 238;
+
 /// A transient progress bar over a known amount of work. Safe to tick from
 /// rayon workers (`indicatif`'s bar is `Sync`); it erases itself when finished
 /// so the summary line is the only trace a build leaves.
@@ -15,10 +24,10 @@ impl Progress {
     pub(super) fn bar(verb: &'static str, len: u64) -> Self {
         let bar = ProgressBar::with_draw_target(Some(len), ProgressDrawTarget::stderr());
         bar.set_style(
-            ProgressStyle::with_template(
-                "  {prefix:.cyan.bold} {bar:24.magenta/238} {pos}/{len} {wide_msg:.dim}",
-            )
-            .expect("static template parses")
+            ProgressStyle::with_template(&format!(
+                "  {{prefix:.cyan.bold}} {{bar:{WIDTH}.magenta/{TRACK}}} {{pos}}/{{len}} {{wide_msg:.dim}}"
+            ))
+            .expect("the template is fixed but for two numbers, and parses")
             .progress_chars("━╸─"),
         );
         bar.set_prefix(verb);
