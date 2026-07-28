@@ -15,8 +15,8 @@ A static site generator where everything is just [Typst](https://typst.app).
 
 ## Install
 
-**Prebuilt binary**: Linux x86_64 / aarch64, no Rust toolchain. Fetch the
-script, skim it, then run it:
+**Prebuilt binary**: Linux (x86_64/aarch64) and macOS on Apple Silicon, no Rust
+toolchain. Fetch the script, skim it, then run it:
 
 ```sh
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh

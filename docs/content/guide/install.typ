@@ -8,9 +8,10 @@ is built in, so there is nothing else to install.
 
 == Prebuilt binary
 
-The quickest path, no Rust toolchain needed. Prebuilt binaries are published
-for Linux `x86_64` and `aarch64`. The installer downloads the release tarball,
-verifies its checksum, and drops `baudelaire` in `~/.local/bin`.
+The quickest path, no Rust toolchain needed. Prebuilt binaries are published for
+Linux (`x86_64` and `aarch64`) and for macOS on Apple Silicon. The installer
+picks the right one, downloads the release tarball, verifies its checksum, and
+drops `baudelaire` in `~/.local/bin`.
 
 It is deliberately readable, so fetch it, skim it, then run it:
 
@@ -20,7 +21,18 @@ less install.sh          # read before you run
 sh install.sh
 ```
 
-Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release.
+Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release. On
+Linux the installer picks the `musl` build on a musl host and the `gnu` one
+otherwise; `LIBC=musl` forces it.
+
+The macOS build is unsigned and unnotarized, so Gatekeeper blocks the first run.
+Clear the quarantine flag once:
+
+```sh
+xattr -d com.apple.quarantine ~/.local/bin/baudelaire
+```
+
+Intel Macs have no prebuilt binary; `cargo install baudelaire` builds one.
 
 == With cargo
 

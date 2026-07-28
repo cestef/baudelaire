@@ -1,7 +1,3 @@
-# First-party actions are pinned to a commit, not `@github`: the deploy step
-# runs with this repo's Cloudflare API token, so a push to the actions repo
-# would otherwise change what runs with that secret. Bump with:
-#   git ls-remote https://github.com/cestef/actions github
 name: Docs
 
 on:
@@ -16,9 +12,6 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
-# A new push makes the in-flight run for the same ref obsolete, so stop paying
-# for it. Release is deliberately excluded: cancelling mid-publish is worse than
-# a redundant run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -26,16 +19,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: 0
-  # Byte-identical to CI's, deliberately: cargo folds RUSTFLAGS into every
-  # fingerprint, so a single differing flag means this job shares nothing
-  # with the target cache CI populated and rebuilds the whole dep graph.
   RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # No gate job here. It re-ran the clippy and tests that CI runs on the very
-  # same push, for ~305s of duplicated work. CI still verifies the commit in
-  # parallel; a red commit shows up there, and the next push redeploys.
   ship:
     name: build & deploy
     runs-on: ubuntu-latest
@@ -48,10 +35,9 @@ jobs:
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
-          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+          rustflags: "false"
       - name: restore cargo registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-      # Same key CI's `check` job writes, so this build starts warm.
       - name: restore build cache
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
@@ -66,10 +52,6 @@ jobs:
       - name: build docs site
         working-directory: docs
         run: ../target/debug/baudelaire build
-
-      # No `save` here on purpose: CI's `check` job saves the very same registry
-      # key on every push, and a key can only be reserved once, so whichever
-      # lost the race just logged `Cache save failed`. This job restores only.
 
       - name: deploy to cloudflare pages
         uses: cestef/actions/wrangler@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b

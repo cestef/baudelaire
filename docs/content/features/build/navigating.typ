@@ -133,6 +133,28 @@ path with it.
   which the home page usually is.
 ]
 
+== Browser-native prefetch, no runtime
+
+```kdl
+output {
+  speculation {
+    prefetch "moderate"      // none | conservative | moderate | eager | immediate
+    prerender "conservative"
+  }
+}
+```
+
+Emits a `<script type="speculationrules">` asking the browser itself to fetch,
+or fully render, an internal link's target before it is clicked. Nothing ships,
+nothing mounts, and a browser without the API ignores it.
+
+`prefetch` costs bytes; `prerender` costs a hidden page render and runs the
+target's scripts, so it defaults to off. The rules are scoped to your own base
+path, so a site under `/docs` never speculates on a neighbour sharing the host.
+
+This is an alternative to `spa`, not a companion: with the SPA runtime mounted,
+its own prefetch already warms the same links.
+
 == What gets written
 
 / #raw("dist/spa.js"): the navigation client, when `spa { }` is set.

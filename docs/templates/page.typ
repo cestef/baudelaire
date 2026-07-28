@@ -1,3 +1,4 @@
+#import "@baudelaire/html:0.1.0": h
 #import "/templates/theme.typ": shell, link-to
 
 // Standard content page: title + compiled body inside the site shell, with a
@@ -9,11 +10,11 @@
     body
     let nav = page.nav
     if nav.prev != none or nav.next != none {
-      html.elem("nav", attrs: (class: "pager", "aria-label": "Page navigation"), {
+      h("nav", class: "pager", aria-label: "Page navigation", {
         if nav.prev != none {
           link-to(nav.prev.url, "← " + nav.prev.title)
         } else {
-          html.elem("span")
+          h("span")
         }
         if nav.next != none {
           link-to(nav.next.url, nav.next.title + " →")

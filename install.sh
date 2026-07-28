@@ -25,28 +25,39 @@ elif command -v wget >/dev/null 2>&1; then
   dl() { wget -qO "$2" "$1" 2>/dev/null; }
 else die "need ${b}curl${x} or ${b}wget${x}"; fi
 
-# linux x86_64/aarch64 only
+# linux x86_64/aarch64, macos on apple silicon
 src="build from source: ${b}cargo install --git $REPO${x}"
-[ "$(uname -s)" = Linux ] || die "prebuilt binaries are linux-only. $src"
+case $(uname -s) in
+  Linux)  os=linux ;;
+  Darwin) os=macos ;;
+  *) die "no prebuilt binary for $(uname -s). $src" ;;
+esac
 case $(uname -m) in
   x86_64 | amd64)  arch=x86_64 ;;
   aarch64 | arm64) arch=aarch64 ;;
   *) die "unsupported arch $(uname -m). $src" ;;
 esac
+# No Intel mac builds: the runner image for them retires in 2027 and the
+# hardware is nearly gone. Source builds still work.
+[ "$os$arch" = macosx86_64 ] && die "no prebuilt binary for Intel Macs. $src"
 
+# The libc suffix, on Linux only: macOS ships one libc and one set of assets.
 # musl build on musl hosts (Alpine), glibc otherwise. LIBC= overrides.
-if [ -z "$LIBC" ]; then
-  LIBC=gnu
-  for ld in /lib/ld-musl-*.so.1; do
-    [ -e "$ld" ] && { LIBC=musl; break; }
-  done
-  [ "$LIBC" = gnu ] && ldd --version 2>&1 | grep -qi musl && LIBC=musl
+libc=
+if [ "$os" = linux ]; then
+  if [ -z "$LIBC" ]; then
+    LIBC=gnu
+    for ld in /lib/ld-musl-*.so.1; do
+      [ -e "$ld" ] && { LIBC=musl; break; }
+    done
+    [ "$LIBC" = gnu ] && ldd --version 2>&1 | grep -qi musl && LIBC=musl
+  fi
+  case "$LIBC" in
+    gnu)  libc= ;;
+    musl) libc=-musl ;;
+    *) die "unknown ${b}LIBC=$LIBC${x}, use ${b}gnu${x} or ${b}musl${x}" ;;
+  esac
 fi
-case "$LIBC" in
-  gnu)  libc= ;;
-  musl) libc=-musl ;;
-  *) die "unknown ${b}LIBC=$LIBC${x}, use ${b}gnu${x} or ${b}musl${x}" ;;
-esac
 
 case "$FLAVOR" in
   full) suffix= ;;
@@ -65,8 +76,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # download tar + sha
-asset="baudelaire-linux-$arch$libc$suffix.tar.gz"
-step "downloading ${b}baudelaire $VERSION${x} ${d}(linux-$arch$libc, $FLAVOR)${x}"
+asset="baudelaire-$os-$arch$libc$suffix.tar.gz"
+step "downloading ${b}baudelaire $VERSION${x} ${d}($os-$arch$libc, $FLAVOR)${x}"
 for f in "$asset" "$asset.sha256"; do
   dl "$REPO/releases/download/$VERSION/$f" "$tmp/$f" || die "download failed: $f"
 done

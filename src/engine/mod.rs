@@ -2,33 +2,20 @@
 
 mod asset;
 mod check;
-#[cfg(feature = "images")]
-mod exif;
-mod feed;
+mod compile;
+mod emit;
 mod hook;
-mod image;
-mod layout;
-mod llms;
-mod process;
+mod layers;
 mod prune;
-mod redirect;
-mod robots;
-mod search;
-mod sitemap;
-mod spa;
-mod standalone;
-mod standard;
 mod statics;
 mod summary;
 pub mod text;
-mod xml;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use rayon::prelude::*;
 use tracing::debug;
-use typst::compile;
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst_html::{HtmlDocument, HtmlOptions};
 
@@ -37,17 +24,21 @@ use crate::content::{Data, Page, Section, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
+use crate::engine::check::External;
 use crate::engine::check::{CheckedPage, Compiled, Links};
+#[cfg(feature = "cards")]
+use crate::engine::compile::card::Card;
+use crate::engine::compile::image::Images;
+use crate::engine::compile::layout::{Bind, Body, Layout};
+use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
-use crate::engine::image::Images;
-use crate::engine::layout::{Bind, Body, Layout};
-use crate::engine::process::{Emitter, Output, Processors, Site};
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root};
 use crate::render::{AssetMap, Fragments, Renderer, SrcSets};
+use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
 use crate::world::{PageWorld, Project, Tracked};
@@ -58,6 +49,34 @@ use crate::world::{PageWorld, Project, Tracked};
 pub struct Stats {
     pub pages: usize,
     pub cached: usize,
+}
+
+/// What the card renderer produced this build, for the summary. A cache hit
+/// re-renders nothing, so these count only fresh cards; the files from earlier
+/// builds are still in `dist` and still kept.
+#[derive(Default)]
+struct Cards {
+    count: usize,
+    bytes: u64,
+}
+
+impl Cards {
+    #[cfg(feature = "cards")]
+    fn of(rendered: &[Rendered]) -> Self {
+        rendered
+            .iter()
+            .filter_map(|r| r.card.as_ref())
+            .fold(Self::default(), |acc, card| Self {
+                count: acc.count + 1,
+                bytes: acc.bytes + card.len() as u64,
+            })
+    }
+
+    /// Without the rasterizer nothing renders one, so there is nothing to count.
+    #[cfg(not(feature = "cards"))]
+    fn of(_rendered: &[Rendered]) -> Self {
+        Self::default()
+    }
 }
 
 /// What the post-build processors emitted, for the summary and the prune.
@@ -87,12 +106,24 @@ impl Trees {
 pub struct Engine {
     project: Project,
     config: Config,
+    /// The resolved theme, when the site names one. Resolved once here rather
+    /// than per consumer, since obtaining a package can download it.
+    theme: Option<Theme>,
 }
 
 impl Engine {
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
+        let theme = config
+            .theme
+            .as_deref()
+            .map(|spec| Theme::resolve(spec, &config.root))
+            .transpose()?;
         let project = Project::new(&config, mode)?;
-        Ok(Self { project, config })
+        Ok(Self {
+            project,
+            config,
+            theme,
+        })
     }
 
     /// Build the site incrementally: reuse cached output for unchanged pages,
@@ -117,7 +148,7 @@ impl Engine {
         let _ = std::fs::remove_dir_all(self.config.asset_staging());
         // Copy the static tree first, so a generated page or asset at the same
         // output path overwrites it; static is the lowest-priority source.
-        let statics = Static::new(&self.config).copy()?;
+        let statics = Static::new(&self.config, self.theme.as_ref()).copy()?;
         debug!(
             count = statics.count,
             bytes = statics.bytes,
@@ -160,6 +191,7 @@ impl Engine {
         // the pages that reference it.
         let assets = Assets::new(
             &self.config,
+            self.theme.as_ref(),
             #[cfg(feature = "js")]
             JsCtx {
                 pages: &pages,
@@ -193,6 +225,16 @@ impl Engine {
                 .html
                 .embed
                 .then(|| Hash::of_dir(&self.config.asset_staging())),
+            // `None` when cards are off *or* the template is missing; the
+            // second case fails the build on the first page it renders, so it
+            // never reaches a silent cache hit.
+            cards: self
+                .config
+                .cards
+                .active()
+                .then(|| Hash::of_file(&self.card_template()))
+                .flatten(),
+            modules: self.project.modules(),
         };
         // The injected values whose per-page reads drive fine-grained metadata
         // invalidation: the analyzer records them from each page's syntax, the
@@ -253,7 +295,7 @@ impl Engine {
         for (page, _, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);
         }
-        self.validate(&rendered, &cached, ui)?;
+        self.validate(&rendered, &cached, false, ui)?;
         // Copy every page's externalized images into the (freshly regenerated)
         // asset directory: fresh pages carry their refs, cache hits their stored
         // ones, so the files are present regardless of what recompiled.
@@ -284,6 +326,17 @@ impl Engine {
         outputs
             .par_iter()
             .try_for_each(|out| fs::write_all(&out.page.output, out.html))?;
+        // Cards were rendered during compile, so only stale pages produced one;
+        // a cache hit leaves the file the previous build wrote in place, and the
+        // sweep below keeps it.
+        #[cfg(feature = "cards")]
+        rendered.par_iter().try_for_each(|r| match &r.card {
+            Some(png) => fs::write_all(
+                self.config.cards.path(&self.config.dist, &r.page.permalink),
+                png,
+            ),
+            None => Ok(()),
+        })?;
         // Every page is on disk pointing at the new asset filenames, so the
         // staged asset tree can replace the published one. Before this line a
         // failure leaves `dist` exactly as the previous build left it.
@@ -299,13 +352,20 @@ impl Engine {
         ui.flush();
         let total = rendered.len() + cached.len();
         let page_bytes: u64 = outputs.iter().map(|out| out.html.len() as u64).sum();
+        let cards = Cards::of(&rendered);
         Summary {
             pages: total,
             cached: cached.len(),
             assets: asset_count + images.count(),
             statics: statics.count,
             generated: generated.count,
-            bytes: page_bytes + asset_bytes + images.bytes() + generated.bytes + statics.bytes,
+            cards: cards.count,
+            bytes: page_bytes
+                + asset_bytes
+                + images.bytes()
+                + generated.bytes
+                + statics.bytes
+                + cards.bytes,
             warnings: ui.warnings() - warned,
             dist: &self.config.dist,
             elapsed: timer.elapsed(),
@@ -339,6 +399,35 @@ impl Engine {
         })
     }
 
+    /// The import root a page's layout is loaded from.
+    ///
+    /// The project's own template directory, expressed relative to the root
+    /// because a typst import is root-absolute in the compiler's terms, not the
+    /// config's. A template the project does not have falls back to the theme's
+    /// package, which the compiler resolves by spec rather than by path.
+    fn template_root(&self, template: &str) -> String {
+        let project = self
+            .config
+            .templates
+            .strip_prefix(self.project.root())
+            .unwrap_or(&self.config.templates);
+        match &self.theme {
+            Some(theme)
+                if !self.config.templates.join(template).is_file()
+                    && theme.has_template(template) =>
+            {
+                theme.templates()
+            }
+            _ => format!("/{}", project.display()),
+        }
+    }
+
+    /// The card template's path on disk, for the fingerprint that ties every
+    /// page's card to the template that drew it.
+    fn card_template(&self) -> PathBuf {
+        self.config.templates.join(&self.config.cards.template)
+    }
+
     /// Drop orphaned outputs from earlier builds (a removed page or taxonomy
     /// term, a renamed permalink) so `dist` never serves stale files.
     ///
@@ -351,9 +440,17 @@ impl Engine {
         if !self.config.clean {
             return Ok(());
         }
+        // A card belongs to its page whether or not this build re-rendered it,
+        // so the keep set is derived from the pages, never from what was written.
+        let cards = outputs
+            .iter()
+            .map(|out| out.page)
+            .filter(|page| page.wants_card(&self.config))
+            .map(|page| self.config.cards.path(&self.config.dist, &page.permalink));
         let keep: Vec<PathBuf> = outputs
             .iter()
             .map(|out| out.page.output.clone())
+            .chain(cards)
             .chain(statics.paths.iter().cloned())
             .chain(generated.paths.iter().cloned())
             .collect();
@@ -398,7 +495,7 @@ impl Engine {
                 }),
             )
         })?;
-        self.validate(&rendered, &[], ui)?;
+        self.validate(&rendered, &[], true, ui)?;
         ui.flush();
         ui.done(format_args!(
             "checked {} in {}",
@@ -516,7 +613,7 @@ impl Engine {
                 Body::Inline(&page.body),
             ),
         };
-        let context = layout::Context {
+        let context = compile::layout::Context {
             data: bind,
             taxonomies: &taxonomies,
             nav: &nav,
@@ -525,15 +622,14 @@ impl Engine {
             translations: &translations,
             strings: &strings,
         };
-        // The import is project-root-absolute in typst's own terms, so the
-        // template directory has to be expressed relative to the root rather
-        // than however the config spelled it.
-        let templates = self
-            .config
-            .templates
-            .strip_prefix(self.project.root())
-            .unwrap_or(&self.config.templates);
-        let text = Layout::new(templates, template, &vpath, context, body).to_string();
+        let text = Layout::new(
+            &self.template_root(template),
+            template,
+            &vpath,
+            context,
+            body,
+        )
+        .to_string();
         // hash the exact text typst compiles; the parse into a `Source` is
         // deferred to `compile`, run only for stale pages.
         let fingerprint = Hash::of_bytes(text.as_bytes());
@@ -642,7 +738,7 @@ impl Engine {
         // parse only now, for a page actually being (re)compiled.
         let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
-        let compiled = compile::<HtmlDocument>(&world);
+        let compiled = typst::compile::<HtmlDocument>(&world);
         // typst warnings (unknown font families, deprecations..) survive a
         // successful compile; bridge them like errors so they render with
         // spans. On failure they are dropped: the errors say more. Typst's
@@ -679,6 +775,13 @@ impl Engine {
             .enabled
             .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
             .transpose()?;
+        // A card is a second, paged compile of the same page, so only a stale
+        // page pays for one. A cache hit keeps the file already in `dist`.
+        #[cfg(feature = "cards")]
+        let card = page
+            .wants_card(&self.config)
+            .then(|| Card::render(&self.project, &self.config, page))
+            .transpose()?;
         let deps = self.project.dependencies(&world);
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
@@ -702,6 +805,9 @@ impl Engine {
                 broken: rewrite.broken,
                 fragments,
             },
+            external: rewrite.external,
+            #[cfg(feature = "cards")]
+            card,
             warnings,
         })
     }
@@ -714,29 +820,44 @@ impl Engine {
     /// only fresh pages made the gate weaken on rebuild: a second build of a
     /// site with a dangling link reported nothing and `links { strict #true }`
     /// passed.
+    ///
+    /// `outbound` reaches the network and so is passed only by [`Engine::check`],
+    /// which recompiles every page and therefore sees every outbound link. A
+    /// build stays offline whatever the config says.
     fn validate(
         &self,
         rendered: &[Rendered],
         cached: &[(&Page, String, Outputs)],
+        outbound: bool,
         ui: &Ui,
     ) -> Result<()> {
-        let pages: Vec<CheckedPage> = rendered
+        // Cached pages contribute no outbound links: nothing recompiled them, so
+        // nothing re-read their anchors. Only `check` asks for them, and it never
+        // serves a page from cache.
+        let fresh = rendered
             .iter()
-            .map(|r| (r.page, &r.outputs))
-            .chain(cached.iter().map(|(page, _, outputs)| (*page, outputs)))
-            .map(|(page, outputs)| CheckedPage {
+            .map(|r| (r.page, &r.outputs, r.external.as_slice()));
+        let reused = cached
+            .iter()
+            .map(|(page, _, outputs)| (*page, outputs, &[] as &[String]));
+        let pages: Vec<CheckedPage> = fresh
+            .chain(reused)
+            .map(|(page, outputs, external)| CheckedPage {
                 label: self.relative(page),
                 source: &page.source,
                 broken: &outputs.broken,
+                external,
             })
             .collect();
-        Links::run(
-            &Compiled {
-                config: &self.config,
-                pages: &pages,
-            },
-            ui,
-        )
+        let site = Compiled {
+            config: &self.config,
+            pages: &pages,
+        };
+        Links::run(&site, ui)?;
+        if outbound && self.config.links.external {
+            External::run(&site, ui)?;
+        }
+        Ok(())
     }
 
     /// Wrap typst source diagnostics with the compiled source so miette renders
@@ -769,5 +890,11 @@ struct Rendered<'a> {
     /// The render pass's own results (externalized images, broken links), the
     /// same shape the cache stores and replays for a hit.
     outputs: Outputs,
+    /// Outbound `http(s)` links the page carries, for `check --external`. Not
+    /// cached: only a fresh compile collects them, and only `check` reads them.
+    external: Vec<String>,
+    /// The page's rendered social card as PNG bytes, when it wanted one.
+    #[cfg(feature = "cards")]
+    card: Option<Vec<u8>>,
     warnings: Vec<TypstSourceDiagnostic>,
 }

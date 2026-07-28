@@ -32,3 +32,24 @@ of the newest appear. The footer of this site links its
   fails the build. On a preview host, pass `--base-url` to point them at the
   right origin.
 ]
+
+== A feed per tag
+
+```kdl
+output {
+  feed {
+    formats "rss"
+    terms #true
+  }
+}
+```
+
+Adds a feed beside every taxonomy term's listing page, so a reader can follow
+one tag instead of the whole site: `/tags/rust/rss.xml` next to `/tags/rust/`.
+Each carries only that term's dated pages, in the same order and under the same
+`limit` as the site feed, and identifies itself by its own URL so an aggregator
+never merges it with another.
+
+Term feeds follow the term pages, so a taxonomy needs `index=#true` to have
+them. They are off by default: one more file per term per format multiplies the
+output of a heavily tagged site.

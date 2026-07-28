@@ -256,6 +256,10 @@ pub struct BuildArgs {
 pub struct CheckArgs {
     #[command(flatten)]
     pub overrides: CommonOverrides,
+
+    /// Also verify outbound `http(s)` links over the network.
+    #[arg(long, help_heading = group::BUILD)]
+    pub external: bool,
 }
 
 /// Arguments for `baudelaire serve`.
@@ -483,7 +487,9 @@ impl Cli {
             }
             other => other,
         };
-        let mut config = Config::parse(&text).map_err(named)?;
+        // `Root::enter` has already made the project directory the cwd, so a
+        // directory-theme resolves against it.
+        let mut config = Config::load(&text, Path::new(".")).map_err(named)?;
         if let Some(profile) = &self.global.profile {
             config = config.with_profile(profile).map_err(named)?;
         }
@@ -643,7 +649,10 @@ impl Run for BuildArgs {
 
 impl Run for CheckArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let config = cx.configured(&self.overrides, "checking")?;
+        let mut config = cx.configured(&self.overrides, "checking")?;
+        // The flag turns the config switch on for this run; it never turns a
+        // configured one off, so `links { external #true }` in CI needs no flag.
+        config.links.external |= self.external;
         crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
         Ok(())
     }

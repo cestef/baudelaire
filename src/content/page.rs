@@ -277,18 +277,38 @@ impl Page {
         )
     }
 
+    /// Whether this page gets a generated social card.
+    ///
+    /// Three conditions, in one place because the renderer, the `og:image` tag,
+    /// and the prune all have to agree: cards are configured *and* compiled in,
+    /// the page named no image of its own (an authored one always wins), and it
+    /// is real content rather than a generated listing (nobody shares a tag
+    /// index, and one render per term would dominate the build).
+    pub fn wants_card(&self, config: &crate::config::Config) -> bool {
+        config.cards.active()
+            && self.frontmatter.text("image").is_none()
+            && !matches!(self.data, Data::Generated(_))
+    }
+
     /// The most recent dated pages of one language, newest first, capped at
     /// `limit`: authored content carrying a date. The single "recent posts"
     /// selection shared by the syndication feeds and the `baudelaire:feed`
     /// module, so a language's feed lists only its own posts.
     pub fn recent<'a>(pages: &'a [Page], lang: &str, limit: usize) -> Vec<&'a Page> {
-        let mut dated: Vec<&Page> = pages
+        let candidates = pages
             .iter()
-            .filter(|p| {
-                !matches!(p.data, Data::Generated(_))
-                    && p.frontmatter.date.is_some()
-                    && p.lang == lang
-            })
+            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.lang == lang);
+        Self::newest(candidates, limit)
+    }
+
+    /// The newest `limit` dated pages among `pages`, newest first; undated ones
+    /// are dropped. The single ordering rule every feed is built on: the site
+    /// feed hands it a language's pages, a term feed hands it that term's
+    /// members, and both come out in the same order.
+    pub fn newest<'a>(pages: impl IntoIterator<Item = &'a Page>, limit: usize) -> Vec<&'a Page> {
+        let mut dated: Vec<&Page> = pages
+            .into_iter()
+            .filter(|p| p.frontmatter.date.is_some())
             .collect();
         dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
         dated.truncate(limit);

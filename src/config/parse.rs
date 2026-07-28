@@ -5,11 +5,12 @@ use crate::config::dispatch::{Attrs, Block, Keys};
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
-    FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig,
-    LinkConfig, LlmsConfig, Named, OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
-    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig,
-    SpaConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, DeployConfig,
+    DraftConfig, Eagerness, FeedConfig, FeedKind, HooksConfig, HtmlConfig, ImagesConfig,
+    JpegConfig, LanguageConfig, LinkConfig, LlmsConfig, Named, OptimizeConfig, PngConfig, PngStrip,
+    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
+    SearchFormat, ServeConfig, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    StandardConfig, TaxonomyConfig, VerifyConfig,
 };
 use crate::error::{ConfigError, Result};
 
@@ -34,7 +35,7 @@ impl Config {
     /// The top-level config schema: every key paired with the handler that
     /// applies it. This table is the *single source of truth* for what keys are
     /// valid: dispatch and "unknown key" suggestions both read it.
-    const RULES: Block<Config> = Block(&[
+    pub(super) const RULES: Block<Config> = Block(&[
         ("site", |c, n, t| {
             c.site = Some(n.string(t, 0)?);
             Ok(())
@@ -52,6 +53,10 @@ impl Config {
             Ok(())
         }),
         ("paths", |c, n, t| n.paths(c, t)),
+        ("theme", |c, n, t| {
+            c.theme = Some(n.string(t, 0)?);
+            Ok(())
+        }),
         ("future", |c, n, t| {
             c.future = n.boolean(t, 0)?;
             Ok(())
@@ -154,6 +159,8 @@ pub(super) trait NodeExt {
     fn contained(&self, text: &str) -> Result<String>;
     fn standalone(&self, target: &mut StandaloneConfig, text: &str) -> Result<()>;
     fn spa(&self, target: &mut SpaConfig, text: &str) -> Result<()>;
+    fn speculation(&self, target: &mut SpeculationConfig, text: &str) -> Result<()>;
+    fn cards(&self, target: &mut CardsConfig, text: &str) -> Result<()>;
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()>;
     fn responsive(&self, target: &mut ResponsiveConfig, text: &str) -> Result<()>;
     fn widths(&self, text: &str) -> Result<Vec<u32>>;
@@ -445,6 +452,47 @@ impl NodeExt for KdlNode {
         SPA.fill(target, self, text)
     }
 
+    /// The `speculation { prefetch ..; prerender .. }` block. Its presence
+    /// enables the navigation hints.
+    fn speculation(&self, target: &mut SpeculationConfig, text: &str) -> Result<()> {
+        const SPECULATION: Block<SpeculationConfig> = Block(&[
+            ("prefetch", |c, n, t| {
+                c.prefetch = n.arg(t, 0)?.one(t, NodeExt::span(n), Eagerness::NAMES)?;
+                Ok(())
+            }),
+            ("prerender", |c, n, t| {
+                c.prerender = n.arg(t, 0)?.one(t, NodeExt::span(n), Eagerness::NAMES)?;
+                Ok(())
+            }),
+        ]);
+        target.enabled = true;
+        SPECULATION.fill(target, self, text)
+    }
+
+    /// The `cards { template ..; width ..; height .. }` block. Its presence
+    /// enables social card rendering.
+    fn cards(&self, target: &mut CardsConfig, text: &str) -> Result<()> {
+        /// The widest and tallest a card may be. Unfurlers cap well below this;
+        /// the limit exists so a typo cannot ask for a gigapixel rasterization.
+        const MAX: i64 = 4096;
+        const CARDS: Block<CardsConfig> = Block(&[
+            ("template", |c, n, t| {
+                c.template = n.string(t, 0)?;
+                Ok(())
+            }),
+            ("width", |c, n, t| {
+                c.width = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, MAX)? as u32;
+                Ok(())
+            }),
+            ("height", |c, n, t| {
+                c.height = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, MAX)? as u32;
+                Ok(())
+            }),
+        ]);
+        target.enabled = true;
+        CARDS.fill(target, self, text)
+    }
+
     /// The `images { lazy; optimize { .. } }` section.
     fn images(&self, target: &mut ImagesConfig, text: &str) -> Result<()> {
         const IMAGES: Block<ImagesConfig> = Block(&[
@@ -654,6 +702,10 @@ impl NodeExt for KdlNode {
             ("search", |c, n, t| n.search(&mut c.search, t)),
             ("standalone", |c, n, t| n.standalone(&mut c.standalone, t)),
             ("spa", |c, n, t| n.spa(&mut c.spa, t)),
+            ("speculation", |c, n, t| {
+                n.speculation(&mut c.speculation, t)
+            }),
+            ("cards", |c, n, t| n.cards(&mut c.cards, t)),
         ]);
         OUTPUT.fill(config, self, text)
     }
@@ -673,10 +725,16 @@ impl NodeExt for KdlNode {
     }
 
     fn links(&self, target: &mut LinkConfig, text: &str) -> Result<()> {
-        const LINKS: Block<LinkConfig> = Block(&[("strict", |c, n, t| {
-            c.strict = n.boolean(t, 0)?;
-            Ok(())
-        })]);
+        const LINKS: Block<LinkConfig> = Block(&[
+            ("strict", |c, n, t| {
+                c.strict = n.boolean(t, 0)?;
+                Ok(())
+            }),
+            ("external", |c, n, t| {
+                c.external = n.boolean(t, 0)?;
+                Ok(())
+            }),
+        ]);
         LINKS.fill(target, self, text)
     }
 
@@ -694,6 +752,10 @@ impl NodeExt for KdlNode {
             }),
             ("limit", |c, n, t| {
                 c.limit = n.count(t, 0)?;
+                Ok(())
+            }),
+            ("terms", |c, n, t| {
+                c.terms = n.boolean(t, 0)?;
                 Ok(())
             }),
         ]);

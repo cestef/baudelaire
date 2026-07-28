@@ -1,25 +1,14 @@
-# First-party actions are pinned to a commit, not `@github`: the coverage job
-# hands one a token with write access to this repo, so a push to the actions
-# repo would otherwise change what runs with it. Bump with:
-#   git ls-remote https://github.com/cestef/actions github
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
-  # Coverage is ~490s, far and away the slowest thing here, and its value on a
-  # main push is only to refresh the baseline. Nightly does that just as well.
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
-# A new push makes the in-flight run for the same ref obsolete, so stop paying
-# for it. Release is deliberately excluded: cancelling mid-publish is worse than
-# a redundant run.
 concurrency:
-  # The event is part of the group so a push to main cannot cancel the nightly
-  # coverage run, which shares the same ref.
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
@@ -29,15 +18,12 @@ env:
   RUST_BACKTRACE: 1
   CARGO_PROFILE_DEV_DEBUG: 0
   CARGO_PROFILE_TEST_DEBUG: 0
-  # sccache used to set this. Incremental artifacts are worthless to a
-  # fresh runner and would bloat the cached target/ tree.
   CARGO_INCREMENTAL: 0
 
 jobs:
   check:
     name: lint & test
     runs-on: ubuntu-latest
-    # `contents` to push the badges branch.
     permissions:
       contents: write
     steps:
@@ -49,12 +35,10 @@ jobs:
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
-          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
-      # Restore the crate registry, so a warm run downloads no crates.
+          rustflags: "false"
       - name: restore cargo registry
         id: registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-      # Restore target/ (dep rlibs, build-script outputs, fingerprint DB).
       - name: restore build cache
         id: build-cache
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
@@ -64,15 +48,12 @@ jobs:
           base: "."
           paths: target
 
-      # Cheapest check first: rustfmt compiles nothing, so it fails fastest.
       - name: fmt
         run: cargo fmt --all --check
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # End-to-end tests shell out to these; a missing one looks like a product
-      # bug rather than a missing tool.
       - name: test prerequisites
         run: |
           for tool in curl base64 git; do
@@ -86,8 +67,6 @@ jobs:
           run: "true"
           args: --workspace --no-tests warn
 
-      # The `slim` flavour ships for every target but nothing else builds it, so
-      # a feature-gated break stayed invisible until a tag was pushed.
       - name: clippy (slim)
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
@@ -101,7 +80,6 @@ jobs:
         uses: cestef/actions/mem-diagnostics@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: failure()
 
-      # Facts worth publishing, read from what this job already has to hand.
       - name: facts
         id: facts
         run: |
@@ -111,8 +89,6 @@ jobs:
             echo "msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           } >> "$GITHUB_OUTPUT"
 
-      # `always()` so a failing suite still publishes: a red badge showing
-      # 490/493 is the whole point of tracking a ratio.
       - name: badge (tests)
         if: always()
         uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
@@ -120,7 +96,6 @@ jobs:
           label: tests
           value: ${{ steps.test.outputs.passed }}/${{ steps.test.outputs.total }} passing
           percent: ${{ steps.test.outputs.percent }}
-          # Green only at a clean sweep; any failure at all reads red.
           thresholds: "100:#3fb950,0:#e5534b"
           file: tests.svg
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -143,8 +118,6 @@ jobs:
           file: msrv.svg
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Only on a miss: the key is immutable, so saving over an exact hit is
-      # gigabytes of tar for a reservation that is guaranteed to be refused.
       - name: save cargo registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: always() && steps.registry.outputs.hit != 'true'
@@ -163,10 +136,7 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
-    # Everywhere but a push: pull requests need the ratchet, the nightly keeps
-    # the baseline and badge current, and a push to main gets the fast lane.
     if: github.event_name != 'push'
-    # `contents` to push the badge branch, `pull-requests` to comment.
     permissions:
       contents: write
       pull-requests: write
@@ -174,7 +144,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v7
 
-      # llvm-tools-preview: tarpaulin's LLVM engine reads profraw with llvm-profdata.
       - name: rust toolchain
         uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
@@ -182,20 +151,11 @@ jobs:
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
-          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+          rustflags: "false"
       - name: restore cargo registry
         id: registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
 
-      # No target/ cache here on purpose. The instrumented tree was 6.2 GB of a
-      # 10 GB repo-wide budget, so it evicted the caches that do pay for
-      # themselves, while tarpaulin re-instruments regardless: measured across
-      # four runs it bought 75-186s of cache I/O for no reliable saving.
-      #
-      # cargo-llvm-cov was measured as the alternative and rejected: 905s cold
-      # against tarpaulin's ~490s, and its 280s warm path needs a target dir far
-      # past what GitHub will cache. `cestef/actions/llvm-cov` exists if that
-      # ever changes.
       - name: coverage
         id: cov
         uses: cestef/actions/tarpaulin@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
@@ -203,9 +163,6 @@ jobs:
           args: --workspace --exclude-files benches/* --engine llvm
           out: Stdout Xml
 
-      # Publish the badge and baseline to the `badges` branch (default branch
-      # only), comment the delta on PRs, and ratchet: a PR can't drop coverage
-      # below main's, minus a small tolerance.
       - name: coverage report
         uses: cestef/actions/coverage-report@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:

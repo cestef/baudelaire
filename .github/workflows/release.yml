@@ -1,5 +1,3 @@
-# First-party actions are pinned to a commit, not `@github`. Bump with:
-#   git ls-remote https://github.com/cestef/actions github
 name: Release
 
 on:
@@ -17,8 +15,6 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # A tag used to ship eight binaries with no gate at all: no fmt, no clippy, no
-  # tests, and no check that the tag matches the version it claims to be.
   gate:
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +77,10 @@ jobs:
             runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             musl: true
+          - name: macos-aarch64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            macos: true
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -93,42 +93,40 @@ jobs:
           targets: ${{ matrix.target }}
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        if: ${{ !matrix.macos }}
         with:
-          rustflags: "false" # RUSTFLAGS already carries the mold link-arg
+          rustflags: "false"
 
-      # musl targets link a from-source OpenSSL (`vendored-openssl`), which needs
-      # a musl-targeting C compiler plus perl/make. `musl-gcc` builds the C code;
-      # rustc's self-contained musl handles the final static link.
+      - name: system linker
+        if: matrix.macos
+        run: echo "RUSTFLAGS=" >> "$GITHUB_ENV"
+
       - name: musl toolchain
         uses: cestef/actions/musl@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         if: matrix.musl
 
-      # Restore the crate registry (one key across targets; keyed on Cargo.lock).
       - name: restore cargo registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
 
-      # Each matrix row runs on its native-arch runner, so no cross-linking is
-      # needed. Two flavors per target: the default `full` binary and a `slim`
-      # one (`--no-default-features`: system fonts, assets copied verbatim). Each
-      # is tarred with a matching checksum; slim carries a `-slim` suffix.
       - name: build
         shell: bash
         env:
-          # Compile the vendored OpenSSL C for the musl target (no-op for gnu,
-          # where `EXTRA_FEATURES` is empty). Target-scoped so host build scripts
-          # and proc-macros still use the default host compiler.
           EXTRA_FEATURES: ${{ matrix.musl && 'vendored-openssl' || '' }}
           CC_x86_64_unknown_linux_musl: musl-gcc
           CC_aarch64_unknown_linux_musl: musl-gcc
         run: |
           set -euo pipefail
-          package() {  # $1 = asset suffix, rest = extra cargo flags
+          checksum() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"
+            else shasum -a 256 "$1"; fi
+          }
+          package() {
             local suffix="$1"; shift
             cargo build --release --target ${{ matrix.target }} \
               ${EXTRA_FEATURES:+--features "$EXTRA_FEATURES"} "$@"
             local out="baudelaire-${{ matrix.name }}${suffix}.tar.gz"
             tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
-            sha256sum "$out" > "$out.sha256"
+            checksum "$out" > "$out.sha256"
             ls -la "$out" "$out.sha256"
           }
           package ""
@@ -171,8 +169,6 @@ jobs:
         run: |
           mkdir -p release
           find dist -mindepth 2 -type f -exec mv -t release {} +
-          # Ship the installer alongside the tarballs, with its own checksum, so
-          # a pinned `install.sh` can be fetched and verified from the release.
           cp install.sh release/
           ( cd release && sha256sum install.sh > install.sh.sha256 )
           ls -la release
@@ -199,12 +195,14 @@ jobs:
           SIZE_ARM_MUSL=$(bin_size "baudelaire-linux-aarch64-musl.tar.gz")
           SIZE_X86_MUSL_SLIM=$(bin_size "baudelaire-linux-x86_64-musl-slim.tar.gz")
           SIZE_ARM_MUSL_SLIM=$(bin_size "baudelaire-linux-aarch64-musl-slim.tar.gz")
+          SIZE_MAC_ARM=$(bin_size "baudelaire-macos-aarch64.tar.gz")
+          SIZE_MAC_ARM_SLIM=$(bin_size "baudelaire-macos-aarch64-slim.tar.gz")
 
           cat > release-notes.md <<EOF
           ## Install
 
-          Prebuilt binary (Linux x86_64 / aarch64), checksum-verified. Fetch the
-          script, skim it, then run it:
+          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon),
+          checksum-verified. Fetch the script, skim it, then run it:
 
           \`\`\`bash
           curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
@@ -232,7 +230,10 @@ jobs:
           and you run your own asset tooling.
 
           The \`gnu\` builds link the host's glibc; the fully static \`musl\` builds
-          run anywhere (Alpine, distroless, scratch containers).
+          run anywhere (Alpine, distroless, scratch containers). The macOS build
+          is unsigned and unnotarized, so the first run needs a right-click ->
+          Open, or \`xattr -d com.apple.quarantine baudelaire\`. Intel Macs have
+          no prebuilt binary: \`cargo install baudelaire\` builds one.
 
           | Artifact | Size |
           |----------|------|
@@ -244,25 +245,23 @@ jobs:
           | \`baudelaire-linux-aarch64-slim\` | ${SIZE_ARM_SLIM} |
           | \`baudelaire-linux-aarch64-musl\` | ${SIZE_ARM_MUSL} |
           | \`baudelaire-linux-aarch64-musl-slim\` | ${SIZE_ARM_MUSL_SLIM} |
+          | \`baudelaire-macos-aarch64\` | ${SIZE_MAC_ARM} |
+          | \`baudelaire-macos-aarch64-slim\` | ${SIZE_MAC_ARM_SLIM} |
 
           Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
           \`\`\`bash
-          sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256
+          sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256   # shasum -a 256 -c on macOS
           \`\`\`
           EOF
           cat release-notes.md
 
-          # Reuse the same measurements for the badges, so the notes and the
-          # badge can never quote different numbers.
           {
             echo "size_full=${SIZE_X86}"
             echo "size_slim=${SIZE_X86_SLIM}"
             echo "version=${VERSION#v}"
           } >> "$GITHUB_OUTPUT"
 
-      # `gh` is preinstalled on the runner, so the upload needs no third-party
-      # action. Re-running a tag replaces the assets rather than failing.
       - name: publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -304,17 +303,12 @@ jobs:
           file: crates-io.svg
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # crates.io Trusted Publishing: the runner exchanges its OIDC identity for a
-  # short-lived registry token, so no long-lived CARGO_REGISTRY_TOKEN is ever
-  # stored here. Requires a trusted publisher configured on the crate naming
-  # this repository and this workflow file.
   crates:
     name: publish to crates.io
     needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # The whole point: without this the OIDC exchange cannot happen.
       id-token: write
     steps:
       - name: checkout
@@ -324,9 +318,6 @@ jobs:
 
       - name: rust toolchain
         uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-      # RUSTFLAGS carries `-fuse-ld=mold` for every job, so this one needs mold
-      # too: without it `cc` fails with "cannot find 'ld'" during the verify
-      # build, after the registry token has already been issued.
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
@@ -336,8 +327,6 @@ jobs:
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
 
-      # `--locked` publishes exactly the dependency versions CI tested with; the
-      # tag/version agreement was already checked by the gate job.
       - name: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

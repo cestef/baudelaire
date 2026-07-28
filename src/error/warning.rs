@@ -68,6 +68,36 @@ pub struct ImageCollision {
     pub dropped: PathBuf,
 }
 
+/// An outbound link nothing answered for: DNS, TLS, a timeout, a refused
+/// connection. A warning rather than an error because the likeliest cause is the
+/// network in between, not the site.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{url}: {why}")]
+#[diagnostic(code(baudelaire::links::unreachable), severity(warning))]
+pub struct Unreachable {
+    pub url: String,
+    pub why: String,
+}
+
+/// The outbound links that could not be reached at all.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} outbound link{} could not be reached", links.len(), if links.len() == 1 { "" } else { "s" })]
+#[diagnostic(
+    code(baudelaire::links::unreachable),
+    severity(warning),
+    help("re-run to retry; a host that stays unreachable is worth checking by hand")
+)]
+pub struct UnreachableLinks {
+    #[related]
+    pub links: Vec<Unreachable>,
+}
+
+impl From<Vec<Unreachable>> for UnreachableLinks {
+    fn from(links: Vec<Unreachable>) -> Self {
+        Self { links }
+    }
+}
+
 /// The single-file export's entry permalink matches no built page, so there is
 /// no head or body to build the shell around and nothing is written.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]

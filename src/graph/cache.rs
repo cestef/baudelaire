@@ -123,6 +123,19 @@ pub struct RenderInputs {
     pub srcsets: Hash,
     /// Present only when `embed` is on: a content hash of the inlined assets.
     pub embeds: Option<Hash>,
+    /// Present only when cards are on: a content hash of the card template.
+    ///
+    /// No page imports it, so typst's dependency tracking never sees it, and an
+    /// edited template would otherwise leave every cache-served page showing the
+    /// card the old one drew.
+    pub cards: Option<Hash>,
+    /// A content hash of the generated `@baudelaire/*` Typst modules.
+    ///
+    /// A page *does* import these, but they exist only in memory, so they
+    /// resolve to no path and never reach the dependency tracker. They carry
+    /// nothing volatile by construction, so hashing them whole costs a full
+    /// rebuild only when baudelaire or the site's identity changes.
+    pub modules: Hash,
 }
 
 /// The build cache. Loads the previous manifest, answers reuse queries, and
@@ -448,6 +461,8 @@ mod tests {
             links: Hash::of_bytes(b""),
             srcsets: Hash::of_bytes(b""),
             embeds: None,
+            cards: None,
+            modules: Hash::of_bytes(b""),
         };
         Cache::load(&config, &render, Vec::new(), root, &Ui::new(Level::Silent)).expect("cache")
     }

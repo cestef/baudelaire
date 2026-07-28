@@ -15,6 +15,8 @@
 #[cfg(feature = "css")]
 mod css;
 #[cfg(feature = "images")]
+mod exif;
+#[cfg(feature = "images")]
 mod image;
 #[cfg(feature = "js")]
 mod js;
@@ -34,7 +36,9 @@ use crate::fs;
 use crate::graph::Hash;
 use rayon::prelude::*;
 
+use crate::engine::layers::{Layered, Layers};
 use crate::render::{AssetMap, SrcSets};
+use crate::theme::Theme;
 use memo::Memo;
 
 #[cfg(feature = "css")]
@@ -75,28 +79,17 @@ enum Phase {
     Bundle,
 }
 
-/// The read-only context a handler renders against: the config, the source
-/// root, the served URL prefix, and the shared JS bundler. The accumulating
-/// [`AssetMap`] is passed to [`Handler::render`] separately, so the pipeline can
-/// keep mutating it between calls.
+/// The read-only context a handler renders against: the config, the served URL
+/// prefix, and the shared JS bundler. The accumulating [`AssetMap`] is passed to
+/// [`Handler::render`] separately, so the pipeline can keep mutating it between
+/// calls.
 struct Ctx<'a> {
     /// The site config: read by the css and image handlers for their options.
     #[cfg(any(feature = "css", feature = "images"))]
     config: &'a Config,
     prefix: &'a str,
-    /// The stylesheet handler's extra context. Grouped into one value so [`Ctx`]
-    /// carries a single css-gated field, mirroring [`JsCtx`] on [`Assets`].
-    #[cfg(feature = "css")]
-    css: CssCtx<'a>,
     #[cfg(feature = "js")]
     bundler: Option<&'a Js>,
-}
-
-/// The css handler's slice of the render context: the source asset root, used to
-/// resolve `@import` ordering and `url()` keys relative to each sheet.
-#[cfg(feature = "css")]
-struct CssCtx<'a> {
-    src: &'a Path,
 }
 
 impl Ctx<'_> {
@@ -171,7 +164,7 @@ trait Handler: Sync {
     /// Reorder this handler's files before rendering. The default keeps input
     /// order; stylesheets override it to fingerprint an imported sheet before
     /// its importer.
-    fn order(&self, files: Vec<PathBuf>, _ctx: &Ctx) -> Vec<PathBuf> {
+    fn order(&self, files: Vec<Layered>, _ctx: &Ctx) -> Vec<Layered> {
         files
     }
 
@@ -280,8 +273,9 @@ pub struct Assets<'a> {
     /// modules, present only under the `js` feature, since nothing else reads it.
     #[cfg(feature = "js")]
     js: JsCtx<'a>,
-    /// Source asset directory (`config.assets`).
-    src: &'a Path,
+    /// Where assets are read from: the theme's tree beneath the project's, so a
+    /// theme ships a stylesheet the site can replace file by file.
+    sources: Layers,
     /// Where this build writes, published over `dist/assets` by
     /// [`Assets::publish`] once the build is far enough along to be consistent.
     dst: PathBuf,
@@ -293,12 +287,16 @@ pub struct Assets<'a> {
 }
 
 impl<'a> Assets<'a> {
-    pub fn new(config: &'a Config, #[cfg(feature = "js")] js: JsCtx<'a>) -> Self {
+    pub fn new(
+        config: &'a Config,
+        theme: Option<&Theme>,
+        #[cfg(feature = "js")] js: JsCtx<'a>,
+    ) -> Self {
         Self {
             config,
             #[cfg(feature = "js")]
             js,
-            src: &config.assets,
+            sources: Layers::new(theme.map(Theme::assets), &config.assets),
             dst: config.asset_staging(),
             memo: Memo::new(config),
             prefix: format!("/{}", config.asset_name()),
@@ -332,16 +330,17 @@ impl<'a> Assets<'a> {
     /// [`Engine::build`]: crate::engine::Engine::build
     pub fn process(&self) -> Result<Processed> {
         let mut out = Processed::default();
-        if !self.src.exists() {
+        let sources = self.sources.files()?;
+        if sources.is_empty() {
             return Ok(out);
         }
         let handlers = builtin();
         // Bucket every file under the first handler that claims it.
-        let mut buckets: Vec<Vec<PathBuf>> = handlers.iter().map(|_| Vec::new()).collect();
-        for file in fs::Walk::new(self.src).files()? {
+        let mut buckets: Vec<Vec<Layered>> = handlers.iter().map(|_| Vec::new()).collect();
+        for file in sources {
             let idx = handlers
                 .iter()
-                .position(|h| h.claims(&file, self.config))
+                .position(|h| h.claims(&file.path, self.config))
                 .expect("Verbatim claims every file");
             buckets[idx].push(file);
         }
@@ -378,8 +377,6 @@ impl<'a> Assets<'a> {
                     #[cfg(any(feature = "css", feature = "images"))]
                     config: self.config,
                     prefix: &self.prefix,
-                    #[cfg(feature = "css")]
-                    css: CssCtx { src: self.src },
                     bundler: Some(&js),
                 };
                 for (handler, bucket) in handlers.iter().zip(&mut buckets) {
@@ -399,8 +396,6 @@ impl<'a> Assets<'a> {
             #[cfg(any(feature = "css", feature = "images"))]
             config: self.config,
             prefix: &self.prefix,
-            #[cfg(feature = "css")]
-            css: CssCtx { src: self.src },
             #[cfg(feature = "js")]
             bundler: None,
         }
@@ -410,7 +405,7 @@ impl<'a> Assets<'a> {
     fn run(
         &self,
         handler: &dyn Handler,
-        files: Vec<PathBuf>,
+        files: Vec<Layered>,
         ctx: &Ctx,
         out: &mut Processed,
     ) -> Result<()> {
@@ -464,14 +459,12 @@ impl<'a> Assets<'a> {
     fn render(
         &self,
         handler: &dyn Handler,
-        file: &Path,
+        source: &Layered,
         ctx: &Ctx,
         map: &AssetMap,
     ) -> Result<Render> {
-        let rel = file
-            .strip_prefix(self.src)
-            .expect("Walk yields paths under src")
-            .to_path_buf();
+        let Layered { rel, path: file } = source;
+        let rel = rel.clone();
         // Render against the source path (stylesheets resolve their relative
         // references from it), emit under the served one.
         let served = handler.rename(&rel);

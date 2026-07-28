@@ -49,6 +49,18 @@ the target's permalink); a link to an already-resolved URL like `/posts/hello/`
 is left untouched and never checked, so a permalink can change without breaking
 `.typ` references to it. Accepts the #link(<build-flags>)[build flags].
 
+/ #raw("--external"): Also verify outbound `http(s)` links over the network.
+  Every distinct URL is requested once (`HEAD`, retried as `GET` by servers that
+  refuse the method) and a URL that answered is remembered for a week, so a
+  repeat run only checks what it has not seen. A host that answers 4xx or 5xx
+  fails the check; one that cannot be reached at all is a warning, since the
+  likeliest cause is the network in between. Set `links { external #true }` to
+  have CI do it without the flag.
+
+Builds never reach the network, whatever `links { external }` says: a build has
+to produce the same bytes offline and when someone else's host is having a bad
+afternoon.
+
 === new \<path>
 
 Scaffold a content file, inferring its structure from the config and existing

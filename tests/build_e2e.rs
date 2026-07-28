@@ -1026,6 +1026,64 @@ fn feed_titles_fall_back_to_the_page_id() {
     assert!(!atom.contains("<title></title>"), "no empty title: {atom}");
 }
 
+/// A term feed sits beside its term listing, carries only that term's pages,
+/// and identifies itself by its own URL so an aggregator does not merge it with
+/// the site feed.
+#[test]
+fn per_term_feeds_sit_beside_their_term_pages() {
+    let site = Site::with(
+        "site \"T\"\nurl \"https://example.com\"\n\
+         taxonomies {\n  tags index=#true\n}\n\
+         output {\n  feed { formats \"rss\"; terms #true }\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", date: datetime(year: 2024, month: 1, day: 2), \
+         tags: (\"rust\",),)\nbody",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\", date: datetime(year: 2024, month: 1, day: 3), \
+         tags: (\"typst\",),)\nbody",
+    );
+    site.stats();
+
+    let rust = site.output("tags/rust/rss.xml");
+    assert!(rust.contains("https://example.com/posts/a/"), "{rust}");
+    assert!(!rust.contains("/posts/b/"), "other term leaked in: {rust}");
+    assert!(rust.contains("<title>T - Tags: rust</title>"), "{rust}");
+    assert!(
+        rust.contains("<link>https://example.com/tags/rust/</link>"),
+        "term feed points at its own page: {rust}"
+    );
+    assert!(site.exists("public/tags/typst/rss.xml"));
+    // The site-wide feed is still there, with both posts.
+    let all = site.output("rss.xml");
+    assert!(
+        all.contains("/posts/a/") && all.contains("/posts/b/"),
+        "{all}"
+    );
+}
+
+/// Term feeds are opt-in, and follow the term pages: no `index`, no feed.
+#[test]
+fn per_term_feeds_stay_off_by_default() {
+    let site = Site::with(
+        "site \"T\"\nurl \"https://example.com\"\n\
+         taxonomies {\n  tags index=#true\n}\n\
+         output {\n  feed { formats \"rss\" }\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", date: datetime(year: 2024, month: 1, day: 2), \
+         tags: (\"rust\",),)\nbody",
+    );
+    site.stats();
+
+    assert!(site.exists("public/rss.xml"));
+    assert!(!site.exists("public/tags/rust/rss.xml"));
+}
+
 #[test]
 fn atom_feed_when_configured() {
     let site = Site::new();

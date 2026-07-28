@@ -4,28 +4,21 @@
 //! ([`typst_html::HtmlDocument`]), never on the serialized string, honoring the
 //! project rule that HTML is never manipulated as text.
 
-mod anchors;
+//! The site-wide data a transform reads (the asset map, the link map, the
+//! responsive manifest) lives here; the passes themselves live in
+//! [`transform`], one file each.
+
 mod asset;
-mod base;
-mod embed;
-mod externalize;
-mod fingerprint;
 mod fragment;
-mod image;
-mod lang;
 mod links;
-mod meta;
-mod rewrite;
-mod sources;
 mod srcset;
-mod standard;
 mod transform;
 
 pub use asset::AssetMap;
-pub use externalize::ImageRef;
 pub use fragment::Fragments;
 pub use links::LinkMap;
 pub use srcset::SrcSets;
+pub use transform::ImageRef;
 
 use crate::graph::Fingerprint;
 
@@ -73,6 +66,9 @@ pub struct Rewrite {
     pub broken: Vec<String>,
     /// Images lifted out of the DOM, for the engine to copy into `dist`.
     pub images: Vec<ImageRef>,
+    /// Outbound `http(s)` link targets the page carries, collected only when
+    /// external checking is on.
+    pub external: Vec<String>,
 }
 
 impl Renderer {
@@ -119,11 +115,13 @@ impl Renderer {
             root: &self.root,
             broken: Vec::new(),
             images: Vec::new(),
+            external: Vec::new(),
         };
         self.transforms.apply(doc, &mut cx);
         Rewrite {
             broken: cx.broken,
             images: cx.images,
+            external: cx.external,
         }
     }
 }

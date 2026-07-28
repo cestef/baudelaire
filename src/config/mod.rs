@@ -16,6 +16,8 @@ use std::path::PathBuf;
 
 use kdl::KdlDocument;
 
+use crate::error::{ConfigError, Result};
+
 pub use defaults::{SortKey, UrlStyle};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 
@@ -51,6 +53,10 @@ pub struct Config {
     pub r#static: PathBuf,
     /// Layout / template directory.
     pub templates: PathBuf,
+    /// A theme package supplying templates, assets, and config defaults, named
+    /// like any Typst dependency (`@preview/plume:1.0.0`). Everything it
+    /// provides is a default the project overrides.
+    pub theme: Option<String>,
     /// How permalinks map onto output files: clean (directory-per-page) or flat
     /// (`.html`). Set under `output { urls "clean" | "flat" }`.
     pub urls: UrlStyle,
@@ -69,7 +75,7 @@ pub struct Config {
     pub llms: LlmsConfig,
     /// Draft handling.
     pub draft: DraftConfig,
-    /// Internal link checking.
+    /// Link checking.
     pub links: LinkConfig,
     /// Syndication feeds.
     pub feed: FeedConfig,
@@ -79,6 +85,10 @@ pub struct Config {
     pub standalone: StandaloneConfig,
     /// Client-side navigation between the built pages.
     pub spa: SpaConfig,
+    /// Browser-native prefetch/prerender hints.
+    pub speculation: SpeculationConfig,
+    /// Generated social cards.
+    pub cards: CardsConfig,
     /// Typst `sys.inputs` entries.
     pub inputs: Vec<(String, String)>,
     /// Build-time constants exposed to client JS through the `baudelaire:config`
@@ -126,6 +136,44 @@ pub struct Config {
 }
 
 impl Config {
+    /// Parse a site's config, layered over whatever defaults its theme supplies.
+    ///
+    /// Two passes, because the config is what names the theme: the site's own
+    /// text is read once to learn that, then re-applied over the theme's
+    /// `theme.kdl` so every key the site states wins and every key it leaves out
+    /// falls back. A site with no theme parses exactly once.
+    ///
+    /// `root` is the project directory a directory-theme is resolved against,
+    /// passed rather than taken from the process cwd so a caller that has not
+    /// changed into the project (a test, an embedding) resolves correctly.
+    pub fn load(text: &str, root: &std::path::Path) -> Result<Self> {
+        let config = Self::parse(text)?;
+        let Some(spec) = config.theme.as_deref() else {
+            return Ok(config);
+        };
+        let theme = crate::theme::Theme::resolve(spec, root)?;
+        let Some(defaults) = theme.config() else {
+            return Ok(config);
+        };
+        let base = Self::parse(&crate::fs::read_to_string(&defaults)?)?;
+        Self::parse_over(base, text)
+    }
+
+    /// Apply a config text over an existing config, rather than over the
+    /// built-in defaults: how a theme's `theme.kdl` becomes the floor the site's
+    /// own config stands on.
+    fn parse_over(base: Self, text: &str) -> Result<Self> {
+        let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
+        // The site's text, not the theme's: every span a later error points at
+        // has to land in the file the author is editing.
+        let mut config = Self {
+            source: text.to_owned(),
+            ..base
+        };
+        Self::RULES.apply(&mut config, doc.nodes(), text)?;
+        Ok(config)
+    }
+
     /// Root of all machine-local, regenerable build state, one subdirectory per
     /// subsystem:
     ///
@@ -491,6 +539,7 @@ impl std::hash::Hash for Config {
             assets,
             r#static,
             templates,
+            theme,
             urls,
             clean,
             future,
@@ -503,6 +552,8 @@ impl std::hash::Hash for Config {
             search,
             standalone,
             spa,
+            speculation,
+            cards,
             inputs,
             client,
             features,
@@ -527,7 +578,7 @@ impl std::hash::Hash for Config {
             source: _,
         } = self;
         (
-            site, url, lang, author, content, index, dist, assets, r#static, templates,
+            site, url, lang, author, content, index, dist, assets, r#static, templates, theme,
         )
             .hash(state);
         (
@@ -536,7 +587,7 @@ impl std::hash::Hash for Config {
             .hash(state);
         (inputs, features, collections, taxonomies, html, images).hash(state);
         (asset, cache, hooks, announce, deploy, profile).hash(state);
-        (client, languages, standalone, spa).hash(state);
+        (client, languages, standalone, spa, speculation, cards).hash(state);
     }
 }
 
@@ -630,6 +681,12 @@ pub struct DraftConfig {
 pub struct LinkConfig {
     /// Treat unresolved internal `.typ` links as errors (else warnings).
     pub strict: bool,
+    /// Also verify outbound `http(s)` links over the network.
+    ///
+    /// Read by `check` alone: a build stays offline and deterministic, so a
+    /// flaky host or an airplane can never change what it produces. `check
+    /// --external` turns it on for one run.
+    pub external: bool,
 }
 
 /// Syndication feeds.
@@ -639,6 +696,11 @@ pub struct FeedConfig {
     pub formats: Vec<FeedKind>,
     /// Maximum items in a feed.
     pub limit: usize,
+    /// Also emit a feed per taxonomy term, beside that term's listing page
+    /// (`/tags/rust/rss.xml`), so a reader can follow one tag rather than the
+    /// whole site. Follows the term pages, so it needs `index=#true` on the
+    /// taxonomy.
+    pub terms: bool,
 }
 
 /// A syndication feed format.
@@ -742,6 +804,103 @@ pub struct StandaloneConfig {
     pub entry: Option<String>,
     /// How the router encodes the current route in the address bar.
     pub router: Router,
+}
+
+/// Generated social cards: the image a link to this site unfurls into, rendered
+/// per page from a Typst template. Enabled by the presence of a `cards { .. }`
+/// block.
+///
+/// The template is compiled to a *paged* document, not an HTML one, so it is
+/// ordinary Typst: `html.elem` does not exist there, and page layout does.
+#[derive(Debug, Clone, Hash)]
+pub struct CardsConfig {
+    /// Whether to render cards.
+    pub enabled: bool,
+    /// The template file under the templates directory.
+    pub template: String,
+    /// Card size in pixels. The card is one page rendered at one pixel per
+    /// point, so these are also the page's dimensions in points.
+    pub width: u32,
+    pub height: u32,
+}
+
+impl CardsConfig {
+    /// The directory cards are written to under `dist`, and the leading segment
+    /// of every card URL.
+    pub const DIR: &'static str = "cards";
+
+    /// The served URL of a page's card, whether or not it has been rendered
+    /// yet: the meta transform names it while the file is still being made, the
+    /// renderer writes it, and the prune keeps it, so all three have to derive
+    /// it the same way.
+    pub fn url(&self, permalink: &str) -> String {
+        let stem = permalink.trim_matches('/');
+        // A flat-URL site's permalink already names a file; `about.html.png`
+        // would be an odd thing to serve.
+        let stem = stem.strip_suffix(".html").unwrap_or(stem);
+        match stem.is_empty() {
+            // the home page, whose permalink is just `/`
+            true => format!("/{}/index.png", Self::DIR),
+            false => format!("/{}/{stem}.png", Self::DIR),
+        }
+    }
+
+    /// Where that URL lands under `dist`.
+    pub fn path(&self, dist: &std::path::Path, permalink: &str) -> PathBuf {
+        dist.join(self.url(permalink).trim_start_matches('/'))
+    }
+
+    /// Whether cards are actually produced: configured *and* compiled in. A
+    /// build without the `cards` feature has no rasterizer, so pointing pages at
+    /// images it cannot make would be worse than making none.
+    pub fn active(&self) -> bool {
+        self.enabled && cfg!(feature = "cards")
+    }
+}
+
+/// Browser-native navigation hints: a `<script type="speculationrules">` telling
+/// the browser to fetch, or fully render, an internal link's target before it is
+/// clicked. Enabled by the presence of a `speculation { .. }` block.
+///
+/// The zero-JavaScript neighbour of [`SpaConfig`]: the browser does the work, so
+/// nothing has to be shipped, mounted, or maintained. Unsupported browsers
+/// ignore the script.
+#[derive(Debug, Clone, Hash)]
+pub struct SpeculationConfig {
+    /// Whether to emit the rules.
+    pub enabled: bool,
+    /// How eagerly to fetch a link's target (cheap: bytes only).
+    pub prefetch: Eagerness,
+    /// How eagerly to render it in full (expensive: a hidden page, its scripts
+    /// running), so the click paints instantly.
+    pub prerender: Eagerness,
+}
+
+/// How eagerly the browser should act on a speculation rule, from the API's own
+/// scale, plus a [`Eagerness::None`] that emits no rule at all for that action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Eagerness {
+    /// Emit no rule: this action is off.
+    #[default]
+    None,
+    /// On pointer-down: the last moment before a navigation.
+    Conservative,
+    /// On hover, roughly, once intent looks real.
+    Moderate,
+    /// As soon as a link looks like a plausible next step.
+    Eager,
+    /// At once, for every matching link on the page.
+    Immediate,
+}
+
+impl Named for Eagerness {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("none", Self::None),
+        ("conservative", Self::Conservative),
+        ("moderate", Self::Moderate),
+        ("eager", Self::Eager),
+        ("immediate", Self::Immediate),
+    ];
 }
 
 /// Client-side navigation over the ordinary multi-file output: a runtime

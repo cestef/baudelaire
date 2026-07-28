@@ -160,6 +160,37 @@ fn the_spa_runtime_stands_alone_without_the_export() {
     assert!(site.output("spa.js").contains("mountSpa();"));
 }
 
+/// The zero-JavaScript path: rules in the head, nothing shipped.
+#[test]
+fn speculation_rules_land_in_the_head() {
+    let site = Site::with(
+        r#"
+        site "T"
+        paths { content "content"; dist "public" }
+        output { speculation { prefetch "eager"; prerender "conservative" } }
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\",)\nHome.\n",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    let rules = html
+        .split_once(r#"type="speculationrules">"#)
+        .expect("rules script")
+        .1
+        .split_once("</script>")
+        .expect("script closes")
+        .0;
+    let rules: serde_json::Value = serde_json::from_str(rules).expect("valid JSON");
+    assert_eq!(rules["prefetch"][0]["eagerness"], "eager");
+    assert_eq!(rules["prerender"][0]["eagerness"], "conservative");
+    assert_eq!(rules["prefetch"][0]["where"]["href_matches"], "/*");
+    assert!(!site.exists("public/spa.js"), "nothing is shipped");
+}
+
 /// Neither output exists unless the site asks for it.
 #[test]
 fn nothing_is_emitted_without_the_blocks() {

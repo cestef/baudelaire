@@ -6,11 +6,11 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CollectionConfig, Config, DeployConfig, DraftConfig,
-    FeedConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig, LlmsConfig,
-    OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig, Router,
-    S3Config, SearchConfig, SearchField, ServeConfig, SpaConfig, SshConfig, StandaloneConfig,
-    StandardConfig, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, DeployConfig,
+    DraftConfig, Eagerness, FeedConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
+    LinkConfig, LlmsConfig, OptimizeConfig, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    RobotsConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig, SpaConfig,
+    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, VerifyConfig,
 };
 
 impl Default for Config {
@@ -29,6 +29,7 @@ impl Default for Config {
             assets: PathBuf::from("assets"),
             r#static: PathBuf::from("static"),
             templates: PathBuf::from("templates"),
+            theme: None,
             urls: UrlStyle::default(),
             clean: true,
             future: false,
@@ -42,6 +43,8 @@ impl Default for Config {
             search: SearchConfig::default(),
             standalone: StandaloneConfig::default(),
             spa: SpaConfig::default(),
+            speculation: SpeculationConfig::default(),
+            cards: CardsConfig::default(),
             inputs: Default::default(),
             client: Default::default(),
             // HTML is forced on in `world.rs`; this list is purely additive
@@ -104,6 +107,32 @@ impl Default for SpaConfig {
     }
 }
 
+impl Default for SpeculationConfig {
+    fn default() -> Self {
+        // opt-in like its neighbours. When the block is present but silent:
+        // prefetch on hover (cheap, near-certain to be used) and no prerender,
+        // which costs a full hidden page render and runs the target's scripts.
+        Self {
+            enabled: false,
+            prefetch: Eagerness::Moderate,
+            prerender: Eagerness::None,
+        }
+    }
+}
+
+impl Default for CardsConfig {
+    fn default() -> Self {
+        // opt-in: rendering a page per card is the most expensive thing a build
+        // can do per page. 1200x630 is the size every unfurler crops to.
+        Self {
+            enabled: false,
+            template: "card.typ".into(),
+            width: 1200,
+            height: 630,
+        }
+    }
+}
+
 impl Default for ImagesConfig {
     fn default() -> Self {
         Self {
@@ -162,7 +191,13 @@ impl Default for DraftConfig {
 
 impl Default for LinkConfig {
     fn default() -> Self {
-        Self { strict: true }
+        // Strict internal links by default: a `.typ` link naming no page is a
+        // typo, and the build knows it for certain. External checking is opt-in
+        // and needs the network, so it can never be a default.
+        Self {
+            strict: true,
+            external: false,
+        }
     }
 }
 
@@ -172,6 +207,9 @@ impl Default for FeedConfig {
             // opt-in like search: no feed until a format is named
             formats: Vec::new(),
             limit: 20,
+            // off by default: one more file per term per format multiplies the
+            // output of a heavily tagged site
+            terms: false,
         }
     }
 }

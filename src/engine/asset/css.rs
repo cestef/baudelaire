@@ -2,7 +2,7 @@
 //! `@import` references to the fingerprinted names of the assets they point at.
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
@@ -13,6 +13,7 @@ use crate::fs;
 use crate::render::{AssetMap, Tail};
 
 use super::{Ctx, Handler, PathExt, Phase};
+use crate::engine::layers::Layered;
 
 /// Stylesheets: minified when enabled, with their references rewritten to the
 /// fingerprinted names recorded in the [`AssetMap`]. Copied verbatim when
@@ -28,7 +29,7 @@ impl Handler for Stylesheet {
         Phase::Late
     }
 
-    fn order(&self, files: Vec<PathBuf>, ctx: &Ctx) -> Vec<PathBuf> {
+    fn order(&self, files: Vec<Layered>, ctx: &Ctx) -> Vec<Layered> {
         Self::order(files, ctx)
     }
 
@@ -121,18 +122,13 @@ impl Stylesheet {
     /// the imported sheet's final name. Import cycles have no satisfying order;
     /// their members keep input order and cross-references fall back to the
     /// original (unmapped) names.
-    fn order(files: Vec<PathBuf>, ctx: &Ctx) -> Vec<PathBuf> {
+    fn order(files: Vec<Layered>, ctx: &Ctx) -> Vec<Layered> {
         if !ctx.config.asset.fingerprint || files.len() < 2 {
             return files;
         }
-        let key_of = |file: &Path| {
-            ctx.url(
-                file.strip_prefix(ctx.css.src)
-                    .expect("Walk yields paths under src"),
-            )
-        };
-        let all: BTreeSet<String> = files.iter().map(|f| key_of(f)).collect();
-        let mut remaining: Vec<(PathBuf, Vec<String>)> = files
+        let key_of = |file: &Layered| ctx.url(&file.rel);
+        let all: BTreeSet<String> = files.iter().map(key_of).collect();
+        let mut remaining: Vec<(Layered, Vec<String>)> = files
             .into_iter()
             .map(|file| {
                 let deps = Self::deps(&file, ctx)
@@ -163,11 +159,9 @@ impl Stylesheet {
 
     /// The asset-map keys of stylesheets referenced by `file`. Unreadable or
     /// unparseable input yields no deps: the error surfaces in `transform`.
-    fn deps(file: &Path, ctx: &Ctx) -> Vec<String> {
-        let rel = file
-            .strip_prefix(ctx.css.src)
-            .expect("Walk yields paths under src");
-        let Ok(code) = fs::read_to_string(file) else {
+    fn deps(file: &Layered, ctx: &Ctx) -> Vec<String> {
+        let rel = file.rel.as_path();
+        let Ok(code) = fs::read_to_string(&file.path) else {
             return Vec::new();
         };
         let Ok(sheet) = StyleSheet::parse(&code, ParserOptions::default()) else {

@@ -42,6 +42,8 @@ output {
   feed { formats "rss" "atom"; limit 20 }
   spa { root "main"; prefetch "hover" }
   standalone { file "site.html"; entry "/"; router "hash" }
+  speculation { prefetch "moderate" }
+  cards { template "card.typ"; width 1200; height 630 }
 }
 ```
 
@@ -52,10 +54,13 @@ loading, externalizing embedded images, responsive `srcset` variants, and
 per-format optimization. See
 #link("../features/discovery/meta.typ")[meta and images].
 
-`spa` and `standalone` are both off unless their block is present: the first
-adds a client-side navigation runtime beside the ordinary pages, the second
-folds the whole site into one file. See
-#link("../features/build/navigating.typ")[SPA and single-file export].
+`spa`, `standalone`, and `speculation` are all off unless their block is
+present: the first adds a client-side navigation runtime beside the ordinary
+pages, the second folds the whole site into one file, and the third asks the
+browser to prefetch with no runtime at all. See
+#link("../features/build/navigating.typ")[SPA and single-file export]. `cards`
+draws a social image per page; see
+#link("../features/discovery/cards.typ")[social cards].
 
 Every field has a sensible default, so a minimal `config.kdl` is just
 `site "My Site"`. The rest overrides only what you name.
@@ -84,8 +89,11 @@ Every field has a sensible default, so a minimal `config.kdl` is just
   #link("../features/assets/hooks.typ")[build hooks].
 / #raw("draft"), #raw("future"): Whether to build draft or future-dated pages
   (both off by default; the `--drafts` / `--future` flags override per build).
-/ #raw("links"): Broken-internal-link policy, error by default (the
-  `--strict-links` flag overrides).
+/ #raw("links"): Link checking. `strict` makes a broken internal `.typ` link an
+  error (the default; the `--strict-links` flag overrides), and `external` has
+  #link("cli.typ")[`check`] verify outbound links over the network.
+/ #raw("theme"): A theme package supplying templates, assets, and config
+  defaults. See #link("../features/build/themes.typ")[themes].
 / #raw("cache"): The incremental build cache. See
   #link("../features/build/incremental.typ")[incremental builds].
 / #raw("serve"): Dev-server options: `port`, `bind` address, `open` (launch a

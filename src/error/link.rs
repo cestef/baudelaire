@@ -145,3 +145,77 @@ impl Diagnostic for BrokenLinks {
         Some(Box::new(self.links.iter().map(|l| l as &dyn Diagnostic)))
     }
 }
+
+/// An outbound link whose host answered, and said no.
+#[derive(Debug)]
+pub struct Dead {
+    pub url: String,
+    pub status: u16,
+    /// Every page linking to it, so one report names every place to fix.
+    pub pages: Vec<String>,
+}
+
+impl fmt::Display for Dead {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} -> HTTP {} (linked from {})",
+            self.url,
+            self.status,
+            self.pages.join(", ")
+        )
+    }
+}
+
+impl std::error::Error for Dead {}
+
+impl Diagnostic for Dead {
+    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
+        Some(Box::new("baudelaire::links::dead"))
+    }
+}
+
+/// Outbound links that answered with an error status. Raised by
+/// `check --external`, where reaching the network is what was asked for.
+#[derive(Debug)]
+pub struct DeadLinks(Vec<Dead>);
+
+impl From<Vec<Dead>> for DeadLinks {
+    fn from(links: Vec<Dead>) -> Self {
+        Self(links)
+    }
+}
+
+impl fmt::Display for DeadLinks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let n = self.0.len();
+        write!(
+            f,
+            "found {n} dead outbound link{}",
+            if n == 1 { "" } else { "s" }
+        )
+    }
+}
+
+impl std::error::Error for DeadLinks {}
+
+impl Diagnostic for DeadLinks {
+    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
+        Some(Box::new("baudelaire::links::dead"))
+    }
+
+    fn severity(&self) -> Option<Severity> {
+        Some(Severity::Error)
+    }
+
+    fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
+        Some(Box::new(
+            "update or remove each target; a permanent redirect is fine, \
+             a 404 is not",
+        ))
+    }
+
+    fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
+        Some(Box::new(self.0.iter().map(|l| l as &dyn Diagnostic)))
+    }
+}

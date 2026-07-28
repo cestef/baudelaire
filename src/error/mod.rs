@@ -3,6 +3,7 @@ use typst::syntax::VirtualizeError;
 pub mod annotated;
 pub mod announce;
 pub mod asset;
+pub mod card;
 pub mod config;
 pub mod content;
 pub mod deploy;
@@ -14,23 +15,26 @@ pub mod remote;
 pub mod scaffold;
 pub mod serialize;
 pub mod serve;
+pub mod theme;
 pub mod typ;
 pub mod warning;
 
 pub use annotated::Annotated;
 pub use announce::AnnounceError;
 pub use asset::AssetError;
+pub use card::CardError;
 pub use config::{ConfigError, ConfigErrorKind};
 pub use content::ContentError;
 pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
-pub use link::{Broken, BrokenLinks};
+pub use link::{Broken, BrokenLinks, Dead, DeadLinks};
 pub use output::BaseUrlRequired;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
 pub use serialize::{Artifact, SerializeError};
 pub use serve::ServeError;
+pub use theme::ThemeError;
 pub use typ::TypstSourceDiagnostic;
 
 pub type Result<T, E = BaudelaireErrorKind> = std::result::Result<T, E>;
@@ -65,6 +69,18 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     BrokenLinks(#[from] crate::error::link::BrokenLinks),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    DeadLinks(#[from] crate::error::link::DeadLinks),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Card(#[from] crate::error::card::CardError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Theme(#[from] crate::error::theme::ThemeError),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

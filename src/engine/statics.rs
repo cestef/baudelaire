@@ -9,12 +9,16 @@
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
+use crate::engine::layers::Layers;
 use crate::error::Result;
 use crate::fs;
+use crate::theme::Theme;
 
 /// Mirrors the static tree into `dist`, preserving its layout at the site root.
 pub struct Static<'a> {
-    src: &'a Path,
+    /// Where static files are read from: the theme's tree beneath the project's,
+    /// so a theme ships a `robots.txt` the site can replace.
+    sources: Layers,
     dist: &'a Path,
     /// The served asset directory and the tree the pipeline stages it in. A
     /// static file landing inside the asset directory is written to the staging
@@ -35,9 +39,9 @@ pub struct Copied {
 }
 
 impl<'a> Static<'a> {
-    pub fn new(config: &'a Config) -> Self {
+    pub fn new(config: &'a Config, theme: Option<&Theme>) -> Self {
         Self {
-            src: &config.r#static,
+            sources: Layers::new(theme.map(Theme::statics), &config.r#static),
             dist: &config.dist,
             assets: (config.asset_dist(), config.asset_staging()),
         }
@@ -50,25 +54,21 @@ impl<'a> Static<'a> {
     /// optional.
     pub fn copy(&self) -> Result<Copied> {
         let mut out = Copied::default();
-        if !self.src.exists() {
-            return Ok(out);
-        }
-        for file in fs::Walk::new(self.src).files()? {
-            let rel = file
-                .strip_prefix(self.src)
-                .expect("Walk yields paths under src");
+        for source in self.sources.files()? {
+            let file = &source.path;
+            let rel = source.rel.as_path();
             let len = file.metadata().map(|m| m.len()).unwrap_or(0);
             // The prune keeps the *served* path; the write may go elsewhere.
             out.paths.push(self.dist.join(rel));
             let dst = self.destination(rel);
-            if Self::current(&file, &dst) {
+            if Self::current(file, &dst) {
                 continue;
             }
             if let Some(parent) = dst.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(&file, &dst)?;
-            Self::stamp(&file, &dst);
+            fs::copy(file, &dst)?;
+            Self::stamp(file, &dst);
             out.count += 1;
             out.bytes += len;
         }

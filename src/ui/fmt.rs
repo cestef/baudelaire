@@ -48,6 +48,10 @@ impl Count {
         }
     }
 
+    pub fn cards(n: usize) -> Self {
+        Self { n, noun: "card" }
+    }
+
     pub fn warnings(n: usize) -> Self {
         Self { n, noun: "warning" }
     }

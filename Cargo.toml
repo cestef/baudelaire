@@ -45,8 +45,11 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-x86_64-musl.
 [package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl.tar.gz"
 
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
+
 [features]
-default = ["embedded-fonts", "js", "css", "images"]
+default = ["embedded-fonts", "js", "css", "images", "cards"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -67,6 +70,11 @@ css = ["dep:lightningcss"]
 # Note: `<img>` lazy/async annotation is attribute-only and stays on regardless.
 images = ["dep:oxipng", "dep:image"]
 
+# Social card rendering: compiles `templates/card.typ` to a paged document and
+# rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means an
+# `output { cards { } }` block warns and produces nothing.
+cards = ["dep:typst-render", "dep:typst-layout"]
+
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
 # (`ureq`) pull in `native-tls` and thus OpenSSL, which has no system copy on a static
@@ -78,6 +86,10 @@ vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
 typst-svg = { version = "0.15" }
+typst-render = { version = "0.15", optional = true }
+# `PagedDocument` lives here and `typst` does not re-export it, so naming the
+# card's compile target needs the layout crate directly.
+typst-layout = { version = "0.15", optional = true }
 typst-kit = { version = "0.15", features = [
   "system-files",
   "system-downloader",

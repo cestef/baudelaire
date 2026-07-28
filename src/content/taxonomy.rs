@@ -23,20 +23,36 @@ impl Generate for Taxonomy {
     /// `/fr/tags/rust/` and `/tags/rust/` pages, never a merged one.
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
-        for (name, cfg) in &ctx.config.taxonomies {
-            if !cfg.index {
-                continue;
-            }
-            for lang in ctx.config.langs() {
-                Group::new(name, cfg, ctx.pages, lang, ctx.config).build(&mut out)?;
-            }
+        for group in Self::groups(ctx.config, ctx.pages) {
+            group.build(&mut out)?;
         }
         Ok(out)
     }
 }
 
+impl Taxonomy {
+    /// Every indexed taxonomy's terms, one [`Group`] per taxonomy per language.
+    ///
+    /// The single grouping rule behind both the generated term pages and the
+    /// per-term feeds, so a term that has a page always has a feed at the same
+    /// URL and neither can drift from the other's idea of what a term contains.
+    pub(crate) fn groups<'a>(config: &'a Config, pages: &'a [Page]) -> Vec<Group<'a>> {
+        config
+            .taxonomies
+            .iter()
+            .filter(|(_, cfg)| cfg.index)
+            .flat_map(|(name, cfg)| {
+                config
+                    .langs()
+                    .into_iter()
+                    .map(move |lang| Group::new(name, cfg, pages, lang, config))
+            })
+            .collect()
+    }
+}
+
 /// One taxonomy's terms and the pages under each, within a single language.
-struct Group<'a> {
+pub(crate) struct Group<'a> {
     /// Taxonomy name, e.g. `tags`; also its URL prefix and section id.
     name: &'a str,
     /// Optional user template for the generated pages.
@@ -96,10 +112,16 @@ impl<'a> Group<'a> {
         Ok(())
     }
 
+    /// The language this group indexes, so a consumer can title and localize
+    /// its output the same way the term pages are.
+    pub(crate) fn lang(&self) -> &'a str {
+        self.lang
+    }
+
     /// Each term paired with its localized URL, checked for empty slugs and
     /// collisions (per language, so identical terms across languages never
     /// clash).
-    fn resolve(&self) -> Result<Vec<Term<'_>>> {
+    pub(crate) fn resolve(&self) -> Result<Vec<Term<'_>>> {
         let mut seen: BTreeMap<String, &str> = BTreeMap::new();
         let mut resolved = Vec::with_capacity(self.terms.len());
         for (name, members) in &self.terms {
@@ -134,10 +156,16 @@ impl<'a> Group<'a> {
         .lang(self.lang)
     }
 
+    /// How a term is titled wherever it is presented: its listing page, and the
+    /// feed that sits beside it.
+    pub(crate) fn title(&self, term: &Term<'_>) -> String {
+        format!("{}: {}", Titlecase(self.name), term.name)
+    }
+
     /// The `/{name}/{term}/` listing of the pages under `term`.
     fn term(&self, term: &Term<'_>) -> Listing {
         let items = term.members.iter().map(|member| Item::of(member)).collect();
-        let title = format!("{}: {}", Titlecase(self.name), term.name);
+        let title = self.title(term);
         Listing::new(self.name, term.slug.clone(), term.url.clone(), title)
             .items(items)
             .template(self.template.clone())
@@ -148,9 +176,11 @@ impl<'a> Group<'a> {
 /// A taxonomy term with its resolved, collision-checked URL. `members` is a
 /// covariant slice so it borrows the group's page vectors without fighting the
 /// invariance of `&Vec`.
-struct Term<'a> {
-    name: &'a str,
+pub(crate) struct Term<'a> {
+    pub(crate) name: &'a str,
     slug: String,
-    url: String,
-    members: &'a [&'a Page],
+    /// The term listing's localized URL (`/fr/tags/rust/`), which a term feed
+    /// also sits under.
+    pub(crate) url: String,
+    pub(crate) members: &'a [&'a Page],
 }

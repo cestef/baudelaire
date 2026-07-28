@@ -128,8 +128,9 @@ impl Keys<'_> {
     }
 
     /// "did you mean ..? valid `noun`: .." help for an unrecognized name, reused
-    /// wherever a name set drives validity (dispatch keys, profile names).
-    pub(super) fn help(&self, unknown: &str, noun: &str) -> String {
+    /// wherever a name set drives validity (dispatch keys, profile names,
+    /// virtual Typst modules).
+    pub(crate) fn help(&self, unknown: &str, noun: &str) -> String {
         let mut help = match self.nearest(unknown) {
             Some(near) => format!("did you mean `{near}`? "),
             None => String::new(),

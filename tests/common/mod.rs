@@ -75,7 +75,7 @@ impl Site {
     /// Parsed `config.kdl` with its paths rebased into the tempdir, so library
     /// calls resolve against this site instead of the test runner's cwd.
     pub fn config(&self) -> Config {
-        let mut cfg = Config::parse(&self.read("config.kdl")).unwrap();
+        let mut cfg = Config::load(&self.read("config.kdl"), &self.root).unwrap();
         cfg.root = self.root.clone();
         cfg.content = self.root.join(&cfg.content);
         cfg.dist = self.root.join(&cfg.dist);
@@ -149,6 +149,14 @@ impl Site {
         let mut config = self.config();
         tweak(&mut config);
         Engine::new(config, Mode::Build)?.build(&Ui::new(Level::Silent))
+    }
+
+    /// Run `check` in-process and return its own `Result`, for tests asserting
+    /// on the validation passes rather than on output files.
+    pub fn try_check(&self, tweak: impl FnOnce(&mut Config)) -> baudelaire::Result<Stats> {
+        let mut config = self.config();
+        tweak(&mut config);
+        Engine::new(config, Mode::Check)?.check(&Ui::new(Level::Silent))
     }
 
     /// A built page under the default `public` dist.

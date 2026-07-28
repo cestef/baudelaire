@@ -1,6 +1,10 @@
-#let link-to(href, label) = html.elem("a", attrs: (href: href), label)
+#import "@baudelaire/html:0.1.0": classes, h
 
-// Build metadata, injected by baudelaire at `sys.inputs.baudelaire`.
+#let link-to(href, label) = h("a", href: href, label)
+
+// Build metadata, injected by baudelaire at `sys.inputs.baudelaire`. Only
+// values that change between builds are read here (site identity comes from
+// `@baudelaire/site`), so a page depends on the commit only if it shows it.
 #let build = sys.inputs.at("baudelaire", default: (:))
 #let git = build.at("git", default: none)
 
@@ -34,68 +38,59 @@
   ),
 )
 
-#let lucide(name, size: 18) = html.elem(
+#let lucide(name, size: 18) = h(
   "svg",
-  attrs: (
-    xmlns: "http://www.w3.org/2000/svg",
-    width: str(size), height: str(size), viewBox: "0 0 24 24",
-    fill: "none", stroke: "currentColor", "stroke-width": "2",
-    "stroke-linecap": "round", "stroke-linejoin": "round",
-    "aria-hidden": "true", class: "icon",
-  ),
-  {
-    for (tag, attrs) in _icons.at(name) { html.elem(tag, attrs: attrs) }
-  },
+  xmlns: "http://www.w3.org/2000/svg",
+  width: size, height: size, viewBox: "0 0 24 24",
+  fill: "none", stroke: "currentColor", stroke-width: 2,
+  stroke-linecap: "round", stroke-linejoin: "round",
+  aria-hidden: "true", class: "icon",
+  // The shape dicts are computed, so they spread into named arguments.
+  for (tag, attrs) in _icons.at(name) { h(tag, ..attrs) },
 )
 
-#let search-trigger = html.elem(
+#let search-trigger = h(
   "button",
-  attrs: (
-    class: "search-trigger",
-    type: "button",
-    "aria-label": "Search",
-    "aria-keyshortcuts": "Control+K /",
-    "data-search-open": "",
-  ),
+  class: "search-trigger",
+  type: "button",
+  aria-label: "Search",
+  aria-keyshortcuts: "Control+K /",
+  data-search-open: true,
   {
     lucide("search", size: 16)
-    html.elem("span", attrs: (class: "search-trigger-label"), "Search")
-    html.elem("kbd", attrs: (class: "search-trigger-key"), "/")
+    h("span", class: "search-trigger-label", "Search")
+    h("kbd", class: "search-trigger-key", "/")
   },
 )
 
-#let theme-toggle = html.elem(
+#let theme-toggle = h(
   "button",
-  attrs: (
-    class: "icon-btn",
-    type: "button",
-    "aria-label": "Toggle dark mode",
-    "aria-pressed": "false",
-    "data-theme-toggle": "",
-  ),
+  class: "icon-btn",
+  type: "button",
+  aria-label: "Toggle dark mode",
+  aria-pressed: "false",
+  data-theme-toggle: true,
   {
-    html.elem("span", attrs: (class: "icon-moon", "aria-hidden": "true"), lucide("moon"))
-    html.elem("span", attrs: (class: "icon-sun", "aria-hidden": "true"), lucide("sun"))
+    h("span", class: "icon-moon", aria-hidden: "true", lucide("moon"))
+    h("span", class: "icon-sun", aria-hidden: "true", lucide("sun"))
   },
 )
 
-#let nav-toggle = html.elem(
+#let nav-toggle = h(
   "button",
-  attrs: (
-    class: "icon-btn nav-toggle",
-    type: "button",
-    "aria-label": "Toggle navigation",
-    "aria-expanded": "false",
-    "aria-controls": "sidebar",
-    "data-nav-toggle": "",
-  ),
+  class: "icon-btn nav-toggle",
+  type: "button",
+  aria-label: "Toggle navigation",
+  aria-expanded: "false",
+  aria-controls: "sidebar",
+  data-nav-toggle: true,
   lucide("menu"),
 )
 
-#let site-header = html.elem("header", attrs: (class: "site-header"))[
-  #html.elem("a", attrs: (class: "skip-link", href: "#main"), "Skip to content")
-  #html.elem("a", attrs: (class: "brand", href: "/"), "Baudelaire")
-  #html.elem("nav", attrs: (class: "top-nav", "aria-label": "Primary"))[
+#let site-header = h("header", class: "site-header")[
+  #h("a", class: "skip-link", href: "#main", "Skip to content")
+  #h("a", class: "brand", href: "/", "Baudelaire")
+  #h("nav", class: "top-nav", aria-label: "Primary")[
     #link-to("/guide/install/", "Guide")
     #link-to("/features/", "Features")
     #link-to("/blog/", "Blog")
@@ -105,14 +100,9 @@
   #nav-toggle
 ]
 
-#let nav-group(title, items) = html.elem("div", attrs: (class: "nav-group"))[
-  #html.elem("p", attrs: (class: "nav-title"), title)
-  #html.elem(
-    "ul",
-    for (href, label) in items {
-      html.elem("li", link-to(href, label))
-    },
-  )
+#let nav-group(title, items) = h("div", class: "nav-group")[
+  #h("p", class: "nav-title", title)
+  #h("ul", for (href, label) in items { h("li", link-to(href, label)) })
 ]
 
 // Title-case a directory name for display: `storage` -> `Storage`.
@@ -127,26 +117,23 @@
 #let nav-section(title, section, sub: false) = {
   let body = {
     if section.pages.len() > 0 {
-      html.elem("ul", for p in section.pages { html.elem("li", link-to(p.url, p.title)) })
+      h("ul", for p in section.pages { h("li", link-to(p.url, p.title)) })
     }
     for child in section.children {
       nav-section(_titlecase(child.id), child, sub: true)
     }
   }
   if sub {
-    html.elem("details", attrs: (
-      class: "nav-group nav-sub",
-      "data-nav-section": section.id,
-    ))[
-      #html.elem("summary", attrs: (class: "nav-title"), {
-        html.elem("span", title)
+    h("details", class: "nav-group nav-sub", data-nav-section: section.id)[
+      #h("summary", class: "nav-title", {
+        h("span", title)
         lucide("chevron-right", size: 14)
       })
-      #html.elem("div", attrs: (class: "nav-sub-body"), body)
+      #h("div", class: "nav-sub-body", body)
     ]
   } else {
-    html.elem("div", attrs: (class: "nav-group"))[
-      #html.elem("p", attrs: (class: "nav-title"), title)
+    h("div", class: "nav-group")[
+      #h("p", class: "nav-title", title)
       #body
     ]
   }
@@ -165,36 +152,32 @@
   for section in sections {
     by-id.insert(section.id, section)
   }
-  html.elem(
-    "nav",
-    attrs: (class: "sidebar", id: "sidebar", "aria-label": "Documentation"),
-    {
-      for (id, title) in _doc-groups {
-        let section = by-id.at(id, default: none)
-        if section != none and (section.pages.len() > 0 or section.children.len() > 0) {
-          nav-section(title, section)
-        }
+  h("nav", class: "sidebar", id: "sidebar", aria-label: "Documentation", {
+    for (id, title) in _doc-groups {
+      let section = by-id.at(id, default: none)
+      if section != none and (section.pages.len() > 0 or section.children.len() > 0) {
+        nav-section(title, section)
       }
-      nav-group("More", (
-        ("/blog/", "Blog"),
-        ("/tags/", "Tags"),
-      ))
-    },
-  )
+    }
+    nav-group("More", (
+      ("/blog/", "Blog"),
+      ("/tags/", "Tags"),
+    ))
+  })
 }
 
 #let site-footer = {
   let meta = ()
-  meta.push(html.elem("span")[Built with #link-to("/", "Baudelaire") v#build.at("version", default: "dev")])
-  meta.push(html.elem("span")[Typst #sys.version])
+  meta.push(h("span")[Built with #link-to("/", "Baudelaire") v#build.at("version", default: "dev")])
+  meta.push(h("span")[Typst #sys.version])
   if git != none {
     let short = git.hash.slice(0, 7)
-    meta.push(html.elem("span")[commit #html.a(href: "https://github.com/cestef/baudelaire/commit/"+git.hash)[#html.code[#short]]])
+    meta.push(h("span")[commit #html.a(href: "https://github.com/cestef/baudelaire/commit/"+git.hash)[#html.code[#short]]])
   }
 
-  html.elem("footer", attrs: (class: "site-footer"))[
-    #html.elem("div", attrs: (class: "build-meta"), meta.join())
-    #html.elem("div")[
+  h("footer", class: "site-footer")[
+    #h("div", class: "build-meta", meta.join())
+    #h("div")[
       #link-to("/rss.xml", "RSS") ·
       #link-to("/atom.xml", "Atom") ·
       #link-to("/sitemap.xml", "Sitemap")
@@ -202,49 +185,41 @@
   ]
 }
 
-#let scripts = html.elem("script", attrs: (type: "module", src: "/assets/main.js"))
+#let scripts = h("script", type: "module", src: "/assets/main.js")
 
-#let callout(body, kind: "note", label: none) = html.elem(
+#let callout(body, kind: "note", label: none) = h(
   "div",
-  attrs: (class: "callout callout-" + kind),
+  class: classes("callout", "callout-" + kind),
 )[
-  #html.elem("p", attrs: (class: "callout-label"), if label != none { label } else { upper(kind) })
+  #h("p", class: "callout-label", if label != none { label } else { upper(kind) })
   #body
 ]
 
-#let cards(items) = html.elem(
-  "ul",
-  attrs: (class: "cards"),
-  for (href, icon, title, blurb) in items {
-    html.elem("li", html.elem("a", attrs: (href: href), {
-      html.elem("span", attrs: (class: "card-icon"), lucide(icon, size: 20))
-      html.elem("strong", title)
-      html.elem("span", blurb)
-    }))
-  },
-)
+#let cards(items) = h("ul", class: "cards", for (href, icon, title, blurb) in items {
+  h("li", h("a", href: href, {
+    h("span", class: "card-icon", lucide(icon, size: 20))
+    h("strong", title)
+    h("span", blurb)
+  }))
+})
 
-#let tag-row(tags) = html.elem(
-  "div",
-  attrs: (class: "tag-row", "aria-label": "Tags"),
-  for tag in tags {
-    link-to("/tags/" + tag + "/", "#" + tag)
-  },
-)
+#let tag-row(tags) = h("div", class: "tag-row", aria-label: "Tags", for tag in tags {
+  link-to("/tags/" + tag + "/", "#" + tag)
+})
 
 #let shell(title, main, tags: (), sections: ()) = {
   set document(title: title)
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
 
-  html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.css"))
-  html.elem("link", attrs: (rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg"))
+  h("link", rel: "stylesheet", href: "/assets/style.css")
+  h("link", rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
   site-header
-  html.elem("div", attrs: (class: "layout"))[
+  h("div", class: "layout")[
     #sidebar(sections)
-    #html.elem("main", attrs: (class: "content", id: "main"))[
-      #html.elem("article")[
-        #html.elem("h1", title)
+    #h("main", class: "content", id: "main")[
+      #h("article")[
+        #h("h1", title)
         #main
         #if tags.len() > 0 { tag-row(tags) }
       ]
