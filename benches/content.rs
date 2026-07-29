@@ -3,6 +3,11 @@
 //! - `plan`:     everything `discover` does, then the full page-set assembly
 //!   (siblings, taxonomy, pagination, permalink-collision check). The gap
 //!   between the two curves is the pure assembly cost.
+//!
+//! Both run on a [`Shape::Templated`] site, the shape a real site has. Neither
+//! stage builds a compile input, so the template only costs the resolution in
+//! `Page::load`; the fork these numbers would otherwise hide is measured in
+//! `benches/build.rs`, which reports both shapes.
 
 mod common;
 
@@ -12,11 +17,14 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 
 use baudelaire::content::{discover, plan};
 
-use common::PAGE_COUNTS;
+use common::{PAGE_COUNTS, Shape};
 
 /// One live site per page count, kept alive for the whole run.
 fn sites() -> Vec<(tempfile::TempDir, baudelaire::config::Config)> {
-    PAGE_COUNTS.into_iter().map(common::site).collect()
+    PAGE_COUNTS
+        .into_iter()
+        .map(|n| Shape::Templated.site(n))
+        .collect()
 }
 
 fn discover_pages(c: &mut Criterion) {

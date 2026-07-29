@@ -1,6 +1,10 @@
 //! Internal-link resolution: one classify per `href`, each a `canonicalize`
 //! against the page map. Blog nav and cross-refs hit the same targets often, so
 //! the workload deliberately repeats hits.
+//!
+//! Runs on a [`Shape::Templated`] site, the shape a real site has. Link
+//! classification is independent of the compile-input fork; the fixture picks a
+//! shape only because every fixture must.
 
 mod common;
 
@@ -11,8 +15,10 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use baudelaire::content::{Page, discover};
 use baudelaire::render::LinkMap;
 
+use common::Shape;
+
 fn link_classify(c: &mut Criterion) {
-    let (dir, cfg) = common::site(50);
+    let (dir, cfg) = Shape::Templated.site(50);
     let pages: Vec<Page> = discover(&cfg, &common::project(&cfg))
         .unwrap()
         .into_iter()
