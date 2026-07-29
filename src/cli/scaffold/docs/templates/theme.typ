@@ -9,7 +9,7 @@
 
 #let link-to(href, label) = h("a", href: href, label)
 
-// `page.sections` is the build's own view of `content/`: a tree of
+// `sections(page.lang)` is the build's own view of `content/`: a tree of
 // `(id, pages: ((url, title), ..), children: (..))`, one node per directory,
 // with each collection's pages already in its configured sort order. The
 // sidebar reads it rather than a hand-kept list, so it cannot drift from the

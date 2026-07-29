@@ -120,6 +120,7 @@ impl Project {
             fonts: Arc::new(LazyLock::new(Self::system_fonts)),
             files: Arc::new(FileStore::new(Files::new(
                 &ModuleCx { context: &tree },
+                &project_root,
                 FsRoot::new(project_root.clone()),
                 SystemPackages::new(SystemDownloader::new(USER_AGENT)),
             ))),
@@ -287,8 +288,8 @@ impl Project {
     }
 
     /// The files a tracked compilation read, excluding its own `main` source
-    /// (fingerprinted separately), resolved to canonical paths: a page's exact
-    /// dependency set.
+    /// (fingerprinted separately): a page's exact dependency set, canonicalized
+    /// where the path resolves and kept as read where it does not.
     pub fn dependencies<W: World>(&self, world: &Tracked<W>) -> Deps {
         let main = world.main();
         world
@@ -296,7 +297,18 @@ impl Project {
             .into_iter()
             .filter(|id| *id != main)
             .filter_map(|id| self.path_of(id))
-            .filter_map(|p| crate::fs::canonicalize(p).ok())
+            // A path that will not canonicalize (deleted between the read and
+            // here, an editor's write-to-temp-then-rename under `serve`) must
+            // not be dropped: a dependency that goes unrecorded is one the page
+            // can never be invalidated by, and it would serve stale output
+            // forever. That is the unsound direction, the same one
+            // `graph::access` refuses when it cannot load a file. Keep the
+            // lexical path instead (`fs::canonical` falls back to it), where
+            // the cost is at worst one rebuild too many and the file's absence
+            // is itself recorded as a dependency. Not a hard error either: that
+            // rename race is routine, and failing on it would make `serve`
+            // flaky over a file that is fine a millisecond later.
+            .map(crate::fs::canonical)
             .collect::<Vec<_>>()
             .into()
     }

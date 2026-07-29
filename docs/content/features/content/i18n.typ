@@ -73,7 +73,7 @@ Once languages are declared, the rest of the build follows automatically:
   tag are separate `/fr/tags/rust/` and `/tags/rust/` pages.
 / Listings and pagination: each language paginates its own collection under its
   own prefix (`/blog/`, `/fr/blog/`).
-/ Navigation: `page.sections` and prev/next only ever reference same-language
+/ Navigation: `sections(page.lang)` and prev/next only ever reference same-language
   pages.
 / Feeds: one set per language, the default at `/rss.xml`, others under
   `/{code}/rss.xml`, each listing only its language's posts.

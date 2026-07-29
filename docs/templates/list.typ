@@ -1,5 +1,6 @@
 #import "@baudelaire/html:0.1.0": h
 #import "/templates/theme.typ": link-to, shell
+#import "@baudelaire/sections:0.1.0": sections
 
 // Generated listing page (taxonomy terms, paginated indexes). Each entry
 // carries `url`, `label`, an optional `date` and `note`, and the source page's
@@ -24,4 +25,4 @@
       if nav.next != none { link-to(nav.next, "Next") }
     })
   }
-}, sections: page.sections)
+}, sections: sections(page.lang))

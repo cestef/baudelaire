@@ -34,7 +34,7 @@ how the site is put together.
 / `config.kdl`: what a page is, how pages are ordered, and what extra files the
   build emits.
 
-Everything in the sidebar comes from `page.sections`, which the build derives
+Everything in the sidebar comes from `sections(page.lang)`, which the build derives
 from `content/` itself. Add a file, and it appears. Nothing to register.
 
 == Search

@@ -12,7 +12,7 @@ paths {
 
 // One ordered collection, and nothing else. `sort="order"` reads each chapter's
 // frontmatter `order`, and that single ordering drives both the contents list
-// (`page.sections`) and the prev/next pager (`page.nav`). Renumber a chapter and
+// (`sections(page.lang)`) and the prev/next pager (`page.nav`). Renumber a chapter and
 // the two move together, because neither is written down anywhere else.
 content {
   collections {

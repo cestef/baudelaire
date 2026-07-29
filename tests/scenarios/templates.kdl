@@ -128,9 +128,10 @@ scenario "sections expose the ordered page set, not filesystem order" {
       """#
     // Every section id and its pages' titles, in order, as a flat trail.
     "templates/page.typ" #"""
+      #import "@baudelaire/sections:0.1.0": sections
       #let page(page, body) = html.elem("html", html.elem("body", {
         body
-        for section in page.sections {
+        for section in sections(page.lang) {
           for entry in section.pages {
             html.elem("span", attrs: (class: "nav"), section.id + ":" + entry.title)
           }
@@ -170,8 +171,9 @@ scenario "a subdirectory becomes a nested child section" {
       """#
     // Each section's id + direct-page titles, then one level of children.
     "templates/page.typ" #"""
+      #import "@baudelaire/sections:0.1.0": sections
       #let page(page, body) = html.elem("html", html.elem("body", {
-        for s in page.sections {
+        for s in sections(page.lang) {
           html.elem("span", "S:" + s.id)
           for p in s.pages { html.elem("span", "P:" + s.id + "/" + p.title) }
           for c in s.children {

@@ -37,7 +37,7 @@ aren't legal identifiers stay reachable through the default export only.
   collection, date, taxonomies }`.
 / #raw("baudelaire:sections"): the tree of content directories as
   `{ id, pages: [...], children: [...] }` nodes, what templates get as
-  `page.sections`. `children` nests subdirectories, so recurse it for the whole
+  the `sections(lang)` Typst binding. `children` nests subdirectories, so recurse it for the whole
   tree.
 / #raw("baudelaire:taxonomies"): each taxonomy's terms mapped to the pages that
   carry them, e.g. `{ tags: { rust: [{ url, title }], .. } }`, for tag

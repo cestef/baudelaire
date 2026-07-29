@@ -30,7 +30,7 @@
   ),
 )
 
-// One node of `page.sections`, and then its children. A flat book only ever has
+// One node of the section tree, and then its children. A flat book only ever has
 // the one `chapters` node, but a book split into parts (`content/chapters/`
 // with subdirectories) nests, so this recurses rather than assuming.
 #let section-list(section, here) = {
@@ -52,7 +52,7 @@
 // the one entry the contents list has to state itself.
 #let front = (url: "/", title: "Front matter")
 
-// The table of contents, rendered from `page.sections`: the build's own view of
+// The table of contents, rendered from the section tree: the build's own view of
 // `content/`, in the collection's `sort` order. It is not a hand-kept list, so
 // it cannot drift from the chapters on disk, nor from the pager below, which
 // reads the same ordering.

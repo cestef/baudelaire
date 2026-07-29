@@ -51,7 +51,7 @@ a phone. The compiler that lays out the text lays out the mathematics.
   table(
     columns: 3,
     table.header([Piece], [Where it comes from], [Kept in step by]),
-    [Contents], [`page.sections`], [the collection's `sort`],
+    [Contents], [`sections(page.lang)`], [the collection's `sort`],
     [Pager], [`page.nav`], [the same `sort`],
     [Anchors], [`html { anchors }`], [each heading's own text],
   ),

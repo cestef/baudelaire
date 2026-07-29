@@ -128,16 +128,20 @@ fn an_unknown_module_suggests_the_nearest() {
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     assert!(err.contains("did you mean `html`?"), "{err}");
-    assert!(err.contains("valid modules: html, site"), "{err}");
+    assert!(err.contains("valid modules: html, sections, site"), "{err}");
 }
 
 /// A version the registry does not serve fails at the import instead of
-/// reaching for the network.
+/// reaching for the network, and answers with the line to write rather than
+/// leaving the reader to derive it.
 #[test]
 fn an_unserved_version_is_rejected() {
     let site = site("import \"@baudelaire/html:9.9.9\": h\n[x]");
     let err = diagnostics(&site);
-    assert!(err.contains("9.9.9"), "{err}");
+    assert!(err.contains("@baudelaire/html:0.1.0"), "{err}");
+    // The natural wrong guess is baudelaire's own version, so the message has
+    // to say the two are unrelated.
+    assert!(err.contains("not baudelaire's own version"), "{err}");
 }
 
 /// A page importing a virtual module still caches: the module resolves to no

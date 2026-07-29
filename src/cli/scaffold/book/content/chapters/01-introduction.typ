@@ -29,7 +29,7 @@ running order is then a matter of changing numbers in frontmatter, and no URL
 moves.
 
 That one ordering is the only ordering. The contents list on the left is
-`page.sections`, the build's own view of `content/`; the links at the foot of
+`sections(page.lang)`, the build's own view of `content/`; the links at the foot of
 this page are the `prev` and `next` of the same page's `page.nav`. Neither is a
 list anyone keeps by hand, so neither can disagree with the other or with the
 files on disk.

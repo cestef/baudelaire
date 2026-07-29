@@ -1,4 +1,5 @@
 #import "/templates/theme.typ": pager, shell
+#import "@baudelaire/sections:0.1.0": sections
 
 // The template function is the file's stem, so `chapter.typ` exports `chapter`.
 // It receives the page (frontmatter, nav, sections, ..) and the compiled body.
@@ -12,6 +13,6 @@
     body
     pager(page.nav)
   },
-  sections: page.sections,
+  sections: sections(page.lang),
   here: page.frontmatter.title,
 )

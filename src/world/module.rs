@@ -24,7 +24,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use typst::diag::{FileError, FileResult, PackageError};
 use typst::ecow::EcoString;
@@ -38,6 +38,7 @@ use typst_kit::packages::SystemPackages;
 
 use super::BuildContext;
 use crate::codegen::{Let, Value};
+use crate::config::Config;
 use crate::config::dispatch::Keys;
 use crate::graph::Hash;
 
@@ -106,18 +107,67 @@ fn builtin() -> [Box<dyn Module>; 2] {
     [Box::new(Html), Box::new(Site)]
 }
 
-/// The generated modules of one build, as `name -> entrypoint source`.
+/// The module whose source the build writes to a file instead of generating
+/// into memory: the site's section tree.
+pub(crate) const SECTIONS: &str = "sections";
+
+/// Where a file-backed module's source lives, relative to the project root.
+///
+/// Under [`Config::SCRATCH`] because it is regenerable build state: gitignored,
+/// wiped by `clean`, and outside every root `serve` watches, so writing it
+/// cannot retrigger the build that wrote it.
+pub(crate) fn generated(name: &str) -> PathBuf {
+    Config::scratch("generated").join(format!("{name}.typ"))
+}
+
+/// Where a module's entrypoint source comes from.
+enum Entrypoint {
+    /// Generated with the world and served from memory. Holds nothing volatile,
+    /// so the registry fingerprint covers it for the whole site at once.
+    Memory(Bytes),
+    /// A file the build writes before any page compiles, served by path.
+    ///
+    /// The distinction is the whole point of this variant: a module served from
+    /// memory has no path, so no page can depend on it *individually*, and a
+    /// module derived from the whole page set would then have to invalidate
+    /// every page whenever any page moved. Served as a file, typst's own
+    /// dependency tracking records the read per page and scopes it to the
+    /// templates that import it.
+    File(PathBuf),
+}
+
+/// The modules of one build, as `name -> entrypoint`.
 struct Modules {
-    sources: BTreeMap<&'static str, Bytes>,
+    entrypoints: BTreeMap<&'static str, Entrypoint>,
 }
 
 impl Modules {
-    fn new(cx: &ModuleCx) -> Self {
-        let sources = builtin()
+    fn new(cx: &ModuleCx, root: &Path) -> Self {
+        let mut entrypoints: BTreeMap<&'static str, Entrypoint> = builtin()
             .iter()
-            .map(|module| (module.name(), Bytes::from_string(module.source(cx))))
+            .map(|module| {
+                (
+                    module.name(),
+                    Entrypoint::Memory(Bytes::from_string(module.source(cx))),
+                )
+            })
             .collect();
-        Self { sources }
+        entrypoints.insert(SECTIONS, Entrypoint::File(root.join(generated(SECTIONS))));
+        Self { entrypoints }
+    }
+
+    /// The file backing `id`, when it names a file-backed module's entrypoint.
+    /// The one place that mapping is made, so serving and path resolution can
+    /// never disagree about where a module's source is.
+    fn file(&self, id: &FileId) -> Option<&Path> {
+        let spec = Self::owner(id)?;
+        if id.vpath().get_without_slash() != ENTRYPOINT {
+            return None;
+        }
+        match self.entrypoints.get(spec.name.as_str())? {
+            Entrypoint::File(path) => Some(path),
+            Entrypoint::Memory(_) => None,
+        }
     }
 
     /// The generated module `id` names a file of, or `None` for a real file.
@@ -132,7 +182,7 @@ impl Modules {
 
     /// Serve a file from the generated module named by `spec`.
     fn load(&self, spec: &PackageSpec, vpath: &VirtualPath) -> FileResult<Bytes> {
-        let Some(source) = self.sources.get(spec.name.as_str()) else {
+        let Some(entrypoint) = self.entrypoints.get(spec.name.as_str()) else {
             // `NotFound` would send the reader looking for a package to
             // install; naming the ones that exist is the whole answer.
             return Err(FileError::Package(PackageError::Other(Some(
@@ -140,16 +190,22 @@ impl Modules {
             ))));
         };
         if spec.version != VERSION {
-            // Reads as "version X does not exist (latest is Y)", pointing at
-            // the import's own span.
-            return Err(FileError::Package(PackageError::VersionNotFound(
-                spec.clone(),
-                VERSION,
-            )));
+            return Err(FileError::Package(PackageError::Other(Some(
+                Self::wrong_version(&spec.name),
+            ))));
         }
         match vpath.get_without_slash() {
             MANIFEST => Ok(Bytes::from_string(Self::manifest(&spec.name))),
-            ENTRYPOINT => Ok(source.clone()),
+            ENTRYPOINT => match entrypoint {
+                Entrypoint::Memory(source) => Ok(source.clone()),
+                // Written by the build before any page compiles. Missing means
+                // something read it earlier than that (a page's frontmatter
+                // importing the site's own shape), which is circular and has
+                // no answer to give.
+                Entrypoint::File(path) => std::fs::read(path)
+                    .map(Bytes::new)
+                    .map_err(|e| FileError::from_io(e, path)),
+            },
             // A module is exactly two files, so any other path is a typo in a
             // deep import (`@baudelaire/html:0.1.0/extra.typ`).
             _ => Err(FileError::NotFound(PathBuf::from(vpath.get_with_slash()))),
@@ -160,10 +216,26 @@ impl Modules {
     /// nearest-match suggestion an unknown config key gets, off the registry
     /// itself so it can never name a module that stopped existing.
     fn unknown(&self, name: &str) -> EcoString {
-        let names: Vec<&str> = self.sources.keys().copied().collect();
+        let names: Vec<&str> = self.entrypoints.keys().copied().collect();
         EcoString::from(format!(
             "unknown baudelaire module `{name}`, {}",
             Keys::of(&names).help(name, "modules")
+        ))
+    }
+
+    /// The message for an import at a version the registry does not serve.
+    ///
+    /// Replaces typst's own `VersionNotFound`, which reads "latest is X" and
+    /// leaves the reader to rewrite the specifier themselves. There is one
+    /// version and nothing to choose between, so the message is simply the line
+    /// to write. It also says what the number *is*, because the natural guess is
+    /// baudelaire's own version, which this deliberately does not track.
+    fn wrong_version(name: &str) -> EcoString {
+        EcoString::from(format!(
+            "`@baudelaire/{name}` is served only at {VERSION}: write \
+             `@baudelaire/{name}:{VERSION}`. That version tracks what these \
+             modules export, not baudelaire's own version, so it does not move \
+             when baudelaire is upgraded."
         ))
     }
 
@@ -176,15 +248,27 @@ impl Modules {
         )
     }
 
-    /// A content fingerprint over every generated module, for the build cache.
+    /// A content fingerprint over the in-memory modules, for the build cache.
     ///
-    /// No page's dependency set can carry a virtual module (it has no path to
-    /// hash), so an edited module would otherwise leave every importing page a
-    /// cache hit on the old source. Fingerprinting the registry whole is sound
-    /// and, because module sources hold nothing volatile, changes only when
-    /// baudelaire or the site's config does.
+    /// One of these has no path to hash, so an edited module would otherwise
+    /// leave every importing page a cache hit on the old source. Fingerprinting
+    /// them whole is sound and, because their sources hold nothing volatile,
+    /// changes only when baudelaire or the site's config does.
+    ///
+    /// File-backed modules are excluded, and must be: their content changes
+    /// with the page set, and folding that in here would invalidate every page
+    /// on every structural edit, which is the cost serving them as files exists
+    /// to avoid. Each is a real dependency of the pages that import it.
     fn fingerprint(&self) -> Hash {
-        Hash::of(&self.sources)
+        let memory: BTreeMap<&&str, &Bytes> = self
+            .entrypoints
+            .iter()
+            .filter_map(|(name, entrypoint)| match entrypoint {
+                Entrypoint::Memory(source) => Some((name, source)),
+                Entrypoint::File(_) => None,
+            })
+            .collect();
+        Hash::of(&memory)
     }
 }
 
@@ -196,9 +280,14 @@ pub(super) struct Files {
 }
 
 impl Files {
-    pub(super) fn new(cx: &ModuleCx, project: FsRoot, packages: SystemPackages) -> Self {
+    pub(super) fn new(
+        cx: &ModuleCx,
+        root: &Path,
+        project: FsRoot,
+        packages: SystemPackages,
+    ) -> Self {
         Self {
-            modules: Modules::new(cx),
+            modules: Modules::new(cx, root),
             system: SystemFiles::new(project, packages),
         }
     }
@@ -208,6 +297,11 @@ impl Files {
     /// A generated module has none, and must short-circuit: the system loader
     /// would try to *download* `@baudelaire/html` from the package registry.
     pub(super) fn resolve(&self, id: FileId) -> FileResult<PathBuf> {
+        // A file-backed module resolves to the file it is served from, which is
+        // what puts it in the importing page's dependency set.
+        if let Some(path) = self.modules.file(&id) {
+            return Ok(path.to_path_buf());
+        }
         if Modules::owner(&id).is_some() {
             return Err(FileError::Other(Some(EcoString::from(
                 "a generated module has no file system path",

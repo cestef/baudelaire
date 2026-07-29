@@ -39,8 +39,9 @@ this `page.nav`.
 
 == The whole site, in order
 
-The same build view is available as `page.sections`: the tree of content
-directories, nested as they sit under `content/`. Each node is
+The same build view is available from the `@baudelaire/sections` module, as
+`sections(lang)`: the tree of content directories, nested as they sit under
+`content/`. Each node is
 `(id, pages, children)` where `id` is the directory name, `pages` is its
 directly-filed pages as `(url, title)` in sort order, and `children` is its
 subdirectories as more nodes. A page under `content/guide/advanced/` lands in
@@ -48,8 +49,10 @@ the `advanced` child of the `guide` section, so recurse `children` to walk the
 whole tree:
 
 ```typ
-#let render(sections) = {
-  for section in sections {
+#import "@baudelaire/sections:0.1.0": sections
+
+#let render(nodes) = {
+  for section in nodes {
     for entry in section.pages {
       link(entry.url)[#entry.title]
     }
@@ -59,9 +62,21 @@ whole tree:
 
 #let page(page, body) = {
   body
-  render(page.sections)
+  render(sections(page.lang))
 }
 ```
+
+The tree is a module rather than a field on `page` so that the build cache can
+tell which pages actually use it. A template that imports it depends on every
+title and URL on the site, and so rebuilds when any of them change, which is
+correct: its nav really did change. A template that does not import it is
+unaffected, so publishing a post recompiles that post and its neighbours rather
+than the whole archive.
+
+Unlike the other `@baudelaire/*` modules, this one is served from a file the
+build writes under `.baudelaire/`, which is what lets Typst record the import as
+an ordinary dependency. That file is machine-local build state: gitignored,
+wiped by `clean`, and never edited by hand.
 
 Generated listing pages (taxonomy and pagination indexes) are left out: only
 authored content appears. This is how the sidebar on the left is built: it is

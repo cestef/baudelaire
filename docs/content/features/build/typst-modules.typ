@@ -6,8 +6,12 @@
 #import "/templates/theme.typ": callout
 
 Baudelaire serves a small set of Typst modules under the `@baudelaire`
-namespace. Nothing for them exists on disk and nothing is downloaded: the
-compiler asks for the package, and baudelaire answers from memory.
+namespace. Nothing is downloaded: the compiler asks for the package, and
+baudelaire answers it directly.
+
+There are three, all at version `0.1.0`:
+#raw("@baudelaire/html") for markup, #raw("@baudelaire/site") for the site's
+identity, and #raw("@baudelaire/sections") for its page tree.
 
 ```typ
 #import "@baudelaire/html:0.1.0": h, classes
@@ -146,12 +150,45 @@ Build metadata that changes between builds is deliberately *not* here. Read
 baudelaire tracks which pages read which value and rebuilds only those. A copy
 baked into a module would rebuild the whole site on every commit.
 
+== #raw("@baudelaire/sections")
+
+The site's own view of `content/`, as a tree, for building a nav that cannot
+drift from the pages.
+
+```typ
+#import "@baudelaire/sections:0.1.0": sections
+
+#let layout(page, body) = {
+  for section in sections(page.lang) {
+    for entry in section.pages { link(entry.url)[#entry.title] }
+  }
+  body
+}
+```
+
+`sections(lang)` takes a language code (pass `page.lang`, which is correct on a
+single-language site too) and returns that language's tree. Each node is
+`(id, pages, children)`; see #link("../content/navigation.typ")[navigation] for
+the shape and the ordering rules.
+
+This one differs from the other two in a way worth knowing. Its content depends
+on every page in the site, so serving it from memory would make every page
+depend on every other page's title and URL, and one rename would recompile
+everything. Baudelaire writes it to a file under `.baudelaire/` instead and
+serves the module from there, so Typst records the import as an ordinary file
+dependency and only the templates that actually import it rebuild when the tree
+moves.
+
 == Versions
 
-The version in the specifier is not optional: Typst's package syntax requires
-one. It tracks the module API, never baudelaire's own version, so
-`@baudelaire/html:0.1.0` keeps working across releases and only changes when
-what these modules export changes.
+*Every module is served at `0.1.0`, and that is the only version there is.*
+Write `:0.1.0` on every `@baudelaire/*` import and stop thinking about it.
+
+The version is not optional, because Typst's package syntax requires one. It
+tracks the module API, never baudelaire's own version, so `@baudelaire/html:0.1.0`
+keeps working across releases and would only move if what these modules export
+changed. Asking for any other version fails at the import, naming the one that
+exists, rather than reaching for the network.
 
 #callout(kind: "warning")[
   Editor tooling cannot resolve `@baudelaire/*`, because the packages exist only

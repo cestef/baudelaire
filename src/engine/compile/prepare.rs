@@ -2,10 +2,15 @@
 //! its template, and the values injected into that module.
 //!
 //! Everything a page's wrapper text is made of lives here: which import root
-//! the template comes from, the section trees, the sibling and translation
-//! links, the UI strings. They are wrapper *text*, so a change to any of them
-//! refingerprints the pages that read it and the cache stays correct, which is
-//! why they are built once for the whole site rather than per page.
+//! the template comes from, the sibling and translation links, the UI strings.
+//! They are wrapper *text*, so a change to any of them refingerprints the pages
+//! that read it and the cache stays correct, which is why they are built once
+//! for the whole site rather than per page.
+//!
+//! The section tree is the deliberate exception: it names every page on the
+//! site, so as wrapper text it would tie every page's fingerprint to every
+//! other page's title and URL. It goes to [`Sections`] instead, and reaches
+//! templates as a file they import.
 //!
 //! [`Layout`] renders the text; this decides what goes into it.
 
@@ -22,22 +27,12 @@ use crate::theme::Theme;
 use crate::world::Project;
 
 use super::layout::{Bind, Body, Context, Layout};
+use super::sections::Sections;
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
 /// typst will compile, and that text's fingerprint, before the costly parse
 /// into a `Source` (deferred to the compile, run only for stale pages).
 pub(in crate::engine) type Prepared = (FileId, String, Hash);
-
-/// Per-language section-tree wrapper text, keyed by language code and picked by
-/// a page's language for its `page.sections`.
-struct Trees(BTreeMap<String, String>);
-
-impl Trees {
-    /// This language's section tree as wrapper text (empty when none was built).
-    fn get(&self, lang: &str) -> &str {
-        self.0.get(lang).map_or("", String::as_str)
-    }
-}
 
 /// Builds every page's compile input against one build's shared state: the site
 /// config, the project world, the resolved theme, and the section trees, which
@@ -48,7 +43,11 @@ pub(in crate::engine) struct Prepare<'a> {
     project: &'a Project,
     theme: Option<&'a Theme>,
     pages: &'a [Page],
-    trees: Trees,
+    /// One section tree per built language. Not wrapper text: the tree reaches
+    /// templates as a file ([`Sections`]) and the JS bundler as a value, and
+    /// putting it in the wrapper would make every page's fingerprint depend on
+    /// every other page's title and URL.
+    trees: BTreeMap<String, Value>,
 }
 
 impl<'a> Prepare<'a> {
@@ -63,19 +62,22 @@ impl<'a> Prepare<'a> {
             project,
             theme,
             pages,
-            trees: Trees(BTreeMap::new()),
+            trees: BTreeMap::new(),
         };
-        // The section tree as wrapper text for every built language, so each
-        // page embeds its own language's nav. Built once and shared by every
-        // page, from the same value the JS modules serve.
-        let trees = Trees(
-            config
-                .langs()
-                .iter()
-                .map(|lang| ((*lang).to_owned(), Typst(&base.sections(lang)).to_string()))
-                .collect(),
-        );
+        // Built once from the whole page set and shared by every consumer, so
+        // the file templates import, the JS module, and any future reader can
+        // never disagree about the site's shape.
+        let trees = config
+            .langs()
+            .iter()
+            .map(|lang| ((*lang).to_owned(), base.sections(lang)))
+            .collect();
         Self { trees, ..base }
+    }
+
+    /// The site tree as the Typst source templates import, ready to write.
+    pub(in crate::engine) fn tree_source(&self) -> Sections {
+        Sections::new(self.trees.clone())
     }
 
     /// The compile input for a page: its (possibly synthetic) source and its
@@ -86,7 +88,6 @@ impl<'a> Prepare<'a> {
     /// wrapper text needs fingerprinting. Built once and shared by the cache
     /// check and the compile.
     pub(in crate::engine) fn input(&self, page: &Page) -> Result<Prepared> {
-        let sections = self.trees.get(&page.lang);
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
@@ -114,7 +115,6 @@ impl<'a> Prepare<'a> {
             data: bind,
             taxonomies: &taxonomies,
             nav: &nav,
-            sections,
             lang: &page.lang,
             translations: &translations,
             strings: &strings,
@@ -133,11 +133,12 @@ impl<'a> Prepare<'a> {
         Ok((id, text, fingerprint))
     }
 
-    /// One language's [`Section`] tree as a value: exposed to that language's
-    /// templates as `page.sections` (the single source a site nav is built from,
-    /// so it can't drift from the pages) and reused by the `baudelaire:sections`
-    /// JS module. Each node is `(id, pages: ((url, title), ..), children: (..))`,
-    /// one per content directory; generated listings are excluded.
+    /// One language's [`Section`] tree as a value: written out by [`Sections`]
+    /// for that language's templates to import (the single source a site nav is
+    /// built from, so it can't drift from the pages) and reused by the
+    /// `baudelaire:sections` JS module. Each node is
+    /// `(id, pages: ((url, title), ..), children: (..))`, one per content
+    /// directory; generated listings are excluded.
     pub(in crate::engine) fn sections(&self, lang: &str) -> Value {
         Value::array(
             Section::tree(self.pages, self.config, lang)
