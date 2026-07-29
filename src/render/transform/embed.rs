@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::mime::Mime;
 
 use super::{Cx, DocumentExt, Transform};
-use crate::render::AssetMap;
+use crate::render::{AssetDeps, AssetMap};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
 pub(super) struct Embed;
@@ -24,8 +24,13 @@ impl Transform for Embed {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let inliner = Inliner::new(cx.config, cx.assets);
+        let mut inliner = Inliner::new(cx.config, cx.assets);
         doc.assets(|value| inliner.inline(value));
+        // The inliner resolves through the same map the fingerprint transform
+        // does, so what it looked up is a dependency of this page too, and the
+        // files whose bytes it inlined are dependencies in the ordinary sense.
+        cx.found.assets.extend(inliner.probed);
+        cx.found.read.extend(inliner.inlined);
     }
 }
 
@@ -42,11 +47,19 @@ struct Inliner<'a> {
     /// Request-to-served URL map, so a fingerprinted reference resolves to its
     /// hashed output file rather than a name no longer present in `dist`.
     assets: &'a AssetMap,
+    /// The map entries this page's embedded references consulted.
+    probed: AssetDeps,
+    /// The processed files whose bytes were inlined. Their contents are in the
+    /// page's markup, so an edit to one has to rebuild it; as ordinary
+    /// dependencies they ride the same content-hash check as every other file.
+    inlined: Vec<PathBuf>,
 }
 
 impl<'a> Inliner<'a> {
     fn new(config: &Config, assets: &'a AssetMap) -> Self {
         Self {
+            probed: AssetDeps::new(),
+            inlined: Vec::new(),
             dst: config.asset_staging(),
             prefix: format!("/{}/", config.asset_name()),
             assets,
@@ -54,9 +67,11 @@ impl<'a> Inliner<'a> {
     }
 
     /// The `data:` URI for a local asset reference, or `None` to leave it as is.
-    fn inline(&self, raw: &str) -> Option<String> {
+    fn inline(&mut self, raw: &str) -> Option<String> {
         // a fingerprinted ref resolves to its hashed file; unmapped ones keep their name
-        let served = self.assets.resolve(raw).unwrap_or_else(|| raw.to_owned());
+        let resolved = self.assets.resolve(raw);
+        self.probed.extend(resolved.probed);
+        let served = resolved.url.unwrap_or_else(|| raw.to_owned());
         let rest = served.strip_prefix(&self.prefix)?;
         // reject dir escapes and query/fragment refs, not plain file references
         if rest.contains("..") || rest.contains(['?', '#']) {
@@ -65,6 +80,7 @@ impl<'a> Inliner<'a> {
         let path = self.dst.join(rest);
         // best-effort: an unreadable asset stays a plain reference
         let bytes = crate::fs::read(&path).ok()?;
+        self.inlined.push(path.clone());
         Some(format!(
             "data:{};base64,{}",
             Mime::of(&path),

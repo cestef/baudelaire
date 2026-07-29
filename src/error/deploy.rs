@@ -86,6 +86,16 @@ pub enum DeployError {
     )]
     Unconfigured,
 
+    /// `deploy { ssh }` is the only destination, and this binary was built
+    /// without the `ssh` feature that compiles the backend in.
+    #[error("this build has no SSH deploy backend")]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh_unsupported),
+        help("rebuild with the `ssh` cargo feature, or deploy over `s3 {{ }}`")
+    )]
+    #[cfg(not(feature = "ssh"))]
+    SshUnsupported,
+
     /// A required credential environment variable was unset or empty.
     #[error("missing credential: set `{var}`")]
     #[diagnostic(code(baudelaire::deploy::credentials))]

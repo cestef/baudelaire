@@ -18,7 +18,7 @@
 //! because a path in a package file resolves against the *package* root, not
 //! the project. Baudelaire therefore reads the file itself, which also means
 //! typst never sees it: each file read here is reported through
-//! [`crate::render::Rewrite::icons`] so the engine can add it to the page's
+//! [`crate::render::Rewrite::read`] so the engine can add it to the page's
 //! dependencies, or an edited icon would leave every page showing it a cache
 //! hit.
 
@@ -104,7 +104,7 @@ impl Transform for Svg {
                 Err(why) => failed.push(why),
             }
         });
-        cx.found.icons.extend(read);
+        cx.found.read.extend(read);
         cx.found.invalid.extend(failed);
     }
 }

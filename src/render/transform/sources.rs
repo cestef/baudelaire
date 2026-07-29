@@ -40,7 +40,12 @@ impl Transform for Sources {
                 return;
             };
             // match the manifest on the path alone, ignoring any query/fragment.
-            let Some(candidates) = cx.srcsets.candidates(Tail::of(src).path) else {
+            let variants = cx.srcsets.candidates(Tail::of(src).path);
+            // Recorded whether or not it matched: an image with no variants
+            // today gets some when the responsive widths change, and this page
+            // has to pick up the new srcset.
+            cx.found.srcsets.extend(variants.probed);
+            let Some(candidates) = variants.candidates else {
                 return;
             };
             // `url 480w` candidates, in the manifest's ascending width order.

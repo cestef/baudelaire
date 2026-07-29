@@ -39,7 +39,7 @@ main,
 
 .site-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 1.5rem;
   height: 4rem;
   border-bottom: 1px solid var(--rule);

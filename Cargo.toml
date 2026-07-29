@@ -49,7 +49,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards"]
+default = ["embedded-fonts", "js", "css", "images", "cards", "ssh"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -65,7 +65,7 @@ embedded-fonts = ["typst-kit/embedded-fonts"]
 # JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
 # the `baudelaire:*` virtual modules): ~2.5 MiB of oxc/rolldown/tokio. Off means
 # `assets { bundle }` warns and `.js` files are copied verbatim.
-js = ["dep:rolldown", "dep:rolldown_common"]
+js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
 
 # CSS minification and `url()`/`@import` fingerprint rewriting via lightningcss:
 # ~3.2 MiB. Off means `assets { minify }` warns and `.css` files are copied
@@ -84,6 +84,13 @@ images = ["dep:oxipng", "dep:image"]
 # rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means a
 # `generate { cards { } }` block warns and produces nothing.
 cards = ["dep:typst-render", "dep:typst-layout"]
+
+# The SSH/SFTP deploy backend, on russh. By crate count this is the most
+# expensive thing in the tree after typst and rolldown: ~145 crates reachable
+# only through it, including `aws-lc-sys`, a large C/assembly build that nothing
+# else pulls. Off means a `deploy { ssh { } }` block warns and that destination
+# is skipped; `deploy { s3 { } }` is unaffected, since S3 rides on ureq.
+ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
@@ -132,15 +139,18 @@ tiny_http = "0.12"
 open = "5"
 lightningcss = { version = "1.0.0-alpha.71", optional = true }
 rolldown = { version = "1", optional = true }
+# Wanted by two independent capabilities: `js` (rolldown drives an async
+# bundler) and `ssh` (russh is async). The feature list is the union of what
+# those two need, so neither has to restate it.
 tokio = { version = "1.52.3", features = [
   "rt",
   "rt-multi-thread",
   "net",
   "time",
   "io-util",
-] }
-russh = "0.62.2"
-russh-sftp = "2.3.0"
+], optional = true }
+russh = { version = "0.62.2", optional = true }
+russh-sftp = { version = "2.3.0", optional = true }
 rolldown_common = { version = "1", optional = true }
 oxipng = { version = "10.1.1", default-features = false, features = [
   "parallel",

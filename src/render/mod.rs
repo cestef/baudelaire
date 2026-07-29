@@ -15,17 +15,17 @@ mod scope;
 mod srcset;
 mod transform;
 
-pub use asset::AssetMap;
+pub use asset::{AssetDeps, AssetMap};
 pub use fragment::Fragments;
 pub use links::{LinkDeps, LinkMap};
-pub use srcset::SrcSets;
+pub use srcset::{SrcSetDeps, SrcSets};
 pub use transform::ImageRef;
 
 use typst_html::HtmlDocument;
 
 use crate::config::Config;
 use crate::content::Page;
-use crate::graph::Fingerprint;
+
 use crate::render::transform::{Cx, Transforms};
 
 /// A raw `href`/`src` split at its `#fragment` / `?query` boundary: the one
@@ -72,18 +72,38 @@ pub struct Rewrite {
     /// on the site's URL layout. Keyed by canonical source path; the cache
     /// stores them the way it stores every other path.
     pub links: LinkDeps,
+    /// The variant-manifest entries this page's images consulted, its
+    /// dependency on the responsive pipeline.
+    pub srcsets: SrcSetDeps,
+    /// The asset-map entries this page's references consulted, its dependency
+    /// on the processed-asset tree.
+    pub assets: AssetDeps,
     /// Images lifted out of the DOM, for the engine to copy into `dist`.
     pub images: Vec<ImageRef>,
     /// Outbound `http(s)` link targets the page carries, collected only when
     /// external checking is on.
     pub external: Vec<String>,
-    /// Icon files the svg transform inlined, to add to the page's dependencies:
-    /// baudelaire reads them, not typst, so nothing else would notice an edit.
-    pub icons: Vec<std::path::PathBuf>,
+    /// Files the render pass read on this page's behalf, to add to its
+    /// dependencies: baudelaire reads them, not typst, so nothing else would
+    /// notice an edit. Inlined SVG icons and embedded assets both land here,
+    /// which is why they need no cache mechanism of their own.
+    pub read: Vec<std::path::PathBuf>,
     /// SVG files `svg()` marked that could not be turned into DOM nodes. The
     /// element is already in the page, so the caller must fail rather than ship
     /// an empty `<svg>` where an icon was asked for.
     pub invalid: Vec<crate::error::SvgError>,
+}
+
+/// The live render-side maps a page's recorded probes are revalidated against.
+///
+/// Grouped because they travel together and answer one question: given what a
+/// page consulted while rendering, may its markup be reused? Passing them as
+/// one value also keeps the fact that they come from a single renderer, rather
+/// than three unrelated arguments a caller could pair up wrongly.
+pub struct RenderMaps<'a> {
+    pub links: &'a LinkMap,
+    pub srcsets: &'a SrcSets,
+    pub assets: &'a AssetMap,
 }
 
 impl Renderer {
@@ -101,20 +121,14 @@ impl Renderer {
         }
     }
 
-    /// The page-to-permalink map, for the build cache to revalidate each page's
-    /// recorded [`LinkDeps`] against.
-    pub fn links(&self) -> &LinkMap {
-        &self.links
-    }
-
-    /// The processed-asset URL map (for the build-cache fingerprint).
-    pub fn assets(&self) -> &AssetMap {
-        &self.assets
-    }
-
-    /// Fingerprint of the responsive width-variant manifest, for the build cache.
-    pub fn srcsets(&self) -> crate::graph::Hash {
-        self.srcsets.fingerprint()
+    /// The site-wide maps every page's probes are checked against, for the
+    /// build cache.
+    pub fn maps(&self) -> RenderMaps<'_> {
+        RenderMaps {
+            links: &self.links,
+            srcsets: &self.srcsets,
+            assets: &self.assets,
+        }
     }
 
     /// Run the DOM transform pipeline over a page's document in place: link

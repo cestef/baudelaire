@@ -1144,3 +1144,110 @@ fn a_nested_content_dir_keeps_the_cache_portable() {
     assert!(manifest.contains("src/content/posts/a.typ"), "{manifest}");
     assert!(manifest.contains("templates/post.typ"), "{manifest}");
 }
+
+/// Asset fingerprinting used to rebuild every page whenever any asset changed,
+/// because the whole request-to-served map was folded into the build
+/// fingerprint. A page depends on the assets it actually references.
+#[test]
+#[cfg(feature = "css")]
+fn changing_an_asset_leaves_pages_that_do_not_reference_it_cached() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  fingerprint #true\n}\n",
+    );
+    site.write("assets/used.css", "body{color:red}");
+    site.write("assets/spare.css", "body{color:blue}");
+    site.write(
+        "content/uses.typ",
+        "#let frontmatter = (title: \"Uses\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/used.css\"))",
+    );
+    site.write(
+        "content/plain.typ",
+        "#let frontmatter = (title: \"Plain\",)\nnothing linked here",
+    );
+    site.stats();
+
+    // Only the unreferenced asset changes, so only its (hashed) name moves.
+    site.write("assets/spare.css", "body{color:green}");
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (2, 2),
+        "neither page references the changed asset"
+    );
+
+    // ...and the page that does reference an asset still follows it when it moves.
+    site.write("assets/used.css", "body{color:black}");
+    let stats = site.stats();
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (2, 1),
+        "only the referencing page depends on the asset that moved"
+    );
+}
+
+/// The negative half. A reference to an asset that is not there records that it
+/// was absent, so the page picks up the real URL once the asset appears.
+/// Recording only the references that resolved would leave it cached pointing
+/// at a file that never existed.
+#[test]
+#[cfg(feature = "css")]
+fn a_reference_to_an_asset_that_appears_later_invalidates_the_page() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  fingerprint #true\n}\n",
+    );
+    site.write("assets/present.css", "body{color:red}");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/later.css\"))",
+    );
+    site.stats();
+    assert!(
+        site.output("index.html").contains("/assets/later.css"),
+        "nothing is mapped there yet, so the reference stays as authored"
+    );
+
+    site.write("assets/later.css", "body{color:blue}");
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(
+        !html.contains("\"/assets/later.css\""),
+        "the reference must follow the asset now that it exists: {html}"
+    );
+}
+
+/// The complement of `editing_an_embedded_asset_invalidates_the_page`: the
+/// embedded bytes are now the embedding page's own dependency, so a page that
+/// inlines nothing is untouched by an asset edit. Hashing the whole staged
+/// asset tree (as this once did) rebuilt every page, and walked the tree on
+/// every build to do it.
+#[test]
+fn a_page_that_embeds_nothing_survives_an_asset_edit() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nhtml {\n  embed #true\n}\n",
+    );
+    site.write("assets/inlined.css", "body{color:red}");
+    site.write(
+        "content/embeds.typ",
+        "#let frontmatter = (title: \"Embeds\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/inlined.css\"))",
+    );
+    site.write(
+        "content/plain.typ",
+        "#let frontmatter = (title: \"Plain\",)\nnothing inlined here",
+    );
+    site.stats();
+
+    site.write("assets/inlined.css", "body{color:blue}");
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (2, 1),
+        "only the page carrying the bytes depends on them"
+    );
+    assert!(
+        site.output("embeds/index.html").contains("data:text/css"),
+        "the embedding page still inlines the asset"
+    );
+}

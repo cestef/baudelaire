@@ -279,3 +279,12 @@ impl Serve {
         (status.trim().parse().unwrap_or(0), body.to_owned())
     }
 }
+
+/// The fixture site both deploy e2e suites reconcile against: three files under
+/// `public/`, one of them nested, so a run exercises directory creation as well
+/// as plain uploads.
+pub fn dist(site: &Site) {
+    site.write("public/index.html", "<h1>home</h1>");
+    site.write("public/posts/a.html", "post a");
+    site.write("public/style.css", "body{}");
+}

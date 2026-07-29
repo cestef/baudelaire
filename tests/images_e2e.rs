@@ -142,3 +142,74 @@ fn an_unchanged_image_is_not_re_encoded() {
         "an edited image must not come from the memo"
     );
 }
+
+/// A page's `srcset` depends on the variants of the images it actually shows.
+/// Folding the whole variant manifest into the build fingerprint (as this once
+/// did) meant a change to any one image rebuilt every page on the site.
+///
+/// The image is resized rather than merely re-encoded, because that is what
+/// moves the *manifest*: the recorded URLs are authored paths, so new pixels at
+/// the same size leave it identical and would prove nothing.
+#[test]
+#[cfg(feature = "images")]
+fn losing_one_images_variants_leaves_pages_that_do_not_show_it_cached() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images {\n      responsive { widths 20 }\n    }\n}\n",
+    );
+    site.write_bytes("assets/shown.png", &png(60, 40));
+    site.write(
+        "content/shows.typ",
+        "#let frontmatter = (title: \"Shows\",)\n#html.elem(\"img\", attrs: (src: \"/assets/shown.png\"))\n",
+    );
+    site.write(
+        "content/plain.typ",
+        "#let frontmatter = (title: \"Plain\",)\nno images here\n",
+    );
+    site.stats();
+    assert!(site.output("shows/index.html").contains("srcset"));
+
+    // Below the configured width, so the source drops out of the manifest.
+    site.write_bytes("assets/shown.png", &png(10, 8));
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (2, 1),
+        "only the page showing the image depends on its variants"
+    );
+    assert!(
+        !site.output("shows/index.html").contains("srcset"),
+        "the page must lose the srcset it can no longer honour"
+    );
+}
+
+/// The negative half. An image with no variants records that it had none, so
+/// gaining some later still invalidates the page showing it. Recording only the
+/// sources that matched would leave that page cached with no `srcset` at all.
+#[test]
+#[cfg(feature = "images")]
+fn an_image_that_gains_variants_invalidates_the_page_showing_it() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images {\n      responsive { widths 20 }\n    }\n}\n",
+    );
+    site.write_bytes("assets/pic.png", &png(10, 8));
+    site.write(
+        "content/index.typ",
+        "#html.elem(\"img\", attrs: (src: \"/assets/pic.png\"))\n",
+    );
+    site.stats();
+    assert!(
+        !site.output("index.html").contains("srcset"),
+        "a source narrower than the configured width has no variants"
+    );
+
+    // Now wide enough to downscale, so the manifest gains an entry.
+    site.write_bytes("assets/pic.png", &png(60, 40));
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(
+        html.contains("srcset"),
+        "the new variant must reach the page: {html}"
+    );
+}

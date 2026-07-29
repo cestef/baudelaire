@@ -27,6 +27,11 @@ impl Transform for Fingerprint {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        doc.assets(|value| cx.assets.resolve(value));
+        let Cx { assets, found, .. } = cx;
+        doc.assets(|value| {
+            let served = assets.resolve(value);
+            found.assets.extend(served.probed);
+            served.url
+        });
     }
 }

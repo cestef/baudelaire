@@ -28,7 +28,7 @@ use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
-use crate::render::{Fragments, ImageRef, LinkDeps, LinkMap};
+use crate::render::{AssetDeps, Fragments, ImageRef, LinkDeps, RenderMaps, SrcSetDeps};
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
@@ -70,6 +70,23 @@ struct Entry {
     /// pre-tracking manifests, hence `default`.
     #[serde(default)]
     links: LinkDeps,
+    /// The responsive variants this page's images matched, keyed by the source
+    /// path each `<img>` named, so regenerating one image's variants rebuilds
+    /// the pages showing it and leaves the rest cached.
+    ///
+    /// `None` records a source with no variants, so an image that gains some
+    /// later still invalidates the page displaying it.
+    #[serde(default)]
+    srcsets: SrcSetDeps,
+    /// The processed-asset URLs this page's references resolved to, keyed by the
+    /// request path each named, so re-fingerprinting one asset rebuilds the
+    /// pages that reference it and leaves the rest cached.
+    ///
+    /// `None` records a reference to an asset that was not there, so one
+    /// appearing later still invalidates the page pointing at it. Only paths
+    /// under the asset prefix are recorded: nothing else can ever be a key.
+    #[serde(default)]
+    assets: AssetDeps,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
     /// What the render pass produced besides the markup, replayed on a hit.
@@ -117,23 +134,17 @@ struct Manifest {
     pages: BTreeMap<PathBuf, Entry>,
 }
 
-/// The render-side inputs folded into the cache fingerprint alongside the
-/// config: the processed-asset URL map and the embedded-asset content hash.
-/// None are visible to the per-page dependency tracker (asset renames happen in
-/// the render pass; embeds inline bytes typst never reads), so they are
-/// fingerprinted whole: any change invalidates every page.
+/// The one render-side input still fingerprinted whole, because nothing narrows
+/// it to the pages it affects: the generated Typst modules. See
+/// [`crate::world::module`] for why hashing them together costs nothing.
 ///
-/// Link resolution is render-side too, but is *not* here: it is tracked per
-/// page as [`Entry::links`], so moving one page rebuilds the pages that link to
-/// it instead of the site.
+/// Everything that used to sit beside it is now tracked per page and so
+/// invalidates only the pages it reaches: link resolution via [`Entry::links`],
+/// the responsive variant manifest via [`Entry::srcsets`], the processed-asset
+/// URL map via [`Entry::assets`], and the social card and every inlined or
+/// embedded file through the page's own [`Entry::deps`].
 #[derive(std::hash::Hash)]
 pub struct RenderInputs {
-    pub assets: Hash,
-    /// The responsive width-variant manifest: a page's `srcset` markup changes
-    /// when its images' variants do.
-    pub srcsets: Hash,
-    /// Present only when `embed` is on: a content hash of the inlined assets.
-    pub embeds: Option<Hash>,
     /// A content hash of the generated `@baudelaire/*` Typst modules.
     ///
     /// A page *does* import these, but they exist only in memory, so they
@@ -160,6 +171,10 @@ pub struct Recorded<'a> {
     pub reads: &'a Reads,
     /// The permalinks the page's links resolved against.
     pub links: &'a LinkDeps,
+    /// The responsive variants the page's images matched.
+    pub srcsets: &'a SrcSetDeps,
+    /// The processed-asset URLs the page's references resolved to.
+    pub assets: &'a AssetDeps,
     /// What the render pass produced besides the markup.
     pub outputs: &'a Outputs,
 }
@@ -186,6 +201,13 @@ pub struct Cache {
     /// This build's page-to-permalink map, keyed the way the manifest stores
     /// paths, to revalidate each page's recorded [`Entry::links`].
     links: BTreeMap<PathBuf, String>,
+    /// This build's variant digests, to revalidate each page's recorded
+    /// [`Entry::srcsets`]. Digested by [`SrcSets`] itself so the recorded and
+    /// the current value cannot be computed two different ways.
+    srcsets: BTreeMap<String, Hash>,
+    /// This build's request-to-served asset URLs, to revalidate each page's
+    /// recorded [`Entry::assets`].
+    assets: BTreeMap<String, String>,
     /// The content-addressed store holding every page's rendered markup.
     objects: Objects,
 }
@@ -208,7 +230,7 @@ impl Cache {
         config: &Config,
         render: &RenderInputs,
         roots: Vec<(String, Value)>,
-        links: &LinkMap,
+        maps: RenderMaps<'_>,
         root: &Path,
         ui: &Ui,
     ) -> Result<Self> {
@@ -245,10 +267,13 @@ impl Cache {
             prev,
             digests: FileDigests::default(),
             roots,
-            links: links
+            links: maps
+                .links
                 .entries()
                 .map(|(source, permalink)| (Self::portable(&root, source), permalink.to_owned()))
                 .collect(),
+            srcsets: maps.srcsets.digests(),
+            assets: maps.assets.served().clone(),
             root,
         })
     }
@@ -303,6 +328,24 @@ impl Cache {
         {
             return None;
         }
+        // every image this page showed must still resolve to the same variants,
+        // and one that had none must still have none.
+        if !entry
+            .srcsets
+            .iter()
+            .all(|(source, digest)| self.srcsets.get(source) == digest.as_ref())
+        {
+            return None;
+        }
+        // every asset this page referenced must still be served from the same
+        // URL, and one that was absent must still be absent.
+        if !entry
+            .assets
+            .iter()
+            .all(|(request, served)| self.assets.get(request) == served.as_ref())
+        {
+            return None;
+        }
         let entry = entry.clone();
         let html = self.objects.read(&entry.blob)?;
         let outputs = entry.outputs.clone();
@@ -321,6 +364,8 @@ impl Cache {
             deps,
             reads,
             links,
+            srcsets,
+            assets,
             outputs,
         } = compiled;
         let meta = self.roots().digests(reads);
@@ -341,6 +386,8 @@ impl Cache {
                 deps,
                 meta,
                 links,
+                srcsets: srcsets.clone(),
+                assets: assets.clone(),
                 blob,
                 outputs: outputs.clone(),
             },
@@ -433,10 +480,12 @@ impl Cache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cache, GENERATED, LinkMap, RenderInputs};
+    use super::{Cache, GENERATED, RenderInputs};
     use crate::config::Config;
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use crate::graph::Hash;
+    use crate::render::RenderMaps;
+    use crate::render::{AssetMap, LinkMap, SrcSets};
     use crate::ui::{Level, Ui};
     use std::path::{Path, PathBuf};
 
@@ -461,16 +510,17 @@ mod tests {
         let mut config = Config::default();
         config.cache.dir = root.join(".cache");
         let render = RenderInputs {
-            assets: Hash::of_bytes(b""),
-            srcsets: Hash::of_bytes(b""),
-            embeds: None,
             modules: Hash::of_bytes(b""),
         };
         Cache::load(
             &config,
             &render,
             Vec::new(),
-            &LinkMap::default(),
+            RenderMaps {
+                links: &LinkMap::default(),
+                srcsets: &SrcSets::default(),
+                assets: &AssetMap::default(),
+            },
             root,
             &Ui::new(Level::Silent),
         )

@@ -96,7 +96,10 @@ impl Stylesheet {
     /// is preserved across the rewrite.
     fn resolve(rel: &Path, raw: &str, map: &AssetMap, ctx: &Ctx) -> Option<String> {
         let key = Self::key(rel, raw, ctx)?;
-        let mapped = map.resolve(&key)?;
+        // Only the URL: a stylesheet is not a page, so this lookup is nobody's
+        // cache dependency. The sheet's own references are covered by hashing
+        // its processed bytes.
+        let mapped = map.resolve(&key).url?;
         // Prefix the served base path here: the `BasePath` transform only walks
         // the DOM, so a root-absolute URL emitted into CSS would 404 on a
         // subpath-hosted site.

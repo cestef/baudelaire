@@ -355,6 +355,13 @@ impl Config {
             .unwrap_or("assets")
     }
 
+    /// The URL prefix every processed asset is served under. The single source
+    /// for it: the pipeline builds its map keys from this, and the render layer
+    /// decides from it whether a reference could name an asset at all.
+    pub fn asset_prefix(&self) -> String {
+        format!("/{}", self.asset_name())
+    }
+
     /// The processed assets directory under `dist`: the *published* location,
     /// read by the dev server and by whatever hosts `dist`.
     pub fn asset_dist(&self) -> PathBuf {

@@ -16,7 +16,7 @@ use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 
 use super::{Cx, DocumentExt, Transform};
-use crate::render::AssetMap;
+use crate::render::{AssetDeps, AssetMap};
 
 /// OpenGraph names its tags with `property` where the HTML spec uses `name`.
 /// typst-html has no constant for it, since it is RDFa rather than HTML.
@@ -31,12 +31,16 @@ impl Transform for Meta {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let tags = Card {
+        let mut card = Card {
             config: cx.config,
             page: cx.page,
             assets: cx.assets,
-        }
-        .tags();
+            probed: AssetDeps::new(),
+        };
+        let tags = card.tags();
+        // The card image resolves through the asset map, so this page depends
+        // on where that image is served from.
+        cx.found.assets.extend(card.probed);
         if tags.is_empty() {
             return;
         }
@@ -56,6 +60,8 @@ struct Card<'a> {
     /// URL before it is absolutized (the fingerprint transform runs later and
     /// cannot resolve an already-absolute `content` value).
     assets: &'a AssetMap,
+    /// The map entries the card image's resolution consulted.
+    probed: AssetDeps,
 }
 
 /// What a page says about itself, resolved once and then spelled three ways.
@@ -82,7 +88,7 @@ impl Card<'_> {
 
     /// Every tag this page carries, in emission order: the plain document meta,
     /// then OpenGraph, then the Twitter card, then the link relations.
-    fn tags(&self) -> Vec<HtmlNode> {
+    fn tags(&mut self) -> Vec<HtmlNode> {
         let facts = self.facts();
         let mut tags = Vec::new();
         self.document(&facts, &mut tags);
@@ -98,17 +104,23 @@ impl Card<'_> {
     /// What every vocabulary below says the same thing about, resolved once:
     /// each of the three spells these out differently, and a value computed per
     /// group is a value that can disagree between them.
-    fn facts(&self) -> Facts {
+    fn facts(&mut self) -> Facts {
         let fm = &self.page.frontmatter;
+        let (title, description, authored) = (
+            fm.title.clone().unwrap_or_default(),
+            fm.text("description").or_else(|| fm.text("summary")),
+            fm.text("image"),
+        );
+        // An authored image always wins; a generated card fills in for the
+        // pages that have none, which is the whole point of generating them.
+        // Resolved before the struct literal because resolution records an
+        // asset dependency, and so needs `self` mutably.
+        let image = authored.or_else(|| self.generated_card());
+        let image = image.map(|src| self.absolute(&src));
         Facts {
-            title: fm.title.clone().unwrap_or_default(),
-            description: fm.text("description").or_else(|| fm.text("summary")),
-            // An authored image always wins; a generated card fills in for the
-            // pages that have none, which is the whole point of generating them.
-            image: fm
-                .text("image")
-                .or_else(|| self.generated_card())
-                .map(|src| self.absolute(&src)),
+            title,
+            description,
+            image,
             canonical: self.url(),
             // A dated page is an article; everything else is a plain website page.
             kind: match fm.date.is_some() {
@@ -207,8 +219,10 @@ impl Card<'_> {
     /// Resolve a root-relative asset reference to its fingerprinted URL, then
     /// make it absolute against the site `url`. An already-absolute (`http`)
     /// value, or one with no base URL, is left as authored (bar fingerprinting).
-    fn absolute(&self, src: &str) -> String {
-        let src = self.assets.resolve(src).unwrap_or_else(|| src.to_owned());
+    fn absolute(&mut self, src: &str) -> String {
+        let resolved = self.assets.resolve(src);
+        self.probed.extend(resolved.probed);
+        let src = resolved.url.unwrap_or_else(|| src.to_owned());
         BaseUrl::resolve(self.config.base().as_ref(), &src)
     }
 

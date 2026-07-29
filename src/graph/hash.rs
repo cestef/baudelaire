@@ -174,6 +174,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 7: embedded asset bytes became ordinary per-page dependencies, so the
+    /// whole-tree `embeds` hash left the manifest fingerprint. An entry written
+    /// before this lists no embedded file among its deps.
+    /// 6: the responsive variant manifest and the processed-asset URL map both
+    /// left the manifest fingerprint, for per-page `Entry::srcsets` and
+    /// `Entry::assets`. An entry written before this records neither, so under
+    /// the new narrower rules it would read as valid however those changed.
     /// 5: `Entry::deps` now covers what a page's social card compile read, and
     /// the card template's hash left the manifest fingerprint with it. An entry
     /// written before this records neither, so its card is validated against
@@ -182,7 +189,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 5;
+    const SCHEMA: u32 = 7;
 
     pub fn current() -> Self {
         Self {

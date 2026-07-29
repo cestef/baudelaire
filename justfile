@@ -1,6 +1,8 @@
-# Match CI: workspace crates are strict (`-D warnings`); deps stay lenient
-# because they're built with `--cap-lints allow`.
-export RUSTFLAGS := "-D warnings"
+# No `export RUSTFLAGS := "-D warnings"`. Setting RUSTFLAGS makes cargo discard
+# `build.rustflags`/`target.<triple>.rustflags` from config, so `just` and a plain
+# `cargo build` (or rust-analyzer) disagreed on rustflags, and two rustflag sets
+# means two fingerprints: each alternation rebuilt all 875 crates. Strictness is
+# unchanged where it matters, since `clippy` below already passes `-D warnings`.
 
 # The released `slim` flavor: no embedded fonts, js, css, images or cards.
 SLIM := "--no-default-features"

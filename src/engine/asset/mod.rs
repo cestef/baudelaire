@@ -120,7 +120,7 @@ impl<'a> Assets<'a> {
             sources: Layers::new(theme.map(Theme::assets), &config.paths.assets),
             dst: config.asset_staging(),
             memo: Memo::new(config),
-            prefix: format!("/{}", config.asset_name()),
+            prefix: config.asset_prefix(),
         }
     }
 
@@ -150,7 +150,10 @@ impl<'a> Assets<'a> {
     ///
     /// [`Engine::build`]: crate::engine::Engine::build
     pub fn process(&self) -> Result<Processed> {
-        let mut out = Processed::default();
+        let mut out = Processed {
+            map: AssetMap::new(self.prefix.clone()),
+            ..Processed::default()
+        };
         let sources = self.sources.files()?;
         if sources.is_empty() {
             return Ok(out);

@@ -8,6 +8,7 @@
 
 mod s3;
 mod sigv4;
+#[cfg(feature = "ssh")]
 mod ssh;
 
 use std::collections::BTreeMap;
@@ -65,6 +66,7 @@ impl Listed {
 use crate::ui::Level;
 
 use self::s3::S3;
+#[cfg(feature = "ssh")]
 use self::ssh::Ssh;
 
 /// The built output tree handed to every [`Backend`]: the `dist` root and every
@@ -176,6 +178,22 @@ pub trait Store {
 /// silently doing nothing.
 pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
     let backends = configured(config);
+    // `deploy` never constructs an `Engine`, so the gate table that warns the
+    // build-shaped commands about a missing capability never runs here. Say it
+    // at the one place that can: as a warning when another destination still
+    // carries the run, and as an error when skipping ssh leaves nothing to do
+    // (which `Unconfigured` would otherwise misreport as an empty config).
+    #[cfg(not(feature = "ssh"))]
+    if config.deploy.ssh.is_some() {
+        if backends.is_empty() {
+            return Err(DeployError::SshUnsupported.into());
+        }
+        ui.warn(crate::error::warning::FeatureMissing {
+            setting: "deploy { ssh }",
+            cargo: "ssh",
+            effect: "the SSH destination is skipped",
+        });
+    }
     if backends.is_empty() {
         return Err(DeployError::Unconfigured.into());
     }
@@ -197,6 +215,7 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend<Dist>>> {
     if let Some(s3) = &config.deploy.s3 {
         out.push(Box::new(S3::new(s3.clone())));
     }
+    #[cfg(feature = "ssh")]
     if let Some(ssh) = &config.deploy.ssh {
         out.push(Box::new(Ssh::new(ssh.clone())));
     }
