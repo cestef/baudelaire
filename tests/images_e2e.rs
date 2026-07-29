@@ -47,6 +47,7 @@ fn typst_image_externalizes_to_a_file() {
     );
 }
 
+#[cfg(feature = "css")]
 #[test]
 fn fingerprint_hashes_the_externalized_name() {
     let site = Site::with(

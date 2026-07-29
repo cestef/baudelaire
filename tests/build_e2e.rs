@@ -270,6 +270,7 @@ fn build_context_exposed_via_sys_inputs() {
     assert!(html.contains("mode=build"), "build mode exposed: {html}");
 }
 
+#[cfg(feature = "css")]
 #[test]
 fn fingerprint_renames_assets_and_rewrites_references() {
     let site = Site::new();
@@ -430,13 +431,19 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
         names
             .iter()
             .any(|n| n.starts_with("gen.") && n.ends_with(".css")),
-        "hook-generated css was fingerprinted: {names:?}"
+        "hook output reached the asset pipeline: {names:?}"
     );
-    let html = fs::read_to_string(site.root.join("public/index.html")).unwrap();
-    assert!(
-        !html.contains("href=\"/assets/gen.css\""),
-        "reference rewritten: {html}"
-    );
+    // Fingerprinting is a `css` capability, so only that flavor renames the file
+    // and rewrites the reference; a slim build serves the generated name as-is.
+    // The assertions above hold either way, which is what pins where hooks run.
+    #[cfg(feature = "css")]
+    {
+        let html = fs::read_to_string(site.root.join("public/index.html")).unwrap();
+        assert!(
+            !html.contains("href=\"/assets/gen.css\""),
+            "reference rewritten: {html}"
+        );
+    }
 }
 
 /// Assets are fingerprinted before pages compile, so a page failing to compile

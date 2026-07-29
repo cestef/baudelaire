@@ -45,6 +45,8 @@ scenario "meta tags are omitted when html meta is off" {
 }
 
 scenario "an og:image is absolute and follows the fingerprinted name" {
+  // Fingerprinting is off in a build without the stylesheet rewriter.
+  requires "css"
   files {
     "config.kdl" #"""
       site "S"
