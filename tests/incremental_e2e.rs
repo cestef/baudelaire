@@ -413,6 +413,47 @@ fn a_link_to_a_page_that_does_not_exist_yet_resolves_when_it_appears() {
 }
 
 #[test]
+#[cfg(unix)]
+fn a_link_resolves_when_its_target_appears_under_a_symlinked_content_dir() {
+    // The same negative dependency, with a symlinked content subtree (a shared
+    // notes vault, a submodule linked into place). A page that exists
+    // canonicalizes to its real location, while a probe at a page that is *not*
+    // there has nothing to canonicalize and keeps the path as walked, so the two
+    // used to be recorded under different keys: the recorded `None` kept
+    // matching "nothing sits here", and `a` stayed a cache hit serving its
+    // broken link.
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
+    );
+    fs::create_dir_all(site.path("vault/posts")).unwrap();
+    fs::create_dir_all(site.path("content")).unwrap();
+    std::os::unix::fs::symlink(site.path("vault/posts"), site.path("content/posts")).unwrap();
+
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[to b]",
+    );
+    site.stats();
+    assert!(
+        !site.output("posts/a/index.html").contains("/posts/b/"),
+        "b does not exist yet, so nothing should resolve"
+    );
+
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    let stats = site.stats();
+
+    assert_eq!(stats.cached, 0, "a must recompile now that b exists");
+    assert!(
+        site.output("posts/a/index.html").contains("/posts/b/"),
+        "a's link should resolve once b appears: {}",
+        site.output("posts/a/index.html")
+    );
+}
+
+#[test]
 fn a_link_that_falls_through_to_the_base_page_rebuilds_when_an_edition_appears() {
     // On a multilingual site a link probes the reader's own edition first and
     // falls through to the target as written. That fall-through is only correct
@@ -443,6 +484,96 @@ fn a_link_that_falls_through_to_the_base_page_rebuilds_when_an_edition_appears()
         a.contains("/fr/posts/b/"),
         "a's link should follow the French edition once it exists: {a}"
     );
+}
+
+/// A site whose pages all render through `layout.typ`. `head` is prepended to
+/// the template at file scope (for imports) and `extra` goes inside the layout
+/// function's block, where the file is already in code mode.
+fn templated(head: &str, extra: &str) -> Site {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  templates \"templates\"\n}\n",
+    );
+    site.write(
+        "templates/layout.typ",
+        &format!("{head}#let layout(page, body) = {{\n  body\n{extra}\n}}\n"),
+    );
+    // Five, so the page retitled below has pages that are *not* its prev/next
+    // neighbours: those two rebuild for their pager links whatever happens, and
+    // would mask what these tests are actually measuring.
+    for (name, title) in [("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")] {
+        site.write(
+            &format!("content/posts/{name}.typ"),
+            &format!("#let frontmatter = (title: \"{title}\", template: \"layout.typ\",)\n{name}"),
+        );
+    }
+    site
+}
+
+#[test]
+fn retitling_leaves_pages_whose_template_ignores_the_section_tree_cached() {
+    // The section tree names every page on the site. Embedded in each page's
+    // generated wrapper (as it once was) it made every title part of every
+    // page's fingerprint, so one retitle was a cold build of the whole site.
+    // As a file, only the templates that import it depend on it.
+    let site = templated("", "");
+    site.stats();
+
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B2\", template: \"layout.typ\",)\nb",
+    );
+    let stats = site.stats();
+
+    // b recompiled, and a and c with it: they are its prev/next neighbours,
+    // whose pager links carry its title. d and e are neither, and nothing here
+    // reads the section tree, so they stay cached.
+    assert_eq!((stats.pages, stats.cached), (5, 2));
+}
+
+#[test]
+fn a_template_that_imports_the_section_tree_rebuilds_when_a_title_changes() {
+    // The other half: a nav really does change on every page when any page is
+    // retitled, so a template that renders one must rebuild. Correctness first;
+    // the saving is only for templates that ask for nothing.
+    let site = templated(
+        "#import \"@baudelaire/sections:0.1.0\": sections\n",
+        "  [#sections(page.lang).len()]",
+    );
+    site.stats();
+    assert!(
+        site.output("posts/a/index.html").contains('1'),
+        "the tree should reach the template: {}",
+        site.output("posts/a/index.html")
+    );
+
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B2\", template: \"layout.typ\",)\nb",
+    );
+    let stats = site.stats();
+
+    assert_eq!(
+        stats.cached, 0,
+        "every page renders the retitled page's nav"
+    );
+}
+
+#[test]
+fn the_generated_section_tree_is_written_before_the_first_compile() {
+    // A template importing the tree has to work on the first build of a fresh
+    // checkout, where nothing has written it yet.
+    let site = templated(
+        "#import \"@baudelaire/sections:0.1.0\": sections\n",
+        "  [#sections(page.lang).len()]",
+    );
+
+    let stats = site.stats();
+
+    assert_eq!(stats.pages, 5);
+    // Where the registry resolves `@baudelaire/sections` to. Asserted so the
+    // import above is served from a real file, which is what puts it in each
+    // importing page's dependency set.
+    assert!(site.exists(".baudelaire/generated/sections.typ"));
 }
 
 #[test]

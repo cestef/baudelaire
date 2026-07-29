@@ -101,6 +101,30 @@ pub fn canonical(path: impl AsRef<Path>) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// One spelling for a path whose file need not exist: the canonical form of its
+/// deepest existing ancestor, with the components below it appended as written.
+///
+/// [`canonical`] cannot serve here, because its fallback is the *whole* lexical
+/// path: a file that is not there yet keeps every symlinked ancestor and every
+/// `..` unresolved, and so spells differently from the very same file once it
+/// appears. Anything keyed on both spellings (the build cache records a link
+/// probe at a page that does not exist, then meets that page on the next build)
+/// silently fails to match itself. Climbing to the deepest ancestor that *does*
+/// resolve makes the two converge by construction, since the ancestor's
+/// canonical form is the same either way.
+pub fn resolved(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    if let Ok(canonical) = std::fs::canonicalize(path) {
+        return canonical;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => resolved(parent).join(name),
+        // Nothing left to climb to (a filesystem root, `..`, the empty path):
+        // lexical is the only answer there is.
+        _ => path.to_path_buf(),
+    }
+}
+
 /// Remove a file.
 pub fn remove_file(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
@@ -394,6 +418,31 @@ mod tests {
         assert_eq!(names, ["a.typ", "b.typ", "c.typ"]);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The property everything keyed on a path relies on: `resolved` answers
+    /// the same before and after the file exists, where `canonical` cannot,
+    /// because its fallback keeps the symlinked ancestor unresolved.
+    #[test]
+    #[cfg(unix)]
+    fn resolved_answers_the_same_before_and_after_a_file_appears() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = super::canonical(tmp.path());
+        super::create_dir_all(root.join("real")).unwrap();
+        std::os::unix::fs::symlink(root.join("real"), root.join("linked")).unwrap();
+        let path = root.join("linked/a.typ");
+
+        let before = super::resolved(&path);
+        super::write(root.join("real/a.typ"), "").unwrap();
+
+        assert_eq!(before, root.join("real/a.typ"));
+        assert_eq!(before, super::resolved(&path));
+        // Nothing to climb to: the lexical path is the only answer, as it is
+        // for `canonical`.
+        assert_eq!(
+            super::resolved("no/such/dir/a.typ"),
+            Path::new("no/such/dir/a.typ")
+        );
     }
 
     #[test]

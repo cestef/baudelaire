@@ -134,12 +134,6 @@ pub struct RenderInputs {
     pub srcsets: Hash,
     /// Present only when `embed` is on: a content hash of the inlined assets.
     pub embeds: Option<Hash>,
-    /// Present only when cards are on: a content hash of the card template.
-    ///
-    /// No page imports it, so typst's dependency tracking never sees it, and an
-    /// edited template would otherwise leave every cache-served page showing the
-    /// card the old one drew.
-    pub cards: Option<Hash>,
     /// A content hash of the generated `@baudelaire/*` Typst modules.
     ///
     /// A page *does* import these, but they exist only in memory, so they
@@ -399,14 +393,32 @@ impl Cache {
     }
 
     /// A path as the manifest stores it: relative to the project root when it
-    /// lies inside it (so a warm cache survives the site moving), unchanged
-    /// otherwise — the typst package cache is machine-global anyway.
+    /// lies under it (so a warm cache survives the site moving), absolute
+    /// otherwise — the typst package cache is machine-global anyway. Never
+    /// relative to the process's working directory, and never dependent on
+    /// whether the file exists yet: one path has exactly one key.
+    ///
+    /// Both halves of that contract are load-bearing for the *negative* link
+    /// dependency ([`Entry::links`]). A probe at a page that is not written yet
+    /// is stored through this function, and the page that later appears there is
+    /// stored through it too; if the two spell differently the lookup finds
+    /// nothing, reads the recorded `None` back as "still nothing here", and the
+    /// linking page stays a cache hit serving a link that is still broken. So
+    /// the canonicalization has to survive a missing file ([`crate::fs::resolved`],
+    /// not [`crate::fs::canonical`], which would keep a symlinked ancestor
+    /// unresolved), and a relative path is absolutized against the root rather
+    /// than stored as the caller happened to spell it.
     ///
     /// Takes `root` rather than `&self` so [`Cache::load`] can normalize the
     /// link map while building the very value that would own it, without a
     /// second spelling of the rule.
     fn portable(root: &Path, path: &Path) -> PathBuf {
-        let absolute = crate::fs::canonical(path);
+        let resolved = crate::fs::resolved(path);
+        let absolute = if resolved.is_absolute() {
+            resolved
+        } else {
+            root.join(resolved)
+        };
         absolute
             .strip_prefix(root)
             .unwrap_or(&absolute)
@@ -452,7 +464,6 @@ mod tests {
             assets: Hash::of_bytes(b""),
             srcsets: Hash::of_bytes(b""),
             embeds: None,
-            cards: None,
             modules: Hash::of_bytes(b""),
         };
         Cache::load(
@@ -481,6 +492,55 @@ mod tests {
 
         assert_ne!(real, listing);
         assert!(listing.starts_with(GENERATED), "{listing:?}");
+    }
+
+    /// The key spelling is a contract, not an accident of where the build ran:
+    /// root-relative under the root, absolute outside it, and the same for a
+    /// path before and after a file appears there.
+    ///
+    /// That last part is what the negative link dependency rides on. A probe
+    /// recorded at a page that does not exist yet must key exactly like the page
+    /// that later shows up there, or the recorded `None` keeps matching "nothing
+    /// sits here" and the linking page stays cached with a broken link. A
+    /// symlinked content subtree is what separates the two: a file that exists
+    /// canonicalizes to its real location, one that does not has nothing to
+    /// canonicalize.
+    #[test]
+    #[cfg(unix)]
+    fn portable_keys_do_not_depend_on_whether_the_file_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let cache = cache(tmp.path());
+        let root = crate::fs::canonical(tmp.path());
+
+        // Under the root: stored relative, and resolves back to the same file.
+        std::fs::write(root.join("layout.typ"), "").unwrap();
+        let inside = Cache::portable(&root, &root.join("layout.typ"));
+        assert_eq!(inside, Path::new("layout.typ"));
+        assert_eq!(cache.resolve(&inside), root.join("layout.typ"));
+
+        // Outside the root (the machine-global typst package cache is the real
+        // case): stored absolute, and resolves back to itself.
+        let external = crate::fs::canonical(outside.path()).join("theme.typ");
+        std::fs::write(&external, "").unwrap();
+        let key = Cache::portable(&root, &external);
+        assert_eq!(key, external);
+        assert_eq!(cache.resolve(&key), external);
+
+        // Not on disk yet: the spelling it will get once written, arrived at
+        // through the symlink the walker sees rather than the real location.
+        std::fs::create_dir_all(root.join("vault/posts")).unwrap();
+        std::fs::create_dir_all(root.join("content")).unwrap();
+        std::os::unix::fs::symlink(root.join("vault/posts"), root.join("content/posts")).unwrap();
+        let missing = root.join("content/posts/b.typ");
+        let before = Cache::portable(&root, &missing);
+        std::fs::write(root.join("vault/posts/b.typ"), "").unwrap();
+        assert_eq!(
+            before,
+            Cache::portable(&root, &missing),
+            "a path must key the same before and after the file appears"
+        );
+        assert_eq!(before, Path::new("vault/posts/b.typ"));
     }
 
     /// Manifest keys are relative to the project root, so a warm cache still

@@ -93,6 +93,40 @@ fn generated_listings_get_no_card() {
     assert!(!site.exists("public/cards/tags/rust.png"));
 }
 
+/// A card template is ordinary Typst and may import its own modules. The card
+/// is a second compile of the page, so what that compile read is part of the
+/// page's dependency set: editing a helper the template imports has to redraw
+/// the card. Tracking only the template file left every card-bearing page a
+/// cache hit, still serving the PNG the old helper drew.
+#[test]
+fn editing_a_module_the_card_template_imports_redraws_the_card() {
+    let site = site(r#"cards { template "card.typ"; width 800; height 418 }"#);
+    site.write("templates/palette.typ", "#let ink = rgb(\"#123456\")\n");
+    site.write(
+        "templates/card.typ",
+        "#import \"palette.typ\": ink\n\
+         #let card(data) = rect(width: 100%, height: 100%, fill: ink)\n",
+    );
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hello\",)\nbody",
+    );
+    site.stats();
+    let before = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card");
+
+    // Only the imported module changes; the template itself is untouched.
+    site.write("templates/palette.typ", "#let ink = rgb(\"#abcdef\")\n");
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (1, 0),
+        "the page draws a card from the edited module, so it cannot be reused"
+    );
+    let after = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card");
+    assert_ne!(before, after, "the card should have been redrawn");
+}
+
 /// Off unless asked for: rendering a page per card is the most expensive thing
 /// a build can do per page.
 #[test]

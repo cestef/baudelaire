@@ -17,10 +17,19 @@ use crate::codegen::{Str, Typst, Value};
 use crate::config::Config;
 use crate::content::{Data, Iso, Page};
 use crate::error::{BaudelaireErrorKind, Result, TypstSourceDiagnostic};
-use crate::world::{PageWorld, Project};
+use crate::graph::Deps;
+use crate::world::{PageWorld, Project, Tracked};
 
-/// The card renderer: a page in, PNG bytes out.
-pub(in crate::engine) struct Card;
+/// One page's rendered card: the image, and what drawing it read.
+pub(in crate::engine) struct Card {
+    /// The encoded PNG.
+    pub png: Vec<u8>,
+    /// The files this compile read: the template and everything it imports. The
+    /// page's own HTML compile touches none of them, so until the caller folds
+    /// these into the page's dependency set nothing ties a cached page to the
+    /// template that drew its card.
+    pub deps: Deps,
+}
 
 impl Card {
     /// Compile and rasterize one page's card.
@@ -28,15 +37,24 @@ impl Card {
         project: &Project,
         config: &Config,
         page: &Page,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Self> {
         let rooted = project.virtualize(&page.source)?;
         let source = Source::new(Self::id(&rooted), Self::source(config, page, &rooted)?);
-        let world = project.world_for(&source);
+        let world = Tracked::new(project.world_for(&source));
         let compiled = typst::compile::<PagedDocument>(&world);
         let document = compiled.output.map_err(|errs| {
-            BaudelaireErrorKind::TypstCompile(Self::diagnostics(errs, &source, &world))
+            BaudelaireErrorKind::TypstCompile(Self::diagnostics(errs, &source, world.inner()))
         })?;
-        Self::rasterize(&document, page)
+        Ok(Self {
+            png: Self::rasterize(&document, page)?,
+            // `main` here is the card's own fabricated id (see [`Card::id`]),
+            // not the page's, so the page source this module imports its
+            // frontmatter from survives `dependencies`' filter instead of being
+            // dropped as the compilation's own main. Harmless: a page's text is
+            // already what its cache entry is keyed on, and hashing it a second
+            // time as a dependency cannot disagree with that.
+            deps: project.dependencies(&world),
+        })
     }
 
     /// The first page as PNG, at one pixel per point (so the configured size in

@@ -63,8 +63,9 @@ pub struct LinkMap {
 }
 
 impl LinkMap {
-    /// Index every page by the canonical path of its source file. `root` is
-    /// the typst project root absolute references resolve against.
+    /// Index every page by the resolved path of its source file, the spelling
+    /// [`LinkMap::candidates`] probes with. `root` is the typst project root
+    /// absolute references resolve against.
     ///
     /// Generated listings are excluded: their source path is fabricated and no
     /// file sits there, so no author can write a `.typ` link against it. Said
@@ -75,7 +76,7 @@ impl LinkMap {
         let by_source = pages
             .iter()
             .filter(|p| !matches!(p.data, Data::Generated(_)))
-            .map(|p| (crate::fs::canonical(&p.source), p.permalink.clone()))
+            .map(|p| (crate::fs::resolved(&p.source), p.permalink.clone()))
             .collect();
         Self {
             by_source,
@@ -137,13 +138,21 @@ impl LinkMap {
     }
 
     /// The source paths a link to `target` probes, in order: the reader's own
-    /// language edition first, then the target as written. Canonical, so they
-    /// key into [`LinkMap::by_source`] and compare equal across builds.
+    /// language edition first, then the target as written. Spelled by
+    /// [`crate::fs::resolved`], the same rule [`LinkMap::new`] indexes by, so
+    /// they key into [`LinkMap::by_source`] and compare equal across builds.
+    ///
+    /// The spelling has to hold for a target that is *not* there, since a probe
+    /// resolving to nothing is recorded as a dependency ("no page sat here") and
+    /// revalidated against the page that later appears at that path.
+    /// [`crate::fs::canonical`] would spell those two differently the moment any
+    /// ancestor is a symlink, leaving the recorded absence matching forever and
+    /// the linking page cached with a broken link.
     fn candidates(target: &Path, lang: Option<&str>) -> impl Iterator<Item = PathBuf> {
         lang.and_then(|lang| Self::edition(target, lang))
             .into_iter()
             .chain(std::iter::once(target.to_path_buf()))
-            .map(crate::fs::canonical)
+            .map(crate::fs::resolved)
     }
 
     /// The `{stem}.{lang}.typ` sibling of `target`: the reader's own edition of

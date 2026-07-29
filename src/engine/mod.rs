@@ -272,7 +272,7 @@ impl Engine {
         // Built before the asset pipeline, whose `baudelaire:*` JS modules serve
         // the section trees it holds, and after it in [`Pass`], which renders
         // against what the pipeline produced.
-        let prepare = self.prepare(&planned.pages);
+        let prepare = self.prepare(&planned.pages)?;
         #[cfg(feature = "js")]
         let modules = Modules::new(self, &prepare);
         // the asset URL map feeds render-side fingerprint rewriting and folds
@@ -369,8 +369,14 @@ impl Engine {
     /// Built by the caller rather than by [`Pass`], because a build feeds these
     /// section trees to the JS bundler before the asset pipeline runs, and the
     /// asset pipeline is what a [`Pass`] renders against.
-    fn prepare<'a>(&'a self, pages: &'a [Page]) -> Prepare<'a> {
-        Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages)
+    ///
+    /// Writing the tree out is part of building the inputs, not a step a caller
+    /// can forget: a template's `#import` of it has to resolve on the very
+    /// first compile, including in a fresh checkout where nothing has run yet.
+    fn prepare<'a>(&'a self, pages: &'a [Page]) -> Result<Prepare<'a>> {
+        let prepare = Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages);
+        prepare.tree_source().write(self.project.root())?;
+        Ok(prepare)
     }
 
     /// Load the build cache, keyed on every site-wide input the per-page
@@ -391,16 +397,6 @@ impl Engine {
                 .html
                 .embed
                 .then(|| Hash::of_dir(&self.config.asset_staging())),
-            // `None` when cards are off *or* the template is missing; the
-            // second case fails the build on the first page it renders, so it
-            // never reaches a silent cache hit.
-            cards: self
-                .config
-                .generate
-                .cards
-                .active()
-                .then(|| Hash::of_file(&self.card_template()))
-                .flatten(),
             modules: self.project.modules(),
         };
         Cache::load(
@@ -524,15 +520,6 @@ impl Engine {
         })
     }
 
-    /// The card template's path on disk, for the fingerprint that ties every
-    /// page's card to the template that drew it.
-    fn card_template(&self) -> PathBuf {
-        self.config
-            .paths
-            .templates
-            .join(&self.config.generate.cards.template)
-    }
-
     /// Drop orphaned outputs from earlier builds (a removed page or taxonomy
     /// term, a renamed permalink) so `dist` never serves stale files.
     ///
@@ -583,7 +570,7 @@ impl Engine {
         let pass = Pass::new(
             self,
             &planned,
-            self.prepare(&planned.pages),
+            self.prepare(&planned.pages)?,
             AssetMap::default(),
             SrcSets::default(),
         );
@@ -753,6 +740,17 @@ impl Engine {
         // them under the same content-hash check as every other dependency,
         // instead of needing a mechanism of their own.
         deps.extend(std::mem::take(&mut rewrite.icons));
+        // The card is a second compile of this page, so the template it imports
+        // and everything that template pulls in are inputs to this page's output
+        // that its own compile never read. Folded in the same way, and for the
+        // same reason: without them an edited card helper changed no hash the
+        // cache checks, and every card-bearing page stayed a hit still serving
+        // the PNG the old helper drew.
+        #[cfg(feature = "cards")]
+        let card = card.map(|card| {
+            deps.extend(card.deps.files().iter().cloned());
+            card.png
+        });
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.

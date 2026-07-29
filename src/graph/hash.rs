@@ -174,11 +174,15 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 5: `Entry::deps` now covers what a page's social card compile read, and
+    /// the card template's hash left the manifest fingerprint with it. An entry
+    /// written before this records neither, so its card is validated against
+    /// nothing at all and would be served stale for the life of the cache.
     /// 4: `Outputs` carries the page's head/body fragments for the single-file
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 4;
+    const SCHEMA: u32 = 5;
 
     pub fn current() -> Self {
         Self {
