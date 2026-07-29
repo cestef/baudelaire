@@ -1,3 +1,0 @@
-# Baudelaire
-
-> Baudelaire is a Typst-native static site generator: write pages in Typst, get incremental builds, clean URLs, taxonomies, pagination, feeds, search, and an asset pipeline.
