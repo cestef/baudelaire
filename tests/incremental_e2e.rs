@@ -318,6 +318,134 @@ fn changing_a_slug_updates_links_from_cached_pages() {
 }
 
 #[test]
+fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
+    // The narrow half of the same claim: a's link to b is a dependency, so
+    // moving b rebuilds a. c links to nobody, so moving b must leave it cached.
+    // Keying the whole page-to-permalink map into the manifest fingerprint (as
+    // this once did) rebuilds c too, which makes publishing a post cost a cold
+    // build of the entire archive.
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[to b]",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\", slug: \"b\",)\nbeta",
+    );
+    site.write(
+        "content/posts/c.typ",
+        "#let frontmatter = (title: \"C\",)\ngamma",
+    );
+    site.stats();
+
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\", slug: \"bee\",)\nbeta",
+    );
+    let stats = site.stats();
+
+    // b recompiled (its own source changed) and a with it (its link moved); c
+    // is untouched by either.
+    assert_eq!((stats.pages, stats.cached), (3, 1));
+    assert!(
+        site.output("posts/a/index.html").contains("/posts/bee/"),
+        "a's link should follow b"
+    );
+}
+
+#[test]
+fn adding_an_unrelated_page_leaves_every_other_page_cached() {
+    // Publishing a post must not recompile the archive. Nothing here links to
+    // the new page, so nothing here depends on it.
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nalpha",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.stats();
+
+    site.write(
+        "content/posts/c.typ",
+        "#let frontmatter = (title: \"C\",)\ngamma",
+    );
+    let stats = site.stats();
+
+    assert_eq!((stats.pages, stats.cached), (3, 2));
+}
+
+#[test]
+fn a_link_to_a_page_that_does_not_exist_yet_resolves_when_it_appears() {
+    // The negative dependency. `a` linked to a page that was not there, so it
+    // recorded "nothing sits at b.typ". Writing b must invalidate a, or a stays
+    // cached and serves the unresolved link forever.
+    // A dangling link is a build error under the default `links { strict }`,
+    // and the whole point here is to build with one and fix it afterwards.
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[to b]",
+    );
+    site.stats();
+    assert!(
+        !site.output("posts/a/index.html").contains("/posts/b/"),
+        "b does not exist yet, so nothing should resolve"
+    );
+
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    let stats = site.stats();
+
+    assert_eq!(stats.cached, 0, "a must recompile now that b exists");
+    assert!(
+        site.output("posts/a/index.html").contains("/posts/b/"),
+        "a's link should resolve once b appears: {}",
+        site.output("posts/a/index.html")
+    );
+}
+
+#[test]
+fn a_link_that_falls_through_to_the_base_page_rebuilds_when_an_edition_appears() {
+    // On a multilingual site a link probes the reader's own edition first and
+    // falls through to the target as written. That fall-through is only correct
+    // while the edition is absent, so its absence has to be a dependency too:
+    // recording just the entry that matched leaves the French page pointing at
+    // the English one after `b.fr.typ` is written.
+    let site = Site::with(
+        "site \"T\"\nlang \"en\"\nlanguages {\n  fr { name \"Français\" }\n}\npaths { content \"content\"; dist \"public\" }\n",
+    );
+    site.write(
+        "content/posts/a.fr.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[vers b]",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.stats();
+
+    site.write(
+        "content/posts/b.fr.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta en francais",
+    );
+    site.stats();
+
+    let a = site.output("fr/posts/a/index.html");
+    assert!(
+        a.contains("/fr/posts/b/"),
+        "a's link should follow the French edition once it exists: {a}"
+    );
+}
+
+#[test]
 fn editing_an_embedded_asset_invalidates_the_page() {
     // With `embed`, a page inlines asset bytes as a `data:` URI at render time:
     // bytes typst never reads, so the per-page tracker is blind to them. Editing

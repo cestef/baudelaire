@@ -39,9 +39,9 @@ use crate::error::warning::FeatureMissing;
 use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{
-    Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, RenderInputs, Root, Roots,
+    Analyzer, Cache, Deps, Fingerprint, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
 };
-use crate::render::{AssetMap, Fragments, Renderer, SrcSets};
+use crate::render::{AssetMap, Fragments, LinkDeps, Renderer, SrcSets};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
@@ -382,7 +382,6 @@ impl Engine {
         // never reads them).
         let render = RenderInputs {
             assets: pass.renderer.assets().fingerprint(),
-            links: pass.renderer.links(),
             srcsets: pass.renderer.srcsets(),
             // hash the *processed* asset tree, what Embed actually inlines: a
             // bundle's bytes can change through imports outside the source
@@ -408,6 +407,7 @@ impl Engine {
             &self.config,
             &render,
             planned.tracked.clone(),
+            pass.renderer.links(),
             self.project.root(),
             ui,
         )
@@ -432,14 +432,7 @@ impl Engine {
             )
         })?;
         for r in &rendered {
-            cache.record(
-                r.page,
-                r.fingerprint,
-                &r.html,
-                &r.deps,
-                &r.reads,
-                &r.outputs,
-            );
+            cache.record(r.into());
         }
         for (page, _, _) in &cached {
             ui.page(self.relative(page), PageStatus::Cached);
@@ -777,6 +770,7 @@ impl Engine {
             html,
             deps,
             reads,
+            links: rewrite.links,
             outputs: Outputs {
                 images: rewrite.images,
                 broken: rewrite.broken,
@@ -980,6 +974,10 @@ struct Rendered<'a> {
     html: String,
     deps: Deps,
     reads: Reads,
+    /// The permalinks this page's links resolved against: a render-side
+    /// dependency the compile itself never sees, since typst does not read a
+    /// link target's source.
+    links: LinkDeps,
     /// The render pass's own results (externalized images, broken links), the
     /// same shape the cache stores and replays for a hit.
     outputs: Outputs,
@@ -990,6 +988,22 @@ struct Rendered<'a> {
     #[cfg(feature = "cards")]
     card: Option<Vec<u8>>,
     warnings: Vec<TypstSourceDiagnostic>,
+}
+
+/// The cache stores the subset of a compile that survives it. The rest
+/// (outbound links, the card, warnings) is consumed by this build alone.
+impl<'a> From<&'a Rendered<'a>> for Recorded<'a> {
+    fn from(rendered: &'a Rendered<'a>) -> Self {
+        Self {
+            page: rendered.page,
+            fingerprint: rendered.fingerprint,
+            html: &rendered.html,
+            deps: &rendered.deps,
+            reads: &rendered.reads,
+            links: &rendered.links,
+            outputs: &rendered.outputs,
+        }
+    }
 }
 
 #[cfg(test)]

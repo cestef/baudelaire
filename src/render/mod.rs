@@ -17,7 +17,7 @@ mod transform;
 
 pub use asset::AssetMap;
 pub use fragment::Fragments;
-pub use links::LinkMap;
+pub use links::{LinkDeps, LinkMap};
 pub use srcset::SrcSets;
 pub use transform::ImageRef;
 
@@ -68,6 +68,10 @@ pub struct Renderer {
 pub struct Rewrite {
     /// Raw targets of internal `.typ` links that point at a non-existent page.
     pub broken: Vec<String>,
+    /// The link-map entries this page's links resolved against, its dependency
+    /// on the site's URL layout. Keyed by canonical source path; the cache
+    /// stores them the way it stores every other path.
+    pub links: LinkDeps,
     /// Images lifted out of the DOM, for the engine to copy into `dist`.
     pub images: Vec<ImageRef>,
     /// Outbound `http(s)` link targets the page carries, collected only when
@@ -97,9 +101,10 @@ impl Renderer {
         }
     }
 
-    /// Fingerprint of the page-to-permalink map, for the build cache.
-    pub fn links(&self) -> crate::graph::Hash {
-        self.links.fingerprint()
+    /// The page-to-permalink map, for the build cache to revalidate each page's
+    /// recorded [`LinkDeps`] against.
+    pub fn links(&self) -> &LinkMap {
+        &self.links
     }
 
     /// The processed-asset URL map (for the build-cache fingerprint).

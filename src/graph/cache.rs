@@ -28,7 +28,7 @@ use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
-use crate::render::{Fragments, ImageRef};
+use crate::render::{Fragments, ImageRef, LinkDeps, LinkMap};
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
@@ -60,6 +60,16 @@ struct Entry {
     /// pre-tracking manifests, hence `default`.
     #[serde(default)]
     meta: BTreeMap<String, Option<Hash>>,
+    /// The permalinks this page's links resolved against, keyed by the target's
+    /// source path, so a page rebuilds when a page it links to moves and stays
+    /// cached when an unrelated one does.
+    ///
+    /// `None` records a link that resolved to no page, so a page later
+    /// appearing at that path still invalidates; dropping it would leave a
+    /// broken link permanently broken in cached markup. Absent from
+    /// pre-tracking manifests, hence `default`.
+    #[serde(default)]
+    links: LinkDeps,
     /// Content hash of the rendered HTML; locates its blob in the object store.
     blob: Hash,
     /// What the render pass produced besides the markup, replayed on a hit.
@@ -97,24 +107,28 @@ pub struct Outputs {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Manifest {
     /// Fingerprint of the site-wide inputs that produced these entries (config,
-    /// asset map, link map, embedded assets). Any change invalidates the whole
-    /// manifest, since it can alter every permalink or embedded input. Build metadata
-    /// is *not* here: it's tracked per page via [`Entry::meta`].
+    /// asset map, embedded assets). Any change invalidates the whole manifest,
+    /// since it can alter every permalink or embedded input. Two things are
+    /// deliberately *not* here, because each is tracked per page and so
+    /// invalidates only the pages it reaches: build metadata, via
+    /// [`Entry::meta`], and the page-to-permalink map, via [`Entry::links`].
     config: Option<Hash>,
     /// Entries keyed by page source path.
     pages: BTreeMap<PathBuf, Entry>,
 }
 
 /// The render-side inputs folded into the cache fingerprint alongside the
-/// config: the processed-asset URL map, the page-to-permalink map, and the
-/// embedded-asset content hash. None are visible to the per-page
-/// dependency tracker (asset renames and link resolution happen in the render
-/// pass; embeds inline bytes typst never reads), so they are fingerprinted
-/// whole: any change invalidates every page.
+/// config: the processed-asset URL map and the embedded-asset content hash.
+/// None are visible to the per-page dependency tracker (asset renames happen in
+/// the render pass; embeds inline bytes typst never reads), so they are
+/// fingerprinted whole: any change invalidates every page.
+///
+/// Link resolution is render-side too, but is *not* here: it is tracked per
+/// page as [`Entry::links`], so moving one page rebuilds the pages that link to
+/// it instead of the site.
 #[derive(std::hash::Hash)]
 pub struct RenderInputs {
     pub assets: Hash,
-    pub links: Hash,
     /// The responsive width-variant manifest: a page's `srcset` markup changes
     /// when its images' variants do.
     pub srcsets: Hash,
@@ -133,6 +147,27 @@ pub struct RenderInputs {
     /// nothing volatile by construction, so hashing them whole costs a full
     /// rebuild only when baudelaire or the site's identity changes.
     pub modules: Hash,
+}
+
+/// One freshly compiled page as [`Cache::record`] takes it: the text it was
+/// built from, everything it depended on while building, and what came out.
+///
+/// A parameter object rather than a row of positional arguments, so a new kind
+/// of dependency is one field here and one line at the call site, instead of a
+/// wider signature every caller has to re-spell.
+pub struct Recorded<'a> {
+    pub page: &'a Page,
+    /// Hash of the exact text typst compiled.
+    pub fingerprint: Hash,
+    pub html: &'a str,
+    /// The files the compile read.
+    pub deps: &'a Deps,
+    /// The injected values the page read.
+    pub reads: &'a Reads,
+    /// The permalinks the page's links resolved against.
+    pub links: &'a LinkDeps,
+    /// What the render pass produced besides the markup.
+    pub outputs: &'a Outputs,
 }
 
 /// The build cache. Loads the previous manifest, answers reuse queries, and
@@ -154,6 +189,9 @@ pub struct Cache {
     /// digest of a page's recorded value reads. Owned so the cache is
     /// self-contained across the build.
     roots: Vec<(String, Value)>,
+    /// This build's page-to-permalink map, keyed the way the manifest stores
+    /// paths, to revalidate each page's recorded [`Entry::links`].
+    links: BTreeMap<PathBuf, String>,
     /// The content-addressed store holding every page's rendered markup.
     objects: Objects,
 }
@@ -165,16 +203,18 @@ impl Cache {
     /// one cold build rather than poisoning the next.
     ///
     /// The manifest fingerprint mixes the config, the renderer's own identity,
-    /// the asset map, the link map,
-    /// and (when `embed` is on) the embedded asset contents: the site-wide
-    /// inputs that can alter any page. Build metadata (a new commit or day) is
-    /// deliberately *not* here: it's tracked per page against `roots`, so it
-    /// rebuilds only the pages that display the value that changed. Only the
-    /// small manifest is read here; HTML blobs are fetched lazily on a hit.
+    /// the asset map, and (when `embed` is on) the embedded asset contents: the
+    /// site-wide inputs that can alter any page. Two things are deliberately
+    /// *not* in it, because both are tracked per page instead and so rebuild
+    /// only the pages they actually affect: build metadata (a new commit or
+    /// day), validated against `roots`, and the page-to-permalink map,
+    /// validated against `links`. Only the small manifest is read here; HTML
+    /// blobs are fetched lazily on a hit.
     pub fn load(
         config: &Config,
         render: &RenderInputs,
         roots: Vec<(String, Value)>,
+        links: &LinkMap,
         root: &Path,
         ui: &Ui,
     ) -> Result<Self> {
@@ -198,10 +238,10 @@ impl Cache {
             Err(_) => Manifest::default(),
         };
         let fingerprint = Hash::of(&(config, render, Renderer::current()));
+        let root = crate::fs::canonical(root);
         Ok(Self {
             objects: Objects::new(&dir),
             dir,
-            root: crate::fs::canonical(root),
             enabled: config.cache.incremental,
             next: Manifest {
                 config: Some(fingerprint),
@@ -211,6 +251,11 @@ impl Cache {
             prev,
             digests: FileDigests::default(),
             roots,
+            links: links
+                .entries()
+                .map(|(source, permalink)| (Self::portable(&root, source), permalink.to_owned()))
+                .collect(),
+            root,
         })
     }
 
@@ -254,6 +299,16 @@ impl Cache {
         {
             return None;
         }
+        // every page this one linked to must still sit at the same URL, and
+        // every link that resolved to nothing must still resolve to nothing, so
+        // a page that moved rebuilds its linkers and no one else.
+        if !entry
+            .links
+            .iter()
+            .all(|(path, permalink)| self.links.get(path) == permalink.as_ref())
+        {
+            return None;
+        }
         let entry = entry.clone();
         let html = self.objects.read(&entry.blob)?;
         let outputs = entry.outputs.clone();
@@ -261,23 +316,28 @@ impl Cache {
         Some((html, outputs))
     }
 
-    /// Record a freshly compiled page against its content fingerprint, its
-    /// dependency hashes, and the digests of the injected values it read,
-    /// staging its HTML for the object store.
-    pub fn record(
-        &mut self,
-        page: &Page,
-        fingerprint: Hash,
-        html: &str,
-        deps: &Deps,
-        reads: &Reads,
-        outputs: &Outputs,
-    ) {
+    /// Record a freshly compiled page: its content fingerprint, its dependency
+    /// hashes, the digests of the injected values it read, and the permalinks
+    /// its links resolved against, staging its HTML for the object store.
+    pub fn record(&mut self, compiled: Recorded<'_>) {
+        let Recorded {
+            page,
+            fingerprint,
+            html,
+            deps,
+            reads,
+            links,
+            outputs,
+        } = compiled;
         let meta = self.roots().digests(reads);
         let deps = deps
             .files()
             .iter()
-            .map(|p| (self.portable(p), self.digests.of(p)))
+            .map(|p| (Self::portable(&self.root, p), self.digests.of(p)))
+            .collect();
+        let links = links
+            .iter()
+            .map(|(path, permalink)| (Self::portable(&self.root, path), permalink.clone()))
             .collect();
         let blob = Hash::of_bytes(html.as_bytes());
         self.next.pages.insert(
@@ -286,6 +346,7 @@ impl Cache {
                 hash: fingerprint,
                 deps,
                 meta,
+                links,
                 blob,
                 outputs: outputs.clone(),
             },
@@ -330,7 +391,7 @@ impl Cache {
     /// at the same path would share one entry with the listing, overwrite it
     /// every build, and leave both missing forever.
     fn key(&self, page: &Page) -> PathBuf {
-        let path = self.portable(&page.source);
+        let path = Self::portable(&self.root, &page.source);
         match page.data {
             Data::Generated(_) => Path::new(GENERATED).join(path),
             Data::Export | Data::Empty => path,
@@ -340,10 +401,14 @@ impl Cache {
     /// A path as the manifest stores it: relative to the project root when it
     /// lies inside it (so a warm cache survives the site moving), unchanged
     /// otherwise — the typst package cache is machine-global anyway.
-    fn portable(&self, path: &Path) -> PathBuf {
+    ///
+    /// Takes `root` rather than `&self` so [`Cache::load`] can normalize the
+    /// link map while building the very value that would own it, without a
+    /// second spelling of the rule.
+    fn portable(root: &Path, path: &Path) -> PathBuf {
         let absolute = crate::fs::canonical(path);
         absolute
-            .strip_prefix(&self.root)
+            .strip_prefix(root)
             .unwrap_or(&absolute)
             .to_path_buf()
     }
@@ -356,7 +421,7 @@ impl Cache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cache, GENERATED, RenderInputs};
+    use super::{Cache, GENERATED, LinkMap, RenderInputs};
     use crate::config::Config;
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use crate::graph::Hash;
@@ -385,13 +450,20 @@ mod tests {
         config.cache.dir = root.join(".cache");
         let render = RenderInputs {
             assets: Hash::of_bytes(b""),
-            links: Hash::of_bytes(b""),
             srcsets: Hash::of_bytes(b""),
             embeds: None,
             cards: None,
             modules: Hash::of_bytes(b""),
         };
-        Cache::load(&config, &render, Vec::new(), root, &Ui::new(Level::Silent)).expect("cache")
+        Cache::load(
+            &config,
+            &render,
+            Vec::new(),
+            &LinkMap::default(),
+            root,
+            &Ui::new(Level::Silent),
+        )
+        .expect("cache")
     }
 
     /// A generated listing fabricates a source path that never exists on disk.

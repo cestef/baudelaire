@@ -8,8 +8,9 @@ use crate::render::transform::{Cx, DocumentExt, ElementExt, Transform};
 
 /// The core [`Transform`]: resolves internal `.typ` source-path links to
 /// permalinks. Always runs (it is URL resolution, not an optional pass) and
-/// records broken internal links in the context for link checking. Operates on
-/// the typed DOM (never on the serialized string) so it can't corrupt markup.
+/// records, in the context, both the broken internal links (for link checking)
+/// and every map entry it consulted (for the build cache). Operates on the
+/// typed DOM (never on the serialized string) so it can't corrupt markup.
 pub(super) struct Links;
 
 impl Transform for Links {
@@ -25,14 +26,18 @@ impl Transform for Links {
             found,
             ..
         } = cx;
-        let broken = &mut found.broken;
         let lang = config.multilingual().then_some(page.lang.as_str());
         doc.walk(|element| {
             element.rewrite(&[attr::href, attr::src], |value| {
-                match links.classify(value, &page.source, lang) {
+                let resolution = links.classify(value, &page.source, lang);
+                // Every probe becomes a dependency, whether or not it matched,
+                // so the page rebuilds when the URL layout it resolved against
+                // changes underneath it.
+                found.links.extend(resolution.probed);
+                match resolution.link {
                     Link::Resolved(url) => Some(url),
                     Link::Broken => {
-                        broken.push(value.to_owned());
+                        found.broken.push(value.to_owned());
                         None
                     }
                     Link::Passthrough => None,
