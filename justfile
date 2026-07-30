@@ -43,6 +43,16 @@ test features="":
 docs:
     cargo run -q -- build
 
+# A live demo site per shipped theme, into `docs/public/themes/<name>/`, so the
+# docs site can link a real example of each.
+#
+# The loop lives in the script because the docs workflow runs it too, and CI has
+# no `just`. Depends on `docs` and must run after it: the docs site sets
+# `prune`, which deletes everything under its `dist` that its own build did not
+# produce, previews included.
+previews: docs
+    themes/demo/build.sh
+
 # Build and install the binary from this checkout (contributors).
 install:
     cargo install --path .

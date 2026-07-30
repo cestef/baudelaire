@@ -68,13 +68,17 @@ The rule is the same for all four, and it is the only rule: *your file wins*.
 The repository ships three, in `themes/`, each a complete look with templates,
 assets, and config defaults:
 
-/ #raw("albatros"): a centred blog. System sans at a comfortable measure, light
-  and dark with a toggle, tag chips, reading time.
-/ #raw("spleen"): a terminal. Monospace throughout, a prompt for a masthead,
-  posts listed like a directory, dark first, and no JavaScript at all.
-/ #raw("voyage"): a multilingual journal. Serif headings, a language switcher
-  built from each page's own editions, every label read from the site's string
-  table.
+/ #link("/themes/albatros/")[#raw("albatros")]: a centred blog. System sans at a
+  comfortable measure, light and dark with a toggle, tag chips, reading time.
+/ #link("/themes/spleen/")[#raw("spleen")]: a terminal. Monospace throughout, a
+  prompt for a masthead, posts listed like a directory, dark first, and no
+  JavaScript at all.
+/ #link("/themes/voyage/")[#raw("voyage")]: a multilingual journal. Serif
+  headings, a language switcher built from each page's own editions, every label
+  read from the site's string table.
+
+Each name links a live demo. The three are the same site built three times, so
+whatever differs between them is the theme and nothing else.
 
 Copy one into your project and name it, or install it into your package
 directory and name it as `@local/albatros:0.1.0`. None of them hardcode a menu:

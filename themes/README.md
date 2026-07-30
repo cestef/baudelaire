@@ -7,9 +7,13 @@ every line of Typst and CSS here is ours and carries no upstream licence.
 
 | Theme | Shape | Needs JS |
 |---|---|---|
-| [`albatros`](albatros) | Centred blog. System sans, generous measure, light/dark toggle, tags, reading time. | one 20-line module for the toggle |
-| [`spleen`](spleen) | Terminal. Monospace throughout, boxed header, prompt-styled nav, dark-first. | no |
-| [`voyage`](voyage) | Multilingual journal. Serif headings, language switcher, section nav, UI strings from config. | one 20-line module for the toggle |
+| [`albatros`](albatros) ([demo](https://baudelaire.cstef.dev/themes/albatros/)) | Centred blog. System sans, generous measure, light/dark toggle, tags, reading time. | one 20-line module for the toggle |
+| [`spleen`](spleen) ([demo](https://baudelaire.cstef.dev/themes/spleen/)) | Terminal. Monospace throughout, boxed header, prompt-styled nav, dark-first. | no |
+| [`voyage`](voyage) ([demo](https://baudelaire.cstef.dev/themes/voyage/)) | Multilingual journal. Serif headings, language switcher, section nav, UI strings from config. | one 20-line module for the toggle |
+
+The demos are one site, [`demo/`](demo), built once per theme by
+[`demo/build.sh`](demo/build.sh), which the docs workflow runs on every deploy.
+Locally: `just previews`.
 
 ## Using one from this repository
 

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "themes/**"
       - "src/**"
       - "install.sh"
       - "Cargo.toml"
@@ -52,6 +53,13 @@ jobs:
       - name: build docs site
         working-directory: docs
         run: ../target/debug/baudelaire build
+
+      # After the docs build, never before: that site sets `prune`, which
+      # deletes everything under its `dist` that its own build did not produce.
+      - name: build theme previews
+        run: themes/demo/build.sh
+        env:
+          BAUDELAIRE: ./target/debug/baudelaire
 
       - name: deploy to cloudflare pages
         uses: cestef/actions/wrangler@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
