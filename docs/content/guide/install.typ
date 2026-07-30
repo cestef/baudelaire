@@ -21,6 +21,11 @@ less install.sh          # read before you run
 sh install.sh
 ```
 
+The checksum it verifies is the `sha256` published alongside the tarball, from
+the same origin as the tarball itself. That catches a corrupted or truncated
+download; it is not a signature, and it is not evidence about who built the
+release.
+
 Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release. On
 Linux the installer picks the `musl` build on a musl host and the `gnu` one
 otherwise; `LIBC=musl` forces it.
