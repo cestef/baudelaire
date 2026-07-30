@@ -1304,6 +1304,49 @@ pub struct S3Config {
     pub prefix: String,
     /// Delete remote objects under `prefix` that the build no longer produces.
     pub delete: bool,
+    /// `Cache-Control` headers to set on upload.
+    pub cache: CacheControl,
+}
+
+/// The `Cache-Control` an uploaded object is served with, and the reason
+/// `assets { fingerprint }` is worth turning on.
+///
+/// Fingerprinting renames a file after its own content, which makes it safe to
+/// cache forever: a change produces a different name, so a stale copy is never
+/// the one asked for. A raw bucket sets no `Cache-Control` at all, though, and
+/// Netlify/Vercel/Cloudflare Pages only guess. Without this the whole point of
+/// hashing a filename is thrown away at the last step.
+///
+/// Enabled by the presence of a `cache { }` block; both values have defaults, so
+/// a bare `cache` is the sensible policy.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct CacheControl {
+    /// Whether to send `Cache-Control` at all.
+    pub enabled: bool,
+    /// For content-addressed files: everything under the asset prefix, once
+    /// `assets { fingerprint }` is on. Cached indefinitely.
+    pub immutable: String,
+    /// For everything else: pages, feeds, `robots.txt`, and any asset whose name
+    /// is not a hash. Revalidated, because these keep their names across builds.
+    pub default: String,
+}
+
+impl CacheControl {
+    /// The header value for `key`, or `None` when no policy is configured.
+    ///
+    /// `hashed` says whether this build content-addresses its assets; without
+    /// it, a file under the asset prefix keeps its authored name across builds
+    /// and is exactly as mutable as a page.
+    pub fn header(&self, key: &str, prefix: &str, hashed: bool) -> Option<&str> {
+        if !self.enabled {
+            return None;
+        }
+        let immutable = hashed && key.trim_start_matches('/').starts_with(prefix);
+        Some(match immutable {
+            true => &self.immutable,
+            false => &self.default,
+        })
+    }
 }
 
 /// A host reachable over SSH. Files are reconciled with the remote directory

@@ -66,7 +66,7 @@ impl Listed {
 #[cfg(test)]
 use crate::ui::Level;
 
-use self::s3::S3;
+use self::s3::{Fingerprinted, S3};
 #[cfg(feature = "ssh")]
 use self::ssh::Ssh;
 
@@ -214,7 +214,13 @@ pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
 fn configured(config: &Config) -> Vec<Box<dyn Backend<Dist>>> {
     let mut out: Vec<Box<dyn Backend<Dist>>> = Vec::new();
     if let Some(s3) = &config.deploy.s3 {
-        out.push(Box::new(S3::new(s3.clone())));
+        out.push(Box::new(S3::new(
+            s3.clone(),
+            Fingerprinted {
+                prefix: config.asset_name().to_owned(),
+                hashed: config.assets.fingerprint,
+            },
+        )));
     }
     #[cfg(feature = "ssh")]
     if let Some(ssh) = &config.deploy.ssh {

@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use super::digest::Digest;
 use super::sigv4::{DATE_HEADER, Request, Signer};
 use super::{Backend, Digests, Dist, Listed, Store};
-use crate::config::S3Config;
+use crate::config::{CacheControl, S3Config};
 use crate::error::deploy::Method;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
@@ -28,11 +28,23 @@ use crate::ui::Ui;
 /// built per run once credentials are in hand.
 pub struct S3 {
     config: S3Config,
+    /// How to tell a content-addressed upload from an ordinary one: the asset
+    /// URL prefix, and whether this build hashes the names under it. Both come
+    /// from the *build's* config, not the destination's, because "may this be
+    /// cached forever" is a question about the file, not about the bucket.
+    assets: Fingerprinted,
+}
+
+/// Whether a build content-addresses its assets, and where they live.
+#[derive(Debug, Clone)]
+pub struct Fingerprinted {
+    pub prefix: String,
+    pub hashed: bool,
 }
 
 impl S3 {
-    pub fn new(config: S3Config) -> Self {
-        Self { config }
+    pub fn new(config: S3Config, assets: Fingerprinted) -> Self {
+        Self { config, assets }
     }
 }
 
@@ -47,7 +59,13 @@ impl Backend<Dist> for S3 {
         // and the interactive prompt all work.
         let access_key = Self::credential(ACCESS_KEY_ENV)?;
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
-        let bucket = Bucket::new(&self.config, access_key, secret_key, Self::session_token());
+        let bucket = Bucket::new(
+            &self.config,
+            self.assets.clone(),
+            access_key,
+            secret_key,
+            Self::session_token(),
+        );
         dist.reconcile(&bucket, self.config.delete, opts, ui)
     }
 }
@@ -106,6 +124,11 @@ pub struct Bucket {
     /// The leading path every signing URI carries: empty for virtual-hosted,
     /// `/bucket` for path-style.
     root: String,
+    /// The `Cache-Control` policy, and how to tell which side of it a key falls
+    /// on. Carried here because the header is set at upload, one object at a
+    /// time.
+    cache: CacheControl,
+    assets: Fingerprinted,
 }
 
 impl Bucket {
@@ -114,6 +137,7 @@ impl Bucket {
     /// MinIO); its absence targets AWS virtual-hosted addressing.
     pub fn new(
         config: &S3Config,
+        assets: Fingerprinted,
         access_key: String,
         secret_key: String,
         token: Option<String>,
@@ -146,6 +170,8 @@ impl Bucket {
             authority,
             host,
             root,
+            cache: config.cache.clone(),
+            assets,
         }
     }
 
@@ -233,7 +259,7 @@ impl Bucket {
         method: Method,
         uri: &str,
         body: &[u8],
-        content_type: Option<&str>,
+        headers: &[(&str, &str)],
     ) -> Result<()> {
         let url = self.url(uri);
         let auth = self.authorize(method, uri, "", body);
@@ -241,8 +267,8 @@ impl Bucket {
             self.signed(self.agent.delete(&url), &auth).call()
         } else {
             let mut request = self.signed(self.agent.put(&url), &auth);
-            if let Some(content_type) = content_type {
-                request = request.header("Content-Type", content_type);
+            for (name, value) in headers {
+                request = request.header(*name, *value);
             }
             request.send(body)
         }
@@ -334,16 +360,23 @@ impl Store for Bucket {
         self.objects()
     }
 
-    /// Upload `body` to `key` (a relative dist path), setting its content type
-    /// from the extension.
+    /// Upload `body` to `key` (a relative dist path), with its content type from
+    /// the extension and its cache policy from whether the name is a hash.
     fn upload(&self, key: &str, body: &[u8]) -> Result<()> {
         let content_type = Mime::of(key).header();
-        self.write(Method::Put, &self.object(key), body, Some(&content_type))
+        let mut headers = vec![("Content-Type", content_type.as_str())];
+        if let Some(cache) = self
+            .cache
+            .header(key, &self.assets.prefix, self.assets.hashed)
+        {
+            headers.push(("Cache-Control", cache));
+        }
+        self.write(Method::Put, &self.object(key), body, &headers)
     }
 
     /// Delete the object at `key` (a relative dist path).
     fn delete(&self, key: &str) -> Result<()> {
-        self.write(Method::Delete, &self.object(key), &[], None)
+        self.write(Method::Delete, &self.object(key), &[], &[])
     }
 
     fn target(&self) -> String {
@@ -477,16 +510,59 @@ mod tests {
             region: "us-east-1".into(),
             prefix: prefix.into(),
             delete: true,
+            cache: CacheControl::default(),
+        }
+    }
+
+    /// A build that content-addresses its assets under `/assets`, the shape the
+    /// cache policy is decided against.
+    fn fingerprinted() -> Fingerprinted {
+        Fingerprinted {
+            prefix: "assets".into(),
+            hashed: true,
         }
     }
 
     fn bucket(endpoint: Option<&str>, prefix: &str) -> Bucket {
         Bucket::new(
             &config(endpoint, prefix),
+            fingerprinted(),
             "AKID".into(),
             "secret".into(),
             None,
         )
+    }
+
+    /// A hashed name can be cached forever, because a change produces a
+    /// different name; everything else keeps its name across builds and has to
+    /// be revalidated. Without a `cache` block, nothing is sent at all.
+    #[test]
+    fn only_content_addressed_keys_are_immutable() {
+        let mut policy = CacheControl::default();
+        assert_eq!(policy.header("assets/app.abc.css", "assets", true), None);
+
+        policy.enabled = true;
+        policy.immutable = "immutable".into();
+        policy.default = "revalidate".into();
+        assert_eq!(
+            policy.header("assets/app.abc.css", "assets", true),
+            Some("immutable")
+        );
+        assert_eq!(
+            policy.header("index.html", "assets", true),
+            Some("revalidate")
+        );
+        // A leading slash is the same key.
+        assert_eq!(
+            policy.header("/assets/app.abc.css", "assets", true),
+            Some("immutable")
+        );
+        // Without fingerprinting an asset keeps its authored name across
+        // builds, so it is exactly as mutable as a page.
+        assert_eq!(
+            policy.header("assets/app.css", "assets", false),
+            Some("revalidate")
+        );
     }
 
     #[test]

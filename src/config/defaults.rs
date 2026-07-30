@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
+    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig,
     HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
     NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
     Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
@@ -266,6 +267,7 @@ impl Default for S3Config {
             prefix: String::new(),
             // reconcile: remove what the build no longer produces.
             delete: true,
+            cache: CacheControl::default(),
         }
     }
 }
@@ -343,4 +345,12 @@ impl From<String> for TaxonomyConfig {
             template: None,
         }
     }
+}
+
+/// The conventional cache policy, applied when `deploy { s3 { cache } }` is
+/// present. A year is the maximum `max-age` any cache honours, and `immutable`
+/// stops a reload from revalidating a file that cannot have changed.
+impl CacheControl {
+    pub(super) const IMMUTABLE: &'static str = "public, max-age=31536000, immutable";
+    pub(super) const DEFAULT: &'static str = "public, max-age=0, must-revalidate";
 }

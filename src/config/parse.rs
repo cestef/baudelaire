@@ -13,7 +13,7 @@ use crate::config::node::NodeExt;
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config,
+    AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
     ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
     NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
@@ -81,6 +81,7 @@ impl Section for Config {
             c.prune = n.boolean(t, 0)?;
             Ok(())
         }),
+        ("cache", |c, n, t| c.cache.fill(n, t)),
         ("typst", |c, n, t| c.typst.fill(n, t)),
         ("client", |c, n, t| {
             c.client = n.table(t)?;
@@ -751,6 +752,34 @@ impl Section for S3Config {
         }),
         ("delete", |c, n, t| {
             c.delete = n.boolean(t, 0)?;
+            Ok(())
+        }),
+    ]);
+}
+
+/// The `cache { .. }` block inside an S3 destination: presence turns
+/// `Cache-Control` on, and both values default to the conventional policy.
+impl Section for CacheControl {
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        // Filled here rather than in `Default`, so an untouched `S3Config`
+        // carries no policy at all and the two states stay distinguishable.
+        if self.immutable.is_empty() {
+            self.immutable = Self::IMMUTABLE.to_owned();
+        }
+        if self.default.is_empty() {
+            self.default = Self::DEFAULT.to_owned();
+        }
+        true
+    }
+
+    const RULES: Block<Self> = Block(&[
+        ("immutable", |c, n, t| {
+            c.immutable = n.string(t, 0)?;
+            Ok(())
+        }),
+        ("default", |c, n, t| {
+            c.default = n.string(t, 0)?;
             Ok(())
         }),
     ]);

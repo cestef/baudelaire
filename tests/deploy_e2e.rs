@@ -13,7 +13,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use baudelaire::config::{Config, S3Config};
+use baudelaire::config::{CacheControl, Config, S3Config};
 use baudelaire::deploy;
 use baudelaire::error::Result as BResult;
 use baudelaire::remote::{Interaction, Options};
@@ -57,12 +57,18 @@ fn set_aws_creds() {
 fn s3_config(site: &Site, port: u16) -> Config {
     let mut config = Config::default();
     config.paths.dist = site.path("public");
+    config.assets.fingerprint = true;
     config.deploy.s3 = Some(S3Config {
         bucket: "bucket".into(),
         endpoint: Some(format!("http://127.0.0.1:{port}")),
         region: "us-east-1".into(),
         prefix: String::new(),
         delete: true,
+        cache: CacheControl {
+            enabled: true,
+            immutable: "public, max-age=31536000, immutable".into(),
+            default: "public, max-age=0, must-revalidate".into(),
+        },
     });
     config
 }
@@ -88,19 +94,27 @@ fn serve_s3(mut stream: TcpStream, store: &Store, log: &Log) {
     let path = parts.next().unwrap_or("").to_owned();
 
     let mut length = 0usize;
+    let mut cache_control: Option<String> = None;
     loop {
         let mut header = String::new();
         reader.read_line(&mut header).unwrap();
         if header.trim().is_empty() {
             break;
         }
-        if let Some(value) = header.to_ascii_lowercase().strip_prefix("content-length:") {
+        let lower = header.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("content-length:") {
             length = value.trim().parse().unwrap_or(0);
+        }
+        if let Some(value) = lower.strip_prefix("cache-control:") {
+            cache_control = Some(value.trim().to_owned());
         }
     }
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).unwrap();
-    log.lock().unwrap().push(format!("{method} {path}"));
+    log.lock().unwrap().push(match cache_control {
+        Some(cache) => format!("{method} {path} [{cache}]"),
+        None => format!("{method} {path}"),
+    });
 
     let body = if path.contains("list-type") {
         listing(&store.lock().unwrap())
@@ -152,6 +166,9 @@ fn listing(store: &BTreeMap<String, Vec<u8>>) -> String {
 fn s3_deploy_uploads_new_files_and_deletes_orphans() {
     let site = Site::new();
     dist(&site);
+    // A content-addressed asset, the one kind of file that may be cached
+    // forever: its name changes whenever its bytes do.
+    site.write("public/assets/app.abc123def456.css", "body{}");
 
     let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
     // An object the build no longer produces: it must be deleted.
@@ -184,6 +201,33 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
     assert!(
         !store.contains_key("orphan.html"),
         "orphan should be deleted"
+    );
+
+    // `assets { fingerprint }` renames a file after its own content, which is
+    // what makes it safe to cache forever. A raw bucket sets no `Cache-Control`
+    // of its own, so without this the whole point of hashing is lost at the
+    // last step.
+    let log = log.lock().unwrap();
+    let line = |key: &str| {
+        log.iter()
+            .find(|l| l.starts_with("PUT") && l.contains(key))
+            .unwrap_or_else(|| panic!("no PUT for {key} in {log:?}"))
+            .clone()
+    };
+    assert!(
+        line("style.css").contains("[public, max-age=0, must-revalidate]"),
+        "an unhashed name keeps its name across builds: {:?}",
+        line("style.css")
+    );
+    assert!(
+        line("index.html").contains("[public, max-age=0, must-revalidate]"),
+        "a page is never immutable: {:?}",
+        line("index.html")
+    );
+    assert!(
+        line("app.abc123def456.css").contains("[public, max-age=31536000, immutable]"),
+        "a hashed asset should be cached forever: {:?}",
+        line("app.abc123def456.css")
     );
 }
 
