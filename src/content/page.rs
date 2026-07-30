@@ -366,12 +366,20 @@ impl Page {
 
     /// The key pairing this page with its editions in other languages.
     ///
-    /// A page's [`PageId`] is `collection/slug`, which already matches across
-    /// languages for authored pages. A generated listing's collection is the
-    /// *scoped* section (`fr/tags`), so its id differed per language and no
+    /// A `translation` in frontmatter is that key outright, which is what lets
+    /// a French edition live at `/fr/articles/bonjour/` instead of carrying the
+    /// English slug: without one, an edition that renamed its slug stopped
+    /// being an edition.
+    ///
+    /// Otherwise a page's [`PageId`] is `collection/slug`, which already matches
+    /// across languages for authored pages. A generated listing's collection is
+    /// the *scoped* section (`fr/tags`), so its id differed per language and no
     /// listing ever had a translation: no language switcher, and no `hreflang`
     /// in the sitemap. Stripping the scope back off restores the pairing.
     fn identity(&self) -> String {
+        if let Some(key) = &self.frontmatter.translation {
+            return key.clone();
+        }
         self.id
             .0
             .strip_prefix(&format!("{}/", self.lang))

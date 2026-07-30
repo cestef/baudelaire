@@ -51,6 +51,10 @@ const FIELDS: &[(&str, Field)] = &[
         fm.lang = Some(v.string(p, k)?);
         Ok(())
     }),
+    ("translation", |fm, v, p, k| {
+        fm.translation = Some(v.string(p, k)?);
+        Ok(())
+    }),
     ("template", |fm, v, p, k| {
         fm.template = Some(v.string(p, k)?);
         Ok(())
@@ -94,6 +98,14 @@ pub struct Frontmatter {
     /// Explicit language override; beats the filename suffix and the default
     /// `lang`. Only meaningful on a multi-language site.
     pub lang: Option<String>,
+    /// An explicit key pairing this page with its editions in other languages.
+    ///
+    /// Editions pair on `collection/slug` by default, which is why a French
+    /// edition had to keep the English slug: give it a French one and it became
+    /// a standalone page instead, losing the switcher and its `hreflang`
+    /// alternates. Naming the same key on both restores the pairing and frees
+    /// the slug.
+    pub translation: Option<String>,
     pub template: Option<String>,
     pub order: Option<i64>,
     pub redirect: Vec<String>,

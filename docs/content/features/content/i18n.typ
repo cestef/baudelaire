@@ -60,10 +60,27 @@ filename, for when a suffix doesn't fit:
 
 #callout(kind: "note")[
   Translations are matched by collection and `slug`: `hello.typ` and
-  `hello.fr.typ` share the slug `hello`, so they are linked. Give a translation a
-  *different* slug and it becomes a standalone page instead. An unknown `lang`
+  `hello.fr.typ` share the slug `hello`, so they are linked. An unknown `lang`
   (one you never declared) is a hard error, never a silent mystery URL.
 ]
+
+=== Localized slugs
+
+French readers want French URLs, and search engines rank them. Since editions
+pair on their slug, renaming one used to make it a standalone page: it lost the
+switcher and its `hreflang` alternates. Name the pairing with `translation`
+instead, and each edition is free to take its own slug:
+
+```typ
+// content/posts/hello.typ
+#let frontmatter = (title: "Hello", translation: "greeting")
+
+// content/posts/bonjour.fr.typ
+#let frontmatter = (title: "Bonjour", translation: "greeting")
+```
+
+`/posts/hello/` and `/fr/posts/bonjour/` now link to each other. The key is
+yours to choose and only has to match: it never appears in a URL.
 
 == Everything localizes
 

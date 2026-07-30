@@ -98,6 +98,12 @@ chores are visible in the git history and change nothing for a site.
 - **feed**: Every page advertises the configured feeds in its `<head>`. Feeds
   were emitted and nothing pointed at them, and since typst-html owns `<head>` a
   layout could not add the tag.
+- **content**: `translation` frontmatter, so a translated page can take a
+  translated slug. Editions pair on collection and slug, so a French edition had
+  to keep the English one: rename it and it became a standalone page, losing the
+  switcher and its `hreflang` alternates. Naming the same `translation` key on
+  both pairs them outright, and `/posts/hello/` and `/fr/posts/bonjour/` link to
+  each other. The key never appears in a URL.
 - **content**: `expiry` frontmatter, the last day a page is published. From the
   day after it leaves the build entirely (no page, no listing entry, no feed
   item, and `prune` removes what an earlier build wrote), which is the other end

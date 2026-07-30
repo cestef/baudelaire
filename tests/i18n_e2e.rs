@@ -217,6 +217,45 @@ fn hreflang_alternates_link_the_translations() {
     assert!(map.contains("hreflang=\"fr\"") && map.contains("xmlns:xhtml"));
 }
 
+/// A localized slug and a working switcher used to be mutually exclusive:
+/// editions pair on `collection/slug`, so a French edition that renamed itself
+/// became a standalone page. `translation` names the pairing outright.
+#[test]
+fn a_named_translation_pairs_editions_with_different_slugs() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://example.com"
+        lang "en"
+        languages { fr { name "Français" } }
+        paths { content "content"; dist "public" }
+        "#,
+    );
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hello\", translation: \"greeting\")\nx\n",
+    );
+    site.write(
+        "content/posts/bonjour.fr.typ",
+        "#let frontmatter = (title: \"Bonjour\", translation: \"greeting\")\nx\n",
+    );
+    site.stats();
+    // Each edition keeps its own slug...
+    assert!(site.exists("public/posts/hello/index.html"));
+    assert!(site.exists("public/fr/posts/bonjour/index.html"));
+    // ...and they still know about each other.
+    let en = site.output("posts/hello/index.html");
+    assert!(
+        en.contains("hreflang=\"fr\"") && en.contains("/fr/posts/bonjour/"),
+        "{en}"
+    );
+    let fr = site.output("fr/posts/bonjour/index.html");
+    assert!(
+        fr.contains("hreflang=\"en\"") && fr.contains("/posts/hello/"),
+        "{fr}"
+    );
+}
+
 #[test]
 fn template_receives_lang_translations_and_strings() {
     let site = Site::with(

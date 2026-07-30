@@ -54,6 +54,10 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
 / #raw("lang:str"): Override the page's language, beating the filename suffix and
   the site default. Only meaningful once a `languages` block exists; see
   #link("../features/content/i18n.typ")[multi-language sites].
+/ #raw("translation:str"): A key pairing this page with its editions in other
+  languages, so each can take a slug in its own language. Editions otherwise
+  pair on collection and slug; see
+  #link("../features/content/i18n.typ")[multi-language sites].
 / #raw("template:str"): The template that wraps this page, overriding the
   collection's default.
 / #raw("order:int"): An integer sort key for a `sort="order"` collection (the guide
