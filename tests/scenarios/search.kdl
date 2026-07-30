@@ -17,7 +17,7 @@ scenario "one index per configured search format, plus a self-mounting client" {
         search {
             formats "json" "inverted"
             stopwords "the"
-            client #true
+            ui #true
           }
       }
       """#

@@ -20,7 +20,7 @@ fn subsite() -> Site {
         serve { open #false }
         generate {
           sitemap #true
-          search { formats "json"; client #true }
+          search { formats "json"; ui #true }
         }
         "#,
     );

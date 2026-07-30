@@ -43,7 +43,7 @@ Ask for both with `formats "json" "inverted"`.
 
 == The command palette, for free
 
-Add `client #true` and the build emits a complete, self-mounting command palette
+Add `ui #true` and the build emits a complete, self-mounting command palette
 per format. Load the one script and you have a working `Ctrl` `K` search box, with
 snippets, highlighted matches, and full keyboard control, no markup or CSS to
 write:

@@ -320,7 +320,7 @@ fn feeds_and_search_are_per_language() {
         }
         generate {
           feed { formats "atom" "json" }
-          search { formats "json"; client #true }
+          search { formats "json"; ui #true }
         }
         "#,
     );

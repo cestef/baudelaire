@@ -58,7 +58,7 @@ impl Processor for SearchIndex {
                     format.file(),
                     corpus.len()
                 ));
-                if cfg.client {
+                if cfg.ui {
                     out.file(
                         &site.dist(&[&scope, format.client_file()]),
                         &format.client(site.config.base_path(), &format.index(site.config, lang)),

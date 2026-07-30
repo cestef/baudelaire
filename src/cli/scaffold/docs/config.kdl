@@ -42,13 +42,13 @@ generate {
   sitemap #true
 
   // Client-side search. `formats "json"` writes `/search.json`, one document
-  // per page; `client #true` writes `/search.js` next to it, a self-mounting
+  // per page; `ui #true` writes `/search.js` next to it, a self-mounting
   // command palette that wires every `[data-search-open]` button and binds
   // Ctrl+K and `/`. `templates/theme.typ` loads it and renders the button.
   search {
     formats "json"
     fields "title" "body" "tags"
-    client #true
+    ui #true
   }
 
   // `/llms.txt`: the site as one Markdown outline, for tools that read docs.

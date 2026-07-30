@@ -46,7 +46,7 @@ generate {
   search {
     formats "json"
     fields "title" "body" "tags"
-    client #true
+    ui #true
   }
   llms {
     summary "Documentation for this project."
@@ -55,7 +55,7 @@ generate {
 ```
 
 `search` writes `/search.json`, one document per page, from the rendered text.
-`client #true` also writes `/search.js`: a small self-mounting command palette
+`ui #true` also writes `/search.js`: a small self-mounting command palette
 that fetches the index, binds `Ctrl-K` and `/`, and opens on any element with a
 `data-search-open` attribute. `templates/theme.typ` loads the script and renders
 that button; neither needs a line of your own JavaScript.

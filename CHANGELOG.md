@@ -46,6 +46,12 @@ chores are visible in the git history and change nothing for a site.
   `new --edit`, since `serve --open` opens a browser and the short form was
   already `-e`. Both old spellings stay as aliases.
 
+- **config**: `generate { search { client } }` is `generate { search { ui } }`.
+  It turns on the shipped Ctrl-K palette, and the top-level `client { }` block
+  is build-time constants for client JS: one word meant two things, and both of
+  them were literally about client-side JavaScript, so the enclosing block did
+  not disambiguate. Rename the key; nothing else changes.
+
 - **config**: `assets { images { optimize { jpg } } }` is spelled `jpeg`. It was
   a second key onto the same field, so a block naming both configured one format
   twice with the last winning and no duplicate diagnostic, while the "valid

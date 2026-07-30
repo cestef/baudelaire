@@ -750,8 +750,10 @@ pub struct SearchConfig {
     pub stopwords: Vec<String>,
     /// Minimum token length kept in the inverted index.
     pub min_length: usize,
-    /// Also emit a tiny JavaScript client next to each index.
-    pub client: bool,
+    /// Also emit the shipped search UI (a Ctrl-K palette) next to each index.
+    /// Spelled `ui` in config: the top-level `client { }` block is build-time
+    /// constants for client JS, and one name could not mean both.
+    pub ui: bool,
 }
 
 impl SearchConfig {

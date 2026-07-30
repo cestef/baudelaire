@@ -229,7 +229,7 @@ impl Default for SearchConfig {
             fields: vec![SearchField::Title, SearchField::Body, SearchField::Tags],
             stopwords: Vec::new(),
             min_length: 2,
-            client: false,
+            ui: false,
         }
     }
 }

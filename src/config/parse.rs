@@ -537,8 +537,8 @@ impl Section for SearchConfig {
             c.min_length = n.count(t, 0)?;
             Ok(())
         }),
-        ("client", |c, n, t| {
-            c.client = n.boolean(t, 0)?;
+        ("ui", |c, n, t| {
+            c.ui = n.boolean(t, 0)?;
             Ok(())
         }),
     ]);
