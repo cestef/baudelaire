@@ -38,6 +38,7 @@ impl Default for Config {
             typst: TypstConfig::default(),
             client: Default::default(),
             cache: CacheConfig::default(),
+            caching: CacheControl::default(),
             hooks: HooksConfig::default(),
             announce: AnnounceConfig::default(),
             deploy: DeployConfig::default(),
@@ -267,7 +268,6 @@ impl Default for S3Config {
             prefix: String::new(),
             // reconcile: remove what the build no longer produces.
             delete: true,
-            cache: CacheControl::default(),
         }
     }
 }

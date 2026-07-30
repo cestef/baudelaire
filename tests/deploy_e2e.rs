@@ -64,12 +64,12 @@ fn s3_config(site: &Site, port: u16) -> Config {
         region: None,
         prefix: String::new(),
         delete: true,
-        cache: CacheControl {
-            enabled: true,
-            immutable: "public, max-age=31536000, immutable".into(),
-            default: "public, max-age=0, must-revalidate".into(),
-        },
     });
+    config.caching = CacheControl {
+        enabled: true,
+        immutable: "public, max-age=31536000, immutable".into(),
+        default: "public, max-age=0, must-revalidate".into(),
+    };
     config
 }
 

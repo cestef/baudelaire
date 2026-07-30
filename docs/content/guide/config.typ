@@ -145,9 +145,11 @@ Two consequences of the grouping are worth knowing before you write anything:
   `sitemap`, #link("../features/discovery/feeds.typ")[`feed`],
   #link("../features/discovery/search.typ")[`search`],
   #link("../features/discovery/cards.typ")[`cards`] (a social image per page),
-  `robots` for `robots.txt`, `llms` for `llms.txt`, and `redirects` to trade
-  the #link("../features/content/redirects.typ")[redirect stubs] for a
-  `_redirects` rule file the host answers with a real 301.
+  `robots` for `robots.txt`, `llms` for `llms.txt`, and the two
+  #link("deploy/static-hosts.typ")[rule files] a Pages host reads: `redirects`
+  trades the #link("../features/content/redirects.typ")[redirect stubs] for a
+  `_redirects` file answered with a real 301, and `headers` writes the `caching`
+  policy into `_headers`.
 / #raw("navigation"): How the browser moves between pages. `spa` adds a
   client-side navigation runtime beside the ordinary pages, `standalone` folds
   the whole site into one file, and `speculation` asks the browser to prefetch
@@ -160,7 +162,12 @@ Two consequences of the grouping are worth knowing before you write anything:
   dropped taxonomy term) out of the output directory on every build. On by
   default.
 / #raw("cache"): The incremental build cache. See
-  #link("../features/build/incremental.typ")[incremental builds].
+  #link("../features/build/incremental.typ")[incremental builds]. Distinct from
+  `caching`, below, which is what a *browser* is told.
+/ #raw("caching"): The `Cache-Control` the built files are served with, stated
+  once for every destination that can say so: a `deploy` upload sets it per
+  object, and `generate { headers }` writes it into `_headers`. See
+  #link("deploy/s3.typ")[cache headers].
 / #raw("hooks"): Run external tools around the build. See
   #link("../features/assets/hooks.typ")[build hooks].
 / #raw("serve"): Dev-server options: `port`, `bind` address, `open` (launch a

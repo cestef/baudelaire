@@ -216,6 +216,7 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend<Dist>>> {
     if let Some(s3) = &config.deploy.s3 {
         out.push(Box::new(S3::new(
             s3.clone(),
+            config.caching.clone(),
             Fingerprinted {
                 prefix: config.asset_name().to_owned(),
                 hashed: config.assets.fingerprint,

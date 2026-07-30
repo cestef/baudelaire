@@ -151,10 +151,17 @@ chores are visible in the git history and change nothing for a site.
 - **serve**: A failed rebuild is overlaid in the browser. It reached the
   terminal only, so a tab kept showing the last good page with no way to tell a
   broken save from a slow one.
-- **deploy**: `deploy { s3 { cache { } } }` sets `Cache-Control` on upload.
-  Content-addressed files get `max-age=31536000, immutable`, everything else
-  revalidates; the split is derived from `assets { fingerprint }`, which is what
-  makes hashing a filename worth anything at the last step.
+- **caching**: A top-level `caching { }` block sets the `Cache-Control` the
+  built files are served with. Content-addressed files get
+  `max-age=31536000, immutable`, everything else revalidates; the split is
+  derived from `assets { fingerprint }`, which is what makes hashing a filename
+  worth anything at the last step. A `deploy` sets it per object on S3, and
+  `generate { headers }` writes the same policy into a `_headers` file for
+  Netlify and Cloudflare Pages, so a site doing both cannot state two different
+  answers. (Not to be confused with `cache { }`, the build cache.)
+- **generate**: `generate { headers }` writes `_headers` from the `caching`
+  policy. Needs both: a rule file with no policy in it says nothing the host had
+  not already assumed.
 - **deploy**: The SSH backend is behind a default-on `ssh` cargo feature. It is
   the most expensive thing in the tree after typst and rolldown by crate count.
 

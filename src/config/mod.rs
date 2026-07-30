@@ -80,8 +80,13 @@ pub struct Config {
     /// Build-time constants exposed to client JS through the `baudelaire:config`
     /// virtual module: arbitrary scalars keyed by name.
     pub client: Vec<(String, crate::codegen::Value)>,
-    /// Cache options.
+    /// Build cache options: where the incremental manifest lives, and whether
+    /// it is consulted. Not to be confused with `caching`, which is what a
+    /// *browser* is told about the built files.
     pub cache: CacheConfig,
+    /// The `Cache-Control` the built files are served with, applied by every
+    /// destination that can say so.
+    pub caching: CacheControl,
     /// External command hooks run around the build.
     pub hooks: HooksConfig,
     /// Announce destinations for the built site.
@@ -175,6 +180,8 @@ pub struct ContentConfig {
 pub struct GenerateConfig {
     /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
     pub sitemap: bool,
+    /// Emit a `_headers` rule file stating the `caching` policy to the host.
+    pub headers: bool,
     /// Emit a `_redirects` rule file instead of the per-path HTML stubs.
     ///
     /// Netlify and Cloudflare Pages read it from the publish directory and
@@ -542,6 +549,11 @@ impl std::hash::Hash for Config {
             typst,
             client,
             cache,
+            // `Cache-Control` shapes no page. The one file it does shape,
+            // `_headers`, is written by a processor, and processors run on
+            // every build whatever the cache says; keying pages on it would
+            // cold-rebuild the site over a header string.
+            caching: _,
             hooks,
             announce,
             deploy,
@@ -1331,8 +1343,6 @@ pub struct S3Config {
     pub prefix: String,
     /// Delete remote objects under `prefix` that the build no longer produces.
     pub delete: bool,
-    /// `Cache-Control` headers to set on upload.
-    pub cache: CacheControl,
 }
 
 impl S3Config {
@@ -1362,7 +1372,7 @@ impl S3Config {
 /// Netlify/Vercel/Cloudflare Pages only guess. Without this the whole point of
 /// hashing a filename is thrown away at the last step.
 ///
-/// Enabled by the presence of a `cache { }` block; both values have defaults, so
+/// Enabled by the presence of a `caching { }` block; both values have defaults, so
 /// a bare `cache` is the sensible policy.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct CacheControl {

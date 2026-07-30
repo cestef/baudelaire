@@ -9,6 +9,7 @@
 //! which module emits what.
 
 mod feed;
+mod headers;
 mod llms;
 mod redirect;
 mod robots;
@@ -171,6 +172,7 @@ impl Processors {
             Box::new(redirect::Redirects),
             Box::new(sitemap::SiteMap),
             Box::new(robots::Robots),
+            Box::new(headers::Headers),
             Box::new(llms::Llms),
             Box::new(feed::Feeds),
             Box::new(search::SearchIndex),

@@ -82,6 +82,7 @@ impl Section for Config {
             Ok(())
         }),
         ("cache", |c, n, t| c.cache.fill(n, t)),
+        ("caching", |c, n, t| c.caching.fill(n, t)),
         ("typst", |c, n, t| c.typst.fill(n, t)),
         ("client", |c, n, t| {
             c.client = n.table(t)?;
@@ -486,6 +487,10 @@ impl Section for GenerateConfig {
             c.redirects = n.boolean(t, 0)?;
             Ok(())
         }),
+        ("headers", |c, n, t| {
+            c.headers = n.boolean(t, 0)?;
+            Ok(())
+        }),
         ("robots", |c, n, t| c.robots.fill(n, t)),
         ("llms", |c, n, t| c.llms.fill(n, t)),
         ("feed", |c, n, t| c.feed.fill(n, t)),
@@ -788,8 +793,8 @@ impl Section for S3Config {
     ]);
 }
 
-/// The `cache { .. }` block inside an S3 destination: presence turns
-/// `Cache-Control` on, and both values default to the conventional policy.
+/// The top-level `caching { .. }` block: presence turns `Cache-Control` on, and
+/// both values default to the conventional policy.
 impl Section for CacheControl {
     fn enable(&mut self) -> bool {
         self.enabled = true;

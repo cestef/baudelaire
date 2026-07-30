@@ -64,23 +64,24 @@ signed along with the request.
 == Cache headers
 
 A bucket serves whatever `Cache-Control` you set on an object, and by default
-that is none at all. Add a `cache` block and every upload gets one:
+that is none at all. Declare a policy and every upload gets one:
 
 ```kdl
-deploy {
-  s3 {
-    bucket "my-site"
-    cache { }
-  }
-}
+caching { }
 ```
+
+It sits at the top level, not under `deploy`, because it describes the built
+site rather than one destination: the same block also drives the
+#link("static-hosts.typ")[`_headers` file] a Pages host
+reads, so a site that does both cannot state two different answers to one
+question. (Not to be confused with `cache { }`, which is the *build* cache.)
 
 Files under the asset prefix are sent as
 `public, max-age=31536000, immutable`, and everything else as
 `public, max-age=0, must-revalidate`. Override either:
 
 ```kdl
-cache {
+caching {
   immutable "public, max-age=604800, immutable"
   default   "public, max-age=300"
 }
@@ -94,6 +95,7 @@ gets the revalidating policy too. Baudelaire works that out from your build's
 own config rather than asking you to restate it.
 
 #callout(kind: "note")[
-  SFTP has nowhere to put a header, so this is S3-only. On an SSH target the
-  headers are your web server's to set.
+  SFTP has nowhere to put a header, so a deploy sets these on S3 only. On an SSH
+  target they are your web server's to set, and on a Pages host they come from
+  `_headers`.
 ]

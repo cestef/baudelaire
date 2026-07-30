@@ -28,6 +28,10 @@ use crate::ui::Ui;
 /// built per run once credentials are in hand.
 pub struct S3 {
     config: S3Config,
+    /// The `Cache-Control` the site is served with. A site-wide policy rather
+    /// than a per-destination one: `_headers` states the same thing to a Pages
+    /// host, and two spellings of one policy could disagree.
+    caching: CacheControl,
     /// How to tell a content-addressed upload from an ordinary one: the asset
     /// URL prefix, and whether this build hashes the names under it. Both come
     /// from the *build's* config, not the destination's, because "may this be
@@ -43,8 +47,12 @@ pub struct Fingerprinted {
 }
 
 impl S3 {
-    pub fn new(config: S3Config, assets: Fingerprinted) -> Self {
-        Self { config, assets }
+    pub fn new(config: S3Config, caching: CacheControl, assets: Fingerprinted) -> Self {
+        Self {
+            config,
+            caching,
+            assets,
+        }
     }
 }
 
@@ -61,6 +69,7 @@ impl Backend<Dist> for S3 {
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(
             &self.config,
+            self.caching.clone(),
             self.assets.clone(),
             access_key,
             secret_key,
@@ -137,6 +146,7 @@ impl Bucket {
     /// MinIO); its absence targets AWS virtual-hosted addressing.
     pub fn new(
         config: &S3Config,
+        cache: CacheControl,
         assets: Fingerprinted,
         access_key: String,
         secret_key: String,
@@ -170,7 +180,7 @@ impl Bucket {
             authority,
             host,
             root,
-            cache: config.cache.clone(),
+            cache,
             assets,
         }
     }
@@ -510,7 +520,6 @@ mod tests {
             region: None,
             prefix: prefix.into(),
             delete: true,
-            cache: CacheControl::default(),
         }
     }
 
@@ -526,6 +535,7 @@ mod tests {
     fn bucket(endpoint: Option<&str>, prefix: &str) -> Bucket {
         Bucket::new(
             &config(endpoint, prefix),
+            CacheControl::default(),
             fingerprinted(),
             "AKID".into(),
             "secret".into(),
