@@ -35,8 +35,13 @@ and the site config:
 / Author: a `<meta name="author">` from a page's `author`, falling back to the
   site-wide `author` in config.
 / #link("https://ogp.me")[OpenGraph]: `og:title`, `og:type` (a dated page is an
-  `article`, everything else a `website`), `og:description`, `og:image`,
-  `og:site_name`, `og:locale`, and, when a base `url` is set, `og:url`.
+  `article`, everything else a `website`), `og:description`, `og:image`
+  (with `og:image:alt`), `og:site_name`, `og:locale`, and, when a base `url` is
+  set, `og:url`.
+/ Article: a dated page also carries `article:published_time`,
+  `article:modified_time` (only when `updated` says it moved),
+  `article:author`, and one `article:tag` per taxonomy term. Several unfurlers
+  read `published_time` for the dateline.
 / Twitter Card: `twitter:card` (a large image when the page has one),
   `twitter:title`, `twitter:description`, and `twitter:image`.
 / Canonical: a `<link rel="canonical">` when a base `url` is set.
@@ -48,9 +53,14 @@ Set the source fields in a page's frontmatter:
   title: "Launch day",
   summary: "Everything new in this release.",
   image: "/assets/launch.png",
+  alt: "The 1.0 release notes, open in a browser",
   author: "Ada",
 )
 ```
+
+`alt` describes the image for a reader who cannot see it. A
+#link("cards.typ")[generated card] needs none: it draws the page title, so that
+is what its `og:image:alt` says.
 
 A root-relative `image` (or a page's `url`) is made absolute against the site
 `url` so crawlers and social cards resolve it; an already-absolute URL is left
@@ -66,6 +76,27 @@ gets a clean, valid set.
 A social `image` that points at a local asset is rewritten to its
 #link("../assets/assets.typ")[fingerprinted] URL and made absolute, so crawlers fetch the
 cache-busted file.
+
+== Structured data
+
+Search engines read #link("https://json-ld.org")[JSON-LD] for rich results.
+Turn it on and every page carries a schema.org island in its `<head>`:
+
+```kdl
+html {
+  jsonld #true
+}
+```
+
+A dated page describes itself as an `Article` and everything else as a
+`WebPage`, the same split `og:type` makes, with the headline, description,
+image, URL, dates, author, and taxonomy terms it already knows. It is built
+from the same facts as the meta tags above, so the two can never claim
+different things about one page.
+
+Unlike its neighbours this is off by default. The meta tags restate what the
+page already says; structured data is a claim made *to* a search engine about
+what the page is, and that is yours to make.
 
 == Images
 

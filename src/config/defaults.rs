@@ -82,6 +82,9 @@ impl Default for HtmlConfig {
             meta: true,
             anchors: true,
             highlight: HighlightConfig::default(),
+            // opt-in: structured data is a claim about the page, not a restating
+            // of what it already says.
+            jsonld: false,
         }
     }
 }

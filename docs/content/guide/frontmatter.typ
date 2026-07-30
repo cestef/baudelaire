@@ -87,8 +87,8 @@ See #link("../features/content/taxonomies.typ")[taxonomies].
 == Everything else
 
 Unknown keys are not errors: they pass through as *extra* frontmatter, yours to
-read in a template. `description`, `summary`, `image`, and `author` are common
-ones the build itself reads when present (for
+read in a template. `description`, `summary`, `image`, `alt`, and `author` are
+common ones the build itself reads when present (for
 #link("../features/discovery/meta.typ")[meta and social tags]):
 
 ```typ
@@ -96,6 +96,7 @@ ones the build itself reads when present (for
   title: "A post",
   description: "A short summary for search and social cards.",
   image: "cover.png",
+  alt: "The cover, described for a reader who cannot see it",
 )
 ```
 

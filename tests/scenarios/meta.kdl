@@ -150,3 +150,101 @@ scenario "anchors off leaves headings bare" {
     file "docs/guide/index.html" { missing #"id="setup""# }
   }
 }
+
+// A dated page is an article, and an article has a vocabulary: when it was
+// published, when it changed, who wrote it, what it is about. The tags were the
+// half of OpenGraph that was never emitted, and several unfurlers read
+// `article:published_time` for the dateline.
+scenario "a dated page carries the article vocabulary" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      author "Ada"
+      content {
+        taxonomies {
+          tags listing=#true
+        }
+      }
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (
+        title: "Hello",
+        date: datetime(year: 2026, month: 3, day: 4),
+        updated: datetime(year: 2026, month: 5, day: 6),
+        tags: ("rust",),
+      )
+      body
+      """#
+    "content/plain.typ" #"""
+      #let frontmatter = (title: "Plain")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" {
+      contains #"property="og:type" content="article""#
+      contains #"property="article:published_time" content="2026-03-04""#
+      contains #"property="article:modified_time" content="2026-05-06""#
+      contains #"property="article:author" content="Ada""#
+      contains #"property="article:tag" content="rust""#
+    }
+    // An undated page is a website page, and has no article vocabulary to carry.
+    file "plain/index.html" {
+      contains #"property="og:type" content="website""#
+      missing "article:published_time"
+      missing "article:author"
+    }
+  }
+}
+
+// Structured data is opt-in: the meta tags beside it restate what the page
+// already says, while this is a claim made to a search engine about what the
+// page is.
+scenario "json-ld is emitted only when asked for" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      html {
+        jsonld #true
+      }
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (
+        title: "Hello",
+        date: datetime(year: 2026, month: 3, day: 4),
+      )
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" {
+      contains #"type="application/ld+json""#
+      contains #""@type":"Article""#
+      contains #""datePublished":"2026-03-04""#
+      contains #""url":"https://s.example/post/""#
+    }
+  }
+}
+
+scenario "no json-ld without the key" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hello")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" {
+      missing "application/ld+json"
+    }
+  }
+}

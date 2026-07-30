@@ -110,6 +110,16 @@ chores are visible in the git history and change nothing for a site.
   held every page under it whatever its size, beside a collection index that
   paginated the very same pages; both now run through one rule, so they cannot
   disagree about what page 2 is called.
+- **html**: A dated page carries the `article:*` vocabulary
+  (`published_time`, `modified_time`, `author`, and one `tag` per taxonomy
+  term), and a social image carries `og:image:alt` from an `alt` frontmatter
+  key. Several unfurlers read `article:published_time` for the dateline. A
+  generated card describes itself: it draws the page title.
+- **html**: `html { jsonld }` emits a schema.org JSON-LD island per page, an
+  `Article` where the page is dated and a `WebPage` otherwise. Built from the
+  same facts as the meta tags, so the two cannot claim different things about
+  one page. Off by default, unlike its neighbours: those restate what the page
+  already says, while structured data is a claim made to a search engine.
 - **content**: `page.reading` reaches every template: `reading.words` and
   `reading.minutes`, for the "6 min read" line a blog index wants. Counted from
   the page's typst source rather than its rendered HTML, because the source is

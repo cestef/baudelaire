@@ -858,6 +858,12 @@ pub struct HtmlConfig {
     pub anchors: bool,
     /// Rewrite syntax-highlight colours as CSS classes.
     pub highlight: HighlightConfig,
+    /// Emit a schema.org JSON-LD island in each page's `<head>`.
+    ///
+    /// Opt-in, unlike the meta tags beside it: those restate facts the page
+    /// already states, while structured data is a claim made *to* a search
+    /// engine about what the page is, and that is the author's claim to make.
+    pub jsonld: bool,
 }
 
 /// Turn typst's inline highlight colours into CSS classes, so a stylesheet owns

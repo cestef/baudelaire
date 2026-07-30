@@ -444,6 +444,10 @@ impl Section for HtmlConfig {
             c.anchors = n.boolean(t, 0)?;
             Ok(())
         }),
+        ("jsonld", |c, n, t| {
+            c.jsonld = n.boolean(t, 0)?;
+            Ok(())
+        }),
         ("highlight", |c, n, t| {
             c.highlight.enabled = true;
             // A bare `highlight` rewrites every colour to its hex class; a block

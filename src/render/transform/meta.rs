@@ -13,7 +13,7 @@
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{BaseUrl, Config};
-use crate::content::Page;
+use crate::content::{Iso, Page};
 
 use super::{Cx, DocumentExt, Transform};
 use crate::render::{AssetDeps, AssetMap};
@@ -71,9 +71,22 @@ struct Facts {
     /// Already fingerprinted and absolutized, since a social image is read by a
     /// crawler that has no page to resolve a relative URL against.
     image: Option<String>,
+    /// What the image shows, for a reader who cannot see it. Authored as `alt`
+    /// beside `image`; a *generated* card falls back to the page title, which
+    /// is what the card renders.
+    alt: Option<String>,
     canonical: Option<String>,
     /// The OpenGraph object type.
     kind: &'static str,
+    /// When the page was published and when it last changed, as ISO-8601 days.
+    /// `article:*` and JSON-LD both read them, so they are resolved once.
+    published: Option<String>,
+    modified: Option<String>,
+    /// The page's author, else the site's.
+    author: Option<String>,
+    /// Every taxonomy term the page carries, flattened: an `article:tag` does
+    /// not distinguish which taxonomy a term came from.
+    terms: Vec<String>,
 }
 
 impl Card<'_> {
@@ -99,7 +112,66 @@ impl Card<'_> {
         }
         self.alternates(&mut tags);
         self.feeds(&mut tags);
+        if self.config.html.jsonld {
+            tags.push(Self::jsonld(&facts));
+        }
         tags
+    }
+
+    /// The schema.org description of this page, as a JSON-LD island.
+    ///
+    /// Built from the same [`Facts`] the meta tags are, so the two cannot claim
+    /// different things about one page. An `Article` where the page is dated,
+    /// a `WebPage` otherwise, which is the same split `og:type` makes.
+    fn jsonld(facts: &Facts) -> HtmlNode {
+        let mut fields: Vec<(&str, serde_json::Value)> = vec![
+            ("@context", "https://schema.org".into()),
+            (
+                "@type",
+                match facts.kind {
+                    "article" => "Article",
+                    _ => "WebPage",
+                }
+                .into(),
+            ),
+            ("headline", facts.title.clone().into()),
+        ];
+        for (key, value) in [
+            ("description", facts.description.as_deref()),
+            ("image", facts.image.as_deref()),
+            ("url", facts.canonical.as_deref()),
+            ("datePublished", facts.published.as_deref()),
+            ("dateModified", facts.modified.as_deref()),
+        ] {
+            if let Some(value) = value {
+                fields.push((key, value.into()));
+            }
+        }
+        if let Some(author) = &facts.author {
+            fields.push((
+                "author",
+                serde_json::json!({ "@type": "Person", "name": author }),
+            ));
+        }
+        if !facts.terms.is_empty() {
+            fields.push(("keywords", facts.terms.clone().into()));
+        }
+        let object: serde_json::Map<String, serde_json::Value> = fields
+            .into_iter()
+            .map(|(key, value)| (key.to_owned(), value))
+            .collect();
+        // Infallible: every value is a string, a list of them, or a map of the
+        // same. `serde_json` only fails on what cannot be a JSON key.
+        let json = serde_json::to_string(&object).expect("plain strings");
+        // A title or description containing `</script>` would close the island
+        // early and spill the rest into the document as text. JSON reads
+        // `<\/` as the same slash; an HTML parser no longer reads it as the end
+        // of the element.
+        let json = json.replace("</", "<\\/");
+        let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "application/ld+json");
+        el.children
+            .push(HtmlNode::Text(json.into(), typst::syntax::Span::detached()));
+        el.into()
     }
 
     /// The feed autodiscovery links: one per configured format, pointing at the
@@ -144,18 +216,32 @@ impl Card<'_> {
         // pages that have none, which is the whole point of generating them.
         // Resolved before the struct literal because resolution records an
         // asset dependency, and so needs `self` mutably.
+        let generated = authored.is_none();
         let image = authored.or_else(|| self.generated_card());
         let image = image.map(|src| self.absolute(&src));
+        // A generated card draws the page title, so that is a true description
+        // of it. An authored image is the author's to describe.
+        let alt = fm
+            .text("alt")
+            .or_else(|| (generated && image.is_some()).then(|| title.clone()))
+            .filter(|alt| !alt.is_empty());
         Facts {
             title,
             description,
             image,
+            alt,
             canonical: self.url(),
             // A dated page is an article; everything else is a plain website page.
             kind: match fm.date.is_some() {
                 true => "article",
                 false => "website",
             },
+            published: fm.date.map(|d| Iso(d).to_string()),
+            // Only when it actually moved: `modified` falls back to the publish
+            // date, and restating that as a modification says nothing.
+            modified: fm.updated.map(|d| Iso(d).to_string()),
+            author: fm.text("author").or_else(|| self.config.author.clone()),
+            terms: fm.taxonomies.values().flatten().cloned().collect(),
         }
     }
 
@@ -195,6 +281,25 @@ impl Card<'_> {
         tags.push(Self::property("og:locale", &Self::locale(&self.page.lang)));
         if let Some(image) = &facts.image {
             tags.push(Self::property("og:image", image));
+            if let Some(alt) = &facts.alt {
+                tags.push(Self::property("og:image:alt", alt));
+            }
+        }
+        // Only an article has an article vocabulary. A website page carries no
+        // publication date, which is what made it a website page.
+        if facts.kind == "article" {
+            for (property, value) in [
+                ("article:published_time", facts.published.as_deref()),
+                ("article:modified_time", facts.modified.as_deref()),
+                ("article:author", facts.author.as_deref()),
+            ] {
+                if let Some(value) = value {
+                    tags.push(Self::property(property, value));
+                }
+            }
+            for term in &facts.terms {
+                tags.push(Self::property("article:tag", term));
+            }
         }
     }
 
@@ -334,5 +439,38 @@ mod tests {
         assert_eq!(Card::locale("zh-Hant"), "zh");
         assert_eq!(Card::locale("zh-Hant-TW"), "zh_TW");
         assert_eq!(Card::locale("fr"), "fr");
+    }
+
+    /// A title carrying `</script>` would close the island early and spill the
+    /// rest of the object into the document as text. The swap is what JSON
+    /// reads as the same slash and an HTML parser no longer reads as the end of
+    /// the element.
+    #[test]
+    fn a_title_cannot_close_the_json_island() {
+        let facts = super::Facts {
+            title: "Escaping </script> in typst".into(),
+            description: None,
+            image: None,
+            alt: None,
+            canonical: None,
+            kind: "website",
+            published: None,
+            modified: None,
+            author: None,
+            terms: Vec::new(),
+        };
+        let node = Card::jsonld(&facts);
+        let typst_html::HtmlNode::Element(el) = node else {
+            panic!("expected an element")
+        };
+        let typst_html::HtmlNode::Text(json, _) = &el.children[0] else {
+            panic!("expected text")
+        };
+        assert!(!json.contains("</script"), "{json}");
+        assert!(json.contains("<\\/script"), "{json}");
+        // ...and it is still the JSON it claims to be.
+        let parsed: serde_json::Value = serde_json::from_str(json).expect("valid JSON");
+        assert_eq!(parsed["headline"], "Escaping </script> in typst");
+        assert_eq!(parsed["@type"], "WebPage");
     }
 }
