@@ -223,7 +223,8 @@ impl<'a> Section<'a> {
 
     /// The listing for page `number` of `total`.
     fn page(&self, paged: &Paged, number: usize, members: &[&Page], total: usize) -> Listing {
-        let items = members.iter().map(|p| Item::of(p)).collect();
+        let strings = Strings::new(self.config, self.lang);
+        let items = members.iter().map(|p| Item::of(p, &strings)).collect();
         Listing::new(
             self.id,
             paged.slug(number),

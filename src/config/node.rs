@@ -169,7 +169,23 @@ impl NodeExt for KdlNode {
             .nodes()
             .iter()
             .map(|child| {
-                let value = child.arg(text, 0)?.scalar(text, NodeExt::span(child))?;
+                let span = NodeExt::span(child);
+                // One argument is that value; several are a list. Only the
+                // first used to be read, so `months "janvier" "février" ..`
+                // kept January and dropped the year.
+                let mut values = Vec::new();
+                let mut index = 0;
+                while let Some(arg) = child.get(index) {
+                    values.push(arg.scalar(text, span)?);
+                    index += 1;
+                }
+                let value = match values.len() {
+                    // No argument at all: report it the way every other missing
+                    // argument is reported.
+                    0 => child.arg(text, 0)?.scalar(text, span)?,
+                    1 => values.remove(0),
+                    _ => crate::codegen::Value::Array(values),
+                };
                 Ok((child.name().value().to_owned(), value))
             })
             .collect()

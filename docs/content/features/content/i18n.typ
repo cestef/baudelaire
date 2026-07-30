@@ -122,6 +122,40 @@ strings:
 full set and mark the active one by `page.lang`. The declared languages are also
 at `sys.inputs.baudelaire.site.languages` as `(code, name)` pairs.
 
+== Dates in the reader's language
+
+ISO-8601 is the right answer for a machine and the wrong one for a reader, and
+typst cannot fix it in a template: its own `datetime.display` knows English
+month names only. So every page and every listing entry carries the date twice:
+
+```typ
+html.elem("time", attrs: (datetime: page.date.iso), page.date.display)
+```
+
+`page.date.iso` is `2026-07-30`, for a `<time datetime>` or a feed;
+`page.date.display` is what the language writes, and a listing entry carries the
+same pair as `entry.date` and `entry.display`. A page with no date has
+`page.date` as `none`.
+
+Two `strings` keys shape the display form, so a language declares its own with
+no locale database in the binary:
+
+```kdl
+languages {
+  fr {
+    strings {
+      date "{day} {month} {year}"
+      months "janvier" "février" "mars" "avril" "mai" "juin" \
+             "juillet" "août" "septembre" "octobre" "novembre" "décembre"
+    }
+  }
+}
+```
+
+`date` takes `{day}`, `{day2}` (zero-padded), `{month}` and `{year}`; the
+default is `{month} {day}, {year}`. A language that names no `months` falls back
+to the English name, which beats printing a number where a word belongs.
+
 == Client-side
 
 The `baudelaire:i18n` #link("../assets/js-modules.typ")[virtual module] exposes

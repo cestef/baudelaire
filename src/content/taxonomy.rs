@@ -11,7 +11,7 @@ use crate::config::{Config, TaxonomyConfig};
 use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Titlecase};
 use crate::content::pagination::Paged;
-use crate::content::{Page, Slug};
+use crate::content::{Page, Slug, Strings};
 use crate::error::{ContentError, Result};
 
 /// Builds the taxonomy index pages for a site.
@@ -189,10 +189,14 @@ impl<'a> Group<'a> {
             self.config,
         );
         let title = self.title(term);
+        let strings = Strings::new(self.config, self.lang);
         let chunks = paged.chunks(term.members);
         for (index, members) in chunks.iter().enumerate() {
             let number = index + 1;
-            let items = members.iter().map(|member| Item::of(member)).collect();
+            let items = members
+                .iter()
+                .map(|member| Item::of(member, &strings))
+                .collect();
             let listing = Listing::new(
                 self.name,
                 paged.slug(number),

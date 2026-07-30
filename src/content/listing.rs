@@ -34,6 +34,10 @@ pub struct Item {
     url: String,
     label: String,
     date: Option<String>,
+    /// The same date written the way the page's language writes one, so a
+    /// listing can show `30 juillet 2026` while `date` stays the ISO-8601 day a
+    /// `<time datetime>` wants.
+    display: Option<String>,
     note: Option<String>,
     /// The page's taxonomy terms, keyed by taxonomy (e.g. `tags`, `categories`),
     /// exposed as-is so a template picks whichever it wants, never flattened.
@@ -47,6 +51,7 @@ impl Item {
             url: url.into(),
             label: label.into(),
             date: None,
+            display: None,
             note: None,
             taxonomies: BTreeMap::new(),
             extra: Value::dict::<&str>([]),
@@ -55,13 +60,17 @@ impl Item {
 
     /// The listing row for a page, the single page->item mapping, so every
     /// listing (paginated index, taxonomy term) exposes the same data: link,
-    /// title, ISO display date, the page's taxonomies, and its extra frontmatter
-    /// (summary, cover image, ..).
-    pub fn of(page: &Page) -> Self {
+    /// title, the date in both forms, the page's taxonomies, and its extra
+    /// frontmatter (summary, cover image, ..).
+    pub fn of(page: &Page, strings: &crate::content::Strings) -> Self {
         let date = page
             .frontmatter
             .date
             .map(|d| crate::content::Iso(d).to_string());
+        let display = page
+            .frontmatter
+            .date
+            .map(|d| crate::content::Localized::new(d, strings).to_string());
         let extra = Value::dict(
             page.frontmatter
                 .extra
@@ -70,6 +79,7 @@ impl Item {
         );
         Self::new(page.permalink.clone(), page.title())
             .dated(date)
+            .shown(display)
             .with_taxonomies(page.frontmatter.taxonomies.clone())
             .extra(extra)
     }
@@ -93,7 +103,13 @@ impl Item {
         }
     }
 
-    /// Attach a display date, shown by dated listings (e.g. a blog index).
+    /// Attach the localized rendering of the same date.
+    pub fn shown(mut self, display: Option<String>) -> Self {
+        self.display = display;
+        self
+    }
+
+    /// Attach the ISO date, shown by dated listings (e.g. a blog index).
     pub fn dated(mut self, date: Option<String>) -> Self {
         self.date = date;
         self
@@ -222,6 +238,7 @@ impl Listing {
                 ("url", Value::str(&item.url)),
                 ("label", Value::str(&item.label)),
                 ("date", Value::opt(item.date.clone())),
+                ("display", Value::opt(item.display.clone())),
                 ("note", Value::opt(item.note.clone())),
                 (
                     "taxonomies",

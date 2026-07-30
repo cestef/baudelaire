@@ -21,7 +21,7 @@ pub mod strings;
 pub mod taxonomy;
 
 pub use cache::DiscoveryCache;
-pub use date::Iso;
+pub use date::{Iso, Localized};
 pub use discovery::{Collection, discover};
 pub use frontmatter::Frontmatter;
 pub use page::{Data, Page, PageId, Sibling, Siblings};

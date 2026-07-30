@@ -20,7 +20,7 @@ use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 
 use crate::codegen::{Typst, Value};
 use crate::config::Config;
-use crate::content::{Data, Page, Section, Sibling, Siblings};
+use crate::content::{Data, Iso, Localized, Page, Section, Sibling, Siblings, Strings};
 use crate::error::Result;
 use crate::graph::Hash;
 use crate::theme::Theme;
@@ -104,6 +104,7 @@ impl<'a> Prepare<'a> {
         // Derived from this page's own body, so it names nothing outside the
         // page and cannot widen the fingerprint the way a site-wide value would.
         let reading = Typst(&Self::reading(&page.body)).to_string();
+        let date = Typst(&self.date(page)).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
             Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
@@ -122,6 +123,7 @@ impl<'a> Prepare<'a> {
             translations: &translations,
             strings: &strings,
             reading: &reading,
+            date: &date,
         };
         let text = Layout::new(
             &self.template_root(template),
@@ -198,6 +200,27 @@ impl<'a> Prepare<'a> {
             ("words", Value::Int(reading.words as i64)),
             ("minutes", Value::Int(reading.minutes as i64)),
         ])
+    }
+
+    /// A page's date in both forms: `(iso: .., display: ..)`, or `none` when it
+    /// carries no date.
+    ///
+    /// The ISO day is what a `<time datetime>` wants and the localized one is
+    /// what a reader wants, and a template cannot derive the second from the
+    /// first: typst's `datetime.display` knows English month names only, so a
+    /// French site rendered `2026-07-30` whatever its layout did.
+    fn date(&self, page: &Page) -> Value {
+        let strings = Strings::new(self.config, &page.lang);
+        match page.frontmatter.date {
+            None => Value::None,
+            Some(date) => Value::dict([
+                ("iso", Value::str(Iso(date).to_string())),
+                (
+                    "display",
+                    Value::str(Localized::new(date, &strings).to_string()),
+                ),
+            ]),
+        }
     }
 
     /// A page's translations as an array value:

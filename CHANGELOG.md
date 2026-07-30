@@ -120,6 +120,18 @@ chores are visible in the git history and change nothing for a site.
   same facts as the meta tags, so the two cannot claim different things about
   one page. Off by default, unlike its neighbours: those restate what the page
   already says, while structured data is a claim made to a search engine.
+- **i18n**: Dates are written the way their language writes them. Every page
+  carries `page.date.iso` and `page.date.display`, and every listing entry
+  `entry.date` and `entry.display`: the first is the ISO-8601 day a
+  `<time datetime>` or a feed wants, the second what a reader wants. A language
+  declares its own through two `strings` keys, `date` (a pattern over `{day}`,
+  `{day2}`, `{month}`, `{year}`) and `months` (the twelve names), so there is no
+  locale database in the binary. Every listing showed ISO-8601, and typst could
+  not fix it in a template: its own `datetime.display` knows English months
+  only.
+- **config**: A `strings { }` or `client { }` entry with several arguments is a
+  list. Only the first was read, so `months "janvier" "février" ..` kept January
+  and dropped the rest.
 - **content**: `page.reading` reaches every template: `reading.words` and
   `reading.minutes`, for the "6 min read" line a blog index wants. Counted from
   the page's typst source rather than its rendered HTML, because the source is

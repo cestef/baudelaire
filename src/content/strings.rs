@@ -27,6 +27,10 @@ impl<'a> Strings<'a> {
         ("next", "Next →"),
         ("page", "page"),
         ("redirecting", "Redirecting.."),
+        // How a date is written out for a reader. `{month}` takes its word from
+        // the `months` list, which is a list rather than a string and so is not
+        // in this table; the rest are numbers off the date itself.
+        ("date", "{month} {day}, {year}"),
     ];
 
     pub fn new(config: &'a Config, lang: &'a str) -> Self {
@@ -40,6 +44,34 @@ impl<'a> Strings<'a> {
             .or_else(|| self.declared(&self.config.lang, key))
             .or_else(|| Self::default(key))
             .unwrap_or_default()
+    }
+
+    /// A list a language declares, when it is an array of plain strings. The
+    /// same language-then-default-then-nothing fallback [`get`](Self::get)
+    /// uses, for the one key whose value is a list: `months`.
+    pub fn list(&self, key: &str) -> Option<Vec<String>> {
+        self.array(self.lang, key)
+            .or_else(|| self.array(&self.config.lang, key))
+    }
+
+    /// An array of plain strings a language declares under `key`.
+    fn array(&self, lang: &str, key: &str) -> Option<Vec<String>> {
+        let crate::codegen::Value::Array(items) = self
+            .config
+            .strings(lang)
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value)?
+        else {
+            return None;
+        };
+        items
+            .iter()
+            .map(|item| match item {
+                crate::codegen::Value::Str(text) => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     /// A string a language declares, when it is a plain string value.

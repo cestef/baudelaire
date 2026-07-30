@@ -260,3 +260,64 @@ scenario "a template can render a reading estimate" {
     }
   }
 }
+
+// ISO-8601 is right for a machine and wrong for a reader, and typst cannot fix
+// it in a template: its own `datetime.display` knows English month names only.
+// Both forms reach the page, and a language names its own months.
+scenario "a page and a listing carry a localized date" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lang "en"
+      languages {
+        fr {
+          strings {
+            date "{day} {month} {year}"
+            months "janvier" "février" "mars" "avril" "mai" "juin" \
+                   "juillet" "août" "septembre" "octobre" "novembre" "décembre"
+          }
+        }
+      }
+      content {
+        collections {
+          posts sort="date" list="index.typ" template="post.typ"
+        }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("html", html.elem("body", {
+        html.elem("time", attrs: (datetime: page.date.iso), page.date.display)
+        body
+      }))
+      """#
+    "templates/index.typ" #"""
+      #let index(page, body) = html.elem("html", html.elem("body", {
+        for entry in page.frontmatter.entries {
+          html.elem("li", entry.display)
+        }
+      }))
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "Bonjour", date: datetime(year: 2026, month: 7, day: 30),)
+      body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Hello", date: datetime(year: 2026, month: 7, day: 30),)
+      body
+      """#
+  }
+  expect {
+    ok
+    // The machine-readable form stays ISO-8601 in both languages.
+    file "fr/posts/a/index.html" {
+      contains #"datetime="2026-07-30""#
+      contains "30 juillet 2026"
+    }
+    file "posts/a/index.html" {
+      contains #"datetime="2026-07-30""#
+      contains "July 30, 2026"
+    }
+    file "fr/posts/index.html" { contains "30 juillet 2026" }
+    file "posts/index.html" { contains "July 30, 2026" }
+  }
+}
