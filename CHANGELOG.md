@@ -98,6 +98,12 @@ chores are visible in the git history and change nothing for a site.
 - **feed**: Every page advertises the configured feeds in its `<head>`. Feeds
   were emitted and nothing pointed at them, and since typst-html owns `<head>` a
   layout could not add the tag.
+- **content**: `expiry` frontmatter, the last day a page is published. From the
+  day after it leaves the build entirely (no page, no listing entry, no feed
+  item, and `prune` removes what an earlier build wrote), which is the other end
+  of the window `content { future }` opens: an event that has happened, a call
+  for papers that has closed. Nothing brings it back, so it is a decision rather
+  than a preview; a page still being written is a `draft`.
 - **content**: `updated` frontmatter, for when a page last changed. `date` stays
   the publication date and still orders every listing, so a rewritten 2023 post
   is still a 2023 post; `updated` is what the sitemap's `lastmod` and a feed

@@ -41,6 +41,13 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
   2023 post is still a 2023 post; `updated` is what the sitemap's `lastmod` and a
   feed entry's `updated` report, which is how a crawler knows to come back and a
   reader knows to resurface it.
+/ #raw("expiry:datetime"): The last day the page is published. From the day
+  after, it is left out of the build entirely: no page, no listing entry, no
+  feed item, and `prune` removes what an earlier build wrote. This is the other
+  end of the window `content { future }` opens, for an event that has happened
+  or a call for papers that has closed. Nothing brings an expired page back, so
+  it is a decision rather than a preview: a page still being written is a
+  `draft`.
 / #raw("draft:bool"): Draft pages are skipped unless you pass `--drafts`
   (or a profile turns them on).
 / #raw("slug:str"): Override the URL slug, otherwise derived from the filename.

@@ -35,6 +35,10 @@ const FIELDS: &[(&str, Field)] = &[
         fm.updated = Some(v.date(p, k)?);
         Ok(())
     }),
+    ("expiry", |fm, v, p, k| {
+        fm.expiry = Some(v.date(p, k)?);
+        Ok(())
+    }),
     ("draft", |fm, v, p, k| {
         fm.draft = v.boolean(p, k)?;
         Ok(())
@@ -78,6 +82,13 @@ pub struct Frontmatter {
     /// every listing: a 2023 guide rewritten today is still a 2023 post, but a
     /// crawler and a feed reader both need to hear that it moved.
     pub updated: Option<time::Date>,
+    /// The date this page stops building: an event that has happened, a call
+    /// for papers that has closed, an offer that has ended.
+    ///
+    /// The other end of the window `content { future }` opens. A page is
+    /// excluded from the day *after* this date, so `expiry` names the last day
+    /// it is published rather than the first day it is not.
+    pub expiry: Option<time::Date>,
     pub draft: bool,
     pub slug: Option<String>,
     /// Explicit language override; beats the filename suffix and the default

@@ -387,13 +387,25 @@ impl Page {
 
     /// Whether this page should be skipped given draft/future flags.
     pub fn skipped(&self, drafts: bool, future: bool) -> bool {
-        (self.frontmatter.draft && !drafts) || (self.is_future() && !future)
+        (self.frontmatter.draft && !drafts) || (self.is_future() && !future) || self.is_expired()
     }
 
     fn is_future(&self) -> bool {
         self.frontmatter
             .date
             .is_some_and(|d| d > time::OffsetDateTime::now_utc().date())
+    }
+
+    /// Whether this page's `expiry` has passed.
+    ///
+    /// No flag brings it back, unlike a draft or a future date: those are pages
+    /// on their way in, and an expired one was dated out of the site on
+    /// purpose. `expiry` names the last day it is published, so the exclusion
+    /// starts the day after.
+    fn is_expired(&self) -> bool {
+        self.frontmatter
+            .expiry
+            .is_some_and(|d| d < time::OffsetDateTime::now_utc().date())
     }
 
     /// The permalink a page will resolve to for a given collection (or a root

@@ -327,6 +327,54 @@ fn draft_page_skipped_unless_flag() {
     assert!(!page.skipped(true, false));
 }
 
+/// `expiry` is the last day a page is published, and no flag brings it back:
+/// unlike a draft or a future date, which are pages on their way in, an expired
+/// page was dated out of the site deliberately.
+#[test]
+fn expired_page_is_skipped_and_todays_expiry_still_builds() {
+    let site = Site::new();
+    site.write("config.kdl", "site \"T\"");
+    let today = time::OffsetDateTime::now_utc().date();
+    let day = |d: time::Date| {
+        format!(
+            "datetime(year: {}, month: {}, day: {})",
+            d.year(),
+            d.month() as u8,
+            d.day()
+        )
+    };
+    site.write(
+        "content/posts/gone.typ",
+        &format!(
+            "#let frontmatter = (title: \"G\", expiry: {},)\nbody",
+            day(today - time::Duration::days(1))
+        ),
+    );
+    site.write(
+        "content/posts/last-day.typ",
+        &format!(
+            "#let frontmatter = (title: \"L\", expiry: {},)\nbody",
+            day(today)
+        ),
+    );
+    let cfg = site.config();
+    let load = |name: &str| {
+        Page::load(
+            "posts",
+            &site.root.join(format!("content/posts/{name}.typ")),
+            &cfg,
+            &project(&cfg),
+            &DiscoveryCache::load(&cfg),
+        )
+        .unwrap()
+    };
+    assert!(load("gone").skipped(true, true), "yesterday's expiry built");
+    assert!(
+        !load("last-day").skipped(false, false),
+        "an expiry of today is the last day it publishes, not the first it does not"
+    );
+}
+
 #[test]
 fn empty_content_dir_returns_empty() {
     let site = Site::new();
