@@ -81,6 +81,10 @@ chores are visible in the git history and change nothing for a site.
   `sx-<hex>`.
 - **cli**: `--strict` fails a run that warned. The warning tally existed but
   only `--strict-links` could gate on it, one class out of the whole set.
+- **cli**: `deploy` and `announce` take the build flags. Both build the site
+  before publishing it, so `--base-url`, `--drafts`, `--future`, `--out` and
+  `--no-cache` now shape that build; a named profile used to be the only lever,
+  which forced every preview permutation into `config.kdl`.
 - **cli**: `--json` writes a machine-readable summary of the run to stdout:
   `ok`, `pages`, `cached`, `warnings`, and every diagnostic with its code and
   severity. stdout was reserved for data and had never carried any.

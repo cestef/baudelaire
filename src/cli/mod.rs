@@ -152,9 +152,12 @@ pub struct GlobalArgs {
     pub json: bool,
 }
 
-/// Config overrides that only make sense for a build (`build`, `serve`,
-/// `check`). Flattened per-command rather than made global so scaffolding
-/// commands don't advertise irrelevant `--drafts`/`--no-cache` flags.
+/// Config overrides that only make sense for a build: `build` and `serve`, and
+/// equally `deploy`/`announce`, which build the site before publishing it and
+/// so want the same levers (a preview `--base-url`, a staging `--drafts`, a
+/// `--no-cache` clean artifact). Flattened per-command rather than made global
+/// so scaffolding commands don't advertise irrelevant `--drafts`/`--no-cache`
+/// flags.
 #[derive(Args, Debug, Clone, Default)]
 pub struct BuildOverrides {
     #[command(flatten)]
@@ -273,6 +276,9 @@ pub struct ServeArgs {
 #[cfg(feature = "announce")]
 #[derive(Args, Debug, Clone)]
 pub struct AnnounceArgs {
+    #[command(flatten)]
+    pub overrides: BuildOverrides,
+
     /// Secret (app password / token) for the destination; `-` reads it from
     /// stdin. Prefer stdin, the environment variable, or the interactive prompt:
     /// a literal flag can leak into shell history.
@@ -302,6 +308,9 @@ impl remote::Flags for AnnounceArgs {
 /// Arguments for `baudelaire deploy`.
 #[derive(Args, Debug, Clone)]
 pub struct DeployArgs {
+    #[command(flatten)]
+    pub overrides: BuildOverrides,
+
     /// Secret for the destination (S3 secret access key, or SSH password/key
     /// passphrase); `-` reads it from stdin. Prefer stdin, the backend's
     /// environment variable, or the interactive prompt: a literal flag can leak
@@ -836,14 +845,14 @@ impl Run for NewArgs {
 #[cfg(feature = "announce")]
 impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let config = cx.announced("announcing")?;
+        let config = cx.configured(&self.overrides, "announcing")?;
         remote::run(cx.ui, &config, self, crate::announce::run)
     }
 }
 
 impl Run for DeployArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let config = cx.announced("deploying")?;
+        let config = cx.configured(&self.overrides, "deploying")?;
         remote::run(cx.ui, &config, self, crate::deploy::run)
     }
 }
@@ -937,6 +946,30 @@ mod tests {
         ));
         // A dist deliberately placed outside the project stays cleanable.
         assert!(CleanArgs::removable(Path::new("/srv/www"), root));
+    }
+
+    /// `deploy` and `announce` build before they publish, so they take the same
+    /// levers as `build`. Without them the only way to publish a preview was a
+    /// named profile per permutation.
+    #[test]
+    fn a_publishing_command_takes_the_build_overrides() {
+        use clap::Parser;
+        let cli = Cli::parse_from([
+            "baudelaire",
+            "deploy",
+            "--base-url",
+            "https://preview.example/",
+            "--drafts",
+            "--no-cache",
+        ]);
+        let Some(Command::Deploy(args)) = cli.command else {
+            panic!("expected deploy")
+        };
+        let mut config = Config::default();
+        args.overrides.apply(&mut config);
+        assert_eq!(config.url.as_deref(), Some("https://preview.example/"));
+        assert!(config.content.draft.build);
+        assert!(!config.cache.incremental);
     }
 
     #[test]

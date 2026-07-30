@@ -102,6 +102,10 @@ announce metadata (see #link("deploy/overview.typ")[Deploying] for the full
 picture). Only changed files are sent, and stale remote files are pruned unless
 `delete` is off. Errors if no `deploy` block is configured.
 
+Because it builds, it accepts the #link(<build-flags>)[build flags]: deploy a
+preview with `--base-url`, a staging copy with `--drafts`, or a cold artifact
+with `--no-cache`.
+
 / #raw("--secret <value>"): The destination secret (S3 secret key or SSH
   password/passphrase). `-` reads it from stdin; prefer that or the environment
   variable over a literal flag.
@@ -115,7 +119,8 @@ Announce the site's metadata to the configured destination: an
 atproto/#link("https://standard.site")[standard.site] publication plus one
 document record per dated page. It announces the site; it does not upload the
 built files (see #link("deploy/overview.typ")[Deploying] for that). Builds first, then
-reconciles the remote records with your pages.
+reconciles the remote records with your pages. Accepts the
+#link(<build-flags>)[build flags], like `deploy`.
 
 / #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
   environment variable over a literal flag.
@@ -215,8 +220,9 @@ Accepted by every command.
 
 == Build flags <build-flags>
 
-Config overrides accepted by the commands that build: `build`, `serve`, and
-`check`.
+Config overrides accepted by the commands that build: `build`, `serve`, `check`,
+and the two that build before publishing, `deploy` and `announce`. (`check`
+writes no file and loads no cache, so it takes neither `--out` nor `--cache`.)
 
 / #raw("--out <dir>"): Override the output directory.
 / #raw("--base-url <url>"): Override the site URL, useful for preview deploys.
