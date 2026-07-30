@@ -212,3 +212,64 @@ fn discover_with_collection_override() {
     assert_eq!(posts.pages.len(), 1);
     assert_eq!(posts.pages[0].permalink, "/blog/hello/");
 }
+
+/// `--strict` turns the warning tally into an exit code. Without it a warning is
+/// something CI can only find by grepping stderr, and `--strict-links` gated one
+/// warning class out of the whole set.
+#[test]
+fn strict_fails_a_run_that_warned() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    // A broken internal link, demoted to a warning by `--no-strict-links`: a
+    // run that warns and would otherwise succeed, which is exactly what
+    // `--strict` is for.
+    sb.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#link(\"/content/gone.typ\")[gone]\n",
+    );
+    let config = sb.path("config.kdl");
+    let config = config.to_str().unwrap();
+
+    let lax = sb.run(&["-c", config, "build", "--no-strict-links"]);
+    let stderr = String::from_utf8_lossy(&lax.stderr).into_owned();
+    assert!(
+        stderr.contains("warning"),
+        "the fixture should warn, else this proves nothing: {stderr}"
+    );
+    assert!(
+        lax.status.success(),
+        "a warning alone must not fail: {stderr}"
+    );
+
+    let strict = sb.run(&["-c", config, "--strict", "build", "--no-strict-links"]);
+    assert!(!strict.status.success(), "--strict should have failed");
+    let stderr = String::from_utf8_lossy(&strict.stderr);
+    assert!(
+        stderr.contains("baudelaire::strict::warnings"),
+        "expected the typed diagnostic: {stderr}"
+    );
+}
+
+/// ...and a clean run is unaffected, so `--strict` is safe to leave on in CI.
+#[test]
+fn strict_passes_a_run_that_did_not_warn() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    sb.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome\n",
+    );
+    let config = sb.path("config.kdl");
+    let out = sb.run(&["-c", config.to_str().unwrap(), "--strict", "build"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

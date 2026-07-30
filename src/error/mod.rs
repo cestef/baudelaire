@@ -165,6 +165,27 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     FeedDate(#[from] FeedDateError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Strict(#[from] StrictWarnings),
+}
+
+/// A run that warned, under `--strict`.
+///
+/// Warnings are what baudelaire says instead of failing: a missing font, an
+/// untaken permalink, a capability this binary lacks. Every one is a thing the
+/// author probably wants to know and possibly wants to block on, and until
+/// `--strict` existed the only warning CI could gate on was broken links
+/// (`--strict-links`). Grepping stderr for the rest is not a gate.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{count} warning{} in a strict run", if *.count == 1 { "" } else { "s" })]
+#[diagnostic(
+    code(baudelaire::strict::warnings),
+    help("the warnings are above; fix them, or drop `--strict` to let them pass")
+)]
+pub struct StrictWarnings {
+    pub count: usize,
 }
 
 /// Several pages failed to compile in one build. Each page's own diagnostics

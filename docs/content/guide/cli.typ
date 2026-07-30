@@ -180,6 +180,11 @@ Accepted by every command.
   resolves under it.
 / #raw("--profile <name>"): Apply a named profile from the `profiles` block.
 / #raw("-v"), #raw("-q"): More (`-v`, repeat for deeper logs) or less output.
+/ #raw("--strict"): Fail the run if anything warned. Warnings are what
+  baudelaire says instead of failing (a missing font, an untaken permalink, a
+  capability this binary lacks), and this is what turns the whole set into an
+  exit code rather than something CI has to grep stderr for. The warnings still
+  print; the run then exits non-zero behind them.
 
 == Build flags <build-flags>
 

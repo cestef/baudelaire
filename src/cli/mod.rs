@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
 use crate::error::warning::CleanRefused;
-use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result};
+use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result, StrictWarnings};
 use crate::ui::{Level, Ui};
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
@@ -142,6 +142,10 @@ pub struct GlobalArgs {
     /// Quiet output.
     #[arg(short, long, global = true, conflicts_with = "verbose", help_heading = group::LOGGING)]
     pub quiet: bool,
+
+    /// Fail the run if anything warned.
+    #[arg(long, global = true, help_heading = group::LOGGING)]
+    pub strict: bool,
 }
 
 /// Config overrides that only make sense for a build (`build`, `serve`,
@@ -670,8 +674,14 @@ pub fn run(cli: Cli) -> Result<()> {
     crate::ui::trace::init(cli.global.verbose);
     let ui = Ui::new(cli.level());
     let result = dispatch(&cli, &ui);
+    // Counted before the flush empties them, and reported after, so `--strict`
+    // fails *behind* the warnings that explain it rather than in front of them.
+    let warned = ui.warnings();
     ui.flush();
-    result
+    result.and_then(|()| match cli.global.strict && warned > 0 {
+        true => Err(StrictWarnings { count: warned }.into()),
+        false => Ok(()),
+    })
 }
 
 /// Dispatch to the matching subcommand. Each command owns its wiring in a
