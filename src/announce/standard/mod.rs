@@ -22,7 +22,6 @@ use crate::atproto::{AtUri, Blob, Did, Repo, Rkey, Session};
 use crate::config::StandardConfig;
 use crate::error::warning::{DidUnpinned, Undated};
 use crate::error::{AnnounceError, Result};
-use crate::graph::Fingerprint;
 use crate::mime::Mime;
 use crate::ui::Ui;
 

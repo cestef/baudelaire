@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::atproto::{AtUri, Blob, Did, Nsid, Rkey};
 use crate::config::BaseUrl;
-use crate::graph::{Fingerprint, Hash};
+use crate::graph::Hash;
 
 use super::super::{Doc, SiteView};
 
@@ -97,15 +97,13 @@ pub(super) struct Document {
     tags: Vec<String>,
 }
 
-impl Fingerprint for Document {
+impl Document {
     /// The record's structural digest, keyed into the skip-cache so an unchanged
     /// document is not re-sent.
-    fn fingerprint(&self) -> Hash {
+    pub(super) fn fingerprint(&self) -> Hash {
         Hash::of(self)
     }
-}
 
-impl Document {
     /// A document record for a `doc` published on `date`, under `publication`.
     /// The caller filters undated pages: standard.site requires `publishedAt`.
     pub(super) fn new(doc: &Doc, publication: &AtUri, date: time::Date) -> Self {

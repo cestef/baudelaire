@@ -6,6 +6,7 @@
 //! [`Store`] it talks to. Adding a destination is one `impl Backend`, one `impl
 //! Store`, plus one line in [`configured`]; nothing else learns about it.
 
+mod digest;
 mod s3;
 mod sigv4;
 #[cfg(feature = "ssh")]

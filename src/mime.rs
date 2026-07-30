@@ -10,25 +10,39 @@ use std::path::Path;
 pub struct Mime(&'static str);
 
 impl Mime {
+    /// What an unrecognized extension, or none at all, is served as.
+    const BINARY: &'static str = "application/octet-stream";
+
+    /// The MIME type named by `path`'s extension, matched case-insensitively:
+    /// `Photo.PNG` names the same type as `photo.png`, as it must, since
+    /// [`ImageFormat`] has always classified the two alike and a file the asset
+    /// pipeline optimized as a PNG cannot then be served as a generic binary.
     pub fn of(path: impl AsRef<Path>) -> Self {
-        Self(match path.as_ref().extension().and_then(|e| e.to_str()) {
-            Some("html") => "text/html",
-            Some("css") => "text/css",
-            Some("js" | "mjs") => "text/javascript",
-            Some("svg") => "image/svg+xml",
-            Some("png") => "image/png",
-            Some("jpg" | "jpeg") => "image/jpeg",
-            Some("gif") => "image/gif",
-            Some("webp") => "image/webp",
-            Some("avif") => "image/avif",
-            Some("ico") => "image/x-icon",
-            Some("woff2") => "font/woff2",
-            Some("woff") => "font/woff",
-            Some("ttf") => "font/ttf",
-            Some("json") => "application/json",
-            Some("xml") => "application/xml",
-            Some("txt") => "text/plain",
-            _ => "application/octet-stream",
+        let Some(ext) = path.as_ref().extension().and_then(|e| e.to_str()) else {
+            return Self(Self::BINARY);
+        };
+        // Rasters resolve through `ImageFormat`, not through a second list of
+        // extensions here: `.jfif` and `.jpe` were JPEG to the optimizer and
+        // `application/octet-stream` to everything that served them.
+        if let Some(format) = ImageFormat::from_ext(ext) {
+            return format.mime();
+        }
+        Self(match ext.to_ascii_lowercase().as_str() {
+            "html" => "text/html",
+            "css" => "text/css",
+            "js" | "mjs" => "text/javascript",
+            "svg" => "image/svg+xml",
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            "avif" => "image/avif",
+            "ico" => "image/x-icon",
+            "woff2" => "font/woff2",
+            "woff" => "font/woff",
+            "ttf" => "font/ttf",
+            "json" => "application/json",
+            "xml" => "application/xml",
+            "txt" => "text/plain",
+            _ => Self::BINARY,
         })
     }
 
@@ -54,9 +68,54 @@ impl fmt::Display for Mime {
     }
 }
 
+/// A raster format the asset pipeline can decode and re-encode.
+///
+/// Lives here, beside [`Mime`], because classifying a file by extension is one
+/// question with one answer: the optimizer used to keep its own wider list
+/// (`jpe`, `jfif`) while `Mime` kept a narrower one, so the same file was
+/// re-encoded as a JPEG and then served as a generic binary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+}
+
+impl ImageFormat {
+    /// Each format's media type and the extensions naming it. The single table
+    /// both [`from_ext`](Self::from_ext) and [`Mime::of`] read, so the pipeline
+    /// and everything that serves a file can never disagree about what it is.
+    const FORMATS: &'static [(Self, &'static str, &'static [&'static str])] = &[
+        (Self::Png, "image/png", &["png"]),
+        (Self::Jpeg, "image/jpeg", &["jpg", "jpeg", "jpe", "jfif"]),
+    ];
+
+    /// The raster format a file extension names, matched case-insensitively.
+    /// `None` when unrecognized. The single source for classifying a raster,
+    /// independent of whether any optimization or responsive processing is
+    /// enabled for it.
+    pub fn from_ext(ext: &str) -> Option<Self> {
+        let ext = ext.to_ascii_lowercase();
+        Self::FORMATS
+            .iter()
+            .find(|(_, _, exts)| exts.contains(&ext.as_str()))
+            .map(|(format, ..)| *format)
+    }
+
+    /// This format's media type.
+    pub fn mime(self) -> Mime {
+        Mime(
+            Self::FORMATS
+                .iter()
+                .find(|(format, ..)| *format == self)
+                .map(|(_, mime, _)| *mime)
+                .unwrap_or(Mime::BINARY),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Mime;
+    use super::{ImageFormat, Mime};
 
     #[test]
     fn maps_known_extensions() {
@@ -92,11 +151,35 @@ mod tests {
             "application/octet-stream"
         );
         assert_eq!(Mime::of("Makefile").to_string(), "application/octet-stream");
-        // Matching is case-sensitive: an uppercase extension is not recognized.
-        assert_eq!(
-            Mime::of("INDEX.HTML").to_string(),
-            "application/octet-stream"
-        );
+    }
+
+    /// Matching ignores case. It used to not, so `Photo.PNG` was optimized as a
+    /// PNG by the asset pipeline (which has always lowercased) and then served
+    /// as `application/octet-stream` by everything downstream.
+    #[test]
+    fn extensions_match_regardless_of_case() {
+        assert_eq!(Mime::of("INDEX.HTML").to_string(), "text/html");
+        assert_eq!(Mime::of("Photo.PNG").to_string(), "image/png");
+        assert_eq!(Mime::of("Style.CSS").to_string(), "text/css");
+    }
+
+    /// Every extension the optimizer classifies as a raster is served as one.
+    /// Two tables used to answer this, and they disagreed: `.jfif` and `.jpe`
+    /// were JPEG to `ImageFormat` and a generic binary to `Mime`.
+    #[test]
+    fn every_raster_extension_agrees_with_the_optimizer() {
+        for ext in ["png", "jpg", "jpeg", "jpe", "jfif", "JFIF"] {
+            let format = ImageFormat::from_ext(ext).unwrap_or_else(|| panic!("{ext} is a raster"));
+            assert_eq!(
+                Mime::of(format!("pic.{ext}")),
+                format.mime(),
+                "{ext} served as something other than what it is optimized as"
+            );
+        }
+        assert_eq!(Mime::of("pic.jfif").to_string(), "image/jpeg");
+        assert_eq!(Mime::of("pic.jpe").to_string(), "image/jpeg");
+        // A non-raster is still not one.
+        assert_eq!(ImageFormat::from_ext("svg"), None);
     }
 
     #[test]

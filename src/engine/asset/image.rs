@@ -8,9 +8,10 @@ use std::path::Path;
 use image::{DynamicImage, imageops::FilterType};
 
 use super::exif::Orientation;
-use crate::config::{Config, ImageFormat, JpegConfig, PngConfig, PngStrip};
+use crate::config::{Config, JpegConfig, PngConfig, PngStrip};
 use crate::error::{AssetError, Result};
 use crate::fs;
+use crate::mime::ImageFormat;
 
 use super::{Ctx, Handler, PathExt, Variant};
 

@@ -16,7 +16,7 @@ mod session;
 
 use tokio::runtime::{Builder, Runtime};
 
-use super::sigv4::Signer;
+use super::digest::Digest;
 use super::{Backend, Digests, Dist, Store};
 use crate::config::SshConfig;
 use crate::error::deploy::Setup;
@@ -109,7 +109,7 @@ impl Store for Sftp<'_> {
     /// The host hashes its own files with `sha256sum`, so the local side must
     /// match it exactly.
     fn digest(&self, bytes: &[u8]) -> String {
-        Signer::sha256_hex(bytes)
+        Digest::sha256(bytes)
     }
 
     fn list(&self) -> Result<Digests> {

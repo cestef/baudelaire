@@ -12,4 +12,4 @@ pub use access::{Analyzer, Reads, Root, Roots};
 pub use cache::{Cache, Outputs, Recorded, RenderInputs};
 pub use deps::Deps;
 pub use digest::FileDigests;
-pub use hash::{AssetName, Fingerprint, Hash, Renderer};
+pub use hash::{AssetName, Hash, Renderer};

@@ -49,29 +49,6 @@ impl Hash {
         value.hash(&mut hasher);
         Self(hasher.0.finalize().into())
     }
-
-    /// A content fingerprint of every file under `dir`, sorted by relative path
-    /// (an empty directory, or an absent one, hashes to a stable empty value).
-    /// Used to invalidate pages that inline asset bytes (`embed`): a change the
-    /// per-file dependency tracker cannot otherwise see, since typst never reads
-    /// the embedded files.
-    pub fn of_dir(dir: &Path) -> Self {
-        // Keyed by the path's raw bytes rather than a lossy string: two distinct
-        // non-UTF-8 names both render as `??` and would collapse into one key,
-        // hiding a change from the very fingerprint meant to catch it.
-        let mut files: Vec<(Vec<u8>, Hash)> = crate::fs::Walk::new(dir)
-            .lossy()
-            .files
-            .iter()
-            .filter_map(|path| {
-                let hash = Self::of_file(path)?;
-                let rel = path.strip_prefix(dir).unwrap_or(path);
-                Some((rel.as_os_str().as_encoded_bytes().to_vec(), hash))
-            })
-            .collect();
-        files.sort_by(|(a, _), (b, _)| a.cmp(b));
-        Self::of(&files)
-    }
 }
 
 /// The emitted name of an asset: the authored path with a short content digest
@@ -198,18 +175,6 @@ impl Renderer {
             schema: Self::SCHEMA,
         }
     }
-}
-
-/// A value that can fingerprint itself into a [`Hash`], for cache invalidation.
-///
-/// One shared vocabulary for "the content digest of this thing": a page-link
-/// map, the processed-asset map, a publishable record. Every implementor folds
-/// its digest into some cache and re-derives dependent work when it changes, so
-/// they all speak in [`Hash`] and compose the same way. Implement it, don't call
-/// [`Hash::of`] ad-hoc, when a type has a canonical fingerprint of its own.
-pub trait Fingerprint {
-    /// This value's content fingerprint. Stable across runs for equal content.
-    fn fingerprint(&self) -> Hash;
 }
 
 /// Serialized as its hex string, so the on-disk manifest stays human-readable

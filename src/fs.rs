@@ -198,14 +198,6 @@ pub struct Walk<'a> {
 /// A predicate over directories a walk must not enter: see [`Walk::skipping`].
 type Skip<'a> = Box<dyn Fn(&Path) -> bool + 'a>;
 
-/// What a walk does with a directory it cannot read.
-enum OnError {
-    /// Fail the whole walk.
-    Fail,
-    /// End that branch and keep going.
-    Prune,
-}
-
 /// The result of a [`Walk`].
 #[derive(Debug, Default)]
 pub struct Tree {
@@ -232,7 +224,10 @@ impl<'a> Walk<'a> {
 
     /// Walk the tree, failing if any directory cannot be read.
     pub fn tree(&self) -> Result<Tree> {
-        self.collect(OnError::Fail)
+        let mut tree = Tree::default();
+        let mut seen = BTreeSet::from([canonical(self.root)]);
+        self.descend(self.root, &mut seen, &mut tree)?;
+        Ok(tree)
     }
 
     /// Every file under the root.
@@ -240,37 +235,12 @@ impl<'a> Walk<'a> {
         Ok(self.tree()?.files)
     }
 
-    /// Walk best-effort: an unreadable directory contributes nothing instead of
-    /// failing the walk. For callers whose result is advisory (a fingerprint of
-    /// whatever is readable) rather than an output the build depends on.
-    pub fn lossy(&self) -> Tree {
-        self.collect(OnError::Prune).unwrap_or_default()
-    }
-
-    fn collect(&self, on_error: OnError) -> Result<Tree> {
-        let mut tree = Tree::default();
-        let mut seen = BTreeSet::from([canonical(self.root)]);
-        self.descend(self.root, &on_error, &mut seen, &mut tree)?;
-        Ok(tree)
-    }
-
-    fn descend(
-        &self,
-        dir: &Path,
-        on_error: &OnError,
-        seen: &mut BTreeSet<PathBuf>,
-        tree: &mut Tree,
-    ) -> Result<()> {
-        let entries = match (read_dir(dir), on_error) {
-            (Ok(entries), _) => entries,
-            (Err(e), OnError::Fail) => return Err(e),
-            (Err(_), OnError::Prune) => return Ok(()),
-        };
-        for path in entries {
+    fn descend(&self, dir: &Path, seen: &mut BTreeSet<PathBuf>, tree: &mut Tree) -> Result<()> {
+        for path in read_dir(dir)? {
             if !path.is_dir() {
                 tree.files.push(path);
             } else if self.enters(&path, seen) {
-                self.descend(&path, on_error, seen, tree)?;
+                self.descend(&path, seen, tree)?;
                 tree.dirs.push(path);
             }
         }

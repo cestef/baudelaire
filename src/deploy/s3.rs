@@ -10,9 +10,10 @@
 //! so a local file whose MD5 matches the remote ETag is skipped without any
 //! local record.
 
-use md5::{Digest, Md5};
+use md5::{Digest as _, Md5};
 use time::OffsetDateTime;
 
+use super::digest::Digest;
 use super::sigv4::{DATE_HEADER, Request, Signer};
 use super::{Backend, Digests, Dist, Listed, Store};
 use crate::config::S3Config;
@@ -273,7 +274,7 @@ impl Bucket {
     /// Sign a request, returning the header trio to attach.
     fn authorize(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Authorization {
         let timestamp = Signer::timestamp(OffsetDateTime::now_utc());
-        let payload_hash = Signer::sha256_hex(body);
+        let payload_hash = Digest::sha256(body);
         let signer = Signer {
             access_key: &self.access_key,
             secret_key: &self.secret_key,
@@ -426,7 +427,7 @@ impl Bucket {
 
     /// The ETag S3 assigns a single-part upload: the lowercase hex MD5 of `bytes`.
     fn etag(bytes: &[u8]) -> String {
-        Signer::hex(&Md5::digest(bytes))
+        Digest::hex(&Md5::digest(bytes))
     }
 }
 

@@ -86,10 +86,11 @@ images = ["dep:oxipng", "dep:image"]
 cards = ["dep:typst-render", "dep:typst-layout"]
 
 # The SSH/SFTP deploy backend, on russh. By crate count this is the most
-# expensive thing in the tree after typst and rolldown: ~145 crates reachable
-# only through it, including `aws-lc-sys`, a large C/assembly build that nothing
-# else pulls. Off means a `deploy { ssh { } }` block warns and that destination
-# is skipped; `deploy { s3 { } }` is unaffected, since S3 rides on ureq.
+# expensive thing in the tree after typst and rolldown: ~76 crates reachable only
+# through it over the default set (~91 over `--no-default-features`), including
+# `aws-lc-sys`, a large C/assembly build that nothing else pulls. Off means a
+# `deploy { ssh { } }` block warns and that destination is skipped;
+# `deploy { s3 { } }` is unaffected, since S3 rides on ureq.
 ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 
 # Build OpenSSL from source and link it statically instead of using the host's

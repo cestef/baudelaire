@@ -1,7 +1,8 @@
 use miette::Diagnostic;
 
-use crate::config::{Config, ImageFormat, PngStrip, SortKey};
+use crate::config::{Config, PngStrip, SortKey};
 use crate::error::BaudelaireErrorKind;
+use crate::mime::ImageFormat;
 
 fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")

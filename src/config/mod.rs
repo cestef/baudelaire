@@ -20,6 +20,7 @@ use kdl::KdlDocument;
 
 use crate::config::dispatch::Section;
 use crate::error::{ConfigError, Result};
+use crate::mime::ImageFormat;
 
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use url::{BaseUrl, Percent, UrlStyle};
@@ -711,6 +712,7 @@ impl FeedKind {
             Self::Json => "feed.json",
         }
     }
+
 }
 
 /// Client-side search index generation. Empty `formats` disables search.
@@ -1053,27 +1055,6 @@ pub struct OptimizeConfig {
     pub png: Option<PngConfig>,
     /// JPEG optimization (re-encode), when enabled.
     pub jpeg: Option<JpegConfig>,
-}
-
-/// A raster format the optimizer recognizes, resolved from a file extension.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImageFormat {
-    Png,
-    Jpeg,
-}
-
-impl ImageFormat {
-    /// The raster format a file extension names, matched leniently (`jpg`,
-    /// `jpeg`, `jpe`, `jfif` all map to JPEG). `None` when unrecognized. The
-    /// single source for classifying a raster, independent of whether any
-    /// optimization or responsive processing is enabled for it.
-    pub fn from_ext(ext: &str) -> Option<Self> {
-        match ext.to_ascii_lowercase().as_str() {
-            "png" => Some(Self::Png),
-            "jpg" | "jpeg" | "jpe" | "jfif" => Some(Self::Jpeg),
-            _ => None,
-        }
-    }
 }
 
 impl OptimizeConfig {

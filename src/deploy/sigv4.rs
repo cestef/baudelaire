@@ -8,8 +8,10 @@
 //! byte.
 
 use hmac::{Hmac, KeyInit, Mac};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use time::OffsetDateTime;
+
+use super::digest::Digest;
 
 /// The signing algorithm, named identically in the string-to-sign and in the
 /// `Authorization` header, so it is spelled once.
@@ -57,10 +59,10 @@ impl Signer<'_> {
             ALGORITHM,
             self.timestamp,
             &scope,
-            &Self::sha256_hex(canonical.as_bytes()),
+            &Digest::sha256(canonical.as_bytes()),
         ]
         .join("\n");
-        let signature = Self::hex(&Self::hmac(&self.key(), to_sign.as_bytes()));
+        let signature = Digest::hex(&Self::hmac(&self.key(), to_sign.as_bytes()));
         format!(
             "{ALGORITHM} Credential={}/{scope}, SignedHeaders={headers}, Signature={signature}",
             self.access_key,
@@ -138,23 +140,6 @@ impl Signer<'_> {
         &self.timestamp[..8]
     }
 
-    /// The lowercase hex SHA-256 of `data`, the value S3 wants in
-    /// `x-amz-content-sha256`, and the digest used throughout signing.
-    pub fn sha256_hex(data: &[u8]) -> String {
-        Self::hex(&Sha256::digest(data))
-    }
-
-    /// Lowercase, zero-padded hex. Shared with the S3 backend's ETag comparison.
-    pub(super) fn hex(bytes: &[u8]) -> String {
-        use std::fmt::Write;
-        bytes
-            .iter()
-            .fold(String::with_capacity(bytes.len() * 2), |mut out, byte| {
-                let _ = write!(out, "{byte:02x}");
-                out
-            })
-    }
-
     /// HMAC-SHA256 of `message` under `key`.
     fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
         let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
@@ -216,11 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn sha256_of_empty_is_the_known_constant() {
-        assert_eq!(Signer::sha256_hex(b""), EMPTY);
-    }
-
-    #[test]
     fn get_vanilla_matches_the_suite() {
         let req = Request {
             method: "GET",
@@ -239,7 +219,7 @@ mod tests {
         );
         // the suite publishes the hash of the canonical request (its string-to-sign line)
         assert_eq!(
-            Signer::sha256_hex(canonical.as_bytes()),
+            Digest::sha256(canonical.as_bytes()),
             "bb579772317eb040ac9ed261061d46c1f17a8133879d6129b6e1c25292927e63"
         );
         assert_eq!(
@@ -312,11 +292,6 @@ mod tests {
         let mut signer = signer();
         signer.timestamp = &timestamp;
         assert_eq!(signer.date(), "20150830");
-    }
-
-    #[test]
-    fn hex_is_zero_padded_lowercase() {
-        assert_eq!(Signer::hex(&[0x00, 0x0f, 0xff, 0xa0]), "000fffa0");
     }
 
     #[test]
