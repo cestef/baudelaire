@@ -103,6 +103,54 @@ impl Timer {
     }
 }
 
+/// What a run produced, as data rather than as prose: what `--json` writes to
+/// stdout.
+///
+/// stdout was already reserved for exactly this and had never carried anything,
+/// so a CI job could get a page count, a broken-link list or a warning set only
+/// by scraping styled text off stderr.
+#[derive(serde::Serialize)]
+pub struct Report {
+    /// Whether the run succeeded. A `--strict` failure is still `false`.
+    pub ok: bool,
+    /// Absent for a command that builds nothing (`clean`, `new`, `init`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached: Option<usize>,
+    pub warnings: usize,
+    /// Every diagnostic collected, warnings and advice alike, in the order they
+    /// were reported.
+    pub diagnostics: Vec<Diagnostics>,
+}
+
+/// One collected diagnostic, reduced to what a machine can act on: which class
+/// it is, how much it matters, and what it said.
+#[derive(serde::Serialize, Clone)]
+pub struct Diagnostics {
+    /// The `baudelaire::..` code, absent only for a diagnostic carrying none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    pub severity: &'static str,
+    pub message: String,
+}
+
+impl Diagnostics {
+    fn of(note: &Note) -> Self {
+        Self {
+            code: note.0.code().map(|c| c.to_string()),
+            severity: match note.0.severity().unwrap_or(Severity::Error) {
+                Severity::Advice => "advice",
+                Severity::Warning => "warning",
+                Severity::Error => "error",
+            },
+            // The plain rendering, not the styled one: a JSON consumer wants the
+            // text, and markup delimiters are this terminal's business.
+            message: Markup::new(&note.0.to_string(), false).to_string(),
+        }
+    }
+}
+
 /// A collected diagnostic and how it counts: warnings tally into the build
 /// summary, advice is informational only.
 struct Note(Box<dyn Diagnostic + Send + Sync>);
@@ -120,6 +168,15 @@ struct State {
     level: Level,
     notes: Vec<Note>,
     warned: usize,
+    /// What the run produced, when it produced anything countable. Recorded by
+    /// the commands that build, read only by [`Ui::summary`].
+    built: Option<(usize, usize)>,
+    /// Every diagnostic collected this run, in machine-readable form.
+    ///
+    /// Kept apart from `notes` because `flush` drains those, and a build flushes
+    /// its own warnings well before the CLI assembles the `--json` report: read
+    /// from `notes`, the report came out empty while the count said otherwise.
+    collected: Vec<Diagnostics>,
 }
 
 /// The shared terminal reporter. All methods take `&self` (state sits behind a
@@ -144,6 +201,8 @@ impl Ui {
                 level,
                 notes: Vec::new(),
                 warned: 0,
+                built: None,
+                collected: Vec::new(),
             }),
             tty: std::io::stderr().is_terminal(),
             color: AutoStream::choice(&std::io::stderr()) != ColorChoice::Never,
@@ -163,6 +222,29 @@ impl Ui {
     /// Total warnings collected so far. Diffed across a build for its summary.
     pub fn warnings(&self) -> usize {
         self.state.lock().warned
+    }
+
+    /// Record what a build produced, for `--json`. Called by the commands that
+    /// build; everything else reports no counts rather than zero ones, which
+    /// are different claims.
+    pub fn built(&self, pages: usize, cached: usize) {
+        self.state.lock().built = Some((pages, cached));
+    }
+
+    /// The machine-readable record of this run.
+    ///
+    /// Built *before* [`flush`](Ui::flush) drains the notes, and written to
+    /// stdout, which is why nothing else here ever writes there: a caller
+    /// piping `--json` gets one object and no prose mixed into it.
+    pub fn summary(&self, ok: bool) -> Report {
+        let s = self.state.lock();
+        Report {
+            ok,
+            pages: s.built.map(|(pages, _)| pages),
+            cached: s.built.map(|(_, cached)| cached),
+            warnings: s.warned,
+            diagnostics: s.collected.clone(),
+        }
     }
 
     /// The command banner: `baudelaire v0.1.0  building my-site`. Printed once
@@ -320,6 +402,7 @@ impl Ui {
         let mut s = self.state.lock();
         let note = Note(warning);
         s.warned += usize::from(note.is_warning());
+        s.collected.push(Diagnostics::of(&note));
         s.notes.push(note);
     }
 

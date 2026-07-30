@@ -273,3 +273,57 @@ fn strict_passes_a_run_that_did_not_warn() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// `--json` is the only thing that ever writes to stdout, so a CI job can read
+/// the run as data instead of scraping styled prose off stderr.
+#[test]
+fn json_writes_a_machine_readable_summary_to_stdout() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks { strict #false }\n",
+    );
+    sb.write("content/a.typ", "#let frontmatter = (title: \"A\",)\na");
+    sb.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n#link(\"/content/gone.typ\")[bad]\n",
+    );
+    let config = sb.path("config.kdl");
+    let out = sb.run(&["-c", config.to_str().unwrap(), "--json", "build"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout should be one JSON object");
+    assert_eq!(report["ok"], true);
+    assert_eq!(report["pages"], 2);
+    assert_eq!(report["warnings"], 1);
+    // The broken link is reachable as data, codes and all: this is what `check`
+    // being "a fast CI gate" was missing.
+    let first = &report["diagnostics"][0];
+    assert_eq!(first["code"], "baudelaire::links::broken");
+    assert_eq!(first["severity"], "warning");
+    assert!(
+        first["message"].as_str().is_some_and(|m| !m.is_empty()),
+        "{first}"
+    );
+}
+
+/// Without the flag, stdout stays empty: that reservation is what makes the
+/// object above safe to pipe.
+#[test]
+fn stdout_is_empty_without_json() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    sb.write("content/index.typ", "#let frontmatter = (title: \"H\",)\nh");
+    let config = sb.path("config.kdl");
+    let out = sb.run(&["-c", config.to_str().unwrap(), "build"]);
+    assert!(out.status.success());
+    assert!(out.stdout.is_empty(), "stdout: {:?}", out.stdout);
+}

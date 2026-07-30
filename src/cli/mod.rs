@@ -146,6 +146,10 @@ pub struct GlobalArgs {
     /// Fail the run if anything warned.
     #[arg(long, global = true, help_heading = group::LOGGING)]
     pub strict: bool,
+
+    /// Write a machine-readable summary of the run to stdout.
+    #[arg(long, global = true, help_heading = group::LOGGING)]
+    pub json: bool,
 }
 
 /// Config overrides that only make sense for a build (`build`, `serve`,
@@ -677,11 +681,32 @@ pub fn run(cli: Cli) -> Result<()> {
     // Counted before the flush empties them, and reported after, so `--strict`
     // fails *behind* the warnings that explain it rather than in front of them.
     let warned = ui.warnings();
-    ui.flush();
-    result.and_then(|()| match cli.global.strict && warned > 0 {
+    let outcome = result.and_then(|()| match cli.global.strict && warned > 0 {
         true => Err(StrictWarnings { count: warned }.into()),
         false => Ok(()),
-    })
+    });
+    // Built while the diagnostics are still collected, and written before the
+    // flush, so the JSON object lands on stdout uninterleaved with the prose on
+    // stderr.
+    if cli.global.json {
+        emit_json(&ui.summary(outcome.is_ok()));
+    }
+    ui.flush();
+    outcome
+}
+
+/// Write the run's summary to stdout, the one thing that ever goes there.
+///
+/// A serialization failure is swallowed rather than replacing the run's real
+/// outcome: the report describes what happened, and losing the description is
+/// not the same as the thing having failed.
+fn emit_json(report: &crate::ui::Report) {
+    use std::io::Write;
+    if let Ok(text) = serde_json::to_string(report) {
+        let mut out = std::io::stdout().lock();
+        let _ = writeln!(out, "{text}");
+        let _ = out.flush();
+    }
 }
 
 /// Dispatch to the matching subcommand. Each command owns its wiring in a
@@ -757,7 +782,8 @@ impl Command {
 impl Run for BuildArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.configured(&self.overrides, "building")?;
-        crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(cx.ui)?;
+        let stats = crate::engine::Engine::new(config, crate::engine::Mode::Build)?.build(cx.ui)?;
+        cx.ui.built(stats.pages, stats.cached);
         Ok(())
     }
 }
@@ -766,7 +792,8 @@ impl Run for CheckArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let mut config = cx.configured(&self.overrides, "checking")?;
         Toggle::of(self.external, self.no_external).apply(&mut config.links.external);
-        crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
+        let stats = crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
+        cx.ui.built(stats.pages, stats.cached);
         Ok(())
     }
 }

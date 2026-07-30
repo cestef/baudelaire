@@ -187,6 +187,26 @@ Accepted by every command.
   resolves under it.
 / #raw("--profile <name>"): Apply a named profile from the `profiles` block.
 / #raw("-v"), #raw("-q"): More (`-v`, repeat for deeper logs) or less output.
+/ #raw("--json"): Write a machine-readable summary of the run to stdout, one
+  JSON object, on its own. Everything else baudelaire prints goes to stderr, so
+  `baudelaire --json build 2>/dev/null | jq` is safe:
+
+  ```json
+  {
+    "ok": true,
+    "pages": 51,
+    "cached": 50,
+    "warnings": 1,
+    "diagnostics": [
+      { "code": "baudelaire::links::broken",
+        "severity": "warning",
+        "message": "found 1 broken internal link" }
+    ]
+  }
+  ```
+
+  `pages`/`cached` are absent for a command that builds nothing. `ok` is false
+  whenever the run failed, `--strict` included.
 / #raw("--strict"): Fail the run if anything warned. Warnings are what
   baudelaire says instead of failing (a missing font, an untaken permalink, a
   capability this binary lacks), and this is what turns the whole set into an
