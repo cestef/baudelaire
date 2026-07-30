@@ -276,6 +276,18 @@ impl Attributed for TaxonomyConfig {
             c.template = Some(v.as_str(t, s)?);
             Ok(())
         }),
+        ("paginate", |c, v, t, s| {
+            let n = v.integer(t, s)?;
+            if n < 1 {
+                return Err(ConfigError::paginate_too_small(t, n, s).into());
+            }
+            c.paginate = Some(n as usize);
+            Ok(())
+        }),
+        ("prefix", |c, v, t, s| {
+            c.prefix = v.as_str(t, s)?;
+            Ok(())
+        }),
     ]);
 }
 

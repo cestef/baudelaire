@@ -98,3 +98,85 @@ scenario "two terms that slug alike are rejected" {
     fails { code "baudelaire::content::term_collision" }
   }
 }
+
+// A term listing chunks like a collection index, through the same rule, so
+// `/tags/rust/page/2/` is named the way `/blog/page/2/` is. A term used to
+// list every member on one page whatever its size.
+scenario "a taxonomy term paginates when it asks to" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags listing=#true paginate=2
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", tags: ("rust",),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", tags: ("rust",),)
+      b
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "Gamma", slug: "c", tags: ("rust",),)
+      c
+      """#
+  }
+  expect {
+    ok
+    // Page 1 keeps the term's own URL, and carries only its chunk.
+    file "tags/rust/index.html" {
+      contains "Alpha"
+      contains "Beta"
+      missing "Gamma"
+      contains #"href="/tags/rust/page/2/""#
+    }
+    file "tags/rust/page/2/index.html" {
+      contains "Gamma"
+      missing "Alpha"
+      contains #"href="/tags/rust/""#
+    }
+    absent "tags/rust/page/3/index.html"
+  }
+}
+
+// An unpaginated term is unchanged: one page with every member, and no page 2.
+scenario "a taxonomy term without paginate stays one page" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags listing=#true
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", tags: ("rust",),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", tags: ("rust",),)
+      b
+      """#
+  }
+  expect {
+    ok
+    file "tags/rust/index.html" {
+      contains "Alpha"
+      contains "Beta"
+    }
+    absent "tags/rust/page/2/index.html"
+  }
+}

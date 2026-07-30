@@ -98,6 +98,12 @@ chores are visible in the git history and change nothing for a site.
 - **feed**: Every page advertises the configured feeds in its `<head>`. Feeds
   were emitted and nothing pointed at them, and since typst-html owns `<head>` a
   layout could not add the tag.
+- **taxonomies**: Term pages paginate. `tags listing=#true paginate=20` chunks
+  `/tags/rust/` across `/tags/rust/page/2/` and so on, with the prev/next nav
+  every other listing carries, and `prefix=` renames the `page` segment. A term
+  held every page under it whatever its size, beside a collection index that
+  paginated the very same pages; both now run through one rule, so they cannot
+  disagree about what page 2 is called.
 - **content**: `translation` frontmatter, so a translated page can take a
   translated slug. Editions pair on collection and slug, so a French edition had
   to keep the English one: rename it and it became a standalone page, losing the

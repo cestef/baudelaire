@@ -646,6 +646,13 @@ pub struct TaxonomyConfig {
     pub listing: bool,
     /// Template for the generated taxonomy index + term pages.
     pub template: Option<String>,
+    /// Members per term page. `None` puts every member on one page, which is
+    /// what a term listing used to do unconditionally, beside a collection
+    /// index that paginated the same pages.
+    pub paginate: Option<usize>,
+    /// Path segment before a term page's number (`/tags/rust/page/2/`); empty
+    /// drops it. Spelled like a collection's, since it is the same thing.
+    pub prefix: String,
 }
 
 /// Draft handling: whether drafts build, and the file-stem suffix marking one.

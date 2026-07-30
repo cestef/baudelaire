@@ -343,6 +343,9 @@ impl From<String> for TaxonomyConfig {
             // opt-in: term pages and their index are extra output
             listing: false,
             template: None,
+            // un-paginated until asked, like a collection with no `paginate`
+            paginate: None,
+            prefix: "page".into(),
         }
     }
 }

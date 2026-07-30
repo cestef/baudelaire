@@ -10,6 +10,7 @@ use crate::config::Permalink;
 use crate::config::{Config, TaxonomyConfig};
 use crate::content::generate::{Generate, PlanCtx};
 use crate::content::listing::{Item, Listing, Titlecase};
+use crate::content::pagination::Paged;
 use crate::content::{Page, Slug};
 use crate::error::{ContentError, Result};
 
@@ -58,6 +59,10 @@ pub(crate) struct Group<'a> {
     name: &'a str,
     /// Optional user template for the generated pages.
     template: Option<String>,
+    /// Members per term page; `None` puts every member on one.
+    paginate: Option<usize>,
+    /// Path segment before a term page's number.
+    prefix: String,
     /// term -> member pages, sorted by term then title.
     terms: BTreeMap<String, Vec<&'a Page>>,
     /// The language whose pages this group indexes; localizes every URL.
@@ -87,6 +92,8 @@ impl<'a> Group<'a> {
         Self {
             name,
             template: cfg.template.clone(),
+            paginate: cfg.paginate,
+            prefix: cfg.prefix.clone(),
             terms,
             lang,
             config,
@@ -108,7 +115,7 @@ impl<'a> Group<'a> {
         let resolved = self.resolve()?;
         out.push(self.index(&resolved).into_page(self.config));
         for term in &resolved {
-            out.push(self.term(term).into_page(self.config));
+            self.term(term, out);
         }
         Ok(())
     }
@@ -163,14 +170,41 @@ impl<'a> Group<'a> {
         format!("{}: {}", Titlecase(self.name), term.name)
     }
 
-    /// The `/{name}/{term}/` listing of the pages under `term`.
-    fn term(&self, term: &Term<'_>) -> Listing {
-        let items = term.members.iter().map(|member| Item::of(member)).collect();
+    /// The `/{name}/{term}/` listing of the pages under `term`, chunked when
+    /// the taxonomy sets a `paginate` count.
+    ///
+    /// Through the same [`Paged`] a collection index uses, so `/tags/rust/` and
+    /// `/blog/` name page 2 the same way. A term used to list every member on
+    /// one page whatever its size, which on a blog with three years of `#rust`
+    /// posts meant all 400 of them.
+    fn term(&self, term: &Term<'_>, out: &mut Vec<Page>) {
+        let root = [self.name, term.slug.as_str()];
+        let paged = Paged::new(
+            &root,
+            None,
+            &self.prefix,
+            &term.slug,
+            self.paginate.unwrap_or(term.members.len()),
+            self.lang,
+            self.config,
+        );
         let title = self.title(term);
-        Listing::new(self.name, term.slug.clone(), term.url.clone(), title)
+        let chunks = paged.chunks(term.members);
+        for (index, members) in chunks.iter().enumerate() {
+            let number = index + 1;
+            let items = members.iter().map(|member| Item::of(member)).collect();
+            let listing = Listing::new(
+                self.name,
+                paged.slug(number),
+                paged.url(number),
+                paged.title(&title, number),
+            )
             .items(items)
+            .nav(paged.nav(number, chunks.len()))
             .template(self.template.clone())
-            .lang(self.lang)
+            .lang(self.lang);
+            out.push(listing.into_page(self.config));
+        }
     }
 }
 
