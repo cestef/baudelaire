@@ -798,6 +798,8 @@ impl Engine {
             outputs: Outputs {
                 images: rewrite.images,
                 broken: rewrite.broken,
+                anchors: rewrite.anchors,
+                deep: rewrite.deep,
                 fragments,
             },
             external: rewrite.external,
@@ -840,8 +842,11 @@ impl Engine {
             .map(|(page, outputs, external)| CheckedPage {
                 label: self.relative(page),
                 source: &page.source,
+                permalink: &page.permalink,
                 broken: &outputs.broken,
                 external,
+                anchors: &outputs.anchors,
+                deep: &outputs.deep,
             })
             .collect();
         let site = Compiled {

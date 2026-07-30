@@ -35,7 +35,15 @@ impl Transform for Links {
                 // changes underneath it.
                 found.links.extend(resolution.probed);
                 match resolution.link {
-                    Link::Resolved(url) => Some(url),
+                    Link::Resolved(url) => {
+                        // A link naming a fragment of another page is checked
+                        // site-wide once every page's anchors are known: the
+                        // target's headings are not resolvable from here.
+                        if url.contains('#') {
+                            found.deep.push(url.clone());
+                        }
+                        Some(url)
+                    }
                     Link::Broken => {
                         found.broken.push(value.to_owned());
                         None

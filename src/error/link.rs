@@ -11,7 +11,19 @@ use miette::{Diagnostic, LabeledSpan, NamedSource, Severity, SourceCode, SourceS
 
 use crate::ui::{Code, Text};
 
-/// An internal `.typ` link pointing at a page that does not exist.
+/// Why a link did not resolve. One error class, two precise reasons: both are
+/// located in the source and reported the same way, and only the wording and
+/// the diagnostic code differ.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Miss {
+    /// No page sits at the `.typ` path.
+    Page,
+    /// The page exists, but exposes no such heading id. Carries the fragment,
+    /// since the raw target is the whole `path.typ#fragment`.
+    Anchor(String),
+}
+
+/// An internal `.typ` link that does not resolve.
 #[derive(Debug, Clone)]
 pub struct Broken {
     /// The page containing the link, relative to the content root.
@@ -25,6 +37,8 @@ pub struct Broken {
     /// Error under `strict_links`, warning otherwise; set by the
     /// [`BrokenLinks`] constructor so parent and children render alike.
     severity: Severity,
+    /// What was missing.
+    miss: Miss,
 }
 
 impl Broken {
@@ -32,6 +46,15 @@ impl Broken {
     /// so miette can underline it. `source` is the raw file text (empty for
     /// generated pages, whose sources never touch disk).
     pub fn new(page: String, target: String, source: &Path) -> Self {
+        Self::missing(page, target, source, Miss::Page)
+    }
+
+    /// A link whose page resolved but whose `#fragment` names no heading there.
+    pub fn anchor(page: String, target: String, source: &Path, fragment: String) -> Self {
+        Self::missing(page, target, source, Miss::Anchor(fragment))
+    }
+
+    fn missing(page: String, target: String, source: &Path, miss: Miss) -> Self {
         let text = crate::fs::read_to_string(source).unwrap_or_default();
         let span = text
             .find(&target)
@@ -43,13 +66,22 @@ impl Broken {
             src,
             span,
             severity: Severity::Error,
+            miss,
         }
     }
 }
 
 impl fmt::Display for Broken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} has no matching page", Code(&self.target))
+        match &self.miss {
+            Miss::Page => write!(f, "{} has no matching page", Code(&self.target)),
+            Miss::Anchor(fragment) => write!(
+                f,
+                "{} has no heading {}",
+                Code(&self.target),
+                Code(&format!("#{fragment}"))
+            ),
+        }
     }
 }
 
@@ -57,7 +89,10 @@ impl std::error::Error for Broken {}
 
 impl Diagnostic for Broken {
     fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new("baudelaire::links::broken"))
+        Some(Box::new(match self.miss {
+            Miss::Page => "baudelaire::links::broken",
+            Miss::Anchor(_) => "baudelaire::links::anchor",
+        }))
     }
 
     fn severity(&self) -> Option<Severity> {
@@ -70,8 +105,15 @@ impl Diagnostic for Broken {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         let span = self.span?;
+        // Constant, not interpolated: a label is not markup-rendered, so a
+        // fragment carrying a backtick would land raw in the output. Which
+        // heading is missing is already in the message, through `Code`.
+        let label = match self.miss {
+            Miss::Page => "no page here",
+            Miss::Anchor(_) => "no such heading on that page",
+        };
         Some(Box::new(std::iter::once(LabeledSpan::new_with_span(
-            Some("no page here".into()),
+            Some(label.to_owned()),
             span,
         ))))
     }

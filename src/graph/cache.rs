@@ -112,6 +112,19 @@ pub struct Outputs {
     /// `links { strict #true }` *passed*: a gate that silently weakened on
     /// rebuild.
     pub broken: Vec<String>,
+    /// The heading ids this page exposes, and the `"/url/#fragment"` links it
+    /// carries into other pages.
+    ///
+    /// Stored for the same reason as `broken`: the deep-link check has to see a
+    /// cached page too, or a second build reports nothing and the gate silently
+    /// weakens on rebuild. Unlike `broken` these are the check's *inputs*, not
+    /// its verdict, and the check re-runs site-wide every build: page A's
+    /// verdict depends on page B's headings, so caching the verdict would go
+    /// stale the moment B was edited and A was not.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deep: Vec<String>,
     /// The page's head and body markup, captured only while the single-file
     /// export is on. Stored because it cannot be recovered from the rendered
     /// page afterwards without parsing it, and a cache-served page has to be

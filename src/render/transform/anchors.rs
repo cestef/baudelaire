@@ -21,11 +21,16 @@ const HEADINGS: &[HtmlTag] = &[tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag:
 pub(super) struct Anchors;
 
 impl Transform for Anchors {
-    fn enabled(&self, config: &Config) -> bool {
-        config.html.anchors
+    /// Always. `html { anchors }` decides whether ids are *derived*, not whether
+    /// this pass runs: it is also the only pass that knows a page's full id set,
+    /// which the deep-link check reads. Gating the whole thing left a site with
+    /// `anchors #false` reporting every fragment link as broken, having simply
+    /// never looked.
+    fn enabled(&self, _config: &Config) -> bool {
+        true
     }
 
-    fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
+    fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         // ids are unique per page: like-slugged headings get `-2`, `-3`, .. suffixes.
         // Every authored id is collected up front (on any element, anywhere in
         // the document) so a derived id never collides with one, regardless of
@@ -36,15 +41,21 @@ impl Transform for Anchors {
                 seen.insert(id.to_string());
             }
         });
-        doc.walk(|element| {
-            if !Self::heading(element.tag) || element.attrs.get(attr::id).is_some() {
-                return;
-            }
-            if let Some(slug) = Slug::parse(&Self::text(element)) {
-                let id = Self::unique(slug.into_string(), &mut seen);
-                element.attrs.push(attr::id, id.as_str());
-            }
-        });
+        if cx.config.html.anchors {
+            doc.walk(|element| {
+                if !Self::heading(element.tag) || element.attrs.get(attr::id).is_some() {
+                    return;
+                }
+                if let Some(slug) = Slug::parse(&Self::text(element)) {
+                    let id = Self::unique(slug.into_string(), &mut seen);
+                    element.attrs.push(attr::id, id.as_str());
+                }
+            });
+        }
+        // Every id on the page, authored or derived, is what a deep link from
+        // elsewhere may name. Recorded here because this is the pass that knows
+        // the full set, and the check that needs it is site-wide.
+        cx.found.anchors.extend(seen);
     }
 }
 

@@ -151,6 +151,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 8: `Outputs` carries each page's heading ids and its `#fragment` links,
+    /// for the site-wide deep-link check. An entry written before this records
+    /// neither, so a cached page would look like it exposes no headings at all
+    /// and every link into it would be reported as dangling.
     /// 7: embedded asset bytes became ordinary per-page dependencies, so the
     /// whole-tree `embeds` hash left the manifest fingerprint. An entry written
     /// before this lists no embedded file among its deps.
@@ -166,7 +170,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 7;
+    const SCHEMA: u32 = 8;
 
     pub fn current() -> Self {
         Self {

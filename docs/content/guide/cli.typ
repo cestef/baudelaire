@@ -51,6 +51,13 @@ the target's permalink); a link to an already-resolved URL like `/posts/hello/`
 is left untouched and never checked, so a permalink can change without breaking
 `.typ` references to it. Accepts the #link(<build-flags>)[build flags].
 
+A `#fragment` on such a link is checked too: `#link("/content/guide.typ#setup")`
+has to find a heading with that `id` on the target page, so renaming a heading
+reports every deep link into it instead of quietly breaking them. This runs
+site-wide on every build, including over pages served from the cache, so
+renaming a heading in one page is caught even though the page linking to it did
+not change.
+
 / #raw("--external"): Also verify outbound `http(s)` links over the network
   (`--no-external` skips them even when `links { external #true }` is set).
   Every distinct URL is requested once (`HEAD`, retried as `GET` by servers that

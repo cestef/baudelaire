@@ -34,18 +34,65 @@ pub(super) struct CheckedPage<'a> {
     pub label: String,
     /// The `.typ` source path, so a check can locate a span within it.
     pub source: &'a Path,
+    /// This page's own URL, so a deep link elsewhere can find its anchors.
+    pub permalink: &'a str,
     /// Raw targets of the broken internal links this page produced.
     pub broken: &'a [String],
     /// Outbound `http(s)` link targets, empty unless external checking is on.
     pub external: &'a [String],
+    /// The heading ids this page exposes.
+    pub anchors: &'a [String],
+    /// Resolved `"/url/#fragment"` links this page carries into others.
+    pub deep: &'a [String],
 }
 
 /// Broken internal `.typ` links: every reference must resolve to an existing
-/// page. Fatal under `links.strict`, otherwise the identical diagnostic as a
-/// warning.
+/// page, and a reference naming a `#fragment` must find that heading there.
+/// Fatal under `links.strict`, otherwise the identical diagnostic as a warning.
 pub(super) struct Links;
 
 impl Links {
+    /// Links naming a `#fragment` no page exposes.
+    ///
+    /// A site-wide pass, because a page cannot answer this while it renders:
+    /// the headings belong to the *target*, which may not have been compiled
+    /// yet. Recomputed from every page's recorded anchors on every build rather
+    /// than cached per page, so renaming a heading in B invalidates the verdict
+    /// on A without A having changed at all.
+    ///
+    /// A fragment pointing into the page's own body is checked the same way; the
+    /// linking page is simply also the target.
+    fn dangling(site: &Compiled) -> Vec<Broken> {
+        let anchors: std::collections::HashMap<&str, &[String]> = site
+            .pages
+            .iter()
+            .map(|page| (page.permalink, page.anchors))
+            .collect();
+        site.pages
+            .iter()
+            .flat_map(|page| {
+                page.deep.iter().filter_map(|target| {
+                    let (url, fragment) = target.split_once('#')?;
+                    // Only a URL this build produced can be judged. Anything
+                    // else is a link out of the site, or into a static file, and
+                    // saying "no such heading" about a page baudelaire never
+                    // rendered would be a false positive.
+                    let ids = anchors.get(url)?;
+                    let fragment = fragment.split('?').next().unwrap_or(fragment);
+                    if fragment.is_empty() || ids.iter().any(|id| id == fragment) {
+                        return None;
+                    }
+                    Some(Broken::anchor(
+                        page.label.clone(),
+                        target.clone(),
+                        page.source,
+                        fragment.to_owned(),
+                    ))
+                })
+            })
+            .collect()
+    }
+
     pub(super) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
         let broken: Vec<Broken> = site
             .pages
@@ -55,6 +102,7 @@ impl Links {
                     .iter()
                     .map(|target| Broken::new(page.label.clone(), target.clone(), page.source))
             })
+            .chain(Self::dangling(site))
             .collect();
         if broken.is_empty() {
             return Ok(());
@@ -71,6 +119,8 @@ impl Links {
 mod tests {
     use std::path::Path;
 
+    use miette::Diagnostic as _;
+
     use super::*;
     use crate::error::BaudelaireErrorKind;
     use crate::ui::Level;
@@ -80,9 +130,74 @@ mod tests {
         CheckedPage {
             label: "post.typ".into(),
             source: Path::new("post.typ"),
+            permalink: "/post/",
             broken,
             external: &[],
+            anchors: &[],
+            deep: &[],
         }
+    }
+
+    /// A page carrying anchors and deep links, for the site-wide fragment check.
+    fn deep_page<'a>(
+        permalink: &'a str,
+        anchors: &'a [String],
+        deep: &'a [String],
+    ) -> CheckedPage<'a> {
+        CheckedPage {
+            permalink,
+            anchors,
+            deep,
+            ..page(&[])
+        }
+    }
+
+    /// A fragment naming a heading the target does not have. This is the case
+    /// that used to pass silently: the fragment rode along in the URL and was
+    /// never looked at, so renaming a heading broke every link into it.
+    #[test]
+    fn a_fragment_with_no_matching_heading_is_reported() {
+        let config = Config::default();
+        let anchors = ["installing".to_owned()];
+        let deep = ["/guide/#instaling".to_owned()];
+        let pages = [
+            deep_page("/guide/", &anchors, &[]),
+            deep_page("/", &[], &deep),
+        ];
+        let found = Links::dangling(&Compiled {
+            config: &config,
+            pages: &pages,
+        });
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].code().map(|c| c.to_string()).as_deref(),
+            Some("baudelaire::links::anchor")
+        );
+    }
+
+    /// Everything that must *not* fire: a heading that is there, a link with no
+    /// fragment, a fragment into a page this build did not produce (an external
+    /// URL, a static file), and a page's link into its own headings.
+    #[test]
+    fn a_resolvable_or_unjudgeable_fragment_is_left_alone() {
+        let config = Config::default();
+        let anchors = ["installing".to_owned()];
+        let deep = [
+            "/guide/#installing".to_owned(),
+            "/guide/".to_owned(),
+            "/not-a-page-of-ours/#whatever".to_owned(),
+        ];
+        let pages = [
+            deep_page("/guide/", &anchors, &[]),
+            deep_page("/", &[], &deep),
+        ];
+        assert!(
+            Links::dangling(&Compiled {
+                config: &config,
+                pages: &pages,
+            })
+            .is_empty()
+        );
     }
 
     #[test]

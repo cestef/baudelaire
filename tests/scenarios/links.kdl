@@ -96,3 +96,98 @@ scenario "frontmatter redirects emit stub pages beside the real one" {
     file "posts/new/index.html"
   }
 }
+
+// A fragment used to be `Link::Passthrough`: resolved as part of the URL and
+// never checked, so renaming a heading silently broke every deep link into it.
+scenario "a link to a heading that does not exist is caught" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Installing
+      how to install
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("/content/guide.typ#instaling")[typo'd anchor]
+      """#
+  }
+  expect {
+    // The aggregate reports as a broken link; the precise `links::anchor` code
+    // rides on the child, which `check::tests` pins.
+    fails { code "baudelaire::links::broken" }
+  }
+}
+
+scenario "a link to a heading that exists is fine" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Installing
+      how to install
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("/content/guide.typ#installing")[good anchor]
+      #link("/content/guide.typ")[no fragment at all]
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "/guide/#installing" }
+  }
+}
+
+// The anchor check must not fire on a page whose ids baudelaire never derived,
+// only on one that genuinely lacks the heading. With `anchors #false` a page
+// exposes exactly its authored ids, and those are still checked.
+scenario "with anchor generation off, only authored ids exist" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html { anchors #false }
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Installing
+      how to install
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("/content/guide.typ#installing")[was derived, now absent]
+      """#
+  }
+  expect {
+    // The aggregate reports as a broken link; the precise `links::anchor` code
+    // rides on the child, which `check::tests` pins.
+    fails { code "baudelaire::links::broken" }
+  }
+}
+
+// A dangling anchor obeys the same strict-vs-warn gate as a dangling page, so
+// a site that chose warnings keeps getting warnings.
+scenario "a dangling anchor is a warning when links are not strict" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      links { strict #false }
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Installing
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("/content/guide.typ#nope")[bad]
+      """#
+  }
+  expect {
+    ok
+    file "index.html"
+  }
+}
