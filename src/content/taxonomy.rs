@@ -1,6 +1,6 @@
 //! Generation of taxonomy index pages.
 //!
-//! For each configured taxonomy with `index=true`, this builds a [`Listing`]
+//! For each configured taxonomy with `listing`, this builds a [`Listing`]
 //! per term (plus one listing every term), which lower to synthetic pages in
 //! the normal compile pipeline.
 

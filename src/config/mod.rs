@@ -683,7 +683,7 @@ pub struct FeedConfig {
     pub limit: usize,
     /// Also emit a feed per taxonomy term, beside that term's listing page
     /// (`/tags/rust/rss.xml`), so a reader can follow one tag rather than the
-    /// whole site. Follows the term pages, so it needs `index=#true` on the
+    /// whole site. Follows the term pages, so it needs `listing` on the
     /// taxonomy.
     pub terms: bool,
 }
@@ -752,6 +752,15 @@ pub struct SearchConfig {
     pub min_length: usize,
     /// Also emit a tiny JavaScript client next to each index.
     pub client: bool,
+}
+
+impl SearchConfig {
+    /// Whether the prebuilt inverted index is among the formats emitted. It is
+    /// the only one `stopwords` and `minimum` reach, so it is also what decides
+    /// whether either of them does anything.
+    pub fn inverted(&self) -> bool {
+        self.formats.contains(&SearchFormat::Inverted)
+    }
 }
 
 /// A client-side search index format.

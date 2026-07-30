@@ -20,7 +20,7 @@ use typst::syntax::{FileId, Source};
 use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::codegen::Value;
-use crate::config::Config;
+use crate::config::{Config, SearchConfig};
 use crate::content::{Page, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
@@ -35,7 +35,7 @@ use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
-use crate::error::warning::FeatureMissing;
+use crate::error::warning::{FeatureMissing, SettingInert};
 use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{
@@ -193,6 +193,115 @@ const GATES: &[Gate] = &[
     },
 ];
 
+/// One config setting that does nothing unless another is also set.
+///
+/// The counterpart of [`Gate`] for settings gated by *each other* rather than
+/// by a cargo feature, and the single source of truth for that class the same
+/// way. Each of these was accepted by the parser, changed nothing about the
+/// build, and said nothing: a `stopwords` list tuning an index format the site
+/// does not emit, a `terms` feed over taxonomies that publish no term page.
+struct Inert {
+    /// The setting that was asked for, as the author writes it in `config.kdl`.
+    setting: &'static str,
+    /// Whether this site asked.
+    asked: fn(&Config) -> bool,
+    /// What it depends on.
+    needs: &'static str,
+    /// Whether that dependency is satisfied.
+    met: fn(&Config) -> bool,
+    /// What the build produces instead.
+    effect: &'static str,
+    /// How to make it take effect, or how to stop asking.
+    help: &'static str,
+}
+
+const INERT: &[Inert] = &[
+    // `minify` is documented as covering CSS and JS, but the JS handler is
+    // gated on `bundle` in full: an unbundled `.js` is copied verbatim.
+    Inert {
+        setting: "assets { minify }",
+        asked: |config| config.assets.minify,
+        needs: "assets { bundle }",
+        met: |config| config.assets.bundle,
+        effect: "JavaScript is copied verbatim, and only stylesheets are minified",
+        help: "turn on `assets { bundle }` to minify JavaScript too",
+    },
+    // Term feeds sit beside term listing pages, and a taxonomy publishes none
+    // unless it asks: `terms` alone wrote no files and warned about nothing.
+    Inert {
+        setting: "generate { feed { terms } }",
+        asked: |config| config.generate.feed.terms,
+        needs: "a taxonomy with `listing`",
+        met: |config| config.content.taxonomies.iter().any(|(_, t)| t.listing),
+        effect: "no per-term feed is written",
+        help: "set `listing` on the taxonomy whose terms should carry a feed",
+    },
+    // Both tune the prebuilt inverted index and reach no other format, so a
+    // site on `formats \"json\"` tuned nothing at all.
+    Inert {
+        setting: "generate { search { stopwords } }",
+        asked: |config| !config.generate.search.stopwords.is_empty(),
+        needs: "generate { search { formats \"inverted\" } }",
+        met: |config| config.generate.search.inverted(),
+        effect: "the flat `json` index carries every token",
+        help: "add `inverted` to `formats`, or drop the stopwords",
+    },
+    Inert {
+        setting: "generate { search { minimum } }",
+        asked: |config| config.generate.search.min_length != SearchConfig::default().min_length,
+        needs: "generate { search { formats \"inverted\" } }",
+        met: |config| config.generate.search.inverted(),
+        effect: "the flat `json` index carries every token",
+        help: "add `inverted` to `formats`, or drop the minimum",
+    },
+    // The verification artifacts are the point of pinning a `did`: without one
+    // there is nothing to reference, and `verify` defaults on, so a site could
+    // ask for both and get neither in silence.
+    Inert {
+        setting: "announce { standard { verify } }",
+        asked: |config| {
+            config
+                .announce
+                .standard
+                .as_ref()
+                .is_some_and(|s| s.verify.wellknown || s.verify.links)
+        },
+        needs: "announce { standard { did } }",
+        met: |config| {
+            config
+                .announce
+                .standard
+                .as_ref()
+                .is_some_and(|s| s.did.is_some())
+        },
+        effect: "no `.well-known` record and no per-page backlink are emitted, so the publication cannot be verified",
+        help: "pin the account's `did`, or turn `verify` off",
+    },
+];
+
+impl Inert {
+    /// Walk the table once against a site's config: name every setting that
+    /// asked for something the config it sits in cannot deliver.
+    fn resolve(config: &Config) -> Vec<SettingInert> {
+        INERT
+            .iter()
+            .filter(|inert| (inert.asked)(config) && !(inert.met)(config))
+            .map(SettingInert::from)
+            .collect()
+    }
+}
+
+impl From<&Inert> for SettingInert {
+    fn from(inert: &Inert) -> Self {
+        Self {
+            setting: inert.setting,
+            needs: inert.needs,
+            effect: inert.effect,
+            help: inert.help,
+        }
+    }
+}
+
 impl Gate {
     /// Walk the table once against a site's config: name every capability it
     /// asked for that this binary lacks, and turn `assets { fingerprint }` off
@@ -237,6 +346,8 @@ pub struct Engine {
     theme: Option<Theme>,
     /// What this binary cannot do that the site asked for, from [`Gate`].
     gaps: Vec<FeatureMissing>,
+    /// What the site asked for that its own config withholds, from [`Inert`].
+    inert: Vec<SettingInert>,
 }
 
 impl Engine {
@@ -257,6 +368,7 @@ impl Engine {
         // A gate can turn a setting off, and a half-applied config is what ships
         // the broken site that guards against.
         let (config, gaps) = Gate::resolve(config);
+        let inert = Inert::resolve(&config);
         let theme = config
             .theme
             .as_deref()
@@ -268,6 +380,7 @@ impl Engine {
             config,
             theme,
             gaps,
+            inert,
         })
     }
 
@@ -299,6 +412,12 @@ impl Engine {
         // producing none of what a missing feature would have shaped.
         for gap in &self.gaps {
             ui.warn(*gap);
+        }
+        // ...and what its own config withholds from it. Same placement, same
+        // reason: the setting that will not take effect belongs beside the
+        // output that does not show it.
+        for inert in &self.inert {
+            ui.warn(*inert);
         }
         // `before` hooks run after the plan (a hook's output is this build's
         // assets, not this build's content) and ahead of the asset pipeline, so
@@ -1044,7 +1163,7 @@ impl<'a> From<&'a Rendered<'a>> for Recorded<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GATES, Gate};
+    use super::{GATES, Gate, INERT, Inert};
     use crate::config::Config;
 
     fn config(text: &str) -> Config {
@@ -1091,6 +1210,64 @@ mod tests {
                 !GATES[i + 1..].iter().any(|o| o.setting == gate.setting),
                 "`{}` is claimed by two gates",
                 gate.setting
+            );
+        }
+    }
+
+    /// Every row fires on the config it describes, and stops once the setting
+    /// it depends on is there. Written as the pair, because a warning that
+    /// cannot be silenced by doing what it asks is worse than none.
+    #[test]
+    fn each_inert_setting_reports_until_its_dependency_is_set() {
+        let cases = [
+            (
+                "assets { minify }",
+                "assets { minify #true }",
+                "assets { minify #true; bundle #true }",
+            ),
+            (
+                "generate { feed { terms } }",
+                "generate { feed { formats \"rss\"; terms #true } }",
+                "generate { feed { formats \"rss\"; terms #true } }\ncontent { taxonomies { tags listing=#true } }",
+            ),
+            (
+                "generate { search { stopwords } }",
+                "generate { search { formats \"json\"; stopwords \"the\" } }",
+                "generate { search { formats \"inverted\"; stopwords \"the\" } }",
+            ),
+            (
+                "generate { search { minimum } }",
+                "generate { search { formats \"json\"; minimum 4 } }",
+                "generate { search { formats \"inverted\"; minimum 4 } }",
+            ),
+            (
+                "announce { standard { verify } }",
+                "announce { standard { handle \"a.example\" } }",
+                "announce { standard { handle \"a.example\"; did \"did:plc:x\" } }",
+            ),
+        ];
+        for (setting, asked, satisfied) in cases {
+            let named = |text| {
+                Inert::resolve(&config(text))
+                    .iter()
+                    .any(|i| i.setting == setting)
+            };
+            assert!(named(asked), "`{setting}` did not report on `{asked}`");
+            assert!(
+                !named(satisfied),
+                "`{setting}` still reports once its dependency is set"
+            );
+        }
+    }
+
+    /// The counterpart of [`every_gate_names_a_distinct_setting`].
+    #[test]
+    fn every_inert_row_names_a_distinct_setting() {
+        for (i, inert) in INERT.iter().enumerate() {
+            assert!(
+                !INERT[i + 1..].iter().any(|o| o.setting == inert.setting),
+                "`{}` is claimed by two rows",
+                inert.setting
             );
         }
     }

@@ -165,6 +165,13 @@ chores are visible in the git history and change nothing for a site.
   recovery. `new` writes the page when the project cannot be opened, losing only
   the two conveniences that read existing content: the next `order` and the
   permalink-collision check.
+- **config**: A setting that does nothing because a sibling is off now says so.
+  Five of them were accepted, changed nothing, and reported nothing:
+  `assets { minify }` leaves JavaScript verbatim without `bundle`;
+  `generate { feed { terms } }` writes no file unless a taxonomy has `listing`;
+  `generate { search { stopwords } }` and `{ minimum }` tune only the `inverted`
+  index; `announce { standard { verify } }` emits nothing without a `did`, and
+  defaults on. Each warns once per build, naming what it needs.
 - **serve**: `--port 0` prints the port it got. It means "any free port", and
   the banner answered by advertising `http://127.0.0.1:0/`.
 - **cli**: `-v` wins over `RUST_LOG`. Any value in the environment used to

@@ -339,6 +339,26 @@ pub struct FeatureMissing {
     pub effect: &'static str,
 }
 
+/// A setting that does nothing, because the setting it depends on is off.
+///
+/// The counterpart of [`FeatureMissing`] for settings gated by *each other*
+/// rather than by a cargo feature. Same shape for the same reason: the config
+/// was accepted, the build was green, and the only evidence that a key had no
+/// effect was its absence from the output.
+#[derive(thiserror::Error, miette::Diagnostic, Debug, Clone, Copy)]
+#[error("{} does nothing without {}: {effect}", Code(.setting), Code(.needs))]
+#[diagnostic(code(baudelaire::config::inert), severity(warning), help("{help}"))]
+pub struct SettingInert {
+    /// The setting that was asked for, spelled as it is written in `config.kdl`.
+    pub setting: &'static str,
+    /// What it needs and does not have.
+    pub needs: &'static str,
+    /// What the build produces instead.
+    pub effect: &'static str,
+    /// How to make it take effect, or how to stop asking.
+    pub help: &'static str,
+}
+
 /// Pages a announce run skipped because they carry no publication date.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{} skipped: no publication date", crate::ui::Count::pages(*count))]
