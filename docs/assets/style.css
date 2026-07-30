@@ -1162,35 +1162,35 @@ ul.listing {
   --sx-punct: #9a9184;
 }
 
-pre code [style*="e5d001"] {
-  color: var(--sx-comment) !important;
+.sx-comment {
+  color: var(--sx-comment);
   font-style: italic;
 }
 
-pre code [style*="e5d002"] {
-  color: var(--sx-string) !important;
+.sx-string {
+  color: var(--sx-string);
 }
 
-pre code [style*="e5d003"] {
-  color: var(--sx-number) !important;
+.sx-number {
+  color: var(--sx-number);
 }
 
-pre code [style*="e5d004"] {
-  color: var(--sx-keyword) !important;
+.sx-keyword {
+  color: var(--sx-keyword);
 }
 
-pre code [style*="e5d005"] {
-  color: var(--sx-node) !important;
+.sx-node {
+  color: var(--sx-node);
 }
 
-pre code [style*="e5d006"] {
-  color: var(--sx-prop) !important;
+.sx-prop {
+  color: var(--sx-prop);
 }
 
-pre code [style*="e5d007"] {
-  color: var(--sx-type) !important;
+.sx-type {
+  color: var(--sx-type);
 }
 
-pre code [style*="e5d008"] {
-  color: var(--sx-punct) !important;
+.sx-punct {
+  color: var(--sx-punct);
 }

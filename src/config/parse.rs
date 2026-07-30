@@ -13,13 +13,13 @@ use crate::config::node::NodeExt;
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig,
-    DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig, HooksConfig,
-    HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig, NavigationConfig,
-    OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig, Router,
-    S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SortKey, SpaConfig,
-    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
-    UrlStyle, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config,
+    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
+    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
+    NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SortKey,
+    SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig,
+    TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
@@ -81,7 +81,6 @@ impl Section for Config {
             c.prune = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("cache", |c, n, t| c.cache.fill(n, t)),
         ("typst", |c, n, t| c.typst.fill(n, t)),
         ("client", |c, n, t| {
             c.client = n.table(t)?;
@@ -414,6 +413,16 @@ impl Section for HtmlConfig {
         }),
         ("anchors", |c, n, t| {
             c.anchors = n.boolean(t, 0)?;
+            Ok(())
+        }),
+        ("highlight", |c, n, t| {
+            c.highlight.enabled = true;
+            // A bare `highlight` rewrites every colour to its hex class; a block
+            // names the scopes the theme paints, so the classes read as meaning
+            // rather than as colours.
+            if n.children().is_some() {
+                c.highlight.scopes = n.pairs(t)?;
+            }
             Ok(())
         }),
     ]);

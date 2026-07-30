@@ -17,36 +17,46 @@ TextMate theme (`.tmTheme`). Typst ships grammars for many common languages, so
 you only need your own for niche ones. This site adds `kdl.sublime-syntax` for
 its config examples.
 
-== The dark-mode caveat
+== Theming, and dark mode
 
 Typst's HTML export bakes highlight colours *inline*, a `color` style on every
-`span`, with no option to emit CSS classes instead. A fixed theme therefore
-can't follow a light/dark toggle: the colours are frozen at build time.
+`span`, with no option to emit CSS classes. A colour frozen at build time cannot
+follow a light/dark toggle that flips at runtime.
 
-#callout(kind: "warn")[
-  A `.tmTheme` with real colours will look wrong in one of your two modes. The
-  colour is decided at build time, but your background changes at runtime.
-]
+Turn on `html { highlight { } }` and Baudelaire rewrites those inline colours
+into classes, so the palette lives in your stylesheet where the toggle can reach
+it:
 
-The fix is to make the theme's colours *arbitrary sentinels*: unique hex values
-that stand for a scope, not a colour. Then remap them in CSS, where they can be
-theme-aware:
-
+```kdl
+html {
+  highlight {
+    keyword "#e5d004"
+    string  "#e5d002"
+    comment "#e5d001"
+  }
+}
 ```
-/* baudelaire.tmTheme: each scope gets a unique, meaningless hex */
-comment  -> #e5d001
-string   -> #e5d002
-keyword  -> #e5d004
-```
+
+Each entry names a colour your `.tmTheme` paints, and the span carrying it comes
+out as `class="sx-keyword"`. Which means the theme's colours can be arbitrary
+*sentinels*: unique hex values standing for a scope rather than for a colour.
 
 ```css
-/* style.css: swap each sentinel for a real, adaptive variable */
-:root            { --sx-keyword: #a12a5e; }   /* light */
-[data-theme=dark]{ --sx-keyword: #e58fa6; }   /* dark  */
+.sx-keyword { color: var(--sx-keyword); }
+.sx-string  { color: var(--sx-string); }
+.sx-comment { color: var(--sx-comment); font-style: italic; }
 
-pre code [style*="e5d004"] { color: var(--sx-keyword) !important; }
+:root             { --sx-keyword: #a12a5e; }  /* light */
+[data-theme=dark] { --sx-keyword: #e58fa6; }  /* dark  */
 ```
 
-An `!important` rule beats Typst's inline style, so the real palette lives in
-CSS and follows the theme toggle. The whole of this site's code, including this
-page, is coloured this way.
+A colour you do not name still becomes a class, keyed by its hex
+(`class="sx-e5d005"`), so a bare `html { highlight }` is enough to get out of
+inline styles entirely. Only spans inside a `<pre>` are rewritten: an inline
+colour in prose is your own `#text(fill: ..)` and is left alone.
+
+#callout(kind: "note")[
+  Without the block, nothing changes: the colours stay inline, exactly as Typst
+  emits them. This is what this site uses, and its whole palette, including the
+  code on this page, comes from `style.css`.
+]

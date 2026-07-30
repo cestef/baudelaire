@@ -11,6 +11,7 @@ mod base;
 mod embed;
 mod externalize;
 mod fingerprint;
+mod highlight;
 mod image;
 mod lang;
 mod meta;
@@ -37,6 +38,7 @@ use base::BasePath;
 use embed::Embed;
 use externalize::Externalize;
 use fingerprint::Fingerprint;
+use highlight::Highlight;
 use image::Images;
 use lang::Lang;
 use meta::Meta;
@@ -82,6 +84,12 @@ pub(super) trait AttrsExt {
     /// Set `key` to `value`, replacing an existing entry rather than appending
     /// a duplicate (which is invalid HTML).
     fn set(&mut self, key: HtmlAttr, value: &str);
+    /// Drop `key` if present.
+    ///
+    /// The counterpart to [`set`](AttrsExt::set), for a transform that moves a
+    /// value *out* of an attribute rather than changing it: emptying a `style`
+    /// leaves `style=""` in the markup, which is not the same as not having one.
+    fn remove(&mut self, key: HtmlAttr);
 }
 
 impl AttrsExt for typst_html::HtmlAttrs {
@@ -90,6 +98,10 @@ impl AttrsExt for typst_html::HtmlAttrs {
             Some(existing) => *existing = value.into(),
             None => self.push(key, value),
         }
+    }
+
+    fn remove(&mut self, key: HtmlAttr) {
+        self.0.retain(|(k, _)| *k != key);
     }
 }
 
@@ -271,6 +283,7 @@ impl Transforms {
             Box::new(Svg),
             Box::new(Lang),
             Box::new(Anchors),
+            Box::new(Highlight),
             Box::new(Meta),
             Box::new(Speculation),
             Box::new(Outbound),

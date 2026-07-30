@@ -211,3 +211,64 @@ scenario "a site with no content builds without error" {
     ok
   }
 }
+
+// typst bakes highlight colours inline and offers no class option, so a themed
+// site had to author sentinel hex values and win them back with
+// `pre code [style*="e5d004"] { ... !important }`. The block moves the palette
+// into the stylesheet, where a light/dark toggle can reach it.
+scenario "highlight colours become classes a stylesheet can own" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight {
+          keyword "#d73948"
+        }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```rust
+      fn main() { let x = 1; }
+      ```
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      // The configured scope names the class...
+      contains #"class="sx-keyword""#
+      // ...an unnamed colour falls back to its hex, which still beats matching
+      // on a style substring...
+      contains #"class="sx-4b69c6""#
+      // ...and no highlight span keeps an inline colour.
+      missing #"<span style="color: #d73948">fn</span>"#
+      // No emptied `style=""` left behind where a colour used to be.
+      missing #"<span style class"#
+    }
+  }
+}
+
+scenario "without the block, highlighting is left exactly as typst emits it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```rust
+      fn main() {}
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains #"<span style="color: #d73948">fn</span>"#
+      missing "sx-"
+    }
+  }
+}

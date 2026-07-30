@@ -6,12 +6,12 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig,
-    DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig, HooksConfig, HtmlConfig,
-    ImagesConfig, JpegConfig, LinkConfig, NavigationConfig, OptimizeConfig, Paths, PngConfig,
-    PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig,
-    SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig,
-    TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    AnnounceConfig, AssetConfig, CacheConfig, CardsConfig, CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig,
+    HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
+    NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
+    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
+    UrlStyle, VerifyConfig,
 };
 
 impl Default for Config {
@@ -79,6 +79,7 @@ impl Default for HtmlConfig {
             embed: false,
             meta: true,
             anchors: true,
+            highlight: HighlightConfig::default(),
         }
     }
 }

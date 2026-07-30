@@ -29,6 +29,20 @@ content {
 
 html {
   pretty #true
+
+  // Names each sentinel colour in `highlight/baudelaire.tmTheme`, so the
+  // markup carries `class="sx-keyword"` and the palette lives in style.css,
+  // where a light/dark toggle can reach it.
+  highlight {
+    comment "#e5d001"
+    string  "#e5d002"
+    number  "#e5d003"
+    keyword "#e5d004"
+    node    "#e5d005"
+    prop    "#e5d006"
+    type    "#e5d007"
+    punct   "#e5d008"
+  }
 }
 
 // Permalink shape and link checking are one subject. `style "clean"` gives
