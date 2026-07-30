@@ -1,0 +1,100 @@
+# git-cliff: generate CHANGELOG.md from the commit history.
+#
+# The generated file is a *skeleton*, not the deliverable. Subject lines here are
+# deliberately one-liners, so a generated entry says what changed and never what
+# to do about it. Every breaking change wants a migration note written by hand
+# under its bullet before a release goes out; `just changelog` regenerates the
+# skeleton, and the prose is yours to keep.
+#
+#   just changelog          # print what the history says changed since the tag
+#   just changelog-full     # regenerate the whole file, discarding hand-written prose
+#
+# `just changelog` prints; it does not write. CHANGELOG.md is edited by hand on
+# top of what it tells you, and a generator that overwrote the file would eat
+# every migration note in it.
+
+[changelog]
+header = """
+# Changelog
+
+Notable changes to baudelaire. Format follows [Keep a Changelog][kac]; versions
+follow [Semantic Versioning][semver], with the pre-1.0 caveat that a breaking
+change bumps the patch number.
+
+Nothing that only affects the repository is listed: refactors, tests, CI and
+chores are visible in the git history and change nothing for a site.
+
+[kac]: https://keepachangelog.com/en/1.1.0/
+[semver]: https://semver.org/spec/v2.0.0.html
+"""
+
+body = """
+
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% set breaking = commits | filter(attribute="breaking", value=true) %}\
+{% if breaking | length > 0 %}
+### Breaking
+{% for commit in breaking %}\
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}
+{% endfor %}\
+{% endif %}\
+{% for group, group_commits in commits | filter(attribute="breaking", value=false) | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in group_commits %}\
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}
+{% endfor %}\
+{% endfor %}
+"""
+
+# Compare links, so a version heading is a diff away from its predecessor. The
+# repository is spelled here rather than read from the remote: a changelog
+# generated in CI, from a shallow clone or a fork, must still link to the same
+# place as one generated locally.
+footer = """
+
+{% set repo = "https://github.com/cestef/baudelaire" -%}
+{% for release in releases -%}
+    {% if release.version -%}
+        {% if release.previous.version -%}
+[{{ release.version | trim_start_matches(pat="v") }}]: {{ repo }}/compare/{{ release.previous.version }}...{{ release.version }}
+        {% else -%}
+[{{ release.version | trim_start_matches(pat="v") }}]: {{ repo }}/releases/tag/{{ release.version }}
+        {% endif -%}
+    {% endif -%}
+{% endfor %}
+"""
+
+trim = true
+
+[git]
+conventional_commits = true
+# A commit that is not conventional is not a changelog entry; it is history.
+filter_unconventional = true
+protect_breaking_commits = true
+filter_commits = true
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"
+
+# Only what a site author would notice. `refactor` is skipped, but
+# `protect_breaking_commits` keeps a `refactor!` (an interface that moved), which
+# is the case the CLI flag rewrite falls into.
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf", group = "Performance" },
+  { message = "^revert", group = "Reverted" },
+  # Skipped, but `protect_breaking_commits` keeps a `refactor!`: an interface
+  # that moved is a changelog entry however the commit was typed.
+  { message = "^refactor", skip = true },
+  { message = "^docs", skip = true },
+  { message = "^test", skip = true },
+  { message = "^build", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^chore", skip = true },
+  { message = "^bump", skip = true },
+  { message = "^bench", skip = true },
+]

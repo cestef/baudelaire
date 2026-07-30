@@ -40,6 +40,17 @@ jobs:
             exit 1
           }
 
+      # The changelog is written by hand, so nothing else can notice it was
+      # forgotten. A release with no entry is a release nobody can read.
+      - name: changelog has a section for the tag
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          grep -q "^## \[${tag#v}\]" CHANGELOG.md || {
+            echo "CHANGELOG.md has no '## [${tag#v}]' section"
+            echo "run \`just changelog\`, then write it"
+            exit 1
+          }
+
       - name: fmt
         run: cargo fmt --all --check
 

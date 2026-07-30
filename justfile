@@ -46,3 +46,18 @@ docs:
 # Build and install the binary from this checkout (contributors).
 install:
     cargo install --path .
+
+# What the commit history says has changed since the last tag. Prints; the file
+# is written by hand.
+#
+# A generated entry is a subject line, so it says what changed and never what to
+# do about it. Read this, then write the Unreleased section of CHANGELOG.md:
+# every breaking change wants a migration note, and a refactor usually wants no
+# entry at all.
+changelog:
+    git-cliff --unreleased
+
+# Regenerate CHANGELOG.md from scratch. Destroys every hand-written note in it;
+# for bootstrapping or for repairing the structure, not for a release.
+changelog-full:
+    git-cliff -o CHANGELOG.md

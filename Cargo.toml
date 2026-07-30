@@ -21,6 +21,7 @@ exclude = [
     "/install.sh",
     "/tests",
     "/benches",
+    "/cliff.toml",
 ]
 
 # Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
