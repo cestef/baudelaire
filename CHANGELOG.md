@@ -98,6 +98,12 @@ chores are visible in the git history and change nothing for a site.
 - **feed**: Every page advertises the configured feeds in its `<head>`. Feeds
   were emitted and nothing pointed at them, and since typst-html owns `<head>` a
   layout could not add the tag.
+- **generate**: `generate { redirects }` writes a `_redirects` rule file that
+  Netlify and Cloudflare Pages answer with a real 301, instead of the per-path
+  HTML stubs. It replaces them rather than joining them: both hosts serve a
+  static file in preference to a redirect rule, so a stub left at the old path
+  would win and the 301 would never fire. Off by default, since a stub works on
+  any host.
 - **taxonomies**: Term pages paginate. `tags listing=#true paginate=20` chunks
   `/tags/rust/` across `/tags/rust/page/2/` and so on, with the prev/next nav
   every other listing carries, and `prefix=` renames the `page` segment. A term

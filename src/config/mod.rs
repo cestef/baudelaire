@@ -175,6 +175,15 @@ pub struct ContentConfig {
 pub struct GenerateConfig {
     /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
     pub sitemap: bool,
+    /// Emit a `_redirects` rule file instead of the per-path HTML stubs.
+    ///
+    /// Netlify and Cloudflare Pages read it from the publish directory and
+    /// answer with a real 301, where a stub is a client-side round trip that
+    /// passes link equity worse. It *replaces* the stubs rather than joining
+    /// them: both hosts serve a static file in preference to a redirect rule,
+    /// so a stub sitting at the old path would win and the 301 would never
+    /// fire.
+    pub redirects: bool,
     /// `robots.txt` generation.
     pub robots: RobotsConfig,
     /// `llms.txt` generation.

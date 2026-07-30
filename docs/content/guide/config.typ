@@ -145,7 +145,9 @@ Two consequences of the grouping are worth knowing before you write anything:
   `sitemap`, #link("../features/discovery/feeds.typ")[`feed`],
   #link("../features/discovery/search.typ")[`search`],
   #link("../features/discovery/cards.typ")[`cards`] (a social image per page),
-  `robots` for `robots.txt`, and `llms` for `llms.txt`.
+  `robots` for `robots.txt`, `llms` for `llms.txt`, and `redirects` to trade
+  the #link("../features/content/redirects.typ")[redirect stubs] for a
+  `_redirects` rule file the host answers with a real 301.
 / #raw("navigation"): How the browser moves between pages. `spa` adds a
   client-side navigation runtime beside the ordinary pages, `standalone` folds
   the whole site into one file, and `speculation` asks the browser to prefetch

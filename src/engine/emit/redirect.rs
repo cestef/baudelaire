@@ -16,6 +16,7 @@ pub(super) struct Redirects;
 
 impl Processor for Redirects {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
+        let mut rules: Vec<(String, String)> = Vec::new();
         // Two pages claiming one old path used to last-writer-win in silence,
         // and each write also pushed a duplicate path, so the summary counted a
         // file it had overwritten. Keep the first and say so, as the sibling
@@ -38,13 +39,25 @@ impl Processor for Redirects {
                     continue;
                 }
                 let target = site.config.prefixed(&page.permalink);
-                let strings = Strings::new(site.config, &page.lang);
-                out.file(
-                    &destination,
-                    &Self::stub(&target, strings.get("redirecting"), &page.lang),
-                )?;
+                // A rule file and a stub cannot coexist: both hosts that read
+                // one serve a static file in preference to a redirect rule, so
+                // the stub would win at the old path and the 301 would never
+                // fire.
+                match site.config.generate.redirects {
+                    true => rules.push((site.config.prefixed(&old), target)),
+                    false => {
+                        let strings = Strings::new(site.config, &page.lang);
+                        out.file(
+                            &destination,
+                            &Self::stub(&target, strings.get("redirecting"), &page.lang),
+                        )?;
+                    }
+                }
                 claimed.insert(destination, &page.source);
             }
+        }
+        if !rules.is_empty() {
+            out.file(&site.dist(&[Self::RULES]), &Self::rules(&rules))?;
         }
         if !claimed.is_empty() {
             out.note(format_args!("wrote {}", Count::redirects(claimed.len())));
@@ -54,6 +67,24 @@ impl Processor for Redirects {
 }
 
 impl Redirects {
+    /// The rule file Netlify and Cloudflare Pages read from the publish
+    /// directory. One name, since both hosts spell it the same.
+    const RULES: &'static str = "_redirects";
+
+    /// The rule file's body: `<old> <new> 301` per line, in the order the pages
+    /// claimed their old paths.
+    ///
+    /// A permanent redirect, because that is what these are: a page moved and
+    /// the old URL is not coming back. The meta-refresh stub this replaces
+    /// could only ever be a client-side round trip, which passes link equity
+    /// worse than a real 301 and costs a page load to do it.
+    fn rules(rules: &[(String, String)]) -> String {
+        rules
+            .iter()
+            .map(|(old, new)| format!("{old} {new} 301\n"))
+            .collect()
+    }
+
     /// A client-side redirect to `target`: a meta-refresh with a canonical link
     /// and a manual fallback anchor. Every value is attribute-escaped by the
     /// markup builder, so no `format!`-built HTML and no bespoke escaper.

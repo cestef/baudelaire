@@ -97,6 +97,39 @@ scenario "frontmatter redirects emit stub pages beside the real one" {
   }
 }
 
+// `generate { redirects }` swaps the stubs for a rule file the host answers
+// with a real 301. The stubs have to go: Netlify and Cloudflare Pages both
+// serve a static file in preference to a redirect rule, so a stub left at the
+// old path would win and the rule would never fire.
+scenario "generate redirects writes a rule file instead of stubs" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        redirects #true
+      }
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new", redirect: ("/old", "/legacy/post"),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "_redirects" {
+      contains "/old /posts/new/ 301"
+      contains "/legacy/post /posts/new/ 301"
+    }
+    absent "old/index.html"
+    absent "legacy/post/index.html"
+    file "posts/new/index.html"
+  }
+}
+
 // A fragment used to be `Link::Passthrough`: resolved as part of the URL and
 // never checked, so renaming a heading silently broke every deep link into it.
 scenario "a link to a heading that does not exist is caught" {

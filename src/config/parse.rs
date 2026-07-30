@@ -482,6 +482,10 @@ impl Section for GenerateConfig {
             c.sitemap = n.boolean(t, 0)?;
             Ok(())
         }),
+        ("redirects", |c, n, t| {
+            c.redirects = n.boolean(t, 0)?;
+            Ok(())
+        }),
         ("robots", |c, n, t| c.robots.fill(n, t)),
         ("llms", |c, n, t| c.llms.fill(n, t)),
         ("feed", |c, n, t| c.feed.fill(n, t)),
