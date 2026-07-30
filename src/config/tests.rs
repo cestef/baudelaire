@@ -1,4 +1,7 @@
+use miette::Diagnostic;
+
 use crate::config::{Config, ImageFormat, PngStrip, SortKey};
+use crate::error::BaudelaireErrorKind;
 
 fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")
@@ -767,4 +770,89 @@ fn percent_round_trips() {
     for path in ["/posts/café/", "/a b/", "/日本語/", "/plain/"] {
         assert_eq!(Percent::decode(&Percent::encode(path)), path);
     }
+}
+
+/// A `dist` that contains the sources is what `paths { dist "." }` produced: the
+/// prune sweep deleted `config.kdl`, the content tree and every unrelated file in
+/// the project, and reported a successful build.
+#[test]
+fn dist_containing_a_source_directory_is_refused() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    let cfg = parse("paths { dist \".\" }");
+    let (key, _) = cfg.paths.swallowed(root).expect("`.` swallows the project");
+    assert_eq!(key, "content");
+
+    // Nesting one level down is the same hazard spelled less obviously.
+    let cfg = parse("paths { dist \"out\"; content \"out/content\" }");
+    let (key, _) = cfg.paths.swallowed(root).expect("nested content swallowed");
+    assert_eq!(key, "content");
+
+    // As is a `dist` above the project, which reaches the sources by climbing.
+    let cfg = parse("paths { dist \"..\" }");
+    assert!(cfg.paths.swallowed(root).is_some());
+
+    // A source directory that *equals* `dist` is swallowed whole.
+    let cfg = parse("paths { dist \"public\"; static \"public\" }");
+    let (key, _) = cfg.paths.swallowed(root).expect("static swallowed");
+    assert_eq!(key, "static");
+}
+
+/// The conventional layout, and a `dist` outside the project, both stand: the
+/// guard refuses containment, not any particular location.
+#[test]
+fn a_dist_beside_the_sources_is_accepted() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    assert_eq!(Config::default().paths.swallowed(root), None);
+    assert_eq!(
+        parse("paths { dist \"../site\" }").paths.swallowed(root),
+        None
+    );
+    assert_eq!(
+        parse("paths { dist \"public/dist\"; assets \"src/assets\" }")
+            .paths
+            .swallowed(root),
+        None
+    );
+}
+
+/// `index` names a stem, matched against `Stem::slug`, which never carries an
+/// extension. The docs shipped `index "index.typ"`, which matches no page: every
+/// bundle keeps its filename slug, `content/index.typ` publishes to `/index/`,
+/// and the build reports success with nothing at `/`.
+#[test]
+fn index_rejects_a_filename_and_names_the_stem() {
+    let err = Config::parse("content { index \"index.typ\" }").expect_err("should refuse");
+    let BaudelaireErrorKind::Config(config) = &err else {
+        panic!("expected a config diagnostic, got: {err:?}");
+    };
+    assert_eq!(
+        config.code().map(|c| c.to_string()).as_deref(),
+        Some("baudelaire::config::index_extension")
+    );
+    // The help has to carry the correction, not just the complaint.
+    let help = config.help().expect("a help").to_string();
+    assert!(help.contains("index"), "help should name the stem: {help}");
+
+    // The stem itself is what the key takes...
+    assert_eq!(
+        parse("content { index \"index\" }")
+            .content
+            .index
+            .as_deref(),
+        Some("index")
+    );
+    // ...and the empty string stays the documented way to turn bundles off.
+    assert_eq!(parse("content { index \"\" }").content.index, None);
+    // A stem that merely contains a dot is not a filename, and is left alone.
+    assert_eq!(
+        parse("content { index \"_index\" }")
+            .content
+            .index
+            .as_deref(),
+        Some("_index")
+    );
 }

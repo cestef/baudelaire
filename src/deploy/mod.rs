@@ -334,6 +334,9 @@ mod tests {
 
     struct Headless;
     impl crate::remote::Interaction for Headless {
+        fn interactive(&self) -> bool {
+            true
+        }
         fn confirm(&self, _: &str) -> Result<bool> {
             Ok(true)
         }

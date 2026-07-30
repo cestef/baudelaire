@@ -15,6 +15,14 @@ use crate::error::Result;
 use crate::fs;
 
 /// Deletes files under `dist` that are not in the produced set.
+///
+/// Containment is the only thing bounding what this deletes, so it is safe
+/// exactly as far as `dist` is a directory of the build's own. That `dist` does
+/// not contain the content, asset, static, or template trees is established
+/// once, by [`Paths::swallowed`] at engine construction; nothing here re-checks
+/// it, and nothing here could.
+///
+/// [`Paths::swallowed`]: crate::config::Paths::swallowed
 pub struct Prune<'a> {
     dist: &'a Path,
     /// `dist` on disk, to test containment against: the one boundary the sweep

@@ -26,7 +26,15 @@ pub fn tls() -> TlsConfig {
 /// remote layers depend only on this, never on the terminal, so the CLI backs it
 /// with the shared prompt widgets and tests pass a headless stub.
 pub trait Interaction {
-    /// Confirm a mutating action; `Ok(false)` cancels it.
+    /// Whether this seam can actually put a question to someone.
+    ///
+    /// `false` means [`confirm`](Interaction::confirm) would answer on the
+    /// user's behalf rather than ask, so a caller needing real consent has to
+    /// fail instead of accepting an answer it invented.
+    fn interactive(&self) -> bool;
+
+    /// Confirm a mutating action; `Ok(false)` cancels it. Called only when
+    /// [`interactive`](Interaction::interactive) holds.
     fn confirm(&self, prompt: &str) -> Result<bool>;
 
     /// Prompt for a secret labeled `label`, or `Ok(None)` when the environment
@@ -76,12 +84,24 @@ impl Options<'_> {
             .ok_or_else(|| Self::missing(label))
     }
 
-    /// Confirm a mutating action, short-circuiting to `true` under `--yes`.
-    pub fn confirm(&self, prompt: &str) -> Result<bool> {
+    /// Consent to a mutating `action` (a phrase like `deploy to s3`): `--yes`
+    /// grants it outright, a terminal is asked, and anything else is refused.
+    ///
+    /// The whole policy lives here so no backend re-derives it. Refusing the
+    /// third case is the point: the prompt answers with its default off a
+    /// terminal, and that default is "no", so a CI run that forgot `--yes` used
+    /// to skip every backend and exit 0 having published nothing.
+    pub fn confirm(&self, action: &str) -> Result<bool> {
         if self.yes {
             return Ok(true);
         }
-        self.interaction.confirm(prompt)
+        if !self.interaction.interactive() {
+            return Err(RemoteError::NeedsConfirmation {
+                action: action.to_owned(),
+            }
+            .into());
+        }
+        self.interaction.confirm(&format!("{action}?"))
     }
 
     /// The "no secret could be found" error for `label`.
@@ -130,8 +150,10 @@ pub fn publish<P>(
 ) -> Result<()> {
     for backend in backends {
         ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
-        // Confirm before any network mutation, unless previewing or `--yes`.
-        if !opts.dry_run && !opts.confirm(&format!("{verb} to {}?", backend.name()))? {
+        // Consent before any network mutation, unless previewing. The `?` is the
+        // prompt's, added by `confirm`: what is passed is the action itself, so
+        // it reads correctly in a diagnostic too.
+        if !opts.dry_run && !opts.confirm(&format!("{verb} to {}", backend.name()))? {
             ui.detail(format_args!("skipped {}", backend.name()));
             continue;
         }
@@ -146,13 +168,28 @@ mod tests {
     use crate::error::{BaudelaireErrorKind, RemoteError};
 
     /// A headless [`Interaction`]: a fixed confirmation answer and an optional
-    /// prompt secret.
+    /// prompt secret. `interactive` stands in for having a terminal, so the
+    /// refusal path can be exercised without one.
     struct Stub {
         confirm: bool,
         secret: Option<String>,
+        interactive: bool,
+    }
+
+    impl Default for Stub {
+        fn default() -> Self {
+            Self {
+                confirm: true,
+                secret: None,
+                interactive: true,
+            }
+        }
     }
 
     impl Interaction for Stub {
+        fn interactive(&self) -> bool {
+            self.interactive
+        }
         fn confirm(&self, _prompt: &str) -> Result<bool> {
             Ok(self.confirm)
         }
@@ -176,8 +213,8 @@ mod tests {
     #[test]
     fn secret_prefers_the_cli_value() {
         let stub = Stub {
-            confirm: true,
             secret: Some("prompted".into()),
+            ..Stub::default()
         };
         let opts = options(Some("flag".into()), &stub);
         assert_eq!(opts.secret(UNSET, "pw").unwrap(), "flag");
@@ -186,8 +223,8 @@ mod tests {
     #[test]
     fn secret_falls_back_to_the_prompt() {
         let stub = Stub {
-            confirm: true,
             secret: Some("prompted".into()),
+            ..Stub::default()
         };
         let opts = options(None, &stub);
         assert_eq!(opts.secret(UNSET, "pw").unwrap(), "prompted");
@@ -195,10 +232,7 @@ mod tests {
 
     #[test]
     fn secret_missing_when_no_source_can_supply_it() {
-        let stub = Stub {
-            confirm: true,
-            secret: None,
-        };
+        let stub = Stub::default();
         let opts = options(None, &stub);
         assert!(matches!(
             opts.secret(UNSET, "pw"),
@@ -212,12 +246,46 @@ mod tests {
     fn confirm_short_circuits_under_yes() {
         let stub = Stub {
             confirm: false,
-            secret: None,
+            ..Stub::default()
         };
         let opts = Options {
             yes: true,
             ..options(None, &stub)
         };
-        assert!(opts.confirm("go?").unwrap());
+        assert!(opts.confirm("deploy to s3").unwrap());
+    }
+
+    /// The CI shape: no terminal, no `--yes`. This used to take the prompt's
+    /// default, which is `no`, so every backend was skipped and the run exited
+    /// 0 having published nothing.
+    #[test]
+    fn confirm_refuses_rather_than_assuming_an_answer_off_a_terminal() {
+        let stub = Stub {
+            interactive: false,
+            ..Stub::default()
+        };
+        let opts = options(None, &stub);
+        assert!(matches!(
+            opts.confirm("deploy to s3"),
+            Err(BaudelaireErrorKind::Remote(
+                RemoteError::NeedsConfirmation { .. }
+            ))
+        ));
+    }
+
+    /// ...and `--yes` is still the way through, terminal or not: the refusal
+    /// must not have made non-interactive use impossible, only explicit.
+    #[test]
+    fn yes_still_carries_a_non_interactive_run() {
+        let stub = Stub {
+            confirm: false,
+            interactive: false,
+            ..Stub::default()
+        };
+        let opts = Options {
+            yes: true,
+            ..options(None, &stub)
+        };
+        assert!(opts.confirm("deploy to s3").unwrap());
     }
 }

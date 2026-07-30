@@ -236,6 +236,14 @@ impl<'a> Input<'a> {
 pub struct Tty;
 
 impl Interaction for Tty {
+    /// Whether a question would reach anyone. The same test [`Prompt::ask`] and
+    /// [`Secret::ask`] make before falling back to their defaults, so a caller
+    /// that refuses to accept a default refuses in exactly the cases they would
+    /// have invented one.
+    fn interactive(&self) -> bool {
+        Term::stderr().is_term()
+    }
+
     fn confirm(&self, prompt: &str) -> Result<bool> {
         Prompt::new(prompt)
             .option(&["yes"], true)

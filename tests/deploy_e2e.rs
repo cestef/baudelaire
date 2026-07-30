@@ -24,6 +24,9 @@ use common::{Site, dist, silent};
 struct Headless;
 
 impl Interaction for Headless {
+    fn interactive(&self) -> bool {
+        true
+    }
     fn confirm(&self, _: &str) -> BResult<bool> {
         Ok(true)
     }

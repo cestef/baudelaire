@@ -36,7 +36,7 @@ use crate::engine::hook::Hooks;
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::warning::FeatureMissing;
-use crate::error::{BaudelaireErrorKind, BuildFailed, Result, TypstSourceDiagnostic};
+use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
 use crate::graph::{
     Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
@@ -229,8 +229,21 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
-        // Before anything else reads it: a gate can turn a setting off, and a
-        // half-applied config is what ships the broken site this guards against.
+        // Ahead of everything, including the gates: this is the one check whose
+        // failure destroys the project rather than the build. Checked here and
+        // not at parse because `dist` is not settled until the profile overlay
+        // and `--out` have had their say, and every command that writes to
+        // `dist` comes through this constructor.
+        if let Some((key, source)) = config.paths.swallowed(&config.root) {
+            return Err(ConfigError::dist_contains_source(
+                &config.paths.dist,
+                key,
+                &source.display().to_string(),
+            )
+            .into());
+        }
+        // A gate can turn a setting off, and a half-applied config is what ships
+        // the broken site that guards against.
         let (config, gaps) = Gate::resolve(config);
         let theme = config
             .theme

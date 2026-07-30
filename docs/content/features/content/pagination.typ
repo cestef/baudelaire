@@ -22,9 +22,9 @@ content {
 
 / glob (the positional string): which files belong to the collection. Omit it and
   the collection is the top-level directory of the same name under `content/`.
-/ #raw("sort"), #raw("reverse"): order members by `date`, `order`, `title`, or
-  `slug`, optionally reversed. This is the order the prev/next pager and listings
-  follow.
+/ #raw("sort"), #raw("reverse"): order members by `order` (the default), `date`,
+  or `title`, optionally reversed. This is the order the prev/next pager and
+  listings follow.
 / #raw("permalink"): the URL template for each member. Tokens `{collection}`,
   `{slug}`, `{year}`, `{month}`, `{day}`, and `{order}` are filled per page;
   the default is `/{collection}/{slug}/`. A typo'd template is a spanned config

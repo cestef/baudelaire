@@ -60,6 +60,24 @@ impl ConfigError {
         }
     }
 
+    /// A `dist` that contains one of the directories the build reads from.
+    ///
+    /// Sourceless, and so unlabeled: `dist` is settled only after the profile
+    /// overlay and `--out`, so the offending value often has no span in the
+    /// config text at all. Naming both paths in the message carries what a label
+    /// would have.
+    pub fn dist_contains_source(dist: &std::path::Path, key: &'static str, path: &str) -> Self {
+        Self {
+            file: NamedSource::new(Self::FILE, String::new()),
+            span: SourceSpan::new(0.into(), 0),
+            kind: ConfigErrorKind::DistContainsSource {
+                dist: dist.display().to_string(),
+                key,
+                path: path.to_owned(),
+            },
+        }
+    }
+
     /// An unrecognized structural key, with a caller-built `help` (nearest match
     /// + the valid keys for the enclosing scope).
     pub fn unknown_key(source: &str, key: &str, help: String, span: SourceSpan) -> Self {
@@ -383,6 +401,31 @@ pub enum ConfigErrorKind {
         help("name a file relative to `dist`, with no leading `/` and no `..`")
     )]
     EscapingFile { path: String },
+
+    #[error("{} is a filename, not a stem", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::index_extension),
+        help(
+            "`index` names the stem a bundle's own page is keyed by, with no extension: write {}. Left as a filename it matches no page, and the site builds with nothing at `/`",
+            Code(.stem)
+        )
+    )]
+    IndexExtension { got: String, stem: String },
+
+    #[error("the output directory contains {}", Code(.key))]
+    #[diagnostic(
+        code(baudelaire::config::dist_contains_source),
+        help(
+            "everything under {} that the build did not write is pruned, which here is the whole {} tree; give `dist` a directory of its own",
+            Code(.dist),
+            Code(.path)
+        )
+    )]
+    DistContainsSource {
+        dist: String,
+        key: &'static str,
+        path: String,
+    },
 
     #[error("feature {} is required and cannot be disabled", Code(.name))]
     #[diagnostic(

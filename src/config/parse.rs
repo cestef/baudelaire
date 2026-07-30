@@ -21,7 +21,7 @@ use crate::config::{
     SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
     UrlStyle, VerifyConfig,
 };
-use crate::error::{ConfigError, Result};
+use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
     pub fn parse(text: &str) -> Result<Self> {
@@ -132,6 +132,22 @@ impl Section for ContentConfig {
     const RULES: Block<Self> = Block(&[
         ("index", |c, n, t| {
             let stem = n.string(t, 0)?;
+            // A stem, matched against `Stem::slug`, which never carries an
+            // extension. `index "index.typ"` therefore matches nothing: every
+            // bundle keeps its filename slug, `content/index.typ` publishes to
+            // `/index/`, and the site builds green with no home page at all.
+            // The docs shipped that exact spelling, so refuse it by name.
+            if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
+                return Err(ConfigError::at(
+                    t,
+                    ConfigErrorKind::IndexExtension {
+                        got: n.string(t, 0)?,
+                        stem: stem.to_owned(),
+                    },
+                    n.span(),
+                )
+                .into());
+            }
             c.index = (!stem.is_empty()).then_some(stem);
             Ok(())
         }),

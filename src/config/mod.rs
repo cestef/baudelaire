@@ -14,7 +14,7 @@ mod tests;
 mod url;
 mod value;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use kdl::KdlDocument;
 
@@ -113,6 +113,40 @@ pub struct Paths {
     pub r#static: PathBuf,
     /// Layout / template directory.
     pub templates: PathBuf,
+}
+
+impl Paths {
+    /// Every configured directory the build *reads*, paired with the key that
+    /// names it. The single list of what [`dist`](Paths::dist) must stay clear
+    /// of, walked by both the containment guard ([`swallowed`]) and the prune
+    /// sweep, so a new `paths` entry is covered by adding it here alone.
+    ///
+    /// [`swallowed`]: Paths::swallowed
+    pub fn sources(&self) -> [(&'static str, &Path); 4] {
+        [
+            ("content", &self.content),
+            ("assets", &self.assets),
+            ("static", &self.r#static),
+            ("templates", &self.templates),
+        ]
+    }
+
+    /// The first source directory `dist` would contain, if any.
+    ///
+    /// The prune sweep deletes everything under `dist` the build did not write,
+    /// so a `dist` holding the sources deletes the sources: `paths { dist "." }`
+    /// took `config.kdl` and the whole content tree with it, and reported a
+    /// successful build. Refusing the config is the only place this can be
+    /// caught, since by the time the sweep runs every path looks alike.
+    ///
+    /// Entries resolve against `root` rather than the process cwd, so a caller
+    /// that has not changed into the project still gets the right answer.
+    pub fn swallowed(&self, root: &Path) -> Option<(&'static str, &Path)> {
+        let dist = crate::fs::resolved(root.join(&self.dist));
+        self.sources()
+            .into_iter()
+            .find(|(_, path)| crate::fs::resolved(root.join(path)).starts_with(&dist))
+    }
 }
 
 /// What the content tree holds and how it is read. The directory itself is

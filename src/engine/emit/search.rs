@@ -166,24 +166,43 @@ struct Document {
 }
 
 impl Document {
-    /// Normalized search tokens over every indexed field: lowercased, split on
-    /// whitespace, stripped to alphanumerics, empties dropped.
+    /// Normalized search tokens over every indexed field: split on whitespace,
+    /// lowercased, stripped to alphanumerics, empties dropped.
     ///
     /// The client's `tokenize` (in `js/tokenize.js`) has to normalize a query
     /// the same way, or a term is looked up in a form the postings were never
-    /// keyed by.
+    /// keyed by. Two things make that hold, and both are load-bearing:
+    ///
+    /// - **Lowercase before stripping.** `İ` lowercases to `i` + U+0307, and
+    ///   U+0307 is not alphanumeric. Stripping first never sees the mark it is
+    ///   about to introduce, so the index was keyed `i̇stanbul` while every query
+    ///   asked for `istanbul`, and the page was unreachable.
+    /// - **`char::is_alphanumeric` is Unicode `Alphabetic | N`,** which the
+    ///   client spells `\p{Alphabetic}\p{N}`. The narrower-looking `\p{L}` is
+    ///   *not* the same set: it drops the Indic, Arabic and Hebrew vowel marks
+    ///   this keeps, so a Devanagari word indexed whole was queried stripped.
+    ///
+    /// [`tokens_agree_with_the_client_tokenizer`] pins both against the cases
+    /// that broke.
+    ///
+    /// [`tokens_agree_with_the_client_tokenizer`]: tests::tokens_agree_with_the_client_tokenizer
     fn tokens(&self) -> impl Iterator<Item = String> + '_ {
         std::iter::once(self.title.as_str())
             .chain(std::iter::once(self.body.as_str()))
             .chain(self.tags.iter().map(String::as_str))
             .flat_map(str::split_whitespace)
-            .map(|word| {
-                word.chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .flat_map(char::to_lowercase)
-                    .collect::<String>()
-            })
+            .map(Self::normalize)
             .filter(|token| !token.is_empty())
+    }
+
+    /// One word reduced to its index key. Split out from [`tokens`](Self::tokens)
+    /// so the agreement test can drive it directly, rather than round-tripping a
+    /// whole document to see one word.
+    fn normalize(word: &str) -> String {
+        word.chars()
+            .flat_map(char::to_lowercase)
+            .filter(|c| c.is_alphanumeric())
+            .collect()
     }
 }
 
@@ -290,6 +309,54 @@ impl SearchFormat {
 mod tests {
     use super::*;
     use crate::engine::emit::Output;
+
+    /// The index key and the query key are computed in two languages, so nothing
+    /// can execute both here. What is pinned instead is each side of the
+    /// contract: the Rust normalization against the cases that broke, and the
+    /// text of the client rule that has to mirror it.
+    ///
+    /// Every case below is one where the two tokenizers *disagreed*. A `\p{L}`
+    /// client, or a strip-then-lowercase index, fails this test.
+    #[test]
+    fn tokens_agree_with_the_client_tokenizer() {
+        // `İ` lowercases to `i` + U+0307 COMBINING DOT ABOVE. Both sides must
+        // drop the mark the lowercasing introduced.
+        assert_eq!(Document::normalize("İstanbul"), "istanbul");
+        // Devanagari vowel signs are `Mc`/`Mn`, outside `\p{L}` but inside
+        // `Alphabetic`, so they are kept. The virama is neither, so it goes:
+        // what matters is that the client agrees, not which way it lands.
+        assert_eq!(Document::normalize("हिन्दी"), "हिनदी");
+        // Same class, Arabic and Hebrew points, all of them retained.
+        assert_eq!(Document::normalize("مُحَمَّد"), "مُحَمَّد");
+        assert_eq!(Document::normalize("שָׁלוֹם"), "שָׁלוֹם");
+        // Precomposed accents survive; they are single alphabetic codepoints.
+        assert_eq!(Document::normalize("ÅNGSTRÖM"), "ångström");
+        // A titlecase digraph lowercases to one codepoint, not two letters.
+        assert_eq!(Document::normalize("ǅungla"), "ǆungla");
+        // Punctuation goes, including inside a word, so both sides join the
+        // halves rather than one splitting them.
+        assert_eq!(Document::normalize("foo-bar!"), "foobar");
+        // `\p{N}` is wider than the digits: superscripts are numeric too.
+        assert_eq!(Document::normalize("x²"), "x²");
+        // Nothing survivable leaves an empty token, which `tokens` drops.
+        assert_eq!(Document::normalize("--"), "");
+
+        // The client rule, checked as text: these are the two edits that would
+        // silently reintroduce the split, and neither is visible from Rust.
+        assert!(
+            TOKENIZE.contains(r"[^\p{Alphabetic}\p{N}]"),
+            "the client must retain exactly `char::is_alphanumeric`; `\\p{{L}}` \
+             drops the combining marks the index keeps"
+        );
+        let (lower, strip) = (
+            TOKENIZE.find("toLowerCase").expect("client lowercases"),
+            TOKENIZE.find("replace").expect("client strips"),
+        );
+        assert!(
+            lower < strip,
+            "the client must lowercase before stripping, as `Document::normalize` does"
+        );
+    }
 
     fn doc(title: &str, body: &str, tags: &[&str]) -> Document {
         Document {
