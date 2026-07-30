@@ -758,7 +758,7 @@ impl Section for S3Config {
             Ok(())
         }),
         ("region", |c, n, t| {
-            c.region = n.string(t, 0)?;
+            c.region = Some(n.string(t, 0)?);
             Ok(())
         }),
         ("prefix", |c, n, t| {

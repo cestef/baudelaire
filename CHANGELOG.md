@@ -155,6 +155,10 @@ chores are visible in the git history and change nothing for a site.
 - **config**: `content { index }` rejects a filename. It names a stem, so the
   documented `index "index.typ"` matched no page: the site built green with
   nothing at `/`.
+- **deploy**: An unstated `deploy { s3 { region } }` follows the target. It
+  defaulted to `us-east-1` whatever the `endpoint` said, so an R2 bucket was
+  signed under an AWS region and answered 403 with nothing in it naming the
+  cause; a custom endpoint now signs as `auto`. A stated region is unchanged.
 - **config**: A collection's `glob` can be written as `glob="..."`, not only as
   the leading positional. It is the field's name in the docs and in the struct,
   and writing it failed with a help that listed every key except that one.

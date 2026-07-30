@@ -152,7 +152,7 @@ impl Bucket {
                 (endpoint.to_owned(), host, format!("/{}", config.bucket))
             }
             None => {
-                let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region);
+                let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region());
                 (format!("https://{host}"), host, String::new())
             }
         };
@@ -165,7 +165,7 @@ impl Bucket {
             access_key,
             secret_key,
             token,
-            region: config.region.clone(),
+            region: config.region().to_owned(),
             prefix: config.prefix.trim_matches('/').to_owned(),
             authority,
             host,
@@ -507,7 +507,7 @@ mod tests {
         S3Config {
             bucket: "my-site".into(),
             endpoint: endpoint.map(String::from),
-            region: "us-east-1".into(),
+            region: None,
             prefix: prefix.into(),
             delete: true,
             cache: CacheControl::default(),

@@ -61,7 +61,7 @@ fn s3_config(site: &Site, port: u16) -> Config {
     config.deploy.s3 = Some(S3Config {
         bucket: "bucket".into(),
         endpoint: Some(format!("http://127.0.0.1:{port}")),
-        region: "us-east-1".into(),
+        region: None,
         prefix: String::new(),
         delete: true,
         cache: CacheControl {

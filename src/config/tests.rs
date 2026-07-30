@@ -657,9 +657,21 @@ fn deploy_s3_block_enables_backend_with_defaults() {
         s3.endpoint.as_deref(),
         Some("https://acct.r2.cloudflarestorage.com")
     );
-    assert_eq!(s3.region, "auto");
+    assert_eq!(s3.region(), "auto");
     assert_eq!(s3.prefix, "");
     assert!(s3.delete, "delete defaults on");
+}
+
+/// An unstated region follows the target. A custom `endpoint` is not AWS, and
+/// signing such a request as `us-east-1` is a 403 whose body never mentions the
+/// region; AWS itself keeps its own default.
+#[test]
+fn an_unstated_s3_region_follows_the_endpoint() {
+    let r2 =
+        parse("deploy { s3 { bucket \"b\"; endpoint \"https://acct.r2.cloudflarestorage.com\" } }");
+    assert_eq!(r2.deploy.s3.unwrap().region(), "auto");
+    let aws = parse("deploy { s3 { bucket \"b\" } }");
+    assert_eq!(aws.deploy.s3.unwrap().region(), "us-east-1");
 }
 
 #[test]

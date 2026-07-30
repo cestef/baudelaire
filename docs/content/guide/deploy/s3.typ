@@ -24,7 +24,9 @@ Every other key has a default:
   default host; set it for R2, MinIO, or any non-AWS provider. Must be `https`,
   since the request carries your signature; `http://localhost` is allowed for a
   local MinIO.
-/ `region` (`us-east-1`): region code. R2 uses `auto`.
+/ `region`: region code. Unset it follows the target: `us-east-1` for AWS, and
+  `auto` when an `endpoint` is set, which is what R2 and most S3-compatible
+  hosts want. State it when your provider expects a real region code.
 / `prefix`: a key prefix (subdirectory in the bucket) every object lands under.
 / `delete` (`#true`): remove objects under `prefix` that the build no longer
   produces, so the bucket mirrors `public/` exactly.

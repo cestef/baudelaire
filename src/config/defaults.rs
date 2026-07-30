@@ -262,8 +262,8 @@ impl Default for S3Config {
             bucket: String::new(),
             // None targets AWS; R2/custom hosts set it.
             endpoint: None,
-            // AWS's default region; R2 wants "auto".
-            region: "us-east-1".into(),
+            // Resolved from the target by `S3Config::region` when unset.
+            region: None,
             prefix: String::new(),
             // reconcile: remove what the build no longer produces.
             delete: true,

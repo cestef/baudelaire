@@ -1308,8 +1308,8 @@ pub struct S3Config {
     /// S3 endpoint host, e.g. `https://ACCOUNT.r2.cloudflarestorage.com`. `None`
     /// targets AWS at the region's default host.
     pub endpoint: Option<String>,
-    /// Region code. R2 uses `auto`; AWS uses e.g. `us-east-1` (the default).
-    pub region: String,
+    /// Region code, resolved by [`S3Config::region`] when unset.
+    pub region: Option<String>,
     /// Key prefix every uploaded object is placed under (a subdirectory in the
     /// bucket). Empty by default.
     pub prefix: String,
@@ -1317,6 +1317,24 @@ pub struct S3Config {
     pub delete: bool,
     /// `Cache-Control` headers to set on upload.
     pub cache: CacheControl,
+}
+
+impl S3Config {
+    /// The region code the request is signed under.
+    ///
+    /// A stated `region` always wins. Otherwise it follows the target: AWS is
+    /// signed as `us-east-1`, its own default, and a custom `endpoint` is not
+    /// AWS, so it is signed as `auto`, which is what R2 and most S3-compatible
+    /// hosts want. Defaulting the second case to `us-east-1` meant an R2 user
+    /// who set `endpoint` and left `region` alone got a 403 with nothing in it
+    /// naming the region.
+    pub fn region(&self) -> &str {
+        match (&self.region, &self.endpoint) {
+            (Some(region), _) => region,
+            (None, Some(_)) => "auto",
+            (None, None) => "us-east-1",
+        }
+    }
 }
 
 /// The `Cache-Control` an uploaded object is served with, and the reason
