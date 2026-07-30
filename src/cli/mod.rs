@@ -195,6 +195,7 @@ pub enum Command {
     /// Scaffold a new content file.
     New(NewArgs),
     /// Announce the site's metadata to the configured destination (atproto/standard.site).
+    #[cfg(feature = "announce")]
     Announce(AnnounceArgs),
     /// Deploy the built files to the configured destination (S3/R2 or SSH).
     Deploy(DeployArgs),
@@ -246,6 +247,7 @@ pub struct ServeArgs {
 }
 
 /// Arguments for `baudelaire announce`.
+#[cfg(feature = "announce")]
 #[derive(Args, Debug, Clone)]
 pub struct AnnounceArgs {
     /// Secret (app password / token) for the destination; `-` reads it from
@@ -261,6 +263,7 @@ pub struct AnnounceArgs {
     pub dry_run: bool,
 }
 
+#[cfg(feature = "announce")]
 impl remote::Flags for AnnounceArgs {
     fn dry_run(&self) -> bool {
         self.dry_run
@@ -683,6 +686,7 @@ impl Command {
             Command::Serve(args) => args.run(cx),
             Command::Check(args) => args.run(cx),
             Command::New(args) => args.run(cx),
+            #[cfg(feature = "announce")]
             Command::Announce(args) => args.run(cx),
             Command::Deploy(args) => args.run(cx),
             Command::Clean(args) => args.run(cx),
@@ -745,6 +749,7 @@ impl Run for NewArgs {
     }
 }
 
+#[cfg(feature = "announce")]
 impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("announcing")?;

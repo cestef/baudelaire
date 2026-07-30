@@ -16,6 +16,7 @@ use typst::syntax::VirtualizeError;
 use crate::ui::Code;
 
 pub mod annotated;
+#[cfg(feature = "announce")]
 pub mod announce;
 pub mod asset;
 pub mod card;
@@ -36,6 +37,7 @@ pub mod typ;
 pub mod warning;
 
 pub use annotated::Annotated;
+#[cfg(feature = "announce")]
 pub use announce::AnnounceError;
 pub use asset::AssetError;
 pub use card::CardError;
@@ -145,6 +147,7 @@ pub enum BaudelaireErrorKind {
 
     #[error(transparent)]
     #[diagnostic(transparent)]
+    #[cfg(feature = "announce")]
     Announce(#[from] crate::error::AnnounceError),
 
     #[error(transparent)]

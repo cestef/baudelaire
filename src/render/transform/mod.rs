@@ -18,6 +18,7 @@ mod outbound;
 mod rewrite;
 mod sources;
 mod speculation;
+#[cfg(feature = "announce")]
 mod standard;
 mod svg;
 
@@ -43,6 +44,7 @@ use outbound::Outbound;
 use rewrite::Links;
 use sources::Sources;
 use speculation::Speculation;
+#[cfg(feature = "announce")]
 use standard::Verify;
 use svg::Svg;
 
@@ -272,6 +274,7 @@ impl Transforms {
             Box::new(Meta),
             Box::new(Speculation),
             Box::new(Outbound),
+            #[cfg(feature = "announce")]
             Box::new(Verify),
             Box::new(Images),
             Box::new(Externalize),

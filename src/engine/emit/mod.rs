@@ -17,6 +17,7 @@ mod search;
 mod sitemap;
 mod spa;
 mod standalone;
+#[cfg(feature = "announce")]
 mod standard;
 mod xml;
 
@@ -173,6 +174,7 @@ impl Processors {
             Box::new(llms::Llms),
             Box::new(feed::Feeds),
             Box::new(search::SearchIndex),
+            #[cfg(feature = "announce")]
             Box::new(standard::WellKnown),
             Box::new(spa::Spa),
             // last: it reads every other page's markup, not what they emit

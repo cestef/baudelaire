@@ -76,6 +76,11 @@ What `slim` leaves out:
     PNG/JPEG assets are copied verbatim. Lazy-loading attributes are markup
     only, so they stay.],
   [`cards`], [A `generate { cards { } }` block warns and produces nothing.],
+  [`ssh`], [A `deploy { ssh { } }` block warns and that destination is skipped.
+    `deploy { s3 { } }` is unaffected.],
+  [`announce`], [An `announce { standard { } }` block warns, the `announce`
+    command is unavailable, and the standard.site verification artifacts (the
+    `.well-known` record and the per-page backlink) are not emitted.],
 )
 
 Each of these is a capability, not a behaviour switch: turning one off never

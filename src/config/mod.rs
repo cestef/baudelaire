@@ -363,6 +363,7 @@ impl Config {
     /// The single gate the render transform and the well-known processor share,
     /// so both agree on when an artifact is emitted and neither re-checks the
     /// `did` after gating.
+    #[cfg(feature = "announce")]
     pub(crate) fn verify_did(&self, artifact: impl Fn(&VerifyConfig) -> bool) -> Option<&str> {
         let standard = self.announce.standard.as_ref()?;
         artifact(&standard.verify)

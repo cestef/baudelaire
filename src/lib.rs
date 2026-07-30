@@ -1,4 +1,6 @@
+#[cfg(feature = "announce")]
 pub mod announce;
+#[cfg(feature = "announce")]
 pub mod atproto;
 pub mod cli;
 pub mod codegen;

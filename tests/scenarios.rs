@@ -85,6 +85,7 @@ use common::Site;
 /// against it, so a typo is a hard error rather than a case that quietly never
 /// runs.
 const FEATURES: &[(&str, bool)] = &[
+    ("announce", cfg!(feature = "announce")),
     ("cards", cfg!(feature = "cards")),
     ("css", cfg!(feature = "css")),
     ("images", cfg!(feature = "images")),

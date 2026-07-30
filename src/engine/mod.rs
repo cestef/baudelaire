@@ -179,6 +179,18 @@ const GATES: &[Gate] = &[
         effect: "the SSH destination is skipped",
         rewrites: false,
     },
+    // Announcing is a command, but it also shapes the *build*: a pinned `did`
+    // emits a `.well-known` record and a per-page backlink. Both vanish here,
+    // which a site that pinned a `did` very much wants to hear about, since
+    // their absence is what makes a publication unverifiable.
+    Gate {
+        cargo: "announce",
+        compiled: cfg!(feature = "announce"),
+        setting: "announce { standard }",
+        asked: |config| config.announce.standard.is_some(),
+        effect: "no verification artifacts are emitted and `announce` is unavailable",
+        rewrites: false,
+    },
 ];
 
 impl Gate {

@@ -49,7 +49,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards", "ssh"]
+default = ["embedded-fonts", "js", "css", "images", "cards", "ssh", "announce"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -92,6 +92,15 @@ cards = ["dep:typst-render", "dep:typst-layout"]
 # `deploy { ssh { } }` block warns and that destination is skipped;
 # `deploy { s3 { } }` is unaffected, since S3 rides on ureq.
 ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
+
+# Announcing to an AT Protocol PDS (standard.site): the `announce` command, the
+# XRPC client, and the two build-time verification artifacts (`.well-known` and
+# the per-page `<link>`). Alone among the gates this pulls no extra crates: it
+# rides `ureq`, already here for S3 and the link checker. What it costs is
+# ~1.4k lines compiled into every binary for an integration with one vendor,
+# which is why it is opt-out rather than unconditional. Off means an
+# `announce { }` block warns and no verification artifacts are emitted.
+announce = []
 
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client

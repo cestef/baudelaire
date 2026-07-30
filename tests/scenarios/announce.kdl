@@ -2,6 +2,7 @@
 // a per-page backlink on dated pages. Nothing here touches the network.
 
 scenario "a configured did emits the wellknown file and links dated pages" {
+  requires "announce"
   files {
     "config.kdl" #"""
       site "Test"
@@ -60,6 +61,7 @@ scenario "without a did, nothing standard.site-related touches the output" {
 }
 
 scenario "the wellknown toggle drops the file and keeps the per-page link" {
+  requires "announce"
   files {
     "config.kdl" #"""
       site "Test"
