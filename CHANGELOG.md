@@ -41,6 +41,13 @@ chores are visible in the git history and change nothing for a site.
   production build. Now `--no-drafts` does it. Passing both halves, the last one
   wins.
 
+- **clean**: The wholesale sweep asks before it removes anything, and refuses
+  to answer for itself off a terminal. `clean` with no flag takes the output
+  directory and every scrap of local state, announce state included, which is
+  what the next `announce` reconciles a live repository against; the only guard
+  was a check that the path did not contain the project. Pass `--yes` in CI, or
+  `--dry-run` to see the list. A narrowed `clean --cache` still runs unasked.
+
 - **init**: `-y` no longer sets up version control. It means one thing now,
   "take the default answer to every prompt", so the flag a script reaches for to
   silence the prompts stops leaving a git repository behind. Naming `--vcs` is
@@ -87,6 +94,12 @@ chores are visible in the git history and change nothing for a site.
   `sx-<hex>`.
 - **cli**: `--strict` fails a run that warned. The warning tally existed but
   only `--strict-links` could gate on it, one class out of the whole set.
+- **clean**: `--all`, `--dry-run` and `--output`. `--all` is the sweep-everything
+  mode said out loud, so the most destructive invocation stops being the
+  shortest one by accident; `--dry-run` prints the directories and removes
+  nothing; `--output` names what it removes rather than the config key that
+  locates it (`--dist` remains as an alias). The paths are now printed before
+  the sweep, not only under `-v`.
 - **cli**: `deploy` and `announce` take the build flags. Both build the site
   before publishing it, so `--base-url`, `--drafts`, `--future`, `--out` and
   `--no-cache` now shape that build; a named profile used to be the only lever,

@@ -169,6 +169,30 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Strict(#[from] StrictWarnings),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Unattended(#[from] Unattended),
+}
+
+/// A mutating action needed confirming, with no terminal to confirm at.
+///
+/// Reached only once the action is known to need an answer: `--yes` and
+/// `--dry-run` are both settled before anything asks. Answering on the user's
+/// behalf instead is what let a CI run that forgot `--yes` skip every deploy
+/// backend and exit 0 having published nothing.
+///
+/// Not remote-specific, which is why it does not live on [`RemoteError`]:
+/// `clean` sweeps the output directory and every scrap of local build state,
+/// and wants the same answer to the same question.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("cannot confirm {} without a terminal", crate::ui::Text(.action))]
+#[diagnostic(
+    code(baudelaire::confirm::unattended),
+    help("pass `--yes` to confirm non-interactively, or `--dry-run` to preview")
+)]
+pub struct Unattended {
+    pub action: String,
 }
 
 /// A run that warned, under `--strict`.

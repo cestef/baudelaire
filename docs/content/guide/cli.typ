@@ -186,9 +186,19 @@ the output plus the `.baudelaire` scratch root (cache and announce state). The
 flags narrow it, so `clean --cache` forces a rebuild without discarding announce
 state.
 
-/ #raw("--dist"): Remove only the output directory.
+Every directory it is about to remove is printed first, and the wholesale sweep
+asks before going ahead: it takes announce state with it, which is what the next
+`announce` reconciles a live repository against. A narrowed sweep does not ask.
+Off a terminal the sweep stops rather than answering for itself, so pass `--yes`
+in CI.
+
+/ #raw("--all"): Remove everything. The same as passing no flag, said out loud,
+  so a script can distinguish meaning it from forgetting a flag.
+/ #raw("--output"): Remove only the output directory (`--dist` still works).
 / #raw("--cache"): Remove only the build cache.
 / #raw("--announce"): Remove only the announce state.
+/ #raw("-y, --yes"): Skip the confirmation.
+/ #raw("--dry-run"): Print what would be removed and remove nothing.
 
 This is the wholesale wipe, and it is not the config's
 #link("config.typ")[`prune`], which sweeps only files no page claims any more

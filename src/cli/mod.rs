@@ -342,17 +342,29 @@ impl remote::Flags for DeployArgs {
 /// Arguments for `baudelaire clean`. With no target flag every directory is
 /// swept; naming targets narrows it to those, so `clean --cache` forces a
 /// rebuild without discarding announce state.
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct CleanArgs {
-    /// Remove the build output directory.
+    /// Remove everything: the output directory and all local build state.
     #[arg(long, help_heading = group::TARGETS)]
-    pub dist: bool,
+    pub all: bool,
+    /// Remove the build output directory. Named for what it removes, not for
+    /// the config key that locates it, which for this repo's own docs site is
+    /// `docs/public`; `--dist` still works.
+    #[arg(long, alias = "dist", help_heading = group::TARGETS)]
+    pub output: bool,
     /// Remove the incremental build cache.
     #[arg(long, help_heading = group::TARGETS)]
     pub cache: bool,
     /// Remove local announce state.
     #[arg(long, help_heading = group::TARGETS)]
     pub announce: bool,
+
+    /// Skip the confirmation prompt.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Report what would be removed without removing it.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// One nameable `clean` target: the flag that selects it and the directories it
@@ -366,7 +378,7 @@ struct CleanTarget {
 
 const CLEAN_TARGETS: &[CleanTarget] = &[
     CleanTarget {
-        selected: |a| a.dist,
+        selected: |a| a.output,
         dirs: |c| vec![c.paths.dist.clone()],
     },
     CleanTarget {
@@ -380,24 +392,53 @@ const CLEAN_TARGETS: &[CleanTarget] = &[
 ];
 
 impl CleanArgs {
-    /// No explicit target means sweep everything.
+    /// Whether this is the wholesale wipe. Naming no target stays the shorthand
+    /// for it, and `--all` is the spelling a script can state, so "I meant
+    /// everything" and "I forgot the flag" stop being the same invocation.
     fn all(&self) -> bool {
-        CLEAN_TARGETS.iter().all(|t| !(t.selected)(self))
+        self.all || CLEAN_TARGETS.iter().all(|t| !(t.selected)(self))
     }
 
     /// Remove this invocation's targets, skipping any that would take the
     /// project with them.
-    fn sweep(&self, ui: &Ui, config: &Config, root: &Path) -> Result<()> {
+    ///
+    /// The paths are printed before anything is removed, whether or not they
+    /// are about to be confirmed: they come from config, so the directory named
+    /// `dist` is only the one you expect if the config says what you think it
+    /// does.
+    fn sweep(
+        &self,
+        ui: &Ui,
+        config: &Config,
+        root: &Path,
+        interaction: &dyn crate::remote::Interaction,
+    ) -> Result<()> {
+        let dirs: Vec<PathBuf> = self
+            .targets(config)
+            .into_iter()
+            .filter(|dir| dir.exists())
+            .collect();
+        if dirs.is_empty() {
+            ui.done("nothing to clean");
+            return Ok(());
+        }
+        for dir in &dirs {
+            ui.detail(format_args!("- {}", dir.display()));
+        }
+        if self.dry_run {
+            ui.done(format_args!("{} to remove", Self::count(dirs.len())));
+            return Ok(());
+        }
+        if !self.consented(interaction, dirs.len())? {
+            ui.done("nothing to clean");
+            return Ok(());
+        }
         let mut removed = 0;
-        for dir in self.targets(config) {
-            if !dir.exists() {
-                continue;
-            }
+        for dir in dirs {
             if !Self::removable(&dir, root) {
                 ui.warn(CleanRefused { dir });
                 continue;
             }
-            ui.detail(format_args!("- {}", dir.display()));
             crate::fs::remove_dir_all(&dir)?;
             removed += 1;
         }
@@ -406,6 +447,38 @@ impl CleanArgs {
             _ => ui.done("clean"),
         }
         Ok(())
+    }
+
+    /// Whether the sweep may go ahead.
+    ///
+    /// Only the wholesale wipe asks. It takes the output directory *and* every
+    /// scrap of local state with it, announce state included, which is remote
+    /// reconciliation state: wiping it changes what the next `announce` does to
+    /// a live repository. A narrowed `clean --cache` costs a rebuild and needs
+    /// no ceremony.
+    fn consented(
+        &self,
+        interaction: &dyn crate::remote::Interaction,
+        count: usize,
+    ) -> Result<bool> {
+        use crate::remote::Consent;
+        if !self.all() {
+            return Ok(true);
+        }
+        let action = format!("remove {}", Self::count(count));
+        match interaction.consent(&action, self.yes)? {
+            Consent::Granted => Ok(true),
+            Consent::Refused => Ok(false),
+            Consent::Unattended => Err(crate::error::Unattended { action }.into()),
+        }
+    }
+
+    /// `1 directory` / `3 directories`, for a prompt that reads as a sentence.
+    fn count(dirs: usize) -> String {
+        match dirs {
+            1 => "1 directory".to_owned(),
+            n => format!("{n} directories"),
+        }
     }
 
     /// Whether `dir` may be removed: it must not be the project root, nor an
@@ -862,7 +935,7 @@ impl Run for DeployArgs {
 impl Run for CleanArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.announced("cleaning")?;
-        self.sweep(cx.ui, &config, cx.root.path())
+        self.sweep(cx.ui, &config, cx.root.path(), &prompt::Tty)
     }
 }
 
@@ -932,11 +1005,12 @@ impl ServeArgs {
 mod tests {
     use super::*;
 
-    fn args(dist: bool, cache: bool, announce: bool) -> CleanArgs {
+    fn args(output: bool, cache: bool, announce: bool) -> CleanArgs {
         CleanArgs {
-            dist,
+            output,
             cache,
             announce,
+            ..CleanArgs::default()
         }
     }
 
@@ -979,6 +1053,53 @@ mod tests {
         assert_eq!(config.url.as_deref(), Some("https://preview.example/"));
         assert!(config.content.draft.build);
         assert!(!config.cache.incremental);
+    }
+
+    /// A headless session: nobody to put the question to.
+    struct Headless;
+
+    impl crate::remote::Interaction for Headless {
+        fn interactive(&self) -> bool {
+            false
+        }
+        fn confirm(&self, _prompt: &str) -> Result<bool> {
+            unreachable!("never asked without a terminal")
+        }
+        fn secret(&self, _label: &str) -> Result<Option<String>> {
+            Ok(None)
+        }
+    }
+
+    /// The wholesale wipe asks; a narrowed sweep does not. `clean` with no flag
+    /// takes the output directory *and* announce state, which decides what the
+    /// next `announce` does to a live repository, so an unattended run has to
+    /// stop rather than answer for itself. `clean --cache` costs a rebuild.
+    #[test]
+    fn only_a_full_sweep_asks_for_consent() {
+        assert!(args(false, true, false).consented(&Headless, 1).unwrap());
+        assert!(matches!(
+            CleanArgs::default().consented(&Headless, 3),
+            Err(BaudelaireErrorKind::Unattended(_))
+        ));
+        let yes = CleanArgs {
+            yes: true,
+            ..CleanArgs::default()
+        };
+        assert!(yes.consented(&Headless, 3).unwrap());
+    }
+
+    /// `--all` is the sweep a script can state outright, so the most
+    /// destructive invocation stops being the shortest one by accident.
+    #[test]
+    fn all_is_explicit_as_well_as_implicit() {
+        assert!(CleanArgs::default().all());
+        assert!(!args(false, true, false).all());
+        let explicit = CleanArgs {
+            all: true,
+            cache: true,
+            ..CleanArgs::default()
+        };
+        assert!(explicit.all());
     }
 
     #[test]

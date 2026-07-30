@@ -5,7 +5,7 @@
 
 use ureq::tls::{TlsConfig, TlsProvider};
 
-use crate::error::{RemoteError, Result};
+use crate::error::{RemoteError, Result, Unattended};
 use crate::ui::Ui;
 
 /// The TLS configuration every `ureq` agent baudelaire builds must use.
@@ -20,6 +20,19 @@ pub fn tls() -> TlsConfig {
     TlsConfig::builder()
         .provider(TlsProvider::NativeTls)
         .build()
+}
+
+/// What asking permission for a destructive action came back with.
+///
+/// [`Unattended`](Consent::Unattended) is separate from a plain refusal because
+/// the two want different treatment and one typed error cannot serve both: a
+/// refusal is the user's answer, an unattended run is the absence of one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Consent {
+    Granted,
+    Refused,
+    /// Nobody was there to ask, and no flag settled it in advance.
+    Unattended,
 }
 
 /// How a run talks to the user: confirmations and interactive secret entry. The
@@ -40,6 +53,29 @@ pub trait Interaction {
     /// Prompt for a secret labeled `label`, or `Ok(None)` when the environment
     /// cannot supply one (non-interactive).
     fn secret(&self, label: &str) -> Result<Option<String>>;
+
+    /// Whether a destructive `action` (a phrase like `deploy to s3`, or `remove
+    /// every build directory`) may go ahead: `yes` grants it outright, a
+    /// terminal is asked, and anything else is [`Consent::Unattended`].
+    ///
+    /// THE consent policy, so nothing re-derives it. Distinguishing the third
+    /// case is the point: the prompt answers with its default off a terminal,
+    /// and that default is "no", so a CI run that forgot `--yes` used to skip
+    /// every deploy backend and exit 0 having published nothing.
+    fn consent(&self, action: &str, yes: bool) -> Result<Consent> {
+        if yes {
+            return Ok(Consent::Granted);
+        }
+        if !self.interactive() {
+            return Ok(Consent::Unattended);
+        }
+        // The `?` is the prompt's, added here: what callers pass is the action
+        // itself, so it reads correctly in a diagnostic too.
+        Ok(match self.confirm(&format!("{action}?"))? {
+            true => Consent::Granted,
+            false => Consent::Refused,
+        })
+    }
 }
 
 /// Cross-cutting options for a push, backend-neutral. A backend reads `dry_run`
@@ -84,24 +120,18 @@ impl Options<'_> {
             .ok_or_else(|| Self::missing(label))
     }
 
-    /// Consent to a mutating `action` (a phrase like `deploy to s3`): `--yes`
-    /// grants it outright, a terminal is asked, and anything else is refused.
-    ///
-    /// The whole policy lives here so no backend re-derives it. Refusing the
-    /// third case is the point: the prompt answers with its default off a
-    /// terminal, and that default is "no", so a CI run that forgot `--yes` used
-    /// to skip every backend and exit 0 having published nothing.
+    /// Consent to a mutating `action`, resolved by [`Interaction::consent`].
+    /// An unattended run is an error rather than a skip: a publish nobody
+    /// authorized must not report success.
     pub fn confirm(&self, action: &str) -> Result<bool> {
-        if self.yes {
-            return Ok(true);
-        }
-        if !self.interaction.interactive() {
-            return Err(RemoteError::NeedsConfirmation {
+        match self.interaction.consent(action, self.yes)? {
+            Consent::Granted => Ok(true),
+            Consent::Refused => Ok(false),
+            Consent::Unattended => Err(Unattended {
                 action: action.to_owned(),
             }
-            .into());
+            .into()),
         }
-        self.interaction.confirm(&format!("{action}?"))
     }
 
     /// The "no secret could be found" error for `label`.
@@ -150,9 +180,7 @@ pub fn publish<P>(
 ) -> Result<()> {
     for backend in backends {
         ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
-        // Consent before any network mutation, unless previewing. The `?` is the
-        // prompt's, added by `confirm`: what is passed is the action itself, so
-        // it reads correctly in a diagnostic too.
+        // Consent before any network mutation, unless previewing.
         if !opts.dry_run && !opts.confirm(&format!("{verb} to {}", backend.name()))? {
             ui.detail(format_args!("skipped {}", backend.name()));
             continue;
@@ -166,6 +194,26 @@ pub fn publish<P>(
 mod tests {
     use super::*;
     use crate::error::{BaudelaireErrorKind, RemoteError};
+
+    /// The consent policy is shared, so `clean` gets the same three answers to
+    /// the same question, and the tests below exercise it through `Options`.
+    #[test]
+    fn consent_separates_a_refusal_from_nobody_being_there() {
+        let attended = Stub {
+            confirm: false,
+            ..Stub::default()
+        };
+        assert_eq!(attended.consent("wipe", false).unwrap(), Consent::Refused);
+        assert_eq!(attended.consent("wipe", true).unwrap(), Consent::Granted);
+        let unattended = Stub {
+            interactive: false,
+            ..Stub::default()
+        };
+        assert_eq!(
+            unattended.consent("wipe", false).unwrap(),
+            Consent::Unattended
+        );
+    }
 
     /// A headless [`Interaction`]: a fixed confirmation answer and an optional
     /// prompt secret. `interactive` stands in for having a terminal, so the
@@ -267,9 +315,7 @@ mod tests {
         let opts = options(None, &stub);
         assert!(matches!(
             opts.confirm("deploy to s3"),
-            Err(BaudelaireErrorKind::Remote(
-                RemoteError::NeedsConfirmation { .. }
-            ))
+            Err(BaudelaireErrorKind::Unattended(_))
         ));
     }
 

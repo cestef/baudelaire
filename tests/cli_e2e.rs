@@ -74,8 +74,15 @@ fn clean_removes_dist_and_cache() {
     let cfg = sb.config();
     assert!(cfg.paths.dist.exists());
     assert!(cfg.cache.dir.exists());
-    // call the clean logic directly via the CLI
-    let out = sb.run(&["-c", sb.path("config.kdl").to_str().unwrap(), "clean"]);
+    // call the clean logic directly via the CLI. `-y` because a full sweep off
+    // a terminal refuses rather than answering for itself, which the test below
+    // pins down.
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "clean",
+        "--yes",
+    ]);
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -83,6 +90,59 @@ fn clean_removes_dist_and_cache() {
     );
     assert!(!cfg.paths.dist.exists(), "dist still exists");
     assert!(!cfg.cache.dir.exists(), "cache still exists");
+}
+
+/// The wholesale sweep takes announce state with it, which is what the next
+/// `announce` reconciles a live repository against. With no terminal to ask and
+/// no `--yes`, it stops: answering for itself is how a stray `clean` in CI
+/// silently changed what a later announce would do.
+#[test]
+fn clean_refuses_a_full_sweep_it_cannot_confirm() {
+    let sb = Site::new();
+    sb.write("config.kdl", "site \"T\"\npaths {\n  dist \"public\"\n}\n");
+    sb.write("public/index.html", "<html></html>");
+    let cfg = sb.config();
+    let out = sb.run(&["-c", sb.path("config.kdl").to_str().unwrap(), "clean"]);
+    assert!(!out.status.success(), "expected a refusal");
+    assert!(cfg.paths.dist.exists(), "dist was removed anyway");
+
+    // ...and a narrowed sweep still runs unasked: it costs a rebuild, nothing
+    // more.
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "clean",
+        "--output",
+    ]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!cfg.paths.dist.exists(), "dist still exists");
+}
+
+/// `--dry-run` names every directory and removes none.
+#[test]
+fn clean_dry_run_reports_without_removing() {
+    let sb = Site::new();
+    sb.write("config.kdl", "site \"T\"\npaths {\n  dist \"public\"\n}\n");
+    sb.write("public/index.html", "<html></html>");
+    let cfg = sb.config();
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "clean",
+        "--dry-run",
+    ]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("public"), "stderr: {stderr}");
+    assert!(cfg.paths.dist.exists(), "dist was removed by a dry run");
 }
 
 #[test]
