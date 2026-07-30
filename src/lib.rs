@@ -16,11 +16,13 @@ pub mod remote;
 pub mod render;
 pub mod theme;
 pub mod ui;
+pub mod version;
 pub mod world;
 
 pub use error::*;
 
 /// The crate version, the single source for every place that surfaces it: the
 /// CLI banner, the HTTP user agent, `sys.inputs.baudelaire.version`, and the
-/// `baudelaire:site` module.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// `baudelaire:site` module. The provenance behind it lives on
+/// [`version::Version`].
+pub const VERSION: &str = version::Version::SEMVER;

@@ -81,16 +81,13 @@ use miette::Diagnostic;
 use common::Site;
 
 /// The cargo features a scenario may name in `requires`, paired with whether
-/// this build has them. The single list: `requires` both validates and skips
-/// against it, so a typo is a hard error rather than a case that quietly never
-/// runs.
-const FEATURES: &[(&str, bool)] = &[
-    ("announce", cfg!(feature = "announce")),
-    ("cards", cfg!(feature = "cards")),
-    ("css", cfg!(feature = "css")),
-    ("images", cfg!(feature = "images")),
-    ("js", cfg!(feature = "js")),
-];
+/// this build has them. `requires` both validates and skips against it, so a
+/// typo is a hard error rather than a case that quietly never runs.
+///
+/// Read from the binary's own inventory rather than kept here: a second copy
+/// would go stale the moment a feature is added, and the failure mode is a
+/// scenario that silently never runs.
+const FEATURES: &[(&str, bool)] = baudelaire::version::Version::FEATURES;
 
 /// What to write for one input file.
 enum Source {

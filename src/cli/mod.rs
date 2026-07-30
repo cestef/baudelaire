@@ -17,6 +17,7 @@ use crate::error::{
     BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
 };
 use crate::ui::{Level, Ui};
+use crate::version::Version;
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
 /// (section headers, usage), green for the literals you type (commands and
@@ -103,7 +104,11 @@ impl Root {
 #[derive(Parser, Debug)]
 #[command(
     name = "baudelaire",
-    version,
+    // `-V` is the one-line form a script greps; `--version` is the full report,
+    // which is also what answers "does this binary even have the feature my
+    // config is asking for".
+    version = Version::SEMVER,
+    long_version = Version::long(),
     about,
     long_about = "Baudelaire compiles a Typst content tree into a static site: incremental \
                   builds, a live-reload dev server, feeds, search, taxonomies, and more, all \

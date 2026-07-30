@@ -189,6 +189,14 @@ chores are visible in the git history and change nothing for a site.
   `pre code [style*="e5d004"] { ... !important }`. Naming a scope
   (`keyword "#e5d004"`) emits `class="sx-keyword"`; unnamed colours fall back to
   `sx-<hex>`.
+- **cli**: `--version` reports the build, not just the number: the commit it
+  was built from (with a `-dirty` suffix when the tree had uncommitted
+  changes), the rustc and profile, the target, and the optional features
+  compiled in. A binary missing any gains a `without` row naming them, which is
+  the answer to "why is my `assets { bundle }` doing nothing": five cargo
+  features gate whole modules and the released `slim` flavor turns all of them
+  off, and until now nothing in the CLI reported which flavor you were holding.
+  `-V` stays the one line a script greps.
 - **cli**: `--strict` fails a run that warned. The warning tally existed but
   only `--strict-links` could gate on it, one class out of the whole set.
 - **clean**: `--all`, `--dry-run` and `--output`. `--all` is the sweep-everything

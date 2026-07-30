@@ -189,6 +189,35 @@ fn new_scaffolds_without_a_readable_project() {
     );
 }
 
+/// `--version` answers "what am I holding": the version, where it was built
+/// from, and which optional capabilities are compiled in. A user whose `js`
+/// config silently did nothing could not tell a config mistake from a slim
+/// binary, because nothing reported which one they had.
+#[test]
+fn version_reports_the_build_and_its_features() {
+    let sb = Site::new();
+    let out = sb.run(&["--version"]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.starts_with("baudelaire "), "{stdout}");
+    for label in ["commit", "rustc", "target", "flavor", "features"] {
+        assert!(stdout.contains(label), "no `{label}` row: {stdout}");
+    }
+    // Piped, so nothing styled survives: the report is plain text a script can
+    // read.
+    assert!(
+        !stdout.contains('\u{1b}'),
+        "escapes survived a pipe: {stdout}"
+    );
+
+    // `-V` stays the one line a script greps.
+    let out = sb.run(&["-V"]);
+    assert!(out.status.success());
+    let short = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(short.lines().count(), 1, "{short}");
+    assert!(short.starts_with("baudelaire "), "{short}");
+}
+
 /// `--dry-run` names every directory and removes none.
 #[test]
 fn clean_dry_run_reports_without_removing() {

@@ -235,6 +235,25 @@ Accepted by every command.
 
   `pages`/`cached` are absent for a command that builds nothing. `ok` is false
   whenever the run failed, `--strict` included.
+/ #raw("-V"), #raw("--version"): `-V` is the one line a script greps
+  (`baudelaire 0.0.7`); `--version` reports the whole build:
+
+  ```
+  baudelaire 0.0.7
+    commit    465556976431
+    rustc     1.97.1 (8bab26f4f 2026-07-14) (release)
+    target    x86_64-unknown-linux-gnu
+    flavor    full
+    features  announce cards css embedded-fonts images js ssh
+  ```
+
+  `flavor` names the published build this matches, spelled the way
+  #link("install.typ")[`install.sh`] spells it: `full`, `slim`, or `custom` for a
+  feature mix no release ships. `features` is what this binary can do, and a
+  build missing any of them gains a `without` row naming them, which is the
+  answer to "why is my `assets { bundle }` doing nothing". A `-dirty` suffix on
+  `commit` means the tree it was built from had uncommitted changes, so the
+  commit alone will not reproduce it.
 / #raw("--strict"): Fail the run if anything warned. Warnings are what
   baudelaire says instead of failing (a missing font, an untaken permalink, a
   capability this binary lacks), and this is what turns the whole set into an
