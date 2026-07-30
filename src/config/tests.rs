@@ -200,6 +200,24 @@ fn collections_overrides() {
     assert!(!notes.1.reverse);
 }
 
+/// `glob` is the field's name in the docs and in the struct, and it is now the
+/// parser's too. It used to be positional-only, so writing the documented thing
+/// failed with a help that listed every key except the one being written.
+#[test]
+fn a_collection_glob_can_be_named_as_well_as_positional() {
+    let cfg = parse(r#"content { collections { posts glob="p/**/*.typ" } }"#);
+    let posts = &cfg.content.collections[0].1;
+    assert_eq!(posts.glob.as_deref(), Some("p/**/*.typ"));
+
+    // The named form is read after the positional, so a line writing both takes
+    // the one it spelled out.
+    let cfg = parse(r#"content { collections { posts "a/*.typ" glob="b/*.typ" } }"#);
+    assert_eq!(
+        cfg.content.collections[0].1.glob.as_deref(),
+        Some("b/*.typ")
+    );
+}
+
 #[test]
 fn images_optimize_per_format_with_params_and_lax_extensions() {
     let cfg = parse(
@@ -228,15 +246,24 @@ fn images_optimize_per_format_with_params_and_lax_extensions() {
     assert_eq!(opt.format("gif"), None);
 }
 
-/// `jpg` is an accepted spelling of the `jpeg` block, and tuning through it
-/// lands on the same format.
+/// One config key per format. `jpg` was a second key onto the same field, so a
+/// block naming both configured one format twice with no duplicate diagnostic,
+/// and the "valid keys" help listed them as if they were different formats.
+/// File *extensions* stay lenient: that is a different table, and `photo.jpg`
+/// is what people name files.
 #[test]
-fn images_optimize_accepts_the_jpg_spelling() {
-    let cfg = parse("assets { images { optimize { jpg quality=70 } } }");
-    assert_eq!(
-        cfg.assets.images.optimize.jpeg.as_ref().unwrap().quality,
-        70
-    );
+fn images_optimize_names_each_format_once() {
+    let err = Config::parse("assets { images { optimize { jpg quality=70 } } }").unwrap_err();
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(rendered.contains("unknown config key `jpg`"), "{rendered}");
+    assert!(rendered.contains("did you mean `jpeg`?"), "{rendered}");
+    // The *extension* table stays lenient: `photo.jpg` is what people name
+    // files, and that is a different table.
+    let opt = &parse("assets { images { optimize { jpeg } } }")
+        .assets
+        .images
+        .optimize;
+    assert_eq!(opt.format("jpg"), Some(ImageFormat::Jpeg));
 }
 
 /// An unrecognized format reads like every other unknown key, suggestions

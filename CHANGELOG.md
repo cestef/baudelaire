@@ -46,6 +46,12 @@ chores are visible in the git history and change nothing for a site.
   `new --edit`, since `serve --open` opens a browser and the short form was
   already `-e`. Both old spellings stay as aliases.
 
+- **config**: `assets { images { optimize { jpg } } }` is spelled `jpeg`. It was
+  a second key onto the same field, so a block naming both configured one format
+  twice with the last winning and no duplicate diagnostic, while the "valid
+  keys" help offered them as if they were different formats. File extensions
+  stay lenient: `.jpg`, `.jpeg`, `.jpe` and `.jfif` all match the `jpeg` block.
+
 - **clean**: The wholesale sweep asks before it removes anything, and refuses
   to answer for itself off a terminal. `clean` with no flag takes the output
   directory and every scrap of local state, announce state included, which is
@@ -143,6 +149,9 @@ chores are visible in the git history and change nothing for a site.
 - **config**: `content { index }` rejects a filename. It names a stem, so the
   documented `index "index.typ"` matched no page: the site built green with
   nothing at `/`.
+- **config**: A collection's `glob` can be written as `glob="..."`, not only as
+  the leading positional. It is the field's name in the docs and in the struct,
+  and writing it failed with a help that listed every key except that one.
 - **init**: `--config` and `--profile` stop being accepted and ignored.
   `--config` now names the config file to scaffold, so
   `init --config site.kdl` writes one every later command finds under the same

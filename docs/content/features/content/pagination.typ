@@ -20,8 +20,9 @@ content {
 }
 ```
 
-/ glob (the positional string): which files belong to the collection. Omit it and
-  the collection is the top-level directory of the same name under `content/`.
+/ #raw("glob"): which files belong to the collection, written either as the
+  leading positional string or as `glob="..."`. Omit it and the collection is
+  the top-level directory of the same name under `content/`.
 / #raw("sort"), #raw("reverse"): order members by `order` (the default), `date`,
   or `title`, optionally reversed. This is the order the prev/next pager and
   listings follow.

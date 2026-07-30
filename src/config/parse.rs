@@ -183,6 +183,9 @@ impl Section for DraftConfig {
 impl CollectionConfig {
     /// One `posts "glob" sort=.. permalink=..` line: the node name is the
     /// collection id, and the optional leading positional its member glob.
+    ///
+    /// The positional is a shorthand for the `glob` attribute, read first so a
+    /// line writing both takes the named one.
     fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let mut cfg = Self::default();
         if let Some(glob) = node.entries().first().filter(|e| e.name().is_none()) {
@@ -197,6 +200,14 @@ impl Attributed for CollectionConfig {
     // the glob, consumed by `item` above
     const LEADING: usize = 1;
     const ATTRS: Attrs<Self> = Attrs(&[
+        // Listed as well as read positionally, because this table is what the
+        // "unknown config key" help enumerates: `glob` is the field's name in
+        // the docs and in the struct, and writing the obvious `glob="..."` used
+        // to fail with a help that never mentioned it existed.
+        ("glob", |c, v, t, s| {
+            c.glob = Some(v.as_str(t, s)?);
+            Ok(())
+        }),
         ("sort", |c, v, t, s| {
             c.sort = v.one::<SortKey>(t, s)?;
             Ok(())
@@ -366,14 +377,18 @@ impl Section for ResponsiveConfig {
 }
 
 /// The `optimize { png [level=..] [strip=..]; jpeg [quality=..] }` block: each
-/// child names a format (leniently: `jpg`/`jpeg` both work) and enables it,
-/// with optional per-format tuning as attributes. Fills onto the existing
-/// per-format config so a profile tuning one attribute keeps its siblings.
+/// child names a format and enables it, with optional per-format tuning as
+/// attributes. Fills onto the existing per-format config so a profile tuning
+/// one attribute keeps its siblings.
+///
+/// One spelling per format. `jpg` used to be a second key onto the same field,
+/// so `optimize { jpeg quality=70; jpg quality=90 }` parsed as one format
+/// configured twice with the last winning, and the "valid keys" help offered
+/// both as if they were different formats.
 impl Section for OptimizeConfig {
     const RULES: Block<Self> = Block(&[
         ("png", |c, n, t| c.png.get_or_insert_default().read(n, t)),
         ("jpeg", |c, n, t| c.jpeg.get_or_insert_default().read(n, t)),
-        ("jpg", |c, n, t| c.jpeg.get_or_insert_default().read(n, t)),
     ]);
 }
 
