@@ -63,6 +63,24 @@ The rule is the same for all four, and it is the only rule: *your file wins*.
   sets `site` does not, because you set it too.
 ]
 
+== Three to start from
+
+The repository ships three, in `themes/`, each a complete look with templates,
+assets, and config defaults:
+
+/ #raw("albatros"): a centred blog. System sans at a comfortable measure, light
+  and dark with a toggle, tag chips, reading time.
+/ #raw("spleen"): a terminal. Monospace throughout, a prompt for a masthead,
+  posts listed like a directory, dark first, and no JavaScript at all.
+/ #raw("voyage"): a multilingual journal. Serif headings, a language switcher
+  built from each page's own editions, every label read from the site's string
+  table.
+
+Copy one into your project and name it, or install it into your package
+directory and name it as `@local/albatros:0.1.0`. None of them hardcode a menu:
+the nav is derived from #link("typst-modules.typ")[`@baudelaire/sections`], so it
+follows `content/` instead of a list in config.
+
 == Writing one
 
 Point `theme` at a directory instead of a package and the same layering applies,

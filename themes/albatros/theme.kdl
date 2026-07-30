@@ -1,0 +1,44 @@
+// Config defaults for the albatros theme. Every key here is a floor: state it
+// in your own config.kdl and yours wins, nested blocks included.
+//
+// Lists are the exception, and the one thing to watch: declaring
+// `content { collections { .. } }` yourself replaces this whole set rather than
+// adding to it, so copy the block below if you only meant to add a collection.
+
+content {
+  collections {
+    posts "posts/**/*.typ" {
+      sort "date"
+      reverse #true
+      permalink "/posts/{slug}/"
+      template "page.typ"
+      paginate {
+        template "list.typ"
+        size 10
+      }
+    }
+  }
+
+  taxonomies {
+    tags listing=#true template="list.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+html {
+  pretty #true
+  meta #true
+  // Slug every heading into an id, so a reader can deep-link a section.
+  anchors #true
+}
+
+generate {
+  sitemap #true
+  feed {
+    formats "rss" "atom"
+    limit 20
+  }
+}

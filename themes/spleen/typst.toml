@@ -1,0 +1,9 @@
+[package]
+name = "spleen"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["cstef <root@cstef.dev>"]
+license = "MIT"
+description = "A terminal theme for baudelaire: monospace throughout, dark first, no JavaScript."
+repository = "https://github.com/cestef/baudelaire"
+keywords = ["baudelaire", "theme", "terminal", "html"]

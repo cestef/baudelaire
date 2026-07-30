@@ -228,6 +228,11 @@ chores are visible in the git history and change nothing for a site.
   not already assumed.
 - **deploy**: The SSH backend is behind a default-on `ssh` cargo feature. It is
   the most expensive thing in the tree after typst and rolldown by crate count.
+- **themes**: Three themes ship in `themes/`: `albatros` (a centred blog),
+  `spleen` (a terminal, no JavaScript), and `voyage` (a multilingual journal
+  with a language switcher). Each is a complete look, templates and assets and
+  config defaults, and each is overridable file by file. None hardcodes a menu:
+  the nav is derived from `@baudelaire/sections`, so it follows `content/`.
 - **typst**: `typst { registry }` names a mirror of Typst Universe to download
   the `preview` namespace from, for a build behind a proxy or on a machine that
   cannot reach `packages.typst.org`. It covers a page's own `#import` and the

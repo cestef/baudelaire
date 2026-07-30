@@ -1,0 +1,274 @@
+/* spleen: a terminal. Monospace everywhere, dark by default, light only for a
+   reader whose system asks for it. No script: the theme has nothing to toggle
+   that CSS cannot answer on its own. */
+
+:root {
+  --measure: 52rem;
+  --bg: #0d0f12;
+  --fg: #c8ccd2;
+  --dim: #6d7580;
+  --accent: #9ece6a;
+  --accent-alt: #e0af68;
+  --rule: #232830;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fbfbf9;
+    --fg: #24282e;
+    --dim: #6a7280;
+    --accent: #3f7d20;
+    --accent-alt: #9a6700;
+    --rule: #e0e2e0;
+    color-scheme: light;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", "Fira Mono", Menlo, monospace;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+.masthead,
+.screen,
+.footer {
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-alt);
+}
+
+/* Masthead ---------------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding-block: 1.75rem 1rem;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip:focus {
+  position: static;
+  left: auto;
+}
+
+.prompt {
+  margin-right: auto;
+}
+
+.user {
+  color: var(--accent);
+}
+
+.at,
+.cwd {
+  color: var(--dim);
+}
+
+.host {
+  color: var(--accent-alt);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.cmd {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+.cmd::before {
+  content: "$ ";
+  color: var(--rule);
+}
+
+.cmd:hover {
+  color: var(--fg);
+}
+
+/* Screen ------------------------------------------------------------------ */
+
+.screen {
+  padding-block: 2rem 3rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  line-height: 1.35;
+  margin-block: 0 0.35rem;
+  font-weight: 700;
+}
+
+h2,
+h3 {
+  margin-block: 1.9rem 0.4rem;
+  font-size: 1.1rem;
+}
+
+.hash {
+  color: var(--dim);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin-block: 0 1.75rem;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.tags {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tag {
+  text-decoration: none;
+}
+
+.post img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+}
+
+blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--rule);
+  color: var(--dim);
+}
+
+pre {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--fg) 5%, var(--bg));
+  overflow-x: auto;
+}
+
+code {
+  font-family: inherit;
+}
+
+:not(pre) > code::before,
+:not(pre) > code::after {
+  content: "`";
+  color: var(--dim);
+}
+
+table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+/* Listing ----------------------------------------------------------------- */
+
+.listing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 1rem;
+  padding-block: 0.35rem;
+}
+
+.listing.dated .entry {
+  grid-template-columns: 6.5rem 1fr;
+}
+
+.entry .date {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-title {
+  text-decoration: none;
+}
+
+.entry-title::before {
+  content: "./";
+  color: var(--rule);
+}
+
+.count,
+.entry-summary {
+  grid-column: -2;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+/* Pager and footer -------------------------------------------------------- */
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--rule);
+  font-size: 0.9rem;
+}
+
+.pager .next {
+  margin-left: auto;
+  text-align: right;
+}
+
+.footer {
+  padding-block: 0 2.5rem;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.rule {
+  display: block;
+  color: var(--rule);
+}
+
+.footer-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.5rem;
+}
+
+.feeds {
+  display: flex;
+  gap: 0.75rem;
+}

@@ -1,0 +1,46 @@
+// Config defaults for the voyage theme. Every key here is a floor: state it in
+// your own config.kdl and yours wins, nested blocks included.
+//
+// No `languages` block: a theme cannot know which languages a site speaks, and
+// declaring one here would be a default that turns i18n on for everybody. The
+// theme works on a single-language site, where the switcher renders nothing.
+//
+// Lists replace wholesale, so declaring `content { collections { .. } }`
+// yourself replaces this set rather than adding to it.
+
+content {
+  collections {
+    posts "posts/**/*.typ" {
+      sort "date"
+      reverse #true
+      permalink "/posts/{slug}/"
+      template "page.typ"
+      paginate {
+        template "list.typ"
+        size 10
+      }
+    }
+  }
+
+  taxonomies {
+    tags listing=#true template="list.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+html {
+  pretty #true
+  meta #true
+  anchors #true
+}
+
+generate {
+  sitemap #true
+  feed {
+    formats "rss" "atom"
+    limit 20
+  }
+}

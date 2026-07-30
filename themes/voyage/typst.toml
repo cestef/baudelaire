@@ -1,0 +1,9 @@
+[package]
+name = "voyage"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["cstef <root@cstef.dev>"]
+license = "MIT"
+description = "A multilingual journal theme for baudelaire: serif headings, a language switcher, section nav."
+repository = "https://github.com/cestef/baudelaire"
+keywords = ["baudelaire", "theme", "blog", "i18n", "html"]

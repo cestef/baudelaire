@@ -1,0 +1,361 @@
+/* voyage: a journal. Serif headings against a sans body, a wide-ish measure,
+   and a header that carries the language switcher. Light and dark; the OS
+   preference decides until the reader presses the toggle. */
+
+:root {
+  --measure: 46rem;
+  --fg: #1b1a18;
+  --muted: #6b6862;
+  --bg: #fdfcfa;
+  --raised: #f3f1ec;
+  --accent: #9a4b2f;
+  --rule: #e6e2da;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fg: #eae7e1;
+    --muted: #a09a91;
+    --bg: #14140f;
+    --raised: #1e1d19;
+    --accent: #e2a08a;
+    --rule: #2a2822;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --fg: #eae7e1;
+  --muted: #a09a91;
+  --bg: #14140f;
+  --raised: #1e1d19;
+  --accent: #e2a08a;
+  --rule: #2a2822;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.03rem;
+  line-height: 1.72;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+.site-header,
+.content,
+.site-footer {
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-block: 1.5rem 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip:focus {
+  position: static;
+  left: auto;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.top-nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.top-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.top-nav a:hover {
+  color: var(--fg);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.langs {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.15rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--raised);
+}
+
+.lang {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.lang.active {
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.toggle {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.toggle > * {
+  display: grid;
+  place-items: center;
+}
+
+.on-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .on-dark {
+  display: grid;
+}
+
+:root[data-theme="dark"] .on-light {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .on-dark {
+    display: grid;
+  }
+
+  :root:not([data-theme="light"]) .on-light {
+    display: none;
+  }
+}
+
+/* Article ----------------------------------------------------------------- */
+
+.content {
+  padding-block: 2.75rem 3.5rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: 2.1rem;
+  margin-block: 0 0.4rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+  margin-block: 2.2rem 0.5rem;
+}
+
+.byline {
+  display: flex;
+  gap: 0.5rem;
+  margin-block: 0 2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.post img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.35rem;
+}
+
+blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1.1rem;
+  border-inline-start: 3px solid var(--rule);
+  color: var(--muted);
+  font-style: italic;
+}
+
+pre {
+  padding: 0.9rem 1rem;
+  border-radius: 0.4rem;
+  background: var(--raised);
+  overflow-x: auto;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+/* Listings ---------------------------------------------------------------- */
+
+.listing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  display: grid;
+  gap: 0.2rem;
+  padding-block: 1.1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.entry-title {
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.25rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.entry-title:hover {
+  color: var(--accent);
+}
+
+.entry .date,
+.entry .count,
+.entry-tags {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.entry-summary {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+}
+
+/* Tags, pager, footer ----------------------------------------------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 2.25rem 0;
+}
+
+.chip {
+  padding: 0.15rem 0.65rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.3rem;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.chip:hover {
+  color: var(--accent);
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.pager a {
+  display: grid;
+  gap: 0.1rem;
+  text-decoration: none;
+  max-width: 48%;
+}
+
+.pager .next {
+  margin-left: auto;
+  text-align: right;
+}
+
+.pager-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pager-title {
+  color: var(--accent);
+}
+
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem 2.5rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.feeds {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.icon {
+  display: block;
+}
