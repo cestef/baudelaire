@@ -11,6 +11,7 @@ mod base;
 mod embed;
 mod externalize;
 mod fingerprint;
+mod footnotes;
 mod highlight;
 mod image;
 mod lang;
@@ -38,6 +39,7 @@ use base::BasePath;
 use embed::Embed;
 use externalize::Externalize;
 use fingerprint::Fingerprint;
+use footnotes::Footnotes;
 use highlight::Highlight;
 use image::Images;
 use lang::Lang;
@@ -283,6 +285,10 @@ impl Transforms {
             Box::new(Svg),
             Box::new(Lang),
             Box::new(Anchors),
+            // Before anything that reads the page's structure: every later pass
+            // should see the notes where they will be served, not where typst
+            // left them.
+            Box::new(Footnotes),
             Box::new(Highlight),
             Box::new(Meta),
             Box::new(Speculation),

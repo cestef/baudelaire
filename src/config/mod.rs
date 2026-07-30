@@ -899,6 +899,33 @@ pub struct HtmlConfig {
     /// already states, while structured data is a claim made *to* a search
     /// engine about what the page is, and that is the author's claim to make.
     pub jsonld: bool,
+    /// Which element a page's footnotes are moved into.
+    pub footnotes: Footnotes,
+}
+
+/// Where a page's footnote list ends up.
+///
+/// Typst appends it to the end of the document, which is right for a page with
+/// no template and wrong for one with a layout: everything the layout emits is
+/// already in the body, so the notes land after the site footer, outside the
+/// element that sets the content width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Footnotes {
+    /// Inside the page's `<article>`, falling back to `<main>`.
+    #[default]
+    Article,
+    /// Inside the page's `<main>`.
+    Main,
+    /// Left where Typst put it, at the end of the document.
+    End,
+}
+
+impl Named for Footnotes {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("article", Self::Article),
+        ("main", Self::Main),
+        ("end", Self::End),
+    ];
 }
 
 /// Turn typst's inline highlight colours into CSS classes, so a stylesheet owns

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
-    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig,
+    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, Footnotes, GenerateConfig,
     HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
     NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
     ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
@@ -85,6 +85,7 @@ impl Default for HtmlConfig {
             // opt-in: structured data is a claim about the page, not a restating
             // of what it already says.
             jsonld: false,
+            footnotes: Footnotes::default(),
         }
     }
 }

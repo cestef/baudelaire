@@ -14,11 +14,11 @@ use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
-    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
-    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
-    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
-    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
-    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, Footnotes,
+    GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig,
+    LlmsConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip,
+    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
+    SearchFormat, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
     StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
@@ -471,6 +471,10 @@ impl Section for HtmlConfig {
         }),
         ("jsonld", |c, n, t| {
             c.jsonld = n.boolean(t, 0)?;
+            Ok(())
+        }),
+        ("footnotes", |c, n, t| {
+            c.footnotes = n.arg(t, 0)?.one::<Footnotes>(t, NodeExt::span(n))?;
             Ok(())
         }),
         ("highlight", |c, n, t| {

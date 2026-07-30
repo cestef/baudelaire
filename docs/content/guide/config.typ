@@ -131,8 +131,13 @@ Two consequences of the grouping are worth knowing before you write anything:
   pipeline; the directory it reads is `paths { assets }`. See
   #link("../features/discovery/meta.typ")[meta and images].
 / #raw("html"): The emitted markup: `pretty` formatting, `embed` to inline
-  assets as `data:` URIs, `meta` for SEO and social tags, and `anchors` to give
-  every heading a slug `id` for deep links.
+  assets as `data:` URIs, `meta` for SEO and social tags, `anchors` to give
+  every heading a slug `id` for deep links, and `footnotes` to say which element
+  a page's notes belong in (`"article"`, the default, `"main"`, or `"end"` to
+  leave them where Typst puts them). Typst appends the note list to the end of
+  the document, which on a templated page is *after* everything the layout
+  emitted, so without this it renders below the site footer and outside the
+  element setting the content width.
 / #raw("links"): Permalink shape and link checking, one subject in one block.
   `style "clean"` gives directory-per-page permalinks, `style "flat"` gives
   `.html` files; `strict` makes a broken internal `.typ` link an error (the

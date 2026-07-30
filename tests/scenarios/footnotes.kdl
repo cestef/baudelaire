@@ -1,0 +1,205 @@
+// Where a page's footnotes end up.
+//
+// Typst appends the list to the end of the document. On a templated page that
+// is after everything the layout emitted, so the notes land below the site
+// footer and outside the element that sets the content width. `html { footnotes }`
+// names the element they belong in instead.
+
+scenario "footnotes move inside the article by default" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("main", html.elem("article", body))
+        html.elem("footer", "site footer")
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      // Inside the article: the list closes before the article does, and the
+      // footer is still the last thing in the body.
+      order #"role="doc-endnotes""# "</article>" "<footer>"
+    }
+  }
+}
+
+scenario "footnotes fall back to main when the layout has no article" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("main", body)
+        html.elem("footer", "site footer")
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      order #"role="doc-endnotes""# "</main>" "<footer>"
+    }
+  }
+}
+
+scenario "footnotes can be pinned to main even when an article exists" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html { footnotes "main" }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("main", {
+          html.elem("article", body)
+          html.elem("aside", "sidebar")
+        })
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      // After the article closes, still inside main: the notes belong to the
+      // page rather than to the article.
+      order "</article>" "<aside>" #"role="doc-endnotes""# "</main>"
+    }
+  }
+}
+
+scenario "footnotes stay where typst put them under `end`" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html { footnotes "end" }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("main", html.elem("article", body))
+        html.elem("footer", "site footer")
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      order "</footer>" #"role="doc-endnotes""#
+    }
+  }
+}
+
+scenario "a layout with no container keeps its footnotes" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("div", attrs: (class: "wrap"), body)
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      // Nowhere better to put them, so they are left alone rather than dropped.
+      contains #"role="doc-endnotes""#
+      contains "The note."
+    }
+  }
+}
+
+scenario "an untemplated page is untouched" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      contains #"role="doc-endnotes""#
+      contains "The note."
+    }
+  }
+}
+
+scenario "an unknown placement is refused by name" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html { footnotes "sidebar" }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note",)
+      Body.
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::config::unknown_value"
+    }
+  }
+}

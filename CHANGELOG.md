@@ -10,6 +10,26 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Fixed
+
+- **html**: A page's footnotes render inside its content instead of below the
+  site footer. Typst appends the note list to the end of the document, which on
+  a templated page is after everything the layout emitted, so the notes landed
+  outside `<main>` and outside whatever element sets the content width, where no
+  stylesheet could reach them. `html { footnotes }` names the element they
+  belong in: `"article"` (the default, falling back to `<main>`), `"main"`, or
+  `"end"` for the old placement. A layout with neither element keeps its notes
+  exactly where they were.
+
+### Upgrading
+
+Footnotes moved. A page with a layout now renders its note list inside the
+layout's `<article>` (or `<main>`), where it used to sit after everything else
+in the body. A stylesheet that reached for it with `body > [role=doc-endnotes]`
+needs a new selector; `html { footnotes "end" }` restores the old placement.
+
 ## [0.0.8] - 2026-07-30
 
 ### Breaking
