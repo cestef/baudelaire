@@ -384,6 +384,24 @@ impl Ui {
         let _ = writeln!(s.out);
     }
 
+    /// A diagnostic rendered as plain text, for a reader that is not this
+    /// terminal.
+    ///
+    /// The dev server's browser overlay is the caller: a page cannot interpret
+    /// ANSI escapes, and the point of putting the diagnostic on screen is that
+    /// it reads exactly like the one in the terminal, spans and all. Fixed
+    /// width for the same reason: the browser's viewport is not this terminal's.
+    pub fn plain(diagnostic: &dyn Diagnostic) -> String {
+        let styled = Styled::new(diagnostic, false);
+        let mut text = String::new();
+        let handler = GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor())
+            .with_width(REPORT_NO_TERMINAL_WIDTH);
+        match handler.render_report(&mut text, &styled) {
+            Ok(()) => text,
+            Err(_) => styled.to_string(),
+        }
+    }
+
     /// One diagnostic, formatted: its markup rendered by [`Styled`], the rest by
     /// miette. Falls back to the bare message if the handler itself fails.
     fn render(&self, diagnostic: &dyn Diagnostic) -> String {

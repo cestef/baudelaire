@@ -324,7 +324,14 @@ fn a_unicode_url_is_served() {
 /// Repeating the edit rather than sleeping once before it removes the race
 /// between the SSE client connecting and the change landing, which a loaded
 /// runner loses.
-fn awaits_reload(srv: &Serve, mut trigger: impl FnMut()) -> bool {
+fn awaits_reload(srv: &Serve, trigger: impl FnMut()) -> bool {
+    awaits_event(srv, "data: reload", trigger)
+}
+
+/// Poll the live stream until a line containing `needle` arrives, re-running
+/// `trigger` between polls (a watcher may not be armed on the first attempt).
+fn awaits_event(srv: &Serve, needle: &str, mut trigger: impl FnMut()) -> bool {
+    let needle = needle.to_owned();
     let mut stream = Command::new("curl")
         .args([
             "-s",
@@ -341,7 +348,7 @@ fn awaits_reload(srv: &Serve, mut trigger: impl FnMut()) -> bool {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         for line in reader.lines().map_while(Result::ok) {
-            if line.contains("data: reload") {
+            if line.contains(&needle) {
                 let _ = tx.send(());
                 return;
             }
@@ -355,4 +362,33 @@ fn awaits_reload(srv: &Serve, mut trigger: impl FnMut()) -> bool {
     let _ = stream.kill();
     let _ = stream.wait();
     seen
+}
+
+/// A rebuild that fails puts its diagnostic on the stream, so the browser can
+/// say so. Before this the tab kept showing the last good page and nothing
+/// distinguished a broken save from a slow one or a missed one.
+#[test]
+fn a_failed_rebuild_pushes_its_diagnostic_to_the_stream() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nv1",
+    );
+    let srv = Serve::start(&t, &[]);
+
+    let mut n = 0;
+    let pushed = awaits_event(&srv, "event: failed", || {
+        // Unclosed code block: typst refuses it, so the rebuild fails while the
+        // previously built page stays served.
+        n += 1;
+        t.write(
+            "content/index.typ",
+            &format!("#let frontmatter = (title: \"H\",)\n#[ broken {n}"),
+        );
+    });
+    assert!(pushed, "no failure event pushed");
 }

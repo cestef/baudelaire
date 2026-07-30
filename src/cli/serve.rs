@@ -261,8 +261,13 @@ impl Dev<'_> {
             }
             Err(e) => {
                 // The failure rides along as a related diagnostic (spans,
-                // offending page and all), rendered by the caller's flush.
-                self.ui.warn(RebuildFailed { errors: vec![e] });
+                // offending page and all), rendered by the caller's flush...
+                let failure = RebuildFailed { errors: vec![e] };
+                // ...and the same text goes to every open tab, because the
+                // browser is where the author is looking and it otherwise just
+                // keeps showing the last good page, saying nothing.
+                live.failed(&Ui::plain(&failure));
+                self.ui.warn(failure);
             }
         }
         Ok(config_changed)
@@ -453,7 +458,7 @@ impl Handler {
 #[derive(Clone, Default)]
 struct Live {
     /// One sender per open SSE connection, keyed for self-removal on close.
-    streams: Arc<Mutex<HashMap<u64, flume::Sender<()>>>>,
+    streams: Arc<Mutex<HashMap<u64, flume::Sender<Signal>>>>,
     /// Monotonic source of stream ids.
     next_id: Arc<AtomicU64>,
 }
@@ -476,11 +481,16 @@ impl Live {
     /// bound on how long a closed connection lingers before it is reaped.
     const HEARTBEAT: Duration = Duration::from_secs(10);
 
-    /// Client script appended to served HTML; reloads on each pushed event.
+    /// Client script appended to served HTML: reloads on a successful rebuild,
+    /// and overlays the diagnostic when one fails. The script is a lambda so the
+    /// endpoint literal reaches it through the same `concat!` that keeps
+    /// [`Live::ENDPOINT`] and the client in agreement.
     const SCRIPT: &'static str = concat!(
-        "\n<script>\nnew EventSource('",
+        "\n<script>\n(",
+        include_str!("live.js"),
+        ")('",
         live_endpoint!(),
-        "').onmessage = function () { location.reload(); };\n</script>\n"
+        "');\n</script>\n"
     );
 
     /// Raw HTTP response head that opens an SSE stream, plus a comment so the
@@ -494,7 +504,23 @@ impl Live {
 
     /// Advance every open stream, dropping any whose client has gone.
     fn bump(&self) {
-        self.streams.lock().retain(|_, tx| tx.send(()).is_ok());
+        self.push(&Signal::Reload);
+    }
+
+    /// Put a failed rebuild's diagnostic on screen in every open tab.
+    ///
+    /// The terminal already says this; the browser did not, and the browser is
+    /// where the author is looking. `text` is the same rendered diagnostic,
+    /// plain, carried as a JSON string so it survives SSE's line framing.
+    fn failed(&self, text: &str) {
+        let payload = serde_json::to_string(text).unwrap_or_else(|_| String::from("\"\""));
+        self.push(&Signal::Failed(payload));
+    }
+
+    fn push(&self, signal: &Signal) {
+        self.streams
+            .lock()
+            .retain(|_, tx| tx.send(signal.clone()).is_ok());
     }
 
     /// Open an SSE stream for `req` on its own thread, writing directly to the
@@ -513,8 +539,8 @@ impl Live {
                     // A rebuild pushes `reload`; an idle timeout emits a comment
                     // keep-alive whose failed write reveals a closed socket.
                     let payload = match signals.recv_timeout(Self::HEARTBEAT) {
-                        Ok(()) => "data: reload\n\n",
-                        Err(flume::RecvTimeoutError::Timeout) => ": ping\n\n",
+                        Ok(signal) => signal.frame(),
+                        Err(flume::RecvTimeoutError::Timeout) => ": ping\n\n".to_owned(),
                         Err(flume::RecvTimeoutError::Disconnected) => break,
                     };
                     if socket.write_all(payload.as_bytes()).is_err() || socket.flush().is_err() {
@@ -524,6 +550,26 @@ impl Live {
             }
             streams.lock().remove(&id);
         });
+    }
+}
+
+/// What a rebuild pushes down an open live-reload stream.
+#[derive(Debug, Clone)]
+enum Signal {
+    /// The rebuild succeeded: reload the page.
+    Reload,
+    /// It did not, carrying the rendered diagnostic as a JSON string.
+    Failed(String),
+}
+
+impl Signal {
+    /// This signal as an SSE frame. The default (unnamed) event stays `reload`,
+    /// so a client from before the overlay existed still reloads.
+    fn frame(&self) -> String {
+        match self {
+            Self::Reload => "data: reload\n\n".to_owned(),
+            Self::Failed(json) => format!("event: failed\ndata: {json}\n\n"),
+        }
     }
 }
 
@@ -823,7 +869,7 @@ mod tests {
     fn bump_reaps_streams_whose_client_disconnected() {
         let live = Live::default();
         let (live_tx, live_rx) = flume::unbounded();
-        let (dead_tx, dead_rx) = flume::unbounded::<()>();
+        let (dead_tx, dead_rx) = flume::unbounded::<Signal>();
         live.streams.lock().insert(0, live_tx);
         live.streams.lock().insert(1, dead_tx);
         // The dead stream's receiver (its writer thread) is gone.
@@ -835,6 +881,32 @@ mod tests {
         assert!(streams.contains_key(&0), "live stream kept");
         assert!(!streams.contains_key(&1), "disconnected stream reaped");
         // The surviving stream received the reload signal.
-        assert!(live_rx.try_recv().is_ok());
+        assert!(matches!(live_rx.try_recv(), Ok(Signal::Reload)));
+    }
+
+    /// A failed rebuild reaches the browser too. It used to reach only the
+    /// terminal, so a tab kept showing the last good page with no hint that the
+    /// save had not taken.
+    #[test]
+    fn a_failed_rebuild_pushes_its_diagnostic_to_open_tabs() {
+        let live = Live::default();
+        let (tx, rx) = flume::unbounded();
+        live.streams.lock().insert(0, tx);
+
+        live.failed("expected `}`\n  at line 3");
+
+        let Ok(signal) = rx.try_recv() else {
+            panic!("the open stream should have been signalled");
+        };
+        let frame = signal.frame();
+        // A named event, so it is distinguishable from `EventSource`'s own
+        // transport errors, and JSON-encoded so the newline survives SSE's
+        // line framing intact.
+        assert!(frame.starts_with("event: failed\ndata: "), "{frame}");
+        assert!(frame.contains(r"expected `}`\n  at line 3"), "{frame}");
+        assert!(frame.ends_with("\n\n"), "{frame}");
+        // Exactly one `data:` line: an unencoded newline would split the frame
+        // and the client would parse half a diagnostic.
+        assert_eq!(frame.matches("data: ").count(), 1, "{frame}");
     }
 }
