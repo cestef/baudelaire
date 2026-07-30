@@ -94,10 +94,11 @@ impl Frontmatter {
     /// The permalink context for a page with this frontmatter, at an
     /// already-resolved `slug` (frontmatter-else-stem precedence is decided
     /// once, in `Page::load`).
-    pub fn permalink(&self, collection: &str, slug: &str) -> PermalinkCtx {
+    pub fn permalink(&self, collection: &str, slug: &str, path: Vec<String>) -> PermalinkCtx {
         PermalinkCtx {
             slug: slug.to_owned(),
             collection: collection.to_owned(),
+            path,
             date: self.date,
             order: self.order,
         }

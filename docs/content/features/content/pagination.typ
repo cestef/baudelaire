@@ -25,10 +25,18 @@ content {
 / #raw("sort"), #raw("reverse"): order members by `order` (the default), `date`,
   or `title`, optionally reversed. This is the order the prev/next pager and
   listings follow.
-/ #raw("permalink"): the URL template for each member. Tokens `{collection}`,
-  `{slug}`, `{year}`, `{month}`, `{day}`, and `{order}` are filled per page;
-  the default is `/{collection}/{slug}/`. A typo'd template is a spanned config
-  error, not a silent fallback.
+/ #raw("permalink"): the URL template for each member. Tokens `{path}`,
+  `{collection}`, `{slug}`, `{year}`, `{month}`, `{day}`, and `{order}` are
+  filled per page; the default is `/{path}/{slug}/`. A typo'd template is a
+  spanned config error, not a silent fallback.
+
+  `{path}` is where the page sits under `content/`, however deep, so
+  `content/guide/deploy/s3.typ` publishes at `/guide/deploy/s3/` and this page's
+  own URL carries `features/content/`. `{collection}` is just the collection's
+  name, so `/{collection}/{slug}/` flattens every subdirectory onto it. For the
+  ordinary layout the two are identical, since a collection *is* a directory;
+  they differ once you nest, or once a collection's glob points somewhere not
+  named after it.
 / #raw("template"): the default layout for members that don't set their own
   `template` in frontmatter.
 

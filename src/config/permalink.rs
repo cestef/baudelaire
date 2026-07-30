@@ -14,7 +14,18 @@ pub struct Permalink {
 
 impl Permalink {
     /// The conventional template applied when a collection sets no `permalink`.
-    pub const CONVENTION: &'static str = "/{collection}/{slug}/";
+    ///
+    /// `{path}` rather than `{collection}`, so the URL mirrors the content tree
+    /// the way every other generator's does: `content/guide/deploy/s3.typ` used
+    /// to publish at `/guide/s3/`, losing `deploy/` entirely, and two files with
+    /// the same stem in sibling subdirectories were an outright collision.
+    ///
+    /// For the conventional layout the two are the same string, since a
+    /// collection *is* a directory under `content/`. They part company only
+    /// where a collection is defined by a glob over a differently-named
+    /// directory, and there `{path}` is the honest answer: it says where the
+    /// page is.
+    pub const CONVENTION: &'static str = "/{path}/{slug}/";
 
     /// The permalink for an optional, *pre-validated* template string (checked
     /// at config parse), falling back to [`Self::CONVENTION`] when absent.
@@ -151,6 +162,9 @@ type Placeholder = (&'static str, fn(&PermalinkCtx) -> String);
 const PLACEHOLDERS: &[Placeholder] = &[
     ("slug", |ctx| ctx.slug.clone()),
     ("collection", |ctx| ctx.collection.clone()),
+    // Renders several segments at once, which is why it is a `/`-joined string
+    // rather than one name: `{path}` is where the page sits, however deep.
+    ("path", |ctx| ctx.path.join("/")),
     ("year", |ctx| {
         ctx.date.map(|d| d.year().to_string()).unwrap_or_default()
     }),
@@ -207,6 +221,11 @@ impl fmt::Display for Segment {
 pub struct PermalinkCtx {
     pub slug: String,
     pub collection: String,
+    /// The directories the page sits under, relative to the content root, with
+    /// a bundle's own directory dropped (it is already the slug). The same
+    /// chain the nav tree nests by, so `{path}` and the sidebar cannot
+    /// disagree about where a page lives.
+    pub path: Vec<String>,
     pub date: Option<time::Date>,
     pub order: Option<i64>,
 }
@@ -256,6 +275,7 @@ mod tests {
         PermalinkCtx {
             slug: slug.into(),
             collection: col.into(),
+            path: vec![col.into()],
             date: time::Date::from_calendar_date(2024, time::Month::January, 15).ok(),
             order: Some(3),
         }
@@ -268,6 +288,7 @@ mod tests {
         let dateless = PermalinkCtx {
             slug: "hello".into(),
             collection: "posts".into(),
+            path: vec!["posts".into()],
             date: None,
             order: None,
         };
@@ -283,6 +304,7 @@ mod tests {
         let orderless = PermalinkCtx {
             slug: "x".into(),
             collection: "y".into(),
+            path: vec!["y".into()],
             date: None,
             order: None,
         };
@@ -317,6 +339,43 @@ mod tests {
     fn renders_order() {
         let p = Permalink::parse("/notes/{order}-{slug}/").unwrap();
         assert_eq!(p.render(&ctx("first", "notes")), "/notes/3-first/");
+    }
+
+    /// `{path}` is where the page sits, however deep, and renders as several
+    /// segments at once.
+    #[test]
+    fn renders_a_nested_path() {
+        let nested = PermalinkCtx {
+            slug: "s3".into(),
+            collection: "guide".into(),
+            path: vec!["guide".into(), "deploy".into()],
+            date: None,
+            order: None,
+        };
+        let p = Permalink::parse("/{path}/{slug}/").unwrap();
+        assert_eq!(p.render(&nested), "/guide/deploy/s3/");
+        // `{collection}` is the collection's name, and still flattens.
+        let flat = Permalink::parse("/{collection}/{slug}/").unwrap();
+        assert_eq!(flat.render(&nested), "/guide/s3/");
+    }
+
+    /// A page directly under the content root has no nesting, and the empty
+    /// render collapses rather than leaving `//`.
+    #[test]
+    fn an_empty_path_leaves_no_stray_separator() {
+        let unnested = PermalinkCtx {
+            slug: "about".into(),
+            collection: "pages".into(),
+            path: Vec::new(),
+            date: None,
+            order: None,
+        };
+        assert_eq!(
+            Permalink::parse("/{path}/{slug}/")
+                .unwrap()
+                .render(&unnested),
+            "/about/"
+        );
     }
 
     #[test]

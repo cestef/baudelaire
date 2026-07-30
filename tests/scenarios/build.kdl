@@ -82,7 +82,10 @@ scenario "flat urls produce html files rather than index directories" {
   }
 }
 
-scenario "pages in a nested content directory join the collection above them" {
+// A nested directory is part of the URL, because it is part of where the page
+// is. These used to flatten onto `/posts/`, which lost the subdirectory and made
+// two same-stem files in sibling directories an outright collision.
+scenario "pages in a nested content directory keep that directory in their URL" {
   files {
     "config.kdl" #"""
       site "Test"
@@ -95,16 +98,48 @@ scenario "pages in a nested content directory join the collection above them" {
       #let frontmatter = (title: "Jan",)
       January
       """#
-    "content/posts/2024/feb.typ" #"""
-      #let frontmatter = (title: "Feb",)
-      February
+    "content/posts/2025/jan.typ" #"""
+      #let frontmatter = (title: "Jan again",)
+      Next January
+      """#
+    "content/posts/flat.typ" #"""
+      #let frontmatter = (title: "Flat",)
+      Flat
       """#
   }
   expect {
     ok
-    // The subdirectory is a section, not a URL segment: both land under /posts/.
+    file "posts/2024/jan/index.html" { contains "January" }
+    // The same stem one directory over is a different page, not a collision.
+    file "posts/2025/jan/index.html" { contains "Next January" }
+    // An unnested page is where it always was: `{path}` and `{collection}`
+    // agree for the conventional layout.
+    file "posts/flat/index.html" { contains "Flat" }
+  }
+}
+
+// `{collection}` is still available for a site that wants the old flattening,
+// and is what a glob-defined collection needs when its directory is named
+// something else.
+scenario "a collection can flatten its nesting back onto its own name" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      content {
+        collections {
+          posts permalink="/{collection}/{slug}/"
+        }
+      }
+      """#
+    "content/posts/2024/jan.typ" #"""
+      #let frontmatter = (title: "Jan",)
+      January
+      """#
+  }
+  expect {
+    ok
     file "posts/jan/index.html" { contains "January" }
-    file "posts/feb/index.html" { contains "February" }
+    absent "posts/2024/jan/index.html"
   }
 }
 

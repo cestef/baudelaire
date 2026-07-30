@@ -126,7 +126,7 @@ impl Page {
             .clone()
             .unwrap_or_else(|| Self::bundle_slug(path, collection, &stem, config));
         let slug = Slug::require(&raw)?.into_string();
-        let permalink = Self::permalink(collection, &frontmatter, &slug, &lang, config);
+        let permalink = Self::permalink(collection, &frontmatter, &slug, &lang, path, config);
         let template = frontmatter.template.clone().or_else(|| {
             config
                 .collection(collection)
@@ -236,10 +236,18 @@ impl Page {
     /// final directory as its slug, so that directory is dropped and the page
     /// nests under its parent (`[posts]`).
     pub(crate) fn section_path(&self, config: &Config) -> Vec<String> {
-        let rel = self
-            .source
-            .strip_prefix(&config.paths.content)
-            .unwrap_or(&self.source);
+        Self::nesting(&self.source, config)
+    }
+
+    /// The same chain, computed from a source path alone.
+    ///
+    /// Split out from [`section_path`](Self::section_path) because the permalink
+    /// is rendered during [`Page::load`], before there is a `Page` to ask: the
+    /// nav tree nested while the URL did not, so a sidebar read
+    /// `guide -> deploy -> s3` for a page published at `/guide/s3/`. One rule
+    /// now answers both.
+    pub(crate) fn nesting(source: &Path, config: &Config) -> Vec<String> {
+        let rel = source.strip_prefix(&config.paths.content).unwrap_or(source);
         let mut dirs: Vec<String> = rel
             .parent()
             .into_iter()
@@ -249,7 +257,7 @@ impl Page {
                 _ => None,
             })
             .collect();
-        if Stem::of(&self.source, config).is_index(config) {
+        if Stem::of(source, config).is_index(config) {
             dirs.pop();
         }
         dirs
@@ -391,14 +399,25 @@ impl Page {
     /// The permalink a page will resolve to for a given collection (or a root
     /// page when `None`), the single rule shared by discovery and by `new`'s
     /// preview, so a scaffolded page reports exactly the URL the build produces.
+    ///
+    /// `source` is where the file will live, which `{path}` reads: a preview
+    /// that guessed at it would print one URL and build another.
     pub(crate) fn permalink_of(
         collection: Option<&str>,
         fm: &Frontmatter,
         slug: &str,
+        source: &Path,
         config: &Config,
     ) -> String {
         // `new`'s preview is always for a default-language page.
-        Self::permalink(collection.unwrap_or(ROOT), fm, slug, &config.lang, config)
+        Self::permalink(
+            collection.unwrap_or(ROOT),
+            fm,
+            slug,
+            &config.lang,
+            source,
+            config,
+        )
     }
 
     /// The stem that names a page for its container rather than for itself: a
@@ -419,6 +438,7 @@ impl Page {
         fm: &Frontmatter,
         slug: &str,
         lang: &str,
+        source: &Path,
         config: &Config,
     ) -> String {
         let path = if collection == ROOT {
@@ -434,7 +454,8 @@ impl Page {
             let template = config
                 .collection(collection)
                 .and_then(|c| c.permalink.as_deref());
-            Permalink::of(template).render(&fm.permalink(collection, slug))
+            let nesting = Self::nesting(source, config);
+            Permalink::of(template).render(&fm.permalink(collection, slug, nesting))
         };
         config.localize(lang, &path)
     }
@@ -442,7 +463,7 @@ impl Page {
 
 #[cfg(test)]
 mod tests {
-    use super::Page;
+    use super::{Page, Path};
     use crate::config::Config;
     use crate::content::Frontmatter;
 
@@ -454,12 +475,24 @@ mod tests {
     fn the_configured_root_index_maps_to_the_site_root() {
         let fm = Frontmatter::default();
         let renamed = Config::parse("content {\n  index \"_index\"\n}").expect("config");
-        assert_eq!(Page::permalink_of(None, &fm, "_index", &renamed), "/");
+        assert_eq!(
+            Page::permalink_of(None, &fm, "_index", Path::new("content/x.typ"), &renamed),
+            "/"
+        );
         // ...and the default name is then just another top-level page.
-        assert_eq!(Page::permalink_of(None, &fm, "index", &renamed), "/index/");
+        assert_eq!(
+            Page::permalink_of(None, &fm, "index", Path::new("content/x.typ"), &renamed),
+            "/index/"
+        );
 
         let default = Config::parse("").expect("config");
-        assert_eq!(Page::permalink_of(None, &fm, "index", &default), "/");
-        assert_eq!(Page::permalink_of(None, &fm, "about", &default), "/about/");
+        assert_eq!(
+            Page::permalink_of(None, &fm, "index", Path::new("content/x.typ"), &default),
+            "/"
+        );
+        assert_eq!(
+            Page::permalink_of(None, &fm, "about", Path::new("content/x.typ"), &default),
+            "/about/"
+        );
     }
 }

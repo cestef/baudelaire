@@ -316,7 +316,8 @@ impl Draft {
         };
         // A root page (no collection) maps `index` to `/` and every other slug
         // to `/{slug}/`; `permalink_of` owns that fallback, exactly as the build.
-        let permalink = Page::permalink_of(collection.as_deref(), &frontmatter, &slug, config);
+        let permalink =
+            Page::permalink_of(collection.as_deref(), &frontmatter, &slug, &path, config);
 
         let output = config.destination(&permalink);
         let collision = discovered
