@@ -98,7 +98,36 @@ impl Card<'_> {
             tags.push(Self::canonical(url));
         }
         self.alternates(&mut tags);
+        self.feeds(&mut tags);
         tags
+    }
+
+    /// The feed autodiscovery links: one per configured format, pointing at the
+    /// feed for this page's language.
+    ///
+    /// This is how a reader, a browser extension, or a subscribe button finds a
+    /// feed at all. Without it the feeds were written and nothing pointed at
+    /// them, and since typst-html owns `<head>` an author could not add the tag
+    /// in a layout either.
+    fn feeds(&self, tags: &mut Vec<HtmlNode>) {
+        // Feeds are absolute-URL artifacts and refuse to generate without a
+        // base, so a missing one means there is no feed to point at.
+        let Some(base) = self.config.base() else {
+            return;
+        };
+        let scope = self.config.scope(&self.page.lang, "");
+        let title = self.config.title(&self.page.lang);
+        for kind in &self.config.generate.feed.formats {
+            let href = kind.url(&base, &scope);
+            tags.push(
+                HtmlElement::new(tag::link)
+                    .with_attr(attr::rel, "alternate")
+                    .with_attr(attr::r#type, kind.mime())
+                    .with_attr(attr::title, title)
+                    .with_attr(attr::href, &href)
+                    .into(),
+            );
+        }
     }
 
     /// What every vocabulary below says the same thing about, resolved once:
@@ -108,7 +137,7 @@ impl Card<'_> {
         let fm = &self.page.frontmatter;
         let (title, description, authored) = (
             fm.title.clone().unwrap_or_default(),
-            fm.text("description").or_else(|| fm.text("summary")),
+            fm.description(),
             fm.text("image"),
         );
         // An authored image always wins; a generated card fills in for the

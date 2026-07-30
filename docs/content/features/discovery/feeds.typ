@@ -27,6 +27,33 @@ of the newest appear. The footer of this site links its
 #link("/rss.xml")[RSS], #link("/atom.xml")[Atom], and
 #link("/sitemap.xml")[sitemap].
 
+Every page also advertises the feeds in its `<head>`, one
+`link rel="alternate"` per configured format, which is how a reader or a browser
+extension finds them without being told a URL.
+
+== What an item carries
+
+An entry takes its `title`, its `date`, its `description` (or `summary`), and
+its taxonomy terms as categories from the page's frontmatter:
+
+```typ
+#let frontmatter = (
+  title: "A tour of the cache",
+  date: datetime(year: 2026, month: 1, day: 2),
+  updated: datetime(year: 2026, month: 3, day: 4),
+  description: "How a page decides it is still valid.",
+  tags: ("build", "performance"),
+)
+```
+
+Without a `description` a reader shows the title and nothing else, so it is
+worth writing one: the same value fills the page's `<meta name="description">`
+and its social preview.
+
+The two dates are kept apart where a format keeps them apart. Atom emits
+`published` and `updated`, JSON Feed `date_published` and `date_modified`; RSS
+has only `pubDate`, which is the publication date.
+
 #callout(kind: "note")[
   Feeds and the sitemap need absolute links, so enabling either without a `url`
   fails the build. On a preview host, pass `--base-url` to point them at the

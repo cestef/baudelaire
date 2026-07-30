@@ -36,6 +36,11 @@ Because Typst evaluates it, the value is a dict like any other, so it can be com
 / #raw("date:datetime"): A Typst `datetime`. A page joins its
   #link("../features/discovery/feeds.typ")[feeds] and sorts in a `sort="date"` collection
   only when it has one. Write it as `datetime(year: 2026, month: 7, day: 9)`.
+/ #raw("updated:datetime"): When the page last changed materially. `date` stays
+  when it was *published*, and is what every listing sorts by, so a rewritten
+  2023 post is still a 2023 post; `updated` is what the sitemap's `lastmod` and a
+  feed entry's `updated` report, which is how a crawler knows to come back and a
+  reader knows to resurface it.
 / #raw("draft:bool"): Draft pages are skipped unless you pass `--drafts`
   (or a profile turns them on).
 / #raw("slug:str"): Override the URL slug, otherwise derived from the filename.

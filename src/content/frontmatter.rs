@@ -31,6 +31,10 @@ const FIELDS: &[(&str, Field)] = &[
         fm.date = Some(v.date(p, k)?);
         Ok(())
     }),
+    ("updated", |fm, v, p, k| {
+        fm.updated = Some(v.date(p, k)?);
+        Ok(())
+    }),
     ("draft", |fm, v, p, k| {
         fm.draft = v.boolean(p, k)?;
         Ok(())
@@ -68,6 +72,12 @@ const FIELDS: &[(&str, Field)] = &[
 pub struct Frontmatter {
     pub title: Option<String>,
     pub date: Option<time::Date>,
+    /// When the page last changed materially, if it has since being published.
+    ///
+    /// Distinct from `date`, which is when it was *published* and which orders
+    /// every listing: a 2023 guide rewritten today is still a 2023 post, but a
+    /// crawler and a feed reader both need to hear that it moved.
+    pub updated: Option<time::Date>,
     pub draft: bool,
     pub slug: Option<String>,
     /// Explicit language override; beats the filename suffix and the default
@@ -91,6 +101,25 @@ impl Frontmatter {
             date: self.date,
             order: self.order,
         }
+    }
+
+    /// When this page last changed: its `updated`, else its publish `date`.
+    ///
+    /// The single answer to "how recent is this", so the sitemap's `lastmod` and
+    /// a feed entry's `updated` cannot disagree. Both used to read `date` alone,
+    /// which meant a rewritten page told crawlers it had not changed since it
+    /// was first published, and never got recrawled or resurfaced.
+    pub fn modified(&self) -> Option<time::Date> {
+        self.updated.or(self.date)
+    }
+
+    /// The page's one-line summary, from `description` or its `summary` alias.
+    ///
+    /// One rule, because three consumers ask the same question and a reader who
+    /// sees a preview in a `<meta>` tag but not in the feed would be reading a
+    /// bug: the head tags, the feed entry, and the announced record.
+    pub fn description(&self) -> Option<String> {
+        self.text("description").or_else(|| self.text("summary"))
     }
 
     /// A string value from `extra` (arbitrary frontmatter), if present and a

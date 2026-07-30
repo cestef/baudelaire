@@ -272,3 +272,137 @@ scenario "a feed without a url is a request that cannot be met" {
     fails { code "baudelaire::output::url_required" }
   }
 }
+
+// An item that carries nothing but a title is a wall of bare titles in a reader,
+// which is what every feed used to be: no description, no categories, and one
+// date doing the work of two.
+scenario "a feed item carries its description, categories and both dates" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        taxonomies {
+          tags
+        }
+      }
+      generate {
+        feed { formats "rss" "atom" "json" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "A",
+        date: datetime(year: 2024, month: 1, day: 2),
+        updated: datetime(year: 2026, month: 3, day: 4),
+        description: "what the post is about",
+        tags: ("rust", "typst"),
+      )
+      body
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      contains "<description>what the post is about</description>"
+      contains "<category>rust</category>"
+      contains "<category>typst</category>"
+      // RSS has only a publication date, so the rewrite has nowhere to go here.
+      contains "<pubDate>Tue, 02 Jan 2024 00:00:00 +0000</pubDate>"
+    }
+    file "atom.xml" {
+      contains "<summary>what the post is about</summary>"
+      contains #"<category term="rust"/>"#
+      // Atom separates them: `updated` is the rewrite, `published` the original.
+      contains "<updated>2026-03-04T00:00:00Z</updated>"
+      contains "<published>2024-01-02T00:00:00Z</published>"
+    }
+    file "feed.json" {
+      contains #""summary":"what the post is about""#
+      contains #""date_published":"2024-01-02T00:00:00Z""#
+      contains #""date_modified":"2026-03-04T00:00:00Z""#
+      contains #""tags":["rust","typst"]"#
+    }
+  }
+}
+
+// `updated` is when the page last changed; `date` is when it went up and is what
+// orders every listing. The sitemap wants the former, and used to be handed the
+// latter, so a rewritten page told crawlers it had not moved since publication.
+scenario "the sitemap reports the rewrite date, not the publication date" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        sitemap #true
+      }
+      """#
+    "content/posts/rewritten.typ" #"""
+      #let frontmatter = (
+        title: "Rewritten",
+        date: datetime(year: 2023, month: 5, day: 6),
+        updated: datetime(year: 2026, month: 7, day: 8),
+      )
+      body
+      """#
+    "content/posts/untouched.typ" #"""
+      #let frontmatter = (title: "Untouched", date: datetime(year: 2023, month: 5, day: 6),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "sitemap.xml" {
+      contains "<lastmod>2026-07-08</lastmod>"
+      // A page that never changed still reports its publication date.
+      contains "<lastmod>2023-05-06</lastmod>"
+    }
+  }
+}
+
+// The feeds existed and nothing pointed at them: no reader, extension or
+// subscribe button could find one. typst-html owns `<head>`, so a layout could
+// not add the tag either.
+scenario "every page advertises the feeds in its head" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        feed { formats "rss" "json" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains #"<link rel="alternate" type="application/rss+xml" title="T" href="https://example.com/rss.xml">"#
+      contains #"<link rel="alternate" type="application/feed+json" title="T" href="https://example.com/feed.json">"#
+      // Only the configured formats are advertised.
+      missing "application/atom+xml"
+    }
+  }
+}
+
+// A site with no feeds must not advertise any.
+scenario "a site without feeds advertises none" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { missing "application/rss+xml" }
+  }
+}

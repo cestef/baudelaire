@@ -713,6 +713,29 @@ impl FeedKind {
         }
     }
 
+    /// The media type a `<link rel="alternate">` announces this format under,
+    /// and how a reader tells the three apart when a page advertises several.
+    /// Beside [`file`](Self::file) because a format's name and its type are the
+    /// same fact, and an autodiscovery tag needs both.
+    pub fn mime(self) -> &'static str {
+        match self {
+            Self::Rss => "application/rss+xml",
+            Self::Atom => "application/atom+xml",
+            Self::Json => "application/feed+json",
+        }
+    }
+
+    /// This feed's absolute URL under `base`, for a language `scope` (empty for
+    /// the default language).
+    ///
+    /// One derivation, because two places name the same file and a reader would
+    /// notice if they disagreed: the feed writes this into its own `<id>` and
+    /// `feed_url`, and every page's `<head>` advertises it. Note the file name
+    /// is appended to the scope's directory URL rather than joined as a path
+    /// segment, which would give it a trailing slash.
+    pub fn url(self, base: &BaseUrl, scope: &str) -> String {
+        format!("{}{}", base.join(Permalink::join(&[scope])), self.file())
+    }
 }
 
 /// Client-side search index generation. Empty `formats` disables search.

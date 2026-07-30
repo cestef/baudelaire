@@ -142,11 +142,7 @@ impl<'a> Feed<'a> {
     }
 
     /// An XML document written by one format's channel writer.
-    fn xml(
-        &self,
-        write: fn(&Self, &mut Xml, &[Option<String>]),
-        stamps: &[Option<String>],
-    ) -> String {
+    fn xml(&self, write: fn(&Self, &mut Xml, &[Stamps]), stamps: &[Stamps]) -> String {
         let mut xml = Xml::document();
         write(self, &mut xml, stamps);
         xml.finish()
@@ -161,14 +157,14 @@ impl<'a> Feed<'a> {
 
     /// This feed's own absolute URL, its stable identity.
     fn url(&self, kind: FeedKind) -> String {
-        format!("{}{}", self.home(), kind.file())
+        kind.url(self.base, self.scope)
     }
 
     fn link(&self, page: &Page) -> String {
         self.base.join(&page.permalink)
     }
 
-    fn rss(&self, xml: &mut Xml, stamps: &[Option<String>]) {
+    fn rss(&self, xml: &mut Xml, stamps: &[Stamps]) {
         xml.nest("rss", &[("version", "2.0")], |xml| {
             xml.nest("channel", &[], |xml| {
                 xml.leaf("title", self.title);
@@ -180,8 +176,19 @@ impl<'a> Feed<'a> {
                         xml.leaf("title", page.title());
                         xml.leaf("link", &link);
                         xml.leaf("guid", &link);
-                        if let Some(stamp) = stamp {
-                            xml.leaf("pubDate", stamp);
+                        // What a reader renders in its list view. Without it
+                        // that column is empty and a subscriber sees a wall of
+                        // bare titles.
+                        if let Some(description) = page.frontmatter.description() {
+                            xml.leaf("description", &description);
+                        }
+                        for term in Self::categories(page) {
+                            xml.leaf("category", term);
+                        }
+                        // RSS has no "last changed": `pubDate` is publication,
+                        // and an `updated` has nowhere to go in this format.
+                        if let Some(published) = &stamp.published {
+                            xml.leaf("pubDate", published);
                         }
                     });
                 }
@@ -189,9 +196,9 @@ impl<'a> Feed<'a> {
         });
     }
 
-    fn atom(&self, xml: &mut Xml, stamps: &[Option<String>]) {
-        // Items are newest-first, so the first dated one is the feed's `updated`.
-        let updated = stamps.iter().flatten().next();
+    fn atom(&self, xml: &mut Xml, stamps: &[Stamps]) {
+        // Items are newest-first, so the first dated one dates the feed.
+        let updated = stamps.iter().find_map(Stamps::latest);
         xml.nest("feed", &[("xmlns", "http://www.w3.org/2005/Atom")], |xml| {
             xml.leaf("title", self.title);
             xml.leaf("id", &self.url(FeedKind::Atom));
@@ -205,16 +212,39 @@ impl<'a> Feed<'a> {
                     xml.leaf("title", page.title());
                     xml.leaf("id", &link);
                     xml.empty("link", &[("href", &link)]);
-                    if let Some(stamp) = stamp {
-                        xml.leaf("updated", stamp);
+                    // Atom separates the two moments, so both are said:
+                    // `updated` is mandatory on an entry and falls back to the
+                    // publication date, `published` is emitted when known.
+                    if let Some(updated) = stamp.latest() {
+                        xml.leaf("updated", updated);
+                    }
+                    if let Some(published) = &stamp.published {
+                        xml.leaf("published", published);
+                    }
+                    if let Some(description) = page.frontmatter.description() {
+                        xml.leaf("summary", &description);
+                    }
+                    for term in Self::categories(page) {
+                        xml.empty("category", &[("term", term)]);
                     }
                 });
             }
         });
     }
 
+    /// Every taxonomy term on a page, flattened: a feed's categories are a flat
+    /// keyword list in all three standards, with nowhere to say which taxonomy a
+    /// term came from.
+    fn categories(page: &Page) -> impl Iterator<Item = &str> {
+        page.frontmatter
+            .taxonomies
+            .values()
+            .flatten()
+            .map(String::as_str)
+    }
+
     /// The JSON Feed 1.1 document (https://jsonfeed.org/version/1.1).
-    fn json(&self, stamps: &[Option<String>]) -> Result<String> {
+    fn json(&self, stamps: &[Stamps]) -> Result<String> {
         let feed = JsonFeed {
             version: "https://jsonfeed.org/version/1.1",
             title: self.title,
@@ -230,7 +260,10 @@ impl<'a> Feed<'a> {
                         id: link.clone(),
                         url: link,
                         title: Some(page.title()),
-                        date_published: stamp.as_deref(),
+                        summary: page.frontmatter.description(),
+                        date_published: stamp.published.as_deref(),
+                        date_modified: stamp.updated.as_deref(),
+                        tags: Self::categories(page).collect(),
                     }
                 })
                 .collect(),
@@ -238,26 +271,47 @@ impl<'a> Feed<'a> {
         Artifact::Feed.json(&feed)
     }
 
-    /// Every item's date rendered in `kind`'s timestamp format (as UTC
-    /// midnight), position-aligned with `items`; `None` for undated pages. A
-    /// date the format cannot represent is an error, not a silently missing
-    /// `pubDate`/`updated`.
-    fn stamps(&self, kind: FeedKind) -> Result<Vec<Option<String>>> {
+    /// Every item's dates rendered in `kind`'s timestamp format (as UTC
+    /// midnight), position-aligned with `items`. A date the format cannot
+    /// represent is an error, not a silently missing `pubDate`/`updated`.
+    fn stamps(&self, kind: FeedKind) -> Result<Vec<Stamps>> {
         self.items
             .iter()
-            .map(|page| Self::stamp(page, kind))
+            .map(|page| {
+                Ok(Stamps {
+                    published: Self::stamp(page, page.frontmatter.date, kind)?,
+                    updated: Self::stamp(page, page.frontmatter.updated, kind)?,
+                })
+            })
             .collect()
     }
 
-    fn stamp(page: &Page, kind: FeedKind) -> Result<Option<String>> {
-        page.frontmatter
-            .date
-            .map(|d| {
-                kind.timestamp(d.midnight().assume_utc()).map_err(|e| {
-                    FeedDateError::new(&page.permalink, d.to_string(), kind.standard(), e).into()
-                })
+    fn stamp(page: &Page, date: Option<time::Date>, kind: FeedKind) -> Result<Option<String>> {
+        date.map(|d| {
+            kind.timestamp(d.midnight().assume_utc()).map_err(|e| {
+                FeedDateError::new(&page.permalink, d.to_string(), kind.standard(), e).into()
             })
-            .transpose()
+        })
+        .transpose()
+    }
+}
+
+/// One item's two moments, each already in its feed's format.
+///
+/// Kept apart because the standards do: `published` is when the page went up
+/// and orders the feed, `updated` is when it last changed. Feeding one date to
+/// both is what left a rewritten post looking untouched to every reader.
+struct Stamps {
+    published: Option<String>,
+    updated: Option<String>,
+}
+
+impl Stamps {
+    /// The moment that dates this item at all: its `updated` if it has one,
+    /// else when it was published. What Atom's `<updated>` requires (it is
+    /// mandatory on an entry) and what the feed's own `<updated>` is taken from.
+    fn latest(&self) -> Option<&String> {
+        self.updated.as_ref().or(self.published.as_ref())
     }
 }
 
@@ -273,7 +327,8 @@ struct JsonFeed<'a> {
 }
 
 /// One JSON Feed item. `id` doubles as the canonical `url`, mirroring the
-/// `guid`/`link` pairing in the XML formats.
+/// `guid`/`link` pairing in the XML formats. Absent members are omitted rather
+/// than emitted empty, which the spec asks for and readers rely on.
 #[derive(Serialize)]
 struct JsonItem<'a> {
     id: String,
@@ -281,5 +336,11 @@ struct JsonItem<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     title: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     date_published: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date_modified: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tags: Vec<&'a str>,
 }

@@ -26,7 +26,7 @@ impl SiteMap {
             for page in pages {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
-                    if let Some(date) = page.frontmatter.date {
+                    if let Some(date) = page.frontmatter.modified() {
                         // `time::Date` displays as an ISO-8601 calendar date,
                         // exactly the W3C format `lastmod` wants.
                         xml.leaf("lastmod", &date.to_string());
