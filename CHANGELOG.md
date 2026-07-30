@@ -124,6 +124,10 @@ chores are visible in the git history and change nothing for a site.
   file optimized as a JPEG was served as `application/octet-stream`; `Photo.PNG`
   hit the same split.
 - **cache**: Two render-side inputs that served stale output.
+- **cli**: `-v` wins over `RUST_LOG`. Any value in the environment used to
+  discard the verbosity count, so `RUST_LOG=warn baudelaire -vv build` printed
+  no debug events and said nothing about why. A run that passes no `-v` still
+  honours the variable, which stays the only way to see a dependency's events.
 
 ### Performance
 
