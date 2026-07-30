@@ -156,8 +156,10 @@ pub struct BuildOverrides {
     #[arg(short, long, help_heading = group::OUTPUT)]
     pub out: Option<PathBuf>,
 
-    /// Skip the cache (full rebuild).
-    #[arg(long, help_heading = group::BUILD)]
+    /// Use the incremental cache (default; `--no-cache` forces a full rebuild).
+    #[arg(long, overrides_with = "no_cache", help_heading = group::BUILD)]
+    pub cache: bool,
+    #[arg(long, overrides_with = "cache", hide = true)]
     pub no_cache: bool,
 }
 
@@ -171,17 +173,23 @@ pub struct CommonOverrides {
     #[arg(long, help_heading = group::OUTPUT)]
     pub base_url: Option<String>,
 
-    /// Build draft pages.
-    #[arg(long, help_heading = group::BUILD)]
+    /// Build draft pages (`--no-drafts` excludes them, whatever the config says).
+    #[arg(long, overrides_with = "no_drafts", help_heading = group::BUILD)]
     pub drafts: bool,
+    #[arg(long, overrides_with = "drafts", hide = true)]
+    pub no_drafts: bool,
 
-    /// Build future-dated pages.
-    #[arg(long, help_heading = group::BUILD)]
+    /// Build future-dated pages (`--no-future` excludes them).
+    #[arg(long, overrides_with = "no_future", help_heading = group::BUILD)]
     pub future: bool,
+    #[arg(long, overrides_with = "future", hide = true)]
+    pub no_future: bool,
 
-    /// Error on broken internal links (default true; pass `false` to warn).
-    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::BUILD)]
-    pub strict_links: Option<bool>,
+    /// Error on broken internal links (default; `--no-strict-links` warns instead).
+    #[arg(long, overrides_with = "no_strict_links", help_heading = group::BUILD)]
+    pub strict_links: bool,
+    #[arg(long, overrides_with = "strict_links", hide = true)]
+    pub no_strict_links: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -218,9 +226,12 @@ pub struct CheckArgs {
     #[command(flatten)]
     pub overrides: CommonOverrides,
 
-    /// Also verify outbound `http(s)` links over the network.
-    #[arg(long, help_heading = group::BUILD)]
+    /// Also verify outbound `http(s)` links over the network
+    /// (`--no-external` skips them even when the config asks).
+    #[arg(long, overrides_with = "no_external", help_heading = group::BUILD)]
     pub external: bool,
+    #[arg(long, overrides_with = "external", hide = true)]
+    pub no_external: bool,
 }
 
 /// Arguments for `baudelaire serve`.
@@ -237,12 +248,16 @@ pub struct ServeArgs {
     #[arg(long, help_heading = group::SERVER)]
     pub bind: Option<String>,
 
-    /// Open browser on start.
-    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::SERVER)]
-    pub open: Option<bool>,
+    /// Open a browser on start (default; `--no-open` suppresses it).
+    #[arg(long, overrides_with = "no_open", help_heading = group::SERVER)]
+    pub open: bool,
+    #[arg(long, overrides_with = "open", hide = true)]
+    pub no_open: bool,
 
-    /// Disable file watching and live rebuild.
-    #[arg(long, help_heading = group::SERVER)]
+    /// Watch for changes and rebuild (default; `--no-watch` serves statically).
+    #[arg(long, overrides_with = "no_watch", help_heading = group::SERVER)]
+    pub watch: bool,
+    #[arg(long, overrides_with = "watch", hide = true)]
     pub no_watch: bool,
 }
 
@@ -421,9 +436,11 @@ pub struct NewArgs {
     #[arg(long, help_heading = group::CONTENT)]
     pub date: Option<String>,
 
-    /// Mark the page a draft (default: true; `--draft false` publishes it).
-    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = group::CONTENT)]
-    pub draft: Option<bool>,
+    /// Mark the page a draft (default; `--no-draft` publishes it immediately).
+    #[arg(long, overrides_with = "no_draft", help_heading = group::CONTENT)]
+    pub draft: bool,
+    #[arg(long, overrides_with = "draft", hide = true)]
+    pub no_draft: bool,
 
     /// Create a page bundle (`<name>/index.typ`) for colocated assets.
     #[arg(short = 'b', long, help_heading = group::CONTENT)]
@@ -580,6 +597,46 @@ impl Cli {
     }
 }
 
+/// What a `--x` / `--no-x` flag pair says about a boolean setting: turn it on,
+/// turn it off, or leave whatever the config decided.
+///
+/// Every overridable boolean in the CLI is spelled as such a pair, resolved
+/// here. Three idioms used to coexist, and each was wrong in its own way:
+///
+/// - A tri-state `Option<bool>` taking an optional value (`--strict-links
+///   [<bool>]`). It read the *next* argument as its value, so the natural
+///   `baudelaire new --draft posts/foo` failed with "invalid value 'posts/foo'
+///   for '--draft'", an error that never mentions the real cause.
+/// - A plain `bool` that could only push a setting on (`--drafts`, `--future`),
+///   so `draft { build #true }` in config had no CLI route back to a production
+///   build, and `serve { watch #false }` no way to turn watching on.
+/// - One that accumulated with `|=` (`--external`), which is the same one-way
+///   street with the reasoning buried in a code comment.
+#[derive(Debug, Clone, Copy, Default)]
+struct Toggle(Option<bool>);
+
+impl Toggle {
+    /// Resolve a pair. Each flag `overrides_with` the other, so clap lets the
+    /// last one on the command line win and at most one arrives set.
+    fn of(on: bool, off: bool) -> Self {
+        Self(on.then_some(true).or(off.then_some(false)))
+    }
+
+    /// Overlay onto a config field, leaving it untouched when neither flag was
+    /// passed, which is what makes the config the default rather than the flag.
+    fn apply(self, target: &mut bool) {
+        if let Some(value) = self.0 {
+            *target = value;
+        }
+    }
+
+    /// The value, or `default` when neither flag was passed. For a toggle with
+    /// no config field behind it.
+    fn or(self, default: bool) -> bool {
+        self.0.unwrap_or(default)
+    }
+}
+
 /// A set of CLI flags that overlay the loaded config.
 trait Overrides {
     fn apply(&self, config: &mut Config);
@@ -591,9 +648,7 @@ impl Overrides for BuildOverrides {
         if let Some(out) = &self.out {
             config.paths.dist = out.clone();
         }
-        if self.no_cache {
-            config.cache.incremental = false;
-        }
+        Toggle::of(self.cache, self.no_cache).apply(&mut config.cache.incremental);
     }
 }
 
@@ -602,15 +657,9 @@ impl Overrides for CommonOverrides {
         if let Some(url) = &self.base_url {
             config.url = Some(url.clone());
         }
-        if self.drafts {
-            config.content.draft.build = true;
-        }
-        if self.future {
-            config.content.future = true;
-        }
-        if let Some(strict) = self.strict_links {
-            config.links.strict = strict;
-        }
+        Toggle::of(self.drafts, self.no_drafts).apply(&mut config.content.draft.build);
+        Toggle::of(self.future, self.no_future).apply(&mut config.content.future);
+        Toggle::of(self.strict_links, self.no_strict_links).apply(&mut config.links.strict);
     }
 }
 
@@ -706,9 +755,7 @@ impl Run for BuildArgs {
 impl Run for CheckArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let mut config = cx.configured(&self.overrides, "checking")?;
-        // The flag turns the config switch on for this run; it never turns a
-        // configured one off, so `links { external #true }` in CI needs no flag.
-        config.links.external |= self.external;
+        Toggle::of(self.external, self.no_external).apply(&mut config.links.external);
         crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
         Ok(())
     }
@@ -783,6 +830,12 @@ impl NewArgs {
     /// the content directory (unless it already starts with it, so an explicit
     /// `content/posts/foo.typ` is not double-prefixed), and `.typ` is appended
     /// when the name does not already carry it.
+    /// Whether the scaffolded page is a draft. Drafting is the default: a page
+    /// being written is not one being published, and `--no-draft` says so.
+    pub(crate) fn is_draft(&self) -> bool {
+        Toggle::of(self.draft, self.no_draft).or(true)
+    }
+
     pub(crate) fn target(&self, config: &Config) -> PathBuf {
         let mut path = if self.path.is_absolute() || self.path.starts_with(&config.paths.content) {
             self.path.clone()
@@ -815,12 +868,8 @@ impl ServeArgs {
         if let Some(bind) = &self.bind {
             config.serve.bind = bind.clone();
         }
-        if let Some(open) = self.open {
-            config.serve.open = open;
-        }
-        if self.no_watch {
-            config.serve.watch = false;
-        }
+        Toggle::of(self.open, self.no_open).apply(&mut config.serve.open);
+        Toggle::of(self.watch, self.no_watch).apply(&mut config.serve.watch);
     }
 }
 

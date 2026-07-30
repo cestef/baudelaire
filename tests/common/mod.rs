@@ -235,7 +235,7 @@ impl Serve {
         // `serve.open` defaults to on, so a test whose config forgets
         // `serve { open #false }` launches a real browser on the runner. Forced
         // here rather than per test, where it can be forgotten again.
-        full.extend_from_slice(&["--port", &arg, "--open", "false"]);
+        full.extend_from_slice(&["--port", &arg, "--no-open"]);
         let child = site.spawn(&full);
         assert!(
             wait_for_port(port, 5000),

@@ -37,8 +37,10 @@ the browser. Also accepts the #link(<build-flags>)[build flags].
 
 / #raw("--port <n>"): Port to listen on.
 / #raw("--bind <addr>"): Address to bind.
-/ #raw("--open"): Open the site in your browser once it's up.
-/ #raw("--no-watch"): Serve once, without watching or live-reload.
+/ #raw("--open"): Open the site in your browser once it's up (the default;
+  `--no-open` suppresses it).
+/ #raw("--watch"): Rebuild on change and live-reload (the default; `--no-watch`
+  serves once, statically).
 
 === check
 
@@ -49,7 +51,8 @@ the target's permalink); a link to an already-resolved URL like `/posts/hello/`
 is left untouched and never checked, so a permalink can change without breaking
 `.typ` references to it. Accepts the #link(<build-flags>)[build flags].
 
-/ #raw("--external"): Also verify outbound `http(s)` links over the network.
+/ #raw("--external"): Also verify outbound `http(s)` links over the network
+  (`--no-external` skips them even when `links { external #true }` is set).
   Every distinct URL is requested once (`HEAD`, retried as `GET` by servers that
   refuse the method) and a URL that answered is remembered for a week, so a
   repeat run only checks what it has not seen. A host that answers 4xx or 5xx
@@ -77,9 +80,9 @@ What it infers:
 
 / #raw("--title <text>"): Override the inferred title.
 / #raw("--date YYYY-MM-DD"): Set the date explicitly.
-/ #raw("--draft <bool>"): Mark the page a draft. Defaults to `true`, so a new
-  page stays out of a normal build until you finish it; pass `--draft false` (or
-  drop the `draft` frontmatter) to publish it, or build with `--drafts`.
+/ #raw("--draft"): Mark the page a draft. On by default, so a new page stays out
+  of a normal build until you finish it; pass `--no-draft` to publish it
+  immediately, or build with `--drafts`.
 / #raw("-b, --bundle"): Create `<name>/index.typ` for colocated assets.
 / #raw("-e, --open"): Open the new file in `$EDITOR`.
 
@@ -186,6 +189,12 @@ Config overrides accepted by the commands that build: `build`, `serve`, and
 / #raw("--out <dir>"): Override the output directory.
 / #raw("--base-url <url>"): Override the site URL, useful for preview deploys.
 / #raw("--drafts"), #raw("--future"): Include draft or future-dated pages.
-/ #raw("--no-cache"): Ignore the cache and rebuild everything.
-/ #raw("--strict-links <bool>"): Treat broken internal `.typ` links as errors
-  (default) or warnings.
+/ #raw("--cache"): Use the incremental cache (the default).
+/ #raw("--strict-links"): Treat broken internal `.typ` links as errors (the
+  default).
+
+Every boolean flag has a `--no-` counterpart: `--no-drafts`, `--no-future`,
+`--no-cache`, `--no-strict-links`. The pair matters because config can set
+either side, so a setting turned on in `config.kdl` needs a way back off for one
+run: `draft { build #true }` plus `--no-drafts` is a production build from a
+config that normally includes drafts. Passing both, the last one wins.

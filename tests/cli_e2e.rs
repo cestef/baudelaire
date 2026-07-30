@@ -175,8 +175,7 @@ fn profile_flag_applied() {
         "ci",
         "serve",
         "--no-watch",
-        "--open",
-        "false",
+        "--no-open",
     ]);
     // Default port is 1821; reachability on `port` proves the `ci` profile won.
     assert!(

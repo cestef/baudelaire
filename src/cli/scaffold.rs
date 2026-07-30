@@ -332,7 +332,7 @@ impl Draft {
             template,
             date,
             order,
-            is_draft: args.draft.unwrap_or(true),
+            is_draft: args.is_draft(),
             permalink,
             collision,
             open: args.open,
