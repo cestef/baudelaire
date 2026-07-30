@@ -65,8 +65,15 @@ struct Dev<'a> {
 
 impl Dev<'_> {
     fn run(mut self) -> Result<()> {
-        let addr = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
-        let server = Server::http(&addr).map_err(|e| ServeError::bind(&addr, e))?;
+        let requested = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
+        let server = Server::http(&requested).map_err(|e| ServeError::bind(&requested, e))?;
+        // What was bound, not what was asked for: `port 0` means "any free
+        // port", and the banner used to answer that request by printing
+        // `http://127.0.0.1:0/`.
+        let addr = server
+            .server_addr()
+            .to_ip()
+            .map_or(requested, |bound| bound.to_string());
 
         // A failed first build is a warning, not a fatal error, exactly like
         // every rebuild after it: the same typo killed the server or merely

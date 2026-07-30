@@ -165,6 +165,8 @@ chores are visible in the git history and change nothing for a site.
   recovery. `new` writes the page when the project cannot be opened, losing only
   the two conveniences that read existing content: the next `order` and the
   permalink-collision check.
+- **serve**: `--port 0` prints the port it got. It means "any free port", and
+  the banner answered by advertising `http://127.0.0.1:0/`.
 - **cli**: `-v` wins over `RUST_LOG`. Any value in the environment used to
   discard the verbosity count, so `RUST_LOG=warn baudelaire -vv build` printed
   no debug events and said nothing about why. A run that passes no `-v` still
