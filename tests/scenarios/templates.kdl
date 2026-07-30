@@ -224,3 +224,39 @@ scenario "client constants reach pages through sys.inputs" {
     file "a/index.html" { contains "Tracker: plausible, every 3600" }
   }
 }
+
+// `page.reading` is counted from the page's own typst source, since that is
+// the only version in hand when a template is handed its page: the render has
+// not happened yet. Code lines are machinery, not prose, and counting them
+// would inflate a short page most.
+scenario "a template can render a reading estimate" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      content {
+        collections {
+          posts template="post.typ"
+        }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("html", html.elem("body", {
+        html.elem("p", "words=" + str(page.reading.words))
+        html.elem("p", "minutes=" + str(page.reading.minutes))
+        body
+      }))
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #let ignored = "machinery"
+      one two three four five
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains "words=5"
+      contains "minutes=1"
+    }
+  }
+}

@@ -101,6 +101,9 @@ impl<'a> Prepare<'a> {
         let nav = Typst(&Self::nav(&page.siblings)).to_string();
         let translations = Typst(&Self::translations(page)).to_string();
         let strings = Typst(&self.strings(&page.lang)).to_string();
+        // Derived from this page's own body, so it names nothing outside the
+        // page and cannot widen the fingerprint the way a site-wide value would.
+        let reading = Typst(&Self::reading(&page.body)).to_string();
         let vpath = Self::rooted_str(&rooted);
         let (id, bind, body) = match &page.data {
             Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
@@ -118,6 +121,7 @@ impl<'a> Prepare<'a> {
             lang: &page.lang,
             translations: &translations,
             strings: &strings,
+            reading: &reading,
         };
         let text = Layout::new(
             &self.template_root(template),
@@ -182,6 +186,17 @@ impl<'a> Prepare<'a> {
         Value::dict([
             ("prev", link(&siblings.prev)),
             ("next", link(&siblings.next)),
+        ])
+    }
+
+    /// A page's reading estimate as a typst dict value:
+    /// `(words: 1200, minutes: 6)`, exposed to the template as `page.reading`
+    /// for a "6 min read" badge.
+    fn reading(body: &str) -> Value {
+        let reading = crate::engine::text::Reading::of(body);
+        Value::dict([
+            ("words", Value::Int(reading.words as i64)),
+            ("minutes", Value::Int(reading.minutes as i64)),
         ])
     }
 

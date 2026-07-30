@@ -56,6 +56,10 @@ pub(in crate::engine) struct Context<'a> {
     /// The current language's UI-string table as a dict literal, exposed as
     /// `page.strings`.
     pub strings: &'a str,
+    /// The page's reading estimate as a dict literal,
+    /// `(words: 1200, minutes: 6)`, exposed as `page.reading`. Derived from
+    /// this page's own source, so it names nothing outside the page.
+    pub reading: &'a str,
 }
 
 /// A synthetic typst module that applies a layout template to a page,
@@ -124,6 +128,7 @@ impl fmt::Display for Layout<'_> {
             lang,
             translations,
             strings,
+            reading,
         } = &self.context;
         let frontmatter: &dyn fmt::Display = match data {
             Bind::Import => {
@@ -134,7 +139,7 @@ impl fmt::Display for Layout<'_> {
         };
         writeln!(
             f,
-            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}), __body)",
+            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}), __body)",
             Str(lang)
         )?;
         match &self.body {
@@ -161,6 +166,7 @@ mod tests {
                 lang: "en",
                 translations: "()",
                 strings: "(:)",
+                reading: "(words: 0, minutes: 0)",
             },
             Body::Include,
         )
@@ -169,7 +175,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:)), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0)), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -187,6 +193,7 @@ mod tests {
                 lang: "en",
                 translations: "()",
                 strings: "(:)",
+                reading: "(words: 0, minutes: 0)",
             },
             Body::Inline("listing body"),
         )
@@ -194,7 +201,7 @@ mod tests {
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:)), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0)), __body)\n\
              listing body"
         );
     }
@@ -212,6 +219,7 @@ mod tests {
                 lang: "en",
                 translations: "()",
                 strings: "(:)",
+                reading: "(words: 0, minutes: 0)",
             },
             Body::Include,
         )
@@ -234,6 +242,7 @@ mod tests {
                 lang: "en",
                 translations: "()",
                 strings: "(:)",
+                reading: "(words: 0, minutes: 0)",
             },
             Body::Inline("b"),
         )
@@ -241,7 +250,7 @@ mod tests {
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:)), __body)"
+                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0)), __body)"
             ),
             "{out}"
         );

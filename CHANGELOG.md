@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   held every page under it whatever its size, beside a collection index that
   paginated the very same pages; both now run through one rule, so they cannot
   disagree about what page 2 is called.
+- **content**: `page.reading` reaches every template: `reading.words` and
+  `reading.minutes`, for the "6 min read" line a blog index wants. Counted from
+  the page's typst source rather than its rendered HTML, because the source is
+  the only version in hand when a template is handed its page, so code lines
+  (`#import`, `#let`) are skipped as machinery and the figure is an estimate.
 - **content**: `translation` frontmatter, so a translated page can take a
   translated slug. Editions pair on collection and slug, so a French edition had
   to keep the English one: rename it and it became a standalone page, losing the

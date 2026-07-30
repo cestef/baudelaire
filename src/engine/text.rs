@@ -1,4 +1,5 @@
-//! Plain-text extraction from rendered HTML.
+//! Plain-text extraction from rendered HTML, and the reading estimate taken
+//! from a page's typst source before it is rendered at all.
 //!
 //! Shared by processors that index or republish page prose (search, llms).
 //! A small tag-aware scanner, deliberately *not* a structure-aware rewrite
@@ -167,6 +168,46 @@ impl Text {
     }
 }
 
+/// How long a page takes to read: its word count, and the minutes that implies.
+///
+/// Counted from the page's *typst source*, not its rendered HTML, because that
+/// is the only version available when a template is handed its page: the render
+/// has not happened yet, and a listing entry is built earlier still. The cost is
+/// that it is an estimate, which a reading time is anyway.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reading {
+    pub words: usize,
+    pub minutes: usize,
+}
+
+impl Reading {
+    /// Words per minute. The figure every other generator uses for prose, and
+    /// the one a reader has been calibrated against by every "6 min read" badge
+    /// they have seen.
+    const WPM: usize = 200;
+
+    /// Estimate `body`, a page's typst source.
+    ///
+    /// Code lines are dropped: in typst markup a leading `#` starts code, so an
+    /// `#import` or a `#let` is machinery rather than prose, and counting it
+    /// would inflate a short page most. Everything else is counted as prose,
+    /// markup and all: an inline `#emph[word]` is one word, which is what it
+    /// reads as.
+    pub fn of(body: &str) -> Self {
+        let words = body
+            .lines()
+            .map(str::trim_start)
+            .filter(|line| !line.starts_with('#') && !line.starts_with("//"))
+            .flat_map(str::split_whitespace)
+            .filter(|word| word.chars().any(char::is_alphanumeric))
+            .count();
+        Self {
+            words,
+            minutes: words.div_ceil(Self::WPM),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Text;
@@ -197,5 +238,27 @@ mod tests {
                     <footer>copyright</footer>";
         // Chrome outside <main> is excluded from the indexed text.
         assert_eq!(Text::extract(html), "Title real content");
+    }
+
+    /// Prose counts, machinery does not, and the minutes round up so a page
+    /// that takes any time at all never reads as zero.
+    #[test]
+    fn reading_counts_prose_and_skips_typst_code() {
+        use super::Reading;
+        let body = "#import \"/templates/theme.typ\": callout\n\
+                    #let x = 1\n\
+                    // a comment\n\
+                    \n\
+                    = A heading\n\
+                    Three plain words, plus #emph[one] more.\n";
+        // The heading contributes `A heading` (the bare `=` is punctuation, not
+        // a word), and the sentence six, counting `#emph[one]` as the one word
+        // it reads as.
+        assert_eq!(Reading::of(body).words, 8);
+        assert_eq!(Reading::of(body).minutes, 1);
+        assert_eq!(Reading::of("").words, 0);
+        assert_eq!(Reading::of("").minutes, 0, "nothing takes no time");
+        let long = "word ".repeat(401);
+        assert_eq!(Reading::of(&long).minutes, 3, "401 words rounds up to 3");
     }
 }
