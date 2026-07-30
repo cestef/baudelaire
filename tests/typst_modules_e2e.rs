@@ -128,7 +128,10 @@ fn an_unknown_module_suggests_the_nearest() {
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     assert!(err.contains("did you mean `html`?"), "{err}");
-    assert!(err.contains("valid modules: html, sections, site"), "{err}");
+    assert!(
+        err.contains("valid modules: `html`, `sections`, `site`"),
+        "{err}"
+    );
 }
 
 /// A version the registry does not serve fails at the import instead of

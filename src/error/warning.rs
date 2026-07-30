@@ -9,10 +9,11 @@
 use std::path::PathBuf;
 
 use super::BaudelaireErrorKind;
+use crate::ui::{Code, Text};
 
 /// `init`/`new` found the file already on disk and left it untouched.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("`{path}` already exists, left untouched")]
+#[error("{} already exists, left untouched", Code(.path.display()))]
 #[diagnostic(
     code(baudelaire::scaffold::exists),
     severity(warning),
@@ -24,7 +25,7 @@ pub struct ScaffoldExists {
 
 /// `new` computed a permalink already produced by an existing page.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("`{url}` is already produced by {origin}")]
+#[error("{} is already produced by {}", Code(.url), Text(.origin))]
 #[diagnostic(
     code(baudelaire::scaffold::permalink_taken),
     severity(warning),
@@ -39,7 +40,7 @@ pub struct PermalinkTaken {
 
 /// The requested version-control tool is not installed.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("`{tool}` not found, repository setup skipped")]
+#[error("{} not found, repository setup skipped", Code(.tool))]
 #[diagnostic(
     code(baudelaire::vcs::missing),
     severity(warning),
@@ -54,7 +55,12 @@ pub struct VcsMissing {
 /// source or enable `assets { fingerprint }` to disambiguate by
 /// content hash.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("two images map to `{name}`: `{kept}` and `{dropped}`")]
+#[error(
+    "two images map to {}: {} and {}",
+    Code(.name),
+    Code(.kept.display()),
+    Code(.dropped.display())
+)]
 #[diagnostic(
     code(baudelaire::images::collision),
     severity(warning),
@@ -70,7 +76,7 @@ pub struct ImageCollision {
 /// connection. A warning rather than an error because the likeliest cause is the
 /// network in between, not the site.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("{url}: {why}")]
+#[error("{}: {}", Text(.url), Text(.why))]
 #[diagnostic(code(baudelaire::links::unreachable), severity(warning))]
 pub struct Unreachable {
     pub url: String,
@@ -99,7 +105,7 @@ impl From<Vec<Unreachable>> for UnreachableLinks {
 /// The single-file export's entry permalink matches no built page, so there is
 /// no head or body to build the shell around and nothing is written.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("no page at `{entry}`, single-file export skipped")]
+#[error("no page at {}, single-file export skipped", Code(.entry))]
 #[diagnostic(
     code(baudelaire::output::standalone_entry),
     severity(warning),
@@ -113,7 +119,7 @@ pub struct StandaloneEntryMissing {
 /// reference `/assets/..` by URL. The file is one document but not a
 /// self-contained one: opened from disk, it loses its styles and images.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("`{file}` links its assets instead of carrying them")]
+#[error("{} links its assets instead of carrying them", Code(.file))]
 #[diagnostic(
     code(baudelaire::output::standalone_linked),
     severity(warning),
@@ -128,7 +134,12 @@ pub struct StandaloneLinked {
 /// cause is translating a page by copying its frontmatter, which copies the
 /// `redirect` list along with it.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("two pages redirect `{old}`: `{kept}` and `{dropped}`")]
+#[error(
+    "two pages redirect {}: {} and {}",
+    Code(.old),
+    Code(.kept.display()),
+    Code(.dropped.display())
+)]
 #[diagnostic(
     code(baudelaire::output::redirect_collision),
     severity(warning),
@@ -142,7 +153,7 @@ pub struct RedirectCollision {
 
 /// `clean` was pointed at a directory that holds the project itself.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("refusing to clean `{dir}`: it contains the project")]
+#[error("refusing to clean {}: it contains the project", Code(.dir.display()))]
 #[diagnostic(
     code(baudelaire::output::clean_refused),
     severity(warning),
@@ -158,11 +169,14 @@ pub struct CleanRefused {
 /// bootstrap into a permanently man-in-the-middle-accepting setting. OpenSSH
 /// warns here too.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("host key for `{host}` has changed, and `strict #false` accepted it")]
+#[error("host key for {} has changed, and `strict #false` accepted it", Code(.host))]
 #[diagnostic(
     code(baudelaire::deploy::ssh::host_key_accepted),
     severity(warning),
-    help("confirm the new key out of band, run `ssh-keygen -R {host}`, and set `strict #true`")
+    help(
+        "confirm the new key out of band, run `ssh-keygen -R {}`, and set `strict #true`",
+        Text(.host)
+    )
 )]
 pub struct HostKeyAccepted {
     pub host: String,
@@ -170,7 +184,11 @@ pub struct HostKeyAccepted {
 
 /// The version-control tool ran but failed to initialize a repository.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("`{tool} init` failed, repository setup skipped{}", detail.as_deref().map(|d| format!(": {d}")).unwrap_or_default())]
+#[error(
+    "`{} init` failed, repository setup skipped{}",
+    Text(.tool),
+    detail.as_deref().map(|d| format!(": {}", Text(d))).unwrap_or_default()
+)]
 #[diagnostic(code(baudelaire::vcs::failed), severity(warning))]
 pub struct VcsFailed {
     pub tool: &'static str,
@@ -180,7 +198,7 @@ pub struct VcsFailed {
 
 /// `serve --open` could not launch a browser; the server is up regardless.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("could not open a browser at {url}")]
+#[error("could not open a browser at {}", Text(.url))]
 #[diagnostic(code(baudelaire::serve::browser), severity(warning))]
 pub struct BrowserOpen {
     pub url: String,
@@ -226,7 +244,7 @@ pub struct RebuildFailed {
 /// A cache manifest that exists but does not parse (torn write, corruption,
 /// manual edit): ignored, forcing a full rebuild.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("unreadable cache manifest at `{path}`, rebuilding from scratch")]
+#[error("unreadable cache manifest at {}, rebuilding from scratch", Code(.path.display()))]
 #[diagnostic(
     code(baudelaire::cache::manifest),
     severity(warning),
@@ -260,11 +278,19 @@ pub struct BaseUrlMissing {
 /// One struct rather than one per feature, like [`BaseUrlMissing`]: the
 /// condition is the same in every case and only the nouns change.
 #[derive(thiserror::Error, miette::Diagnostic, Debug, Clone, Copy)]
-#[error("`{setting}` needs the `{cargo}` feature, which this build lacks: {effect}")]
+#[error(
+    "{} needs the {} feature, which this build lacks: {effect}",
+    Code(.setting),
+    Code(.cargo)
+)]
 #[diagnostic(
     code(baudelaire::feature::missing),
     severity(warning),
-    help("rebuild with `--features {cargo}`, or drop `{setting}` from config.kdl")
+    help(
+        "rebuild with `--features {}`, or drop {} from config.kdl",
+        Text(.cargo),
+        Code(.setting)
+    )
 )]
 pub struct FeatureMissing {
     /// The config that asked, spelled as the author writes it in `config.kdl`.
@@ -289,13 +315,14 @@ pub struct Undated {
 
 /// The account's DID is not pinned in config; worth doing, not wrong.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("announce destination resolved to {did}")]
+#[error("announce destination resolved to {}", Text(.did))]
 #[diagnostic(
     // Distinct from `announce::did`, the mismatch *error*.
     code(baudelaire::announce::did_unpinned),
     severity(advice),
     help(
-        "pin it with `announce.standard.did \"{did}\"` in config.kdl to emit verification artifacts at build time"
+        "pin it with `announce.standard.did \"{}\"` in config.kdl to emit verification artifacts at build time",
+        Text(.did)
     )
 )]
 pub struct DidUnpinned {

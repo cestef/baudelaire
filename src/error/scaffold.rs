@@ -1,27 +1,29 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::Code;
+
 #[derive(Error, Diagnostic, Debug)]
 pub enum ScaffoldError {
-    #[error("file already exists at `{path}`")]
+    #[error("file already exists at {}", Code(.path))]
     #[diagnostic(
         code(baudelaire::scaffold::already_exists),
         help("remove the file first, or choose a different path")
     )]
     AlreadyExists { path: String },
 
-    #[error("invalid date `{input}`")]
+    #[error("invalid date {}", Code(.input))]
     #[diagnostic(
         code(baudelaire::scaffold::bad_date),
         help("expected `YYYY-MM-DD`, e.g. 2026-07-13")
     )]
     BadDate { input: String },
 
-    #[error("unknown starter template `{name}`")]
+    #[error("unknown starter template {}", Code(.name))]
     #[diagnostic(code(baudelaire::scaffold::unknown_template), help("{help}"))]
     UnknownTemplate { name: String, help: String },
 
-    #[error("unknown optional feature `{name}`")]
+    #[error("unknown optional feature {}", Code(.name))]
     #[diagnostic(code(baudelaire::scaffold::unknown_extra), help("{help}"))]
     UnknownExtra { name: String, help: String },
 }

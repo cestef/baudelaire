@@ -7,6 +7,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::error::Annotated;
+use crate::ui::{Code, Text, markup};
 
 /// A failure while discovering or interpreting a content file.
 #[derive(Error, Diagnostic, Debug)]
@@ -15,7 +16,11 @@ pub enum ContentError {
     #[diagnostic(transparent)]
     BadGlob(Annotated),
 
-    #[error("`frontmatter` in {path} must be a dictionary, but is a {ty}: {repr}")]
+    #[error(
+        "`frontmatter` in {} must be a dictionary, but is a {ty}: {}",
+        Text(.path),
+        Text(.repr)
+    )]
     #[diagnostic(
         code(baudelaire::content::frontmatter_not_dict),
         help("export the fields as a dict: `#let frontmatter = (key: value, ...)`")
@@ -26,7 +31,11 @@ pub enum ContentError {
         repr: String,
     },
 
-    #[error("frontmatter `{key}` in {path} must be {expected}, but is a {got}")]
+    #[error(
+        "frontmatter {} in {} must be {expected}, but is a {got}",
+        Code(.key),
+        Text(.path)
+    )]
     #[diagnostic(code(baudelaire::content::frontmatter_field))]
     FrontmatterField {
         path: String,
@@ -37,21 +46,21 @@ pub enum ContentError {
         help: Option<String>,
     },
 
-    #[error("{path} declares frontmatter with the removed `#frontmatter(..)` call")]
+    #[error("{} declares frontmatter with the removed `#frontmatter(..)` call", Text(.path))]
     #[diagnostic(
         code(baudelaire::content::frontmatter_call),
         help("export it instead: `#let frontmatter = (title: \"..\")`")
     )]
     FrontmatterCall { path: String },
 
-    #[error("{path} declares `#let frontmatter` without a value")]
+    #[error("{} declares `#let frontmatter` without a value", Text(.path))]
     #[diagnostic(
         code(baudelaire::content::frontmatter_uninit),
         help("give it a dict: `#let frontmatter = (title: \"..\")`")
     )]
     FrontmatterUninit { path: String },
 
-    #[error("unknown frontmatter key `{key}` in {path}")]
+    #[error("unknown frontmatter key {} in {}", Code(.key), Text(.path))]
     #[diagnostic(code(baudelaire::content::unknown_frontmatter_key))]
     UnknownFrontmatterKey {
         path: String,
@@ -60,21 +69,21 @@ pub enum ContentError {
         help: String,
     },
 
-    #[error("`{name}` has no URL-safe characters, so its slug would be empty")]
+    #[error("{} has no URL-safe characters, so its slug would be empty", Code(.name))]
     #[diagnostic(
         code(baudelaire::content::empty_slug),
         help("give it a `slug` with at least one ASCII letter or digit")
     )]
     EmptySlug { name: String },
 
-    #[error("{path} has a filename that is not valid UTF-8")]
+    #[error("{} has a filename that is not valid UTF-8", Text(.path))]
     #[diagnostic(
         code(baudelaire::content::non_utf8_source),
         help("rename it: a page's filename becomes its slug, and a URL is text")
     )]
     NonUtf8Source { path: String },
 
-    #[error("{path} declares unknown language `{lang}`")]
+    #[error("{} declares unknown language {}", Text(.path), Code(.lang))]
     #[diagnostic(code(baudelaire::content::unknown_language))]
     UnknownLanguage {
         path: String,
@@ -83,7 +92,7 @@ pub enum ContentError {
         help: String,
     },
 
-    #[error("`{first}` and `{second}` both write `{target}`")]
+    #[error("{} and {} both write {}", Code(.first), Code(.second), Code(.target))]
     #[diagnostic(
         code(baudelaire::content::collision),
         help(
@@ -96,7 +105,13 @@ pub enum ContentError {
         second: String,
     },
 
-    #[error("terms `{first}` and `{second}` of `{taxonomy}` both slug to `{slug}`")]
+    #[error(
+        "terms {} and {} of {} both slug to {}",
+        Code(.first),
+        Code(.second),
+        Code(.taxonomy),
+        Code(.slug)
+    )]
     #[diagnostic(
         code(baudelaire::content::term_collision),
         help("two terms cannot share a URL: rename one so their slugs differ")
@@ -117,10 +132,11 @@ impl ContentError {
     pub fn bad_glob(noun: &'static str, pattern: &str, error: wax::BuildError) -> Self {
         let mut diag = Annotated::new(
             "baudelaire::content::bad_glob",
-            format!("invalid {noun} glob `{pattern}`"),
+            markup!("invalid {} glob `{}`", noun, pattern),
             pattern.to_owned(),
         )
-        .help(error.to_string());
+        // wax's own message: foreign text, escaped rather than read as markup.
+        .help(Text(&error).to_string());
         for location in error.locations() {
             let (offset, len) = location.span();
             diag = diag.label(location.to_string(), offset, len);
@@ -161,7 +177,7 @@ impl ContentError {
         Self::UnknownFrontmatterKey {
             path: path.display().to_string(),
             key: key.to_owned(),
-            help: format!("did you mean `{suggestion}`?"),
+            help: markup!("did you mean `{}`?", suggestion),
         }
     }
 
@@ -192,7 +208,7 @@ impl ContentError {
         Self::UnknownLanguage {
             path: path.display().to_string(),
             lang: lang.to_owned(),
-            help: format!(
+            help: markup!(
                 "declare it under `languages`, or use one of: {}",
                 known.join(", ")
             ),

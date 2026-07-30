@@ -9,6 +9,8 @@ use std::path::Path;
 
 use miette::{Diagnostic, LabeledSpan, NamedSource, Severity, SourceCode, SourceSpan};
 
+use crate::ui::{Code, Text};
+
 /// An internal `.typ` link pointing at a page that does not exist.
 #[derive(Debug, Clone)]
 pub struct Broken {
@@ -47,7 +49,7 @@ impl Broken {
 
 impl fmt::Display for Broken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "`{}` has no matching page", self.target)
+        write!(f, "{} has no matching page", Code(&self.target))
     }
 }
 
@@ -160,9 +162,9 @@ impl fmt::Display for Dead {
         write!(
             f,
             "{} -> HTTP {} (linked from {})",
-            self.url,
+            Text(&self.url),
             self.status,
-            self.pages.join(", ")
+            Text(self.pages.join(", "))
         )
     }
 }

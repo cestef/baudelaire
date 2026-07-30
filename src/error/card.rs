@@ -3,11 +3,13 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::{Code, Text};
+
 /// A card that could not be produced. Fatal: the page's `og:image` already
 /// names it, so a missing card is a broken social preview, not a cosmetic loss.
 #[derive(Debug, Error, Diagnostic)]
 pub enum CardError {
-    #[error("the card for `{page}` rendered {pages} pages")]
+    #[error("the card for {} rendered {pages} pages", Code(.page))]
     #[diagnostic(
         code(baudelaire::cards::overflow),
         help(
@@ -17,7 +19,7 @@ pub enum CardError {
     )]
     Pages { page: String, pages: usize },
 
-    #[error("the card for `{page}` could not be encoded: {why}")]
+    #[error("the card for {} could not be encoded: {}", Code(.page), Text(.why))]
     #[diagnostic(code(baudelaire::cards::encode))]
     Encode { page: String, why: String },
 }

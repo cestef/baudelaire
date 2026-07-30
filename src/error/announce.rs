@@ -3,6 +3,8 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::{Code, Text};
+
 /// A failure while announcing standard.site records to a PDS.
 #[derive(Debug, Error, Diagnostic)]
 pub enum AnnounceError {
@@ -26,6 +28,10 @@ pub enum AnnounceError {
 
     /// Authentication (`createSession`) succeeded at the HTTP layer but the
     /// response was missing or rejected.
+    ///
+    /// `message` is written at the call site, not read off the response, so it
+    /// is already marked up (see [`crate::ui::markup!`]) and interpolated as-is
+    /// rather than escaped.
     #[error("atproto authentication failed: {message}")]
     #[diagnostic(
         code(baudelaire::announce::auth),
@@ -36,7 +42,7 @@ pub enum AnnounceError {
     /// An XRPC method returned a non-2xx status. The PDS's own error body is
     /// carried through so the cause (rate limit, bad record, invalid session)
     /// is visible.
-    #[error("XRPC `{nsid}` failed ({status}): {message}")]
+    #[error("XRPC {} failed ({status}): {}", Code(.nsid), Text(.message))]
     #[diagnostic(code(baudelaire::announce::xrpc))]
     Xrpc {
         nsid: String,
@@ -54,7 +60,11 @@ pub enum AnnounceError {
 
     /// The configured `did` does not match the account that authenticated: the
     /// build would have emitted verification artifacts for the wrong identity.
-    #[error("configured did `{configured}` does not match the authenticated account `{actual}`")]
+    #[error(
+        "configured did {} does not match the authenticated account {}",
+        Code(.configured),
+        Code(.actual)
+    )]
     #[diagnostic(
         code(baudelaire::announce::did),
         help("update `announce.standard.did` to the authenticated did, or remove it")
@@ -62,7 +72,7 @@ pub enum AnnounceError {
     DidMismatch { configured: String, actual: String },
 
     /// The configured publication icon could not be read.
-    #[error("could not read publication icon `{path}`")]
+    #[error("could not read publication icon {}", Code(.path))]
     #[diagnostic(code(baudelaire::announce::icon))]
     Icon {
         path: String,
@@ -73,7 +83,7 @@ pub enum AnnounceError {
     /// A paginated read kept returning a cursor past a sane page ceiling: a
     /// misbehaving or hostile PDS can advance the cursor forever, so the walk is
     /// bounded and refused rather than looping (or growing memory) unbounded.
-    #[error("XRPC `{nsid}` did not stop paginating after {pages} pages")]
+    #[error("XRPC {} did not stop paginating after {pages} pages", Code(.nsid))]
     #[diagnostic(
         code(baudelaire::announce::pagination),
         help(

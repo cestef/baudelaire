@@ -1,6 +1,18 @@
+use std::process::ExitCode;
+
+use baudelaire::ui::{Level, Ui};
 use clap::Parser;
 
-fn main() -> miette::Result<()> {
+fn main() -> ExitCode {
     let cli = baudelaire::cli::Cli::parse();
-    baudelaire::cli::run(cli).map_err(miette::Report::from)
+    match baudelaire::cli::run(cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        // Rendered here rather than by miette's global hook, so a failure comes
+        // out through the same reporter, at the same width, with the same markup
+        // as every warning above it.
+        Err(error) => {
+            Ui::new(Level::Default).fail(&error);
+            ExitCode::FAILURE
+        }
+    }
 }

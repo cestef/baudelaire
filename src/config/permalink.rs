@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::LazyLock;
 
+use crate::ui::{Code, Text};
+
 /// A permalink template parsed from a config string like `/posts/{slug}/`.
 ///
 /// Segments are parsed once at config load and rendered per page. No
@@ -223,7 +225,7 @@ impl PermalinkError {
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 pub enum PermalinkError {
-    #[error("unknown permalink placeholder `{name}`")]
+    #[error("unknown permalink placeholder {}", Code(.name))]
     #[diagnostic(code(baudelaire::permalink::unknown_placeholder))]
     UnknownPlaceholder {
         name: String,
@@ -231,10 +233,10 @@ pub enum PermalinkError {
         valid: String,
     },
 
-    #[error("unterminated `{{{name}` in permalink template")]
+    #[error("unterminated `{{{}` in permalink template", Text(.name))]
     #[diagnostic(
         code(baudelaire::permalink::unterminated),
-        help("close the placeholder with `}}`, e.g. `{{{name}}}`")
+        help("close the placeholder with `}}`, e.g. `{{{}}}`", Text(.name))
     )]
     Unterminated { name: String },
 

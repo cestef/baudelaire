@@ -8,27 +8,35 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+// Every variant here is gated, so the `slim` flavor has no message to build.
+#[cfg(any(feature = "css", feature = "js", feature = "images"))]
+use crate::ui::{Code, Text};
+
 /// A failure while processing a static asset (minify or bundle).
 #[derive(Debug, Error, Diagnostic)]
 pub enum AssetError {
     /// lightningcss could not parse or print the stylesheet.
     #[cfg(feature = "css")]
-    #[error("failed to minify CSS asset `{path}`")]
+    #[error("failed to minify CSS asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::css))]
     Css {
         path: String,
+        /// The tool's own message, escaped: it is foreign text, not markup this
+        /// crate wrote.
         #[help]
-        detail: String,
+        detail: Text<String>,
     },
 
     /// rolldown could not bundle the JavaScript entry.
     #[cfg(feature = "js")]
-    #[error("failed to bundle JavaScript asset `{path}`")]
+    #[error("failed to bundle JavaScript asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::js))]
     Js {
         path: String,
+        /// The tool's own message, escaped: it is foreign text, not markup this
+        /// crate wrote.
         #[help]
-        detail: String,
+        detail: Text<String>,
     },
 
     /// The bundler's async runtime could not be started, so no entry was ever
@@ -50,12 +58,14 @@ pub enum AssetError {
 
     /// oxipng could not optimize the PNG.
     #[cfg(feature = "images")]
-    #[error("failed to optimize image asset `{path}`")]
+    #[error("failed to optimize image asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::image))]
     Image {
         path: String,
+        /// The tool's own message, escaped: it is foreign text, not markup this
+        /// crate wrote.
         #[help]
-        detail: String,
+        detail: Text<String>,
     },
 }
 
@@ -64,7 +74,7 @@ impl AssetError {
     pub fn css(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Css {
             path: path.to_string(),
-            detail: detail.to_string(),
+            detail: Text(detail.to_string()),
         }
     }
 
@@ -72,7 +82,7 @@ impl AssetError {
     pub fn js(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Js {
             path: path.to_string(),
-            detail: detail.to_string(),
+            detail: Text(detail.to_string()),
         }
     }
 
@@ -87,7 +97,7 @@ impl AssetError {
     pub fn image(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Image {
             path: path.to_string(),
-            detail: detail.to_string(),
+            detail: Text(detail.to_string()),
         }
     }
 }

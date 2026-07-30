@@ -34,6 +34,7 @@ use crate::error::SvgError;
 use crate::fs::Contained;
 use crate::graph::Hash;
 use crate::render::scope::Scoped;
+use crate::ui::markup;
 use crate::world::module::Html;
 
 use super::{AttrsExt, Cx, DocumentExt, ElementExt, Transform};
@@ -283,12 +284,15 @@ impl<'a> Icon<'a> {
         for attribute in self.node.attributes() {
             let name = attribute.name();
             if name.len() > 2 && name[..2].eq_ignore_ascii_case("on") {
-                return Err(SvgError::active(self.path, format!("an `{name}` handler")));
+                return Err(SvgError::active(
+                    self.path,
+                    markup!("an `{}` handler", name),
+                ));
             }
             if Self::executable(attribute.value()) {
                 return Err(SvgError::active(
                     self.path,
-                    format!("a `{SCRIPT_SCHEME}` {name}"),
+                    markup!("a `{}` {}", SCRIPT_SCHEME, name),
                 ));
             }
         }

@@ -10,6 +10,8 @@ use std::fmt;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::{Code, Text};
+
 /// An HTTP method the S3 client signs and sends. The whole set it uses: a
 /// listing, an upload, a removal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,7 +99,7 @@ pub enum DeployError {
     SshUnsupported,
 
     /// A required credential environment variable was unset or empty.
-    #[error("missing credential: set `{var}`")]
+    #[error("missing credential: set {}", Code(.var))]
     #[diagnostic(code(baudelaire::deploy::credentials))]
     MissingCredentials { var: String },
 
@@ -113,7 +115,7 @@ pub enum DeployError {
     /// through (truncated) so the cause is visible, with a status-keyed hint,
     /// because the body alone leaves auth failure, a missing bucket and a rate
     /// limit indistinguishable.
-    #[error("{method} `{uri}` failed ({status}): {message}")]
+    #[error("{method} {} failed ({status}): {}", Code(.uri), Text(.message))]
     #[diagnostic(code(baudelaire::deploy::request), help("{}", Self::hint(*status)))]
     Request {
         method: Method,
@@ -133,7 +135,7 @@ pub enum DeployError {
     },
 
     /// The SSH connection or transport failed (DNS, TCP, host key, protocol).
-    #[error("ssh connection to `{host}` failed")]
+    #[error("ssh connection to {} failed", Code(.host))]
     #[diagnostic(code(baudelaire::deploy::ssh::connect))]
     Connect {
         host: String,
@@ -143,10 +145,13 @@ pub enum DeployError {
 
     /// The server presented a different host key than the one recorded in
     /// `known_hosts`, the man-in-the-middle guard.
-    #[error("the host key for `{host}` has changed")]
+    #[error("the host key for {} has changed", Code(.host))]
     #[diagnostic(
         code(baudelaire::deploy::ssh::host_key),
-        help("if you trust the change, run `ssh-keygen -R {host}`; else set `strict #false`")
+        help(
+            "if you trust the change, run `ssh-keygen -R {}`; else set `strict #false`",
+            Text(.host)
+        )
     )]
     HostKeyChanged { host: String },
 
@@ -159,7 +164,7 @@ pub enum DeployError {
     NoUser,
 
     /// The server rejected authentication for the user.
-    #[error("ssh authentication as `{user}` failed")]
+    #[error("ssh authentication as {} failed", Code(.user))]
     #[diagnostic(
         code(baudelaire::deploy::ssh::auth),
         help("check the `key`/password and that the user is authorized on the host")

@@ -11,8 +11,8 @@
 //! Three pieces, and they have to agree, so they live together:
 //!
 //! - **The grammar.** [`Kind`] is the one table of delimiters and the styling
-//!   each carries: `` `code` ``, `*bold*`, `_italic_`, with `\` escaping any of
-//!   them. Spans do not nest and do not cross a line.
+//!   each carries: `` `code` `` and `*bold*`, with `\` escaping either. Spans do
+//!   not nest and do not cross a line.
 //! - **Escaping.** [`Text`] and [`Code`] are the Display adapters an error
 //!   interpolates a value through, so the value cannot be read as markup.
 //!   [`markup!`] does the same for the help strings that are assembled at
@@ -37,18 +37,23 @@ const ESCAPE: char = '\\';
 ///
 /// The one table. A new kind is a variant plus a row in [`Kind::spellings`];
 /// the parser, the escaper and the plain-text renderer all derive from it.
+///
+/// There is deliberately no `_italic_`. Every delimiter has to be escaped in an
+/// interpolated value, and the escapes are visible to anything reading the
+/// message without rendering it (a caller's `to_string()`, a log line). `_` runs
+/// through the names these messages are made of, so the noise would be constant,
+/// for emphasis nothing here uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     /// A path, config key, command, or anything else quoted as literal text.
     Code,
     Bold,
-    Italic,
 }
 
 impl Kind {
     /// Every kind, so the escaper and the parser cannot fall out of step with
     /// the table by listing delimiters of their own.
-    const ALL: [Self; 3] = [Self::Code, Self::Bold, Self::Italic];
+    const ALL: [Self; 2] = [Self::Code, Self::Bold];
 
     /// The delimiter this kind is written with, and the SGR parameters that
     /// turn its styling on and off.
@@ -61,7 +66,6 @@ impl Kind {
         match self {
             Self::Code => ('`', "36", "39"),
             Self::Bold => ('*', "1", "22"),
-            Self::Italic => ('_', "3", "23"),
         }
     }
 
@@ -93,7 +97,10 @@ impl Kind {
 /// author never wrote.
 ///
 /// Used inside a delimiter the message already writes:
-/// ``help("run `ssh-keygen -R {}`", Text(.host))``.
+/// ``help("run `ssh-keygen -R {}`", Text(.host))``, and as the type of a field
+/// that miette renders directly (`#[help]`), where there is no format string to
+/// put an adapter in.
+#[derive(Debug, Clone, Copy)]
 pub struct Text<T>(pub T);
 
 impl<T: Display> Display for Text<T> {
@@ -107,6 +114,7 @@ impl<T: Display> Display for Text<T> {
 ///
 /// ``#[error("failed to {op} {}", Code(.path))]`` renders as ``failed to read
 /// `content/post.typ` ``, with the value escaped.
+#[derive(Debug, Clone, Copy)]
 pub struct Code<T>(pub T);
 
 impl<T: Display> Display for Code<T> {
@@ -226,32 +234,36 @@ impl<'a> Markup<'a> {
 
 impl Display for Markup<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut rest = self.source;
-        // The run of literal text before the next span, flushed whole so a
-        // message with no markup costs one write.
+        let source = self.source;
+        // The start of the run of literal text not yet written: flushed whole
+        // when a span opens, so a message with no markup costs one write.
         let mut literal = 0;
-        while let Some((offset, c)) = rest[literal..]
-            .char_indices()
-            .map(|(i, c)| (literal + i, c))
-            .find(|&(_, c)| Kind::is_special(c))
-        {
-            let body = &rest[offset + c.len_utf8()..];
-            let span = Kind::of(c)
-                .zip(Self::close(body, c))
-                .filter(|&(_, end)| Self::is_span(&body[..end]));
-            match span {
-                Some((kind, end)) => {
-                    Self::unescaped(&rest[..offset], f)?;
+        let mut i = 0;
+        while let Some(c) = source[i..].chars().next() {
+            let next = i + c.len_utf8();
+            if c == ESCAPE {
+                // Step over the escaped character: it can never open a span.
+                i = next + source[next..].chars().next().map_or(0, char::len_utf8);
+                continue;
+            }
+            let Some(kind) = Kind::of(c) else {
+                i = next;
+                continue;
+            };
+            let body = &source[next..];
+            // A delimiter that never closes, or one wrapping nothing, is not a
+            // span: it stays in the literal run, which `unescaped` resolves.
+            match Self::close(body, c).filter(|&end| Self::is_span(&body[..end])) {
+                Some(end) => {
+                    Self::unescaped(&source[literal..i], f)?;
                     self.span(kind, &body[..end], f)?;
-                    rest = &body[end + c.len_utf8()..];
-                    literal = 0;
+                    i = next + end + c.len_utf8();
+                    literal = i;
                 }
-                // Not a span: an escape, or a delimiter that never closes.
-                // Leave it in the literal run, which `unescaped` resolves.
-                None => literal = offset + c.len_utf8() + usize::from(c == ESCAPE),
+                None => i = next,
             }
         }
-        Self::unescaped(rest, f)
+        Self::unescaped(&source[literal..], f)
     }
 }
 
@@ -369,14 +381,12 @@ mod tests {
     fn every_kind_renders_with_a_narrow_reset() {
         // Never `\x1b[0m`: miette styles the whole help string around us.
         assert_eq!(color("*b*"), "\x1b[1mb\x1b[22m");
-        assert_eq!(color("_i_"), "\x1b[3mi\x1b[23m");
         assert_eq!(color("`c`"), "\x1b[36mc\x1b[39m");
     }
 
     #[test]
     fn an_unpaired_delimiter_is_literal() {
         assert_eq!(color("2 * 3 and `x"), "2 * 3 and `x");
-        assert_eq!(plain("a_b"), "a_b");
     }
 
     #[test]
@@ -412,10 +422,10 @@ mod tests {
 
     #[test]
     fn interpolated_values_cannot_open_a_span() {
-        let hostile = "a*b_c`d";
+        let hostile = "a*b`c";
         let message = format!("read {}", Code(hostile));
-        assert_eq!(color(&message), format!("\x1b[36m{hostile}\x1b[39m"));
-        assert_eq!(plain(&message), format!("`{hostile}`"));
+        assert_eq!(color(&message), format!("read \x1b[36m{hostile}\x1b[39m"));
+        assert_eq!(plain(&message), format!("read `{hostile}`"));
     }
 
     #[test]
@@ -434,5 +444,172 @@ mod tests {
     #[test]
     fn multibyte_text_around_a_span_keeps_its_boundaries() {
         assert_eq!(color("é `a` ü"), "é \x1b[36ma\x1b[39m ü");
+    }
+
+    /// A diagnostic with one of everything [`Styled`] has to deal with: markup
+    /// in the message and the help, a source snippet that must survive
+    /// untouched, and a related child.
+    #[derive(Debug)]
+    struct Fake {
+        related: Vec<Fake>,
+    }
+
+    impl Display for Fake {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("read `a.typ`")
+        }
+    }
+
+    impl std::error::Error for Fake {}
+
+    impl Diagnostic for Fake {
+        fn code(&self) -> Option<Box<dyn Display + '_>> {
+            Some(Box::new("test::fake"))
+        }
+
+        fn help(&self) -> Option<Box<dyn Display + '_>> {
+            Some(Box::new("try `b.typ`"))
+        }
+
+        fn severity(&self) -> Option<miette::Severity> {
+            Some(miette::Severity::Warning)
+        }
+
+        fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+            // Typst, not markup: its backticks are the author's raw code.
+            Some(&"#let x = `raw`" as &dyn miette::SourceCode)
+        }
+
+        fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+            Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+                None, 0, 4,
+            ))))
+        }
+
+        fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
+            (!self.related.is_empty())
+                .then(|| Box::new(self.related.iter().map(|d| d as &dyn Diagnostic)) as _)
+        }
+    }
+
+    fn fake() -> Fake {
+        Fake {
+            related: vec![Fake { related: vec![] }],
+        }
+    }
+
+    #[test]
+    fn styled_renders_the_message_and_the_help() {
+        let fake = fake();
+        let styled = Styled::new(&fake, true);
+        assert_eq!(styled.to_string(), "read \x1b[36ma.typ\x1b[39m");
+        assert_eq!(
+            styled.help().expect("a help").to_string(),
+            "try \x1b[36mb.typ\x1b[39m"
+        );
+    }
+
+    #[test]
+    fn styled_forwards_the_rest_and_wraps_related() {
+        let fake = fake();
+        let styled = Styled::new(&fake, true);
+        assert_eq!(styled.code().expect("a code").to_string(), "test::fake");
+        assert_eq!(styled.severity(), Some(miette::Severity::Warning));
+        let related: Vec<_> = styled
+            .related()
+            .expect("one related")
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(related, ["read \x1b[36ma.typ\x1b[39m"]);
+        // `None` and an empty iterator are different answers to miette.
+        let leaf = Fake { related: vec![] };
+        assert!(Styled::new(&leaf, true).related().is_none());
+    }
+
+    #[test]
+    fn styled_leaves_the_source_snippet_alone() {
+        let fake = Fake { related: vec![] };
+        let mut report = String::new();
+        miette::GraphicalReportHandler::new_themed(miette::GraphicalTheme::none())
+            .render_report(&mut report, &Styled::new(&fake, true))
+            .expect("renders");
+        // The message lost its delimiters to styling; the snippet kept its own,
+        // which are typst source and not this crate's markup.
+        assert!(report.contains("read \x1b[36ma.typ\x1b[39m"), "{report}");
+        assert!(report.contains("#let x = `raw`"), "{report}");
+    }
+
+    /// Whether `body` holds the named-field shorthand thiserror and miette both
+    /// accept (`{path}`, `{0:?}`), which is the one way to interpolate a value
+    /// without an adapter having seen it.
+    ///
+    /// ASCII throughout, so byte indices are safe; nothing here is sliced.
+    fn shorthand(body: &str) -> bool {
+        let name = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        let bytes = body.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] != b'{' {
+                i += 1;
+                continue;
+            }
+            // `{{` is a literal brace; step over both, so text like
+            // `assets {{ fingerprint }}` is not read as a placeholder.
+            if bytes.get(i + 1) == Some(&b'{') {
+                i += 2;
+                continue;
+            }
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len() && name(bytes[end]) {
+                end += 1;
+            }
+            // A bare `{}` is positional: its adapter lives in the argument list,
+            // which this literal cannot see.
+            if end > start && matches!(bytes.get(end), Some(b'}' | b':')) {
+                return true;
+            }
+            i = start;
+        }
+        false
+    }
+
+    /// Everything between a pair of backticks on one line. Naive by design: a
+    /// diagnostic literal is one line of prose, not Rust to be parsed.
+    fn spans(line: &str) -> impl Iterator<Item = &str> {
+        line.split('`').skip(1).step_by(2)
+    }
+
+    /// The rule [`Text`] and [`Code`] exist to enforce: a value interpolated
+    /// inside a code span goes through an adapter, never through the `{field}`
+    /// shorthand. Nothing in the type system says so, because the shorthand
+    /// belongs to thiserror and miette, so the check is here.
+    ///
+    /// Rendering makes the omission worse than cosmetic: an unescaped value
+    /// carrying a backtick closes the span early, and the rest of the message
+    /// renders as code.
+    #[test]
+    fn no_diagnostic_interpolates_a_raw_value_inside_a_code_span() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/error");
+        let mut offenders = Vec::new();
+        for entry in std::fs::read_dir(dir).expect("the error module is checked in") {
+            let path = entry.expect("readable entry").path();
+            let text = std::fs::read_to_string(&path).expect("readable source");
+            for (n, line) in text.lines().enumerate() {
+                // Prose about the grammar is not the grammar.
+                if line.trim_start().starts_with("//") {
+                    continue;
+                }
+                if spans(line).any(shorthand) {
+                    let name = path.file_name().expect("a file").to_string_lossy();
+                    offenders.push(format!("{name}:{}: {}", n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "interpolate through `Code(.field)` or `Text(.field)` instead:\n{}",
+            offenders.join("\n")
+        );
     }
 }

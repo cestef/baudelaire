@@ -1,6 +1,8 @@
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
+use crate::ui::{Code, Text, markup};
+
 #[derive(Error, Debug)]
 #[error("{kind}")]
 pub struct ConfigError {
@@ -53,7 +55,7 @@ impl ConfigError {
             span: SourceSpan::new(0.into(), 0),
             kind: ConfigErrorKind::UnknownFeature {
                 name: name.to_owned(),
-                valid: format!("valid features: {valid}"),
+                valid: markup!("valid features: {}", valid),
             },
         }
     }
@@ -305,7 +307,7 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::parse))]
     Parse(Box<kdl::KdlError>),
 
-    #[error("unknown config key `{key}`")]
+    #[error("unknown config key {}", Code(.key))]
     #[diagnostic(code(baudelaire::config::unknown_key))]
     UnknownKey {
         key: String,
@@ -313,7 +315,7 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    #[error("unknown value `{value}`")]
+    #[error("unknown value {}", Code(.value))]
     #[diagnostic(code(baudelaire::config::unknown_value))]
     UnknownValue {
         value: String,
@@ -321,10 +323,13 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    #[error("missing argument for `{node}`")]
+    #[error("missing argument for {}", Code(.node))]
     #[diagnostic(
         code(baudelaire::config::missing_arg),
-        help("add the missing value as a positional argument, e.g. `{node} \"value\"`")
+        help(
+            "add the missing value as a positional argument, e.g. `{} \"value\"`",
+            Text(.node)
+        )
     )]
     MissingArg { node: String },
 
@@ -347,7 +352,7 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::port_range))]
     PortRange { got: i64 },
 
-    #[error("`{got}` is not https")]
+    #[error("{} is not https", Code(.got))]
     #[diagnostic(
         code(baudelaire::config::insecure_url),
         help(
@@ -356,7 +361,7 @@ pub enum ConfigErrorKind {
     )]
     InsecureUrl { got: String },
 
-    #[error("`{field}` must not be negative, got {got}")]
+    #[error("{} must not be negative, got {got}", Code(.field))]
     #[diagnostic(code(baudelaire::config::negative_count))]
     NegativeCount { field: String, got: i64 },
 
@@ -364,22 +369,22 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::paginate_too_small))]
     PaginateTooSmall { got: i64 },
 
-    #[error("duplicate {noun} `{id}`")]
+    #[error("duplicate {noun} {}", Code(.id))]
     #[diagnostic(code(baudelaire::config::duplicate_id))]
     DuplicateId { noun: &'static str, id: String },
 
-    #[error("duplicate `{name}` in `{scope}`")]
+    #[error("duplicate {} in {}", Code(.name), Code(.scope))]
     #[diagnostic(code(baudelaire::config::duplicate_entry))]
     DuplicateEntry { name: String, scope: String },
 
-    #[error("`{path}` would be written outside the output directory")]
+    #[error("{} would be written outside the output directory", Code(.path))]
     #[diagnostic(
         code(baudelaire::config::escaping_file),
         help("name a file relative to `dist`, with no leading `/` and no `..`")
     )]
     EscapingFile { path: String },
 
-    #[error("feature `{name}` is required and cannot be disabled")]
+    #[error("feature {} is required and cannot be disabled", Code(.name))]
     #[diagnostic(
         code(baudelaire::config::feature_removal),
         help(
@@ -388,7 +393,7 @@ pub enum ConfigErrorKind {
     )]
     FeatureRemoval { name: String },
 
-    #[error("unexpected argument {value}; `{node}` takes `key=value` attributes")]
+    #[error("unexpected argument {}; {} takes `key=value` attributes", Text(.value), Code(.node))]
     #[diagnostic(code(baudelaire::config::unexpected_argument))]
     UnexpectedArgument { value: String, node: String },
 
@@ -403,14 +408,14 @@ pub enum ConfigErrorKind {
     )]
     MissingChildren,
 
-    #[error("config file not found at `{path}`")]
+    #[error("config file not found at {}", Code(.path))]
     #[diagnostic(
         code(baudelaire::config::not_found),
         help("run `baudelaire init` to scaffold a new project, or pass `--config <path>`")
     )]
     NotFound { path: String },
 
-    #[error("unknown typst feature `{name}`")]
+    #[error("unknown typst feature {}", Code(.name))]
     #[diagnostic(code(baudelaire::config::unknown_feature))]
     UnknownFeature {
         name: String,
@@ -418,7 +423,7 @@ pub enum ConfigErrorKind {
         valid: String,
     },
 
-    #[error("profile `{name}` not found")]
+    #[error("profile {} not found", Code(.name))]
     #[diagnostic(code(baudelaire::config::missing_profile))]
     MissingProfile {
         name: String,
@@ -426,10 +431,14 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    #[error("environment variable `{name}` is not set")]
+    #[error("environment variable {} is not set", Code(.name))]
     #[diagnostic(
         code(baudelaire::config::missing_env),
-        help("set `{name}` or provide a default with `${{{name}:-default}}`")
+        help(
+            "set `{}` or provide a default with `${{{}:-default}}`",
+            Text(.name),
+            Text(.name)
+        )
     )]
     MissingEnv { name: String },
 

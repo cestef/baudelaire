@@ -3,26 +3,28 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::{Code, Text};
+
 /// A configured theme that could not be resolved. Fatal: the site's templates
 /// and assets are expected to come from it, so continuing would build a
 /// stripped version of the site rather than the one that was asked for.
 #[derive(Debug, Error, Diagnostic)]
 pub enum ThemeError {
-    #[error("`{spec}` is not a package spec: {why}")]
+    #[error("{} is not a package spec: {}", Code(.spec), Text(.why))]
     #[diagnostic(
         code(baudelaire::theme::spec),
         help("a theme is named like any Typst package: `@preview/name:1.0.0`")
     )]
     Spec { spec: String, why: String },
 
-    #[error("theme `{spec}` could not be obtained: {why}")]
+    #[error("theme {} could not be obtained: {}", Code(.spec), Text(.why))]
     #[diagnostic(
         code(baudelaire::theme::unavailable),
         help("check the name and version, and that the machine can reach the package registry")
     )]
     Unavailable { spec: String, why: String },
 
-    #[error("theme directory `{path}` is outside the project")]
+    #[error("theme directory {} is outside the project", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::outside),
         help(
@@ -32,7 +34,7 @@ pub enum ThemeError {
     )]
     Outside { path: String },
 
-    #[error("theme directory `{path}` does not exist")]
+    #[error("theme directory {} does not exist", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::missing),
         help("create it, or name a published theme as `@namespace/name:version`")

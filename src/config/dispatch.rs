@@ -10,10 +10,12 @@
 //! block) or [`Attributed`] (a `key=value` line), which is also where the merge
 //! policy lives: sections fill in place, lists replace wholesale.
 
+use itertools::Itertools;
 use kdl::{KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::error::{BaudelaireErrorKind, ConfigError, Result};
+use crate::ui::{Code, markup};
 
 use super::node::{EntryExt, NodeExt};
 
@@ -194,14 +196,20 @@ impl Keys<'_> {
     /// "did you mean ..? valid `noun`: .." help for an unrecognized name, reused
     /// wherever a name set drives validity (dispatch keys, profile names,
     /// virtual Typst modules).
+    ///
+    /// Laid out to be read rather than parsed: the suggestion, which is the
+    /// answer in the common case, gets a line to itself, and each valid name a
+    /// code span of its own. Two dozen bare words separated by commas are one
+    /// wall of text, with the comma the only thing telling one name from the
+    /// next. The break survives miette's wrapper, which re-indents the rest into
+    /// the help column.
     pub(crate) fn help(&self, unknown: &str, noun: &str) -> String {
-        let mut help = match self.nearest(unknown) {
-            Some(near) => format!("did you mean `{near}`? "),
+        let suggestion = match self.nearest(unknown) {
+            Some(near) => markup!("did you mean `{}`?\n", near),
             None => String::new(),
         };
-        help.push_str(&format!("valid {noun}: "));
-        help.push_str(&self.0.join(", "));
-        help
+        let names = self.0.iter().map(Code).format(", ");
+        format!("{suggestion}{}{names}", markup!("valid {}: ", noun))
     }
 
     /// The valid key within edit distance 2 of `unknown` (a typo), if any.
@@ -252,8 +260,12 @@ mod tests {
 
     #[test]
     fn help_lists_valid_keys_and_suggestion() {
-        let help = Keys(&["pretty"]).help("pruty", "keys");
-        assert!(help.contains("did you mean `pretty`?"), "{help}");
-        assert!(help.contains("valid keys: pretty"), "{help}");
+        // The suggestion answers the common case, so it gets a line of its own,
+        // and every valid name is a code span rather than a bare word in a
+        // comma list.
+        assert_eq!(
+            Keys(&["pretty", "indent"]).help("pruty", "keys"),
+            "did you mean `pretty`?\nvalid keys: `pretty`, `indent`"
+        );
     }
 }

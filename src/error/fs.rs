@@ -12,6 +12,8 @@ use std::path::PathBuf;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::markup;
+
 /// A filesystem operation, named for error messages and for the diagnostic
 /// code.
 #[derive(Debug, Clone, Copy)]
@@ -96,11 +98,12 @@ impl FsError {
     }
 
     /// The path portion of the message: a single ``\`path\``` or, for a two-path
-    /// operation, ``\`from\` → \`to\```.
+    /// operation, ``\`from\` → \`to\```. Built through [`markup!`] so a path
+    /// carrying a delimiter of its own cannot open a span.
     fn location(&self) -> String {
         match &self.dest {
-            Some(to) => format!("`{}` → `{}`", self.path.display(), to.display()),
-            None => format!("`{}`", self.path.display()),
+            Some(to) => markup!("`{}` → `{}`", self.path.display(), to.display()),
+            None => markup!("`{}`", self.path.display()),
         }
     }
 

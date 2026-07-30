@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use crate::error::AnnounceError;
 use crate::mime::Mime;
+use crate::ui::markup;
 
 use super::id::{Did, Nsid, Rkey};
 
@@ -249,6 +250,6 @@ impl ValueExt for Value {
         self.get(key)
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .ok_or_else(|| AnnounceError::auth(format!("session response had no `{key}`")))
+            .ok_or_else(|| AnnounceError::auth(markup!("session response had no `{}`", key)))
     }
 }

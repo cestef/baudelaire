@@ -362,7 +362,7 @@ fn err_bad_sort_key() {
     let rendered = format!("{:?}", miette::Report::from(err));
     // an unknown enum *value* reads as "unknown value", not "unknown key"
     assert!(rendered.contains("unknown value `wat`"), "{rendered}");
-    assert!(rendered.contains("order, date, title"), "{rendered}");
+    assert!(rendered.contains("`order`, `date`, `title`"), "{rendered}");
 }
 
 #[test]
@@ -413,7 +413,7 @@ fn err_unknown_url_style() {
     let rendered = format!("{:?}", miette::Report::from(err));
     // The value table drives the "did you mean" hint, listing the valid styles.
     assert!(rendered.contains("unknown value `pretty`"), "{rendered}");
-    assert!(rendered.contains("clean, flat"), "{rendered}");
+    assert!(rendered.contains("`clean`, `flat`"), "{rendered}");
 }
 
 #[test]

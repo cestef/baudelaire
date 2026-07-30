@@ -3,6 +3,8 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::{Code, Text};
+
 /// An SVG that `svg()` asked for but baudelaire could not turn into DOM nodes.
 ///
 /// Fatal rather than a warning: the element is already in the page, so a
@@ -10,7 +12,7 @@ use thiserror::Error;
 /// nothing downstream would notice.
 #[derive(Debug, Error, Diagnostic)]
 pub enum SvgError {
-    #[error("`{path}` is not a path inside the project")]
+    #[error("{} is not a path inside the project", Code(.path))]
     #[diagnostic(
         code(baudelaire::svg::path),
         help(
@@ -21,14 +23,14 @@ pub enum SvgError {
     )]
     Path { path: String },
 
-    #[error("`{path}` is not an SVG: its root element is `<{root}>`")]
+    #[error("{} is not an SVG: its root element is `<{}>`", Code(.path), Text(.root))]
     #[diagnostic(
         code(baudelaire::svg::root),
         help("`svg()` inlines an SVG file; the root element must be `<svg>`")
     )]
     Root { path: String, root: String },
 
-    #[error("`{path}` carries {what}, which would run on every page that inlines it")]
+    #[error("{} carries {what}, which would run on every page that inlines it", Code(.path))]
     #[diagnostic(
         code(baudelaire::svg::active),
         help(
@@ -39,7 +41,7 @@ pub enum SvgError {
     )]
     Active { path: String, what: String },
 
-    #[error("`{path}` could not be read")]
+    #[error("{} could not be read", Code(.path))]
     #[diagnostic(code(baudelaire::svg::unreadable))]
     Unreadable {
         path: String,
@@ -51,21 +53,26 @@ pub enum SvgError {
         source: Box<crate::error::BaudelaireErrorKind>,
     },
 
-    #[error("`{path}` nests more than {limit} levels deep")]
+    #[error("{} nests more than {limit} levels deep", Code(.path))]
     #[diagnostic(
         code(baudelaire::svg::nested),
         help("an icon is a few levels of `<g>`; this looks generated, not drawn")
     )]
     Nested { path: String, limit: usize },
 
-    #[error("`{path}` is not well-formed XML: {why}")]
+    #[error("{} is not well-formed XML: {}", Code(.path), Text(.why))]
     #[diagnostic(
         code(baudelaire::svg::malformed),
         help("an SVG must parse as XML: every tag closed, every attribute quoted")
     )]
     Malformed { path: String, why: String },
 
-    #[error("`{path}` contains a `<{tag}>` that cannot be written as HTML: {why}")]
+    #[error(
+        "{} contains a `<{}>` that cannot be written as HTML: {}",
+        Code(.path),
+        Text(.tag),
+        Text(.why)
+    )]
     #[diagnostic(
         code(baudelaire::svg::tag),
         help(
@@ -95,6 +102,9 @@ impl SvgError {
         }
     }
 
+    /// `what` names the offending construct and is already marked up (see
+    /// [`crate::ui::markup!`]): it is written at the call site, not read off the
+    /// file, so it is interpolated as-is rather than escaped.
     pub fn active(path: &str, what: impl std::fmt::Display) -> Self {
         Self::Active {
             path: path.to_owned(),

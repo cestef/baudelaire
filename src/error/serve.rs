@@ -5,10 +5,12 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::ui::Code;
+
 /// A failure while starting `baudelaire serve`.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ServeError {
-    #[error("failed to bind `{addr}`")]
+    #[error("failed to bind {}", Code(.addr))]
     #[diagnostic(
         code(baudelaire::serve::bind),
         help("is another process using this port? try --port <n>")
@@ -23,7 +25,7 @@ pub enum ServeError {
     #[diagnostic(code(baudelaire::serve::watcher_init))]
     WatcherInit(#[source] notify::Error),
 
-    #[error("failed to watch `{dir}`")]
+    #[error("failed to watch {}", Code(.dir))]
     #[diagnostic(code(baudelaire::serve::watch))]
     Watch {
         dir: String,

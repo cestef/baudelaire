@@ -33,6 +33,7 @@ pub use taxonomy::Taxonomy;
 
 use crate::config::Config;
 use crate::error::{ContentError, Result};
+use crate::ui::markup;
 use crate::world::Project;
 
 /// The site's full page set: eligible content pages plus generated taxonomy and
@@ -118,7 +119,7 @@ impl Claim {
         };
         let stubs = page.frontmatter.redirect.iter().map(|old| Self {
             output: config.destination(old),
-            origin: format!("`redirect \"{old}\"` in {}", page.source.display()),
+            origin: markup!("`redirect \"{}\"` in {}", old, page.source.display()),
         });
         std::iter::once(own).chain(stubs)
     }

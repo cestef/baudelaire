@@ -7,12 +7,18 @@
 //! - **Warnings** ([`Ui::warn`]): full [`miette::Diagnostic`]s with codes,
 //!   spans, and help, collected during a run and rendered together by
 //!   [`Ui::flush`], so a build's noise never interleaves with its progress.
+//! - **Errors** ([`Ui::fail`]): the diagnostic that ended the run, through the
+//!   same renderer. `main` returns an exit code rather than a
+//!   [`miette::Result`] so there is one of these and not two.
 //! - **Debug logs** ([`trace`]): `tracing` events for `-v`/`-vv`/`RUST_LOG`,
 //!   strictly diagnostic.
 //!
 //! What a line is made of lives beside it: `marker` is the one table of status
 //! glyphs and their colours, `fmt` the count, size, duration and path adapters
-//! every line formats through, and `progress` the compile bar.
+//! every line formats through, `markup` the `` `code` `` / `*bold*` grammar
+//! diagnostics are written in (with the [`Text`] and [`Code`] adapters that keep
+//! an interpolated value from being read as markup), and `progress` the compile
+//! bar.
 //!
 //! Everything goes to stderr (stdout stays reserved for data), through
 //! `anstream` so color strips on pipes and under `NO_COLOR`. Output is
@@ -21,6 +27,7 @@
 
 mod fmt;
 mod marker;
+mod markup;
 mod progress;
 pub mod trace;
 
@@ -28,13 +35,15 @@ use std::fmt::Display;
 use std::io::{IsTerminal, Write};
 use std::time::{Duration, Instant};
 
-use anstream::AutoStream;
+use anstream::{AutoStream, ColorChoice};
 use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Severity};
 use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
 pub use fmt::{Bytes, Count, Dur, Paths, term_width, wrap};
 pub use marker::{Marker, PageStatus};
+pub(crate) use markup::markup;
+pub use markup::{Code, Markup, Styled, Text};
 pub use progress::Progress;
 
 /// Return the cursor to column 0 and erase the line: what makes a transient
@@ -119,6 +128,12 @@ struct State {
 pub struct Ui {
     state: Mutex<State>,
     tty: bool,
+    /// Whether the writer will keep colour, asked of `anstream` with the same
+    /// question it answers for itself. Diagnostics need it up front rather than
+    /// after the fact: [`Markup`] renders a span *structurally*, styling it here
+    /// and writing its delimiters back out there, so stripping the escapes off a
+    /// coloured render would leave a path with no quotes around it at all.
+    color: bool,
 }
 
 impl Ui {
@@ -131,6 +146,7 @@ impl Ui {
                 warned: 0,
             }),
             tty: std::io::stderr().is_terminal(),
+            color: AutoStream::choice(&std::io::stderr()) != ColorChoice::Never,
         }
     }
 
@@ -324,13 +340,9 @@ impl Ui {
         if notes.is_empty() {
             return;
         }
-        let handler = self.handler();
         let mut seen: Vec<(String, usize)> = Vec::new();
         for note in &notes {
-            let mut text = String::new();
-            if handler.render_report(&mut text, &*note.0).is_err() {
-                text = note.0.to_string();
-            }
+            let text = self.render(&*note.0);
             match seen.iter_mut().find(|(t, _)| *t == text) {
                 Some((_, n)) => *n += 1,
                 None => seen.push((text, 1)),
@@ -350,6 +362,37 @@ impl Ui {
             }
         }
         let _ = writeln!(s.out);
+    }
+
+    /// Render the error that ended the run, into the same report column its
+    /// warnings use. Printed at every level: an error is never quieted, and
+    /// [`Ui::flush`] has already emptied the warnings above it.
+    ///
+    /// The one place a failure prints. `main` returns an exit code rather than a
+    /// [`miette::Result`] so that this renderer, not miette's global hook,
+    /// decides the width, the colour and the markup.
+    pub fn fail(&self, error: &dyn Diagnostic) {
+        let text = self.render(error);
+        let mut s = self.state.lock();
+        if self.tty {
+            let _ = write!(s.out, "{CLEAR_LINE}");
+        }
+        let _ = writeln!(s.out);
+        for line in text.lines() {
+            let _ = writeln!(s.out, "  {line}");
+        }
+        let _ = writeln!(s.out);
+    }
+
+    /// One diagnostic, formatted: its markup rendered by [`Styled`], the rest by
+    /// miette. Falls back to the bare message if the handler itself fails.
+    fn render(&self, diagnostic: &dyn Diagnostic) -> String {
+        let styled = Styled::new(diagnostic, self.color);
+        let mut text = String::new();
+        match self.handler().render_report(&mut text, &styled) {
+            Ok(()) => text,
+            Err(_) => styled.to_string(),
+        }
     }
 
     /// The renderer for collected diagnostics, sized to the terminal. Colors

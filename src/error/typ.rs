@@ -8,6 +8,8 @@ use typst::{
     syntax::{DiagSpan, FileId},
 };
 
+use crate::ui::Text;
+
 /// A typst diagnostic bridged to miette, with span resolution via the world
 /// that produced it. [`src`](Self::src) holds one file's text; [`file`](Self::file)
 /// records which file that is, so a label is only drawn for spans in that same
@@ -88,9 +90,11 @@ impl std::fmt::Debug for TypstSourceDiagnostic {
     }
 }
 
+/// typst's own message, escaped: it is foreign text, and a compiler that
+/// quotes an identifier in backticks is not writing this crate's markup.
 impl std::fmt::Display for TypstSourceDiagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner.message)
+        write!(f, "{}", Text(&self.inner.message))
     }
 }
 
@@ -119,7 +123,7 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .filter(|e| e.span.is_detached())
             .collect();
         (!helps.is_empty()).then(|| {
-            Box::new(helps.iter().map(|e| &e.v).join("\n")) as Box<dyn std::fmt::Display + '_>
+            Box::new(Text(helps.iter().map(|e| &e.v).join("\n"))) as Box<dyn std::fmt::Display + '_>
         })
     }
 

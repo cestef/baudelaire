@@ -13,6 +13,8 @@
 
 use typst::syntax::VirtualizeError;
 
+use crate::ui::Code;
+
 pub mod annotated;
 pub mod announce;
 pub mod asset;
@@ -190,7 +192,7 @@ impl BuildFailed {
 /// RFC 2822 (RSS `pubDate`) only covers years 1900–9999, RFC 3339 (Atom
 /// `updated`) years 0–9999.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("date `{date}` of `{page}` cannot be formatted as {standard}")]
+#[error("date {} of {} cannot be formatted as {standard}", Code(.date), Code(.page))]
 #[diagnostic(
     code(baudelaire::feed::date),
     help(

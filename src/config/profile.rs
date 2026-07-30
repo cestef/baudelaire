@@ -209,7 +209,10 @@ mod tests {
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(rendered.contains("profile `prd` not found"), "{rendered}");
         assert!(rendered.contains("did you mean `prod`?"), "{rendered}");
-        assert!(rendered.contains("valid profiles: dev, prod"), "{rendered}");
+        assert!(
+            rendered.contains("valid profiles: `dev`, `prod`"),
+            "{rendered}"
+        );
     }
 
     #[test]
