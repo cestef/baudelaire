@@ -11,7 +11,7 @@ scenario "paginate splits a collection into numbered index pages" {
       }
       content {
         collections {
-          posts sort="title" paginate=2
+          posts { sort "title"; paginate { size 2 } }
         }
       }
       """#
@@ -57,8 +57,8 @@ scenario "the pagination prefix is configurable, empty included" {
       site "T"
       content {
         collections {
-          a sort="title" paginate=2 prefix="p"
-          b sort="title" paginate=2 prefix=""
+          a { sort "title"; paginate { size 2; prefix "p" } }
+          b { sort "title"; paginate { size 2; prefix "" } }
         }
       }
       """#
@@ -105,7 +105,7 @@ scenario "a list template with no paginate yields one index holding everything" 
       site "T"
       content {
         collections {
-          posts sort="title" list="list.typ"
+          posts { sort "title"; paginate { template "list.typ" } }
         }
       }
       """#

@@ -127,7 +127,7 @@ scenario "a collection can flatten its nesting back onto its own name" {
       site "Test"
       content {
         collections {
-          posts permalink="/{collection}/{slug}/"
+          posts { permalink "/{collection}/{slug}/" }
         }
       }
       """#
@@ -153,7 +153,7 @@ scenario "a collection permalink template moves the whole collection" {
       }
       content {
         collections {
-          posts permalink="/blog/{slug}/"
+          posts { permalink "/blog/{slug}/" }
         }
       }
       """#

@@ -39,8 +39,8 @@ fn fixture_config() -> &'static str {
         }
         content {
           collections {
-            posts "posts/**/*.typ" sort="date" reverse=#true
-            notes "notes/**/*.typ" sort="order"
+            posts "posts/**/*.typ" { sort "date"; reverse #true }
+            notes "notes/**/*.typ" { sort "order" }
           }
           taxonomies {
             tags listing=#true

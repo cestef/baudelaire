@@ -16,7 +16,18 @@ content {
   // `paginate` splits that index once it outgrows one page, adding
   // /posts/page/2/ and on, each with previous/next links.
   collections {
-    posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/" template="layout.typ" list="list.typ" paginate=5
+    posts "posts/**/*.typ" {
+      sort "date"
+      reverse #true
+      permalink "/posts/{slug}/"
+      template "layout.typ"
+      // The index over them, as distinct from the template that wraps one:
+      // present means generated, `size` chunks it into pages.
+      paginate {
+        template "list.typ"
+        size 5
+      }
+    }
   }
 
   // Any page whose frontmatter carries `tags` is grouped automatically.

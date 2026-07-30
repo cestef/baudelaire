@@ -93,7 +93,7 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\ncontent {\n  collections { pages template=\"page.typ\" }\n}\n",
+        "site \"T\"\ncontent {\n  collections { pages { template \"page.typ\" } }\n}\n",
     );
     // Padding pushes the erroring span past the length of the short page source.
     site.write(

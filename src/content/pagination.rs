@@ -170,11 +170,12 @@ struct Section<'a> {
 
 impl<'a> Section<'a> {
     /// The index section for a collection, or `None` when it configures no
-    /// index. `paginate` sets the page size; a `list` template without one puts
-    /// every member on a single page (`per_page` = the whole membership).
+    /// index. The `paginate { }` block's presence is what generates one; its
+    /// `size` chunks the members, and without one every member sits on a single
+    /// page (`per_page` = the whole membership).
     fn of(collection: &'a Collection, config: &'a Config, lang: &'a str) -> Option<Self> {
-        let paginate = collection.config.paginate.filter(|n| *n > 0);
-        if paginate.is_none() && collection.config.list.is_none() {
+        let paginate = &collection.config.paginate;
+        if !paginate.enabled {
             return None;
         }
         let members: Vec<&Page> = collection
@@ -184,12 +185,12 @@ impl<'a> Section<'a> {
             .collect();
         // A single un-paginated page holds every member; guard against a zero
         // chunk size for an empty collection (`chunks(0)` panics).
-        let per_page = paginate.unwrap_or(members.len()).max(1);
+        let per_page = paginate.size.unwrap_or(members.len()).max(1);
         Some(Self {
             id: &collection.id,
-            template: collection.config.list.clone(),
-            mount: collection.config.mount.clone(),
-            prefix: &collection.config.prefix,
+            template: paginate.template.clone(),
+            mount: paginate.mount.clone(),
+            prefix: &paginate.prefix,
             members,
             per_page,
             lang,

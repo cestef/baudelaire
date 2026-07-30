@@ -586,16 +586,34 @@ pub struct CollectionConfig {
     pub permalink: Option<String>,
     /// Default template file for pages in this collection.
     pub template: Option<String>,
-    /// Items per generated index page. `None` = no pagination.
-    pub paginate: Option<usize>,
-    /// Template for the generated paginated index pages.
-    pub list: Option<String>,
-    /// Where the collection's listing is served: the permalink of its first
-    /// page. `None` = `/{id}/`; set to `/` to mount a blog at the site root.
+    /// The generated index over this collection's members.
+    pub paginate: PaginateConfig,
+}
+
+/// A collection's generated index: whether there is one, how it is chunked, and
+/// where it is served.
+///
+/// One block, because it is one concept. It used to be four flat attributes
+/// sitting beside the ones that shape *member* pages, and three of the four
+/// names did not say what they meant: `list` was a template rather than a list,
+/// `mount` the permalink of page 1, `prefix` the segment before a page number.
+/// Reading `template` next to `list` gave no clue that the first wrapped a post
+/// and the second the index over them.
+#[derive(Debug, Clone, Hash)]
+pub struct PaginateConfig {
+    /// Whether an index is generated at all: the block's presence.
+    pub enabled: bool,
+    /// Members per page. `None` puts every member on one page, which is what a
+    /// listing with no size is.
+    pub size: Option<usize>,
+    /// Template for the generated index pages, as distinct from the collection's
+    /// `template`, which wraps its members.
+    pub template: Option<String>,
+    /// Where page 1 is served. `None` = `/{id}/`; set to `/` to mount a blog at
+    /// the site root.
     pub mount: Option<String>,
-    /// Path segment before a paginated page number: `/{id}/{prefix}/{n}/`.
-    /// Defaults to `page` (`/blog/page/2/`); an empty string drops the segment
-    /// entirely (`/blog/2/`).
+    /// Path segment before a page number: `/{id}/{prefix}/{n}/`. Defaults to
+    /// `page` (`/blog/page/2/`); empty drops the segment (`/blog/2/`).
     pub prefix: String,
 }
 

@@ -48,7 +48,7 @@ pub fn slug(name: &str) -> String {
 ```kdl
 content {
   collections {
-    blog sort="date" reverse=#true paginate=5 list="list.typ"
+    blog { sort "date"; reverse #true; paginate { size 5; template "list.typ" } }
   }
 }
 ```

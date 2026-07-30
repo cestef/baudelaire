@@ -174,8 +174,12 @@ fn collections_overrides() {
         r#"
         content {
           collections {
-            posts "posts/**/*.typ" sort="date" reverse=#true permalink="/posts/{slug}/"
-            notes "notes/**/*.typ" sort="order"
+            posts "posts/**/*.typ" {
+              sort "date"
+              reverse #true
+              permalink "/posts/{slug}/"
+            }
+            notes "notes/**/*.typ" { sort "order" }
           }
         }
     "#,
@@ -205,13 +209,13 @@ fn collections_overrides() {
 /// failed with a help that listed every key except the one being written.
 #[test]
 fn a_collection_glob_can_be_named_as_well_as_positional() {
-    let cfg = parse(r#"content { collections { posts glob="p/**/*.typ" } }"#);
+    let cfg = parse(r#"content { collections { posts { glob "p/**/*.typ" } } }"#);
     let posts = &cfg.content.collections[0].1;
     assert_eq!(posts.glob.as_deref(), Some("p/**/*.typ"));
 
     // The named form is read after the positional, so a line writing both takes
     // the one it spelled out.
-    let cfg = parse(r#"content { collections { posts "a/*.typ" glob="b/*.typ" } }"#);
+    let cfg = parse(r#"content { collections { posts "a/*.typ" { glob "b/*.typ" } } }"#);
     assert_eq!(
         cfg.content.collections[0].1.glob.as_deref(),
         Some("b/*.typ")
@@ -388,8 +392,8 @@ fn err_unknown_top_key() {
 
 #[test]
 fn err_bad_sort_key() {
-    let err =
-        Config::parse("content {\n  collections {\n    posts sort=\"wat\"\n  }\n}\n").unwrap_err();
+    let err = Config::parse("content {\n  collections {\n    posts { sort \"wat\" }\n  }\n}\n")
+        .unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
     // an unknown enum *value* reads as "unknown value", not "unknown key"
     assert!(rendered.contains("unknown value `wat`"), "{rendered}");
@@ -449,7 +453,7 @@ fn err_unknown_url_style() {
 
 #[test]
 fn err_boolean_attr_type() {
-    let err = Config::parse("content {\n  collections {\n    posts reverse=\"yes\"\n  }\n}\n")
+    let err = Config::parse("content {\n  collections {\n    posts { reverse \"yes\" }\n  }\n}\n")
         .unwrap_err();
     assert!(
         err.to_string().contains("expected boolean, got string"),
@@ -492,11 +496,11 @@ fn err_negative_limit_and_minimum() {
 fn err_paginate_below_one() {
     for (config, detail) in [
         (
-            "content {\n  collections {\n    posts paginate=0\n  }\n}\n",
+            "content {\n  collections {\n    posts { paginate { size 0 } }\n  }\n}\n",
             "paginate must be at least 1, got 0",
         ),
         (
-            "content {\n  collections {\n    posts paginate=-3\n  }\n}\n",
+            "content {\n  collections {\n    posts { paginate { size -3 } }\n  }\n}\n",
             "paginate must be at least 1, got -3",
         ),
     ] {
@@ -517,9 +521,10 @@ fn err_duplicate_format() {
 
 #[test]
 fn err_duplicate_collection() {
-    let err =
-        Config::parse("content {\n  collections {\n    posts\n    posts sort=\"date\"\n  }\n}\n")
-            .unwrap_err();
+    let err = Config::parse(
+        "content {\n  collections {\n    posts\n    posts { sort \"date\" }\n  }\n}\n",
+    )
+    .unwrap_err();
     assert!(
         err.to_string().contains("duplicate collection `posts`"),
         "{err}"
@@ -546,7 +551,7 @@ fn err_duplicate_profile() {
 
 #[test]
 fn err_unknown_permalink_placeholder_is_spanned() {
-    let text = "content {\n  collections {\n    posts permalink=\"/{bogus}/\"\n  }\n}\n";
+    let text = "content {\n  collections {\n    posts { permalink \"/{bogus}/\" }\n  }\n}\n";
     let err = Config::parse(text).unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
     assert!(
@@ -555,21 +560,23 @@ fn err_unknown_permalink_placeholder_is_spanned() {
     );
     assert!(rendered.contains("valid placeholders"), "{rendered}");
     // the label excerpts config.kdl: the error is spanned at parse time
-    assert!(rendered.contains("permalink="), "{rendered}");
+    assert!(rendered.contains("permalink "), "{rendered}");
 }
 
 #[test]
 fn err_unterminated_permalink_placeholder() {
-    let err = Config::parse("content {\n  collections {\n    posts permalink=\"/{slug\"\n  }\n}\n")
-        .unwrap_err();
+    let err =
+        Config::parse("content {\n  collections {\n    posts { permalink \"/{slug\" }\n  }\n}\n")
+            .unwrap_err();
     assert!(err.to_string().contains("unterminated `{slug`"), "{err}");
 }
 
 #[test]
 fn err_permalink_parent_dir_segment() {
-    let err =
-        Config::parse("content {\n  collections {\n    posts permalink=\"/../{slug}/\"\n  }\n}\n")
-            .unwrap_err();
+    let err = Config::parse(
+        "content {\n  collections {\n    posts { permalink \"/../{slug}/\" }\n  }\n}\n",
+    )
+    .unwrap_err();
     assert!(err.to_string().contains("must not contain `..`"), "{err}");
 }
 

@@ -46,6 +46,35 @@ chores are visible in the git history and change nothing for a site.
   `new --edit`, since `serve --open` opens a browser and the short form was
   already `-e`. Both old spellings stay as aliases.
 
+- **config**: A collection is a `{ }` block, and its generated index nests
+  inside it. `paginate`, `list`, `mount` and `prefix` were four flat attributes
+  sitting beside the ones that shape *member* pages, and three of the four names
+  did not say what they meant: `list` was a template rather than a list, `mount`
+  the permalink of page 1, `prefix` the segment before a page number. Reading
+  `template` next to `list` gave no clue that the first wrapped a post and the
+  second the index over them.
+
+  ```kdl
+  // before
+  content { collections { blog sort="date" template="post.typ" list="index.typ" paginate=5 } }
+
+  // after
+  content {
+    collections {
+      blog {
+        sort "date"
+        template "post.typ"
+        paginate { template "index.typ"; size 5 }
+      }
+    }
+  }
+  ```
+
+  The `paginate { }` block's presence is what generates the index, as
+  `robots { }` and `spa { }` work; a block with no `size` puts every member on
+  one page, which is what a `list` without a `paginate` was. The glob keeps its
+  positional shorthand (`blog "blog/**/*.typ" { .. }`).
+
 - **config**: `generate { search { client } }` is `generate { search { ui } }`.
   It turns on the shipped Ctrl-K palette, and the top-level `client { }` block
   is build-time constants for client JS: one word meant two things, and both of

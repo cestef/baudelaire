@@ -73,7 +73,7 @@ fn new_infers_frontmatter_from_the_collection() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        "site \"T\"\ncontent {\n  collections {\n    blog sort=\"date\"\n    guide sort=\"order\"\n  }\n}\n",
+        "site \"T\"\ncontent {\n  collections {\n    blog { sort \"date\" }\n    guide { sort \"order\" }\n  }\n}\n",
     );
     // A dated collection gets today's date stamped; no order field.
     let blog = t.run(&["new", "blog/launch-day"]);

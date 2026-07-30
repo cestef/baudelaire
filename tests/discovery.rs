@@ -37,7 +37,7 @@ fn collection_sort_and_reverse_applied() {
             }
             content {
               collections {
-                posts sort="date" reverse=#true
+                posts { sort "date"; reverse #true }
               }
             }
             "#,
@@ -74,7 +74,7 @@ fn discovers_collections_and_pages() {
             }
             content {
               collections {
-                posts "posts/**/*.typ" sort="date"
+                posts "posts/**/*.typ" { sort "date" }
               }
             }
             "#,
@@ -257,7 +257,7 @@ fn custom_permalink_template() {
             }
             content {
               collections {
-                posts permalink="/posts/{year}/{slug}/"
+                posts { permalink "/posts/{year}/{slug}/" }
               }
             }
             "#,
@@ -447,7 +447,7 @@ fn bundle_index_takes_slug_from_its_directory() {
               content "content" dist "public"
             }
             content {
-              collections { posts "posts/**/*.typ" permalink="/posts/{slug}/" }
+              collections { posts "posts/**/*.typ" { permalink "/posts/{slug}/" } }
             }
             "#,
     );

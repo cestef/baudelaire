@@ -245,7 +245,7 @@ fn config_collection_lookup() {
             site "T"
             content {
               collections {
-                posts "posts/**/*.typ" sort="date"
+                posts "posts/**/*.typ" { sort "date" }
                 notes "notes/**/*.typ"
               }
             }
@@ -324,7 +324,7 @@ fn discover_with_collection_override() {
             }
             content {
               collections {
-                posts permalink="/blog/{slug}/"
+                posts { permalink "/blog/{slug}/" }
               }
             }
             "#,

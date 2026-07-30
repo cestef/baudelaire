@@ -16,7 +16,11 @@ paths {
 // `list` names the template for that generated index.
 content {
   collections {
-    guide sort="order" template="page.typ" list="list.typ"
+    guide {
+      sort "order"
+      template "page.typ"
+      paginate { template "list.typ" }
+    }
   }
 }
 

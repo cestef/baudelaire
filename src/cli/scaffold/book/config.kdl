@@ -16,7 +16,7 @@ paths {
 // the two move together, because neither is written down anywhere else.
 content {
   collections {
-    chapters sort="order" template="chapter.typ"
+    chapters { sort "order"; template "chapter.typ" }
   }
 }
 

@@ -28,7 +28,7 @@ content {
   index "index"
   draft { build #false }
   collections {
-    posts sort="date" reverse=#true paginate=10 template="post.typ"
+    posts { sort "date"; reverse #true; template "post.typ"; paginate { size 10 } }
   }
   taxonomies {
     tags listing=#true

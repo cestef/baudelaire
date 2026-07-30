@@ -16,10 +16,10 @@ use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
     ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
-    NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
-    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SortKey,
-    SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig,
-    TypstConfig, UrlStyle, VerifyConfig,
+    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
+    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
+    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
@@ -182,74 +182,99 @@ impl Section for DraftConfig {
 }
 
 impl CollectionConfig {
-    /// One `posts "glob" sort=.. permalink=..` line: the node name is the
-    /// collection id, and the optional leading positional its member glob.
-    ///
-    /// The positional is a shorthand for the `glob` attribute, read first so a
-    /// line writing both takes the named one.
+    /// One `posts { .. }` block: the node name is the collection id, and an
+    /// optional leading positional its member glob, so the one-line
+    /// `posts "posts/**/*.typ"` shorthand still reads.
     fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let mut cfg = Self::default();
-        if let Some(glob) = node.entries().first().filter(|e| e.name().is_none()) {
-            cfg.glob = Some(glob.value().as_str(text, NodeExt::span(node))?);
+        // At most the glob. Anything after it would be silently discarded, and
+        // a setting that looks accepted and does nothing is the failure this
+        // whole dispatch layer exists to prevent.
+        for (position, entry) in node.entries().iter().enumerate() {
+            match position {
+                0 => cfg.glob = Some(entry.value().as_str(text, NodeExt::span(node))?),
+                _ => {
+                    return Err(ConfigError::unexpected_argument(
+                        text,
+                        &entry.value().to_string(),
+                        node.name().value(),
+                        crate::config::node::EntryExt::span(entry),
+                    )
+                    .into());
+                }
+            }
         }
-        cfg.read(node, text)?;
+        // A bare `posts` or `posts "glob"` is a collection that only declares
+        // its members; everything else it could say lives in the block.
+        if node.children().is_some() {
+            cfg.fill(node, text)?;
+        }
         Ok((node.name().value().to_owned(), cfg))
     }
 }
 
-impl Attributed for CollectionConfig {
-    // the glob, consumed by `item` above
-    const LEADING: usize = 1;
-    const ATTRS: Attrs<Self> = Attrs(&[
-        // Listed as well as read positionally, because this table is what the
-        // "unknown config key" help enumerates: `glob` is the field's name in
-        // the docs and in the struct, and writing the obvious `glob="..."` used
-        // to fail with a help that never mentioned it existed.
-        ("glob", |c, v, t, s| {
-            c.glob = Some(v.as_str(t, s)?);
+/// One collection: what belongs to it, how its members are ordered and
+/// addressed, and (in a nested block) the index generated over them.
+impl Section for CollectionConfig {
+    const RULES: Block<Self> = Block(&[
+        ("glob", |c, n, t| {
+            c.glob = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("sort", |c, v, t, s| {
-            c.sort = v.one::<SortKey>(t, s)?;
+        ("sort", |c, n, t| {
+            c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
             Ok(())
         }),
-        ("reverse", |c, v, t, s| {
-            c.reverse = v.boolean(t, s)?;
+        ("reverse", |c, n, t| {
+            c.reverse = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("permalink", |c, v, t, s| {
-            let raw = v.as_str(t, s)?;
+        ("permalink", |c, n, t| {
+            let raw = n.string(t, 0)?;
             // validate here so a template typo is a spanned config error,
             // not a silent fallback to convention at page load
-            Permalink::parse(&raw).map_err(|e| ConfigError::at(t, e.into(), s))?;
+            Permalink::parse(&raw).map_err(|e| ConfigError::at(t, e.into(), NodeExt::span(n)))?;
             c.permalink = Some(raw);
             Ok(())
         }),
-        ("template", |c, v, t, s| {
-            c.template = Some(v.as_str(t, s)?);
+        ("template", |c, n, t| {
+            c.template = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("paginate", |c, v, t, s| {
-            let n = v.integer(t, s)?;
-            if n < 1 {
-                return Err(ConfigError::paginate_too_small(t, n, s).into());
+        ("paginate", |c, n, t| c.paginate.fill(n, t)),
+    ]);
+}
+
+/// The `paginate { .. }` block inside a collection: its presence generates the
+/// index, and every key tunes it.
+impl Section for PaginateConfig {
+    const RULES: Block<Self> = Block(&[
+        ("size", |c, n, t| {
+            let n_ = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
+            if n_ < 1 {
+                return Err(ConfigError::paginate_too_small(t, n_, NodeExt::span(n)).into());
             }
-            c.paginate = Some(n as usize);
+            c.size = Some(n_ as usize);
             Ok(())
         }),
-        ("list", |c, v, t, s| {
-            c.list = Some(v.as_str(t, s)?);
+        ("template", |c, n, t| {
+            c.template = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("mount", |c, v, t, s| {
-            c.mount = Some(v.as_str(t, s)?);
+        ("mount", |c, n, t| {
+            c.mount = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("prefix", |c, v, t, s| {
-            c.prefix = v.as_str(t, s)?;
+        ("prefix", |c, n, t| {
+            c.prefix = n.string(t, 0)?;
             Ok(())
         }),
     ]);
+
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        true
+    }
 }
 
 impl TaxonomyConfig {

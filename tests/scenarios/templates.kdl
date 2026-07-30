@@ -45,7 +45,7 @@ scenario "a collection's template applies without frontmatter asking for it" {
       }
       content {
         collections {
-          posts template="post.typ"
+          posts { template "post.typ" }
         }
       }
       """#
@@ -69,7 +69,7 @@ scenario "prev and next siblings reach the template" {
       site "T"
       content {
         collections {
-          posts template="post.typ"
+          posts { template "post.typ" }
         }
       }
       """#
@@ -122,7 +122,7 @@ scenario "sections expose the ordered page set, not filesystem order" {
       site "T"
       content {
         collections {
-          guide sort="order" template="page.typ"
+          guide { sort "order"; template "page.typ" }
         }
       }
       """#
@@ -165,7 +165,7 @@ scenario "a subdirectory becomes a nested child section" {
       site "T"
       content {
         collections {
-          guide sort="order" template="page.typ"
+          guide { sort "order"; template "page.typ" }
         }
       }
       """#
@@ -235,7 +235,7 @@ scenario "a template can render a reading estimate" {
       site "T"
       content {
         collections {
-          posts template="post.typ"
+          posts { template "post.typ" }
         }
       }
       """#
@@ -280,7 +280,7 @@ scenario "a page and a listing carry a localized date" {
       }
       content {
         collections {
-          posts sort="date" list="index.typ" template="post.typ"
+          posts { sort "date"; template "post.typ"; paginate { template "index.typ" } }
         }
       }
       """#

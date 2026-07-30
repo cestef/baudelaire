@@ -17,7 +17,7 @@ paths {
 }
 content {
   collections {
-      blog sort="date" reverse=#true paginate=2
+      blog { sort "date"; reverse #true; paginate { size 2 } }
   }
   taxonomies {
       tags listing=#true

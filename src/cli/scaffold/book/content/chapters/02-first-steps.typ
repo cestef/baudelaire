@@ -98,7 +98,7 @@ is available to a chapter.
 - `assets/style.css` holds every rule this book uses; there is no framework
   underneath to fight.
 - `templates/theme.typ` is the frame: the header, the contents list, the pager.
-- Set `content { collections { chapters permalink="/{slug}/" } }` in `config.kdl`
+- Set `content { collections { chapters { permalink "/{slug}/" } } }` in `config.kdl`
   to drop the `/chapters/` prefix from every chapter's URL.
 - `navigation { standalone { file } }` names the export; `book.html` is only a
   default.

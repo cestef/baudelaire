@@ -17,9 +17,9 @@ paths {
 // `paths { content }`, so they belong next to it.
 content {
   collections {
-    guide sort="order" template="page.typ"
-    features sort="order" template="page.typ" list="list.typ"
-    blog sort="date" reverse=#true template="page.typ" paginate=5 list="list.typ"
+    guide { sort "order"; template "page.typ" }
+    features { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    blog { sort "date"; reverse #true; template "page.typ"; paginate { size 5; template "list.typ" } }
   }
 
   taxonomies {

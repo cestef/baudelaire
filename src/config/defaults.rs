@@ -9,8 +9,8 @@ use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
     ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, GenerateConfig,
     HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    NavigationConfig, OptimizeConfig, Paths, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
-    Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
+    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
+    ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
     SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
     UrlStyle, VerifyConfig,
 };
@@ -328,8 +328,20 @@ impl Default for CollectionConfig {
             reverse: false,
             permalink: None,
             template: None,
-            paginate: None,
-            list: None,
+            paginate: PaginateConfig::default(),
+        }
+    }
+}
+
+impl Default for PaginateConfig {
+    fn default() -> Self {
+        Self {
+            // opt-in: the presence of a `paginate { .. }` block flips it, and a
+            // collection with no index generates none.
+            enabled: false,
+            // no size is one page holding every member
+            size: None,
+            template: None,
             mount: None,
             prefix: "page".into(),
         }

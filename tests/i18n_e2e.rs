@@ -106,7 +106,7 @@ fn tagged_blog() -> Site {
         }
         content {
           collections {
-              blog "blog/**/*.typ" sort="date" reverse=#true list="layout.typ" paginate=1
+              blog "blog/**/*.typ" { sort "date"; reverse #true; paginate { template "layout.typ"; size 1 } }
           }
           taxonomies { tags listing=#true template="layout.typ" }
         }

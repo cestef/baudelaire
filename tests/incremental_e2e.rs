@@ -90,7 +90,7 @@ fn retitling_a_page_invalidates_its_sibling() {
     // neighbour's layout wrapper. Retitling one must therefore rebuild the
     // sibling whose nav points at it; otherwise its "next" link goes stale.
     let site = Site::with(
-        "site \"T\"\ncontent {\n  collections {\n    posts template=\"post.typ\"\n  }\n}\n",
+        "site \"T\"\ncontent {\n  collections {\n    posts { template \"post.typ\" }\n  }\n}\n",
     );
     site.write(
         "templates/post.typ",
@@ -639,7 +639,7 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     // frontmatter depends on that module. Editing it must re-evaluate the page's
     // frontmatter: a missed dependency would serve the stale title from cache.
     let site = Site::with(
-        "site \"T\"\ncontent {\n  collections {\n    posts template=\"post.typ\"\n  }\n}\n",
+        "site \"T\"\ncontent {\n  collections {\n    posts { template \"post.typ\" }\n  }\n}\n",
     );
     site.write(
         "templates/post.typ",
