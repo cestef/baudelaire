@@ -152,6 +152,14 @@ chores are visible in the git history and change nothing for a site.
   file optimized as a JPEG was served as `application/octet-stream`; `Photo.PNG`
   hit the same split.
 - **cache**: Two render-side inputs that served stale output.
+- **clean**, **new**: Neither refuses over a config it does not need. `clean` is
+  what you reach for when the project is in a state you want gone, and a config
+  syntax error blocked it; it now warns and sweeps the built-in directories
+  instead. A config that is *missing* is still an error, since sweeping `public`
+  and `.baudelaire` out of whatever directory you were standing in is not a
+  recovery. `new` writes the page when the project cannot be opened, losing only
+  the two conveniences that read existing content: the next `order` and the
+  permalink-collision check.
 - **cli**: `-v` wins over `RUST_LOG`. Any value in the environment used to
   discard the verbosity count, so `RUST_LOG=warn baudelaire -vv build` printed
   no debug events and said nothing about why. A run that passes no `-v` still

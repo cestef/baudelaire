@@ -122,6 +122,73 @@ fn clean_refuses_a_full_sweep_it_cannot_confirm() {
     assert!(!cfg.paths.dist.exists(), "dist still exists");
 }
 
+/// `clean` is the recovery command, so it must not depend on the artifact most
+/// likely to be broken: a config syntax error used to block the very wipe that
+/// would let you start over.
+#[test]
+fn clean_falls_back_to_the_defaults_when_the_config_does_not_parse() {
+    let sb = Site::new();
+    sb.write("config.kdl", "site \"T\"\nthis is not { valid kdl\n");
+    sb.write("public/index.html", "<html></html>");
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "clean",
+        "--yes",
+    ]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!sb.path("public").exists(), "default dist still exists");
+}
+
+/// A config that is missing entirely still fails: sweeping `public` and
+/// `.baudelaire` out of whatever directory you happened to be standing in is
+/// not a recovery.
+#[test]
+fn clean_still_refuses_a_missing_config() {
+    let sb = Site::new();
+    sb.write("public/index.html", "<html></html>");
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "clean",
+        "--yes",
+    ]);
+    assert!(!out.status.success(), "expected a failure");
+    assert!(sb.path("public").exists(), "swept without a project");
+}
+
+/// `new` writes the file even when the project cannot be opened. The two things
+/// it loses are conveniences: the next `order` and the collision check.
+#[test]
+fn new_scaffolds_without_a_readable_project() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\ntypst {\n  features \"no-such-feature\"\n}\n",
+    );
+    let out = sb.run(&[
+        "-c",
+        sb.path("config.kdl").to_str().unwrap(),
+        "new",
+        "posts/hello",
+    ]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(sb.path("content/posts/hello.typ").exists(), "no page");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("scaffolding without it"),
+        "stderr: {stderr}"
+    );
+}
+
 /// `--dry-run` names every directory and removes none.
 #[test]
 fn clean_dry_run_reports_without_removing() {

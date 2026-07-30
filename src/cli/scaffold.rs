@@ -280,7 +280,11 @@ pub(crate) struct Draft {
 impl Draft {
     /// Infer everything for the page named by `args`, reading the collection
     /// config and the existing content. Errors if the target already exists.
-    pub(crate) fn plan(args: &NewArgs, config: &Config, project: &Project) -> Result<Self> {
+    ///
+    /// `project` is what makes the existing content readable, and is `None`
+    /// when it could not be opened at all: the ordering and collision hints go
+    /// with it, the page is still written.
+    pub(crate) fn plan(args: &NewArgs, config: &Config, project: Option<&Project>) -> Result<Self> {
         let path = args.target(config);
         if path.exists() {
             return Err(crate::error::ScaffoldError::already_exists(&path).into());
@@ -300,7 +304,9 @@ impl Draft {
             .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
         // Discover once, reused for the next order and the collision check.
         // A discovery failure (e.g. a broken sibling page) must not block `new`.
-        let discovered = crate::content::discover(config, project).unwrap_or_default();
+        let discovered = project
+            .and_then(|project| crate::content::discover(config, project).ok())
+            .unwrap_or_default();
 
         let date = match &args.date {
             Some(input) => Some(Self::parse_date(input)?),

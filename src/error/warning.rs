@@ -23,6 +23,44 @@ pub struct ScaffoldExists {
     pub path: PathBuf,
 }
 
+/// `clean` could not load the config, and swept the built-in directories.
+///
+/// `clean` is the recovery command, so depending on the artifact most likely to
+/// be broken is backwards: a config syntax error used to block the very wipe
+/// that would let you start over. A config that is *missing* stays an error,
+/// since sweeping `public` and `.baudelaire` out of whatever directory you
+/// happened to be standing in is not a recovery.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("could not load the config; cleaning the default directories")]
+#[diagnostic(
+    code(baudelaire::clean::defaults),
+    severity(warning),
+    help("fix the config to sweep the directories it names, or pass explicit targets")
+)]
+pub struct CleanDefaults {
+    #[related]
+    pub errors: Vec<BaudelaireErrorKind>,
+}
+
+/// `new` could not read the existing content, and scaffolded without it.
+///
+/// The inference is a convenience: the next `order` in an ordered collection
+/// and the permalink-collision check. Neither is worth refusing to write a file
+/// over, and one broken sibling page used to be enough to refuse.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("could not read the existing content; scaffolding without it")]
+#[diagnostic(
+    code(baudelaire::scaffold::uninferred),
+    severity(warning),
+    help(
+        "the next `order` and the permalink-collision check are skipped; the page is written either way"
+    )
+)]
+pub struct Uninferred {
+    #[related]
+    pub errors: Vec<BaudelaireErrorKind>,
+}
+
 /// `new` computed a permalink already produced by an existing page.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{} is already produced by {}", Code(.url), Text(.origin))]

@@ -12,7 +12,7 @@ use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
-use crate::error::warning::CleanRefused;
+use crate::error::warning::{CleanDefaults, CleanRefused, Uninferred};
 use crate::error::{
     BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
 };
@@ -447,6 +447,31 @@ impl CleanArgs {
             _ => ui.done("clean"),
         }
         Ok(())
+    }
+
+    /// The config to sweep by, falling back to the built-in paths when the file
+    /// exists and does not load.
+    ///
+    /// A config that is missing entirely stays an error: `clean` would
+    /// otherwise sweep `public` and `.baudelaire` out of whatever directory it
+    /// was run in, which is not a recovery. One that exists and does not parse
+    /// is the case worth recovering from, since `clean` is what you reach for
+    /// when the project is in a state you want gone.
+    fn config(cx: &Cx) -> Result<Config> {
+        match cx.announced("cleaning") {
+            Ok(config) => Ok(config),
+            Err(error) if cx.cli.global.config.exists() => {
+                cx.ui.banner("cleaning");
+                cx.ui.warn(CleanDefaults {
+                    errors: vec![error],
+                });
+                Ok(Config {
+                    root: cx.root.path().to_path_buf(),
+                    ..Config::default()
+                })
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Whether the sweep may go ahead.
@@ -911,9 +936,19 @@ impl Run for NewArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.cli.config()?;
         // A project lets `new` read the existing content: next order in an
-        // ordered collection, and permalink collisions.
-        let project = crate::world::Project::new(&config, crate::engine::Mode::Build)?;
-        scaffold::Draft::plan(self, &config, &project)?.create(cx.ui)
+        // ordered collection, and permalink collisions. Both are conveniences,
+        // so a content tree that cannot be opened costs the inference and warns
+        // rather than refusing to write the file.
+        let project = match crate::world::Project::new(&config, crate::engine::Mode::Build) {
+            Ok(project) => Some(project),
+            Err(error) => {
+                cx.ui.warn(Uninferred {
+                    errors: vec![error],
+                });
+                None
+            }
+        };
+        scaffold::Draft::plan(self, &config, project.as_ref())?.create(cx.ui)
     }
 }
 
@@ -934,7 +969,7 @@ impl Run for DeployArgs {
 
 impl Run for CleanArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let config = cx.announced("cleaning")?;
+        let config = Self::config(cx)?;
         self.sweep(cx.ui, &config, cx.root.path(), &prompt::Tty)
     }
 }
