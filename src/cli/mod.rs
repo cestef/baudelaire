@@ -13,7 +13,9 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
 use crate::error::warning::CleanRefused;
-use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result, StrictWarnings};
+use crate::error::{
+    BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
+};
 use crate::ui::{Level, Ui};
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
@@ -521,12 +523,12 @@ pub struct InitArgs {
     #[arg(long, help_heading = group::PROJECT)]
     pub no_sample: bool,
 
-    /// Skip the prompt and set up version control (default: git).
+    /// Take the default answer to every prompt instead of asking.
     #[arg(short = 'y', long)]
     pub yes: bool,
     // The accepted values are not spelled out: `value_enum` already lists them
     // from [`scaffold::Vcs`] itself, so a new variant documents itself.
-    /// Set up this version-control system (implies `--yes`).
+    /// Set up this version-control system without asking.
     #[arg(long, value_enum)]
     pub vcs: Option<scaffold::Vcs>,
 }
@@ -866,8 +868,15 @@ impl Run for CleanArgs {
 
 impl Run for InitArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
+        // The two globals `init` cannot honour: it writes the config every other
+        // command reads, so `--config` names the file to write rather than one
+        // to read, and there is no profile to select in a project that does not
+        // exist yet. Both used to be accepted and ignored.
+        if cx.cli.global.profile.is_some() {
+            return Err(ScaffoldError::Profile.into());
+        }
         cx.ui.banner("init");
-        scaffold::init(cx.ui, cx.root, self)
+        scaffold::init(cx.ui, cx.root, self, &cx.cli.global.config)
     }
 }
 

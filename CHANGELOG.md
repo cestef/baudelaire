@@ -41,6 +41,12 @@ chores are visible in the git history and change nothing for a site.
   production build. Now `--no-drafts` does it. Passing both halves, the last one
   wins.
 
+- **init**: `-y` no longer sets up version control. It means one thing now,
+  "take the default answer to every prompt", so the flag a script reaches for to
+  silence the prompts stops leaving a git repository behind. Naming `--vcs` is
+  how you ask for one: `baudelaire init -y --vcs git` restores the old
+  behaviour.
+
 - **announce**: Announcing is behind a default-on `announce` cargo feature. No
   change to a normal build; a `--no-default-features` (slim) binary loses the
   `announce` command and stops emitting the standard.site verification
@@ -119,6 +125,15 @@ chores are visible in the git history and change nothing for a site.
 - **config**: `content { index }` rejects a filename. It names a stem, so the
   documented `index "index.typ"` matched no page: the site built green with
   nothing at `/`.
+- **init**: `--config` and `--profile` stop being accepted and ignored.
+  `--config` now names the config file to scaffold, so
+  `init --config site.kdl` writes one every later command finds under the same
+  flag; a path rather than a bare filename is refused, since `paths { }`
+  resolves against the working directory and a nested config would name a
+  content tree outside its own project. `--profile` is refused outright.
+  Separately, `--vcs` stops claiming to imply `--yes`: it skipped only the
+  version-control prompt, so a scripted `init --vcs git` still blocked on
+  "Author".
 - **mime**: `.jfif` and `.jpe` are served as JPEG, and extensions match
   regardless of case. The optimizer and the MIME table kept separate lists, so a
   file optimized as a JPEG was served as `application/octet-stream`; `Photo.PNG`

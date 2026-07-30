@@ -95,14 +95,15 @@ impl Config {
 /// the flags (prompting for what they left out, when there is a terminal to
 /// prompt at), write the files the flags did not exclude, and optionally
 /// initialize a repository.
-pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs) -> Result<()> {
-    // Both selections are resolved before anything is prompted for or written,
+pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
+    // Every selection is resolved before anything is prompted for or written,
     // so a mistyped name fails on the spot rather than half a scaffold in.
     let template = Template::find(&args.template)?;
     let extras = Extra::resolve(&args.with)?;
+    let config = templates::File::config_at(config)?;
     let interactive = !args.yes && std::io::stdin().is_terminal();
     let (target, details) = Details::gather(args, root, interactive)?;
-    let repo = Repo::wanted(args.yes, interactive, args.vcs)?;
+    let repo = Repo::wanted(interactive, args.vcs)?;
     if interactive {
         ui.blank();
     }
@@ -112,11 +113,14 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs) -> Result<()> {
         if (args.theme.is_some() && file.themed()) || (args.no_sample && file.sample()) {
             continue;
         }
-        let body = match file.is_config() {
-            true => details.config(&file.body, args.theme.as_deref(), &extras),
-            false => file.body,
+        let (rel, body) = match file.is_config() {
+            true => (
+                config.clone(),
+                details.config(&file.body, args.theme.as_deref(), &extras),
+            ),
+            false => (file.rel, file.body),
         };
-        scaffold = scaffold.file(file.rel, body);
+        scaffold = scaffold.file(rel, body);
     }
     scaffold.apply(ui)?;
 
@@ -543,16 +547,19 @@ impl<'a> Repo<'a> {
         Self { root, vcs }
     }
 
-    /// Which VCS to set up, if any. An explicit `--vcs` wins; `yes` takes the
-    /// default (git) without asking; otherwise ask, but only when the session is
-    /// `interactive` (decided once, in `init`); piped or CI input defaults to
-    /// none, so a scaffold never blocks nor creates a repo unbidden.
-    fn wanted(yes: bool, interactive: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
+    /// Which VCS to set up, if any. An explicit `--vcs` wins; otherwise ask,
+    /// but only when the session is `interactive` (decided once, in `init`);
+    /// piped or CI input sets up nothing, so a scaffold never blocks nor
+    /// creates a repo unbidden.
+    ///
+    /// `--yes` means only "do not prompt". It used to also create a git
+    /// repository, so the one flag every script reaches for to silence the
+    /// prompts wrote a repository nobody asked for, and its help line ("skip the
+    /// prompt and set up version control") was doing two jobs at once. Naming
+    /// `--vcs` is now the only way to ask.
+    fn wanted(interactive: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
         if explicit.is_some() {
             return Ok(explicit);
-        }
-        if yes {
-            return Ok(Some(Vcs::Git));
         }
         if !interactive {
             return Ok(None);
@@ -796,6 +803,22 @@ pub(super) mod templates {
             self.rel == Path::new(Self::CONFIG)
         }
 
+        /// Where the scaffolded config lands: whatever the global `--config`
+        /// names, so a project initialized under one name is one every later
+        /// command finds under the same flag. The flag used to be accepted and
+        /// ignored, writing `config.kdl` and reporting success.
+        ///
+        /// Only a bare filename can serve: a `paths { }` entry resolves against
+        /// the working directory rather than against the config file, so a
+        /// config nested a directory down would name a content tree outside its
+        /// own project.
+        pub fn config_at(path: &Path) -> crate::error::Result<PathBuf> {
+            if path.file_name().is_none_or(|name| name != path.as_os_str()) {
+                return Err(crate::error::ScaffoldError::config_path(path).into());
+            }
+            Ok(path.to_path_buf())
+        }
+
         /// Whether a `--theme` package already supplies this file, in which case
         /// scaffolding a copy would shadow it on the very first build.
         pub fn themed(&self) -> bool {
@@ -903,6 +926,21 @@ pub(super) mod templates {
                         .unwrap_or_else(|e| panic!("`{}` profile `{name}`: {e}", template.name));
                 }
             }
+        }
+
+        /// `--config` names the file `init` writes, and only a bare name can:
+        /// a nested one would leave every `paths { }` entry pointing outside
+        /// the project it was scaffolded into.
+        #[test]
+        fn the_scaffolded_config_takes_a_name_not_a_path() {
+            use std::path::Path;
+            assert_eq!(
+                File::config_at(Path::new("site.kdl")).unwrap(),
+                Path::new("site.kdl")
+            );
+            assert!(File::config_at(Path::new("conf/site.kdl")).is_err());
+            assert!(File::config_at(Path::new("/etc/site.kdl")).is_err());
+            assert!(File::config_at(Path::new("../site.kdl")).is_err());
         }
 
         /// Every template ships a home page and a template to render it with,
@@ -1018,6 +1056,24 @@ pub(super) mod templates {
                 "dangling {{site"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod repo_tests {
+    use super::{Repo, Vcs};
+
+    /// A non-interactive scaffold sets up nothing unless `--vcs` names it.
+    /// `--yes` used to mean git as well as "do not prompt", so the flag scripts
+    /// reach for to silence the prompts left a repository behind.
+    #[test]
+    fn only_an_explicit_vcs_sets_one_up_without_a_prompt() {
+        assert_eq!(Repo::wanted(false, None).unwrap(), None);
+        assert_eq!(Repo::wanted(false, Some(Vcs::Git)).unwrap(), Some(Vcs::Git));
+        assert_eq!(
+            Repo::wanted(true, Some(Vcs::Jujutsu)).unwrap(),
+            Some(Vcs::Jujutsu)
+        );
     }
 }
 

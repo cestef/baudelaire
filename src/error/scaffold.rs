@@ -26,6 +26,27 @@ pub enum ScaffoldError {
     #[error("unknown optional feature {}", Code(.name))]
     #[diagnostic(code(baudelaire::scaffold::unknown_extra), help("{help}"))]
     UnknownExtra { name: String, help: String },
+
+    /// `--profile` is global, so it reaches `init` too, and `init` has nothing
+    /// to apply it to. It used to be accepted and ignored: the run reported
+    /// success having done none of what was asked.
+    #[error("{} does not apply to {}", Code("--profile"), Code("baudelaire init"))]
+    #[diagnostic(
+        code(baudelaire::scaffold::profile),
+        help("a profile narrows a config that already exists; `init` writes the first one")
+    )]
+    Profile,
+
+    /// `--config` names where the scaffolded config lands, and only a filename
+    /// can: every `paths { }` entry resolves against the working directory
+    /// rather than against the config file, so a config nested a directory down
+    /// would name a content tree outside the project.
+    #[error("{} names a path, not a filename", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::scaffold::config_path),
+        help("`init` writes the config at the project root; pass a bare name like `site.kdl`")
+    )]
+    ConfigPath { path: String },
 }
 
 impl ScaffoldError {
@@ -57,6 +78,12 @@ impl ScaffoldError {
     pub fn bad_date(input: &str) -> Self {
         Self::BadDate {
             input: input.to_owned(),
+        }
+    }
+
+    pub fn config_path(path: &std::path::Path) -> Self {
+        Self::ConfigPath {
+            path: path.display().to_string(),
         }
     }
 }

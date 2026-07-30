@@ -162,11 +162,22 @@ Four starter shapes ship with the binary, selected with `-t`:
 / #raw("--title <text>"), #raw("--author <name>"), #raw("--url <url>"): Fill the
   config without being prompted.
 / #raw("--lang <code>"): Default language code (default `en`).
-/ #raw("--vcs <git|jujutsu>"): Choose a VCS instead of being prompted.
-/ #raw("-y"): Accept every default non-interactively.
+/ #raw("--vcs <git|jujutsu>"): Set up this VCS without being prompted for one.
+  Naming it is the only way to get a repository without a prompt, so
+  `baudelaire init -y --vcs git` is the scripted spelling.
+/ #raw("-y"): Take the default answer to every prompt instead of asking. On its
+  own it sets up no version control: a run that only wanted to silence the
+  prompts should not leave a repository behind.
 
 Existing files are never overwritten: `init` in a populated directory skips what
 is already there and reports it.
+
+The global `--config` names the file to write, so `init --config site.kdl`
+scaffolds a project whose config every later command finds under the same flag.
+It has to be a bare filename: a `paths { }` entry resolves against the working
+directory, not against the config file, so a config nested a directory down
+would name a content tree outside its own project. `--profile` is refused
+outright, having nothing to narrow in a project that does not exist yet.
 
 === clean
 
