@@ -186,11 +186,74 @@ code {
   color: var(--dim);
 }
 
+/* Highlight palette. Typst bakes its colours inline; `html { highlight }` turns
+   each sentinel from `highlight/palette.tmTheme` into one of these classes, so
+   the colours live here, where the light variant can reach them too. */
+
+:root {
+  --sx-comment: #5f6b74;
+  --sx-string: #9ece6a;
+  --sx-number: #e0af68;
+  --sx-keyword: #bb9af7;
+  --sx-node: #7dcfff;
+  --sx-prop: #c8ccd2;
+  --sx-type: #2ac3de;
+  --sx-punct: #6d7580;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --sx-comment: #6a7280;
+    --sx-string: #3f7d20;
+    --sx-number: #9a6700;
+    --sx-keyword: #7d3fa8;
+    --sx-node: #0b6a8f;
+    --sx-prop: #24282e;
+    --sx-type: #0f766e;
+    --sx-punct: #6a7280;
+  }
+}
+
+.sx-comment {
+  color: var(--sx-comment);
+  font-style: italic;
+}
+.sx-string { color: var(--sx-string); }
+.sx-number { color: var(--sx-number); }
+.sx-keyword { color: var(--sx-keyword); }
+.sx-node { color: var(--sx-node); }
+.sx-prop { color: var(--sx-prop); }
+.sx-type { color: var(--sx-type); }
+.sx-punct { color: var(--sx-punct); }
+
+/* A terminal draws tables with rules, not boxes: dashes for the body, a solid
+   line under the header, and figures in a tabular column. */
+
 table {
   display: block;
   width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
+  margin-block: 1.5rem;
+}
+
+th,
+td {
+  padding: 0.3rem 1.5rem 0.3rem 0;
+  text-align: left;
+  border-bottom: 1px dashed var(--rule);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+thead th {
+  border-bottom: 1px solid var(--rule);
+  color: var(--accent-alt);
+  font-weight: 700;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 /* Listing ----------------------------------------------------------------- */

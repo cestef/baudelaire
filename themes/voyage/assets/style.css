@@ -238,14 +238,94 @@ pre {
 
 code {
   font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
-  font-size: 0.9em;
+  /* Same size as the prose around it. Monospace reads larger at a given size,
+     so `font-size-adjust` matches the x-height instead of shrinking the text. */
+  font-size: 1em;
+  font-size-adjust: ex-height 0.52;
 }
+
+/* Highlight palette. Typst bakes its colours inline; `html { highlight }` turns
+   each sentinel from `highlight/palette.tmTheme` into one of these classes, so
+   the colours live here and follow the toggle. */
+
+:root {
+  --sx-comment: #8a8378;
+  --sx-string: #5f7a33;
+  --sx-number: #97682c;
+  --sx-keyword: #9a4b2f;
+  --sx-node: #6b4fa0;
+  --sx-prop: #3a3730;
+  --sx-type: #2f6f6a;
+  --sx-punct: #8a8378;
+}
+
+:root[data-theme="dark"] {
+  --sx-comment: #9b9186;
+  --sx-string: #b6c46a;
+  --sx-number: #e0b072;
+  --sx-keyword: #e2a08a;
+  --sx-node: #c0a6ee;
+  --sx-prop: #eae7e1;
+  --sx-type: #7fd3c8;
+  --sx-punct: #9b9186;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sx-comment: #9b9186;
+    --sx-string: #b6c46a;
+    --sx-number: #e0b072;
+    --sx-keyword: #e2a08a;
+    --sx-node: #c0a6ee;
+    --sx-prop: #eae7e1;
+    --sx-type: #7fd3c8;
+    --sx-punct: #9b9186;
+  }
+}
+
+.sx-comment {
+  color: var(--sx-comment);
+  font-style: italic;
+}
+.sx-string { color: var(--sx-string); }
+.sx-number { color: var(--sx-number); }
+.sx-keyword { color: var(--sx-keyword); }
+.sx-node { color: var(--sx-node); }
+.sx-prop { color: var(--sx-prop); }
+.sx-type { color: var(--sx-type); }
+.sx-punct { color: var(--sx-punct); }
+
+/* Rules, no boxes: a horizontal line under the header and between rows, the way
+   a printed table sets. */
 
 table {
   display: block;
   width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
+  margin-block: 1.75rem;
+}
+
+th,
+td {
+  padding: 0.55rem 1rem 0.55rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+
+thead th {
+  border-bottom: 2px solid var(--fg);
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+td {
+  font-variant-numeric: tabular-nums;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 /* Listings ---------------------------------------------------------------- */

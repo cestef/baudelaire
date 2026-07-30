@@ -23,8 +23,8 @@ $h(p)$ is unchanged is served from the cache.
 #table(
   columns: 3,
   table.header[Flavor][Binary][Drops],
-  [full], [~40 MiB], [nothing],
-  [slim], [~11 MiB], [fonts, JS, CSS, images, cards],
+  [full], [about 40 MiB], [nothing],
+  [slim], [about 11 MiB], [fonts, JS, CSS, images, cards],
 )
 
 = A list that means something

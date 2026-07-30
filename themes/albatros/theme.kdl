@@ -33,6 +33,21 @@ html {
   meta #true
   // Slug every heading into an id, so a reader can deep-link a section.
   anchors #true
+
+  // Each hex is a sentinel painted by `highlight/palette.tmTheme`, rewritten to
+  // `class="sx-keyword"` and friends. Without this block the colours stay
+  // inline and the sentinels reach the page as themselves, so the palette file
+  // and this block belong together.
+  highlight {
+    comment "#e5d001"
+    string  "#e5d002"
+    number  "#e5d003"
+    keyword "#e5d004"
+    node    "#e5d005"
+    prop    "#e5d006"
+    type    "#e5d007"
+    punct   "#e5d008"
+  }
 }
 
 generate {

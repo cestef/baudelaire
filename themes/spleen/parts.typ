@@ -44,7 +44,7 @@
 #let site-footer(page) = h("footer", class: "footer", {
   h("span", class: "rule", "─" * 3)
   h("div", class: "footer-line", {
-    if author not in (none, "") { h("span", "© " + author) }
+    if author not in (none, "") { h("span", author) }
     h("span", class: "feeds", {
       h("a", href: "/rss.xml", "rss")
       h("a", href: "/atom.xml", "atom")
@@ -102,6 +102,14 @@
 #let shell(page, main) = {
   let title = page.frontmatter.at("title", default: site-title)
   set document(title: title)
+
+  // Typst bakes highlight colours inline, where no stylesheet can reach them.
+  // `palette.tmTheme` paints sentinel hexes instead, and the `html { highlight }`
+  // block in `theme.kdl` turns each one into an `sx-*` class, so the palette
+  // lives in `style.css` and follows the reader's light/dark preference. The
+  // path is relative because a theme resolves `/` against the project when it is
+  // a directory and against the package when it is installed.
+  show raw: set raw(theme: "highlight/palette.tmTheme")
 
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
