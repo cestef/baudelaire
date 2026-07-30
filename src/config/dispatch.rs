@@ -46,11 +46,6 @@ impl<T> Block<T> {
         }
         Ok(())
     }
-
-    /// Apply this scope's rules to a node's `{ ... }` children block.
-    pub(super) fn fill(&self, value: &mut T, node: &KdlNode, text: &str) -> Result<()> {
-        self.apply(value, node.block(text)?.nodes(), text)
-    }
 }
 
 /// A config section: a struct filled from a node's `{ .. }` block, whose
@@ -63,16 +58,34 @@ pub(super) trait Section: Sized + 'static {
     const RULES: Block<Self>;
 
     /// Run before a block's keys are applied. A section that is turned on by the
-    /// mere presence of its block flips its `enabled` flag here, so that rule
-    /// lives with the section rather than at every parent mentioning it.
-    fn enable(&mut self) {}
+    /// mere presence of its block flips its `enabled` flag here and returns
+    /// `true`, so that rule lives with the section rather than at every parent
+    /// mentioning it.
+    ///
+    /// The return value is what lets a *bare* node with no `{ }` mean "just turn
+    /// it on": the docs promise that `generate { robots }` enables robots.txt by
+    /// existing, and it used to be a hard `missing_children` error instead.
+    /// Reporting it from the same override that does the enabling is what keeps
+    /// the two from disagreeing.
+    fn enable(&mut self) -> bool {
+        false
+    }
 
     /// Apply a node's `{ .. }` children onto `self`, *filling in place*: a key
     /// the block omits keeps the value it already had, which is what lets a
     /// profile override one key of a section and inherit its siblings.
+    ///
+    /// A node with no block at all is the "presence is the switch" spelling, and
+    /// is accepted only where there is a switch to flip. For a section that
+    /// merely holds settings, a bare `paths` configures nothing and is far more
+    /// likely a forgotten block than an intent, so it still errors.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
-        self.enable();
-        Self::RULES.fill(self, node, text)
+        let switch = self.enable();
+        match node.children() {
+            Some(block) => Self::RULES.apply(self, block.nodes(), text),
+            None if switch => Ok(()),
+            None => Err(ConfigError::missing_children(text, NodeExt::span(node)).into()),
+        }
     }
 
     /// Apply a sequence of nodes onto `self`: the top-level document, or the

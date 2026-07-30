@@ -359,8 +359,9 @@ impl Section for ResponsiveConfig {
         }),
     ]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -458,8 +459,9 @@ impl Section for RobotsConfig {
         Ok(())
     })]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -469,8 +471,9 @@ impl Section for LlmsConfig {
         Ok(())
     })]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -538,8 +541,9 @@ impl Section for CardsConfig {
         }),
     ]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -567,8 +571,9 @@ impl Section for SpaConfig {
         }),
     ]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -590,8 +595,9 @@ impl Section for StandaloneConfig {
         }),
     ]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 
@@ -609,8 +615,9 @@ impl Section for SpeculationConfig {
         }),
     ]);
 
-    fn enable(&mut self) {
+    fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
     }
 }
 

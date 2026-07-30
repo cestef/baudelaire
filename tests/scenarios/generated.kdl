@@ -81,3 +81,73 @@ scenario "llms.txt indexes pages by collection" {
     }
   }
 }
+
+// The docs say a `generate { robots }` or `generate { llms }` block turns the
+// feature on just by existing. It used to be a hard `missing_children` error, so
+// the documented spelling did not parse at all, while `optimize { png }` next
+// door did, because it goes through a different code path.
+scenario "a bare block turns its feature on" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        robots
+        llms
+      }
+      navigation {
+        speculation
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    file "robots.txt" { contains "User-agent: *" }
+    file "llms.txt"
+    file "index.html" { contains "speculationrules" }
+  }
+}
+
+// ...and a bare block is still equivalent to an empty one.
+scenario "a bare block and an empty block agree" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        robots { }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    file "robots.txt" { contains "User-agent: *" }
+  }
+}
+
+// A section that only holds settings has no switch to flip, so a bare node
+// configures nothing. Far more likely a forgotten block than an intent, so it
+// stays an error rather than becoming a silent no-op.
+scenario "a settings-only section still needs its block" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::missing_children" }
+  }
+}
