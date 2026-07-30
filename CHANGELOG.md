@@ -41,6 +41,11 @@ chores are visible in the git history and change nothing for a site.
   production build. Now `--no-drafts` does it. Passing both halves, the last one
   wins.
 
+- **cli**: One name per concept. `announce --password` is `announce --secret`,
+  the same spelling `deploy` uses for the same parameter, and `new --open` is
+  `new --edit`, since `serve --open` opens a browser and the short form was
+  already `-e`. Both old spellings stay as aliases.
+
 - **clean**: The wholesale sweep asks before it removes anything, and refuses
   to answer for itself off a terminal. `clean` with no flag takes the output
   directory and every scrap of local state, announce state included, which is

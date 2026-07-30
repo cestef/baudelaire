@@ -56,9 +56,9 @@ Baudelaire never stores the password in config. It is resolved, in order of
 precedence, from:
 
 ```sh
-# 1. stdin (--password -), so it never appears in the process arguments;
+# 1. stdin (--secret -), so it never appears in the process arguments;
 #    this wins over the environment variable when both are present
-echo "$APP_PASSWORD" | baudelaire announce --password -
+echo "$APP_PASSWORD" | baudelaire announce --secret -
 
 # 2. the BAUDELAIRE_ATPROTO_PASSWORD environment variable - best for CI
 BAUDELAIRE_ATPROTO_PASSWORD="xxxx-xxxx-xxxx-xxxx" baudelaire announce

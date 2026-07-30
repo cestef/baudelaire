@@ -91,7 +91,8 @@ What it infers:
   of a normal build until you finish it; pass `--no-draft` to publish it
   immediately, or build with `--drafts`.
 / #raw("-b, --bundle"): Create `<name>/index.typ` for colocated assets.
-/ #raw("-e, --open"): Open the new file in `$EDITOR`.
+/ #raw("-e, --edit"): Open the new file in `$EDITOR`. (`--open` still works;
+  `serve --open` opens a browser, which is a different thing.)
 
 === deploy
 
@@ -122,8 +123,9 @@ built files (see #link("deploy/overview.typ")[Deploying] for that). Builds first
 reconciles the remote records with your pages. Accepts the
 #link(<build-flags>)[build flags], like `deploy`.
 
-/ #raw("--password <pw>"): `-` reads it from stdin; prefer that or the
-  environment variable over a literal flag.
+/ #raw("--secret <pw>"): The app password. `-` reads it from stdin; prefer that
+  or the environment variable over a literal flag. Spelled the same as
+  `deploy`'s, and `--password` still works.
 / #raw("-y, --yes"): Skip the confirmation prompt.
 / #raw("--dry-run"): Report what a real announce would send and remove, without
   writing. Needs no password: it diffs against the live repository over public

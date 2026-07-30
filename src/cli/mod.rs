@@ -284,8 +284,10 @@ pub struct AnnounceArgs {
     /// Secret (app password / token) for the destination; `-` reads it from
     /// stdin. Prefer stdin, the environment variable, or the interactive prompt:
     /// a literal flag can leak into shell history.
-    #[arg(long)]
-    pub password: Option<String>,
+    // Spelled the same as `deploy`'s: one concept, one name. `--password` stays
+    // as an alias, since that is what the atproto side calls an app password.
+    #[arg(long, alias = "password")]
+    pub secret: Option<String>,
     /// Skip the confirmation prompt.
     #[arg(short = 'y', long)]
     pub yes: bool,
@@ -303,7 +305,7 @@ impl remote::Flags for AnnounceArgs {
         self.yes
     }
     fn secret(&self) -> Option<String> {
-        self.password.clone()
+        self.secret.clone()
     }
 }
 
@@ -564,8 +566,11 @@ pub struct NewArgs {
     pub bundle: bool,
 
     /// Open the new file in `$EDITOR` after creating it.
-    #[arg(short = 'e', long, help_heading = group::CONTENT)]
-    pub open: bool,
+    // `--edit`, not `--open`: `serve --open` opens a browser, and the two are
+    // unrelated. The short form was already `-e`, so the flag's own two names
+    // disagreed about what it was called.
+    #[arg(short = 'e', long, alias = "open", help_heading = group::CONTENT)]
+    pub edit: bool,
 }
 
 /// Arguments for `baudelaire init`.

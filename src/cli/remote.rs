@@ -15,8 +15,7 @@ use crate::ui::Ui;
 pub(crate) trait Flags {
     fn dry_run(&self) -> bool;
     fn yes(&self) -> bool;
-    /// The secret supplied on the command line, under whatever name the
-    /// command spells it (`--secret`, `--password`).
+    /// The secret supplied on the command line.
     fn secret(&self) -> Option<String>;
 }
 

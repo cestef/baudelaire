@@ -274,7 +274,7 @@ pub(crate) struct Draft {
     /// The source of an existing page already producing `permalink`, if any.
     collision: Option<String>,
     /// Whether to open the created file in `$EDITOR`.
-    open: bool,
+    edit: bool,
 }
 
 impl Draft {
@@ -345,7 +345,7 @@ impl Draft {
             is_draft: args.is_draft(),
             permalink,
             collision,
-            open: args.open,
+            edit: args.edit,
         })
     }
 
@@ -373,7 +373,7 @@ impl Draft {
             "→".dimmed(),
             self.permalink.cyan()
         ));
-        if self.open {
+        if self.edit {
             Editor::open(&self.path, ui);
         }
         Ok(())
