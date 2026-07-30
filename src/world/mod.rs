@@ -15,13 +15,12 @@ use typst::{
 mod context;
 pub mod image_rule;
 pub(crate) mod module;
+mod packages;
 
 pub use context::{BuildContext, Mode};
+pub(crate) use packages::Registry;
 
-use typst_kit::{
-    downloader::SystemDownloader, files::FileStore, files::FsRoot, fonts::FontStore,
-    packages::SystemPackages,
-};
+use typst_kit::{files::FileStore, files::FsRoot, fonts::FontStore, packages::SystemPackages};
 
 use module::{Files, ModuleCx};
 
@@ -122,7 +121,7 @@ impl Project {
                 &ModuleCx { context: &tree },
                 &project_root,
                 FsRoot::new(project_root.clone()),
-                SystemPackages::new(SystemDownloader::new(USER_AGENT)),
+                SystemPackages::from(Registry(config.typst.registry.as_deref())),
             ))),
             root: project_root,
             now,

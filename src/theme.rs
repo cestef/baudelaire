@@ -24,11 +24,12 @@
 use std::path::{Path, PathBuf};
 
 use typst::syntax::package::PackageSpec;
-use typst_kit::downloader::SystemDownloader;
 use typst_kit::packages::SystemPackages;
 
+use crate::config::Config;
 use crate::error::{Result, ThemeError};
 use crate::fs::Contained;
+use crate::world::Registry;
 
 /// A resolved theme: where its files are, and how Typst names them.
 #[derive(Debug, Clone)]
@@ -48,24 +49,35 @@ impl Theme {
     const STATIC: &'static str = "static";
     const CONFIG: &'static str = "theme.kdl";
 
+    /// The theme a config names, if it names one: every field the resolution
+    /// reads lives on the config, so the two callers (the config's own theme
+    /// layering, and the engine) cannot disagree about how a spec is read.
+    pub fn of(config: &Config) -> Result<Option<Self>> {
+        config
+            .theme
+            .as_deref()
+            .map(|spec| Self::resolve(spec, &config.root, config.typst.registry.as_deref()))
+            .transpose()
+    }
+
     /// Resolve the configured `theme` value.
     ///
     /// A leading `@` means a package, resolved (and downloaded if needed)
     /// through the package store. Anything else is a directory inside the
     /// project, which is how a theme is developed before it is published.
-    pub fn resolve(theme: &str, project: &Path) -> Result<Self> {
+    fn resolve(theme: &str, project: &Path, registry: Option<&str>) -> Result<Self> {
         match theme.starts_with('@') {
-            true => Self::package(theme),
+            true => Self::package(theme, registry),
             false => Self::directory(theme, project),
         }
     }
 
     /// A published theme, from the package store.
-    fn package(spec: &str) -> Result<Self> {
+    fn package(spec: &str, registry: Option<&str>) -> Result<Self> {
         let parsed: PackageSpec = spec
             .parse()
             .map_err(|why: typst::ecow::EcoString| ThemeError::spec(spec, why))?;
-        let packages = SystemPackages::new(SystemDownloader::new(crate::world::USER_AGENT));
+        let packages = SystemPackages::from(Registry(registry));
         let root = packages
             .obtain(&parsed)
             .map_err(|why| ThemeError::unavailable(spec, why))?;
@@ -145,7 +157,7 @@ mod tests {
         let tmp = project();
         for spec in ["@preview/plume", "@plume", "@preview/plume:x"] {
             assert!(
-                Theme::resolve(spec, tmp.path()).is_err(),
+                Theme::resolve(spec, tmp.path(), None).is_err(),
                 "{spec} should not parse"
             );
         }
@@ -156,7 +168,7 @@ mod tests {
     #[test]
     fn a_directory_theme_imports_by_project_path() {
         let tmp = project();
-        let theme = Theme::resolve("themes/plume", tmp.path()).expect("theme");
+        let theme = Theme::resolve("themes/plume", tmp.path(), None).expect("theme");
         assert_eq!(theme.templates(), "/themes/plume/templates");
         assert_eq!(theme.root(), tmp.path().join("themes/plume"));
     }
@@ -170,7 +182,7 @@ mod tests {
         let tmp = project();
         for path in ["../elsewhere", "/etc/theme", "themes/../../up", "", "."] {
             assert!(
-                Theme::resolve(path, tmp.path()).is_err(),
+                Theme::resolve(path, tmp.path(), None).is_err(),
                 "{path} should be refused"
             );
         }
@@ -179,14 +191,14 @@ mod tests {
     #[test]
     fn a_missing_directory_is_an_error() {
         let tmp = project();
-        assert!(Theme::resolve("themes/absent", tmp.path()).is_err());
+        assert!(Theme::resolve("themes/absent", tmp.path(), None).is_err());
     }
 
     #[test]
     fn template_lookup_sees_only_files_the_theme_has() {
         let tmp = project();
         std::fs::write(tmp.path().join("themes/plume/templates/page.typ"), "").expect("write");
-        let theme = Theme::resolve("themes/plume", tmp.path()).expect("theme");
+        let theme = Theme::resolve("themes/plume", tmp.path(), None).expect("theme");
         assert!(theme.has_template("page.typ"));
         assert!(!theme.has_template("post.typ"));
     }

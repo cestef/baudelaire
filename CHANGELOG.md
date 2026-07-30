@@ -228,6 +228,13 @@ chores are visible in the git history and change nothing for a site.
   not already assumed.
 - **deploy**: The SSH backend is behind a default-on `ssh` cargo feature. It is
   the most expensive thing in the tree after typst and rolldown by crate count.
+- **typst**: `typst { registry }` names a mirror of Typst Universe to download
+  the `preview` namespace from, for a build behind a proxy or on a machine that
+  cannot reach `packages.typst.org`. It covers a page's own `#import` and the
+  site's `theme` alike, since both resolve through one package store; a plaintext
+  URL is refused, as package tarballs are code the build runs. Every other
+  namespace is served from the local package directories exactly as before, so a
+  mirror never changes where an already-installed package comes from.
 
 ### Fixed
 

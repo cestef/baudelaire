@@ -17,6 +17,19 @@ That is a Typst package spec, resolved through the same package store the
 compiler already uses: downloaded once, cached across projects, versioned by the
 registry. There is no second package manager and nothing to vendor.
 
+A build that cannot reach `packages.typst.org` can name a mirror of it, which
+covers the theme and every `@preview` package your pages import:
+
+```kdl
+typst { registry "https://packages.example.net" }
+```
+
+Only the `preview` namespace is ever downloaded. Any other namespace is read
+from the local package directories (`~/.local/share/typst/packages/<namespace>/`
+and the platform equivalents), which is where an unpublished theme can live
+under a name of your own: install it as `@internal/plume:1.0.0` and every
+project on the machine can name it.
+
 == What a theme contains
 
 A theme is laid out like a site, with fixed directory names (your `paths` name

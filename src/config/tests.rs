@@ -158,6 +158,27 @@ fn feature_disable_parses_as_negated_token() {
     );
 }
 
+/// A mirror is stored ready to be joined onto, so the store never builds a
+/// `//preview/..` URL out of a trailing slash the author is entitled to write.
+#[test]
+fn registry_mirror_drops_its_trailing_slash() {
+    let cfg = parse("typst {\n  registry \"https://packages.example.net/\"\n}\n");
+    assert_eq!(
+        cfg.typst.registry.as_deref(),
+        Some("https://packages.example.net")
+    );
+    assert_eq!(Config::default().typst.registry, None);
+}
+
+/// Package tarballs are code the build executes, so a plaintext mirror is
+/// refused exactly like every other URL the config accepts.
+#[test]
+fn err_insecure_registry_rejected() {
+    let err =
+        Config::parse("typst {\n  registry \"http://packages.example.net\"\n}\n").unwrap_err();
+    assert!(err.to_string().contains("https"), "{err}");
+}
+
 #[test]
 fn err_html_feature_removal_rejected() {
     let err = Config::parse("typst {\n  features \"-html\"\n}\n").unwrap_err();

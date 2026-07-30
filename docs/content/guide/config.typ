@@ -183,7 +183,10 @@ Two consequences of the grouping are worth knowing before you write anything:
 / #raw("typst"): Typst compiler settings: `inputs` exposes values to pages as
   `sys.inputs`, and `features` toggles experimental Typst features, `+name` on
   and `-name` off (e.g. `features "+a11y-extras"`). HTML export is always on, so
-  you never list it and `-html` is refused. See
+  you never list it and `-html` is refused. `registry` names a mirror of Typst
+  Universe (`registry "https://packages.example.net"`) for a build that cannot
+  reach `packages.typst.org`; it applies to every `@preview` package the site
+  pulls, imports and #link("../features/build/themes.typ")[theme] alike. See
   #link("../features/build/context.typ")[build metadata].
 / #raw("client"): Build-time constants exposed to client JavaScript through the
   #link("../features/assets/js-modules.typ")[#raw("baudelaire:config")] virtual module.

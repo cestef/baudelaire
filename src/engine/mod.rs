@@ -369,11 +369,7 @@ impl Engine {
         // the broken site that guards against.
         let (config, gaps) = Gate::resolve(config);
         let inert = Inert::resolve(&config);
-        let theme = config
-            .theme
-            .as_deref()
-            .map(|spec| Theme::resolve(spec, &config.root))
-            .transpose()?;
+        let theme = Theme::of(&config)?;
         let project = Project::new(&config, mode)?;
         Ok(Self {
             project,

@@ -224,6 +224,13 @@ pub struct TypstConfig {
     pub features: Vec<String>,
     /// Typst `sys.inputs` entries.
     pub inputs: Vec<(String, String)>,
+    /// A mirror of Typst Universe to download the `preview` namespace from,
+    /// without the trailing slash. `None` is the official registry.
+    ///
+    /// It covers a page's own `#import` and the site's theme alike, since both
+    /// resolve through the same store. Only `preview` is affected: every other
+    /// namespace is served from the local package directories and never fetched.
+    pub registry: Option<String>,
 }
 
 impl Config {
@@ -236,17 +243,27 @@ impl Config {
     ///
     /// `root` is the project directory a directory-theme is resolved against,
     /// passed rather than taken from the process cwd so a caller that has not
-    /// changed into the project (a test, an embedding) resolves correctly.
+    /// changed into the project (a test, an embedding) resolves correctly. It is
+    /// recorded on the returned config, so the theme the engine later resolves
+    /// is the one resolved here.
     pub fn load(text: &str, root: &std::path::Path) -> Result<Self> {
-        let config = Self::parse(text)?;
-        let Some(spec) = config.theme.as_deref() else {
+        let config = Self {
+            root: root.to_path_buf(),
+            ..Self::parse(text)?
+        };
+        let Some(theme) = crate::theme::Theme::of(&config)? else {
             return Ok(config);
         };
-        let theme = crate::theme::Theme::resolve(spec, root)?;
         let Some(defaults) = theme.config() else {
             return Ok(config);
         };
-        let base = Self::parse(&crate::fs::read_to_string(&defaults)?)?;
+        // The project's root, not the theme's default: `theme.kdl` is a floor
+        // for what the site *builds*, and where it is being built is not one of
+        // the things it gets a say in.
+        let base = Self {
+            root: config.root,
+            ..Self::parse(&crate::fs::read_to_string(&defaults)?)?
+        };
         Self::parse_over(base, text)
     }
 

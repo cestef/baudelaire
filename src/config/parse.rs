@@ -707,6 +707,13 @@ impl Section for TypstConfig {
             c.inputs = n.pairs(t)?;
             Ok(())
         }),
+        // Stored without its trailing slash: the store joins `/preview/..` onto
+        // it, and a doubled slash is a 404 from some hosts and a redirect from
+        // others.
+        ("registry", |c, n, t| {
+            c.registry = Some(n.url(t, 0)?.trim_end_matches('/').to_owned());
+            Ok(())
+        }),
     ]);
 }
 
