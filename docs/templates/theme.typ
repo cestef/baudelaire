@@ -127,7 +127,11 @@
         nav-section(title, section)
       }
     }
+    // Root-level pages sit in no section, so `page.sections` never carries
+    // them: anything at `content/*.typ` that belongs in the sidebar is named
+    // here.
     nav-group("More", (
+      ("/themes/", "Themes"),
       ("/blog/", "Blog"),
       ("/tags/", "Tags"),
     ))
