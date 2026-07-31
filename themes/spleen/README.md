@@ -2,7 +2,8 @@
 
 A terminal. Monospace throughout, a prompt for a masthead, nav as commands, and
 a post index laid out like a directory listing. Dark by default; a reader whose
-system asks for light gets light.
+system asks for light gets light. Multilingual sites get an `[en|fr]` switcher,
+plain links like everything else here.
 
 ```kdl
 theme "themes/spleen"
@@ -42,7 +43,7 @@ table:
 languages { fr { strings { reading "min de lecture"; newer "récent"; older "ancien" } } }
 ```
 
-Keys used: `skip`, `reading`, `pagination`, `newer`, `older`.
+Keys used: `skip`, `languages`, `reading`, `pagination`, `newer`, `older`.
 
 ## Overriding it
 

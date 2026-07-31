@@ -1,8 +1,8 @@
-// The dark-mode toggle. The only script this theme ships: the language
-// switcher is plain links, and the colours are custom properties the OS
-// preference already drives until a reader states one of their own.
+// The dark-mode toggle. Nothing else on the page needs script: the layout is
+// grid and the colours are custom properties, so the OS preference drives them
+// until a reader states one of their own here.
 
-const KEY = "voyage-theme";
+const KEY = "paysage-theme";
 const root = document.documentElement;
 
 const stored = localStorage.getItem(KEY);

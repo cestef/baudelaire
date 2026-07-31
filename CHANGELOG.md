@@ -14,6 +14,20 @@ chores are visible in the git history and change nothing for a site.
 
 ### Breaking
 
+- **themes**: `voyage` is gone, and the shipped set is now one theme per kind of
+  site: `albatros` (a blog), `spleen` (a blog with no JavaScript), `phares`
+  (documentation), `paysage` (a portfolio). Everything voyage did is in
+  `albatros`, which now builds a language switcher from each page's own editions
+  and reads every visible word from the site's string table, so the migration is
+  one line:
+
+  ```kdl
+  theme "themes/albatros"
+  ```
+
+  A site that wants voyage's serif look back can keep its own copy: the last
+  version of it is in the `v0.0.8` tag under `themes/voyage/`.
+
 - **js**: A `baudelaire:pages` row is now the same shape a generated listing
   hands its template: `{ url, label, collection, lang, date, display, note,
   taxonomies, extra }`. `title` was renamed to `label`, and the row gained the
@@ -30,6 +44,19 @@ chores are visible in the git history and change nothing for a site.
   not in it. Like `@baudelaire/sections`, it is written to a file under
   `.baudelaire/` and served from there, so only the templates that import it
   rebuild when the catalogue moves.
+
+- **themes**: `phares`, a documentation theme: a sidebar built from your own
+  `content/` tree, a search palette on `/` or `⌘K`, the page's headings down the
+  right with the section being read marked, prev/next that runs the length of
+  the manual, and a `callout` exported for the asides a manual needs.
+
+- **themes**: `paysage`, a portfolio theme: a landing page with a hero, a work
+  grid built from the page catalogue, and case-study pages with a cover image
+  and a fact row read from each project's own frontmatter.
+
+- **themes**: `albatros` and `spleen` gain a `home.typ` layout that lists a
+  collection's newest pages from the catalogue, so a home page needs no second
+  list to maintain. `spleen` gains a language switcher, still without script.
 
 ### Fixed
 
@@ -53,6 +80,12 @@ chores are visible in the git history and change nothing for a site.
   so does a page that has none of the named elements.
 
 ### Upgrading
+
+A site on `voyage` has to name another theme. `albatros` is the one that
+replaced it, and the switch is a one-line config change plus copying the new
+theme directory in; a site that had overridden voyage's templates keeps those
+files, and they now layer over albatros, which is rarely what you want. Delete
+the overrides you no longer need first.
 
 Client code reading `baudelaire:pages` needs `p.title` renamed to `p.label`.
 

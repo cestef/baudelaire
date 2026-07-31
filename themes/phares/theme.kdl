@@ -1,0 +1,78 @@
+// Config defaults for the phares theme. Every key here is a floor: state it in
+// your own config.kdl and yours wins, nested blocks included.
+//
+// Lists are the exception, and the one thing to watch: declaring
+// `content { collections { .. } }` yourself replaces this whole set rather than
+// adding to it, so copy the block below if you only meant to add a collection.
+
+content {
+  collections {
+    // Pages directly under `content/` (the home page, an about page) keep
+    // their own URLs and only need the layout.
+    _root { template "page.typ" }
+
+    // One collection over everything in a subdirectory, because a manual is one
+    // document: prev/next then runs through every page in reading order rather
+    // than stopping at a directory boundary. The default permalink is
+    // `/{path}/{slug}/`, so `content/guide/install.typ` still publishes at
+    // `/guide/install/` and the sidebar nests by directory as it always did.
+    //
+    // The glob starts at a directory on purpose. A root `index.typ` swept into
+    // a named collection would be read as that directory's bundle index and
+    // publish at `/content/`, so root pages are left where they are.
+    //
+    // Sorting is by `order`, and pages without one tie and fall back to source
+    // path, which is already the order a directory reads in. Number the pages
+    // that need to lead.
+    docs "*/**/*.typ" {
+      sort "order"
+      template "page.typ"
+    }
+  }
+
+  taxonomies {
+    tags listing=#true template="list.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+html {
+  pretty #true
+  meta #true
+  // Slug every heading into an id: the on-page contents links them, and a
+  // reader can deep-link a section.
+  anchors #true
+
+  // Each hex is a sentinel painted by `highlight/palette.tmTheme`, rewritten to
+  // `class="sx-keyword"` and friends. Without this block the colours stay
+  // inline and the sentinels reach the page as themselves, so the palette file
+  // and this block belong together.
+  highlight {
+    comment "#e5d001"
+    string  "#e5d002"
+    number  "#e5d003"
+    keyword "#e5d004"
+    node    "#e5d005"
+    prop    "#e5d006"
+    type    "#e5d007"
+    punct   "#e5d008"
+  }
+}
+
+generate {
+  sitemap #true
+  robots { }
+
+  // The palette this theme's header button opens. `ui` emits a self-mounting
+  // client at `/search.js`; the theme only restyles its `.bd-*` classes.
+  search {
+    formats "json"
+    fields "title" "body" "tags"
+    ui #true
+  }
+
+  llms { }
+}

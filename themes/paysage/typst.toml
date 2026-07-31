@@ -1,0 +1,9 @@
+[package]
+name = "paysage"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["cstef <root@cstef.dev>"]
+license = "MIT"
+description = "A portfolio theme for baudelaire: a landing page, a work grid, and case studies."
+repository = "https://github.com/cestef/baudelaire"
+keywords = ["baudelaire", "theme", "portfolio", "landing", "html"]

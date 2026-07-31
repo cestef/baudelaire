@@ -1,0 +1,67 @@
+// Config defaults for the paysage theme. Every key here is a floor: state it in
+// your own config.kdl and yours wins, nested blocks included.
+//
+// Lists are the exception, and the one thing to watch: declaring
+// `content { collections { .. } }` yourself replaces this whole set rather than
+// adding to it, so copy the block below if you only meant to add a collection.
+
+content {
+  collections {
+    // Pages directly under `content/`: the landing page, an about page, a
+    // contact page. The landing page binds `home.typ` from its own frontmatter.
+    _root { template "page.typ" }
+
+    // The work itself: one file per project under `content/work/`, newest
+    // first, each a case study. The index at `/work/` is the same grid the
+    // landing page shows, so a visitor who scrolls past the selection lands
+    // somewhere that looks like where they came from.
+    work "work/**/*.typ" {
+      sort "date"
+      reverse #true
+      template "project.typ"
+      paginate {
+        template "list.typ"
+        size 12
+      }
+    }
+  }
+
+  taxonomies {
+    // What a project was built with, indexed: `/stack/rust/` lists every
+    // project that names it. A portfolio's tags are its tools.
+    stack listing=#true template="list.typ"
+  }
+}
+
+links {
+  style "clean"
+}
+
+html {
+  pretty #true
+  meta #true
+  anchors #true
+
+  // Each hex is a sentinel painted by `highlight/palette.tmTheme`, rewritten to
+  // `class="sx-keyword"` and friends. Without this block the colours stay
+  // inline and the sentinels reach the page as themselves, so the palette file
+  // and this block belong together.
+  highlight {
+    comment "#e5d001"
+    string  "#e5d002"
+    number  "#e5d003"
+    keyword "#e5d004"
+    node    "#e5d005"
+    prop    "#e5d006"
+    type    "#e5d007"
+    punct   "#e5d008"
+  }
+}
+
+generate {
+  sitemap #true
+  feed {
+    formats "rss"
+    limit 20
+  }
+}

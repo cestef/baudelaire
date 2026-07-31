@@ -7,15 +7,35 @@
 
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, title as site-title
+#import "@baudelaire/site:0.1.0": author, languages, title as site-title
 
 // A UI label, from the site's own string table when it has one, so a
 // non-English site translates the theme through config rather than by editing
 // it.
 #let label(page, key, fallback) = page.strings.at(key, default: fallback)
 
-// `posts` -> `posts`, but a path segment, which is what the prompt shows.
-#let path-of(page) = page.frontmatter.at("title", default: "")
+// The page's other editions, as a shell would offer them: `[en|fr]`, the
+// current one marked. Built from `page.translations`, so it offers only the
+// editions this page has and disappears on a single-language site. Plain
+// links, like everything else here: the theme ships no script.
+#let lang-switch(page) = if page.translations.len() > 1 {
+  h("nav", class: "langs", aria-label: label(page, "languages", "Languages"), {
+    h("span", class: "bracket", aria-hidden: "true", "[")
+    for edition in page.translations {
+      let active = edition.lang == page.lang
+      h(
+        "a",
+        class: classes("lang", ("active", active)),
+        href: edition.url,
+        hreflang: edition.lang,
+        lang: edition.lang,
+        aria-current: if active { "true" },
+        edition.lang,
+      )
+    }
+    h("span", class: "bracket", aria-hidden: "true", "]")
+  })
+}
 
 // The nav, derived from the build's own view of `content/` rather than from a
 // menu in config: a new top-level directory appears on its own, and one that
@@ -39,6 +59,7 @@
     h("span", class: "cwd", ":~$")
   })
   nav(page)
+  lang-switch(page)
 })
 
 #let site-footer(page) = h("footer", class: "footer", {

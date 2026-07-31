@@ -1,7 +1,8 @@
 # albatros
 
-A centred blog theme: one column at a comfortable measure, the system type
-stack, light and dark, and nothing on screen that a post did not put there.
+A centred blog theme, multilingual out of the box: one column at a comfortable
+measure, the system type stack, light and dark, a language switcher built from
+each page's own editions, and nothing on screen that a post did not put there.
 
 ```kdl
 theme "themes/albatros"
@@ -11,6 +12,8 @@ theme "themes/albatros"
 
 - `page.typ` — a post or page: title, byline (localized date · reading time),
   body, tag chips, prev/next pager.
+- `home.typ` — a page's own words followed by the newest posts, read from the
+  `@baudelaire/pages` catalogue. Bind it with `template: "home.typ"`.
 - `list.typ` — every generated index: the paginated collection index, `/tags/`,
   and each term page.
 - A `posts` collection at `/posts/{slug}/` with a paginated index, a `tags`
@@ -25,27 +28,38 @@ Nothing mandatory beyond `title`. It uses, when present:
 | `date` | byline date, feed date, listing date |
 | `tags` | chips under the post, term pages under `/tags/` |
 | `summary` | one line under the entry in a listing |
+| `collection` | on a `home.typ` page: which collection to list (default `posts`) |
+| `recent` | on a `home.typ` page: how many to list (default 5) |
 
-## Translating it
+## Multiple languages
+
+Declare the languages and write `post.fr.typ` beside `post.typ`. The switcher in
+the header is built from `page.translations`, so it offers only the editions
+that page actually has, and disappears entirely on a single-language site.
 
 Every visible word comes from the site's own string table, so no template needs
 editing to change language:
 
 ```kdl
 languages {
+  en { name "English" }
   fr {
+    name "Français"
     strings {
       reading "min de lecture"
       tags "Étiquettes"
       newer "Plus récent"
       older "Plus ancien"
+      recent "Derniers articles"
+      archive "Tous les articles"
     }
   }
 }
 ```
 
-Keys used: `skip`, `reading`, `tags`, `pagination`, `newer`, `older`. Dates are
-localized by baudelaire itself, from the page's language.
+Keys used: `skip`, `primary`, `theme`, `languages`, `reading`, `tags`,
+`pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`. Dates
+are localized by baudelaire itself, from the page's language.
 
 ## The navigation
 

@@ -1,10 +1,14 @@
-// The pieces both layouts are built from. Kept at the theme root rather than
+// The pieces every layout is built from. Kept at the theme root rather than
 // under `templates/`, so a project file can never shadow it by accident: only
 // `templates/`, `assets/` and `static/` are layered.
+//
+// Every visible word goes through `label`, and every date arrives already
+// localized, so translating this theme is a `strings { }` block in config and
+// never an edit to a file here.
 
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, title as site-title
+#import "@baudelaire/site:0.1.0": author, languages, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
 // and follows the theme toggle. A theme cannot use `svg()`: those paths are
@@ -31,16 +35,29 @@
 
 #let moon = icon("M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z")
 
-// A UI label, from the site's own string table when it has one. Every visible
-// word goes through here, so a French site translates the theme by configuring
-// `languages { fr { strings { .. } } }` rather than by editing it.
+#let globe = icon(
+  "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
+  "M3.6 9h16.8M3.6 15h16.8",
+  "M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z",
+)
+
+// A UI label, from the site's own string table when it has one. Falls back to
+// the English word only when the language declares none.
 #let label(page, key, fallback) = page.strings.at(key, default: fallback)
 
-#let theme-toggle = h(
+// A language's display name from `languages` in config (`Français`). The list
+// is empty on a single-language site, so a lookup that finds nothing falls back
+// to the uppercased code.
+#let lang-name(code) = {
+  let declared = languages.filter(entry => entry.code == code)
+  if declared.len() > 0 { declared.first().name } else { upper(code) }
+}
+
+#let theme-toggle(page) = h(
   "button",
-  class: "toggle",
+  class: "icon-btn",
   type: "button",
-  aria-label: "Toggle dark mode",
+  aria-label: label(page, "theme", "Toggle dark mode"),
   data-theme-toggle: true,
   {
     h("span", class: "on-light", moon)
@@ -48,16 +65,39 @@
   },
 )
 
+// The language switcher, built from this page's own editions, so a reader never
+// lands on a language switch that changes the subject. `translations` includes
+// the page's own edition, so the active one is marked rather than dropped, and
+// the whole element disappears on a single-language site.
+#let lang-switch(page) = if page.translations.len() > 1 {
+  h("nav", class: "langs", aria-label: label(page, "languages", "Languages"), {
+    h("span", class: "langs-icon", globe)
+    for edition in page.translations {
+      let active = edition.lang == page.lang
+      h(
+        "a",
+        class: classes("lang", ("active", active)),
+        href: edition.url,
+        hreflang: edition.lang,
+        lang: edition.lang,
+        aria-current: if active { "true" },
+        lang-name(edition.lang),
+      )
+    }
+  })
+}
+
 // `posts` -> `Posts`, for a nav built out of directory names.
 #let titlecase(s) = if s == "" { s } else { upper(s.slice(0, count: 1)) + s.slice(1) }
 
 // The top nav, derived from the build's own view of `content/` rather than from
 // a menu in config: a new top-level directory shows up on its own, and one that
-// goes away cannot leave a dead link behind.
+// goes away cannot leave a dead link behind. `sections(lang)` never crosses
+// languages, so a French page's nav links French pages.
 #let top-nav(page) = {
   let entries = sections(page.lang).filter(s => s.pages.len() > 0 or s.children.len() > 0)
   if entries.len() > 0 {
-    h("nav", class: "top-nav", aria-label: "Primary", for s in entries {
+    h("nav", class: "top-nav", aria-label: label(page, "primary", "Primary"), for s in entries {
       h("a", href: "/" + s.id + "/", titlecase(s.id))
     })
   }
@@ -67,11 +107,14 @@
   h("a", class: "skip", href: "#main", label(page, "skip", "Skip to content"))
   h("a", class: "brand", href: "/", site-title)
   top-nav(page)
-  theme-toggle
+  h("div", class: "controls", {
+    lang-switch(page)
+    theme-toggle(page)
+  })
 })
 
 #let site-footer(page) = h("footer", class: "site-footer", {
-  if author not in (none, "") { h("span", author) }
+  h("span", if author not in (none, "") { author } else { site-title })
   h("span", class: "feeds", {
     h("a", href: "/rss.xml", "RSS")
     h("a", href: "/atom.xml", "Atom")
@@ -92,11 +135,51 @@
   }
 }
 
+#let byline(page) = {
+  let date = posted(page.date)
+  let reading = reading-badge(page)
+  if date != none or reading != none {
+    h("p", class: "byline", {
+      date
+      if date != none and reading != none { h("span", class: "sep", aria-hidden: "true", "·") }
+      reading
+    })
+  }
+}
+
 #let chips(page, terms) = if terms.len() > 0 {
   h("nav", class: "chips", aria-label: label(page, "tags", "Tags"), for term in terms {
     h("a", class: "chip", href: "/tags/" + term + "/", "#" + term)
   })
 }
+
+// One row of a page list, from the row shape every list is made of: a generated
+// listing's `page.frontmatter.entries` and the `@baudelaire/pages` catalogue
+// carry the same fields, so this one function renders an index, a term page,
+// and the home page's recent posts.
+#let entry-row(page, entry) = h("li", class: classes("entry", ("dated", entry.date != none)), {
+  h("a", class: "entry-title", href: entry.url, entry.label)
+  let terms = entry.taxonomies.at("tags", default: ())
+  if entry.date != none or entry.note != none or terms.len() > 0 {
+    h("p", class: "entry-meta", {
+      if entry.date != none {
+        h("time", class: "date", datetime: entry.date, entry.display)
+      }
+      if entry.note != none { h("span", class: "count", entry.note) }
+      if terms.len() > 0 {
+        h("span", class: "entry-tags", for term in terms {
+          h("a", class: "chip", href: "/tags/" + term + "/", "#" + term)
+        })
+      }
+    })
+  }
+  let summary = entry.extra.at("summary", default: entry.extra.at("description", default: none))
+  if summary != none { h("p", class: "entry-summary", summary) }
+})
+
+#let entry-list(page, entries) = h("ul", class: "listing", for entry in entries {
+  entry-row(page, entry)
+})
 
 // Prev/next across the collection. On a reverse-dated blog `prev` is the newer
 // post, which is why the labels are neutral.
@@ -105,21 +188,29 @@
   if nav.prev != none or nav.next != none {
     h("nav", class: "pager", aria-label: label(page, "pagination", "Post navigation"), {
       if nav.prev != none {
-        h("a", class: "prev", rel: "prev", href: nav.prev.url, "← " + nav.prev.title)
+        h("a", class: "prev", rel: "prev", href: nav.prev.url, {
+          h("span", class: "pager-label", label(page, "previous", "Previous"))
+          h("span", class: "pager-title", nav.prev.title)
+        })
       } else {
         h("span")
       }
       if nav.next != none {
-        h("a", class: "next", rel: "next", href: nav.next.url, nav.next.title + " →")
+        h("a", class: "next", rel: "next", href: nav.next.url, {
+          h("span", class: "pager-label", label(page, "next", "Next"))
+          h("span", class: "pager-title", nav.next.title)
+        })
       }
     })
   }
 }
 
 // The document shell. typst-html owns `<html>`, `<head>` and `<body>`, so this
-// emits neither; the stylesheet link sits at the top of the body, which
+// emits none of them; the stylesheet link sits at the top of the body, which
 // browsers accept and baudelaire lifts back into the head for a single-file
-// export.
+// export. The `hreflang` alternates a multilingual site needs are baudelaire's
+// own work in the head, so the switcher above is a visible convenience rather
+// than a duplicate of them.
 #let shell(page, main) = {
   let title = page.frontmatter.at("title", default: site-title)
   set document(title: title)

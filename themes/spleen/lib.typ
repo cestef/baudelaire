@@ -6,4 +6,4 @@
 // The layouts themselves are not re-exported: baudelaire loads those from
 // `templates/` by filename, which is what makes them overridable file by file.
 
-#import "parts.typ": label, meta-line, nav, pager, posted, shell
+#import "parts.typ": label, lang-switch, meta-line, nav, pager, posted, shell
