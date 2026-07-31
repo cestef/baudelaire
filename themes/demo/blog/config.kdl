@@ -1,0 +1,57 @@
+// The site behind the blog-theme previews: one set of content built once per
+// theme that reads as a blog (albatros, spleen), so those published sites
+// differ in nothing but the theme.
+//
+// Built from the repository root by `just previews`, because a theme has to sit
+// inside the project root and these live in `themes/`. The recipe appends the
+// one line this file deliberately lacks:
+//
+//   theme "themes/albatros"
+//
+// and builds with `--out docs/public/themes/<name>`. It is appended rather than
+// written out once per theme, and it cannot be a `profiles { }` entry: the theme
+// is resolved when the config loads, before any profile is overlaid, so a theme
+// named in a profile would supply templates and assets but none of its
+// `theme.kdl` defaults.
+//
+// Nothing below declares collections or taxonomies. Each theme's `theme.kdl`
+// supplies those, and a `content { collections }` here would replace that set
+// wholesale rather than adding to it.
+
+site "baudelaire themes"
+author "cstef"
+lang "en"
+
+paths {
+  content "themes/demo/blog/content"
+  // Overridden per theme by `--out`; named here so a bare build still lands
+  // somewhere harmless rather than in the docs site's own root.
+  dist "docs/public/themes/preview"
+}
+
+// Two languages, so the previews show what a multilingual site looks like: the
+// switcher is built from each page's own editions, and every label a theme
+// draws comes from these tables rather than from a template.
+languages {
+  en {
+    name "English"
+  }
+  fr {
+    name "Français"
+    strings {
+      skip "Aller au contenu"
+      reading "min de lecture"
+      tags "Étiquettes"
+      pagination "Pagination"
+      previous "Précédent"
+      next "Suivant"
+      newer "Plus récent"
+      older "Plus ancien"
+      recent "Derniers articles"
+      archive "Tous les articles"
+      languages "Langues"
+      date "{day} {month} {year}"
+      months "janvier" "février" "mars" "avril" "mai" "juin" "juillet" "août" "septembre" "octobre" "novembre" "décembre"
+    }
+  }
+}

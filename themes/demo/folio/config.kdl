@@ -1,0 +1,18 @@
+// The site behind the portfolio-theme preview (paysage): a landing page and a
+// few projects, so the grid has cards and a case study has facts.
+//
+// Built from the repository root by `just previews`, which appends the theme
+// line this file deliberately lacks and overrides `dist` with `--out`. See
+// `themes/demo/blog/config.kdl` for why the theme cannot live in a profile.
+//
+// Nothing below declares collections. The theme's `theme.kdl` supplies those,
+// and a `content { collections }` here would replace that set wholesale.
+
+site "Camille Roux"
+author "Camille Roux"
+lang "en"
+
+paths {
+  content "themes/demo/folio/content"
+  dist "docs/public/themes/preview"
+}
