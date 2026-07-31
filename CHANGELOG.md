@@ -102,6 +102,20 @@ chores are visible in the git history and change nothing for a site.
   Turning it on changes the cache fingerprint, so the first build after is a
   cold one.
 
+- **serve**: Alt-click the preview to open its source. `serve --spans` stamps
+  the pages it serves, and alt-clicking anything on one hands its location to
+  the editor named by `serve { editor "code" "--goto"
+  "{file}:{line}:{column}" }`: the program and each of its arguments as their
+  own word, with `{file}`, `{line}` and `{column}` filled in, run directly and
+  never through a shell. The nearest stamped ancestor wins, so clicking a word
+  in a paragraph opens the paragraph.
+
+  The endpoint only answers the page it served, only opens files inside the
+  project, and only exists while watching. With no `editor` configured it says
+  so in the browser rather than guessing at one; every other refusal (a location
+  that does not parse, a file outside the project, a command that will not run)
+  arrives the same way.
+
 ### Fixed
 
 - **build**: A sidecar file deleted from `dist` comes back. A page's HTML is

@@ -285,6 +285,10 @@ impl Default for ServeConfig {
             watch: true,
             include: Vec::new(),
             exclude: Vec::new(),
+            // No guess: launching a program is the author's instruction, and
+            // `$EDITOR` is as likely to be a terminal editor with no terminal
+            // to appear in.
+            editor: Vec::new(),
         }
     }
 }

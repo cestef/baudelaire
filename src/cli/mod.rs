@@ -277,6 +277,13 @@ pub struct ServeArgs {
     pub watch: bool,
     #[arg(long, overrides_with = "watch", hide = true)]
     pub no_watch: bool,
+
+    /// Stamp each element with the source it came from, so alt-clicking the
+    /// preview opens that line in `serve { editor }` (`html { spans }`).
+    #[arg(long, overrides_with = "no_spans", help_heading = group::SERVER)]
+    pub spans: bool,
+    #[arg(long, overrides_with = "spans", hide = true)]
+    pub no_spans: bool,
 }
 
 /// Arguments for `baudelaire announce`.
@@ -1043,6 +1050,11 @@ impl ServeArgs {
         }
         Toggle::of(self.open, self.no_open).apply(&mut config.serve.open);
         Toggle::of(self.watch, self.no_watch).apply(&mut config.serve.watch);
+        // Into `html`, not `serve`: the stamps are markup, and the cache keys on
+        // the config that shapes markup. A preview-only switch that the
+        // fingerprint could not see would leave a later `build` reusing these
+        // pages with their attributes still on.
+        Toggle::of(self.spans, self.no_spans).apply(&mut config.html.spans);
     }
 }
 

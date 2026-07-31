@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -322,8 +323,9 @@ struct Handler {
     ui: Ui,
 }
 
-/// What the server reads from and what URL prefix it strips: the two things a
-/// config reload can move out from under a running handler.
+/// What the server reads from, what URL prefix it strips, and how it opens a
+/// source file: the config-derived values a reload can move out from under a
+/// running handler.
 #[derive(Clone)]
 struct Route {
     /// The served root, canonical so every per-request traversal check compares
@@ -332,6 +334,9 @@ struct Route {
     /// The path the site is served under, stripped from each request so a
     /// subdirectory-hosted site (`url "https://host/docs"`) previews locally.
     base: String,
+    /// The editor a source-mapped preview hands a location to, absent until
+    /// `serve { editor .. }` names one.
+    open: Option<Open>,
 }
 
 impl Route {
@@ -340,6 +345,7 @@ impl Route {
         Self {
             dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
             base: config.base_path().to_owned(),
+            open: Open::new(config),
         }
     }
 }
@@ -366,13 +372,21 @@ impl Handler {
         }
     }
 
-    /// Serve the live-reload stream, or map the URL to a file under `dist`.
+    /// Serve the live-reload stream, open a source location, or map the URL to
+    /// a file under `dist`.
     fn handle(&self, req: Request) {
         let url = req.url().to_owned();
         if let Some(live) = &self.live
             && url.starts_with(Live::ENDPOINT)
         {
             live.serve(req);
+            return;
+        }
+        // Only while watching: the alt-click handler rides in with the
+        // live-reload client, so a `--no-watch` session serves files and
+        // nothing else.
+        if self.live.is_some() && url.starts_with(Open::ENDPOINT) {
+            self.open(req, &url);
             return;
         }
         match self.resolve(&url) {
@@ -441,6 +455,56 @@ impl Handler {
             .or_else(|| self.within(&route.dist.join(format!("{rel}.html"))))
     }
 
+    /// Hand a stamped source location to the configured editor.
+    ///
+    /// The location was written by this build, into a `data-typst` attribute,
+    /// but it arrives as a request and is checked as one: the browser must be
+    /// calling from the page itself, the location must parse, and the file it
+    /// names must be one of the project's own.
+    fn open(&self, req: Request, url: &str) {
+        let outcome = self.launch(&req, url);
+        let status = outcome.as_ref().err().map_or(200, Unopenable::status);
+        self.ui.request(status, url);
+        // The refusal is the response body: the author is looking at the
+        // browser (they just clicked in it), which is where the injected
+        // client puts this, exactly as it does a failed rebuild.
+        let body = outcome.err().map(|why| why.to_string()).unwrap_or_default();
+        let _ = req.respond(Response::from_string(body).with_status_code(status));
+    }
+
+    fn launch(&self, req: &Request, url: &str) -> Result<(), Unopenable> {
+        if !Self::same_origin(req) {
+            return Err(Unopenable::Foreign);
+        }
+        let raw = Self::query(url, "at").ok_or_else(|| Unopenable::Malformed(url.to_owned()))?;
+        let decoded = Percent::decode(raw);
+        let at = At::parse(&decoded).ok_or(Unopenable::Malformed(decoded.clone()))?;
+        let open = self.route.lock().open.clone();
+        open.ok_or(Unopenable::Unconfigured)?.at(&at)
+    }
+
+    /// Whether the request came from the page this server served.
+    ///
+    /// A browser labels every request: the injected client's `fetch` is
+    /// `same-origin`, and anything another site provokes is not. A client that
+    /// sends no label at all (curl, a test) is allowed through: it is already
+    /// running as the author, which is all this endpoint's authority amounts to.
+    fn same_origin(req: &Request) -> bool {
+        req.headers()
+            .iter()
+            .find(|header| header.field.equiv("Sec-Fetch-Site"))
+            .is_none_or(|header| header.value.as_str() == "same-origin")
+    }
+
+    /// The value of `key` in a URL's query string, undecoded.
+    fn query<'a>(url: &'a str, key: &str) -> Option<&'a str> {
+        url.split_once('?')?
+            .1
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .find_map(|(k, value)| (k == key).then_some(value))
+    }
+
     /// The canonical path of `candidate` when it is an existing file inside
     /// `dist`, else `None`. The single guard against path traversal: both the
     /// root and the candidate are canonical, so `..` segments and symlinks that
@@ -448,6 +512,143 @@ impl Handler {
     fn within(&self, candidate: &Path) -> Option<PathBuf> {
         let canon = crate::fs::canonicalize(candidate).ok()?;
         (canon.starts_with(&self.route.lock().dist) && canon.is_file()).then_some(canon)
+    }
+}
+
+/// The source-opening endpoint's path, a macro for the same reason
+/// [`live_endpoint`] is one: the literal is both matched per request and
+/// `concat!`ed into the client that calls it.
+macro_rules! open_endpoint {
+    () => {
+        "/__baudelaire/open"
+    };
+}
+
+/// A source location as a stamped element spells it: `file:line:column`, the
+/// value [`crate::render`] writes into `data-typst`.
+struct At<'a> {
+    /// Project-relative, as the compiler named the file.
+    file: &'a str,
+    line: u32,
+    column: u32,
+}
+
+impl<'a> At<'a> {
+    /// Parse `file:line:column`. Split from the right, because a path may
+    /// itself contain a colon and the two numbers may not.
+    fn parse(raw: &'a str) -> Option<Self> {
+        let (head, column) = raw.rsplit_once(':')?;
+        let (file, line) = head.rsplit_once(':')?;
+        (!file.is_empty()).then_some(Self {
+            file,
+            line: line.parse().ok()?,
+            column: column.parse().ok()?,
+        })
+    }
+}
+
+/// Opens a source location in the author's editor, for a preview alt-click.
+///
+/// Exists only when `serve { editor .. }` names a command: nothing is guessed
+/// from the environment, and with no command configured the endpoint answers
+/// with what to configure instead of launching something the author did not ask
+/// for.
+#[derive(Clone)]
+struct Open {
+    /// The project root, canonical. Every requested file is resolved against it
+    /// and must stay inside it: the request names a path, and this is what
+    /// keeps it to the site's own sources.
+    root: PathBuf,
+    /// The program, then each of its arguments. Run directly, never through a
+    /// shell, so a path with a space or a semicolon in it is an argument and
+    /// can never be a second command.
+    command: Vec<String>,
+}
+
+impl Open {
+    /// Endpoint the injected client posts a location to.
+    const ENDPOINT: &'static str = open_endpoint!();
+
+    fn new(config: &Config) -> Option<Self> {
+        let root = config.root.clone();
+        (!config.serve.editor.is_empty()).then(|| Self {
+            root: crate::fs::canonicalize(&root).unwrap_or(root),
+            command: config.serve.editor.clone(),
+        })
+    }
+
+    /// Run the editor at `at`, once the file it names is confirmed to be one of
+    /// the project's own.
+    fn at(&self, at: &At<'_>) -> Result<(), Unopenable> {
+        let path = crate::fs::canonicalize(self.root.join(at.file))
+            .ok()
+            .filter(|path| path.starts_with(&self.root) && path.is_file())
+            .ok_or_else(|| Unopenable::Outside(at.file.to_owned()))?;
+        let mut words = self.substituted(&path.display().to_string(), at);
+        let program = words.remove(0);
+        let mut child = Command::new(&program)
+            .args(words)
+            .current_dir(&self.root)
+            // The dev server owns this terminal; an editor writing into it
+            // would land in the middle of the rebuild log.
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|source| Unopenable::Spawn(program.clone(), source))?;
+        // Reaped on its own thread: waiting here would hold the request open
+        // for as long as the editor runs, and not waiting at all leaves a
+        // zombie behind every click.
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(())
+    }
+
+    /// The command with `{file}`, `{line}` and `{column}` filled in. Per word,
+    /// so a value lands inside whatever argument shape an editor wants
+    /// (`+{line}`, `--goto {file}:{line}:{column}`) and never splits into two.
+    fn substituted(&self, file: &str, at: &At<'_>) -> Vec<String> {
+        self.command
+            .iter()
+            .map(|word| {
+                word.replace("{file}", file)
+                    .replace("{line}", &at.line.to_string())
+                    .replace("{column}", &at.column.to_string())
+            })
+            .collect()
+    }
+}
+
+/// Why a source location could not be opened. Its text is the response body, so
+/// it addresses the author at the browser: what to fix, not what failed inside.
+#[derive(thiserror::Error, Debug)]
+enum Unopenable {
+    #[error("refused: this endpoint only answers the page it was served with")]
+    Foreign,
+    #[error(
+        "no editor configured: add `serve {{ editor \"code\" \"--goto\" \"{{file}}:{{line}}:{{column}}\" }}` to config.kdl"
+    )]
+    Unconfigured,
+    #[error("not a source location: {0}")]
+    Malformed(String),
+    #[error("{0} is not a file in this project")]
+    Outside(String),
+    #[error("could not run {0}: {1}")]
+    Spawn(String, std::io::Error),
+}
+
+impl Unopenable {
+    /// The status the refusal answers with: a browser distinguishes them, and
+    /// the client shows the body either way.
+    fn status(&self) -> u16 {
+        match self {
+            Self::Foreign => 403,
+            Self::Unconfigured => 501,
+            Self::Malformed(_) => 400,
+            Self::Outside(_) => 404,
+            Self::Spawn(..) => 500,
+        }
     }
 }
 
@@ -497,6 +698,8 @@ impl Live {
         include_str!("live.js"),
         ")('",
         live_endpoint!(),
+        "', '",
+        open_endpoint!(),
         "');\n</script>\n"
     );
 

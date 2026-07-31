@@ -1669,4 +1669,12 @@ pub struct ServeConfig {
     /// hook writing into a watched directory does not trigger a rebuild loop.
     /// Checked first, so it overrides both the defaults and `include`.
     pub exclude: Vec<String>,
+    /// The command that opens a source location, run when a preview alt-click
+    /// asks for one. The program first, then each argument as its own word,
+    /// with `{file}`, `{line}` and `{column}` substituted per argument: no
+    /// shell, so a path is never re-parsed as a command line.
+    ///
+    /// Empty means no editor, and the preview says so rather than guessing at
+    /// one.
+    pub editor: Vec<String>,
 }

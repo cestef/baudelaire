@@ -8,7 +8,12 @@
 //
 // Named `failed` rather than `error`, because `EventSource` dispatches its own
 // transport errors to `error` listeners and the two would be indistinguishable.
-(endpoint) => {
+//
+// The same client carries the source-mapped preview: alt-click anything the
+// build stamped with a `data-typst` location and the server opens it in the
+// configured editor. Nothing happens on a page built without `html { spans }`,
+// which carries no stamps to find.
+(endpoint, open) => {
   const ID = "__baudelaire-overlay";
 
   const clear = () => document.getElementById(ID)?.remove();
@@ -36,6 +41,25 @@
     overlay.addEventListener("click", clear);
     document.body.append(overlay);
   };
+
+  // Alt-click, because it is the one modifier no element already claims: a
+  // plain click follows links, and ctrl/cmd/shift open them elsewhere. The
+  // nearest stamped ancestor wins, so clicking a word inside a paragraph asks
+  // for the paragraph when the word itself was not an element of its own.
+  document.addEventListener("click", (event) => {
+    if (!event.altKey) return;
+    const target = event.target.closest?.("[data-typst]");
+    if (!target) return;
+    // The click was for the editor: a link must not also navigate, and a
+    // selection must not be left behind.
+    event.preventDefault();
+    const at = encodeURIComponent(target.getAttribute("data-typst"));
+    fetch(`${open}?at=${at}`)
+      // The server answers a refusal in plain text (no editor configured, a
+      // file outside the project), which belongs on screen where the click was.
+      .then((response) => (response.ok ? null : response.text().then(show)))
+      .catch((error) => show(`could not reach the dev server: ${error}`));
+  });
 
   const stream = new EventSource(endpoint);
   // A rebuild that succeeded: the reload replaces the whole document, overlay

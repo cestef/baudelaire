@@ -995,5 +995,29 @@ impl Section for ServeConfig {
             c.exclude = n.words(t)?;
             Ok(())
         }),
+        // The program and its arguments, each its own word: the command is run
+        // directly, never through a shell, so a whole command line in one
+        // string would name a program that does not exist. Caught here, where
+        // the span points at what the author wrote, rather than as a spawn
+        // failure on the first alt-click.
+        ("editor", |c, n, t| {
+            let span = NodeExt::span(n);
+            let words = n.words(t)?;
+            if let [only] = words.as_slice()
+                && only.split_whitespace().count() > 1
+            {
+                return Err(ConfigError::unknown_value(
+                    t,
+                    only,
+                    markup!(
+                        "give the program and each argument as its own word, like `editor \"code\" \"--goto\" \"{{file}}:{{line}}:{{column}}\"`"
+                    ),
+                    span,
+                )
+                .into());
+            }
+            c.editor = words;
+            Ok(())
+        }),
     ]);
 }

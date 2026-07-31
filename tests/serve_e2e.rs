@@ -392,3 +392,92 @@ fn a_failed_rebuild_pushes_its_diagnostic_to_the_stream() {
     });
     assert!(pushed, "no failure event pushed");
 }
+
+/// The source-mapped preview, end to end: `serve --spans` stamps every element
+/// with where it was written, and the endpoint the alt-click handler calls
+/// hands that location to the configured editor.
+#[test]
+fn alt_click_opens_the_stamped_location_in_the_editor() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        // The "editor" is a shell that records what it was handed: the program
+        // and each argument are separate words, so this is an ordinary command,
+        // not a command line the server had to parse.
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
+         serve {\n  open #false\n  editor \"sh\" \"-c\" \"echo {file}:{line}:{column} > opened.txt\"\n}",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nA paragraph.",
+    );
+    let srv = Serve::start(&t, &["--spans"]);
+
+    let (code, body) = srv.get("/");
+    assert_eq!(code, 200);
+    assert!(
+        body.contains("data-typst=\"content/index.typ:2:1\""),
+        "page carries no source stamp: {body}"
+    );
+
+    let (code, body) = srv.get("/__baudelaire/open?at=content/index.typ:2:1");
+    assert_eq!(code, 200, "{body}");
+    // The editor runs on its own, so the file it writes appears a moment later.
+    let opened = (0..40)
+        .find_map(|_| {
+            std::thread::sleep(Duration::from_millis(50));
+            t.exists("opened.txt").then(|| t.read("opened.txt"))
+        })
+        .expect("the editor command never ran");
+    assert!(
+        opened.trim().ends_with("content/index.typ:2:1"),
+        "editor got {opened}"
+    );
+}
+
+/// The location arrives as a request, so it is checked as one: a path that
+/// leaves the project is refused, and an unconfigured editor says what to
+/// configure rather than failing silently.
+#[test]
+fn the_open_endpoint_refuses_what_it_cannot_open() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
+         serve {\n  open #false\n  editor \"sh\" \"-c\" \"echo {file} > opened.txt\"\n}",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nA paragraph.",
+    );
+    let srv = Serve::start(&t, &["--spans"]);
+
+    let (code, _) = srv.get_raw("/__baudelaire/open?at=../../etc/hostname:1:1");
+    assert_eq!(code, 404, "a path outside the project was accepted");
+    let (code, _) = srv.get("/__baudelaire/open?at=content/index.typ");
+    assert_eq!(code, 400, "a location with no line was accepted");
+    assert!(
+        !t.exists("opened.txt"),
+        "a refused location still ran a command"
+    );
+}
+
+/// With no `serve { editor }`, the endpoint answers with what to set instead of
+/// guessing at a program to launch.
+#[test]
+fn the_open_endpoint_says_when_no_editor_is_configured() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nA paragraph.",
+    );
+    let srv = Serve::start(&t, &["--spans"]);
+
+    let (code, body) = srv.get("/__baudelaire/open?at=content/index.typ:2:1");
+    assert_eq!(code, 501, "{body}");
+    assert!(body.contains("editor"), "unhelpful refusal: {body}");
+}
