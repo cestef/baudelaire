@@ -144,9 +144,16 @@ impl Renderer {
 
     /// Run the DOM transform pipeline over a page's document in place: link
     /// resolution (source-path `.typ` links to permalinks) first, then the
-    /// configured transforms. Returns the raw targets of any internal `.typ`
-    /// links that point at a non-existent page.
-    pub fn rewrite(&self, doc: &mut HtmlDocument, page: &Page, config: &Config) -> Rewrite {
+    /// configured transforms. `world` is the one the page compiled in, so a
+    /// transform can resolve the spans its nodes carry. Returns the raw targets
+    /// of any internal `.typ` links that point at a non-existent page.
+    pub fn rewrite(
+        &self,
+        doc: &mut HtmlDocument,
+        page: &Page,
+        config: &Config,
+        world: &crate::world::PageWorld,
+    ) -> Rewrite {
         let mut cx = Cx {
             config,
             page,
@@ -154,6 +161,7 @@ impl Renderer {
             assets: &self.assets,
             srcsets: &self.srcsets,
             root: &self.root,
+            world,
             found: Rewrite::default(),
         };
         self.transforms.apply(doc, &mut cx);

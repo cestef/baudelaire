@@ -86,6 +86,9 @@ impl Default for HtmlConfig {
             // of what it already says.
             jsonld: false,
             footnotes: Footnotes::default(),
+            // opt-in: source spans are scaffolding for whoever is writing the
+            // page, and every reader of the published one would pay for them.
+            spans: false,
         }
     }
 }

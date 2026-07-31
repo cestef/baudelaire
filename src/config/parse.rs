@@ -474,6 +474,10 @@ impl Section for HtmlConfig {
             c.jsonld = n.boolean(t, 0)?;
             Ok(())
         }),
+        ("spans", |c, n, t| {
+            c.spans = n.boolean(t, 0)?;
+            Ok(())
+        }),
         // A list of element names, tried in order. Each is checked here, where
         // the span points at the word the author wrote: an unwritable name would
         // otherwise fail silently at render, as an element the page never has.

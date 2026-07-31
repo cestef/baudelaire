@@ -882,7 +882,9 @@ impl Engine {
         let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
         })?;
-        let mut rewrite = pass.renderer.rewrite(&mut doc, page, &self.config);
+        let mut rewrite = pass
+            .renderer
+            .rewrite(&mut doc, page, &self.config, world.inner());
         // An icon that could not be inlined leaves an empty `<svg>` in the DOM,
         // so the page cannot be shipped: fail on the first one.
         // Only the first is reported: the files are independent, and stopping

@@ -19,6 +19,7 @@ mod meta;
 mod outbound;
 mod rewrite;
 mod sources;
+mod spans;
 mod speculation;
 #[cfg(feature = "announce")]
 mod standard;
@@ -47,6 +48,7 @@ use meta::Meta;
 use outbound::Outbound;
 use rewrite::Links;
 use sources::Sources;
+use spans::Spans;
 use speculation::Speculation;
 #[cfg(feature = "announce")]
 use standard::Verify;
@@ -65,6 +67,9 @@ pub(super) struct Cx<'a> {
     /// Project root, so the externalize and svg transforms resolve a marker's
     /// project-relative path to the source file on disk.
     pub root: &'a std::path::Path,
+    /// The world this page compiled in, so a transform can ask what a node's
+    /// span points at: the source files, as the compiler read them.
+    pub world: &'a crate::world::PageWorld,
     /// What the pipeline has found so far. This is the value the caller gets
     /// back, accumulated in place rather than copied out field by field.
     pub found: super::Rewrite,
@@ -290,6 +295,11 @@ impl Transforms {
             // left them.
             Box::new(Footnotes),
             Box::new(Highlight),
+            // After the passes that move authored elements around, before the
+            // ones that synthesize elements of our own: an element is stamped
+            // where it ends up, and only what the author actually wrote carries
+            // a location at all.
+            Box::new(Spans),
             Box::new(Meta),
             Box::new(Speculation),
             Box::new(Outbound),

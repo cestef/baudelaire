@@ -89,6 +89,19 @@ chores are visible in the git history and change nothing for a site.
   binds changes, is added, removed or reordered, and when its template changes.
   The `book` and `docs` starter shapes scaffold a `templates/book.typ`.
 
+- **html**: Source-mapped output. `html { spans #true }` stamps every element
+  with the `file:line:column` the compiler says it came from, as
+  `data-typst="content/post.typ:12:1"`. Typst carries a span on every node it
+  emits and the typed DOM hands it through, so the location is the compiler's,
+  not a guess: an inline `#emph` names its own column, and what a layout emitted
+  names the template rather than the page. Elements baudelaire synthesizes (the
+  meta tags, an inlined icon's innards) carry none, and neither does anything
+  from a package.
+
+  Off by default, and meant for a preview session rather than a published site.
+  Turning it on changes the cache fingerprint, so the first build after is a
+  cold one.
+
 ### Fixed
 
 - **build**: A sidecar file deleted from `dist` comes back. A page's HTML is

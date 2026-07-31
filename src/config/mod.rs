@@ -933,6 +933,17 @@ pub struct HtmlConfig {
     pub jsonld: bool,
     /// Where a page's footnotes are moved to.
     pub footnotes: Footnotes,
+    /// Stamp every element with the `file:line:column` it was authored at, as
+    /// `data-typst`. What a source-mapped preview reads to jump from a rendered
+    /// element back to the Typst that produced it.
+    ///
+    /// Opt-in, and off in a published build: the attributes are for the author,
+    /// not the reader. `serve --spans` turns them on for a preview session.
+    /// Deliberately a config field rather than a `serve`-only flag: `serve`
+    /// settings are excluded from the cache fingerprint, so a mode-derived
+    /// stamp would leave a `build` reusing a served page's markup, attributes
+    /// and all.
+    pub spans: bool,
 }
 
 /// The elements a page's footnote list is moved into, most specific first.

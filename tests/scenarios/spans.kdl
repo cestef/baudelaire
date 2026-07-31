@@ -1,0 +1,71 @@
+// Source-mapped output: `html { spans #true }` stamps every element with the
+// `file:line:column` the compiler says it came from, which is what a preview
+// reads to jump from a rendered element back to the Typst that wrote it.
+//
+// Off by default: the attributes are scaffolding for the author, and a
+// published page would carry one on every element.
+
+scenario "spans stamp each element with the source it came from" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html { spans #true }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("main", body)
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+
+      = A heading
+
+      A paragraph with #emph[emphasis].
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      // The content's own elements, at the line and column they were written
+      // at, one-based as an editor counts them.
+      contains #"data-typst="content/note.typ:3:1""#
+      contains #"data-typst="content/note.typ:5:1""#
+      // Inline elements too, so the location is as precise as the span is.
+      contains #"<em data-typst="content/note.typ:5:19">"#
+      // What the layout emitted names the template, not the page: an element
+      // is stamped with the file that actually wrote it.
+      contains #"<main data-typst="templates/page.typ:2:3">"#
+      // Nothing we synthesized carries one: the meta tags have no source.
+      missing #"<meta charset="utf-8" data-typst"#
+    }
+  }
+}
+
+scenario "no spans without asking for them" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note",)
+
+      A paragraph.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      missing "data-typst"
+    }
+  }
+}
