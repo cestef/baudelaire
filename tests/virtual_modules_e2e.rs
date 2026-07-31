@@ -103,7 +103,10 @@ fn pages_module_lists_authored_content() {
         "#let frontmatter = (title: \"Hello Post\", date: datetime(year: 2026, month: 7, day: 14), tags: (\"rust\",))\nx",
     );
     let js = bundle(&site);
+    // One row is the shape a listing entry and the Typst catalogue carry, so a
+    // page's title arrives as `label` and its own frontmatter as `extra`.
     assert!(js.contains("Hello Post"), "title inlined: {js}");
+    assert!(js.contains("label"), "listing row shape: {js}");
     assert!(js.contains("2026-07-14"), "iso date inlined: {js}");
     assert!(js.contains("rust"), "taxonomy inlined: {js}");
 }

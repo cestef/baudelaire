@@ -4,7 +4,7 @@ use crate::config::{Config, Permalink};
 use crate::content::cache::DiscoveryCache;
 use crate::content::discovery::ROOT;
 use crate::content::stem::Stem;
-use crate::content::{Frontmatter, Slug};
+use crate::content::{Frontmatter, Slug, Strings};
 use crate::error::{ContentError, Result};
 use crate::world::Project;
 
@@ -390,6 +390,49 @@ impl Page {
             .strip_prefix(&format!("{}/", self.lang))
             .unwrap_or(&self.id.0)
             .to_owned()
+    }
+
+    /// The site's authored pages as catalogue rows, keyed by language code and
+    /// in the site's own page order (collection order, then each collection's
+    /// sort).
+    ///
+    /// The single answer to "which pages does a catalogue contain": generated
+    /// listings are left out (a listing of listings is noise), and so is
+    /// anything [`Page::listed`] excludes. `@baudelaire/pages` serves one
+    /// language's rows, `baudelaire:pages` serves them all flattened, and
+    /// neither decides membership for itself.
+    pub fn catalogue(
+        pages: &[Page],
+        config: &Config,
+    ) -> std::collections::BTreeMap<String, Vec<crate::codegen::Value>> {
+        let mut out: std::collections::BTreeMap<String, Vec<crate::codegen::Value>> =
+            std::collections::BTreeMap::new();
+        // Every built language is a key, so a template asking for one that has
+        // no pages yet reads an empty array rather than failing.
+        for lang in config.langs() {
+            out.entry(lang.to_owned()).or_default();
+        }
+        for page in pages
+            .iter()
+            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.listed(config))
+        {
+            out.entry(page.lang.clone())
+                .or_default()
+                .push(page.entry(config));
+        }
+        out
+    }
+
+    /// This page as one catalogue row, the value `@baudelaire/pages` and
+    /// `baudelaire:pages` are arrays of.
+    ///
+    /// Deliberately the same [`Item`] a generated listing is built from: a
+    /// theme that can render a collection index can render a home-page grid
+    /// with the same function, because the entries are the same shape.
+    ///
+    /// [`Item`]: crate::content::listing::Item
+    pub fn entry(&self, config: &Config) -> crate::codegen::Value {
+        crate::content::listing::Item::of(self, &Strings::new(config, &self.lang)).value()
     }
 
     /// Whether this page appears in the site's own navigation and indexes: a

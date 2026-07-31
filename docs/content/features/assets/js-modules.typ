@@ -33,8 +33,10 @@ aren't legal identifiers stay reachable through the default export only.
   URL, and a `url(path)` helper that returns the hashed name (or the path
   unchanged if it is not a known asset). Use it to point at a hashed
   #link("assets.typ")[asset] from script code.
-/ #raw("baudelaire:pages"): the content pages, each as `{ url, title,
-  collection, date, taxonomies }`.
+/ #raw("baudelaire:pages"): the content pages, each as `{ url, label,
+  collection, lang, date, display, note, taxonomies, extra }`, the same row a
+  generated listing hands its template and the Typst
+  #link("../build/typst-modules.typ")[`@baudelaire/pages`] catalogue serves.
 / #raw("baudelaire:sections"): the tree of content directories as
   `{ id, pages: [...], children: [...] }` nodes, what templates get as
   the `sections(lang)` Typst binding. `children` nests subdirectories, so recurse it for the whole

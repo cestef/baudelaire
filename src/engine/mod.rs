@@ -527,7 +527,9 @@ impl Engine {
     /// first compile, including in a fresh checkout where nothing has run yet.
     fn prepare<'a>(&'a self, pages: &'a [Page]) -> Result<Prepare<'a>> {
         let prepare = Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages);
-        prepare.tree_source().write(self.project.root())?;
+        for file in prepare.generated() {
+            file.write(self.project.root())?;
+        }
         Ok(prepare)
     }
 

@@ -12,6 +12,25 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Breaking
+
+- **js**: A `baudelaire:pages` row is now the same shape a generated listing
+  hands its template: `{ url, label, collection, lang, date, display, note,
+  taxonomies, extra }`. `title` was renamed to `label`, and the row gained the
+  localized `display` date and the page's own remaining frontmatter as `extra`.
+  In client code, `p.title` becomes `p.label`; nothing else moved.
+
+### Added
+
+- **typst**: `@baudelaire/pages`, the site's page catalogue as a Typst module.
+  `pages(lang)` returns one row per authored page of that language, in the site's
+  own order, in the same shape a listing's `entries` carry, so the card
+  component a theme writes for its collection index also renders a home-page
+  grid or a portfolio's work grid. Generated listings and the not-found page are
+  not in it. Like `@baudelaire/sections`, it is written to a file under
+  `.baudelaire/` and served from there, so only the templates that import it
+  rebuild when the catalogue moves.
+
 ### Fixed
 
 - **content**: The not-found page is no longer part of the site's own
@@ -34,6 +53,8 @@ chores are visible in the git history and change nothing for a site.
   so does a page that has none of the named elements.
 
 ### Upgrading
+
+Client code reading `baudelaire:pages` needs `p.title` renamed to `p.label`.
 
 Footnotes moved. A page with a layout now renders its note list inside the
 layout's `<article>` (or `<main>`), where it used to sit after everything else

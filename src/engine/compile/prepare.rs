@@ -7,10 +7,10 @@
 //! that read it and the cache stays correct, which is why they are built once
 //! for the whole site rather than per page.
 //!
-//! The section tree is the deliberate exception: it names every page on the
-//! site, so as wrapper text it would tie every page's fingerprint to every
-//! other page's title and URL. It goes to [`Sections`] instead, and reaches
-//! templates as a file they import.
+//! The section tree and the page catalogue are the deliberate exceptions: each
+//! names every page on the site, so as wrapper text they would tie every page's
+//! fingerprint to every other page's title and URL. They go to [`Generated`]
+//! instead, and reach templates as files they import.
 //!
 //! [`Layout`] renders the text; this decides what goes into it.
 
@@ -25,9 +25,10 @@ use crate::error::Result;
 use crate::graph::Hash;
 use crate::theme::Theme;
 use crate::world::Project;
+use crate::world::module;
 
+use super::generated::Generated;
 use super::layout::{Bind, Body, Context, Layout};
-use super::sections::Sections;
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
 /// typst will compile, and that text's fingerprint, before the costly parse
@@ -44,7 +45,7 @@ pub(in crate::engine) struct Prepare<'a> {
     theme: Option<&'a Theme>,
     pages: &'a [Page],
     /// One section tree per built language. Not wrapper text: the tree reaches
-    /// templates as a file ([`Sections`]) and the JS bundler as a value, and
+    /// templates as a file ([`Generated`]) and the JS bundler as a value, and
     /// putting it in the wrapper would make every page's fingerprint depend on
     /// every other page's title and URL.
     trees: BTreeMap<String, Value>,
@@ -75,9 +76,23 @@ impl<'a> Prepare<'a> {
         Self { trees, ..base }
     }
 
-    /// The site tree as the Typst source templates import, ready to write.
-    pub(in crate::engine) fn tree_source(&self) -> Sections {
-        Sections::new(self.trees.clone())
+    /// The files templates import, ready to write: the section tree and the
+    /// page catalogue.
+    ///
+    /// One per file-backed module, as an array sized by that registry, so a
+    /// module added there without a table to write it fails to compile rather
+    /// than resolving to a file nothing produces.
+    pub(in crate::engine) fn generated(&self) -> [Generated; module::FILES.len()] {
+        [
+            Generated::new(module::SECTIONS, self.trees.clone()),
+            Generated::new(
+                module::PAGES,
+                Page::catalogue(self.pages, self.config)
+                    .into_iter()
+                    .map(|(lang, rows)| (lang, Value::array(rows)))
+                    .collect(),
+            ),
+        ]
     }
 
     /// The compile input for a page: its (possibly synthetic) source and its
@@ -139,7 +154,7 @@ impl<'a> Prepare<'a> {
         Ok((id, text, fingerprint))
     }
 
-    /// One language's [`Section`] tree as a value: written out by [`Sections`]
+    /// One language's [`Section`] tree as a value: written out by [`Generated`]
     /// for that language's templates to import (the single source a site nav is
     /// built from, so it can't drift from the pages) and reused by the
     /// `baudelaire:sections` JS module. Each node is

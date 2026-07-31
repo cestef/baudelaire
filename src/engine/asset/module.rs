@@ -245,29 +245,18 @@ impl Module for Assets {
     }
 }
 
-/// `baudelaire:pages`: the authored content pages as `{ url, title, collection,
-/// date, taxonomies }`, for client nav, related-posts, and prefetch.
+/// `baudelaire:pages`: the authored content pages as `{ url, label,
+/// collection, lang, date, display, note, taxonomies, extra }`, for client
+/// nav, related-posts, and prefetch.
+///
+/// One row is [`Page::entry`], the same value a generated listing's entries and
+/// the Typst `@baudelaire/pages` catalogue are built from, so the shape a theme
+/// learns once holds everywhere.
 struct Pages;
 
 impl Module for Pages {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        let pages = cx
-            .pages
-            .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.listed(cx.config))
-            .map(|page| {
-                Value::dict([
-                    ("url", Value::str(&page.permalink)),
-                    ("title", Value::str(page.title())),
-                    ("collection", Value::str(&page.collection)),
-                    ("lang", Value::str(&page.lang)),
-                    (
-                        "date",
-                        Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
-                    ),
-                    ("taxonomies", page.taxonomies()),
-                ])
-            });
+        let pages = Page::catalogue(cx.pages, cx.config).into_values().flatten();
         vec![("baudelaire:pages".into(), Esm::value(&Value::array(pages)))]
     }
 }

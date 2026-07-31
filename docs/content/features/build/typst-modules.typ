@@ -9,9 +9,10 @@ Baudelaire serves a small set of Typst modules under the `@baudelaire`
 namespace. Nothing is downloaded: the compiler asks for the package, and
 baudelaire answers it directly.
 
-There are three, all at version `0.1.0`:
+There are four, all at version `0.1.0`:
 #raw("@baudelaire/html") for markup, #raw("@baudelaire/site") for the site's
-identity, and #raw("@baudelaire/sections") for its page tree.
+identity, #raw("@baudelaire/sections") for its page tree, and
+#raw("@baudelaire/pages") for its page catalogue.
 
 ```typ
 #import "@baudelaire/html:0.1.0": h, classes
@@ -171,13 +172,45 @@ single-language site too) and returns that language's tree. Each node is
 `(id, pages, children)`; see #link("../content/navigation.typ")[navigation] for
 the shape and the ordering rules.
 
-This one differs from the other two in a way worth knowing. Its content depends
+This one differs from `html` and `site` in a way worth knowing. Its content depends
 on every page in the site, so serving it from memory would make every page
 depend on every other page's title and URL, and one rename would recompile
 everything. Baudelaire writes it to a file under `.baudelaire/` instead and
 serves the module from there, so Typst records the import as an ordinary file
 dependency and only the templates that actually import it rebuild when the tree
 moves.
+
+== #raw("@baudelaire/pages")
+
+Every authored page of one language, as rows a template can filter and render:
+a home page that shows the three most recent posts, a portfolio grid, a related
+list, an archive.
+
+```typ
+#import "@baudelaire/pages:0.1.0": pages
+
+#let recent(page) = {
+  let posts = pages(page.lang).filter(p => p.collection == "posts")
+  for entry in posts.slice(0, calc.min(3, posts.len())) {
+    link(entry.url)[#entry.label]
+  }
+}
+```
+
+A row is the same shape a generated listing hands its template as
+`page.frontmatter.entries`: `url`, `label`, `collection`, `lang`, `date` (ISO)
+and `display` (localized), `note`, `taxonomies`, and `extra`, the page's own
+remaining frontmatter. That is the point of the shape being shared: the card
+component a theme writes for its collection index renders a home-page grid
+unchanged.
+
+Generated listings are not in the catalogue (a listing of listings is noise),
+and neither is the not-found page. Pages are in the site's own order:
+collection by collection, each in its collection's sort order.
+
+Like `sections`, this module is written to a file under `.baudelaire/` and
+served from there, for the same reason: it names every page, so only the
+templates that import it rebuild when the catalogue moves.
 
 == Versions
 

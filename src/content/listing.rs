@@ -30,9 +30,20 @@ impl fmt::Display for Titlecase<'_> {
 /// One link row: a labelled link with an optional date (dated collection
 /// entries), an optional trailing note (e.g. a taxonomy member count), and the
 /// source page's extra frontmatter for the template to draw on.
+///
+/// THE page-as-data shape, and not only a listing's: `@baudelaire/pages` and
+/// `baudelaire:pages` both serve arrays of [`Item::value`], so a theme writes
+/// one card component and renders a collection index, a term page, and a
+/// home-page grid with it.
 pub struct Item {
     url: String,
     label: String,
+    /// The collection the page belongs to, for a consumer picking one out of
+    /// the whole catalogue. Empty for a row with no page behind it (a term
+    /// index lists terms, not pages).
+    collection: String,
+    /// The page's language code, empty for the same reason as `collection`.
+    lang: String,
     date: Option<String>,
     /// The same date written the way the page's language writes one, so a
     /// listing can show `30 juillet 2026` while `date` stays the ISO-8601 day a
@@ -50,6 +61,8 @@ impl Item {
         Self {
             url: url.into(),
             label: label.into(),
+            collection: String::new(),
+            lang: String::new(),
             date: None,
             display: None,
             note: None,
@@ -77,11 +90,40 @@ impl Item {
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone())),
         );
-        Self::new(page.permalink.clone(), page.title())
-            .dated(date)
-            .shown(display)
-            .with_taxonomies(page.frontmatter.taxonomies.clone())
-            .extra(extra)
+        Self {
+            collection: page.collection.clone(),
+            lang: page.lang.clone(),
+            ..Self::new(page.permalink.clone(), page.title())
+        }
+        .dated(date)
+        .shown(display)
+        .with_taxonomies(page.frontmatter.taxonomies.clone())
+        .extra(extra)
+    }
+
+    /// This row as a typst [`Value`]: `(url, label, collection, lang, date,
+    /// display, note, taxonomies, extra)`.
+    ///
+    /// The single rendering of a row, so a listing's `entries`, the
+    /// `@baudelaire/pages` catalogue and its JavaScript counterpart cannot
+    /// drift into three shapes a theme has to learn separately.
+    pub fn value(&self) -> Value {
+        Value::dict([
+            ("url", Value::str(&self.url)),
+            ("label", Value::str(&self.label)),
+            ("collection", Value::str(&self.collection)),
+            ("lang", Value::str(&self.lang)),
+            ("date", Value::opt(self.date.clone())),
+            ("display", Value::opt(self.display.clone())),
+            ("note", Value::opt(self.note.clone())),
+            (
+                "taxonomies",
+                Value::dict(self.taxonomies.iter().map(|(name, terms)| {
+                    (name.clone(), Value::array(terms.iter().map(Value::str)))
+                })),
+            ),
+            ("extra", self.extra.clone()),
+        ])
     }
 
     /// Attach the page's taxonomies, exposed to the template as
@@ -233,25 +275,9 @@ impl Listing {
     /// The listing as a typst [`Value`], exposed to a bound template as
     /// `page.frontmatter`: `(title, entries: ((url, label, note), ..), nav)`.
     fn data(&self) -> Value {
-        let entries = self.items.iter().map(|item| {
-            Value::dict([
-                ("url", Value::str(&item.url)),
-                ("label", Value::str(&item.label)),
-                ("date", Value::opt(item.date.clone())),
-                ("display", Value::opt(item.display.clone())),
-                ("note", Value::opt(item.note.clone())),
-                (
-                    "taxonomies",
-                    Value::dict(item.taxonomies.iter().map(|(name, terms)| {
-                        (name.clone(), Value::array(terms.iter().map(Value::str)))
-                    })),
-                ),
-                ("extra", item.extra.clone()),
-            ])
-        });
         Value::dict([
             ("title", Value::str(&self.title)),
-            ("entries", Value::array(entries)),
+            ("entries", Value::array(self.items.iter().map(Item::value))),
             (
                 "nav",
                 Value::dict([

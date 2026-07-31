@@ -107,9 +107,21 @@ fn builtin() -> [Box<dyn Module>; 2] {
     [Box::new(Html), Box::new(Site)]
 }
 
-/// The module whose source the build writes to a file instead of generating
-/// into memory: the site's section tree.
+/// The modules whose source the build writes to a file instead of generating
+/// into memory, because each is derived from the whole page set: the site's
+/// section tree and its page catalogue.
+///
+/// THE list of them: [`Modules::new`] registers exactly these as
+/// [`Entrypoint::File`], and [`crate::engine::compile::Generated`] writes one
+/// file per entry, so a module cannot be served without being written or the
+/// other way round.
+pub(crate) const FILES: [&str; 2] = [SECTIONS, PAGES];
+
+/// The section tree module: `sections(lang)`.
 pub(crate) const SECTIONS: &str = "sections";
+
+/// The page catalogue module: `pages(lang)`.
+pub(crate) const PAGES: &str = "pages";
 
 /// Where a file-backed module's source lives, relative to the project root.
 ///
@@ -152,7 +164,9 @@ impl Modules {
                 )
             })
             .collect();
-        entrypoints.insert(SECTIONS, Entrypoint::File(root.join(generated(SECTIONS))));
+        for name in FILES {
+            entrypoints.insert(name, Entrypoint::File(root.join(generated(name))));
+        }
         Self { entrypoints }
     }
 

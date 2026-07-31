@@ -120,6 +120,51 @@ fn site_identity_is_bound() {
     assert!(html.contains("T|https://example.com|en|none|0"), "{html}");
 }
 
+/// `@baudelaire/pages` hands a template the site's own catalogue, in the same
+/// row shape a generated listing's `entries` carry, so a theme renders a home
+/// grid and a collection index with one function. Generated listings are not in
+/// it: a catalogue of catalogues is noise.
+#[test]
+fn the_page_catalogue_is_bound_per_language() {
+    let site = Site::with(
+        "site \"T\"\nurl \"https://example.com\"\n\
+         content {\n  taxonomies {\n    tags\n  }\n  collections {\n    posts { template \"page.typ\" }\n  }\n}\n",
+    );
+    site.write(
+        "templates/page.typ",
+        r#"
+        #import "@baudelaire/pages:0.1.0": pages
+        #let page(data, body) = [
+          #for entry in pages("en") [
+            #entry.collection/#entry.label/#entry.date/#entry.extra.at("summary", default: "-")/#entry.taxonomies.at("tags", default: ()).len();
+          ]
+        ]
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHi.\n",
+    );
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (\n  title: \"Hello\",\n  date: datetime(year: 2026, month: 7, day: 14),\n  tags: (\"rust\",),\n  summary: \"A summary.\",\n)\nx\n",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    // An undated page carries `date: none`, which prints as nothing.
+    assert!(html.contains("_root/Home//-/0"), "root page row: {html}");
+    assert!(
+        html.contains("posts/Hello/2026-07-14/A summary./1"),
+        "post row carries date, extra and taxonomies: {html}"
+    );
+    // The taxonomy index at `/tags/` is a generated listing, so it is absent.
+    assert!(
+        !html.contains("/Tags/"),
+        "generated listings excluded: {html}"
+    );
+}
+
 /// A misspelled module suggests the real one rather than sending the reader off
 /// to install a package that was never meant to exist.
 #[test]
@@ -129,7 +174,7 @@ fn an_unknown_module_suggests_the_nearest() {
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     assert!(err.contains("did you mean `html`?"), "{err}");
     assert!(
-        err.contains("valid modules: `html`, `sections`, `site`"),
+        err.contains("valid modules: `html`, `pages`, `sections`, `site`"),
         "{err}"
     );
 }
