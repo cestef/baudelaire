@@ -468,7 +468,7 @@ impl Handler {
         // The refusal is the response body: the author is looking at the
         // browser (they just clicked in it), which is where the injected
         // client puts this, exactly as it does a failed rebuild.
-        let body = outcome.err().map(|why| why.to_string()).unwrap_or_default();
+        let body = outcome.err().map(|why| why.body()).unwrap_or_default();
         let _ = req.respond(Response::from_string(body).with_status_code(status));
     }
 
@@ -595,7 +595,10 @@ impl Open {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|source| Unopenable::Spawn(program.clone(), source))?;
+            .map_err(|source| Unopenable::Spawn {
+                program: program.clone(),
+                source,
+            })?;
         // Reaped on its own thread: waiting here would hold the request open
         // for as long as the editor runs, and not waiting at all leaves a
         // zombie behind every click.
@@ -626,16 +629,17 @@ impl Open {
 enum Unopenable {
     #[error("refused: this endpoint only answers the page it was served with")]
     Foreign,
-    #[error(
-        "no editor configured: add `serve {{ editor \"code\" \"--goto\" \"{{file}}:{{line}}:{{column}}\" }}` to config.kdl"
-    )]
+    #[error("no editor configured")]
     Unconfigured,
     #[error("not a source location: {0}")]
     Malformed(String),
     #[error("{0} is not a file in this project")]
     Outside(String),
-    #[error("could not run {0}: {1}")]
-    Spawn(String, std::io::Error),
+    #[error("could not run {program}: {source}")]
+    Spawn {
+        program: String,
+        source: std::io::Error,
+    },
 }
 
 impl Unopenable {
@@ -647,8 +651,41 @@ impl Unopenable {
             Self::Unconfigured => 501,
             Self::Malformed(_) => 400,
             Self::Outside(_) => 404,
-            Self::Spawn(..) => 500,
+            Self::Spawn { .. } => 500,
         }
+    }
+
+    /// What to do about it, when there is something to do. A spawn failure is
+    /// the one worth guessing at: an editor the server cannot find is almost
+    /// always one that is not installed, or not on the `PATH` this process
+    /// inherited (a desktop-launched terminal often has a shorter one).
+    fn help(&self) -> Option<&'static str> {
+        match self {
+            Self::Foreign => None,
+            Self::Unconfigured => Some(
+                "add `serve { editor \"code\" \"--goto\" \"{file}:{line}:{column}\" }` to config.kdl",
+            ),
+            Self::Malformed(_) => Some("a stamped element reads `file:line:column`"),
+            Self::Outside(_) => Some("only files under the project root can be opened"),
+            Self::Spawn { source, .. } => match source.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Some("is it installed, and on the PATH this dev server inherited?")
+                }
+                _ => None,
+            },
+        }
+    }
+
+    /// The response body, in the shape a diagnostic has: a marked headline and
+    /// a `help:` line. The injected client lays a refusal out with the same
+    /// renderer it lays a failed rebuild out with, so one shape here means one
+    /// presentation there rather than a special case per message.
+    fn body(&self) -> String {
+        let mut text = format!("× {self}");
+        if let Some(help) = self.help() {
+            text.push_str(&format!("\nhelp: {help}"));
+        }
+        text
     }
 }
 
@@ -689,18 +726,37 @@ impl Live {
     /// bound on how long a closed connection lingers before it is reaped.
     const HEARTBEAT: Duration = Duration::from_secs(10);
 
-    /// Client script appended to served HTML: reloads on a successful rebuild,
-    /// and overlays the diagnostic when one fails. The script is a lambda so the
-    /// endpoint literal reaches it through the same `concat!` that keeps
-    /// [`Live::ENDPOINT`] and the client in agreement.
+    /// Client script appended to served HTML.
+    ///
+    /// One file per piece, composed here: the DOM helpers, the diagnostic
+    /// renderer, the panel a message is shown in, the reload stream with its
+    /// status dot, and the alt-click that opens a stamped element's source.
+    /// Each is a lambda, so the block
+    /// scope below is all they share and the endpoint literals reach them
+    /// through the same `concat!` that keeps [`Live::ENDPOINT`] and
+    /// [`Open::ENDPOINT`] in agreement with the client that calls them.
     const SCRIPT: &'static str = concat!(
-        "\n<script>\n(",
-        include_str!("live.js"),
+        "\n<script>\n{\n",
+        "const dom = (",
+        include_str!("js/dom.js"),
+        ")();\n",
+        "const report = (",
+        include_str!("js/report.js"),
+        ")(dom);\n",
+        "const overlay = (",
+        include_str!("js/overlay.js"),
+        ")(dom, report);\n",
+        "(",
+        include_str!("js/live.js"),
         ")('",
         live_endpoint!(),
-        "', '",
+        "', overlay, dom);\n",
+        "(",
+        include_str!("js/source.js"),
+        ")('",
         open_endpoint!(),
-        "');\n</script>\n"
+        "', overlay);\n",
+        "}\n</script>\n"
     );
 
     /// Raw HTTP response head that opens an SSE stream, plus a comment so the

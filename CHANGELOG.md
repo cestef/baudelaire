@@ -116,6 +116,18 @@ chores are visible in the git history and change nothing for a site.
   that does not parse, a file outside the project, a command that will not run)
   arrives the same way.
 
+- **serve**: A status dot on every served page, and a readable failure overlay.
+  The dot sits in the bottom corner and stands for the live-reload connection:
+  unobtrusive while it is up, marked when the stream drops or a rebuild fails,
+  and clicking it brings the current state (or the last diagnostic) back.
+
+  The diagnostic is now laid out rather than dumped: the error code as a tag,
+  the message as a heading, the source frame as numbered lines with the caret
+  row under them, and the `file:line:column` it names as a button that opens
+  that line in your editor. The overlay no longer closes on any click either, so
+  the text can be selected and copied; Escape, the backdrop, and its own button
+  dismiss it.
+
 ### Fixed
 
 - **build**: A sidecar file deleted from `dist` comes back. A page's HTML is
