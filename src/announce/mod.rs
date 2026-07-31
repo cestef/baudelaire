@@ -99,7 +99,7 @@ fn view(config: &Config) -> Result<SiteView<'_>> {
     let documents = collections
         .iter()
         .flat_map(|c| c.pages.iter())
-        .filter(|page| page.eligible(config))
+        .filter(|page| page.eligible(config) && page.listed(config))
         .map(Doc::from_page)
         .collect();
     Ok(SiteView { config, documents })

@@ -23,7 +23,7 @@ impl SiteMap {
         let mut xml = Xml::document();
         let ns: &[(&str, &str)] = &[("xmlns", Self::XMLNS), ("xmlns:xhtml", Self::XHTML)];
         xml.nest("urlset", ns, |xml| {
-            for page in pages {
+            for page in pages.iter().filter(|p| p.listed(config)) {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
                     if let Some(date) = page.frontmatter.modified() {

@@ -447,42 +447,60 @@ impl Config {
             .join(format!(".{}.staging", self.asset_name()))
     }
 
-    /// The file a URL path is written to under `dist`, honoring clean URLs.
-    /// Single source for the URL-to-file mapping, shared by page output and
-    /// redirect stubs.
+    /// A URL's path segments, joined back with the empty ones dropped.
     ///
     /// `..` segments are dropped here: permalink *templates* are already
     /// rejected at config parse, and this filter owns the defense for every
     /// other URL source (e.g. a frontmatter slug), so no page can ever be
     /// written outside `dist`.
-    pub fn destination(&self, url: &str) -> PathBuf {
-        if url == "/" {
-            return self.paths.dist.join("index.html");
-        }
-        let trimmed = url
-            .split('/')
+    fn segments(url: &str) -> String {
+        url.split('/')
             .filter(|segment| !segment.is_empty() && *segment != "..")
             .collect::<Vec<_>>()
-            .join("/");
-        // 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't
-        // served as not-found. A translated `404.fr.typ` localizes to
-        // `/{lang}/404/` and belongs at `{lang}/404.html` for the same reason.
-        // Only a language scope counts: `/notes/404/` is an ordinary page.
+            .join("/")
+    }
+
+    /// The file `url` is written to when it names the not-found page, and
+    /// `None` for every other URL.
+    ///
+    /// 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't
+    /// served as not-found. A translated `404.fr.typ` localizes to
+    /// `/{lang}/404/` and belongs at `{lang}/404.html` for the same reason.
+    /// Only a language scope counts: `/notes/404/` is an ordinary page.
+    ///
+    /// The single test for "is this the not-found page", shared by
+    /// [`destination`](Config::destination) and [`Page::listed`], so the page
+    /// held out of navigation is exactly the one written where a host looks for
+    /// an unmatched URL.
+    ///
+    /// [`Page::listed`]: crate::content::Page::listed
+    pub fn not_found(&self, url: &str) -> Option<PathBuf> {
+        let trimmed = Self::segments(url);
         let stem = trimmed.strip_suffix(UrlStyle::PAGE).unwrap_or(&trimmed);
         // the not-found page's URL stem, derived so its name is written once
         let not_found = Self::NOT_FOUND
             .strip_suffix(UrlStyle::PAGE)
             .unwrap_or(Self::NOT_FOUND);
         if stem == not_found {
-            return self.paths.dist.join(Self::NOT_FOUND);
+            return Some(self.paths.dist.join(Self::NOT_FOUND));
         }
-        if let Some(scope) = stem
-            .strip_suffix(not_found)
+        stem.strip_suffix(not_found)
             .and_then(|head| head.strip_suffix('/'))
             .filter(|scope| self.languages.iter().any(|(code, _)| code == scope))
-        {
-            return self.paths.dist.join(scope).join(Self::NOT_FOUND);
+            .map(|scope| self.paths.dist.join(scope).join(Self::NOT_FOUND))
+    }
+
+    /// The file a URL path is written to under `dist`, honoring clean URLs.
+    /// Single source for the URL-to-file mapping, shared by page output and
+    /// redirect stubs.
+    pub fn destination(&self, url: &str) -> PathBuf {
+        if url == "/" {
+            return self.paths.dist.join("index.html");
         }
+        if let Some(path) = self.not_found(url) {
+            return path;
+        }
+        let trimmed = Self::segments(url);
         match self.links.style {
             UrlStyle::Clean => self.paths.dist.join(&trimmed).join("index.html"),
             // A flat page URL already names its file; a raw path (a frontmatter

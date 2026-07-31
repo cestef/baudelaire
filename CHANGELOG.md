@@ -14,6 +14,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **content**: The not-found page is no longer part of the site's own
+  navigation. `content/404.typ` used to be an ordinary page everywhere but on
+  disk: it took a slot in its neighbours' prev/next pager (sorting ahead of the
+  home page, since ties break on source path), and published a `/404/` URL that
+  nothing serves to the sitemap, the search index, `llms.txt`, the section tree,
+  feeds, collection and taxonomy listings, `baudelaire:pages`, and announces. It
+  still builds, to a flat `404.html`, and now has no prev/next of its own.
+
 - **html**: A page's footnotes render inside its content instead of below the
   site footer. Typst appends the note list to the end of the document, which on
   a templated page is after everything the layout emitted, so the notes landed

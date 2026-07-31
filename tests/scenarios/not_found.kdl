@@ -1,0 +1,109 @@
+// The not-found page: built like any other page, but never a destination.
+
+scenario "the not-found page is skipped by its neighbours' pagers" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          _root { template "page.typ" }
+        }
+      }
+      """#
+    // Render `page.nav` prev/next as rel-tagged links.
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("html", html.elem("body", {
+        body
+        if page.nav.prev != none { html.elem("a", attrs: (rel: "prev", href: page.nav.prev.url), page.nav.prev.title) }
+        if page.nav.next != none { html.elem("a", attrs: (rel: "next", href: page.nav.next.url), page.nav.next.title) }
+      }))
+      """#
+    // Ties on the default `order` sort break on source path, which puts
+    // `404.typ` ahead of `index.typ`.
+    "content/404.typ" #"""
+      #let frontmatter = (title: "Not found",)
+      nothing here
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      body home
+      """#
+    "content/about.typ" #"""
+      #let frontmatter = (title: "About",)
+      body about
+      """#
+  }
+  expect {
+    ok
+    // `about` sorts first among the two real pages, and has no predecessor.
+    file "about/index.html" {
+      missing #"rel="prev""#
+      contains #"rel="next" href="/""#
+    }
+    file "index.html" {
+      contains #"rel="prev" href="/about/""#
+      missing "Not found"
+    }
+    // Built, flat, and with no neighbours of its own.
+    file "404.html" {
+      contains "nothing here"
+      missing "rel=\"prev\""
+      missing "rel=\"next\""
+    }
+  }
+}
+
+scenario "the not-found page stays out of the site's indexes" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #true
+        llms
+        search {
+            formats "json"
+          }
+        feed {
+            formats "rss"
+          }
+      }
+      """#
+    "content/404.typ" #"""
+      #let frontmatter = (title: "Not found", date: datetime(year: 2026, month: 1, day: 2),)
+      nothing here
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home", date: datetime(year: 2026, month: 1, day: 1),)
+      body home
+      """#
+  }
+  expect {
+    ok
+    file "404.html" { contains "nothing here" }
+    file "sitemap.xml" {
+      contains "<loc>https://example.com/</loc>"
+      missing "404"
+    }
+    file "llms.txt" {
+      contains "Home"
+      missing "Not found"
+    }
+    file "search.json" {
+      contains #""title":"Home""#
+      missing #""/404/""#
+    }
+    file "rss.xml" {
+      contains "<title>Home</title>"
+      missing "Not found"
+    }
+  }
+}

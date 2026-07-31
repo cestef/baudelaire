@@ -79,7 +79,7 @@ impl<'a> Group<'a> {
         config: &'a Config,
     ) -> Self {
         let mut terms: BTreeMap<String, Vec<&Page>> = BTreeMap::new();
-        for page in pages.iter().filter(|p| p.lang == lang) {
+        for page in pages.iter().filter(|p| p.lang == lang && p.listed(config)) {
             if let Some(values) = page.frontmatter.taxonomies.get(&cfg.key) {
                 for term in values {
                     terms.entry(term.clone()).or_default().push(page);

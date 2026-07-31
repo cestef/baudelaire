@@ -47,7 +47,12 @@ impl Processor for Feeds {
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
-            let dated = Page::recent(site.pages, lang, site.config.generate.feed.limit);
+            let dated = Page::recent(
+                site.pages,
+                site.config,
+                lang,
+                site.config.generate.feed.limit,
+            );
             let scope = site.config.scope(lang, "");
             let feed = Feed::new(&base, site.config.title(lang), &dated, &scope);
             Self::emit(site, out, &feed)?;

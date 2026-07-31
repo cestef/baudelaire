@@ -299,10 +299,15 @@ impl Page {
     /// `limit`: authored content carrying a date. The single "recent posts"
     /// selection shared by the syndication feeds and the `baudelaire:feed`
     /// module, so a language's feed lists only its own posts.
-    pub fn recent<'a>(pages: &'a [Page], lang: &str, limit: usize) -> Vec<&'a Page> {
-        let candidates = pages
-            .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.lang == lang);
+    pub fn recent<'a>(
+        pages: &'a [Page],
+        config: &Config,
+        lang: &str,
+        limit: usize,
+    ) -> Vec<&'a Page> {
+        let candidates = pages.iter().filter(|p| {
+            !matches!(p.data, Data::Generated(_)) && p.lang == lang && p.listed(config)
+        });
         Self::newest(candidates, limit)
     }
 
@@ -385,6 +390,19 @@ impl Page {
             .strip_prefix(&format!("{}/", self.lang))
             .unwrap_or(&self.id.0)
             .to_owned()
+    }
+
+    /// Whether this page appears in the site's own navigation and indexes: a
+    /// neighbour's prev/next pager, the section tree, collection and taxonomy
+    /// listings, feeds, the sitemap, the search index, `llms.txt`, announces.
+    ///
+    /// The not-found page is the one exclusion, and builds either way. It is
+    /// what a host answers an unmatched URL with, not a destination: listed, it
+    /// sorted ahead of the home page in the root pager, and published a `/404/`
+    /// URL that nothing serves (the file is a flat `404.html`) to crawlers and
+    /// to search.
+    pub fn listed(&self, config: &Config) -> bool {
+        config.not_found(&self.permalink).is_none()
     }
 
     /// Whether this page builds under the current draft/future config, the

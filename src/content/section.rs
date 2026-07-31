@@ -24,13 +24,15 @@ pub struct Section {
 
 impl Section {
     /// The forest of top-level sections built from the authored pages of one
-    /// language; generated listings (taxonomy and paginated indexes) are
-    /// excluded. Each page is filed under its [`Page::section_path`], so a
-    /// language's nav lists only its own pages.
+    /// language; generated listings (taxonomy and paginated indexes) and pages
+    /// a nav never links ([`Page::listed`]) are excluded. Each page is filed
+    /// under its [`Page::section_path`], so a language's nav lists only its own
+    /// pages.
     pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Section> {
         let mut root = Section::new("");
         for page in pages {
-            if matches!(page.data, Data::Generated(_)) || page.lang != lang {
+            if matches!(page.data, Data::Generated(_)) || page.lang != lang || !page.listed(config)
+            {
                 continue;
             }
             let mut node = &mut root;

@@ -35,7 +35,11 @@ impl Processor for Llms {
         // generated listings carry the scoped collection id.
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
-            let pages: Vec<&Page> = site.pages.iter().filter(|p| p.lang == lang).collect();
+            let pages: Vec<&Page> = site
+                .pages
+                .iter()
+                .filter(|p| p.lang == lang && p.listed(site.config))
+                .collect();
             if pages.is_empty() {
                 continue;
             }

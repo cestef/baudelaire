@@ -181,7 +181,7 @@ impl<'a> Section<'a> {
         let members: Vec<&Page> = collection
             .pages
             .iter()
-            .filter(|p| p.eligible(config) && p.lang == lang)
+            .filter(|p| p.eligible(config) && p.listed(config) && p.lang == lang)
             .collect();
         // A single un-paginated page holds every member; guard against a zero
         // chunk size for an empty collection (`chunks(0)` panics).

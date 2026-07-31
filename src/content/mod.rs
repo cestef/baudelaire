@@ -55,14 +55,20 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
         // Siblings link within a language as well as a collection: prev/next
         // never cross a language boundary. A single-language site is one group.
         for group in Page::groups(&eligible) {
-            for (i, page) in group.iter().enumerate() {
+            // A pager links the pages a reader navigates between, which the
+            // not-found page is not: it neither appears in a neighbour's pager
+            // nor gets neighbours of its own.
+            let (linked, rest): (Vec<&Page>, Vec<&Page>) =
+                group.into_iter().partition(|p| p.listed(config));
+            for (i, page) in linked.iter().enumerate() {
                 let mut page = (*page).clone();
                 page.siblings = page::Siblings {
-                    prev: i.checked_sub(1).map(|j| group[j].sibling()),
-                    next: group.get(i + 1).map(|n| n.sibling()),
+                    prev: i.checked_sub(1).map(|j| linked[j].sibling()),
+                    next: linked.get(i + 1).map(|n| n.sibling()),
                 };
                 pages.push(page);
             }
+            pages.extend(rest.into_iter().cloned());
         }
     }
     // Synthetic pages (taxonomy indexes, paginated listings) derive from the
