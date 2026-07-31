@@ -899,33 +899,53 @@ pub struct HtmlConfig {
     /// already states, while structured data is a claim made *to* a search
     /// engine about what the page is, and that is the author's claim to make.
     pub jsonld: bool,
-    /// Which element a page's footnotes are moved into.
+    /// Where a page's footnotes are moved to.
     pub footnotes: Footnotes,
 }
 
-/// Where a page's footnote list ends up.
+/// The elements a page's footnote list is moved into, most specific first.
 ///
-/// Typst appends it to the end of the document, which is right for a page with
-/// no template and wrong for one with a layout: everything the layout emits is
-/// already in the body, so the notes land after the site footer, outside the
+/// Typst appends the list to the end of the document, which is right for a page
+/// with no template and wrong for one with a layout: everything the layout emits
+/// is already in the body, so the notes land after the site footer, outside the
 /// element that sets the content width.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Footnotes {
-    /// Inside the page's `<article>`, falling back to `<main>`.
-    #[default]
-    Article,
-    /// Inside the page's `<main>`.
-    Main,
-    /// Left where Typst put it, at the end of the document.
-    End,
+///
+/// This is a list rather than one name because a site's layouts rarely agree: a
+/// post wraps its body in `<article>`, a generated index has only `<main>`, and
+/// a bespoke page may have neither. Each name is tried in order and the first
+/// element found wins, so `footnotes "article" "main"` covers all three without
+/// a rule per template. An empty list moves nothing, which is how a site keeps
+/// Typst's own placement.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Footnotes(Vec<String>);
+
+impl Default for Footnotes {
+    /// An article, else the main region: the two elements a layout is most
+    /// likely to have, in the order that puts the notes closest to the text
+    /// they annotate.
+    fn default() -> Self {
+        Self(vec!["article".to_owned(), "main".to_owned()])
+    }
 }
 
-impl Named for Footnotes {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("article", Self::Article),
-        ("main", Self::Main),
-        ("end", Self::End),
-    ];
+impl Footnotes {
+    /// The element names to try, in order.
+    pub fn targets(&self) -> &[String] {
+        &self.0
+    }
+
+    /// Whether the notes stay where Typst put them.
+    pub fn disabled(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// Built from the configured names, which the parser has already checked are
+/// element names the DOM can hold.
+impl From<Vec<String>> for Footnotes {
+    fn from(names: Vec<String>) -> Self {
+        Self(names)
+    }
 }
 
 /// Turn typst's inline highlight colours into CSS classes, so a stylesheet owns

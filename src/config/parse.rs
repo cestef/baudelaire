@@ -14,14 +14,15 @@ use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
-    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, Footnotes,
-    GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig,
-    LlmsConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip,
-    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
-    SearchFormat, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
+    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
+    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
+    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
+    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
     StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
+use crate::ui::markup;
 
 impl Config {
     pub fn parse(text: &str) -> Result<Self> {
@@ -473,8 +474,27 @@ impl Section for HtmlConfig {
             c.jsonld = n.boolean(t, 0)?;
             Ok(())
         }),
+        // A list of element names, tried in order. Each is checked here, where
+        // the span points at the word the author wrote: an unwritable name would
+        // otherwise fail silently at render, as an element the page never has.
         ("footnotes", |c, n, t| {
-            c.footnotes = n.arg(t, 0)?.one::<Footnotes>(t, NodeExt::span(n))?;
+            let span = NodeExt::span(n);
+            let names = n.words(t)?;
+            for name in &names {
+                // The DOM's own judgement of what can be an element, rather than
+                // a second opinion here. Checked at the span the author wrote,
+                // because a name no element can carry would otherwise fail
+                // silently at render, as a container the page simply never has.
+                typst_html::HtmlTag::intern(name).map_err(|why| {
+                    ConfigError::unknown_value(
+                        t,
+                        name,
+                        markup!("name an element your layout emits, like `article`: {}", why),
+                        span,
+                    )
+                })?;
+            }
+            c.footnotes = names.into();
             Ok(())
         }),
         ("highlight", |c, n, t| {

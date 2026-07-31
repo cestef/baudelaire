@@ -18,17 +18,19 @@ chores are visible in the git history and change nothing for a site.
   site footer. Typst appends the note list to the end of the document, which on
   a templated page is after everything the layout emitted, so the notes landed
   outside `<main>` and outside whatever element sets the content width, where no
-  stylesheet could reach them. `html { footnotes }` names the element they
-  belong in: `"article"` (the default, falling back to `<main>`), `"main"`, or
-  `"end"` for the old placement. A layout with neither element keeps its notes
-  exactly where they were.
+  stylesheet could reach them. `html { footnotes "article" "main" }` names the
+  elements they belong in, most specific first: each is tried in turn and the
+  first one the page has wins, so one setting covers a post wrapped in
+  `<article>` and an index that has only `<main>`. Any element a layout emits
+  works, not a fixed set. Naming none leaves the notes where Typst put them, and
+  so does a page that has none of the named elements.
 
 ### Upgrading
 
 Footnotes moved. A page with a layout now renders its note list inside the
 layout's `<article>` (or `<main>`), where it used to sit after everything else
 in the body. A stylesheet that reached for it with `body > [role=doc-endnotes]`
-needs a new selector; `html { footnotes "end" }` restores the old placement.
+needs a new selector; a bare `html { footnotes }` restores the old placement.
 
 ## [0.0.8] - 2026-07-30
 

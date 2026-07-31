@@ -2,8 +2,9 @@
 //
 // Typst appends the list to the end of the document. On a templated page that
 // is after everything the layout emitted, so the notes land below the site
-// footer and outside the element that sets the content width. `html { footnotes }`
-// names the element they belong in instead.
+// footer and outside the element that sets the content width.
+// `html { footnotes "article" "main" }` names the elements they belong in, most
+// specific first; naming none leaves them where Typst put them.
 
 scenario "footnotes move inside the article by default" {
   files {
@@ -99,7 +100,7 @@ scenario "footnotes can be pinned to main even when an article exists" {
   }
 }
 
-scenario "footnotes stay where typst put them under `end`" {
+scenario "any element the layout emits can hold the notes" {
   files {
     "config.kdl" #"""
       site "Test"
@@ -108,7 +109,39 @@ scenario "footnotes stay where typst put them under `end`" {
         dist "public"
         templates "templates"
       }
-      html { footnotes "end" }
+      // Not one of the defaults, and not a name baudelaire knows: the DOM
+      // decides what can be an element, and the layout decides what exists.
+      html { footnotes "footer" }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        html.elem("article", body)
+        html.elem("footer", "site footer")
+      }
+      """#
+    "content/note.typ" #"""
+      #let frontmatter = (title: "Note", template: "page.typ",)
+      Text with a note#footnote[The note.] in it.
+      """#
+  }
+  expect {
+    ok
+    file "note/index.html" {
+      order "</article>" "site footer" #"role="doc-endnotes""# "</footer>"
+    }
+  }
+}
+
+scenario "naming no element leaves them where typst put them" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html { footnotes }
       """#
     "templates/page.typ" #"""
       #let page(page, body) = {
@@ -182,7 +215,7 @@ scenario "an untemplated page is untouched" {
   }
 }
 
-scenario "an unknown placement is refused by name" {
+scenario "a name no element can carry is refused where it is written" {
   files {
     "config.kdl" #"""
       site "Test"
@@ -190,7 +223,7 @@ scenario "an unknown placement is refused by name" {
         content "content"
         dist "public"
       }
-      html { footnotes "sidebar" }
+      html { footnotes "not a tag" }
       """#
     "content/note.typ" #"""
       #let frontmatter = (title: "Note",)

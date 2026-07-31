@@ -9,17 +9,17 @@
 //! set the content width. A reader gets a full-bleed, unstyled list below the
 //! footer, and a stylesheet cannot fix a placement in the DOM.
 //!
-//! `html { footnotes }` names the element they belong in instead: the page's
-//! `article`, its `main`, or `end` to leave them where Typst put them. The
-//! configured element is searched for depth-first, and `article` falls back to
-//! `main`, so a layout that uses only one of the two needs no configuration.
-//! Nothing moves when neither is present: a page whose layout emits no
-//! container has nowhere better to put them, and inventing one would be a
-//! wrapper the author never wrote.
+//! `html { footnotes "article" "main" }` names the elements they belong in, most
+//! specific first: each is searched for depth-first and the first one found
+//! wins, so one setting covers a post wrapped in `<article>` and a generated
+//! index that has only `<main>`. Naming no element at all leaves them where
+//! Typst put them, and so does a page whose layout has none of the named ones:
+//! there is nowhere better to put them, and inventing a wrapper would be markup
+//! the author never wrote.
 
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
-use crate::config::{Config, Footnotes as Placement};
+use crate::config::Config;
 
 use super::{Cx, Transform};
 
@@ -32,13 +32,23 @@ const ENDNOTES: &str = "doc-endnotes";
 pub(super) struct Footnotes;
 
 impl Transform for Footnotes {
-    /// `end` is Typst's own placement, so there is nothing to do.
+    /// Naming no element is Typst's own placement, so there is nothing to do.
     fn enabled(&self, config: &Config) -> bool {
-        config.html.footnotes != Placement::End
+        !config.html.footnotes.disabled()
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let targets = Self::targets(cx.config.html.footnotes);
+        // Interned here rather than at parse: `HtmlTag` is the DOM's type, and
+        // holding one in the config would put typst-html in the config API for
+        // a handful of names. The parser has already checked each one interns.
+        let targets: Vec<HtmlTag> = cx
+            .config
+            .html
+            .footnotes
+            .targets()
+            .iter()
+            .filter_map(|name| HtmlTag::intern(name).ok())
+            .collect();
         let Some(body) = Self::body(doc.root_mut()) else {
             return;
         };
@@ -47,27 +57,13 @@ impl Transform for Footnotes {
         };
         // Put it back exactly where it was if no container wants it: a page that
         // loses its footnotes is worse than one that renders them low.
-        if let Some(orphan) = Self::place(body, targets, notes) {
+        if let Some(orphan) = Self::place(body, &targets, notes) {
             body.children.push(orphan);
         }
     }
 }
 
 impl Footnotes {
-    /// The elements to try, in order. `article` falls back to `main` because a
-    /// layout that wraps its content in only one of the two is the common case,
-    /// and leaving the notes stranded over a missing `article` would be a
-    /// configuration error the author never made.
-    fn targets(placement: Placement) -> &'static [HtmlTag] {
-        match placement {
-            Placement::Article => &[tag::article, tag::main],
-            Placement::Main => &[tag::main],
-            // Unreachable through `enabled`, and cheaper to answer than to
-            // assert: an empty list moves nothing.
-            Placement::End => &[],
-        }
-    }
-
     /// The document's `<body>`, which is where Typst appends the section and the
     /// only subtree this pass touches.
     fn body(root: &mut HtmlElement) -> Option<&mut HtmlElement> {
@@ -115,8 +111,9 @@ impl Footnotes {
 
     /// The first element with `tag` in `element`'s subtree, depth-first.
     ///
-    /// Not [`ElementExt::walk`]: that hands each element to a closure and cannot
-    /// hand one back out, and this pass needs the element itself to append to.
+    /// Not [`super::ElementExt::walk`]: that hands each element to a closure and
+    /// cannot hand one back out, and this pass needs the element itself to
+    /// append to.
     fn find(element: &mut HtmlElement, tag: HtmlTag) -> Option<&mut HtmlElement> {
         if element.tag == tag {
             return Some(element);
