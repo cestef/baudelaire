@@ -41,6 +41,16 @@ the browser. Also accepts the #link(<build-flags>)[build flags].
   `--no-open` suppresses it).
 / #raw("--watch"): Rebuild on change and live-reload (the default; `--no-watch`
   serves once, statically).
+/ #raw("--spans"): Stamp every element with the source it came from, so
+  alt-clicking the preview opens that line in your editor. See
+  #link("../features/build/preview.typ")[source-mapped preview]. This is
+  `html { spans }`, which the cache keys on, so turning it on rebuilds the site
+  once.
+
+A served page carries a small dot in its bottom corner: the live-reload
+connection. It stays out of the way while the stream is up, marks itself when
+the stream drops or a rebuild fails, and clicking it shows the current state, or
+the last diagnostic, in a panel you can read and copy from. Escape dismisses it.
 
 === check
 

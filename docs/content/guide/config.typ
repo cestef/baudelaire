@@ -145,6 +145,11 @@ Two consequences of the grouping are worth knowing before you write anything:
   html { footnotes "aside" }            // any element your layout emits
   html { footnotes }                    // leave them where Typst puts them
   ```
+
+  `spans` stamps every element with the `file:line:column` it was compiled
+  from, which is what a preview reads to jump back to the source. Off by
+  default and meant for a preview session; see
+  #link("../features/build/preview.typ")[source-mapped preview].
 / #raw("links"): Permalink shape and link checking, one subject in one block.
   `style "clean"` gives directory-per-page permalinks, `style "flat"` gives
   `.html` files; `strict` makes a broken internal `.typ` link an error (the
@@ -186,6 +191,12 @@ Two consequences of the grouping are worth knowing before you write anything:
 / #raw("serve"): Dev-server options: `port`, `bind` address, `open` (launch a
   browser), `watch` (rebuild on change, on by default), and the `exclude` /
   `include` watch globs. See #link("../features/assets/hooks.typ")[build hooks].
+  `editor` names the command an alt-click in the preview opens a source
+  location with, the program and each argument as its own word:
+
+  ```kdl
+  serve { editor "code" "--goto" "{file}:{line}:{column}" }
+  ```
 
 === Shipping and cross-cutting
 

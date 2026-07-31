@@ -2,7 +2,7 @@ site "Baudelaire"
 url "https://baudelaire.cstef.dev"
 author "cstef"
 lang "en"
-
+serve { editor "code" "--goto" "{file}:{line}:{column}" }
 // Where things live on disk. `assets` here is the source directory; the
 // top-level `assets` block below is the pipeline that processes it.
 paths {
