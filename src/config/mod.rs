@@ -23,7 +23,7 @@ use crate::error::{ConfigError, Result};
 use crate::mime::ImageFormat;
 
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
-pub use url::{BaseUrl, Percent, UrlStyle};
+pub use url::{BaseUrl, Basename, Percent, UrlStyle};
 
 /// Top-level site configuration.
 #[derive(Debug, Clone)]
@@ -201,6 +201,8 @@ pub struct GenerateConfig {
     pub search: SearchConfig,
     /// Generated social cards.
     pub cards: CardsConfig,
+    /// A PDF of every page, beside its HTML.
+    pub pdf: PdfConfig,
 }
 
 /// How a visitor moves between the built pages. Three independent strategies,
@@ -490,7 +492,19 @@ impl Config {
             .map(|scope| self.paths.dist.join(scope).join(Self::NOT_FOUND))
     }
 
-    /// The file a URL path is written to under `dist`, honoring clean URLs.
+    /// The file a root-relative URL names under `dist`, for a URL that already
+    /// names a file: a card, a page's PDF, a bundled document.
+    ///
+    /// [`Config::destination`] is its counterpart for a *page* URL, which has
+    /// no extension and so has to be given one according to `links { style }`.
+    /// Both exist because the two questions have different answers, and every
+    /// artifact asking either of them asks it here: three of them derived their
+    /// own `dist.join(..)` and nothing tied the answers together.
+    pub fn file(&self, url: &str) -> PathBuf {
+        self.paths.dist.join(url.trim_start_matches('/'))
+    }
+
+    /// The file a page URL is written to under `dist`, honoring clean URLs.
     /// Single source for the URL-to-file mapping, shared by page output and
     /// redirect stubs.
     pub fn destination(&self, url: &str) -> PathBuf {
@@ -1048,20 +1062,7 @@ impl CardsConfig {
     /// renderer writes it, and the prune keeps it, so all three have to derive
     /// it the same way.
     pub fn url(&self, permalink: &str) -> String {
-        let stem = permalink.trim_matches('/');
-        // A flat-URL site's permalink already names a file; `about.html.png`
-        // would be an odd thing to serve.
-        let stem = stem.strip_suffix(".html").unwrap_or(stem);
-        match stem.is_empty() {
-            // the home page, whose permalink is just `/`
-            true => format!("/{}/index.png", Self::DIR),
-            false => format!("/{}/{stem}.png", Self::DIR),
-        }
-    }
-
-    /// Where that URL lands under `dist`.
-    pub fn path(&self, dist: &std::path::Path, permalink: &str) -> PathBuf {
-        dist.join(self.url(permalink).trim_start_matches('/'))
+        format!("/{}/{}.png", Self::DIR, Basename(permalink))
     }
 
     /// Whether cards are actually produced: configured *and* compiled in. A
@@ -1069,6 +1070,99 @@ impl CardsConfig {
     /// images it cannot make would be worse than making none.
     pub fn active(&self) -> bool {
         self.enabled && cfg!(feature = "cards")
+    }
+}
+
+/// What the typesetter writes on paper: `generate { pdf { .. } }`.
+///
+/// The other half of what it can do with the same source: the HTML compile
+/// targets a DOM, these target pages. Two artifacts, switched on separately by
+/// the presence of their own block, because wanting one says nothing about
+/// wanting the other: a manual is bundled and rarely per-page, a blog is the
+/// reverse.
+#[derive(Debug, Clone, Hash, Default)]
+pub struct PdfConfig {
+    /// One PDF per page, beside its HTML.
+    pub pages: PdfPages,
+    /// Many pages as one document.
+    pub bundle: PdfBundle,
+}
+
+impl PdfConfig {
+    /// Whether the site asked for either artifact, for the feature gate: a
+    /// binary without the exporter has to say so whichever one was asked for.
+    pub fn enabled(&self) -> bool {
+        self.pages.enabled || self.bundle.enabled()
+    }
+}
+
+/// One PDF per page, from a paged template. Enabled by the presence of a
+/// `generate { pdf { pages { .. } } }` block.
+///
+/// Like a card it needs its own template, because a layout that emits
+/// `html.elem` produces nothing on the paged target.
+#[derive(Debug, Clone, Hash)]
+pub struct PdfPages {
+    /// Whether to write a PDF per page.
+    pub enabled: bool,
+    /// The paged template file under the templates directory.
+    pub template: String,
+}
+
+impl PdfPages {
+    /// The served URL of a page's PDF: a sibling of the page rather than a file
+    /// inside it, so `/posts/hello/` yields `/posts/hello.pdf` and a browser
+    /// saves it under a name that means something. `/posts/hello/index.pdf`
+    /// would download as `index.pdf`.
+    pub fn url(&self, permalink: &str) -> String {
+        format!("/{}.pdf", Basename(permalink))
+    }
+
+    /// Whether per-page PDFs are actually produced: configured *and* compiled
+    /// in. A build without the `pdf` feature has no exporter, so linking pages
+    /// to a file it cannot make would be worse than making none.
+    pub fn active(&self) -> bool {
+        self.enabled && cfg!(feature = "pdf")
+    }
+}
+
+/// Many pages as one document: a collection bound end to end, the whole site,
+/// or both. Enabled by the presence of a `generate { pdf { bundle { .. } } }`
+/// block naming at least one target.
+///
+/// The paged sibling of `navigation { standalone }`, which does the same thing
+/// for HTML.
+#[derive(Debug, Clone, Hash)]
+pub struct PdfBundle {
+    /// Whether the site wrote a `bundle { }` block at all, as distinct from
+    /// having named a target in one. An empty block asks for nothing, and the
+    /// difference is what lets the build say so instead of writing no file in
+    /// silence.
+    pub present: bool,
+    /// The paged template file under the templates directory. Distinct from the
+    /// per-page one: it is handed every page at once, and what it does with a
+    /// run of documents (a title page, a contents list, running heads) is not
+    /// what a single page's template does.
+    pub template: String,
+    /// Collections to bundle, each written to `/<collection>.pdf`.
+    pub collections: Vec<String>,
+    /// Whether to bundle the whole site, written to `/site.pdf`. Named by the
+    /// same rule its neighbours are: a bundle is `/<target>.pdf`, and inventing
+    /// a second rule so this one could carry a filename bought nothing.
+    pub site: bool,
+}
+
+impl PdfBundle {
+    /// Whether any target was named. A `bundle { }` block that names none asks
+    /// for nothing, which [`crate::engine`]'s inert-setting table reports
+    /// rather than letting the build write nothing in silence.
+    pub fn enabled(&self) -> bool {
+        !self.collections.is_empty() || self.site
+    }
+
+    /// Whether bundles are actually produced: asked for *and* compiled in.
+    pub fn active(&self) -> bool {
+        self.enabled() && cfg!(feature = "pdf")
     }
 }
 

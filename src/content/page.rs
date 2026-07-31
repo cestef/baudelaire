@@ -295,6 +295,16 @@ impl Page {
             && !matches!(self.data, Data::Generated(_))
     }
 
+    /// Whether this page gets a PDF beside its HTML.
+    ///
+    /// In one place for the same reason [`Page::wants_card`] is: the exporter,
+    /// the `<link rel="alternate">` that points at the file, and the prune all
+    /// have to agree. A generated listing is excluded: a tag index is a table of
+    /// contents for a site, not a document anyone prints.
+    pub fn wants_pdf(&self, config: &crate::config::Config) -> bool {
+        config.generate.pdf.pages.active() && !matches!(self.data, Data::Generated(_))
+    }
+
     /// The most recent dated pages of one language, newest first, capped at
     /// `limit`: authored content carrying a date. The single "recent posts"
     /// selection shared by the syndication feeds and the `baudelaire:feed`

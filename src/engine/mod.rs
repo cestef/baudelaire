@@ -27,10 +27,11 @@ use crate::engine::asset::Assets;
 use crate::engine::asset::JsCtx;
 use crate::engine::check::External;
 use crate::engine::check::{CheckedPage, Compiled, Links};
-#[cfg(feature = "cards")]
-use crate::engine::compile::card::Card;
+#[cfg(feature = "pdf")]
+use crate::engine::compile::bundle::Bundle;
 use crate::engine::compile::image::Images;
 use crate::engine::compile::prepare::{Prepare, Prepared};
+use crate::engine::compile::sidecar::{Artifact, Sidecars, Tally};
 use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
 use crate::engine::statics::{Copied, Static};
@@ -55,32 +56,16 @@ pub struct Stats {
     pub cached: usize,
 }
 
-/// What the card renderer produced this build, for the summary. A cache hit
-/// re-renders nothing, so these count only fresh cards; the files from earlier
-/// builds are still in `dist` and still kept.
+/// The bundled documents a build dealt with: the ones it exported, and every
+/// one the site asks for.
+///
+/// The paths are derived from the config and the page set, never from what was
+/// written, for the same reason a sidecar's are: a cached bundle produces no
+/// artifact, and a keep-set built from what this build wrote would sweep it.
 #[derive(Default)]
-struct Cards {
-    count: usize,
-    bytes: u64,
-}
-
-impl Cards {
-    #[cfg(feature = "cards")]
-    fn of(rendered: &[Rendered]) -> Self {
-        rendered
-            .iter()
-            .filter_map(|r| r.card.as_ref())
-            .fold(Self::default(), |acc, card| Self {
-                count: acc.count + 1,
-                bytes: acc.bytes + card.len() as u64,
-            })
-    }
-
-    /// Without the rasterizer nothing renders one, so there is nothing to count.
-    #[cfg(not(feature = "cards"))]
-    fn of(_rendered: &[Rendered]) -> Self {
-        Self::default()
-    }
+struct Bundled {
+    drawn: Vec<Artifact>,
+    paths: Vec<PathBuf>,
 }
 
 /// What the post-build processors emitted, for the summary and the prune.
@@ -167,6 +152,14 @@ const GATES: &[Gate] = &[
         effect: "no social card is rendered",
         rewrites: false,
     },
+    Gate {
+        cargo: "pdf",
+        compiled: cfg!(feature = "pdf"),
+        setting: "generate { pdf }",
+        asked: |config| config.generate.pdf.enabled(),
+        effect: "no PDF is written beside a page, and nothing links to one",
+        rewrites: false,
+    },
     // Unlike its neighbours this names a capability of `deploy`, not of the
     // build. It sits here anyway so the table stays the single place a gated
     // capability is declared, and so a build warns about a destination it will
@@ -216,6 +209,16 @@ struct Inert {
 }
 
 const INERT: &[Inert] = &[
+    // A `bundle { }` block naming neither a collection nor the site binds no
+    // pages, so it wrote no document and said nothing about it.
+    Inert {
+        setting: "generate { pdf { bundle } }",
+        asked: |config| config.generate.pdf.bundle.present,
+        needs: "a `collections` list or `site`",
+        met: |config| config.generate.pdf.bundle.enabled(),
+        effect: "no bundled document is written",
+        help: "name the collections to bind (`collections \"guide\"`), or set `site #true` for the whole site",
+    },
     // `minify` is documented as covering CSS and JS, but the JS handler is
     // gated on `bundle` in full: an unbundled `.js` is copied verbatim.
     Inert {
@@ -446,14 +449,22 @@ impl Engine {
         let images = self.images(&rendered, &cached, ui)?;
         let outputs = Self::outputs(&rendered, &cached);
         Self::write(&outputs)?;
-        self.cards(&rendered)?;
+        // Bound from the page *sources*, so a bundle is exported whether its
+        // pages recompiled or were served from cache.
+        let bundled = self.bundles(&pass, &mut cache, ui)?;
+        let artifacts: Vec<&Artifact> = rendered
+            .iter()
+            .flat_map(|r| &r.artifacts)
+            .chain(bundled.drawn.iter())
+            .collect();
+        Self::artifacts(&artifacts)?;
         // Every page is on disk pointing at the new asset filenames, so the
         // staged asset tree can replace the published one. Before this line a
         // failure leaves `dist` exactly as the previous build left it.
         assets.publish()?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
         let generated = self.generate(&planned.pages, &outputs, &statics, ui)?;
-        self.sweep(&outputs, &statics, &generated)?;
+        self.sweep(&outputs, &statics, &generated, &bundled)?;
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
 
@@ -461,20 +472,20 @@ impl Engine {
         ui.flush();
         let total = rendered.len() + cached.len();
         let page_bytes: u64 = outputs.iter().map(|out| out.html.len() as u64).sum();
-        let cards = Cards::of(&rendered);
+        let sidecars = Tally::of(artifacts.iter().copied());
         Summary {
             pages: total,
             cached: cached.len(),
             assets: asset_count + images.count(),
             statics: statics.count,
             generated: generated.count,
-            cards: cards.count,
             bytes: page_bytes
                 + asset_bytes
                 + images.bytes()
                 + generated.bytes
                 + statics.bytes
-                + cards.bytes,
+                + sidecars.bytes,
+            sidecars: sidecars.kinds,
             warnings: ui.warnings() - warned,
             dist: &self.config.paths.dist,
             elapsed: timer.elapsed(),
@@ -616,27 +627,55 @@ impl Engine {
             .try_for_each(|out| fs::write_all(&out.page.output, out.html))
     }
 
-    /// Write the social cards this build drew. Cards are rendered during
-    /// compile, so only stale pages produced one; a cache hit leaves the file
-    /// the previous build wrote in place, and the sweep keeps it.
-    #[cfg(feature = "cards")]
-    fn cards(&self, rendered: &[Rendered]) -> Result<()> {
-        rendered.par_iter().try_for_each(|r| match &r.card {
-            Some(png) => fs::write_all(
-                self.config
-                    .generate
-                    .cards
-                    .path(&self.config.paths.dist, &r.page.permalink),
-                png,
-            ),
-            None => Ok(()),
-        })
+    /// Write every artifact this build produced beside the pages: the sidecars
+    /// drawn during compile, and the bundled documents.
+    ///
+    /// Only what was freshly made is here. A cache hit leaves the file the
+    /// previous build wrote in place, and the sweep keeps it. Each artifact
+    /// carries its own destination, so nothing here has to know which kind it
+    /// is holding.
+    fn artifacts(artifacts: &[&Artifact]) -> Result<()> {
+        artifacts
+            .par_iter()
+            .try_for_each(|artifact| fs::write_all(&artifact.path, &artifact.bytes))
     }
 
-    /// Without the rasterizer nothing rendered one, so there is nothing to write.
-    #[cfg(not(feature = "cards"))]
-    fn cards(&self, _rendered: &[Rendered]) -> Result<()> {
-        Ok(())
+    /// Export the bundled documents this site asks for: a collection, or the
+    /// whole site, as one PDF.
+    ///
+    /// Unlike a sidecar this belongs to no page, so it cannot ride a page's
+    /// cache entry: it carries one of its own, keyed on the module text (which
+    /// names every page it binds, in order) and on every file that compile
+    /// read.
+    #[cfg(feature = "pdf")]
+    fn bundles(&self, pass: &Pass<'_>, cache: &mut Cache, ui: &Ui) -> Result<Bundled> {
+        let mut bundled = Bundled::default();
+        for bundle in Bundle::planned(&self.config, pass.pages) {
+            let path = bundle.path(&self.config);
+            bundled.paths.push(path.clone());
+            let text = bundle.source(&pass.prepare, &self.project)?;
+            let fingerprint = Hash::of_bytes(text.as_bytes());
+            if cache.reuse_bundle(bundle.id(), &fingerprint, &path) {
+                debug!(bundle = bundle.id(), "bundle reused");
+                continue;
+            }
+            let (bytes, deps) = bundle.export(&self.project, &pass.prepare, text)?;
+            cache.record_bundle(bundle.id(), fingerprint, &deps);
+            ui.page(bundle.id(), PageStatus::Built);
+            bundled.drawn.push(Artifact {
+                kind: Bundle::KIND,
+                path,
+                bytes,
+            });
+        }
+        Ok(bundled)
+    }
+
+    /// Without the exporter nothing binds one, so there is nothing to write and
+    /// nothing to keep.
+    #[cfg(not(feature = "pdf"))]
+    fn bundles(&self, _pass: &Pass<'_>, _cache: &mut Cache, _ui: &Ui) -> Result<Bundled> {
+        Ok(Bundled::default())
     }
 
     /// Run the post-build processors over the finished site.
@@ -669,26 +708,27 @@ impl Engine {
     /// passthrough, generated files. The asset tree is regenerated wholesale, so
     /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
     /// are not ours to prune.
-    fn sweep(&self, outputs: &[Output], statics: &Copied, generated: &Generated) -> Result<()> {
+    fn sweep(
+        &self,
+        outputs: &[Output],
+        statics: &Copied,
+        generated: &Generated,
+        bundled: &Bundled,
+    ) -> Result<()> {
         if !self.config.prune {
             return Ok(());
         }
-        // A card belongs to its page whether or not this build re-rendered it,
+        // A sidecar belongs to its page whether or not this build re-drew it,
         // so the keep set is derived from the pages, never from what was written.
-        let cards = outputs
+        let sidecars = Sidecars::builtin();
+        let drawn = outputs
             .iter()
-            .map(|out| out.page)
-            .filter(|page| page.wants_card(&self.config))
-            .map(|page| {
-                self.config
-                    .generate
-                    .cards
-                    .path(&self.config.paths.dist, &page.permalink)
-            });
+            .flat_map(|out| sidecars.planned(&self.config, out.page));
         let keep: Vec<PathBuf> = outputs
             .iter()
             .map(|out| out.page.output.clone())
-            .chain(cards)
+            .chain(drawn)
+            .chain(bundled.paths.iter().cloned())
             .chain(statics.paths.iter().cloned())
             .chain(generated.paths.iter().cloned())
             .collect();
@@ -868,30 +908,24 @@ impl Engine {
             .enabled
             .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
             .transpose()?;
-        // A card is a second, paged compile of the same page, so only a stale
+        // A sidecar is a second, paged compile of the same page, so only a stale
         // page pays for one. A cache hit keeps the file already in `dist`.
-        #[cfg(feature = "cards")]
-        let card = page
-            .wants_card(&self.config)
-            .then(|| Card::render(&self.project, &self.config, page))
-            .transpose()?;
+        let (artifacts, drawn) =
+            pass.sidecars
+                .draw(&self.project, &self.config, &pass.prepare, page)?;
         let mut deps = self.project.dependencies(&world);
         // Inlined icons and embedded assets are read by the render pass, not by
         // typst, so they are absent from the compilation's own accesses. Adding
         // them here puts them under the same content-hash check as every other
         // dependency, instead of needing a mechanism of their own.
         deps.extend(std::mem::take(&mut rewrite.read));
-        // The card is a second compile of this page, so the template it imports
+        // A sidecar is a second compile of this page, so the template it imports
         // and everything that template pulls in are inputs to this page's output
         // that its own compile never read. Folded in the same way, and for the
         // same reason: without them an edited card helper changed no hash the
         // cache checks, and every card-bearing page stayed a hit still serving
         // the PNG the old helper drew.
-        #[cfg(feature = "cards")]
-        let card = card.map(|card| {
-            deps.extend(card.deps.files().iter().cloned());
-            card.png
-        });
+        deps.extend(drawn.files().iter().cloned());
         // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
         // its own source and every `.typ` it depends on: the fine-grained
         // metadata dependency set.
@@ -920,8 +954,7 @@ impl Engine {
                 fragments,
             },
             external: rewrite.external,
-            #[cfg(feature = "cards")]
-            card,
+            artifacts,
             warnings,
         })
     }
@@ -1019,10 +1052,14 @@ type Reused<'a> = (&'a Page, String, Outputs);
 /// otherwise derived the same four values side by side and had to be kept in
 /// step by hand.
 struct Pass<'a> {
+    config: &'a Config,
     pages: &'a [Page],
     prepare: Prepare<'a>,
     renderer: Renderer,
     analyzer: Analyzer<'a>,
+    /// The artifacts drawn beside each page's HTML, registered once for the
+    /// pass rather than rebuilt per page inside the pool.
+    sidecars: Sidecars,
 }
 
 impl<'a> Pass<'a> {
@@ -1037,6 +1074,7 @@ impl<'a> Pass<'a> {
         srcsets: SrcSets,
     ) -> Self {
         Self {
+            config: &engine.config,
             pages: &planned.pages,
             prepare,
             renderer: Renderer::new(&planned.pages, assets, srcsets, engine.project.root()),
@@ -1044,6 +1082,7 @@ impl<'a> Pass<'a> {
                 planned.tracked.iter().map(Root::from).collect::<Roots>(),
                 &engine.project,
             ),
+            sidecars: Sidecars::builtin(),
         }
     }
 
@@ -1059,14 +1098,37 @@ impl<'a> Pass<'a> {
         let mut stale = Vec::new();
         for page in self.pages {
             match self.prepare.input(page) {
-                Ok((id, text, fingerprint)) => match cache.reuse(page, &fingerprint) {
-                    Some((html, outputs)) => cached.push((page, html, outputs)),
-                    None => stale.push((page, Ok((id, text, fingerprint)))),
-                },
+                Ok((id, text, fingerprint)) => {
+                    // The existence check comes first so a page that has to be
+                    // recompiled anyway leaves no reuse bookkeeping behind.
+                    match self
+                        .drawn(page)
+                        .then(|| cache.reuse(page, &fingerprint))
+                        .flatten()
+                    {
+                        Some((html, outputs)) => cached.push((page, html, outputs)),
+                        None => stale.push((page, Ok((id, text, fingerprint)))),
+                    }
+                }
                 Err(e) => stale.push((page, Err(e))),
             }
         }
         (cached, stale)
+    }
+
+    /// Whether every file this page's sidecars own is still on disk.
+    ///
+    /// A page's HTML is rewritten on every build, hit or miss, because the cache
+    /// holds the markup itself. A sidecar is not: only the build that compiles a
+    /// page draws one, so once the file is gone (a deleted `dist`, a hand-removed
+    /// card, a half-finished copy) nothing would ever draw it again and the cache
+    /// would keep reporting the page as built. Missing one makes the page stale,
+    /// which is the only thing that redraws it.
+    fn drawn(&self, page: &Page) -> bool {
+        self.sidecars
+            .planned(self.config, page)
+            .iter()
+            .all(|path| path.exists())
     }
 }
 
@@ -1135,14 +1197,14 @@ struct Rendered<'a> {
     /// Outbound `http(s)` links the page carries, for `check --external`. Not
     /// cached: only a fresh compile collects them, and only `check` reads them.
     external: Vec<String>,
-    /// The page's rendered social card as PNG bytes, when it wanted one.
-    #[cfg(feature = "cards")]
-    card: Option<Vec<u8>>,
+    /// The files this page produces beside its HTML (a social card..), each
+    /// with the destination it was drawn for.
+    artifacts: Vec<Artifact>,
     warnings: Vec<TypstSourceDiagnostic>,
 }
 
 /// The cache stores the subset of a compile that survives it. The rest
-/// (outbound links, the card, warnings) is consumed by this build alone.
+/// (outbound links, the sidecar files, warnings) is consumed by this build alone.
 impl<'a> From<&'a Rendered<'a>> for Recorded<'a> {
     fn from(rendered: &'a Rendered<'a>) -> Self {
         Self {

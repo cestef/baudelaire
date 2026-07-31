@@ -417,6 +417,17 @@ impl PageWorld {
     pub fn source(&self) -> &Source {
         &self.main
     }
+
+    /// This build's date, for an exporter that stamps one into its output.
+    ///
+    /// Deliberately not [`World::today`]: that call is what [`Tracked`] records
+    /// as a read of the clock, and a page that merely *ships* a dated PDF has
+    /// not displayed the date and must not be invalidated when it turns over.
+    /// It is the same instant either way, so the PDF's creation date and
+    /// `sys.inputs.baudelaire.date` cannot disagree.
+    pub fn stamp(&self) -> Option<Datetime> {
+        Some(Datetime::Date(self.project.now.date()))
+    }
 }
 
 impl World for PageWorld {

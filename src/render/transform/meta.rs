@@ -112,6 +112,7 @@ impl Card<'_> {
         }
         self.alternates(&mut tags);
         self.feeds(&mut tags);
+        self.pdf(&mut tags);
         if self.config.html.jsonld {
             tags.push(Self::jsonld(&facts));
         }
@@ -343,6 +344,29 @@ impl Card<'_> {
         {
             tags.push(Self::alternate("x-default", &base.join(&default.url)));
         }
+    }
+
+    /// `<link rel="alternate" type="application/pdf">` to this page's PDF.
+    ///
+    /// The file is written by the build that compiles the page, so the tag and
+    /// the exporter derive the URL the same way, from [`Page::wants_pdf`]: a
+    /// page that gets no PDF must not advertise one. Root-relative, unlike the
+    /// feeds: a PDF beside the page needs no base URL to be reachable.
+    fn pdf(&self, tags: &mut Vec<HtmlNode>) {
+        if !self.page.wants_pdf(self.config) {
+            return;
+        }
+        let href = self.config.generate.pdf.pages.url(&self.page.permalink);
+        tags.push(
+            HtmlElement::new(tag::link)
+                .with_attr(attr::rel, "alternate")
+                .with_attr(attr::r#type, crate::mime::Mime::PDF)
+                .with_attr(
+                    attr::href,
+                    BaseUrl::resolve(self.config.base().as_ref(), &href),
+                )
+                .into(),
+        );
     }
 
     /// The page's canonical absolute URL, if a base `url` is configured.

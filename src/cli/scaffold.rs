@@ -700,6 +700,10 @@ pub(super) mod templates {
             name: "search",
             fragment: "\n// Client-side search index.\ngenerate {\n  search { formats \"json\" }\n}\n",
         },
+        Extra {
+            name: "pdf",
+            fragment: "\n// A PDF of every page, from `templates/print.typ`.\ngenerate {\n  pdf { pages { template \"print.typ\" } }\n}\n",
+        },
     ];
 
     impl Template {

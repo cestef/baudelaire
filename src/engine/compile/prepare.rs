@@ -76,6 +76,13 @@ impl<'a> Prepare<'a> {
         Self { trees, ..base }
     }
 
+    /// The site config this pass renders against. Read by the bundle, which
+    /// resolves its own template and title from it.
+    #[cfg(feature = "pdf")]
+    pub(in crate::engine) fn config(&self) -> &Config {
+        self.config
+    }
+
     /// The files templates import, ready to write: the section tree and the
     /// page catalogue.
     ///
@@ -109,6 +116,55 @@ impl<'a> Prepare<'a> {
             let fingerprint = Hash::of_bytes(text.as_bytes());
             return Ok((FileId::new(rooted), text, fingerprint));
         };
+        let id = match &page.data {
+            Data::Generated(_) => FileId::new(rooted.clone()),
+            _ => Self::wrapper(&rooted),
+        };
+        let text = self.bind(page, &rooted, &self.template_root(template), template);
+        // hash the exact text typst compiles; the parse into a `Source` is
+        // deferred to the compile, run only for stale pages.
+        let fingerprint = Hash::of_bytes(text.as_bytes());
+        Ok((id, text, fingerprint))
+    }
+
+    /// The synthetic module binding `page` to the template `file` under `dir`.
+    ///
+    /// Split out from [`Prepare::input`] because a page is bound to a template
+    /// more than once: to its layout for the HTML compile, and to a paged
+    /// template for each sidecar that wraps the page (the PDF). They must hand
+    /// the template the same `page` dict, or `page.strings` means one thing on
+    /// screen and another on paper.
+    pub(in crate::engine) fn bind(
+        &self,
+        page: &Page,
+        rooted: &RootedPath,
+        dir: &str,
+        file: &str,
+    ) -> String {
+        let vpath = Self::rooted_str(rooted);
+        let body = match &page.data {
+            Data::Generated(_) => Body::Inline(&page.body),
+            _ => Body::Include,
+        };
+        self.with(page, |context| {
+            Layout::new(dir, file, &vpath, context, body).to_string()
+        })
+    }
+
+    /// The `page` dict this page is handed as, with its frontmatter spelled as
+    /// `frontmatter`: what a bundled document gives each of its entries, where
+    /// there is no wrapper module per page to hold the binding.
+    #[cfg(feature = "pdf")]
+    pub(in crate::engine) fn dict(&self, page: &Page, frontmatter: &str) -> String {
+        self.with(page, |context| context.dict(&frontmatter))
+    }
+
+    /// Build this page's [`Context`] and hand it to `f`.
+    ///
+    /// The pieces borrow from locals, so they cannot be returned; taking the
+    /// consumer instead keeps every caller reading one construction rather than
+    /// each assembling its own and drifting.
+    fn with<T>(&self, page: &Page, f: impl FnOnce(Context<'_>) -> T) -> T {
         let taxonomies = Typst(&page.taxonomies()).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
@@ -120,17 +176,12 @@ impl<'a> Prepare<'a> {
         // page and cannot widen the fingerprint the way a site-wide value would.
         let reading = Typst(&Self::reading(&page.body)).to_string();
         let date = Typst(&self.date(page)).to_string();
-        let vpath = Self::rooted_str(&rooted);
-        let (id, bind, body) = match &page.data {
-            Data::Export => (Self::wrapper(&rooted), Bind::Import, Body::Include),
-            Data::Empty => (Self::wrapper(&rooted), Bind::Literal("(:)"), Body::Include),
-            Data::Generated(dict) => (
-                FileId::new(rooted.clone()),
-                Bind::Literal(dict),
-                Body::Inline(&page.body),
-            ),
+        let bind = match &page.data {
+            Data::Export => Bind::Import,
+            Data::Empty => Bind::Literal("(:)"),
+            Data::Generated(dict) => Bind::Literal(dict),
         };
-        let context = Context {
+        f(Context {
             data: bind,
             taxonomies: &taxonomies,
             nav: &nav,
@@ -139,19 +190,7 @@ impl<'a> Prepare<'a> {
             strings: &strings,
             reading: &reading,
             date: &date,
-        };
-        let text = Layout::new(
-            &self.template_root(template),
-            template,
-            &vpath,
-            context,
-            body,
-        )
-        .to_string();
-        // hash the exact text typst compiles; the parse into a `Source` is
-        // deferred to the compile, run only for stale pages.
-        let fingerprint = Hash::of_bytes(text.as_bytes());
-        Ok((id, text, fingerprint))
+        })
     }
 
     /// One language's [`Section`] tree as a value: written out by [`Generated`]
@@ -168,13 +207,13 @@ impl<'a> Prepare<'a> {
         )
     }
 
-    /// The import root a page's layout is loaded from.
+    /// The import root a template is loaded from, layout or paged alike.
     ///
     /// The project's own template directory, expressed relative to the root
     /// because a typst import is root-absolute in the compiler's terms, not the
     /// config's. A template the project does not have falls back to the theme's
     /// package, which the compiler resolves by spec rather than by path.
-    fn template_root(&self, template: &str) -> String {
+    pub(in crate::engine) fn template_root(&self, template: &str) -> String {
         let project = self
             .config
             .paths

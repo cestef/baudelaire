@@ -51,7 +51,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards", "ssh", "announce"]
+default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -82,10 +82,21 @@ css = ["dep:lightningcss"]
 # attribute-only and stays on regardless.
 images = ["dep:oxipng", "dep:image"]
 
+# The paged second compile a sidecar artifact is drawn from (`typst-layout`),
+# and the registry in `engine/compile/sidecar.rs` that drives it. Internal: not a
+# flavor anyone selects, but the one name every artifact drawn that way enables,
+# so a build that draws none carries no layout engine.
+sidecars = ["dep:typst-layout"]
+
 # Social card rendering: compiles `templates/card.typ` to a paged document and
 # rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means a
 # `generate { cards { } }` block warns and produces nothing.
-cards = ["dep:typst-render", "dep:typst-layout"]
+cards = ["dep:typst-render", "sidecars"]
+
+# A PDF of every page, laid out from a paged template and exported with
+# typst-pdf (~8 crates: krilla, pdf-writer, subsetter, write-fonts and friends).
+# Off means a `generate { pdf { } }` block warns and no PDF is written.
+pdf = ["dep:typst-pdf", "sidecars"]
 
 # The SSH/SFTP deploy backend, on russh. By crate count this is the most
 # expensive thing in the tree after typst and rolldown: ~76 crates reachable only
@@ -115,6 +126,7 @@ vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
 typst-svg = { version = "0.15" }
+typst-pdf = { version = "0.15", optional = true }
 typst-render = { version = "0.15", optional = true }
 # `PagedDocument` lives here and `typst` does not re-export it, so naming the
 # card's compile target needs the layout crate directly.

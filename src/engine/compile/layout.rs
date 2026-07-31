@@ -68,6 +68,32 @@ pub(in crate::engine) struct Context<'a> {
     pub date: &'a str,
 }
 
+impl Context<'_> {
+    /// The `page` dict a template is applied to, as typst source, with
+    /// `frontmatter` already spelled as whatever expression holds it.
+    ///
+    /// One spelling, because a page is handed to a template in two places: the
+    /// show rule of its own compile, and one entry of a bundled document, where
+    /// each page's frontmatter arrives under an alias of its own. A second
+    /// spelling is how `page.strings` comes to exist on screen and not on paper.
+    pub(in crate::engine) fn dict(&self, frontmatter: &dyn fmt::Display) -> String {
+        let Self {
+            data: _,
+            taxonomies,
+            nav,
+            lang,
+            translations,
+            strings,
+            reading,
+            date,
+        } = self;
+        format!(
+            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, date: {date})",
+            Str(lang)
+        )
+    }
+}
+
 /// A synthetic typst module that applies a layout template to a page,
 /// passing the page's frontmatter as data. Renders (via [`fmt::Display`]) to
 /// compilable typst source.
@@ -127,17 +153,7 @@ impl fmt::Display for Layout<'_> {
             Str(&self.import()),
             self.func()
         )?;
-        let Context {
-            data,
-            taxonomies,
-            nav,
-            lang,
-            translations,
-            strings,
-            reading,
-            date,
-        } = &self.context;
-        let frontmatter: &dyn fmt::Display = match data {
+        let frontmatter: &dyn fmt::Display = match &self.context.data {
             Bind::Import => {
                 writeln!(f, "#import {}: frontmatter as __data", Str(self.page))?;
                 &"__data"
@@ -146,8 +162,8 @@ impl fmt::Display for Layout<'_> {
         };
         writeln!(
             f,
-            "#show: __body => __layout((frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, date: {date}), __body)",
-            Str(lang)
+            "#show: __body => __layout({}, __body)",
+            self.context.dict(frontmatter)
         )?;
         match &self.body {
             Body::Include => write!(f, "#include {}", Str(self.page)),

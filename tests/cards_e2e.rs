@@ -127,6 +127,57 @@ fn editing_a_module_the_card_template_imports_redraws_the_card() {
     assert_ne!(before, after, "the card should have been redrawn");
 }
 
+/// A cache hit draws nothing, so the card in `dist` is still the one an earlier
+/// build wrote. The sweep's keep set is derived from the pages and not from what
+/// this build drew, or the first rebuild would delete every card on the site.
+#[test]
+fn a_cached_rebuild_keeps_the_card_it_did_not_redraw() {
+    let site = site(r#"cards { template "card.typ"; width 800; height 418 }"#);
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hello\",)\nbody",
+    );
+    site.stats();
+    let before = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card");
+
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (1, 1),
+        "nothing changed, so the page is reused and no card is drawn"
+    );
+    let after =
+        std::fs::read(site.path("public/cards/posts/hello.png")).expect("the card survives");
+    assert_eq!(before, after);
+}
+
+/// The counterpart: a card that is *gone* has to come back. The page's HTML is
+/// rewritten from the cache on every build, but only a compile draws a card, so
+/// a deleted `dist` with a warm cache left the file missing on every build from
+/// then on. The page is stale when its card is absent.
+#[test]
+fn a_deleted_card_is_redrawn_even_though_the_page_is_otherwise_a_hit() {
+    let site = site(r#"cards { template "card.typ"; width 800; height 418 }"#);
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hello\",)\nbody",
+    );
+    site.stats();
+    let before = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card");
+
+    std::fs::remove_dir_all(site.path("public")).expect("dist removed");
+    let stats = site.stats();
+
+    assert_eq!(
+        (stats.pages, stats.cached),
+        (1, 0),
+        "the page's card is gone, so nothing about it can be reused"
+    );
+    let after = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card redrawn");
+    assert_eq!(before, after);
+}
+
 /// Off unless asked for: rendering a page per card is the most expensive thing
 /// a build can do per page.
 #[test]

@@ -35,7 +35,10 @@ impl Version {
     /// `vendored-openssl` is absent on purpose: it decides how OpenSSL is
     /// *linked*, not what the binary can do, and the musl release turns it on
     /// over the full default set. Counting it would report that build as
-    /// `custom` when it is exactly the published `full` one.
+    /// `custom` when it is exactly the published `full` one. `sidecars` is
+    /// absent for the neighbouring reason: nobody selects it, every artifact
+    /// drawn from a paged compile turns it on, and it gates no capability of its
+    /// own that the artifact's feature does not already name.
     pub const FEATURES: &'static [(&'static str, bool)] = &[
         ("announce", cfg!(feature = "announce")),
         ("cards", cfg!(feature = "cards")),
@@ -43,6 +46,7 @@ impl Version {
         ("embedded-fonts", cfg!(feature = "embedded-fonts")),
         ("images", cfg!(feature = "images")),
         ("js", cfg!(feature = "js")),
+        ("pdf", cfg!(feature = "pdf")),
         ("ssh", cfg!(feature = "ssh")),
     ];
 

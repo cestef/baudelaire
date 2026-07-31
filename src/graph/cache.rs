@@ -145,6 +145,27 @@ struct Manifest {
     config: Option<Hash>,
     /// Entries keyed by page source path.
     pages: BTreeMap<PathBuf, Entry>,
+    /// Entries for the artifacts compiled from *many* pages (a bundled PDF),
+    /// keyed by the artifact's id. A page's entry cannot stand in for one: the
+    /// document belongs to no single page and has to rebuild when any of them
+    /// moves.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    bundles: BTreeMap<String, Compiled>,
+}
+
+/// What validating any compiled artifact needs: the fingerprint of the exact
+/// text typst compiled, and the hash of every file that compile read.
+///
+/// [`Entry`] carries the same pair for a page, alongside everything a page
+/// additionally records. Split out so the two are checked by one function
+/// rather than by two that can drift.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Compiled {
+    /// Hash of the exact text typst compiled.
+    hash: Hash,
+    /// Dependency files and their hashes at compile time, `None` for one that
+    /// could not be hashed, exactly as [`Entry::deps`] records them.
+    deps: BTreeMap<PathBuf, Option<Hash>>,
 }
 
 /// The one render-side input still fingerprinted whole, because nothing narrows
@@ -274,7 +295,7 @@ impl Cache {
             enabled: config.cache.incremental,
             next: Manifest {
                 config: Some(fingerprint),
-                pages: BTreeMap::new(),
+                ..Manifest::default()
             },
             config: fingerprint,
             prev,
@@ -313,11 +334,7 @@ impl Cache {
         if &entry.hash != fingerprint {
             return None;
         }
-        if !entry
-            .deps
-            .iter()
-            .all(|(path, hash)| self.digests.of(&self.resolve(path)) == *hash)
-        {
+        if !self.intact(&entry.deps) {
             return None;
         }
         // every injected value the page read must still hash the same, so a
@@ -366,6 +383,60 @@ impl Cache {
         Some((html, outputs))
     }
 
+    /// Whether every file a compile read still hashes to what it hashed then.
+    ///
+    /// One check, shared by every artifact the cache validates: a page and a
+    /// bundled document ask the same question of the same recorded shape, and
+    /// two spellings of it would drift.
+    fn intact(&self, deps: &BTreeMap<PathBuf, Option<Hash>>) -> bool {
+        deps.iter()
+            .all(|(path, hash)| self.digests.of(&self.resolve(path)) == *hash)
+    }
+
+    /// The files a compile read, hashed and keyed the portable way the manifest
+    /// stores them. The counterpart of [`Cache::intact`], and the reason the
+    /// two agree about what a recorded dependency looks like.
+    fn digested(&self, deps: &Deps) -> BTreeMap<PathBuf, Option<Hash>> {
+        deps.files()
+            .iter()
+            .map(|p| (Self::portable(&self.root, p), self.digests.of(p)))
+            .collect()
+    }
+
+    /// Whether a bundled document compiled from `fingerprint` can be left as it
+    /// is: the same module text, every file it read unchanged, and the file
+    /// still on disk.
+    ///
+    /// The disk check is not belt-and-braces. Unlike a page's HTML, which is
+    /// rewritten from the object store every build, a bundle is written only by
+    /// the build that compiles it, so a `dist` cleared behind the cache's back
+    /// would leave it missing forever.
+    pub fn reuse_bundle(&mut self, id: &str, fingerprint: &Hash, path: &Path) -> bool {
+        let hit = self.enabled
+            && self.prev.config.as_ref() == Some(&self.config)
+            && path.exists()
+            && match self.prev.bundles.get(id) {
+                Some(entry) => &entry.hash == fingerprint && self.intact(&entry.deps),
+                None => false,
+            };
+        if hit && let Some(entry) = self.prev.bundles.get(id).cloned() {
+            self.next.bundles.insert(id.to_owned(), entry);
+        }
+        hit
+    }
+
+    /// Record a freshly compiled bundle, so the next build can leave it alone.
+    pub fn record_bundle(&mut self, id: &str, fingerprint: Hash, deps: &Deps) {
+        let deps = self.digested(deps);
+        self.next.bundles.insert(
+            id.to_owned(),
+            Compiled {
+                hash: fingerprint,
+                deps,
+            },
+        );
+    }
+
     /// Record a freshly compiled page: its content fingerprint, its dependency
     /// hashes, the digests of the injected values it read, and the permalinks
     /// its links resolved against, staging its HTML for the object store.
@@ -382,11 +453,7 @@ impl Cache {
             outputs,
         } = compiled;
         let meta = self.roots().digests(reads);
-        let deps = deps
-            .files()
-            .iter()
-            .map(|p| (Self::portable(&self.root, p), self.digests.of(p)))
-            .collect();
+        let deps = self.digested(deps);
         let links = links
             .iter()
             .map(|(path, permalink)| (Self::portable(&self.root, path), permalink.clone()))

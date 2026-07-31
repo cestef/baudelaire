@@ -15,7 +15,10 @@ pub(super) struct Summary<'a> {
     pub assets: usize,
     pub statics: usize,
     pub generated: usize,
-    pub cards: usize,
+    /// The sidecar files drawn this build, one entry per kind (`("card", 12)`).
+    /// Counted apart rather than totalled: the kinds are unlike things, and the
+    /// name is what the line calls them.
+    pub sidecars: Vec<(&'static str, usize)>,
     pub bytes: u64,
     pub warnings: usize,
     pub dist: &'a Path,
@@ -51,8 +54,8 @@ impl Summary<'_> {
         if self.generated > 0 {
             parts.push(Count::files(self.generated).styled().to_string());
         }
-        if self.cards > 0 {
-            parts.push(Count::cards(self.cards).styled().to_string());
+        for (kind, count) in &self.sidecars {
+            parts.push(Count::of(*count, kind).styled().to_string());
         }
         if self.bytes > 0 {
             parts.push(Bytes(self.bytes).styled().to_string());

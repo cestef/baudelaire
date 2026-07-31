@@ -9,10 +9,10 @@ use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
     ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, Footnotes, GenerateConfig,
     HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
-    ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig, SortKey, SpaConfig,
-    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
-    UrlStyle, VerifyConfig,
+    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfPages, PngConfig,
+    PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig,
+    SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig,
+    TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 
 impl Default for Config {
@@ -140,6 +140,31 @@ impl Default for CardsConfig {
             template: "card.typ".into(),
             width: 1200,
             height: 630,
+        }
+    }
+}
+
+impl Default for PdfPages {
+    fn default() -> Self {
+        // opt-in for the same reason a card is: it is a second compile of every
+        // page, and this one lays the whole document out rather than one page.
+        Self {
+            enabled: false,
+            template: "print.typ".into(),
+        }
+    }
+}
+
+impl Default for PdfBundle {
+    fn default() -> Self {
+        // No target: a bundle binds what the block names, and naming nothing
+        // is asking for nothing. The template is the value a `bundle { }` block
+        // inherits when it stays silent about it.
+        Self {
+            present: false,
+            template: "book.typ".into(),
+            collections: Vec::new(),
+            site: false,
         }
     }
 }

@@ -58,7 +58,44 @@ chores are visible in the git history and change nothing for a site.
   collection's newest pages from the catalogue, so a home page needs no second
   list to maintain. `spleen` gains a language switcher, still without script.
 
+- **pdf**: A PDF of every page, beside its HTML. `generate { pdf { pages { template
+  "print.typ" } } }` compiles each page a second time as a *paged* document and
+  writes `/<permalink>.pdf`, with a `<link rel="alternate" type="application/pdf">`
+  in the page's head pointing at it. The paged template is handed the same `page`
+  dictionary your layout gets, so `page.date`, `page.reading`, `page.strings` and
+  the rest mean the same thing on paper as on screen; it is a separate file
+  because `html.elem` draws nothing on this target, the same split a social card
+  has. Off unless the block is present, and covered by the incremental cache like
+  everything else. The `slim` release does not carry the exporter, so a `pdf { }`
+  block there writes nothing and links nothing.
+
+  A paged template that wants a page rule needs `set std.page(..)`: the
+  parameter named `page` by convention shadows Typst's own element.
+
+  Every starter shape now scaffolds a `templates/print.typ`, and
+  `baudelaire init --with pdf` turns it on.
+
+- **pdf**: Many pages as one document. `generate { pdf { bundle { template
+  "book.typ"; collections "guide"; site #true } } }` binds a collection end to
+  end, or the whole site, into a single PDF at `/<target>.pdf` (`/guide.pdf`,
+  `/site.pdf`), localized like every other per-language artifact. Pages are bound
+  in the order the site already puts them, and the template is handed the
+  document plus every page's `page` dictionary and compiled body, so a title
+  page, a contents list and continuous numbering are yours to write. It is the
+  paged counterpart of `navigation { standalone }`, which folds the same site
+  into one HTML file.
+
+  A bundle carries a cache entry of its own: it is re-exported when any page it
+  binds changes, is added, removed or reordered, and when its template changes.
+  The `book` and `docs` starter shapes scaffold a `templates/book.typ`.
+
 ### Fixed
+
+- **build**: A sidecar file deleted from `dist` comes back. A page's HTML is
+  rewritten from the cache on every build, but a social card is drawn only by
+  the build that compiles its page, so clearing `dist` while keeping the cache
+  left every card missing on that build and on every build after it. A page
+  whose sidecar files are not on disk is now stale, which is what redraws them.
 
 - **content**: The not-found page is no longer part of the site's own
   navigation. `content/404.typ` used to be an ordinary page everywhere but on

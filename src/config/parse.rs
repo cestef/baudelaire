@@ -16,10 +16,10 @@ use crate::config::{
     AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
     ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
     HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
-    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PngConfig, PngStrip, Prefetch,
-    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
-    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
-    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages,
+    PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig,
+    SearchField, SearchFormat, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
+    StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
@@ -549,6 +549,7 @@ impl Section for GenerateConfig {
         ("feed", |c, n, t| c.feed.fill(n, t)),
         ("search", |c, n, t| c.search.fill(n, t)),
         ("cards", |c, n, t| c.cards.fill(n, t)),
+        ("pdf", |c, n, t| c.pdf.fill(n, t)),
     ]);
 }
 
@@ -642,6 +643,55 @@ impl Section for CardsConfig {
 
     fn enable(&mut self) -> bool {
         self.enabled = true;
+        true
+    }
+}
+
+/// The `pdf { .. }` section: what the typesetter writes on paper. Each child
+/// block's presence enables that artifact.
+impl Section for PdfConfig {
+    const RULES: Block<Self> = Block(&[
+        ("pages", |c, n, t| c.pages.fill(n, t)),
+        ("bundle", |c, n, t| c.bundle.fill(n, t)),
+    ]);
+}
+
+/// The `pages { template .. }` block. Its presence enables the per-page PDF.
+impl Section for PdfPages {
+    const RULES: Block<Self> = Block(&[("template", |c, n, t| {
+        c.template = n.string(t, 0)?;
+        Ok(())
+    })]);
+
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        true
+    }
+}
+
+/// The `bundle { template ..; collections ..; site .. }` block: many pages as
+/// one document. Unlike its neighbours, presence alone enables nothing: a
+/// bundle needs a target to bind.
+impl Section for PdfBundle {
+    const RULES: Block<Self> = Block(&[
+        ("template", |c, n, t| {
+            c.template = n.string(t, 0)?;
+            Ok(())
+        }),
+        ("collections", |c, n, t| {
+            c.collections = n.words(t)?;
+            Ok(())
+        }),
+        ("site", |c, n, t| {
+            c.site = n.boolean(t, 0)?;
+            Ok(())
+        }),
+    ]);
+
+    /// Presence is recorded but enables nothing: a bundle binds what the block
+    /// names, and naming nothing is asking for nothing.
+    fn enable(&mut self) -> bool {
+        self.present = true;
         true
     }
 }

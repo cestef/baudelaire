@@ -48,8 +48,12 @@ impl Count {
         }
     }
 
-    pub fn cards(n: usize) -> Self {
-        Self { n, noun: "card" }
+    /// A count whose noun is not fixed at the call site: the sidecar registry
+    /// names its own kinds (`"card"`), and the summary counts whatever it
+    /// registered. Pluralization still happens here, so a registry cannot
+    /// invent its own phrasing.
+    pub fn of(n: usize, noun: &'static str) -> Self {
+        Self { n, noun }
     }
 
     pub fn warnings(n: usize) -> Self {

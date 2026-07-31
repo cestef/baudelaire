@@ -52,6 +52,31 @@ impl std::fmt::Display for BaseUrl {
     }
 }
 
+/// The file name a permalink's paged artifacts hang off: `/posts/a/` is
+/// `posts/a`, `/about.html` is `about` (a flat-URL permalink already names a
+/// file, and `about.html.pdf` would be an odd thing to serve), and the home
+/// page, whose permalink is just `/`, is `index`.
+///
+/// One derivation, because every such file is named three times over: while it
+/// is still being made (the meta transform points a tag at it), when it is
+/// written, and when the prune decides to keep it. All three have to agree.
+///
+/// Not to be confused with [`crate::content::Stem`], which is the other end of
+/// the pipeline: what a *source* filename says about a page (its slug, its
+/// language suffix, whether it is a draft).
+pub struct Basename<'a>(pub &'a str);
+
+impl std::fmt::Display for Basename<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let stem = self.0.trim_matches('/');
+        let stem = stem.strip_suffix(".html").unwrap_or(stem);
+        f.write_str(match stem.is_empty() {
+            true => "index",
+            false => stem,
+        })
+    }
+}
+
 /// Percent-encoding, as a URL path carries it.
 pub struct Percent;
 

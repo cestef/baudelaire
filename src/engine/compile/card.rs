@@ -7,62 +7,61 @@
 //!
 //! A card is rendered only for a page that does not already name its own
 //! `image`, so an author who has a real screenshot keeps it.
+//!
+//! One [`Sidecar`] among however many the flavor registers; everything around
+//! the compile lives there.
 
 use std::fmt;
+use std::path::PathBuf;
 
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
-use typst_layout::PagedDocument;
+use typst::syntax::RootedPath;
 
 use crate::codegen::{Str, Typst, Value};
 use crate::config::Config;
 use crate::content::{Data, Iso, Page};
-use crate::error::{BaudelaireErrorKind, Result, TypstSourceDiagnostic};
-use crate::graph::Deps;
-use crate::world::{PageWorld, Project, Tracked};
+use crate::error::Result;
 
-/// One page's rendered card: the image, and what drawing it read.
-pub(in crate::engine) struct Card {
-    /// The encoded PNG.
-    pub png: Vec<u8>,
-    /// The files this compile read: the template and everything it imports. The
-    /// page's own HTML compile touches none of them, so until the caller folds
-    /// these into the page's dependency set nothing ties a cached page to the
-    /// template that drew its card.
-    pub deps: Deps,
+use super::paged::Laid;
+use super::sidecar::{Cx, Sidecar};
+
+/// The social-card sidecar.
+pub(in crate::engine) struct Card;
+
+impl Sidecar for Card {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn wanted(&self, config: &Config, page: &Page) -> bool {
+        page.wants_card(config)
+    }
+
+    fn path(&self, config: &Config, page: &Page) -> PathBuf {
+        config.file(&config.generate.cards.url(&page.permalink))
+    }
+
+    /// A card is a poster of its own shape, so it takes the page's data flat
+    /// and ignores the layout bindings [`Cx`] also carries.
+    fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
+        Self::module(cx.config, page, rooted)
+    }
+
+    fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>> {
+        Self::rasterize(&laid.document, page)
+    }
 }
 
 impl Card {
-    /// Compile and rasterize one page's card.
-    pub(in crate::engine) fn render(
-        project: &Project,
-        config: &Config,
-        page: &Page,
-    ) -> Result<Self> {
-        let rooted = project.virtualize(&page.source)?;
-        let source = Source::new(Self::id(&rooted), Self::source(config, page, &rooted)?);
-        let world = Tracked::new(project.world_for(&source));
-        let compiled = typst::compile::<PagedDocument>(&world);
-        let document = compiled.output.map_err(|errs| {
-            BaudelaireErrorKind::TypstCompile(Self::diagnostics(errs, &source, world.inner()))
-        })?;
-        Ok(Self {
-            png: Self::rasterize(&document, page)?,
-            // `main` here is the card's own fabricated id (see [`Card::id`]),
-            // not the page's, so the page source this module imports its
-            // frontmatter from survives `dependencies`' filter instead of being
-            // dropped as the compilation's own main. Harmless: a page's text is
-            // already what its cache entry is keyed on, and hashing it a second
-            // time as a dependency cannot disagree with that.
-            deps: project.dependencies(&world),
-        })
-    }
+    /// The kind's name: the file id of its synthetic module, the label its
+    /// compile errors carry, and the noun the summary counts.
+    pub(in crate::engine) const NAME: &'static str = "card";
 
     /// The first page as PNG, at one pixel per point (so the configured size in
     /// pixels is also the page size the template is given in points).
     ///
     /// A template that overflowed onto a second page would silently ship only
     /// its first, so the extra pages are reported rather than dropped.
-    fn rasterize(document: &PagedDocument, page: &Page) -> Result<Vec<u8>> {
+    fn rasterize(document: &typst_layout::PagedDocument, page: &Page) -> Result<Vec<u8>> {
         let [first] = document.pages() else {
             return Err(
                 crate::error::CardError::pages(&page.permalink, document.pages().len()).into(),
@@ -86,7 +85,7 @@ impl Card {
     /// The page rule is set *before* the import so a template that wants a
     /// different size can still say so, and after nothing else, so the default
     /// is exactly the configured card.
-    fn source(config: &Config, page: &Page, rooted: &RootedPath) -> Result<String> {
+    fn module(config: &Config, page: &Page, rooted: &RootedPath) -> Result<String> {
         let templates = config
             .paths
             .templates
@@ -129,28 +128,6 @@ impl Card {
             ),
             ("taxonomies", page.taxonomies()),
         ])
-    }
-
-    /// The card's own file id: a sibling of the page, distinct from it and from
-    /// the page's layout wrapper, so importing the page's frontmatter never
-    /// shadows the page itself.
-    fn id(rooted: &RootedPath) -> FileId {
-        let name = format!("{}@card", rooted.vpath().get_without_slash());
-        let vpath = VirtualPath::new(&name)
-            .expect("a page vpath with a suffix stays a valid relative path");
-        FileId::new(RootedPath::new(VirtualRoot::Project, vpath))
-    }
-
-    fn diagnostics(
-        errs: typst::ecow::EcoVec<typst::diag::SourceDiagnostic>,
-        source: &Source,
-        world: &PageWorld,
-    ) -> Vec<TypstSourceDiagnostic> {
-        TypstSourceDiagnostic::bridge(
-            errs,
-            ("card", source.text()),
-            std::sync::Arc::new(world.clone()),
-        )
     }
 }
 

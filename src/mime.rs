@@ -13,6 +13,11 @@ impl Mime {
     /// What an unrecognized extension, or none at all, is served as.
     const BINARY: &'static str = "application/octet-stream";
 
+    /// The type a page's PDF is served and advertised as. Named because two
+    /// places state it: the extension table below, and the
+    /// `<link rel="alternate">` the meta transform points at the file.
+    pub const PDF: &'static str = "application/pdf";
+
     /// The MIME type named by `path`'s extension, matched case-insensitively:
     /// `Photo.PNG` names the same type as `photo.png`, as it must, since
     /// [`ImageFormat`] has always classified the two alike and a file the asset
@@ -42,6 +47,7 @@ impl Mime {
             "json" => "application/json",
             "xml" => "application/xml",
             "txt" => "text/plain",
+            "pdf" => Self::PDF,
             _ => Self::BINARY,
         })
     }
