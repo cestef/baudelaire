@@ -50,6 +50,7 @@ generate {
   search { formats "json"; fields "title" "body" "tags" }
   feed   { formats "rss" "atom"; limit 20 }
   cards  { template "card.typ"; width 1200; height 630 }
+  pdf    { pages { template "print.typ" }; bundle { collections "posts" } }
 }
 
 navigation {
@@ -156,6 +157,7 @@ Two consequences of the grouping are worth knowing before you write anything:
   `sitemap`, #link("../features/discovery/feeds.typ")[`feed`],
   #link("../features/discovery/search.typ")[`search`],
   #link("../features/discovery/cards.typ")[`cards`] (a social image per page),
+  #link("../features/build/pdf.typ")[`pdf`] (a PDF per page),
   `robots` for `robots.txt`, `llms` for `llms.txt`, and the two
   #link("deploy/static-hosts.typ")[rule files] a Pages host reads: `redirects`
   trades the #link("../features/content/redirects.typ")[redirect stubs] for a

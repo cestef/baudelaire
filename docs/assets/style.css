@@ -596,6 +596,12 @@ code {
   background: var(--code-bg);
   padding: 0.12em 0.38em;
   border-radius: 4px;
+  /* One span is one token to the eye, so it never breaks at a space it
+     contains: `set page(..)` split across two lines reads as two things.
+     There is no CSS for "never break unless it cannot fit" -- `overflow-wrap`
+     does nothing under `nowrap` -- so the column width decides instead, at the
+     bottom of this file. */
+  white-space: nowrap;
   /* Keep padding + rounding on each fragment when inline code wraps a line. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -614,6 +620,9 @@ pre code {
   background: none;
   padding: 0;
   font-size: 0.8rem;
+  /* A block keeps its own line breaks: the no-break rule above is about a
+     span sitting inside a sentence, and `pre` is the opposite of that. */
+  white-space: pre;
 }
 
 /* Copy-to-clipboard button, injected around each code block by _copy.js. The
@@ -1193,4 +1202,15 @@ ul.listing {
 
 .sx-punct {
   color: var(--sx-punct);
+}
+
+/* An unbroken inline span is a promise a phone column cannot keep: at this
+   width a `baudelaire init --with pdf` is already most of the line, and holding
+   it together would push the whole page sideways. Readability wins, and the
+   spans long enough to wrap here are the ones that should have been code blocks
+   anyway. */
+@media (max-width: 640px) {
+  code {
+    white-space: normal;
+  }
 }

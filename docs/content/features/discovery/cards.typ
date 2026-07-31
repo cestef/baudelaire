@@ -41,8 +41,8 @@ Write it the way you would write a poster.
 ```
 
 The page is already sized for you: `width` and `height` are set before your
-template runs, at one point per pixel, so `1200 x 630` in config is `1200pt x
-630pt` on the page and `1200 x 630` in the PNG. Set your own `page` rule if you
+template runs, at one point per pixel, so `1200 x 630` in config is
+`1200pt x 630pt` on the page and `1200 x 630` in the PNG. Set your own `page` rule if you
 want a different shape.
 
 `data` carries `title`, `url`, `lang`, `collection`, `site`, `author`, `date`,

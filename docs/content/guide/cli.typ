@@ -154,8 +154,10 @@ Four starter shapes ship with the binary, selected with `-t`:
 / #raw("--with <feature,..>"): Switch on optional features, appending their
   config blocks: `spa` and `standalone`
   (#link("../features/build/navigating.typ")[client-side navigation and
-  single-file export]), `speculation` (prefetch hints), and `search`
-  (#link("../features/discovery/search.typ")[a client-side search index]).
+  single-file export]), `speculation` (prefetch hints), `search`
+  (#link("../features/discovery/search.typ")[a client-side search index]), and
+  `pdf` (#link("../features/build/pdf.typ")[a PDF per page], from the
+  `print.typ` every shape ships).
 / #raw("--theme <spec>"): Take templates and assets from a
   #link("../features/build/themes.typ")[theme package] instead of scaffolding
   copies of them. Only the shape's content and config are written.
