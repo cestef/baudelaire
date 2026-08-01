@@ -210,13 +210,17 @@ include_dir = "0.7.4"
 [dev-dependencies]
 tempfile = "3"
 # Generate test images (already in the tree via the `images` feature).
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # The scenario harness (`tests/scenarios.rs`) reads its cases as KDL, the same
 # language the product's own config speaks. A normal dependency is out of reach
 # from an integration test, so it is repeated here.
 kdl = { version = "6" }
 # ...and asserts on `Diagnostic::code`, which needs the trait in scope.
 miette = { version = "7" }
+# `matches`/`capture` claims, and the JSON pointer claims. Both are already in
+# the dependency tree; naming them here costs no new crate.
+regex = { version = "1" }
+serde_json = { version = "1" }
 criterion = { version = "0.8", features = ["html_reports"] }
 # In-process SSH/SFTP server for the deploy end-to-end test.
 russh = "0.62.2"

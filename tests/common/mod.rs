@@ -161,7 +161,7 @@ impl Site {
     fn try_stats(&self, tweak: impl FnOnce(&mut Config)) -> baudelaire::Result<Stats> {
         let mut config = self.try_config()?;
         tweak(&mut config);
-        Engine::new(config, Mode::Build)?.build(&Ui::new(Level::Silent))
+        Run::of(config, Mode::Build).result
     }
 
     /// Run `check` in-process and return its own `Result`, for tests asserting
@@ -169,7 +169,7 @@ impl Site {
     pub fn try_check(&self, tweak: impl FnOnce(&mut Config)) -> baudelaire::Result<Stats> {
         let mut config = self.config();
         tweak(&mut config);
-        Engine::new(config, Mode::Check)?.check(&Ui::new(Level::Silent))
+        Run::of(config, Mode::Check).result
     }
 
     /// A built page under the default `public` dist.
@@ -181,6 +181,46 @@ impl Site {
 /// A `Ui` that prints nothing, for tests that drive the library in-process.
 pub fn silent() -> Ui {
     Ui::new(Level::Silent)
+}
+
+/// One in-process engine run: what it produced, and everything it reported.
+///
+/// The diagnostics come from [`Ui::summary`], the same machine-readable record
+/// `--json` publishes, rather than from stderr: a warning is matched on its
+/// `baudelaire::..` code, so rewording one does not break a test, exactly as
+/// for the errors the outcome already matches on.
+pub struct Run {
+    pub result: baudelaire::Result<Stats>,
+    pub report: baudelaire::ui::Report,
+}
+
+impl Run {
+    /// Drive one engine mode against an already-resolved config.
+    ///
+    /// Takes the finished config rather than a mutating closure because a
+    /// profile is applied *by value* (`Config::with_profile` consumes and can
+    /// fail), so a caller that overlays one has to build its config anyway.
+    pub fn of(config: Config, mode: Mode) -> Self {
+        let ui = Ui::new(Level::Silent);
+        let result = Engine::new(config, mode).and_then(|engine| match mode {
+            Mode::Check => engine.check(&ui),
+            _ => engine.build(&ui),
+        });
+        let report = ui.summary(result.is_ok());
+        Self { result, report }
+    }
+
+    /// The codes of every diagnostic this run reported at warning severity.
+    /// Advice is collected alongside them and deliberately excluded: it never
+    /// counts against a build, so a claim about it would be a different claim.
+    pub fn warnings(&self) -> Vec<&str> {
+        self.report
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == "warning")
+            .filter_map(|d| d.code.as_deref())
+            .collect()
+    }
 }
 
 /// A [`Project`] for a test config: module evaluation needs the real world.

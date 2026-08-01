@@ -378,6 +378,7 @@ dependencies = [
  "quick-xml 0.41.0",
  "rand 0.10.2",
  "rayon",
+ "regex",
  "rolldown",
  "rolldown_common",
  "roxmltree 0.21.1",

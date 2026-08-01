@@ -1,0 +1,315 @@
+// The harness proving itself. Every claim, input kind, step knob and binding
+// the format offers is exercised here, so a change to the runner fails against
+// its own vocabulary rather than against whichever suite happened to use it.
+//
+// A suite-wide config, laid down before each scenario's own files.
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths { content "content"; dist "public" }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      home body
+      """#
+  }
+}
+
+scenario "the suite default config is what a scenario builds against" {
+  expect {
+    ok
+    file "index.html" { contains "home body" }
+  }
+}
+
+scenario "a scenario's own file replaces the default at the same path" {
+  files {
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Mine",)
+      mine
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "mine"; missing "home body" }
+  }
+}
+
+scenario "count distinguishes present from present once" {
+  files {
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      one #h(0pt) two #h(0pt) three
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      count "<p>" 1
+      count "three" 1
+      contains "two"
+    }
+  }
+}
+
+scenario "matches and size read the built file" {
+  expect {
+    ok
+    file "index.html" {
+      matches #"og:title" content="Home""#
+      size min=50 max="1MB"
+    }
+  }
+}
+
+scenario "a capture binds a generated name for a later path and needle" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      assets { fingerprint #true; minify #false; bundle #false }
+      """#
+    "assets/style.css" #"""
+      .beacon { color: red }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.css"))
+      home body
+      """#
+  }
+  expect {
+    ok
+    // The page names a file the build chose the name of...
+    file "index.html" { capture "css" #"assets/(style\.[0-9a-f]+\.css)"# }
+    // ...and that exact file is the one on disk, with the source's content.
+    file "assets/{css}" { contains ".beacon" }
+    absent "assets/style.css"
+  }
+}
+
+scenario "json addresses a generated document by pointer" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths { content "content"; dist "public" }
+      generate { search { formats "json"; fields "title" } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha",)
+      alpha body
+      """#
+  }
+  expect {
+    ok
+    file "search.json" {
+      json "/0/title" equals="Home"
+      json "/1/title" equals="Alpha"
+      json "" count=2
+      json "/0/url" equals="/"
+    }
+  }
+}
+
+scenario "identical proves a static file is copied, not processed" {
+  files {
+    "static/logo.png" png="12x8"
+  }
+  expect {
+    ok
+    file "logo.png" { identical "static/logo.png" }
+  }
+}
+
+scenario "smaller proves an image was optimized" {
+  requires "images"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      assets { images { optimize { png } } }
+      """#
+    "assets/bloated.png" from="tests/fixtures/bloated.png"
+  }
+  expect {
+    ok
+    file "assets/bloated.png" { smaller "assets/bloated.png" }
+  }
+}
+
+scenario "a jpeg input is a real jpeg the pipeline can read" {
+  requires "images"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      assets { images { optimize { jpeg quality=50 } } }
+      """#
+    "assets/photo.jpg" jpeg="64x48"
+  }
+  expect {
+    ok
+    file "assets/photo.jpg" { size min=100 }
+  }
+}
+
+scenario "a bytes literal lays down a file no generator makes" {
+  files {
+    // "hi\n", as hex: enough to prove the bytes arrive verbatim.
+    "static/raw.bin" bytes="6869 0a"
+  }
+  expect {
+    ok
+    file "raw.bin" { equals "hi"; size max=3 }
+  }
+}
+
+scenario "a second build reuses every page, and an edit rebuilds only its own" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      beta
+      """#
+  }
+  build { expect { ok; pages 3; cached 0 } }
+  build { expect { ok; pages 3; cached 3 } }
+  build {
+    files {
+      "content/posts/a.typ" #"""
+        #let frontmatter = (title: "A",)
+        ALPHA2
+        """#
+    }
+    expect {
+      ok
+      pages 3
+      cached 2
+      file "posts/a/index.html" { contains "ALPHA2" }
+    }
+  }
+}
+
+scenario "a removed page is pruned from the output" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      prune #true
+      """#
+    "content/posts/gone.typ" #"""
+      #let frontmatter = (title: "Gone",)
+      gone
+      """#
+  }
+  build { expect { ok; file "posts/gone/index.html" } }
+  build {
+    remove "content/posts/gone.typ"
+    expect { ok; absent "posts/gone/index.html"; file "index.html" }
+  }
+}
+
+scenario "a step with no expect is a warm-up that leaves a cache behind" {
+  build { }
+  build { expect { ok; cached 1 } }
+}
+
+scenario "the drafts knob overrides the config, in both directions" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content { draft { build #false } }
+      """#
+    "content/posts/wip.typ" #"""
+      #let frontmatter = (title: "W", draft: true,)
+      work in progress
+      """#
+  }
+  build { expect { ok; absent "posts/wip/index.html" } }
+  build {
+    drafts
+    expect { ok; file "posts/wip/index.html" { contains "work in progress" } }
+  }
+  build {
+    drafts #false
+    expect { ok; absent "posts/wip/index.html" }
+  }
+}
+
+scenario "the base knob supplies the absolute URL a generated file needs" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      generate { sitemap #true }
+      """#
+  }
+  build {
+    base "https://elsewhere.test"
+    expect {
+      ok
+      file "sitemap.xml" { contains "https://elsewhere.test/" }
+    }
+  }
+}
+
+scenario "a profile overlays the config exactly as the CLI applies it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content { draft { build #false } }
+      profiles {
+        staging {
+          content { draft { build #true } }
+        }
+      }
+      """#
+    "content/posts/wip.typ" #"""
+      #let frontmatter = (title: "W", draft: true,)
+      staged draft
+      """#
+  }
+  build { expect { ok; absent "posts/wip/index.html" } }
+  build {
+    profile "staging"
+    expect { ok; file "posts/wip/index.html" { contains "staged draft" } }
+  }
+}
+
+scenario "check runs the validation passes without writing a site" {
+  files {
+    "content/posts/broken.typ" #"""
+      #let frontmatter = (title: "B",)
+      #link("missing.typ")[gone]
+      """#
+  }
+  check { expect { fails { code "baudelaire::links::broken" } } }
+}
+
+scenario "a warning is claimed by code, not by the words it printed" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      links { strict #false }
+      """#
+    "content/posts/loose.typ" #"""
+      #let frontmatter = (title: "L",)
+      #link("nowhere.typ")[gone]
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::links::broken"
+  }
+}
