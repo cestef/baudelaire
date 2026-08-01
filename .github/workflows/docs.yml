@@ -1,9 +1,17 @@
 name: Docs
 
+# The docs site is a real baudelaire site and the theme previews are real
+# builds, so a typst error in either is a build failure that `just ci` does not
+# cover. Running on pull requests too means it fails on the branch that caused
+# it rather than on main afterwards; only the deploy step is push-only.
+#
+# One path list, aliased into both triggers. Actions has supported YAML anchors
+# since 2025-09-18; it is merge keys (`<<:`) it still rejects, and an alias is
+# not one.
 on:
   push:
     branches: [main]
-    paths:
+    paths: &paths
       - "docs/**"
       - "themes/**"
       - "src/**"
@@ -11,6 +19,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/docs.yml"
+  pull_request:
+    paths: *paths
   workflow_dispatch:
 
 concurrency:
@@ -61,7 +71,12 @@ jobs:
         env:
           BAUDELAIRE: ./target/debug/baudelaire
 
+      # Push and manual runs only. A pull request builds the site to prove it
+      # compiles and stops there: it has no access to the Cloudflare secrets,
+      # and publishing a fork's docs over the live site is not a thing to make
+      # possible in the first place.
       - name: deploy to cloudflare pages
+        if: github.event_name != 'pull_request'
         uses: cestef/actions/wrangler@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
         with:
           command: pages deploy public --project-name=baudelaire --branch=main
