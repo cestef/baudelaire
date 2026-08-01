@@ -304,7 +304,7 @@ fn a_stylesheet_is_confined_to_its_icon() {
     // Zero specificity, so confining a rule does not also let it outrank the
     // page's own CSS.
     assert!(
-        html.contains(r#":where([data-svg="#),
+        html.contains(r":where([data-svg="),
         "rules are confined: {html}"
     );
     assert!(
@@ -332,7 +332,7 @@ fn at_rules_are_confined_only_where_they_hold_selectors() {
         "keyframes are untouched: {html}"
     );
     assert!(
-        html.contains(r#"@media (prefers-reduced-motion: reduce) { :where([data-svg="#),
+        html.contains(r"@media (prefers-reduced-motion: reduce) { :where([data-svg="),
         "rules inside @media are confined: {html}"
     );
     assert!(

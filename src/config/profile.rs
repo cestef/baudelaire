@@ -19,7 +19,7 @@ impl Config {
         // carry spans into it, so labels point at the real config.kdl lines
         let text = self.source.clone();
         for node in partial.nodes() {
-            if node.name().value() == Config::PROFILES {
+            if node.name().value() == Self::PROFILES {
                 return Err(ConfigError::nested_profiles(&text, NodeExt::span(node)).into());
             }
             self.overlay(&text, node)?;
@@ -33,14 +33,14 @@ impl Config {
 impl ConfigError {
     /// A profile name that matches nothing in `profiles { .. }`, its help
     /// listing (and nearest-matching) the names that are configured.
-    pub fn missing_profile(name: &str, profiles: &[(String, KdlDocument)]) -> ConfigError {
+    pub fn missing_profile(name: &str, profiles: &[(String, KdlDocument)]) -> Self {
         let names: Vec<&str> = profiles.iter().map(|(n, _)| n.as_str()).collect();
         let help = if names.is_empty() {
             "no profiles are configured; add a `profiles { .. }` block to config.kdl".to_owned()
         } else {
             Keys(&names).help(name, "profiles")
         };
-        ConfigError::at(
+        Self::at(
             "",
             ConfigErrorKind::MissingProfile {
                 name: name.to_owned(),
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn profile_overrides_nested_html() {
         let cfg = parse(
-            r#"
+            r"
             html {
               pretty #true
             }
@@ -108,7 +108,7 @@ mod tests {
                 }
               }
             }
-        "#,
+        ",
         );
         let prod = cfg.with_profile("prod").expect("profile exists");
         assert!(!prod.html.pretty);
@@ -118,14 +118,14 @@ mod tests {
     fn profile_override_preserves_sibling_fields() {
         // overriding one field of a nested section must inherit the base's others, not reset them
         let cfg = parse(
-            r#"
+            r"
             html { pretty #true; embed #true; meta #true }
             profiles {
               prod {
                 html { pretty #false }
               }
             }
-        "#,
+        ",
         );
         let prod = cfg.with_profile("prod").expect("profile exists");
         assert!(!prod.html.pretty, "pretty overridden");
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn profile_overrides_serve() {
         let cfg = parse(
-            r#"
+            r"
             serve {
               port 1821
             }
@@ -182,7 +182,7 @@ mod tests {
               }
               }
             }
-        "#,
+        ",
         );
         let ci = cfg.with_profile("ci").expect("profile exists");
         assert_eq!(ci.serve.port, 9000);
@@ -250,14 +250,14 @@ mod tests {
     #[test]
     fn profile_future_flag() {
         let cfg = parse(
-            r#"
+            r"
             content { future #false }
             profiles {
               dev {
                 content { future #true }
               }
             }
-        "#,
+        ",
         );
         let dev = cfg.clone().with_profile("dev").expect("profile exists");
         assert!(dev.content.future);

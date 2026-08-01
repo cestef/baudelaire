@@ -907,7 +907,7 @@ impl Toggle {
     /// Resolve a pair. Each flag `overrides_with` the other, so clap lets the
     /// last one on the command line win and at most one arrives set.
     fn of(on: bool, off: bool) -> Self {
-        Self(on.then_some(true).or(off.then_some(false)))
+        Self(on.then_some(true).or_else(|| off.then_some(false)))
     }
 
     /// Overlay onto a config field, leaving it untouched when neither flag was
@@ -934,7 +934,7 @@ impl Overrides for BuildOverrides {
     fn apply(&self, config: &mut Config) {
         self.common.apply(config);
         if let Some(out) = &self.out {
-            config.paths.dist = out.clone();
+            config.paths.dist.clone_from(out);
         }
         Toggle::of(self.cache, self.no_cache).apply(&mut config.cache.incremental);
     }
@@ -954,6 +954,9 @@ impl Overrides for CommonOverrides {
 /// Run a parsed CLI: install the debug-log subscriber, dispatch, and flush any
 /// collected warnings, on success and failure alike, so a failed run still
 /// shows what it warned about before dying.
+// The process entry point owns the parsed CLI for the whole run and drops it at
+// the end; borrowing here would only push that ownership back into `main`.
+#[allow(clippy::needless_pass_by_value)]
 pub fn run(cli: Cli) -> Result<()> {
     crate::ui::trace::init(cli.global.verbose);
     let ui = Ui::new(cli.level());
@@ -1046,18 +1049,18 @@ impl Command {
     /// Delegate to the selected subcommand's [`Run`] impl.
     fn run(&self, cx: &Cx) -> Result<()> {
         match self {
-            Command::Build(args) => args.run(cx),
-            Command::Serve(args) => args.run(cx),
-            Command::Check(args) => args.run(cx),
-            Command::New(args) => args.run(cx),
+            Self::Build(args) => args.run(cx),
+            Self::Serve(args) => args.run(cx),
+            Self::Check(args) => args.run(cx),
+            Self::New(args) => args.run(cx),
             #[cfg(feature = "announce")]
-            Command::Announce(args) => args.run(cx),
-            Command::Deploy(args) => args.run(cx),
-            Command::Clean(args) => args.run(cx),
-            Command::Init(args) => args.run(cx),
-            Command::Completions(args) => args.run(cx),
-            Command::Man(args) => args.run(cx),
-            Command::Reference(args) => args.run(cx),
+            Self::Announce(args) => args.run(cx),
+            Self::Deploy(args) => args.run(cx),
+            Self::Clean(args) => args.run(cx),
+            Self::Init(args) => args.run(cx),
+            Self::Completions(args) => args.run(cx),
+            Self::Man(args) => args.run(cx),
+            Self::Reference(args) => args.run(cx),
         }
     }
 }
@@ -1072,7 +1075,7 @@ impl Run for CompletionsArgs {
         use clap::CommandFactory;
 
         let mut command = Cli::command();
-        let name = command.get_name().to_string();
+        let name = command.get_name().to_owned();
         // Rendered into memory first so the whole script reaches stdout in one
         // write, and so a failed write is one error rather than a half-written
         // completion file that a shell would happily source.
@@ -1170,10 +1173,11 @@ impl Run for CheckArgs {
 
 impl Run for ServeArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
+        use owo_colors::OwoColorize;
+
         let mut config = cx.cli.config()?;
         self.apply(&mut config);
         // Prefix the site name with the active profile, if one was requested.
-        use owo_colors::OwoColorize;
         match cx.cli.global.profile.as_deref() {
             Some(profile) => cx.ui.banner(format_args!(
                 "{} · {}",
@@ -1290,7 +1294,7 @@ impl ServeArgs {
             config.serve.port = port;
         }
         if let Some(bind) = &self.bind {
-            config.serve.bind = bind.clone();
+            config.serve.bind.clone_from(bind);
         }
         Toggle::of(self.open, self.no_open).apply(&mut config.serve.open);
         Toggle::of(self.watch, self.no_watch).apply(&mut config.serve.watch);

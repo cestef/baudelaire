@@ -84,7 +84,7 @@ impl Paged<'_> {
 
     /// The name a per-page artifact's module hangs off.
     pub(in crate::engine) fn of(rooted: &RootedPath) -> String {
-        rooted.vpath().get_without_slash().to_string()
+        rooted.vpath().get_without_slash().to_owned()
     }
 }
 

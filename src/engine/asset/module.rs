@@ -6,6 +6,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write as _;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -125,11 +126,11 @@ impl Esm {
         if let Value::Dict(pairs) = value {
             for (key, item) in pairs {
                 if Self::ident(key) {
-                    out.push_str(&format!("export const {key} = {};\n", Js(item)));
+                    let _ = writeln!(out, "export const {key} = {};", Js(item));
                 }
             }
         }
-        out.push_str(&format!("export default {};\n", Js(value)));
+        let _ = writeln!(out, "export default {};", Js(value));
         out
     }
 

@@ -32,7 +32,7 @@ impl Transform for Outbound {
             };
             // Deduplicated per page: a nav repeated on every page is one URL to
             // check, and one page to name when it is dead.
-            if Outbound::is_external(href) && !cx.found.external.iter().any(|seen| seen == href) {
+            if Self::is_external(href) && !cx.found.external.iter().any(|seen| seen == href) {
                 cx.found.external.push(href.to_string());
             }
         });

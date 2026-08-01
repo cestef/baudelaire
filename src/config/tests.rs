@@ -629,12 +629,12 @@ fn destination_never_escapes_dist() {
     let cfg = parse("");
     let dist = cfg.paths.dist.clone();
     for url in ["/../../etc/passwd/", "/posts/../../secret/"] {
-        let dest = cfg.destination(url);
-        assert!(dest.starts_with(&dist), "{url} -> {}", dest.display());
+        let written = cfg.destination(url);
+        assert!(written.starts_with(&dist), "{url} -> {}", written.display());
         assert!(
-            !dest.components().any(|c| c.as_os_str() == ".."),
+            !written.components().any(|c| c.as_os_str() == ".."),
             "{url} -> {}",
-            dest.display()
+            written.display()
         );
     }
 }

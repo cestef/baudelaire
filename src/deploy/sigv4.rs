@@ -98,10 +98,13 @@ impl Signer<'_> {
             .map(|(name, _)| name.to_lowercase())
             .collect::<Vec<_>>()
             .join(";");
-        let rows: String = headers
-            .iter()
-            .map(|(name, value)| format!("{}:{value}\n", name.to_lowercase()))
-            .collect();
+        let mut rows = String::new();
+        for (name, value) in &headers {
+            rows.push_str(&name.to_lowercase());
+            rows.push(':');
+            rows.push_str(value);
+            rows.push('\n');
+        }
         let canonical = [
             req.method,
             req.uri,

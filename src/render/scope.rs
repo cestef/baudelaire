@@ -85,23 +85,20 @@ impl Scoped {
         // the selector we are about to rewrite.
         let selectors = &prelude[Css(prelude).lead()..];
         out.push_str(&prelude[..prelude.len() - selectors.len()]);
-        match Css(selectors).at_rule() {
-            Some(at) => {
-                out.push_str(selectors);
-                out.push('{');
-                if GROUPING.contains(&at) {
-                    self.rules(body, out);
-                } else {
-                    out.push_str(body);
-                }
-            }
-            None => {
-                out.push_str(&self.selectors(selectors));
-                out.push('{');
-                // A nested rule resolves against its parent, which is already
-                // confined, so the body needs no rewriting of its own.
+        if let Some(at) = Css(selectors).at_rule() {
+            out.push_str(selectors);
+            out.push('{');
+            if GROUPING.contains(&at) {
+                self.rules(body, out);
+            } else {
                 out.push_str(body);
             }
+        } else {
+            out.push_str(&self.selectors(selectors));
+            out.push('{');
+            // A nested rule resolves against its parent, which is already
+            // confined, so the body needs no rewriting of its own.
+            out.push_str(body);
         }
         out.push('}');
     }

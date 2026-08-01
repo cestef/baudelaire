@@ -1,6 +1,7 @@
 //! Redirect stubs: a minimal HTML page that forwards a stale URL to its new one.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use super::xml::Xml;
@@ -43,15 +44,14 @@ impl Processor for Redirects {
                 // one serve a static file in preference to a redirect rule, so
                 // the stub would win at the old path and the 301 would never
                 // fire.
-                match site.config.generate.redirects {
-                    true => rules.push((site.config.prefixed(&old), target)),
-                    false => {
-                        let strings = Strings::new(site.config, &page.lang);
-                        out.file(
-                            &destination,
-                            &Self::stub(&target, strings.get("redirecting"), &page.lang),
-                        )?;
-                    }
+                if site.config.generate.redirects {
+                    rules.push((site.config.prefixed(&old), target));
+                } else {
+                    let strings = Strings::new(site.config, &page.lang);
+                    out.file(
+                        &destination,
+                        &Self::stub(&target, strings.get("redirecting"), &page.lang),
+                    )?;
                 }
                 claimed.insert(destination, &page.source);
             }
@@ -79,10 +79,11 @@ impl Redirects {
     /// could only ever be a client-side round trip, which passes link equity
     /// worse than a real 301 and costs a page load to do it.
     fn rules(rules: &[(String, String)]) -> String {
-        rules
-            .iter()
-            .map(|(old, new)| format!("{old} {new} 301\n"))
-            .collect()
+        let mut body = String::new();
+        for (old, new) in rules {
+            let _ = writeln!(body, "{old} {new} 301");
+        }
+        body
     }
 
     /// A client-side redirect to `target`: a meta-refresh with a canonical link
@@ -125,7 +126,7 @@ mod tests {
             id: PageId::new("posts", source),
             source: PathBuf::from(source),
             frontmatter: Frontmatter {
-                redirect: redirect.iter().map(|s| (*s).to_string()).collect(),
+                redirect: redirect.iter().map(|s| (*s).to_owned()).collect(),
                 ..Frontmatter::default()
             },
             body: String::new(),

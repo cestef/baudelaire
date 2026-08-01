@@ -167,7 +167,11 @@ impl Sidecars {
     }
 }
 
+// The stubs below mirror the `sidecars`-on signatures exactly, so the caller
+// compiles unchanged in both flavors. That is the whole point of them, and it is
+// why they take a `self` they cannot use and return a `Result` they cannot fail.
 #[cfg(not(feature = "sidecars"))]
+#[allow(clippy::unused_self, clippy::unnecessary_wraps)]
 impl Sidecars {
     pub(in crate::engine) fn builtin() -> Self {
         Self

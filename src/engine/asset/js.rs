@@ -121,7 +121,7 @@ impl Js {
         };
         let mut bundler = BundlerBuilder::default()
             .with_options(options)
-            .with_plugins(vec![self.plugin.clone()])
+            .with_plugins(vec![Arc::clone(&self.plugin)])
             .build()
             .map_err(|e| AssetError::js(entry.display(), e))?;
         let output = self

@@ -65,7 +65,7 @@ struct Dev<'a> {
 }
 
 impl Dev<'_> {
-    fn run(mut self) -> Result<()> {
+    fn run(self) -> Result<()> {
         let requested = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&requested).map_err(|e| ServeError::bind(&requested, e))?;
         // What was bound, not what was asked for: `port 0` means "any free
@@ -125,7 +125,7 @@ impl Dev<'_> {
         if self.config.serve.watch {
             let live = Live::default();
             Handler::new(Arc::clone(&route), Some(live.clone()), level).spawn(server);
-            self.watch(live, &route)
+            self.watch(&live, &route)
         } else {
             Handler::new(route, None, level).serve(&server);
             Ok(())
@@ -139,7 +139,7 @@ impl Dev<'_> {
     /// the bytes it first read and an edit never shows up. That costs six `git`
     /// subprocesses and the loaded fonts per rebuild; making it reusable means
     /// giving the file store a reset, not just hoisting the value.
-    fn rebuild(&mut self) -> Result<crate::engine::Stats> {
+    fn rebuild(&self) -> Result<crate::engine::Stats> {
         Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)
     }
 
@@ -160,7 +160,7 @@ impl Dev<'_> {
 
     /// Watch content, templates, assets, and any `include` globs, rebuilding on
     /// every relevant change.
-    fn watch(mut self, live: Live, route: &Mutex<Route>) -> Result<()> {
+    fn watch(mut self, live: &Live, route: &Mutex<Route>) -> Result<()> {
         // Rebuild the watcher whenever `config.kdl` is reloaded, so changes to
         // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
         // change still needs a restart: the HTTP server is already bound.)
@@ -171,7 +171,7 @@ impl Dev<'_> {
             tracing::debug!(watches = ?filter.watches(), "watcher established");
             let mut reloaded = false;
             for result in rx {
-                let outcome = self.on_event(result, &live, &filter)?;
+                let outcome = self.on_event(result, live, &filter);
                 // Render whatever the iteration warned about (watcher trouble,
                 // a failed rebuild) right away; the server runs indefinitely,
                 // so there is no end-of-run flush to wait for.
@@ -194,42 +194,32 @@ impl Dev<'_> {
     /// of silently discarding them; the server keeps serving either way.
     /// Returns whether `config.kdl` was reloaded (so the caller recreates the
     /// watcher).
-    fn on_event(
-        &mut self,
-        result: DebounceEventResult,
-        live: &Live,
-        filter: &Filter,
-    ) -> Result<bool> {
+    fn on_event(&mut self, result: DebounceEventResult, live: &Live, filter: &Filter) -> bool {
         match result {
-            Ok(events) => self.on_change(events, live, filter),
+            Ok(events) => self.on_change(&events, live, filter),
             Err(errors) => {
                 for error in errors {
                     self.ui.warn(WatchLost { source: error });
                 }
-                Ok(false)
+                false
             }
         }
     }
 
     /// Rebuild after a batch of file events, then push a live reload on success.
-    fn on_change(
-        &mut self,
-        events: Vec<DebouncedEvent>,
-        live: &Live,
-        filter: &Filter,
-    ) -> Result<bool> {
+    fn on_change(&mut self, events: &[DebouncedEvent], live: &Live, filter: &Filter) -> bool {
         // A single edit can surface as several debounced events (and each event
         // may repeat the path), so dedupe before reporting or we print the file
         // once per raw event.
         let changed: Vec<_> = events
             .iter()
-            .filter(|e| Self::is_content_change(&e.event.kind))
+            .filter(|e| Self::is_content_change(e.event.kind))
             .flat_map(|e| e.event.paths.iter())
             .filter(|p| filter.is_relevant(p))
             .unique()
             .collect();
         if changed.is_empty() {
-            return Ok(false);
+            return false;
         }
 
         // A change to the config file reloads it first, so the rebuild (and,
@@ -243,7 +233,7 @@ impl Dev<'_> {
                     // The parse error rides along as a related diagnostic, so
                     // the warning renders it in full, spans and all.
                     self.ui.warn(ConfigReload { errors: vec![e] });
-                    return Ok(false);
+                    return false;
                 }
             }
         }
@@ -278,7 +268,7 @@ impl Dev<'_> {
                 self.ui.warn(failure);
             }
         }
-        Ok(config_changed)
+        config_changed
     }
 
     /// A concise label for a rebuild's trigger: the first changed file (relative
@@ -297,7 +287,7 @@ impl Dev<'_> {
     /// Whether an event actually changes content. Crucially excludes `Access`
     /// (and metadata) events: a rebuild *reads* every source, and reacting to
     /// those reads would loop the watcher forever.
-    fn is_content_change(kind: &notify::EventKind) -> bool {
+    fn is_content_change(kind: notify::EventKind) -> bool {
         use notify::EventKind;
         use notify::event::ModifyKind;
         matches!(
@@ -478,7 +468,7 @@ impl Handler {
         }
         let raw = Self::query(url, "at").ok_or_else(|| Unopenable::Malformed(url.to_owned()))?;
         let decoded = Percent::decode(raw);
-        let at = At::parse(&decoded).ok_or(Unopenable::Malformed(decoded.clone()))?;
+        let at = At::parse(&decoded).ok_or_else(|| Unopenable::Malformed(decoded.clone()))?;
         let open = self.route.lock().open.clone();
         open.ok_or(Unopenable::Unconfigured)?.at(&at)
     }
@@ -681,9 +671,11 @@ impl Unopenable {
     /// renderer it lays a failed rebuild out with, so one shape here means one
     /// presentation there rather than a special case per message.
     fn body(&self) -> String {
+        use std::fmt::Write as _;
+
         let mut text = format!("× {self}");
         if let Some(help) = self.help() {
-            text.push_str(&format!("\nhelp: {help}"));
+            let _ = write!(text, "\nhelp: {help}");
         }
         text
     }
@@ -982,9 +974,7 @@ impl Filter {
     /// possible so a symlinked event path still matches; falls back to a raw
     /// compare when the file is mid-rename (deleted, about to reappear).
     fn is_config(&self, path: &Path) -> bool {
-        crate::fs::canonicalize(path)
-            .map(|p| p == self.config)
-            .unwrap_or(path == self.config)
+        crate::fs::canonicalize(path).map_or(path == self.config, |p| p == self.config)
     }
 
     /// Whether a changed path should trigger a rebuild. Of `.kdl` files only
@@ -1019,14 +1009,13 @@ mod tests {
         let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
         let live = Live::default();
         let mut dev = Dev {
-            config: config.clone(),
+            config,
             ui: &ui,
             root: &root,
             config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
         };
-        dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter)
-            .unwrap();
+        dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter);
         assert_eq!(ui.warnings(), 1);
     }
 
@@ -1040,13 +1029,13 @@ mod tests {
         let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
         let live = Live::default();
         let mut dev = Dev {
-            config: config.clone(),
+            config,
             ui: &ui,
             root: &root,
             config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
         };
-        dev.on_event(Ok(Vec::new()), &live, &filter).unwrap();
+        dev.on_event(Ok(Vec::new()), &live, &filter);
         assert_eq!(ui.warnings(), 0);
     }
 

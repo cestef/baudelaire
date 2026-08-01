@@ -28,7 +28,7 @@ impl Processor for Llms {
                 feature: "llms.txt",
                 effect: "emitted with relative links",
             },
-        )?;
+        );
         // One file per language, beside that language's feeds and search index.
         // A single flat file interleaved every language under one `## blog`
         // heading, and split taxonomies into `## tags` and `## fr/tags` because

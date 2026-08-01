@@ -37,9 +37,8 @@ impl Transform for Integrity {
             match element.tag {
                 tag::script => match element.attrs.get(attr::src) {
                     Some(_) if sri => Self::stamp(element, attr::src, emitted),
-                    Some(_) => {}
                     None if hashes => inline.script(&element.text()),
-                    None => {}
+                    _ => {}
                 },
                 tag::style if hashes => inline.style(&element.text()),
                 _ if sri && element.stylesheet() => Self::stamp(element, attr::href, emitted),

@@ -70,16 +70,15 @@ impl Text {
                     }
                     gap = true;
                 }
-                b'&' => match Self::entity(&html[i..]) {
-                    Some((ch, len)) => {
+                b'&' => {
+                    if let Some((ch, len)) = Self::entity(&html[i..]) {
                         Self::push_char(&mut out, &mut gap, ch);
                         i += len;
-                    }
-                    None => {
+                    } else {
                         Self::push_char(&mut out, &mut gap, '&');
                         i += 1;
                     }
-                },
+                }
                 b if b.is_ascii_whitespace() => {
                     gap = true;
                     i += 1;

@@ -139,7 +139,7 @@ impl Page {
             body,
             data,
             collection.to_owned(),
-            permalink,
+            &permalink,
             template,
             lang,
             config,
@@ -180,7 +180,7 @@ impl Page {
         body: String,
         data: Data,
         collection: String,
-        permalink: String,
+        permalink: &str,
         template: Option<String>,
         lang: String,
         config: &Config,
@@ -188,7 +188,7 @@ impl Page {
         // Shape the URL for the site's style here, the one funnel every page
         // (authored and generated) passes through, so the permalink and the
         // file it maps to can never disagree.
-        let permalink = config.links.style.url(&permalink);
+        let permalink = config.links.style.url(permalink);
         Self {
             output: config.destination(&permalink),
             id,
@@ -310,11 +310,11 @@ impl Page {
     /// selection shared by the syndication feeds and the `baudelaire:feed`
     /// module, so a language's feed lists only its own posts.
     pub fn recent<'a>(
-        pages: &'a [Page],
+        pages: &'a [Self],
         config: &Config,
         lang: &str,
         limit: usize,
-    ) -> Vec<&'a Page> {
+    ) -> Vec<&'a Self> {
         let candidates = pages.iter().filter(|p| {
             !matches!(p.data, Data::Generated(_)) && p.lang == lang && p.listed(config)
         });
@@ -325,8 +325,8 @@ impl Page {
     /// are dropped. The single ordering rule every feed is built on: the site
     /// feed hands it a language's pages, a term feed hands it that term's
     /// members, and both come out in the same order.
-    pub fn newest<'a>(pages: impl IntoIterator<Item = &'a Page>, limit: usize) -> Vec<&'a Page> {
-        let mut dated: Vec<&Page> = pages
+    pub fn newest<'a>(pages: impl IntoIterator<Item = &'a Self>, limit: usize) -> Vec<&'a Self> {
+        let mut dated: Vec<&Self> = pages
             .into_iter()
             .filter(|p| p.frontmatter.date.is_some())
             .collect();
@@ -339,8 +339,8 @@ impl Page {
     /// one group per language in first-seen order, a single group for a
     /// single-language site. The single language-partition rule, shared wherever
     /// per-language ordering matters (siblings, listings).
-    pub fn groups<'a>(pages: &[&'a Page]) -> Vec<Vec<&'a Page>> {
-        let mut groups: Vec<(&str, Vec<&Page>)> = Vec::new();
+    pub fn groups<'a>(pages: &[&'a Self]) -> Vec<Vec<&'a Self>> {
+        let mut groups: Vec<(&str, Vec<&Self>)> = Vec::new();
         for &page in pages {
             match groups.iter_mut().find(|(lang, _)| *lang == page.lang) {
                 Some((_, group)) => group.push(page),
@@ -354,7 +354,7 @@ impl Page {
     /// page in other languages, generated listings included. Only sets spanning
     /// more than one language are recorded. Editions are ordered by the site's
     /// language order (default first) for a stable switcher.
-    pub(super) fn relate(pages: &mut [Page], config: &Config) {
+    pub(super) fn relate(pages: &mut [Self], config: &Config) {
         use std::collections::BTreeMap;
         let mut editions: BTreeMap<String, Vec<Translation>> = BTreeMap::new();
         for page in pages.iter() {
@@ -374,7 +374,7 @@ impl Page {
         }
         for page in pages.iter_mut() {
             if let Some(set) = editions.get(&page.identity()) {
-                page.translations = set.clone();
+                page.translations.clone_from(set);
             }
         }
     }
@@ -412,7 +412,7 @@ impl Page {
     /// language's rows, `baudelaire:pages` serves them all flattened, and
     /// neither decides membership for itself.
     pub fn catalogue(
-        pages: &[Page],
+        pages: &[Self],
         config: &Config,
     ) -> std::collections::BTreeMap<String, Vec<crate::codegen::Value>> {
         let mut out: std::collections::BTreeMap<String, Vec<crate::codegen::Value>> =

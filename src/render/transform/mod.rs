@@ -159,7 +159,7 @@ pub(super) trait ElementExt {
 }
 
 impl ElementExt for HtmlElement {
-    fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement)) {
+    fn walk(&mut self, f: &mut impl FnMut(&mut Self)) {
         f(self);
         for child in self.children.make_mut() {
             if let HtmlNode::Element(child) = child {
@@ -168,9 +168,9 @@ impl ElementExt for HtmlElement {
         }
     }
 
-    fn visit(&self, f: &mut impl FnMut(&HtmlElement)) {
+    fn visit(&self, f: &mut impl FnMut(&Self)) {
         f(self);
-        for child in self.children.iter() {
+        for child in &self.children {
             if let HtmlNode::Element(child) = child {
                 child.visit(f);
             }
@@ -180,7 +180,7 @@ impl ElementExt for HtmlElement {
     fn text(&self) -> String {
         let mut out = String::new();
         self.visit(&mut |element| {
-            for child in element.children.iter() {
+            for child in &element.children {
                 if let HtmlNode::Text(text, _) = child {
                     out.push_str(text);
                 }
@@ -193,7 +193,7 @@ impl ElementExt for HtmlElement {
         HEADINGS
             .iter()
             .position(|&heading| heading == self.tag)
-            .map(|level| level as u8 + 1)
+            .and_then(|level| u8::try_from(level + 1).ok())
     }
 
     fn stylesheet(&self) -> bool {

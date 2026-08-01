@@ -140,7 +140,7 @@ impl Raster {
             ImageFormat::Jpeg => {
                 image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality)
                     .encode_image(img)
-                    .map_err(|e| AssetError::image(file.display(), e))?
+                    .map_err(|e| AssetError::image(file.display(), e))?;
             }
             ImageFormat::Png => img
                 .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)

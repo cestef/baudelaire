@@ -176,7 +176,7 @@ mod tests {
         let mut cache = SkipCache::default();
         cache.set("keep".into(), one);
         cache.set("gone".into(), two);
-        cache.retain(&["keep".to_owned()].into_iter().collect());
+        cache.retain(&std::iter::once("keep".to_owned()).collect());
         assert!(cache.unchanged("keep", &one));
         assert!(!cache.unchanged("gone", &two));
     }

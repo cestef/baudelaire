@@ -95,7 +95,13 @@ impl<'a> Policy<'a> {
         // every file the page loads.
         push(
             "script-src",
-            Self::sources(script, default, self.digests.scripts.clone(), &[]).as_ref(),
+            Self::sources(
+                script.as_deref(),
+                default.as_deref(),
+                &self.digests.scripts,
+                &[],
+            )
+            .as_ref(),
         );
         // A style *attribute* is allowed by digest only in the company of
         // `'unsafe-hashes'`, which is what its name says it is: it lets a hash
@@ -106,15 +112,10 @@ impl<'a> Policy<'a> {
             true => &[],
             false => &["'unsafe-hashes'"],
         };
+        let styles = &self.digests.styles | &self.digests.attrs;
         push(
             "style-src",
-            Self::sources(
-                style,
-                default,
-                &self.digests.styles | &self.digests.attrs,
-                unsafe_hashes,
-            )
-            .as_ref(),
+            Self::sources(style.as_deref(), default.as_deref(), &styles, unsafe_hashes).as_ref(),
         );
         push("img-src", img.as_ref());
         push("font-src", font.as_ref());
@@ -132,17 +133,17 @@ impl<'a> Policy<'a> {
     /// `None` when the directive says nothing the fallback does not already
     /// say.
     fn sources(
-        configured: &Option<String>,
-        default: &Option<String>,
-        digests: BTreeSet<String>,
+        configured: Option<&str>,
+        default: Option<&str>,
+        digests: &BTreeSet<String>,
         keywords: &[&str],
     ) -> Option<String> {
         if digests.is_empty() {
-            return configured.clone();
+            return configured.map(str::to_owned);
         }
-        let base = configured.as_ref().or(default.as_ref());
+        let base = configured.or(default);
         let sources = base
-            .cloned()
+            .map(str::to_owned)
             .into_iter()
             .chain(keywords.iter().map(|&keyword| keyword.to_owned()))
             .chain(digests.iter().map(|digest| format!("'{digest}'")));

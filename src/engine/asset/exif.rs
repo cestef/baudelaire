@@ -178,7 +178,11 @@ mod tests {
         tiff.extend(word(0)); // value padding to 4 bytes
         let payload = [b"Exif\0\0".as_slice(), &tiff].concat();
         let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
-        out.extend(((payload.len() + 2) as u16).to_be_bytes());
+        out.extend(
+            u16::try_from(payload.len() + 2)
+                .expect("a fixture's EXIF payload fits an APP1 length")
+                .to_be_bytes(),
+        );
         out.extend(payload);
         out
     }

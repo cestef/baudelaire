@@ -19,7 +19,7 @@ pub struct Link {
 pub struct Section {
     pub id: String,
     pub pages: Vec<Link>,
-    pub children: Vec<Section>,
+    pub children: Vec<Self>,
 }
 
 impl Section {
@@ -28,8 +28,8 @@ impl Section {
     /// a nav never links ([`Page::listed`]) are excluded. Each page is filed
     /// under its [`Page::section_path`], so a language's nav lists only its own
     /// pages.
-    pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Section> {
-        let mut root = Section::new("");
+    pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Self> {
+        let mut root = Self::new("");
         for page in pages {
             if matches!(page.data, Data::Generated(_)) || page.lang != lang || !page.listed(config)
             {
@@ -47,8 +47,8 @@ impl Section {
         root.children
     }
 
-    fn new(id: &str) -> Section {
-        Section {
+    fn new(id: &str) -> Self {
+        Self {
             id: id.to_owned(),
             pages: Vec::new(),
             children: Vec::new(),
@@ -57,11 +57,11 @@ impl Section {
 
     /// The direct child directory named `id`, created (in first-seen order) if
     /// it does not exist yet.
-    fn child(&mut self, id: &str) -> &mut Section {
+    fn child(&mut self, id: &str) -> &mut Self {
         if let Some(i) = self.children.iter().position(|c| c.id == id) {
             return &mut self.children[i];
         }
-        self.children.push(Section::new(id));
+        self.children.push(Self::new(id));
         self.children.last_mut().expect("just pushed")
     }
 
@@ -79,7 +79,7 @@ impl Section {
             ),
             (
                 "children",
-                Value::array(self.children.iter().map(Section::value)),
+                Value::array(self.children.iter().map(Self::value)),
             ),
         ])
     }

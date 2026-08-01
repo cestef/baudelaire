@@ -128,7 +128,7 @@ impl Svg {
         let mut attrs = HtmlAttrs::new();
         attrs.push(XMLNS_ATTR, XMLNS);
         icon.attributes(&mut attrs);
-        for (key, value) in element.attrs.0.iter() {
+        for (key, value) in &element.attrs.0 {
             attrs.set(*key, value);
         }
 

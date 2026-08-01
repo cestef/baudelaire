@@ -58,12 +58,12 @@ fn extracts_scalar_fields() {
 #[test]
 fn extracts_date() {
     let fm = extract(
-        r#"
+        r"
 #let frontmatter = (
   date: datetime(year: 2024, month: 1, day: 15),
 )
 body
-"#,
+",
     );
     let date = fm.date.expect("date");
     assert_eq!(date.year(), 2024);
@@ -84,11 +84,11 @@ body
     );
     assert_eq!(
         fm.taxonomies.get("tags").unwrap(),
-        &vec!["intro".to_string(), "typst".to_string()]
+        &vec!["intro".to_owned(), "typst".to_owned()]
     );
     assert_eq!(
         fm.taxonomies.get("series").unwrap(),
-        &vec!["build".to_string()]
+        &vec!["build".to_owned()]
     );
 }
 
@@ -102,7 +102,7 @@ fn extracts_redirect_list() {
 body
 "#,
     );
-    assert_eq!(fm.redirect, vec!["/old".to_string(), "/older".to_string()]);
+    assert_eq!(fm.redirect, vec!["/old".to_owned(), "/older".to_owned()]);
 }
 
 #[test]
@@ -139,7 +139,7 @@ body
     assert_eq!(fm.title.as_deref(), Some("Part 2 - build"));
     assert_eq!(
         fm.taxonomies.get("series").unwrap(),
-        &vec!["build".to_string()]
+        &vec!["build".to_owned()]
     );
 }
 
@@ -223,7 +223,7 @@ fn configured_taxonomy_key_is_recognized() {
     .expect("load");
     assert_eq!(
         page.frontmatter.taxonomies.get("categories").unwrap(),
-        &vec!["rust".to_string(), "cli".to_string()]
+        &vec!["rust".to_owned(), "cli".to_owned()]
     );
 }
 

@@ -246,7 +246,7 @@ mod tests {
         }
     }
 
-    fn options<'a>(secret: Option<String>, stub: &'a Stub) -> Options<'a> {
+    fn options(secret: Option<String>, stub: &Stub) -> Options<'_> {
         Options {
             dry_run: false,
             yes: false,

@@ -91,7 +91,7 @@ impl russh::keys::signature::rand_core::TryCryptoRng for Rng {}
 /// The SFTP-visible file store the server keeps, keyed by dist-relative path.
 type SftpStore = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 
-fn options<'a>(dry_run: bool, headless: &'a Headless) -> Options<'a> {
+fn options(dry_run: bool, headless: &Headless) -> Options<'_> {
     Options {
         dry_run,
         yes: true,
@@ -121,11 +121,11 @@ fn spawn_ssh(store: SftpStore, listing: String) -> u16 {
             let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
             while let Ok((stream, _)) = listener.accept().await {
                 let handler = SshServer {
-                    store: store.clone(),
+                    store: Arc::clone(&store),
                     listing: listing.clone(),
                     channels: HashMap::new(),
                 };
-                let config = config.clone();
+                let config = Arc::clone(&config);
                 tokio::spawn(async move {
                     if let Ok(session) = run_stream(config, stream, handler).await {
                         let _ = session.await;
@@ -199,7 +199,8 @@ impl Handler for SshServer {
         if name == "sftp" {
             session.channel_success(channel)?;
             if let Some(channel) = self.channels.remove(&channel) {
-                russh_sftp::server::run(channel.into_stream(), Sftp::new(self.store.clone())).await;
+                russh_sftp::server::run(channel.into_stream(), Sftp::new(Arc::clone(&self.store)))
+                    .await;
             }
         } else {
             session.channel_failure(channel)?;
@@ -322,7 +323,7 @@ fn ssh_deploy_uploads_new_files_and_deletes_orphans() {
         .lock()
         .unwrap()
         .insert("orphan.html".into(), b"stale".to_vec());
-    let port = spawn_ssh(store.clone(), orphan_listing("orphan.html"));
+    let port = spawn_ssh(Arc::clone(&store), orphan_listing("orphan.html"));
 
     let headless = Headless;
     deploy::run(
@@ -361,7 +362,7 @@ fn ssh_refuses_a_changed_host_key() {
     let site = Site::new();
     dist(&site);
     let store: SftpStore = Arc::new(Mutex::new(BTreeMap::new()));
-    let port = spawn_ssh(store.clone(), String::new());
+    let port = spawn_ssh(Arc::clone(&store), String::new());
 
     // A known_hosts that records a *different* key for this host:port, so the
     // server's ephemeral key reads as changed: the man-in-the-middle guard.
@@ -399,7 +400,7 @@ fn ssh_dry_run_writes_nothing() {
     dist(&site);
 
     let store: SftpStore = Arc::new(Mutex::new(BTreeMap::new()));
-    let port = spawn_ssh(store.clone(), String::new());
+    let port = spawn_ssh(Arc::clone(&store), String::new());
 
     let headless = Headless;
     deploy::run(

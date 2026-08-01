@@ -116,14 +116,11 @@ impl<'a> Auth<'a> {
     fn load(&self) -> Result<PrivateKey> {
         let key = self.config.key.as_ref().expect("key configured");
         let path = Self::expand(key, std::env::var_os("HOME"));
-        match load_secret_key(&path, None) {
-            Ok(key) => Ok(key),
-            Err(_) => {
-                let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
-                load_secret_key(&path, Some(&passphrase))
-                    .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
-            }
-        }
+        load_secret_key(&path, None).or_else(|_| {
+            let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
+            load_secret_key(&path, Some(&passphrase))
+                .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
+        })
     }
 
     /// Expand a leading `~` in a key path against `home`, leaving other paths

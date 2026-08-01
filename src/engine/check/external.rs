@@ -27,7 +27,7 @@ use crate::ui::Ui;
 /// How long a verified URL stays verified. A link that answered last week is
 /// almost certainly still there, and re-asking every host on every CI run is
 /// both slow and rude.
-const FRESH: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const FRESH: Duration = Duration::from_hours(7 * 24);
 
 /// Per-request ceiling. Generous enough for a slow host, short enough that one
 /// black hole does not hold up the run.
@@ -71,7 +71,7 @@ impl External {
             .par_iter()
             .map(|url| {
                 let probe = Probe::of(&agent, url);
-                progress.tick((*url).to_string());
+                progress.tick((*url).to_owned());
                 (*url, probe)
             })
             .collect();
@@ -202,7 +202,7 @@ impl Verified {
             return false;
         };
         let age = Self::now() - at;
-        (0..FRESH.as_secs() as i64).contains(&age)
+        (0..FRESH.as_secs().cast_signed()).contains(&age)
     }
 
     /// Now, in the unix seconds the record is keyed by.
@@ -241,7 +241,7 @@ mod tests {
         verified.0.insert("https://fresh.test".into(), now - 60);
         verified.0.insert(
             "https://stale.test".into(),
-            now - FRESH.as_secs() as i64 - 1,
+            now - FRESH.as_secs().cast_signed() - 1,
         );
 
         assert!(verified.is_fresh("https://fresh.test"));

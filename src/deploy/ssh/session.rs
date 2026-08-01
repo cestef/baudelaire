@@ -39,12 +39,17 @@ impl Session {
         // The handler records its verdict here, since it can only return a
         // bool; a plain connection failure otherwise stays generic.
         let verdict = Arc::new(Mutex::new(None));
-        let client = Client::new(config, verdict.clone());
+        let client = Client::new(config, Arc::clone(&verdict));
         let mut handle = client::connect(rc, (config.host.as_str(), config.port), client)
             .await
-            .map_err(|e| match *verdict.lock() {
-                Some(Verdict::Changed) => DeployError::host_key_changed(&config.host),
-                _ => DeployError::connect(&config.host, e),
+            .map_err(|e| {
+                // Read the verdict out before matching: the guard must not stay
+                // alive for the arms, which lock nothing but would hold it.
+                let seen = *verdict.lock();
+                match seen {
+                    Some(Verdict::Changed) => DeployError::host_key_changed(&config.host),
+                    _ => DeployError::connect(&config.host, e),
+                }
             })?;
         // Connected despite a changed key: only `strict #false` gets here, and
         // it must not do so quietly.

@@ -146,21 +146,20 @@ impl BuildContext {
 /// [`codegen::Value`] and converted to a Typst runtime value at injection.
 impl From<&BuildContext> for codegen::Value {
     fn from(cx: &BuildContext) -> Self {
-        use codegen::Value;
         let mut fields = vec![
-            ("version", Value::str(cx.version)),
-            (BuildContext::DATE, Value::str(&cx.date)),
-            ("mode", Value::str(cx.mode.as_str())),
+            ("version", Self::str(cx.version)),
+            (BuildContext::DATE, Self::str(&cx.date)),
+            ("mode", Self::str(cx.mode.as_str())),
         ];
         if let Some(profile) = &cx.profile {
-            fields.push(("profile", Value::str(profile)));
+            fields.push(("profile", Self::str(profile)));
         }
         if let Some(git) = &cx.git {
             fields.push(("git", git.into()));
         }
         fields.push(("site", (&cx.site).into()));
         fields.push(("client", cx.client.clone()));
-        Value::dict(fields)
+        Self::dict(fields)
     }
 }
 
@@ -206,22 +205,21 @@ impl GitInfo {
 
 impl From<&GitInfo> for codegen::Value {
     fn from(git: &GitInfo) -> Self {
-        use codegen::Value;
-        let mut fields = vec![("hash", Value::str(&git.hash))];
+        let mut fields = vec![("hash", Self::str(&git.hash))];
         if let Some(rev) = &git.rev {
-            fields.push(("rev", Value::str(rev)));
+            fields.push(("rev", Self::str(rev)));
         }
         if let Some(branch) = &git.branch {
-            fields.push(("branch", Value::str(branch)));
+            fields.push(("branch", Self::str(branch)));
         }
         if let Some(tag) = &git.tag {
-            fields.push(("tag", Value::str(tag)));
+            fields.push(("tag", Self::str(tag)));
         }
         if let Some(committed) = &git.committed {
-            fields.push(("committed", Value::str(committed)));
+            fields.push(("committed", Self::str(committed)));
         }
-        fields.push(("dirty", Value::Bool(git.dirty)));
-        Value::dict(fields)
+        fields.push(("dirty", Self::Bool(git.dirty)));
+        Self::dict(fields)
     }
 }
 
@@ -231,19 +229,18 @@ impl From<&GitInfo> for codegen::Value {
 /// fail on an authorless site instead of reading `none`.
 impl From<&SiteInfo> for codegen::Value {
     fn from(site: &SiteInfo) -> Self {
-        use codegen::Value;
         let langs = site.languages.iter().map(|(code, name)| {
-            Value::dict([
-                ("code", Value::str(code)),
-                ("name", Value::str(name.as_deref().unwrap_or(code))),
+            Self::dict([
+                ("code", Self::str(code)),
+                ("name", Self::str(name.as_deref().unwrap_or(code))),
             ])
         });
-        Value::dict([
-            ("title", Value::opt(site.title.clone())),
-            ("url", Value::opt(site.url.clone())),
-            ("lang", Value::str(&site.lang)),
-            ("author", Value::opt(site.author.clone())),
-            ("languages", Value::array(langs)),
+        Self::dict([
+            ("title", Self::opt(site.title.clone())),
+            ("url", Self::opt(site.url.clone())),
+            ("lang", Self::str(&site.lang)),
+            ("author", Self::opt(site.author.clone())),
+            ("languages", Self::array(langs)),
         ])
     }
 }

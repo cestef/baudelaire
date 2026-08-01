@@ -57,7 +57,7 @@ impl<'a> Static<'a> {
         for source in self.sources.files()? {
             let file = &source.path;
             let rel = source.rel.as_path();
-            let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+            let len = file.metadata().map_or(0, |m| m.len());
             // The prune keeps the *served* path; the write may go elsewhere.
             out.paths.push(self.dist.join(rel));
             let dst = self.destination(rel);
@@ -136,7 +136,7 @@ mod tests {
         fs::write(&src, b"a.example.com").unwrap();
         fs::write(&dst, b"b.example.com").unwrap();
         // Whatever the clock did, the destination is at least as new.
-        let newer = fs::metadata(&src).unwrap().modified().unwrap() + Duration::from_secs(60);
+        let newer = fs::metadata(&src).unwrap().modified().unwrap() + Duration::from_mins(1);
         fs::File::options()
             .write(true)
             .open(&dst)

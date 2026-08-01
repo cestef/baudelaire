@@ -53,10 +53,10 @@ pub(super) struct Output<'a> {
     pub inline: &'a crate::render::Inline,
 }
 
+#[cfg(test)]
 impl<'a> Output<'a> {
     /// A page and its markup, with no fragments: what a test builds when the
     /// processor under it never looks at the single-file export's half.
-    #[cfg(test)]
     pub(super) fn new(page: &'a Page, html: &'a str) -> Self {
         Self {
             page,
@@ -106,12 +106,12 @@ impl Site<'_> {
         &self,
         out: &mut dyn Emit,
         missing: BaseUrlMissing,
-    ) -> Result<Option<BaseUrl>> {
+    ) -> Option<BaseUrl> {
         let base = self.config.base();
         if base.is_none() {
             out.warn(missing);
         }
-        Ok(base)
+        base
     }
 }
 

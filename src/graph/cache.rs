@@ -216,6 +216,7 @@ pub struct RenderInputs {
 /// A parameter object rather than a row of positional arguments, so a new kind
 /// of dependency is one field here and one line at the call site, instead of a
 /// wider signature every caller has to re-spell.
+#[derive(Clone, Copy)]
 pub struct Recorded<'a> {
     pub page: &'a Page,
     /// Hash of the exact text typst compiled.
@@ -300,7 +301,7 @@ impl Cache {
                 Ok(prev) => prev,
                 Err(e) => {
                     ui.warn(ManifestUnreadable {
-                        path: manifest.clone(),
+                        path: manifest,
                         source: e,
                     });
                     Manifest::default()

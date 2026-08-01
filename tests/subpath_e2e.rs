@@ -165,7 +165,7 @@ fn css_references_carry_the_subpath() {
     let sheet = site
         .files("public/assets")
         .into_iter()
-        .find(|name| name.starts_with("app.") && name.ends_with(".css"))
+        .find(|name| name.starts_with("app.") && common::has_ext(name, "css"))
         .expect("fingerprinted stylesheet");
     let css = site.read(&format!("public/assets/{sheet}"));
     assert!(css.contains("/docs/assets/logo."), "{css}");

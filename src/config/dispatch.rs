@@ -11,7 +11,7 @@
 //! policy lives: sections fill in place, lists replace wholesale.
 
 use itertools::Itertools;
-use kdl::{KdlNode, KdlValue};
+use kdl::{KdlIdentifier, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::error::{BaudelaireErrorKind, ConfigError, Result};
@@ -80,7 +80,7 @@ pub enum Kind {
     /// A block of repeated child nodes, each named by the author and each
     /// accepting *any top-level key*.
     ///
-    /// Its own variant rather than [`Kind::Items`]`(Config::rows)`, which is
+    /// Its own variant rather than [`Kind::Items(Config::rows)`](Kind::Items), which is
     /// what it means: that spelling is honest and would send the reference
     /// walker into an infinite recursion, since a profile can hold a `profiles`
     /// block of its own.
@@ -150,7 +150,7 @@ pub(super) trait Section: Sized + 'static {
     /// This section's keys, as the reference renders them.
     ///
     /// A `fn() -> Vec<Row>` and not a constant, so a parent naming a child
-    /// writes [`Kind::Block`]`(Child::rows)` and never repeats the child's key
+    /// writes [`Kind::Block(Child::rows)`](Kind::Block) and never repeats the child's key
     /// list. That indirection is what makes the generated reference a walk of
     /// the same tables that parse, rather than a second description of them.
     fn rows() -> Vec<Row> {
@@ -252,7 +252,7 @@ impl<T> Attrs<T> {
     ) -> Result<()> {
         let span = NodeExt::span(node);
         for (position, entry) in node.entries().iter().enumerate() {
-            let Some(key) = entry.name().map(|n| n.value()) else {
+            let Some(key) = entry.name().map(KdlIdentifier::value) else {
                 if position >= leading {
                     return Err(ConfigError::unexpected_argument(
                         text,

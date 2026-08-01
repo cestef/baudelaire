@@ -137,6 +137,7 @@ pub struct Rewrite {
 /// page consulted while rendering, may its markup be reused? Passing them as
 /// one value also keeps the fact that they come from a single renderer, rather
 /// than three unrelated arguments a caller could pair up wrongly.
+#[derive(Clone, Copy)]
 pub struct RenderMaps<'a> {
     pub links: &'a LinkMap,
     pub srcsets: &'a SrcSets,

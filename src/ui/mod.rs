@@ -512,7 +512,7 @@ impl Ui {
     fn render(&self, diagnostic: &dyn Diagnostic) -> String {
         let styled = Styled::new(diagnostic, self.color);
         let mut text = String::new();
-        match self.handler().render_report(&mut text, &styled) {
+        match Self::handler().render_report(&mut text, &styled) {
             Ok(()) => text,
             Err(_) => styled.to_string(),
         }
@@ -521,15 +521,15 @@ impl Ui {
     /// The renderer for collected diagnostics, sized to the terminal. Colors
     /// are always emitted: the `anstream` writer strips them on pipes and
     /// under `NO_COLOR`, same as every other line.
-    fn handler(&self) -> GraphicalReportHandler {
-        let width = console::Term::stderr()
-            .size_checked()
-            .map(|(_, cols)| {
-                (cols as usize)
-                    .saturating_sub(REPORT_MARGIN)
-                    .clamp(REPORT_MIN_WIDTH, REPORT_MAX_WIDTH)
-            })
-            .unwrap_or(REPORT_NO_TERMINAL_WIDTH);
+    fn handler() -> GraphicalReportHandler {
+        let width =
+            console::Term::stderr()
+                .size_checked()
+                .map_or(REPORT_NO_TERMINAL_WIDTH, |(_, cols)| {
+                    usize::from(cols)
+                        .saturating_sub(REPORT_MARGIN)
+                        .clamp(REPORT_MIN_WIDTH, REPORT_MAX_WIDTH)
+                });
         GraphicalReportHandler::new_themed(GraphicalTheme::unicode()).with_width(width)
     }
 

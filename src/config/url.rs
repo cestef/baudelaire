@@ -3,6 +3,8 @@
 //! Configured through `links { style }` and `url`, but the algebra itself is
 //! independent of the config tree.
 
+use std::fmt::Write as _;
+
 use super::Named;
 
 /// The site base URL with its trailing slash normalized away: the single
@@ -38,7 +40,7 @@ impl BaseUrl {
     /// leave it as-is: the one "absolutize if we can, otherwise stay relative"
     /// rule shared by every URL emitter. Non-root-relative refs (external URLs)
     /// pass through untouched.
-    pub fn resolve(base: Option<&BaseUrl>, path: &str) -> String {
+    pub fn resolve(base: Option<&Self>, path: &str) -> String {
         match base {
             Some(base) if path.starts_with('/') => base.join(path),
             _ => path.to_owned(),
@@ -96,7 +98,9 @@ impl Percent {
             }
             match Self::literal(byte) {
                 true => out.push(byte as char),
-                false => out.push_str(&format!("%{byte:02X}")),
+                false => {
+                    let _ = write!(out, "%{byte:02X}");
+                }
             }
             i += 1;
         }
@@ -111,15 +115,12 @@ impl Percent {
         let mut out = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
-            match Self::triplet(bytes, i).filter(|_| bytes[i] == b'%') {
-                Some(byte) => {
-                    out.push(byte);
-                    i += 3;
-                }
-                None => {
-                    out.push(bytes[i]);
-                    i += 1;
-                }
+            if let Some(byte) = Self::triplet(bytes, i).filter(|_| bytes[i] == b'%') {
+                out.push(byte);
+                i += 3;
+            } else {
+                out.push(bytes[i]);
+                i += 1;
             }
         }
         String::from_utf8(out).unwrap_or_else(|_| path.to_owned())

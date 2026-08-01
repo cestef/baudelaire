@@ -68,7 +68,7 @@ impl<'a> Origins<'a> {
     /// The file and byte range `span` names, or `None` for anything the author
     /// cannot open: a detached span (an element this crate synthesized), or one
     /// in a package, whose paths name a download cache rather than the site.
-    pub(super) fn site(&mut self, span: Span) -> Option<Site> {
+    pub(super) fn site(&self, span: Span) -> Option<Site> {
         let (id, range) = self.bytes(span)?;
         Some(Site {
             file: id.vpath().get_without_slash().to_owned(),
@@ -89,7 +89,7 @@ impl<'a> Origins<'a> {
     }
 
     /// The shared half: which file a span belongs to, and the bytes it covers.
-    fn bytes(&mut self, span: Span) -> Option<(FileId, Range<usize>)> {
+    fn bytes(&self, span: Span) -> Option<(FileId, Range<usize>)> {
         let id = span.id()?;
         if matches!(id.root(), VirtualRoot::Package(_)) {
             return None;

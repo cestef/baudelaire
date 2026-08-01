@@ -315,7 +315,7 @@ fn i18n_module_inlines_languages_and_strings() {
     let bundle = site
         .files("public/assets")
         .into_iter()
-        .find(|f| f.starts_with("main") && f.ends_with(".js"))
+        .find(|f| f.starts_with("main") && common::has_ext(f, "js"))
         .expect("bundled main.js");
     let js = site.read(&format!("public/assets/{bundle}"));
     assert!(js.contains("Lire la suite") && js.contains("Français"));

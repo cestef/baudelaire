@@ -173,8 +173,8 @@ impl Modules {
     /// The file backing `id`, when it names a file-backed module's entrypoint.
     /// The one place that mapping is made, so serving and path resolution can
     /// never disagree about where a module's source is.
-    fn file(&self, id: &FileId) -> Option<&Path> {
-        let spec = Self::owner(id)?;
+    fn file(&self, id: FileId) -> Option<&Path> {
+        let spec = Self::owner(&id)?;
         if id.vpath().get_without_slash() != ENTRYPOINT {
             return None;
         }
@@ -313,7 +313,7 @@ impl Files {
     pub(super) fn resolve(&self, id: FileId) -> FileResult<PathBuf> {
         // A file-backed module resolves to the file it is served from, which is
         // what puts it in the importing page's dependency set.
-        if let Some(path) = self.modules.file(&id) {
+        if let Some(path) = self.modules.file(id) {
             return Ok(path.to_path_buf());
         }
         if Modules::owner(&id).is_some() {

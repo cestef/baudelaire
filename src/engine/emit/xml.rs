@@ -61,7 +61,7 @@ impl Xml {
         &mut self,
         name: &str,
         attrs: &[(&str, &str)],
-        content: impl FnOnce(&mut Xml),
+        content: impl FnOnce(&mut Self),
     ) {
         self.write(Event::Start(Self::start(name, attrs)));
         content(self);

@@ -75,6 +75,10 @@ pub(super) trait NodeExt {
 
 impl NodeExt for KdlNode {
     /// Bridge kdl's `miette::SourceSpan` (its own miette 7) to ours.
+    // `use_self` wants `Self::span`, which reads as a call to the very function
+    // it sits in. It resolves to kdl's inherent method either way, but the type
+    // name is what says so.
+    #[allow(clippy::use_self)]
     fn span(&self) -> SourceSpan {
         let s = KdlNode::span(self);
         SourceSpan::new(s.offset().into(), s.len())
@@ -266,7 +270,7 @@ impl NodeExt for KdlNode {
         self.entries()
             .iter()
             .filter(|e| e.name().is_none())
-            .map(|e| Ok(e.value().ranged(text, span, 1, 16384)? as u32))
+            .map(|e| e.value().bounded::<u32>(text, span, 1, 16384))
             .collect()
     }
 
@@ -308,6 +312,9 @@ pub(super) trait EntryExt {
 }
 
 impl EntryExt for KdlEntry {
+    // As on `NodeExt::span` above: the spelled-out type is what shows this is
+    // kdl's inherent method and not a recursive call.
+    #[allow(clippy::use_self)]
     fn span(&self) -> SourceSpan {
         let s = KdlEntry::span(self);
         SourceSpan::new(s.offset().into(), s.len())

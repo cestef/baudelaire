@@ -125,9 +125,9 @@ impl<'a> Root<'a> {
             return None;
         }
         if path.len() <= base.len() {
-            return Some(self.base.to_string());
+            return Some(self.base.to_owned());
         }
-        let mut key = self.base.to_string();
+        let mut key = self.base.to_owned();
         let mut node = self.tree;
         for segment in &path[base.len()..] {
             let Value::Dict(_) = node else {
@@ -193,7 +193,7 @@ impl<'a> Scan<'a> {
             // or complex pattern) would let the value escape untracked, so its
             // initializer is recorded like any other use instead.
             if let Expr::LetBinding(binding) = expr {
-                let init = binding.init().map(|init| init.to_untyped());
+                let init = binding.init().map(Expr::to_untyped);
                 match (self.bind(binding), init) {
                     (true, Some(init)) => self.args(init),
                     (false, Some(init)) => self.walk(init),
@@ -332,7 +332,7 @@ impl<'a> Analyzer<'a> {
     /// The reads of a dependency file, analyzed once per build.
     fn file(&self, path: &Path) -> Arc<Reads> {
         if let Some(cached) = self.memo.lock().get(path) {
-            return cached.clone();
+            return Arc::clone(cached);
         }
         let found = match self.project.source(path) {
             Ok(source) => self.roots.reads(&source),
@@ -345,7 +345,7 @@ impl<'a> Analyzer<'a> {
             Err(_) => self.roots.everything(),
         };
         let found = Arc::new(found);
-        self.memo.lock().insert(path.to_owned(), found.clone());
+        self.memo.lock().insert(path.to_owned(), Arc::clone(&found));
         found
     }
 }
@@ -431,10 +431,10 @@ mod tests {
     fn binding_alone_is_not_a_read() {
         // Binding the whole context must NOT record a whole-context dependency;
         // only the fields actually read count.
-        let code = r#"
+        let code = r"
             #let build = sys.inputs.baudelaire
             #build.version
-        "#;
+        ";
         assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire.version"]);
     }
 
@@ -457,12 +457,12 @@ mod tests {
     #[test]
     fn transitive_aliases_chain() {
         // a = root; c = a; d = c; then read a leaf off d.
-        let code = r#"
+        let code = r"
             #let a = sys.inputs.baudelaire
             #let c = a
             #let d = c
             #d.git.hash
-        "#;
+        ";
         assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire.git.hash"]);
     }
 

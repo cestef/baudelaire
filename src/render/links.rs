@@ -109,7 +109,9 @@ impl LinkMap {
             return Resolution::passthrough();
         }
         let split = super::Tail::of(raw);
-        if !split.path.ends_with(".typ") {
+        // Case-sensitively, the way discovery matches content files: typst
+        // resolves the path literally, so `b.TYP` is not a link to `b.typ`.
+        if Path::new(split.path).extension().is_none_or(|e| e != "typ") {
             return Resolution::passthrough();
         }
         // Typst path semantics: absolute paths are project-root-relative,

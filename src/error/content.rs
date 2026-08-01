@@ -134,14 +134,13 @@ impl ContentError {
             "baudelaire::content::bad_glob",
             markup!("invalid {} glob `{}`", noun, pattern),
             pattern.to_owned(),
-        )
-        // wax's own message: foreign text, escaped rather than read as markup.
-        .help(Text(&error).to_string());
+        );
         for location in error.locations() {
             let (offset, len) = location.span();
             diag = diag.label(location.to_string(), offset, len);
         }
-        Self::BadGlob(diag)
+        // wax's own message: foreign text, escaped rather than read as markup.
+        Self::BadGlob(diag.help(Text(error).to_string()))
     }
 
     pub fn frontmatter_not_dict(path: &std::path::Path, value: &typst::foundations::Value) -> Self {

@@ -248,8 +248,8 @@ impl Plan {
     /// new); an entry deletes when the build no longer produces it and `delete`
     /// is on; everything else is unchanged. The digest algorithm is the backend's
     /// choice; this only compares the strings.
-    pub fn compute(local: &Digests, remote: &Digests, delete: bool) -> Plan {
-        let mut out = Plan::default();
+    pub fn compute(local: &Digests, remote: &Digests, delete: bool) -> Self {
+        let mut out = Self::default();
         for (key, digest) in local {
             match remote.get(key) {
                 Some(other) if other.eq_ignore_ascii_case(digest) => out.unchanged += 1,
@@ -371,7 +371,7 @@ mod tests {
         let plan = Plan::compute(&local, &remote, true);
         assert_eq!(
             plan.uploads,
-            vec!["changed.html".to_string(), "new.html".to_string()]
+            vec!["changed.html".to_owned(), "new.html".to_owned()]
         );
         assert_eq!(plan.unchanged, 1);
     }
@@ -382,7 +382,7 @@ mod tests {
         let remote = digests(&[("keep.html", "k"), ("gone.html", "g")]);
 
         let with_delete = Plan::compute(&local, &remote, true);
-        assert_eq!(with_delete.deletes, vec!["gone.html".to_string()]);
+        assert_eq!(with_delete.deletes, vec!["gone.html".to_owned()]);
         assert_eq!(with_delete.unchanged, 1);
 
         assert!(Plan::compute(&local, &remote, false).deletes.is_empty());

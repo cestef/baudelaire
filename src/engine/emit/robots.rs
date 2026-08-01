@@ -39,7 +39,7 @@ impl Processor for Robots {
                     feature: "the robots.txt sitemap link",
                     effect: "omitted",
                 },
-            )?
+            )
         {
             let _ = writeln!(body, "Sitemap: {}", base.file(SiteMap::FILE));
         }

@@ -116,7 +116,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         let (rel, body) = match file.is_config() {
             true => (
                 config.clone(),
-                details.config(&file.body, args.theme.as_deref(), &extras),
+                Details::config(&file.body, args.theme.as_deref(), &extras),
             ),
             false => (file.rel, file.body),
         };
@@ -219,7 +219,7 @@ impl Details {
     /// The scaffolded `config.kdl`: the template's own, plus whatever the flags
     /// bolt on. Both additions are appended rather than spliced, which a KDL
     /// config tolerates because a repeated section fills in place.
-    fn config(&self, rendered: &str, theme: Option<&str>, extras: &[&'static Extra]) -> String {
+    fn config(rendered: &str, theme: Option<&str>, extras: &[&'static Extra]) -> String {
         let mut out = rendered.to_owned();
         if let Some(theme) = theme {
             let _ = write!(
@@ -240,8 +240,7 @@ impl Details {
             .file_name()
             .and_then(|n| n.to_str())
             .filter(|n| !n.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| Self::UNNAMED.to_owned())
+            .map_or_else(|| Self::UNNAMED.to_owned(), str::to_owned)
     }
 
     /// The user's name from git config, if configured.
@@ -262,6 +261,10 @@ impl Details {
 /// occupant). The operation is a type, not a free function: [`plan`](Self::plan)
 /// reads the config and existing content to infer, then [`create`](Self::create)
 /// writes. Only standard frontmatter fields are written; content is the author's.
+// The type is the plan for a new page; the field is the `draft` frontmatter key
+// that plan writes. Same word, two different things, and the key is not ours to
+// rename.
+#[allow(clippy::struct_field_names)]
 pub(crate) struct Draft {
     /// The file to write; a bundle resolves to `<dir>/index.typ`.
     path: PathBuf,
@@ -269,7 +272,7 @@ pub(crate) struct Draft {
     template: String,
     date: Option<time::Date>,
     order: Option<i64>,
-    is_draft: bool,
+    draft: bool,
     permalink: String,
     /// The source of an existing page already producing `permalink`, if any.
     collision: Option<String>,
@@ -342,7 +345,7 @@ impl Draft {
             template,
             date,
             order,
-            is_draft: args.is_draft(),
+            draft: args.is_draft(),
             permalink,
             collision,
             edit: args.edit,
@@ -364,7 +367,7 @@ impl Draft {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("untitled.typ");
-        Scaffold::new(self.path.parent().unwrap_or(Path::new(".")))
+        Scaffold::new(self.path.parent().unwrap_or_else(|| Path::new(".")))
             .file(name, self.body())
             .apply(ui)?;
         ui.done(format_args!(
@@ -458,7 +461,7 @@ impl Draft {
         if let Some(order) = self.order {
             fields.push(("order", Value::Int(order)));
         }
-        fields.push(("draft", Value::Bool(self.is_draft)));
+        fields.push(("draft", Value::Bool(self.draft)));
         fields.push(("template", Value::str(&self.template)));
 
         let mut out = String::from("#let frontmatter = (\n");
@@ -867,15 +870,12 @@ pub(super) mod templates {
                     return out;
                 };
                 let key = &after[..close];
-                match self.0.iter().find(|(k, _)| *k == key) {
-                    Some((_, value)) => {
-                        let _ = write!(out, "{}", Quoted(value));
-                    }
-                    None => {
-                        out.push_str("{{");
-                        out.push_str(key);
-                        out.push_str("}}");
-                    }
+                if let Some((_, value)) = self.0.iter().find(|(k, _)| *k == key) {
+                    let _ = write!(out, "{}", Quoted(value));
+                } else {
+                    out.push_str("{{");
+                    out.push_str(key);
+                    out.push_str("}}");
                 }
                 rest = &after[close + 2..];
             }

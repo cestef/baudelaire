@@ -63,6 +63,13 @@ pub(super) trait ValueExt {
     /// An integer required to fall within `min..=max`, erroring (never clamping)
     /// when it does not: the same policy as `port` and `paginate`.
     fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64>;
+    /// The [`ValueExt::ranged`] case where the bounds are already values of the
+    /// narrow field type. The range check *is* the narrowing check, so the
+    /// conversion back to `T` cannot fail and no site has to spell out a cast
+    /// whose safety argument lives one line above it.
+    fn bounded<T>(&self, text: &str, span: SourceSpan, min: T, max: T) -> Result<T>
+    where
+        T: TryFrom<i64> + Into<i64> + Copy;
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     /// Read a string value as one of `T`'s configured names, erroring on an
@@ -105,6 +112,17 @@ impl ValueExt for KdlValue {
         }
     }
 
+    fn bounded<T>(&self, text: &str, span: SourceSpan, min: T, max: T) -> Result<T>
+    where
+        T: TryFrom<i64> + Into<i64> + Copy,
+    {
+        let n = self.ranged(text, span, min.into(), max.into())?;
+        let Ok(narrowed) = T::try_from(n) else {
+            unreachable!("`ranged` already bounded the value to `T`'s own min..=max")
+        };
+        Ok(narrowed)
+    }
+
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool> {
         match self.as_bool() {
             Some(b) => Ok(b),
@@ -114,27 +132,27 @@ impl ValueExt for KdlValue {
 
     fn kind(&self) -> &'static str {
         match self {
-            KdlValue::String(_) => "string",
-            KdlValue::Integer(_) => "integer",
-            KdlValue::Float(_) => "float",
-            KdlValue::Bool(_) => "boolean",
-            KdlValue::Null => "null",
+            Self::String(_) => "string",
+            Self::Integer(_) => "integer",
+            Self::Float(_) => "float",
+            Self::Bool(_) => "boolean",
+            Self::Null => "null",
         }
     }
 
     fn scalar(&self, text: &str, span: SourceSpan) -> Result<crate::codegen::Value> {
         use crate::codegen::Value;
         Ok(match self {
-            KdlValue::String(_) => Value::str(self.as_str(text, span)?),
-            KdlValue::Integer(_) => Value::Int(self.integer(text, span)?),
-            KdlValue::Float(f) if f.is_finite() => Value::Float(*f),
-            KdlValue::Float(_) => {
+            Self::String(_) => Value::str(self.as_str(text, span)?),
+            Self::Integer(_) => Value::Int(self.integer(text, span)?),
+            Self::Float(f) if f.is_finite() => Value::Float(*f),
+            Self::Float(_) => {
                 return Err(
                     ConfigError::type_mismatch(text, "finite number", "float", span).into(),
                 );
             }
-            KdlValue::Bool(b) => Value::Bool(*b),
-            KdlValue::Null => Value::None,
+            Self::Bool(b) => Value::Bool(*b),
+            Self::Null => Value::None,
         })
     }
 

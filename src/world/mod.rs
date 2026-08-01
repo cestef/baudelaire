@@ -158,7 +158,7 @@ impl Project {
     /// fine-grained invalidation is added here.
     pub fn tracked(&self) -> Vec<(String, codegen::Value)> {
         vec![(
-            Self::METADATA.to_string(),
+            Self::METADATA.to_owned(),
             codegen::Value::from(&self.context),
         )]
     }
@@ -237,7 +237,7 @@ impl Project {
             source,
         )
         .map_err(|errs| {
-            let name = source.id().vpath().get_without_slash().to_string();
+            let name = source.id().vpath().get_without_slash().to_owned();
             crate::error::BaudelaireErrorKind::TypstCompile(TypstSourceDiagnostic::bridge(
                 errs,
                 (&name, source.text()),
@@ -269,7 +269,7 @@ impl Project {
                 Ok((module, deps))
             }
             Err(errs) => {
-                let name = source.id().vpath().get_without_slash().to_string();
+                let name = source.id().vpath().get_without_slash().to_owned();
                 Err(crate::error::BaudelaireErrorKind::TypstCompile(
                     TypstSourceDiagnostic::bridge(
                         errs,
@@ -463,7 +463,14 @@ impl World for PageWorld {
         // rather than `None`, which typst reports as "unable to determine
         // current date" on every offset-less `datetime.today()` call.
         let offset = match offset {
-            Some(o) => time::UtcOffset::from_whole_seconds(o.seconds() as i32).ok()?,
+            // Clamped before narrowing, so the cast cannot truncate: an offset
+            // that overflows `i32` is thousands of times past the day
+            // `from_whole_seconds` accepts, and is `None` either way.
+            #[allow(clippy::cast_possible_truncation)]
+            Some(o) => time::UtcOffset::from_whole_seconds(
+                o.seconds().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
+            )
+            .ok()?,
             None => time::UtcOffset::UTC,
         };
         let dt = self.project.now.checked_to_offset(offset)?;

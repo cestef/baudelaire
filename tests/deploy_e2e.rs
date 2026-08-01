@@ -8,6 +8,7 @@
 mod common;
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -153,10 +154,12 @@ fn listing(store: &BTreeMap<String, Vec<u8>>) -> String {
         // The ETag is deliberately bogus: these tests assert on upload/delete,
         // not the unchanged-skip path (which the `plan` unit tests cover), so a
         // non-matching ETag just means every local file re-uploads.
-        xml.push_str(&format!(
+        write!(
+            xml,
             "<Contents><Key>{key}</Key><ETag>\"x\"</ETag><Size>{}</Size></Contents>",
             body.len()
-        ));
+        )
+        .unwrap();
     }
     xml.push_str("</ListBucketResult>");
     xml
@@ -177,7 +180,7 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
         .unwrap()
         .insert("orphan.html".into(), b"stale".to_vec());
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    let port = spawn_s3(store.clone(), log.clone());
+    let port = spawn_s3(Arc::clone(&store), Arc::clone(&log));
 
     set_aws_creds();
     let opts = Options {
@@ -238,7 +241,7 @@ fn s3_dry_run_lists_but_writes_nothing() {
 
     let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    let port = spawn_s3(store.clone(), log.clone());
+    let port = spawn_s3(Arc::clone(&store), Arc::clone(&log));
 
     set_aws_creds();
     let opts = Options {

@@ -34,9 +34,9 @@ impl Config {
     pub fn parse(text: &str) -> Result<Self> {
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
         // keep the raw text: profile overlay reports errors against it, its nodes carry spans into it
-        let mut cfg = Config {
+        let mut cfg = Self {
             source: text.to_owned(),
-            ..Config::default()
+            ..Self::default()
         };
         cfg.apply(doc.nodes(), text)?;
         Ok(cfg)
@@ -222,7 +222,7 @@ impl Section for Config {
             |c, n, t| c.serve.fill(n, t),
         ),
         (
-            Config::PROFILES,
+            Self::PROFILES,
             Overlay,
             "Named overlays, each selected with `--profile` and each accepting any key on this page.",
             |c, n, t| {
@@ -473,7 +473,9 @@ impl Section for PaginateConfig {
                 if n_ < 1 {
                     return Err(ConfigError::paginate_too_small(t, n_, NodeExt::span(n)).into());
                 }
-                c.size = Some(n_ as usize);
+                // `n_` is proved positive above; a page size wider than `usize`
+                // (only reachable on a 32-bit target) still means "one page".
+                c.size = Some(usize::try_from(n_).unwrap_or(usize::MAX));
                 Ok(())
             },
         ),
@@ -561,7 +563,9 @@ impl Attributed for TaxonomyConfig {
                 if n < 1 {
                     return Err(ConfigError::paginate_too_small(t, n, s).into());
                 }
-                c.paginate = Some(n as usize);
+                // `n` is proved positive above; a page size wider than `usize`
+                // (only reachable on a 32-bit target) still means "one page".
+                c.paginate = Some(usize::try_from(n).unwrap_or(usize::MAX));
                 Ok(())
             },
         ),
@@ -728,7 +732,7 @@ impl Section for ResponsiveConfig {
             Number,
             "Encoder quality for the generated variants, 1 to 100.",
             |c, n, t| {
-                c.quality = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, 100)? as u8;
+                c.quality = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, 100)?;
                 Ok(())
             },
         ),
@@ -782,7 +786,7 @@ impl Attributed for PngConfig {
             Number,
             "Compression effort, 0 to 6. Higher is slower and smaller.",
             |c, v, t, s| {
-                c.level = v.ranged(t, s, 0, 6)? as u8;
+                c.level = v.bounded(t, s, 0, 6)?;
                 Ok(())
             },
         ),
@@ -804,7 +808,7 @@ impl Attributed for JpegConfig {
         Number,
         "Encoder quality, 1 to 100.",
         |c, v, t, s| {
-            c.quality = v.ranged(t, s, 1, 100)? as u8;
+            c.quality = v.bounded(t, s, 1, 100)?;
             Ok(())
         },
     )]);
@@ -1365,15 +1369,11 @@ impl Section for CardsConfig {
             },
         ),
         ("width", Number, "Card width in pixels.", |c, n, t| {
-            c.width = n
-                .arg(t, 0)?
-                .ranged(t, NodeExt::span(n), 1, CardsConfig::MAX)? as u32;
+            c.width = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
             Ok(())
         }),
         ("height", Number, "Card height in pixels.", |c, n, t| {
-            c.height = n
-                .arg(t, 0)?
-                .ranged(t, NodeExt::span(n), 1, CardsConfig::MAX)? as u32;
+            c.height = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
             Ok(())
         }),
     ]);
@@ -1826,10 +1826,10 @@ impl Section for CacheControl {
         // Filled here rather than in `Default`, so an untouched `S3Config`
         // carries no policy at all and the two states stay distinguishable.
         if self.immutable.is_empty() {
-            self.immutable = Self::IMMUTABLE.to_owned();
+            Self::IMMUTABLE.clone_into(&mut self.immutable);
         }
         if self.default.is_empty() {
-            self.default = Self::DEFAULT.to_owned();
+            Self::DEFAULT.clone_into(&mut self.default);
         }
         true
     }

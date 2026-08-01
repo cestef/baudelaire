@@ -64,6 +64,9 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     }
     // Intrinsic pixel dimensions, so the browser can reserve space before the
     // file loads (rounded, matching typst's own rule).
+    // Pixel dimensions of a decoded raster, so far inside `i64` that no image
+    // typst can hold could truncate; kept as typst's own rule spells it.
+    #[allow(clippy::cast_possible_truncation)]
     let cast = |v: f64| format!("{}", v.round() as i64);
     attrs.push(attr::width, cast(image.width()));
     attrs.push(attr::height, cast(image.height()));

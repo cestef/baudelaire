@@ -105,7 +105,7 @@ fn retitling_a_page_invalidates_its_sibling() {
         "#let frontmatter = (title: \"B\", order: 2,)\nbeta",
     );
     site.stats();
-    assert!(site.output("posts/a/index.html").contains("B"));
+    assert!(site.output("posts/a/index.html").contains('B'));
 
     // Retitle b; a's next-link title must follow.
     site.write(

@@ -12,7 +12,13 @@ use common::Site;
 /// different sizes never share bytes (and so collide only when we mean them to).
 fn png(w: u32, h: u32) -> Vec<u8> {
     let img = image::RgbImage::from_fn(w, h, |x, y| {
-        image::Rgb([(x * 7 + y * 13) as u8, (x * 3) as u8, (y * 5) as u8])
+        // Masked rather than checked: the pattern is meant to wrap, so a
+        // truncating cast is the point.
+        image::Rgb([
+            ((x * 7 + y * 13) & 0xff) as u8,
+            ((x * 3) & 0xff) as u8,
+            ((y * 5) & 0xff) as u8,
+        ])
     });
     let mut buf = std::io::Cursor::new(Vec::new());
     image::DynamicImage::ImageRgb8(img)

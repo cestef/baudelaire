@@ -13,7 +13,7 @@ use std::fs;
 
 use baudelaire::content::discover;
 
-use common::{Site, project};
+use common::{Site, has_ext, project};
 
 #[test]
 fn check_compiles_without_writing() {
@@ -289,7 +289,7 @@ fn fingerprint_renames_assets_and_rewrites_references() {
     assert!(!names.iter().any(|n| n == "style.css"), "{names:?}");
     let hashed = names
         .iter()
-        .find(|n| n.starts_with("style.") && n.ends_with(".css"))
+        .find(|n| n.starts_with("style.") && has_ext(n, "css"))
         .expect("a fingerprinted stylesheet");
     // The page reference is rewritten to the hashed URL.
     let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
@@ -312,11 +312,11 @@ fn css_url_references_are_fingerprinted() {
     let names = site.files("public/assets");
     let bg = names
         .iter()
-        .find(|n| n.starts_with("bg.") && n.ends_with(".png"))
+        .find(|n| n.starts_with("bg.") && has_ext(n, "png"))
         .expect("a fingerprinted image");
     let css_name = names
         .iter()
-        .find(|n| n.starts_with("style.") && n.ends_with(".css"))
+        .find(|n| n.starts_with("style.") && has_ext(n, "css"))
         .expect("a fingerprinted stylesheet");
     let css = fs::read_to_string(site.root.join(format!("public/assets/{css_name}"))).unwrap();
     // The `url()` now points at the image's hashed name, not the original.
@@ -347,11 +347,11 @@ fn srcset_urls_are_fingerprinted() {
     let names = site.files("public/assets");
     let a = names
         .iter()
-        .find(|n| n.starts_with("a.") && n.ends_with(".png"))
+        .find(|n| n.starts_with("a.") && has_ext(n, "png"))
         .expect("hashed a");
     let b = names
         .iter()
-        .find(|n| n.starts_with("b.") && n.ends_with(".png"))
+        .find(|n| n.starts_with("b.") && has_ext(n, "png"))
         .expect("hashed b");
     let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
     // Each candidate URL is fingerprinted; its descriptor is preserved.
@@ -392,14 +392,13 @@ fn cache_stores_html_in_object_store_not_manifest() {
     assert!(objects.is_dir(), "object store created");
     let shard = fs::read_dir(&objects)
         .unwrap()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .map(|e| e.path())
         .find(|p| p.is_dir())
         .expect("a sharded object directory");
     let blob = fs::read_dir(&shard)
         .unwrap()
-        .filter_map(|e| e.ok())
-        .next()
+        .find_map(std::result::Result::ok)
         .expect("a blob file");
     let html = fs::read_to_string(blob.path()).unwrap();
     assert!(
@@ -430,7 +429,7 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     assert!(
         names
             .iter()
-            .any(|n| n.starts_with("gen.") && n.ends_with(".css")),
+            .any(|n| n.starts_with("gen.") && has_ext(n, "css")),
         "hook output reached the asset pipeline: {names:?}"
     );
     // Fingerprinting is a `css` capability, so only that flavor renames the file

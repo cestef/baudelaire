@@ -113,8 +113,7 @@ impl ImageFormat {
             Self::FORMATS
                 .iter()
                 .find(|(format, ..)| *format == self)
-                .map(|(_, mime, _)| *mime)
-                .unwrap_or(Mime::BINARY),
+                .map_or(Mime::BINARY, |(_, mime, _)| *mime),
         )
     }
 }

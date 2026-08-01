@@ -6,7 +6,7 @@ mod common;
 
 use baudelaire::engine::{Engine, Mode};
 
-use common::{Site, silent};
+use common::{Site, has_ext, silent};
 
 const CONFIG: &str = r#"
 site "T"
@@ -200,15 +200,12 @@ fn asset_pipeline_processes_css_js_and_images() {
     // Each asset kind lands under dist/assets, fingerprinted.
     let out = site.files("public/assets");
     assert!(
-        out.iter().any(|f| f.ends_with(".css")),
+        out.iter().any(|f| has_ext(f, "css")),
         "css emitted: {out:?}"
     );
+    assert!(out.iter().any(|f| has_ext(f, "js")), "js emitted: {out:?}");
     assert!(
-        out.iter().any(|f| f.ends_with(".js")),
-        "js emitted: {out:?}"
-    );
-    assert!(
-        out.iter().any(|f| f.ends_with(".png")),
+        out.iter().any(|f| has_ext(f, "png")),
         "png emitted: {out:?}"
     );
 }

@@ -1183,7 +1183,10 @@ impl HighlightConfig {
             .iter()
             .find(|(_, hex)| hex.eq_ignore_ascii_case(colour))
             .map(|(name, _)| name.as_str());
-        format!("sx-{}", named.unwrap_or(colour.trim_start_matches('#')))
+        format!(
+            "sx-{}",
+            named.unwrap_or_else(|| colour.trim_start_matches('#'))
+        )
     }
 }
 
@@ -1229,7 +1232,7 @@ impl CardsConfig {
 
     /// The widest and tallest a card may be. Unfurlers cap well below this; the
     /// limit exists so a typo cannot ask for a gigapixel rasterization.
-    pub(crate) const MAX: i64 = 4096;
+    pub(crate) const MAX: u32 = 4096;
 
     /// The served URL of a page's card, whether or not it has been rendered
     /// yet: the meta transform names it while the file is still being made, the

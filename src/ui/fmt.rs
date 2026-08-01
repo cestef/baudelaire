@@ -99,7 +99,7 @@ impl Bytes {
     /// The units a size may be written in, largest first so `MB` is matched
     /// before `B`. The `i` spellings are accepted for authors who want to be
     /// explicit; they mean the same thing, since these units are 1024-based.
-    const UNITS: &'static [(&'static str, u64)] = &[
+    const UNITS: &'static [(&'static str, u32)] = &[
         ("gib", 1 << 30),
         ("mib", 1 << 20),
         ("kib", 1 << 10),
@@ -115,6 +115,16 @@ impl Bytes {
     /// A size written as a number and an optional unit (`0`, `500`, `50kB`,
     /// `1.5 MB`), or `None` when it is neither. Case and inner spaces are
     /// ignored; a bare number is bytes.
+    // The float math is the point: `1.5 MB` has to scale. The value is checked
+    // finite and non-negative, and a product that no longer fits a `u64` is
+    // rejected below, so the narrowing back rounds an in-range number rather
+    // than truncating, wrapping, or dropping a sign. `u64::MAX as f64` rounds
+    // up to 2^64, which is the bound being tested for.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     pub fn parse(text: &str) -> Option<Self> {
         let text = text.trim().to_ascii_lowercase().replace(' ', "");
         let (number, scale) = Self::UNITS
@@ -125,7 +135,7 @@ impl Bytes {
         if !value.is_finite() || value < 0.0 {
             return None;
         }
-        let bytes = value * scale as f64;
+        let bytes = value * f64::from(scale);
         // Beyond this a `f64` no longer counts single bytes, and a budget that
         // large is a typo rather than an intent.
         (bytes <= u64::MAX as f64).then_some(Self(bytes as u64))
@@ -133,7 +143,10 @@ impl Bytes {
 
     /// The scaled number and its unit, split so styling can treat them
     /// separately.
-    fn parts(&self) -> (String, &'static str) {
+    // Sizes past 2^53 bytes lose their last digits here, and the scaled form
+    // this produces shows one decimal anyway.
+    #[allow(clippy::cast_precision_loss)]
+    fn parts(self) -> (String, &'static str) {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
         let mut size = self.0 as f64;
         let mut unit = 0;
@@ -183,7 +196,7 @@ impl Display for Dur {
             write!(f, "{}µs", d.as_micros())
         } else if d < Duration::from_secs(1) {
             write!(f, "{}ms", d.as_millis())
-        } else if d < Duration::from_secs(60) {
+        } else if d < Duration::from_mins(1) {
             write!(f, "{:.2}s", d.as_secs_f64())
         } else {
             let secs = d.as_secs();
@@ -234,8 +247,9 @@ const NO_TERMINAL_WIDTH: usize = 100;
 pub fn term_width() -> usize {
     console::Term::stdout()
         .size_checked()
-        .map(|(_, cols)| (cols as usize).clamp(MIN_WIDTH, MAX_WIDTH))
-        .unwrap_or(NO_TERMINAL_WIDTH)
+        .map_or(NO_TERMINAL_WIDTH, |(_, cols)| {
+            usize::from(cols).clamp(MIN_WIDTH, MAX_WIDTH)
+        })
 }
 
 /// Lay out `·`-separated `items` so no line exceeds `width`, with every line
@@ -278,7 +292,7 @@ mod tests {
     use super::*;
 
     fn items(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
+        list.iter().copied().map(str::to_owned).collect()
     }
 
     #[test]

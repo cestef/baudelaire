@@ -152,19 +152,16 @@ impl Bucket {
         secret_key: String,
         token: Option<String>,
     ) -> Self {
-        let (authority, host, root) = match &config.endpoint {
-            Some(endpoint) => {
-                let endpoint = endpoint.trim_end_matches('/');
-                let host = endpoint
-                    .split_once("://")
-                    .map_or(endpoint, |(_, h)| h)
-                    .to_owned();
-                (endpoint.to_owned(), host, format!("/{}", config.bucket))
-            }
-            None => {
-                let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region());
-                (format!("https://{host}"), host, String::new())
-            }
+        let (authority, host, root) = if let Some(endpoint) = &config.endpoint {
+            let endpoint = endpoint.trim_end_matches('/');
+            let host = endpoint
+                .split_once("://")
+                .map_or(endpoint, |(_, h)| h)
+                .to_owned();
+            (endpoint.to_owned(), host, format!("/{}", config.bucket))
+        } else {
+            let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region());
+            (format!("https://{host}"), host, String::new())
         };
         Self {
             agent: ureq::Agent::config_builder()
@@ -252,7 +249,7 @@ impl Bucket {
             .signed(self.agent.get(&url), &auth)
             .call()
             .map_err(DeployError::from)?;
-        self.check(method, uri, response.status().as_u16(), &mut response)?;
+        Self::check(method, uri, response.status().as_u16(), &mut response)?;
         // Unlike the error body in `check`, this one is the answer itself: a
         // body that cannot be read is a transport failure, not an empty listing
         // (which would read as a bucket with nothing in it).
@@ -283,7 +280,7 @@ impl Bucket {
             request.send(body)
         }
         .map_err(DeployError::from)?;
-        self.check(method, uri, response.status().as_u16(), &mut response)
+        Self::check(method, uri, response.status().as_u16(), &mut response)
     }
 
     /// Attach the SigV4 authorization header trio to any request builder.
@@ -342,7 +339,6 @@ impl Bucket {
     /// Turn a non-2xx status into a [`DeployError::Request`] carrying the host's
     /// own error body.
     fn check(
-        &self,
         method: Method,
         uri: &str,
         status: u16,
@@ -441,14 +437,19 @@ impl Bucket {
     /// everything else becomes uppercase `%XX`. A path keeps its `/` separators;
     /// a query component encodes them too.
     fn encode(value: &str, keep_slash: bool) -> String {
+        const HEX: &[u8; 16] = b"0123456789ABCDEF";
         let mut out = String::with_capacity(value.len());
         for byte in value.bytes() {
             match byte {
                 b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                    out.push(byte as char)
+                    out.push(char::from(byte));
                 }
                 b'/' if keep_slash => out.push('/'),
-                _ => out.push_str(&format!("%{byte:02X}")),
+                _ => {
+                    out.push('%');
+                    out.push(char::from(HEX[usize::from(byte >> 4)]));
+                    out.push(char::from(HEX[usize::from(byte & 0x0f)]));
+                }
             }
         }
         out
@@ -476,7 +477,7 @@ impl Bucket {
 
 impl Listing {
     /// Parse a ListObjectsV2 XML response into its objects and continuation token.
-    fn parse(xml: &str) -> Result<Listing> {
+    fn parse(xml: &str) -> Result<Self> {
         let document = roxmltree::Document::parse(xml).map_err(DeployError::from)?;
         let text = |node: roxmltree::Node, tag: &str| {
             node.children()
@@ -500,7 +501,7 @@ impl Listing {
             .find(|node| node.has_tag_name("NextContinuationToken"))
             .and_then(|node| node.text())
             .map(str::to_owned);
-        Ok(Listing { objects, next })
+        Ok(Self { objects, next })
     }
 
     /// Strip the surrounding quotes S3 wraps an ETag in.

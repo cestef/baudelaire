@@ -1,6 +1,8 @@
 //! `_headers`: what the host serving the built files is told about them, the
 //! `Cache-Control` policy and the `Content-Security-Policy` both.
 
+use std::fmt::Write as _;
+
 use super::csp::{Digests, Policy};
 use super::{Emit, Processor, Site};
 use crate::config::Config;
@@ -75,7 +77,7 @@ impl Headers {
     fn rule(pattern: &str, headers: &[(&'static str, impl AsRef<str>)]) -> String {
         let mut rule = format!("{pattern}\n");
         for (name, value) in headers {
-            rule.push_str(&format!("  {name}: {}\n", value.as_ref()));
+            let _ = writeln!(rule, "  {name}: {}", value.as_ref());
         }
         rule.push('\n');
         rule

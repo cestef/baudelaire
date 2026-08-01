@@ -251,8 +251,14 @@ impl<'a> Prepare<'a> {
     fn reading(body: &str) -> Value {
         let reading = crate::engine::text::Reading::of(body);
         Value::dict([
-            ("words", Value::Int(reading.words as i64)),
-            ("minutes", Value::Int(reading.minutes as i64)),
+            (
+                "words",
+                Value::Int(i64::try_from(reading.words).unwrap_or(i64::MAX)),
+            ),
+            (
+                "minutes",
+                Value::Int(i64::try_from(reading.minutes).unwrap_or(i64::MAX)),
+            ),
         ])
     }
 

@@ -48,16 +48,18 @@ impl TypstSourceDiagnostic {
         world: Arc<dyn World + Send + Sync>,
     ) -> Vec<Self> {
         errs.into_iter()
-            .map(|e| {
+            .map(move |e| {
                 let file = e.span.id();
                 let src = file
                     .and_then(|id| world.source(id).ok().map(|src| (id, src)))
-                    .map(|(id, src)| {
-                        let name = id.vpath().get_without_slash().to_string();
-                        NamedSource::new(name, src.text().to_owned())
-                    })
-                    .unwrap_or_else(|| NamedSource::new(fallback.0, fallback.1.to_owned()));
-                Self::new(e, src, file, world.clone())
+                    .map_or_else(
+                        || NamedSource::new(fallback.0, fallback.1.to_owned()),
+                        |(id, src)| {
+                            let name = id.vpath().get_without_slash().to_owned();
+                            NamedSource::new(name, src.text().to_owned())
+                        },
+                    );
+                Self::new(e, src, file, Arc::clone(&world))
             })
             .collect()
     }

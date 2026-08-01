@@ -29,7 +29,7 @@ impl Default for Config {
             paths: Paths::default(),
             theme: None,
             content: ContentConfig::default(),
-            languages: Default::default(),
+            languages: Vec::default(),
             assets: AssetConfig::default(),
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
@@ -39,7 +39,7 @@ impl Default for Config {
             navigation: NavigationConfig::default(),
             prune: true,
             typst: TypstConfig::default(),
-            client: Default::default(),
+            client: Vec::default(),
             cache: CacheConfig::default(),
             caching: CacheControl::default(),
             hooks: HooksConfig::default(),
@@ -47,7 +47,7 @@ impl Default for Config {
             deploy: DeployConfig::default(),
             serve: ServeConfig::default(),
             profile: None,
-            profiles: Default::default(),
+            profiles: Vec::default(),
             source: String::new(),
         }
     }
@@ -71,8 +71,8 @@ impl Default for ContentConfig {
             index: Some("index".into()),
             future: false,
             draft: DraftConfig::default(),
-            collections: Default::default(),
-            taxonomies: Default::default(),
+            collections: Vec::default(),
+            taxonomies: Vec::default(),
         }
     }
 }

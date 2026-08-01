@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use baudelaire::announce;
-use baudelaire::config::{Config, StandardConfig};
+use baudelaire::config::{Config, StandardConfig, VerifyConfig};
 use baudelaire::error::Result as BResult;
 use baudelaire::remote::{Interaction, Options};
 
@@ -151,8 +151,7 @@ fn record_key(body: &serde_json::Value) -> String {
 /// One query parameter of a request path.
 fn query(path: &str, key: &str) -> String {
     path.split_once('?')
-        .map(|(_, q)| q)
-        .unwrap_or("")
+        .map_or("", |(_, q)| q)
         .split('&')
         .find_map(|pair| pair.strip_prefix(&format!("{key}=")))
         .unwrap_or_default()
@@ -182,7 +181,7 @@ fn site() -> Site {
 
 fn config_at(site: &Site, port: u16) -> Config {
     let mut config = Config::default();
-    config.root = site.root.clone();
+    config.root.clone_from(&site.root);
     config.url = Some("https://example.com".into());
     config.site = Some("T".into());
     config.announce.standard = Some(StandardConfig {
@@ -191,7 +190,7 @@ fn config_at(site: &Site, port: u16) -> Config {
         pds: format!("http://127.0.0.1:{port}"),
         discover: true,
         icon: None,
-        verify: Default::default(),
+        verify: VerifyConfig::default(),
     });
     config
 }
@@ -217,7 +216,7 @@ fn a_record_whose_page_is_gone_is_deleted_from_the_repo() {
         .unwrap()
         .insert(format!("{DOCUMENTS}/staleaaaaaaaa"));
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    let port = spawn_pds(records.clone(), log.clone());
+    let port = spawn_pds(Arc::clone(&records), Arc::clone(&log));
 
     let site = site();
     set_password();
@@ -254,7 +253,7 @@ fn a_dry_run_diffs_the_live_repo_without_writing() {
         .unwrap()
         .insert(format!("{DOCUMENTS}/staleaaaaaaaa"));
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    let port = spawn_pds(records.clone(), log.clone());
+    let port = spawn_pds(Arc::clone(&records), Arc::clone(&log));
 
     let site = site();
     set_password();
@@ -287,7 +286,7 @@ fn a_dry_run_diffs_the_live_repo_without_writing() {
 fn a_mismatched_did_pin_refuses_to_publish() {
     let records: Records = Arc::new(Mutex::new(BTreeSet::new()));
     let log: Log = Arc::new(Mutex::new(Vec::new()));
-    let port = spawn_pds(records.clone(), log.clone());
+    let port = spawn_pds(Arc::clone(&records), log);
 
     let site = site();
     set_password();

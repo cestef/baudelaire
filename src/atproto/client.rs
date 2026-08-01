@@ -248,7 +248,7 @@ trait ValueExt {
 impl ValueExt for Value {
     fn field(&self, key: &str) -> Result<String, AnnounceError> {
         self.get(key)
-            .and_then(Value::as_str)
+            .and_then(Self::as_str)
             .map(str::to_owned)
             .ok_or_else(|| AnnounceError::auth(markup!("session response had no `{}`", key)))
     }

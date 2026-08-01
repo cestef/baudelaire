@@ -65,7 +65,7 @@ impl Site {
     pub fn files(&self, rel: &str) -> Vec<String> {
         fs::read_dir(self.path(rel))
             .map(|rd| {
-                rd.filter_map(|e| e.ok())
+                rd.filter_map(std::result::Result::ok)
                     .map(|e| e.file_name().to_string_lossy().into_owned())
                     .collect()
             })
@@ -83,7 +83,7 @@ impl Site {
     /// to survive one broken case and report the rest).
     pub fn try_config(&self) -> baudelaire::Result<Config> {
         let mut cfg = Config::load(&self.read("config.kdl"), &self.root)?;
-        cfg.root = self.root.clone();
+        cfg.root.clone_from(&self.root);
         cfg.paths.content = self.root.join(&cfg.paths.content);
         cfg.paths.dist = self.root.join(&cfg.paths.dist);
         cfg.paths.assets = self.root.join(&cfg.paths.assets);
@@ -275,9 +275,19 @@ impl Serve {
         // arithmetic was off by three and left `"\n2"` on every body, so every
         // negative assertion was checking slightly wrong data.
         let out = String::from_utf8_lossy(&resp.stdout);
-        let (body, status) = out.rsplit_once('\n').unwrap_or(("", out.as_ref()));
+        let (body, status) = out.rsplit_once('\n').unwrap_or_else(|| ("", out.as_ref()));
         (status.trim().parse().unwrap_or(0), body.to_owned())
     }
+}
+
+/// Whether `name`'s extension is `ext`, spelled without the dot.
+///
+/// Generated names are fingerprinted (`style.<hash>.css`), so the assertion is
+/// about the extension itself rather than a `.css` suffix on the whole string.
+pub fn has_ext(name: &str, ext: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|found| found == ext)
 }
 
 /// The fixture site both deploy e2e suites reconcile against: three files under

@@ -64,7 +64,7 @@ impl Permalink {
         }
         let mut segments = Vec::new();
         let mut buf = String::new();
-        let mut chars = src.chars().peekable();
+        let mut chars = src.chars();
         while let Some(c) = chars.next() {
             if c == '{' {
                 if !buf.is_empty() {

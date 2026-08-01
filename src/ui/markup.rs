@@ -284,7 +284,7 @@ pub struct Styled<'a> {
     inner: &'a dyn Diagnostic,
     /// Wrapped eagerly, so [`Diagnostic::related`] has something borrowable to
     /// hand back. `None` and `Some(vec![])` are different answers to miette.
-    related: Option<Vec<Styled<'a>>>,
+    related: Option<Vec<Self>>,
     color: bool,
 }
 
@@ -451,7 +451,7 @@ mod tests {
     /// untouched, and a related child.
     #[derive(Debug)]
     struct Fake {
-        related: Vec<Fake>,
+        related: Vec<Self>,
     }
 
     impl Display for Fake {

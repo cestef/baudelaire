@@ -112,7 +112,7 @@ impl Page {
         {
             self.unlabelled.push(span);
         }
-        for (key, value) in element.attrs.0.iter() {
+        for (key, value) in &element.attrs.0 {
             let name = key.resolve();
             match name.as_str() {
                 "role" => self.roles.push((value.to_string(), span)),

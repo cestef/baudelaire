@@ -197,14 +197,14 @@ impl Frontmatter {
         let Value::Dict(dict) = value else {
             return Err(ContentError::frontmatter_not_dict(path, value).into());
         };
-        Self::from_dict(dict.clone(), path, config).map(Some)
+        Self::from_dict(dict, path, config).map(Some)
     }
 
     /// Interpret the evaluated frontmatter dict. A known key with a wrong-typed
     /// value is an error (never silently dropped); a configured taxonomy key
     /// collects its terms; a key that is a near-miss of a known one is a typo
     /// error; anything else passes through to `extra`.
-    fn from_dict(dict: Dict, path: &Path, config: &Config) -> Result<Self> {
+    fn from_dict(dict: &Dict, path: &Path, config: &Config) -> Result<Self> {
         let taxonomies: Vec<&str> = config
             .content
             .taxonomies
@@ -212,7 +212,7 @@ impl Frontmatter {
             .map(|(_, t)| t.key.as_str())
             .collect();
         let mut fm = Self::default();
-        for (key, val) in dict.iter() {
+        for (key, val) in dict {
             let key = key.as_str();
             match FIELDS.iter().find(|(name, _)| *name == key) {
                 Some((_, parse)) => parse(&mut fm, val, path, key)?,
@@ -264,7 +264,7 @@ trait ValueExt {
 impl ValueExt for Value {
     fn str(&self) -> Option<String> {
         match self {
-            Value::Str(s) => Some(s.to_string()),
+            Self::Str(s) => Some(s.to_string()),
             _ => None,
         }
     }
@@ -277,7 +277,7 @@ impl ValueExt for Value {
 
     fn boolean(&self, path: &Path, key: &str) -> Result<bool> {
         match self {
-            Value::Bool(b) => Ok(*b),
+            Self::Bool(b) => Ok(*b),
             _ => Err(
                 ContentError::frontmatter_field(path, key, "a boolean", self.kind(), None).into(),
             ),
@@ -286,7 +286,7 @@ impl ValueExt for Value {
 
     fn integer(&self, path: &Path, key: &str) -> Result<i64> {
         match self {
-            Value::Int(i) => Ok(*i),
+            Self::Int(i) => Ok(*i),
             _ => Err(
                 ContentError::frontmatter_field(path, key, "an integer", self.kind(), None).into(),
             ),
@@ -295,8 +295,8 @@ impl ValueExt for Value {
 
     fn date(&self, path: &Path, key: &str) -> Result<time::Date> {
         match self {
-            Value::Datetime(Datetime::Date(d)) => Ok(*d),
-            Value::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
+            Self::Datetime(Datetime::Date(d)) => Ok(*d),
+            Self::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
             _ => Err(ContentError::frontmatter_field(
                 path,
                 key,
@@ -315,7 +315,7 @@ impl ValueExt for Value {
             ContentError::frontmatter_field(path, key, "a list of strings", kind, None).into()
         };
         match self {
-            Value::Array(arr) => arr
+            Self::Array(arr) => arr
                 .iter()
                 .map(|v| v.str().ok_or_else(|| wrong(v.kind())))
                 .collect(),

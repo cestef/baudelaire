@@ -51,6 +51,9 @@ pub struct Weight {
 impl Weight {
     /// A page that inlines nothing stores nothing; `serde` needs a path to
     /// call, and this one belongs to the type it is about.
+    // `skip_serializing_if` hands the field by reference, so the signature is
+    // serde's to choose and not ours.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn unweighed(bytes: &u64) -> bool {
         *bytes == 0
     }

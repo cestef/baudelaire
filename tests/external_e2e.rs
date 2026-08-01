@@ -5,6 +5,7 @@
 
 mod common;
 
+use std::fmt::Write as _;
 use std::io::Cursor;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::Arc;
@@ -35,11 +36,10 @@ impl Host {
             for request in worker.incoming_requests() {
                 let head = request.method() == &tiny_http::Method::Head;
                 let status = match request.url() {
-                    "/ok" => 200,
                     // Rejects the method, not the URL: the checker has to ask
                     // again with GET before calling this link dead.
                     "/method" if head => 405,
-                    "/method" => 200,
+                    "/ok" | "/method" => 200,
                     _ => 404,
                 };
                 let response = tiny_http::Response::new(
@@ -75,10 +75,10 @@ fn site(host: &Host, paths: &[&str]) -> Site {
         links { external #true }
         "#,
     );
-    let links: String = paths
-        .iter()
-        .map(|path| format!("#link(\"{}\")[link]\n", host.url(path)))
-        .collect();
+    let mut links = String::new();
+    for path in paths {
+        writeln!(links, "#link(\"{}\")[link]", host.url(path)).unwrap();
+    }
     site.write(
         "content/index.typ",
         &format!("#let frontmatter = (title: \"Home\",)\n{links}"),

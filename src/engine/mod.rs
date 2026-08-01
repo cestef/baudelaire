@@ -341,7 +341,7 @@ impl Gate {
     /// pipeline's renames, the render pass's rewrites, the cache fingerprint)
     /// agrees on one answer rather than disagreeing file by file.
     fn resolve(mut config: Config) -> (Config, Vec<FeatureMissing>) {
-        let missing: Vec<&Gate> = GATES
+        let missing: Vec<&Self> = GATES
             .iter()
             .filter(|gate| !gate.compiled && (gate.asked)(&config))
             .collect();
@@ -716,7 +716,12 @@ impl Engine {
 
     /// Without the exporter nothing binds one, so there is nothing to write and
     /// nothing to keep.
+    ///
+    /// It mirrors the `pdf`-on signature exactly so the caller compiles
+    /// unchanged in both flavors, which is why it takes a `self` it cannot use
+    /// and returns a `Result` it cannot fail.
     #[cfg(not(feature = "pdf"))]
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     fn bundles(&self, _pass: &Pass<'_>, _cache: &mut Cache, _ui: &Ui) -> Result<Bundled> {
         Ok(Bundled::default())
     }
@@ -925,9 +930,9 @@ impl Engine {
                     .starts_with("html export is under active development")
             })
             .collect();
-        let warnings = self.diagnostics(warnings, page, &source, world.inner());
+        let warnings = Self::diagnostics(warnings, page, &source, world.inner());
         let mut doc = compiled.output.map_err(|errs| {
-            BaudelaireErrorKind::TypstCompile(self.diagnostics(errs, page, &source, world.inner()))
+            BaudelaireErrorKind::TypstCompile(Self::diagnostics(errs, page, &source, world.inner()))
         })?;
         let mut rewrite = pass
             .renderer
@@ -945,7 +950,7 @@ impl Engine {
         // Shared by both serializations below, so a failure in either reports
         // with the page's own spans.
         let serialization_failed = |errs| {
-            BaudelaireErrorKind::TypstHtml(self.diagnostics(errs, page, &source, world.inner()))
+            BaudelaireErrorKind::TypstHtml(Self::diagnostics(errs, page, &source, world.inner()))
         };
         let html = typst_html::html(&doc, &options).map_err(&serialization_failed)?;
         // Only the single-file export consumes these, and capturing them costs
@@ -1075,7 +1080,6 @@ impl Engine {
     /// spans against exactly what was compiled (the layout-wrapped source, when
     /// a template is bound). Shared by the compile and HTML-emit stages.
     fn diagnostics(
-        &self,
         errs: typst::ecow::EcoVec<typst::diag::SourceDiagnostic>,
         page: &Page,
         source: &Source,

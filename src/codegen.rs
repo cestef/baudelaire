@@ -50,10 +50,10 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     /// A sequence: Typst `(a, b)`, JavaScript `[a, b]`.
-    Array(Vec<Value>),
+    Array(Vec<Self>),
     /// A mapping: Typst `(key: value)`, JavaScript `{ "key": value }`. Keys are
     /// quoted where the target requires it, so arbitrary keys are safe.
-    Dict(Vec<(String, Value)>),
+    Dict(Vec<(String, Self)>),
     /// A pre-formed expression in the *target's* own syntax, emitted verbatim.
     /// Carries a Typst runtime value's [`repr`](typst::foundations::Value::repr)
     /// unchanged; it is Typst-only and becomes `null` / `none` elsewhere.
@@ -93,11 +93,11 @@ impl Value {
         value.map_or(Self::None, |v| Self::Str(v.into()))
     }
 
-    pub fn array(items: impl IntoIterator<Item = Value>) -> Self {
+    pub fn array(items: impl IntoIterator<Item = Self>) -> Self {
         Self::Array(items.into_iter().collect())
     }
 
-    pub fn dict<K: Into<String>>(pairs: impl IntoIterator<Item = (K, Value)>) -> Self {
+    pub fn dict<K: Into<String>>(pairs: impl IntoIterator<Item = (K, Self)>) -> Self {
         Self::Dict(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
@@ -111,7 +111,7 @@ impl Value {
 
     /// The value under `key`, for a `Dict`, so a consumer can serve a sub-tree
     /// of a larger value (a JS module exposing part of the build context).
-    pub fn get(&self, key: &str) -> Option<&Value> {
+    pub fn get(&self, key: &str) -> Option<&Self> {
         match self {
             Self::Dict(pairs) => pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v),
             _ => None,

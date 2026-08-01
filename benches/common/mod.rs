@@ -9,6 +9,7 @@
 //! measuring whichever one the fixture happened to produce.
 #![allow(dead_code)]
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -101,7 +102,7 @@ impl Shape {
     /// small asset set, returning a config whose paths are rebased into `dir`.
     pub fn mksite(self, dir: &Path, n: usize) -> Config {
         let kdl = format!(
-            r##"site "Bench"
+            r#"site "Bench"
 url "https://bench.example"
 paths {{ content "content"; dist "public"; assets "assets"; templates "templates" }}
 prune #true
@@ -111,7 +112,7 @@ generate {{
   feed {{ formats rss atom }}
   search {{ formats json }}
 }}
-"##,
+"#,
             binding = self.binding(),
         );
         fs::write(dir.join("config.kdl"), &kdl).unwrap();
@@ -122,12 +123,11 @@ generate {{
         fs::write(dir.join("templates/layout.typ"), Self::LAYOUT).unwrap();
         for i in 0..n {
             // Sibling links so resolution actually hits the filesystem (and the map).
-            let links: String = (0..4)
-                .map(|k| {
-                    let j = (i * 7 + k * 13) % n;
-                    format!("#link(\"p{j}.typ\")[see {j}]\n")
-                })
-                .collect();
+            let mut links = String::new();
+            for k in 0..4 {
+                let j = (i * 7 + k * 13) % n;
+                writeln!(links, "#link(\"p{j}.typ\")[see {j}]").unwrap();
+            }
             let body = format!(
                 "#let frontmatter = (title: \"Page {i}\", date: datetime(year: 2024, month: 1, day: {}), tags: (\"t{}\", \"t{}\",))\n\
                  #import \"/content/_shared.typ\": badge\n\
@@ -183,10 +183,12 @@ pub fn html_doc(sections: usize) -> String {
          <nav>Home About Contact</nav><main>",
     );
     for i in 0..sections {
-        s.push_str(&format!(
+        write!(
+            s,
             "<h2>Section {i}</h2><p>Lorem ipsum &amp; dolor &lt;sit&gt; amet, \
              consectetur &#39;adipiscing&#39; elit. Sed do eiusmod tempor incididunt.</p>"
-        ));
+        )
+        .unwrap();
     }
     s.push_str(
         "<script>console.log('ignored')</script></main><footer>copyright</footer></body></html>",

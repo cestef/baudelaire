@@ -5,7 +5,7 @@
 mod common;
 
 use baudelaire::graph::Hash;
-use common::Site;
+use common::{Site, has_ext};
 
 /// The 16-hex fingerprint baudelaire splices into an asset's filename.
 fn fingerprint(bytes: &[u8]) -> String {
@@ -264,7 +264,7 @@ fn a_renamed_entry_resolves_under_both_names() {
     let served = site
         .files("public/assets")
         .into_iter()
-        .find(|name| name.ends_with(".js"))
+        .find(|name| has_ext(name, "js"))
         .expect("bundled entry");
     let html = site.read("public/index.html");
     assert_eq!(

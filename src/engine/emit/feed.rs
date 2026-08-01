@@ -58,7 +58,7 @@ impl Processor for Feeds {
             Self::emit(site, out, &feed)?;
         }
         if site.config.generate.feed.terms {
-            self.terms(site, out, &base)?;
+            Self::terms(site, out, &base)?;
         }
         Ok(())
     }
@@ -71,7 +71,7 @@ impl Feeds {
     /// Terms come from the same grouping that generated those listings, so a
     /// term always has its feed at its own URL and neither can disagree with the
     /// other about which pages belong to it.
-    fn terms(&self, site: &Site, out: &mut dyn Emit, base: &BaseUrl) -> Result<()> {
+    fn terms(site: &Site, out: &mut dyn Emit, base: &BaseUrl) -> Result<()> {
         for group in Taxonomy::groups(site.config, site.pages) {
             let lang = group.lang();
             for term in group.resolve()? {

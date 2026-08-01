@@ -265,7 +265,7 @@ impl Listing {
             // without one, the default body renders and this is unused.
             crate::content::Data::Generated(crate::codegen::Typst(&self.data()).to_string()),
             section,
-            self.permalink.clone(),
+            &self.permalink,
             self.template.clone(),
             lang,
             config,

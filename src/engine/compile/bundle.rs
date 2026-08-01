@@ -197,7 +197,10 @@ impl<'a> Bundle<'a> {
             ("url", Value::str(&self.url)),
             ("site", Value::str(config.title(self.lang))),
             ("author", Value::opt(config.author(self.lang))),
-            ("pages", Value::Int(self.pages.len() as i64)),
+            (
+                "pages",
+                Value::Int(i64::try_from(self.pages.len()).unwrap_or(i64::MAX)),
+            ),
         ])
     }
 

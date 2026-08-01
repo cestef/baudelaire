@@ -43,7 +43,7 @@ impl Sidecar for Card {
     /// A card is a poster of its own shape, so it takes the page's data flat
     /// and ignores the layout bindings [`Cx`] also carries.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
-        Self::module(cx.config, page, rooted)
+        Ok(Self::module(cx.config, page, rooted))
     }
 
     fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>> {
@@ -85,13 +85,13 @@ impl Card {
     /// The page rule is set *before* the import so a template that wants a
     /// different size can still say so, and after nothing else, so the default
     /// is exactly the configured card.
-    fn module(config: &Config, page: &Page, rooted: &RootedPath) -> Result<String> {
+    fn module(config: &Config, page: &Page, rooted: &RootedPath) -> String {
         let templates = config
             .paths
             .templates
             .strip_prefix(&config.root)
             .unwrap_or(&config.paths.templates);
-        Ok(Template {
+        Template {
             import: format!(
                 "/{}/{}",
                 templates.display(),
@@ -108,7 +108,7 @@ impl Card {
             frontmatter: matches!(page.data, Data::Export)
                 .then(|| format!("/{}", rooted.vpath().get_without_slash())),
         }
-        .to_string())
+        .to_string()
     }
 
     /// What the template is handed. Deliberately flat and small: a card shows a
