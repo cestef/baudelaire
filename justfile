@@ -15,11 +15,21 @@ SLIM := "--no-default-features"
 #
 # `audit` needs no toolchain and no compile, so it runs alongside `fmt` at the
 # front rather than behind the two test passes.
-ci: fmt audit clippy test (clippy SLIM) (test SLIM)
+ci: fmt workflows audit clippy test (clippy SLIM) (test SLIM)
 
 # Formatting is compile-free, so it runs first and fails fastest.
 fmt:
     cargo fmt --all --check
+
+# Lint the workflows, including every `run:` block through shellcheck. Same
+# skip-with-a-note rule as `audit`: CI installs the tool, a contributor need not.
+workflows:
+    #!/usr/bin/env sh
+    if command -v actionlint >/dev/null 2>&1; then
+        actionlint
+    else
+        echo "actionlint not installed, skipping workflow lint"
+    fi
 
 # Advisories, licenses, duplicate crates and source registries, per `deny.toml`.
 # Skipped with a note rather than failing when cargo-deny is absent: CI installs

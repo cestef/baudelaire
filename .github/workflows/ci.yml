@@ -165,6 +165,33 @@ jobs:
           base: "."
           paths: target
 
+  # Three workflows now carry real shell: a packaging function that branches on
+  # archive format, a notes step that reads the changelog, an installer fetch.
+  # None of that is exercised until a release runs, so it is linted instead.
+  #
+  # actionlint hands every `run:` block to shellcheck, which is where most of
+  # the value is: an unquoted expansion in the packaging script would otherwise
+  # surface as a broken release artifact.
+  workflows:
+    name: workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      # shellcheck is already on the runner image; actionlint is not.
+      - name: actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -euo pipefail
+          url="https://github.com/rhysd/actionlint/releases/download"
+          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          curl -fsSL "$url/v$ACTIONLINT_VERSION/$asset" \
+            | tar xz -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint" -color
+
   # There is Windows-aware code in the tree (`src/fs.rs`, `src/engine/hook.rs`)
   # and nothing that compiles it, so it can rot without anyone noticing. This
   # job is what notices.
