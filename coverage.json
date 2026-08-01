@@ -1,7 +1,7 @@
 {
- "badge": "cf71bb152cf2381d",
- "commit": "81b83302ce793659ecc1a5e0929b62c58e633d21",
- "covered": 7879,
+ "badge": "2d5964b3c6b10fb4",
+ "commit": "8e17535e33e6d3b629ed8fd648116fe854d5e121",
+ "covered": 8202,
  "files": {
   "src/announce/mod.rs": [
    43,
@@ -25,7 +25,7 @@
   ],
   "src/cli/mod.rs": [
    200,
-   253
+   254
   ],
   "src/cli/prompt.rs": [
    2,
@@ -36,36 +36,36 @@
    8
   ],
   "src/cli/scaffold.rs": [
-   264,
+   265,
    342
   ],
   "src/cli/serve.rs": [
    75,
-   260
+   343
   ],
   "src/codegen.rs": [
    96,
    107
   ],
   "src/config/defaults.rs": [
-   84,
-   84
+   90,
+   90
   ],
   "src/config/dispatch.rs": [
    69,
    71
   ],
   "src/config/mod.rs": [
-   224,
-   236
+   234,
+   247
   ],
   "src/config/node.rs": [
    107,
    113
   ],
   "src/config/parse.rs": [
-   427,
-   478
+   451,
+   516
   ],
   "src/config/permalink.rs": [
    74,
@@ -76,8 +76,8 @@
    23
   ],
   "src/config/url.rs": [
-   49,
-   50
+   55,
+   56
   ],
   "src/config/value.rs": [
    51,
@@ -104,16 +104,16 @@
    7
   ],
   "src/content/listing.rs": [
-   116,
-   116
+   121,
+   121
   ],
   "src/content/mod.rs": [
-   41,
-   41
+   44,
+   44
   ],
   "src/content/page.rs": [
-   147,
-   152
+   164,
+   169
   ],
   "src/content/pagination.rs": [
    81,
@@ -200,8 +200,8 @@
    106
   ],
   "src/engine/asset/module.rs": [
-   136,
-   137
+   125,
+   126
   ],
   "src/engine/check/external.rs": [
    76,
@@ -211,37 +211,53 @@
    31,
    31
   ],
+  "src/engine/compile/bundle.rs": [
+   88,
+   94
+  ],
   "src/engine/compile/card.rs": [
-   58,
-   65
+   56,
+   58
+  ],
+  "src/engine/compile/generated.rs": [
+   15,
+   15
   ],
   "src/engine/compile/image.rs": [
    36,
    41
   ],
   "src/engine/compile/layout.rs": [
-   30,
-   30
+   34,
+   34
+  ],
+  "src/engine/compile/paged.rs": [
+   24,
+   29
+  ],
+  "src/engine/compile/pdf.rs": [
+   13,
+   13
   ],
   "src/engine/compile/prepare.rs": [
-   93,
-   94
+   107,
+   109
   ],
-  "src/engine/compile/sections.rs": [
-   16,
-   16
+  "src/engine/compile/sidecar.rs": [
+   40,
+   40
   ],
   "src/engine/emit/feed.rs": [
-   112,
-   119
+   116,
+   122
   ],
   "src/engine/emit/headers.rs": [
    14,
    14
   ],
   "src/engine/emit/llms.rs": [
-   36,
-   37
+   38,
+   39
   ],
   "src/engine/emit/mod.rs": [
    55,
@@ -292,8 +308,8 @@
    15
   ],
   "src/engine/mod.rs": [
-   339,
-   353
+   355,
+   369
   ],
   "src/engine/prune.rs": [
    19,
@@ -392,8 +408,8 @@
    130
   ],
   "src/graph/cache.rs": [
-   130,
-   131
+   148,
+   150
   ],
   "src/graph/deps.rs": [
    5,
@@ -416,8 +432,8 @@
    7
   ],
   "src/mime.rs": [
-   40,
-   40
+   41,
+   41
   ],
   "src/remote.rs": [
    34,
@@ -484,12 +500,12 @@
    7
   ],
   "src/render/transform/meta.rs": [
-   181,
-   187
+   193,
+   199
   ],
   "src/render/transform/mod.rs": [
-   89,
-   90
+   90,
+   91
   ],
   "src/render/transform/outbound.rs": [
    11,
@@ -502,6 +518,10 @@
   "src/render/transform/sources.rs": [
    19,
    23
+  ],
+  "src/render/transform/spans.rs": [
+   25,
+   26
   ],
   "src/render/transform/speculation.rs": [
    23,
@@ -556,20 +576,20 @@
    16
   ],
   "src/world/mod.rs": [
-   152,
-   173
+   154,
+   175
   ],
   "src/world/module.rs": [
-   84,
-   85
+   85,
+   86
   ],
   "src/world/packages.rs": [
    7,
    7
   ]
  },
- "percent": 88.18,
+ "percent": 87.59,
  "schema": 2,
- "total": 8935,
- "updated": "2026-07-31T06:33:50+00:00"
+ "total": 9364,
+ "updated": "2026-08-01T06:19:42+00:00"
 }
