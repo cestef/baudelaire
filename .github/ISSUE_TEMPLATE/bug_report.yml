@@ -1,0 +1,59 @@
+name: Bug report
+description: Something built wrong, crashed, or did not do what it said
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything with a security impact, do not open an issue: see
+        [SECURITY.md](https://github.com/cestef/baudelaire/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        The smallest content tree and config that shows it. A link to a repo
+        works too. This is the part that decides how fast it gets fixed.
+      placeholder: |
+        config.kdl:
+          site "T"
+          paths { content "content" }
+
+        content/index.typ:
+          #let frontmatter = (title: "H",)
+
+        $ baudelaire build
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      description: >
+        The full output of `baudelaire --version`, not `-V`: it lists the
+        features this build has, which is often the answer.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: >
+        The run with `-v` (or `-vv` for trace). Paste it as text rather than a
+        screenshot, so the error codes are searchable.
+      render: text
+    validations:
+      required: false

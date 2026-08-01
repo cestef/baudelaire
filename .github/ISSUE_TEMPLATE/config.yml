@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/cestef/baudelaire/discussions
+    about: For anything that is not yet a bug or a concrete request.
+  - name: Security vulnerability
+    url: https://github.com/cestef/baudelaire/security/advisories/new
+    about: Report privately. Please do not open a public issue.
+  - name: Documentation
+    url: https://baudelaire.cstef.dev
+    about: The guide, the config reference, and the theme gallery.
