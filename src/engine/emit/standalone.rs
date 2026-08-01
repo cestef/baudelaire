@@ -330,9 +330,8 @@ mod tests {
             self.0
                 .iter()
                 .map(|(page, fragments)| Output {
-                    page,
-                    html: "",
                     fragments: Some(fragments),
+                    ..Output::new(page, "")
                 })
                 .collect()
         }

@@ -282,6 +282,29 @@ const INERT: &[Inert] = &[
         effect: "no `.well-known` record and no per-page backlink are emitted, so the publication cannot be verified",
         help: "pin the account's `did`, or turn `verify` off",
     },
+    // An `integrity` pins a digest to a URL. Where the URL is not
+    // content-addressed, the file behind it changes while the pages naming it
+    // stay cached, and every one of them then blocks the very stylesheet it
+    // asked for. Stamping nothing is the safe half of that bargain.
+    // The policy is written into `_headers` and nowhere else: it is a header,
+    // and a static build has no other way to send one. Without that file the
+    // whole block is a paragraph of config that produces nothing.
+    Inert {
+        setting: "security { csp }",
+        asked: |config| config.security.csp.enabled,
+        needs: "generate { headers }",
+        met: |config| config.generate.headers,
+        effect: "no policy is written, since `_headers` is the file it goes in",
+        help: "turn on `generate { headers }`, or drop the `csp { }` block",
+    },
+    Inert {
+        setting: "security { sri }",
+        asked: |config| config.security.sri,
+        needs: "assets { fingerprint }",
+        met: |config| config.assets.fingerprint,
+        effect: "no `integrity` attribute is stamped, since a digest pinned to a name that can change under it blocks the file it was meant to protect",
+        help: "turn on `assets { fingerprint }`, which is what makes an asset URL name one exact file",
+    },
 ];
 
 impl Inert {
@@ -445,7 +468,17 @@ impl Engine {
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let mut emitted = processed.emitted;
-        let pass = Pass::new(self, &planned, prepare, processed.map, processed.srcsets);
+        let pass = Pass::new(
+            self,
+            &planned,
+            prepare,
+            processed.map,
+            processed.srcsets,
+            // The renderer's own copy: a page is stamped with the digest of the
+            // file the pipeline wrote, and the externalized images folded in
+            // below carry none.
+            emitted.clone(),
+        );
         let mut cache = self.cache(&pass, &planned, ui)?;
         let (rendered, cached) = self.incremental(&pass, &mut cache, ui)?;
         // Ahead of validation, which weighs each page against what this build
@@ -619,11 +652,13 @@ impl Engine {
                 page: r.page,
                 html: r.html.as_str(),
                 fragments: r.outputs.fragments.as_ref(),
+                inline: &r.outputs.inline,
             })
             .chain(cached.iter().map(|(page, html, out)| Output {
                 page,
                 html: html.as_str(),
                 fragments: out.fragments.as_ref(),
+                inline: &out.inline,
             }))
             .collect()
     }
@@ -762,6 +797,7 @@ impl Engine {
             self.prepare(&planned.pages)?,
             AssetMap::new(self.config.asset_prefix()),
             SrcSets::default(),
+            Emitted::default(),
         );
         // Prepare + compile every page inline (no cache split, no output).
         let rendered = self.render_pages("checking", pass.pages.iter().collect(), ui, |page| {
@@ -904,7 +940,7 @@ impl Engine {
             return Err(invalid.into());
         }
         let options = HtmlOptions {
-            pretty: self.config.html.pretty,
+            pretty: self.config.pretty(),
         };
         // Shared by both serializations below, so a failure in either reports
         // with the page's own spans.
@@ -967,6 +1003,7 @@ impl Engine {
                 fragments,
                 lints: rewrite.lints,
                 weight: rewrite.weight,
+                inline: rewrite.inline,
             },
             external: rewrite.external,
             artifacts,
@@ -1087,21 +1124,28 @@ struct Pass<'a> {
 }
 
 impl<'a> Pass<'a> {
-    /// Wire a pass over `planned`, rendering against `assets` and `srcsets`:
-    /// what the asset pipeline produced for a build, empty for a check, which
-    /// rewrites nothing it will not write.
+    /// Wire a pass over `planned`, rendering against `assets`, `srcsets` and
+    /// `emitted`: what the asset pipeline produced for a build, empty for a
+    /// check, which rewrites nothing it will not write.
     fn new(
         engine: &'a Engine,
         planned: &'a Planned,
         prepare: Prepare<'a>,
         assets: AssetMap,
         srcsets: SrcSets,
+        emitted: Emitted,
     ) -> Self {
         Self {
             config: &engine.config,
             pages: &planned.pages,
             prepare,
-            renderer: Renderer::new(&planned.pages, assets, srcsets, engine.project.root()),
+            renderer: Renderer::new(
+                &planned.pages,
+                assets,
+                srcsets,
+                emitted,
+                engine.project.root(),
+            ),
             analyzer: Analyzer::new(
                 planned.tracked.iter().map(Root::from).collect::<Roots>(),
                 &engine.project,

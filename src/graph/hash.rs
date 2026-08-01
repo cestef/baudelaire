@@ -151,6 +151,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 10: `Outputs` carries the digests of the page's inline scripts and
+    /// styles. An entry written before this records none, so a cached page
+    /// would contribute nothing to the generated policy and a browser would
+    /// refuse to run the page's own inline script.
     /// 9: `Outputs` carries the page's lint findings and the ledger of what it
     /// ships. An entry written before this records neither, so a cached page
     /// would read as clean and weightless: the lint and budget gates would both
@@ -174,7 +178,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 9;
+    const SCHEMA: u32 = 10;
 
     pub fn current() -> Self {
         Self {

@@ -339,7 +339,7 @@ impl<'a> Assets<'a> {
         fs::write_all(self.dst.join(&dst), bytes)?;
         out.count += 1;
         out.bytes += bytes.len() as u64;
-        out.emitted.insert(ctx.url(&dst), bytes.len() as u64);
+        out.emitted.insert(ctx.url(&dst), bytes, self.config.sri());
         if dst != rel {
             out.map.insert(ctx.url(rel), ctx.url(&dst));
         }

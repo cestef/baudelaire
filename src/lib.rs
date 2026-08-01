@@ -7,6 +7,7 @@ pub mod codegen;
 pub mod config;
 pub mod content;
 pub mod deploy;
+pub mod digest;
 pub mod engine;
 pub mod error;
 pub mod fs;

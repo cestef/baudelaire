@@ -8,6 +8,7 @@
 //! adding one touches nothing else here and the list doubles as the map of
 //! which module emits what.
 
+mod csp;
 mod feed;
 mod headers;
 mod llms;
@@ -47,6 +48,9 @@ pub(super) struct Output<'a> {
     /// Its head and body markup, present only while the single-file export is
     /// on (nothing else pays to capture them).
     pub fragments: Option<&'a Fragments>,
+    /// The digests of its inline scripts and styles, for the generated content
+    /// security policy. Empty unless one is being generated.
+    pub inline: &'a crate::render::Inline,
 }
 
 impl<'a> Output<'a> {
@@ -58,6 +62,7 @@ impl<'a> Output<'a> {
             page,
             html,
             fragments: None,
+            inline: crate::render::Inline::EMPTY,
         }
     }
 }

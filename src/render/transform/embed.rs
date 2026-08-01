@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use typst_html::HtmlDocument;
 
 use crate::config::Config;
+use crate::digest::Base64;
 use crate::mime::Mime;
 
 use super::{Cx, DocumentExt, Transform};
@@ -84,59 +85,7 @@ impl<'a> Inliner<'a> {
         Some(format!(
             "data:{};base64,{}",
             Mime::of(&path),
-            Self::base64(&bytes)
+            Base64(&bytes)
         ))
-    }
-
-    /// Standard (RFC 4648) base64 with `=` padding.
-    fn base64(bytes: &[u8]) -> String {
-        /// The RFC 4648 alphabet, indexed by the six-bit group it encodes.
-        const TABLE: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        /// The `n`th six-bit group of a chunk's 24 bits, most significant
-        /// first, which is the order they are written in.
-        fn sextet(bits: u32, n: u32) -> char {
-            TABLE[(bits >> (18 - n * 6) & 0x3f) as usize] as char
-        }
-        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-        for chunk in bytes.chunks(3) {
-            let bits = (u32::from(chunk[0]) << 16)
-                | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
-                | u32::from(chunk.get(2).copied().unwrap_or(0));
-            out.push(sextet(bits, 0));
-            out.push(sextet(bits, 1));
-            // A short chunk pads rather than encoding the zero bits it never had.
-            out.push(if chunk.len() > 1 {
-                sextet(bits, 2)
-            } else {
-                '='
-            });
-            out.push(if chunk.len() > 2 {
-                sextet(bits, 3)
-            } else {
-                '='
-            });
-        }
-        out
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Inliner;
-
-    fn base64(bytes: &[u8]) -> String {
-        Inliner::base64(bytes)
-    }
-
-    #[test]
-    fn base64_matches_rfc4648_vectors() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foob"), "Zm9vYg==");
-        assert_eq!(base64(b"fooba"), "Zm9vYmE=");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
     }
 }

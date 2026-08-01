@@ -55,6 +55,28 @@ chores are visible in the git history and change nothing for a site.
   them. Exceeding a budget always fails the build. `baudelaire check` processes
   no assets and so runs the rules but not the budgets.
 
+- **html**: `security { sri }`, subresource integrity from the build's own
+  output. Every `<script src>` and `<link rel="stylesheet">` naming a file this
+  build wrote is stamped with that file's SHA-384; a reference to another host,
+  or one already carrying an `integrity`, is left alone. Needs
+  `assets { fingerprint }`, and says so when it does not have it: a digest
+  pinned to a name whose contents can change under it blocks the very file it
+  was meant to protect.
+
+- **html**: `security { csp { } }`, a `Content-Security-Policy` written into the
+  generated `_headers`. One key per directive (`default`, `script`, `style`,
+  `img`, `font`, `connect`, `frame`, `object`, `base`, `form`, `report`), each
+  taking a CSP source list verbatim, plus the half no author can maintain: the
+  SHA-256 of every inline `<script>`, `<style>` and `style=""` attribute the
+  build produced, unioned across the site and folded into `script-src` /
+  `style-src` alongside the fallback. The attributes are the ones typst resolves
+  an element's CSS properties into, so a page carries several nobody wrote;
+  allowing them adds `'unsafe-hashes'`, which is still an allowlist of exact
+  strings this build emitted. `enforce #false` emits `Content-Security-Policy-Report-Only`
+  instead. Taking those digests turns `html { pretty }` off, since the pretty
+  printer re-indents an inline body after the digest is taken and a browser
+  hashes what it is served.
+
 - **typst**: `@baudelaire/pages`, the site's page catalogue as a Typst module.
   `pages(lang)` returns one row per authored page of that language, in the site's
   own order, in the same shape a listing's `entries` carry, so the card
@@ -233,7 +255,7 @@ layout's `<article>` (or `<main>`), where it used to sit after everything else
 in the body. A stylesheet that reached for it with `body > [role=doc-endnotes]`
 needs a new selector; a bare `html { footnotes }` restores the old placement.
 
-The build cache schema changed (`Renderer::SCHEMA` 8 → 9), so the first build
+The build cache schema changed (`Renderer::SCHEMA` 8 → 10), so the first build
 after upgrading is cold. Nothing to do; it is one rebuild.
 
 `lint { strict }` and any `lint { budget { } }` can fail a build that previously

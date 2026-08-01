@@ -7,12 +7,13 @@ use std::path::PathBuf;
 
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
-    CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig,
-    Footnotes, GenerateConfig, HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
-    LinkConfig, LintConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle,
-    PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig,
-    SearchField, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
-    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DraftConfig, Eagerness,
+    FeedConfig, Footnotes, GenerateConfig, HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig,
+    JpegConfig, LinkConfig, LintConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths,
+    PdfBundle, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, Router, S3Config,
+    SearchConfig, SearchField, SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig,
+    SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle,
+    VerifyConfig,
 };
 
 impl Default for Config {
@@ -33,6 +34,7 @@ impl Default for Config {
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
             lint: LintConfig::default(),
+            security: SecurityConfig::default(),
             generate: GenerateConfig::default(),
             navigation: NavigationConfig::default(),
             prune: true,
@@ -258,6 +260,35 @@ impl Default for LintConfig {
             ids: true,
             aria: true,
             budget: BudgetConfig::default(),
+        }
+    }
+}
+
+impl Default for CspConfig {
+    fn default() -> Self {
+        // opt-in as a whole, like every other generated artifact: a policy this
+        // tool invented for a site that never asked for one would be either
+        // useless or breaking. Once the block is present, it enforces (a
+        // report-only policy is a rollout step, not a destination) and carries
+        // the inline digests, which is the half an author cannot write.
+        Self {
+            enabled: false,
+            enforce: true,
+            hashes: true,
+            // The one directive with a default: a policy with no `default-src`
+            // restricts nothing it does not name, which is not what a block
+            // saying `csp { }` means.
+            default: Some("'self'".into()),
+            script: None,
+            style: None,
+            img: None,
+            font: None,
+            connect: None,
+            frame: None,
+            object: None,
+            base: None,
+            form: None,
+            report: None,
         }
     }
 }

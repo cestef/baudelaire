@@ -108,8 +108,10 @@ impl Images {
         fs::write_all(&dst, &data)?;
         self.seen
             .insert(image.name.clone(), (hash, image.source.clone()));
+        // No digest: `integrity` is for the scripts and stylesheets a page
+        // loads, and an `<img>` carries none.
         self.emitted
-            .insert(format!("{}/{}", self.prefix, image.name), data.len() as u64);
+            .insert(format!("{}/{}", self.prefix, image.name), &data, false);
         self.count += 1;
         self.bytes += data.len() as u64;
         Ok(())

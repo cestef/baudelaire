@@ -1,0 +1,270 @@
+// `security { }`: subresource integrity on what a page loads, and a content
+// security policy naming what it inlines. Both are derived from the built DOM,
+// so neither can go stale against the pages it describes.
+
+scenario "an emitted stylesheet and script are stamped with their digests" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets { fingerprint #true }
+      security { sri }
+      """#
+    "assets/app.css" #"""
+      body { color: black; }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/app.css"))
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains #"integrity="sha384-"#
+    }
+  }
+}
+
+scenario "a reference this build did not write is left unstamped" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets { fingerprint #true }
+      security { sri }
+      """#
+    "assets/app.css" #"""
+      body { color: black; }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("script", attrs: (src: "https://cdn.example.com/x.js"))[]
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      missing "integrity"
+    }
+  }
+}
+
+scenario "integrity needs content-addressed names to pin to" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      security { sri }
+      """#
+    "assets/app.css" #"""
+      body { color: black; }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/app.css"))
+      """#
+  }
+  expect {
+    // The build stands and says so: `assets { fingerprint }` is off, so a
+    // digest would be pinned to a name whose contents can change under it.
+    ok
+    file "a/index.html" {
+      missing "integrity"
+    }
+  }
+}
+
+scenario "the policy names every inline script the build produced" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate { headers #true }
+      security {
+        csp {
+          img "'self' data:"
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("script", "console.log(1)")
+      #html.elem("style", "body { margin: 0 }")
+      """#
+  }
+  expect {
+    ok
+    file "_headers" {
+      contains "Content-Security-Policy: default-src 'self'"
+      contains "script-src 'self' 'sha256-"
+      contains "style-src 'self' 'sha256-"
+      contains "img-src 'self' data:"
+    }
+  }
+}
+
+scenario "hashing an inline script serves it exactly as it was hashed" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html { pretty #true }
+      generate { headers #true }
+      security { csp { } }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("script", "console.log(1)")
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      // Unindented despite `pretty`: the printer re-indents a script body on
+      // its way out, and a digest has to cover the bytes as served.
+      contains "<script>console.log(1)</script>"
+    }
+    file "_headers" {
+      // The digest of exactly those bytes, checked against `openssl dgst`.
+      contains "'sha256-CihokcEcBW4atb/CW/XWsvWwbTjqwQlE9nj9ii5ww5M='"
+    }
+  }
+}
+
+scenario "the style attributes the build emits are named by the policy" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate { headers #true }
+      security { csp { } }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```rust
+      let x = 1;
+      ```
+      """#
+  }
+  expect {
+    ok
+    // Highlighting resolves into `style` attributes nobody wrote. A policy
+    // naming only `<style>` elements would have dropped every one of them, in
+    // the browser and nowhere else.
+    file "a/index.html" {
+      contains "<span style=\"color:"
+    }
+    file "_headers" {
+      contains "style-src 'self' 'unsafe-hashes' 'sha256-"
+    }
+  }
+}
+
+scenario "a policy with nowhere to go says so" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      security { csp { } }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      Body.
+      """#
+  }
+  expect {
+    // `_headers` is the only file a policy can go in, and this site does not
+    // write one. The build warns rather than silently producing nothing.
+    ok
+    absent "_headers"
+  }
+}
+
+scenario "a policy can be rolled out without blocking anything" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate { headers #true }
+      caching { }
+      security {
+        csp { enforce #false }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "_headers" {
+      contains "Content-Security-Policy-Report-Only: default-src 'self'"
+      contains "Cache-Control:"
+    }
+  }
+}
+
+scenario "no policy and no integrity without asking" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate { headers #true }
+      caching { }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("script", "console.log(1)")
+      """#
+  }
+  expect {
+    ok
+    file "_headers" {
+      missing "Content-Security-Policy"
+    }
+  }
+}

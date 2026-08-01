@@ -29,7 +29,7 @@ use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
-    AssetDeps, Finding, Fragments, ImageRef, LinkDeps, RenderMaps, SrcSetDeps, Weight,
+    AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, RenderMaps, SrcSetDeps, Weight,
 };
 use crate::ui::Ui;
 
@@ -145,6 +145,14 @@ pub struct Outputs {
     pub lints: Vec<Finding>,
     #[serde(default, skip_serializing_if = "Weight::is_empty")]
     pub weight: Weight,
+    /// The digests of the page's inline scripts and styles, for the generated
+    /// content security policy.
+    ///
+    /// Stored because the policy is assembled site-wide from every page's
+    /// digests, cache hits included: a page absent from that union is a page
+    /// whose own inline script the browser refuses to run.
+    #[serde(default, skip_serializing_if = "Inline::is_empty")]
+    pub inline: Inline,
 }
 
 /// The serialized cache manifest: metadata only, no page markup.

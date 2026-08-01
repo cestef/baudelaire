@@ -14,6 +14,7 @@ mod fingerprint;
 mod footnotes;
 mod highlight;
 mod image;
+mod integrity;
 mod lang;
 mod meta;
 mod outbound;
@@ -43,6 +44,7 @@ use fingerprint::Fingerprint;
 use footnotes::Footnotes;
 use highlight::Highlight;
 use image::Images;
+use integrity::Integrity;
 use lang::Lang;
 use meta::Meta;
 use outbound::Outbound;
@@ -64,6 +66,9 @@ pub(super) struct Cx<'a> {
     pub assets: &'a AssetMap,
     /// Responsive width-variant manifest, consumed by the sources transform.
     pub srcsets: &'a SrcSets,
+    /// What this build wrote and what each file digests to, consumed by the
+    /// integrity transform.
+    pub emitted: &'a super::Emitted,
     /// Project root, so the externalize and svg transforms resolve a marker's
     /// project-relative path to the source file on disk.
     pub root: &'a std::path::Path,
@@ -375,6 +380,10 @@ impl Transforms {
             Box::new(Embed),
             Box::new(Fingerprint),
             Box::new(BasePath),
+            // Last, over the finished markup: an `integrity` names the file a
+            // browser will actually fetch, base path and content hash and all,
+            // and an inline digest has to cover the bytes as they are served.
+            Box::new(Integrity),
         ])
     }
 

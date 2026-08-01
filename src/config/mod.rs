@@ -69,6 +69,9 @@ pub struct Config {
     /// Post-render linting of the built pages: accessibility and structure
     /// rules over the typed DOM, and per-page weight budgets.
     pub lint: LintConfig,
+    /// Integrity attributes and the content security policy, both derived from
+    /// what the pages actually load and inline.
+    pub security: SecurityConfig,
     /// Files the build generates beside the pages: sitemap, robots, llms,
     /// feeds, search indexes, social cards.
     pub generate: GenerateConfig,
@@ -375,6 +378,45 @@ impl Config {
         self.url.as_deref().map(BaseUrl::new)
     }
 
+    /// Whether this build stamps `integrity` attributes: asked for, *and*
+    /// backed by content-addressed names.
+    ///
+    /// The single gate, shared by the asset pipeline (which pays for the digest
+    /// only if one is going to be used), the transform that stamps it, and the
+    /// [`Inert`] row that explains the silence. Without `fingerprint` an asset
+    /// URL names whatever is at that path today, so a page cached from
+    /// yesterday would pin a digest the file no longer has and block it.
+    ///
+    /// [`Inert`]: crate::engine
+    pub fn sri(&self) -> bool {
+        self.security.sri && self.assets.fingerprint
+    }
+
+    /// Whether this build takes the digest of every inline script, style and
+    /// `style` attribute for the generated policy.
+    ///
+    /// Conditional on the policy having somewhere to go. The digests are read
+    /// by exactly one thing, the `_headers` writer, so a site that generates no
+    /// `_headers` would pay for them, and pay again in [`Config::pretty`], to
+    /// produce a policy nobody is ever served.
+    pub fn hashes(&self) -> bool {
+        self.generate.headers && self.security.csp.enabled && self.security.csp.hashes
+    }
+
+    /// Whether the HTML is pretty-printed: `html { pretty }`, unless this build
+    /// is hashing what it inlines.
+    ///
+    /// The two cannot both be had. A browser digests the bytes between
+    /// `<script>` and `</script>` exactly as they are served, and typst's pretty
+    /// printer re-indents a script or style body on its way out, *after* the DOM
+    /// this build took its digest from. A policy built that way names a body
+    /// that was never served, and the browser refuses to run the page's own
+    /// script: a site broken in production and nowhere else. Printing the
+    /// markup unindented costs nothing but the look of the source.
+    pub fn pretty(&self) -> bool {
+        self.html.pretty && !self.hashes()
+    }
+
     /// The path the site is served under, from the `url`'s path component
     /// (`url "https://host/docs"` -> `/docs`); empty for a root-hosted site.
     /// Every on-page root-absolute URL is prefixed with it so the site works
@@ -603,6 +645,10 @@ impl std::hash::Hash for Config {
             // serve those pages from cache and report nothing, which is the one
             // failure mode a gate must not have.
             lint,
+            // Shapes the markup (an `integrity` attribute) and the digests a
+            // page records, so a page built under one policy must not be served
+            // under another.
+            security,
             generate,
             navigation,
             prune,
@@ -628,7 +674,10 @@ impl std::hash::Hash for Config {
             source: _,
         } = self;
         (site, url, lang, author, paths, theme, content, languages).hash(state);
-        (assets, html, links, lint, generate, navigation, prune).hash(state);
+        (
+            assets, html, links, lint, security, generate, navigation, prune,
+        )
+            .hash(state);
         (typst, client, cache, hooks, announce, deploy, profile).hash(state);
     }
 }
@@ -778,6 +827,62 @@ pub struct LinkConfig {
     /// flaky host or an airplane can never change what it produces. `check
     /// --external` turns it on for one run.
     pub external: bool,
+}
+
+/// What the built pages tell a browser to trust: the integrity of the files
+/// they load, and the policy they are served under.
+///
+/// Both are derived from the pages themselves rather than written by hand,
+/// which is the only way either stays true: a hand-kept `script-src` goes stale
+/// the moment a template gains an inline script, and a hand-kept `integrity`
+/// the moment the file it names is rebuilt.
+#[derive(Debug, Clone, Default, Hash)]
+pub struct SecurityConfig {
+    /// Stamp `integrity` onto every script and stylesheet this build emitted,
+    /// so a browser refuses one that arrives altered.
+    ///
+    /// Needs `assets { fingerprint }`: an attribute pinning a digest to a URL
+    /// whose contents can change under it is how a site serves a page that
+    /// blocks its own stylesheet.
+    pub sri: bool,
+    /// The `Content-Security-Policy` written into the generated `_headers`.
+    pub csp: CspConfig,
+}
+
+/// A generated `Content-Security-Policy`.
+///
+/// Each directive is the value it is given, verbatim: a CSP source list is its
+/// own small language (`'self'`, `https:`, a host, `'unsafe-inline'`), and
+/// inventing a second spelling for it would help nobody. What this adds is the
+/// half no author can write down, the digest of every inline script and style
+/// the build produced.
+#[derive(Debug, Clone, Hash)]
+pub struct CspConfig {
+    /// Whether a policy is emitted at all; flipped by the block's presence.
+    pub enabled: bool,
+    /// Enforce it. Off emits `Content-Security-Policy-Report-Only`, which
+    /// reports violations and blocks nothing: how a policy is rolled out.
+    pub enforce: bool,
+    /// Add the digest of every inline `<script>` and `<style>` the build
+    /// produced to the script and style directives, which is what lets a strict
+    /// policy coexist with the inline blocks a page needs.
+    pub hashes: bool,
+    /// `default-src`, the fallback every unstated fetch directive inherits.
+    pub default: Option<String>,
+    /// `script-src`, `style-src`, and the rest, each stated only if set.
+    pub script: Option<String>,
+    pub style: Option<String>,
+    pub img: Option<String>,
+    pub font: Option<String>,
+    pub connect: Option<String>,
+    pub frame: Option<String>,
+    pub object: Option<String>,
+    /// `base-uri`: what a `<base>` may point the page's relative URLs at.
+    pub base: Option<String>,
+    /// `form-action`: where a form may submit.
+    pub form: Option<String>,
+    /// `report-uri`: where a violation report is posted.
+    pub report: Option<String>,
 }
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a

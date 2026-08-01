@@ -19,13 +19,13 @@ use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
-    CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig,
-    FeedKind, GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig,
-    LinkConfig, LintConfig, LlmsConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths,
-    PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig,
-    Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SortKey, SpaConfig,
-    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
-    UrlStyle, VerifyConfig,
+    CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DraftConfig, Eagerness,
+    FeedConfig, FeedKind, GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
+    LanguageConfig, LinkConfig, LintConfig, LlmsConfig, NavigationConfig, OptimizeConfig,
+    PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch,
+    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
+    SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
+    StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
@@ -142,6 +142,12 @@ impl Section for Config {
             Nested(LintConfig::rows),
             "Checks run over the built pages. Its presence turns them on.",
             |c, n, t| c.lint.fill(n, t),
+        ),
+        (
+            "security",
+            Nested(SecurityConfig::rows),
+            "What the built pages tell a browser to trust.",
+            |c, n, t| c.security.fill(n, t),
         ),
         (
             "generate",
@@ -1043,6 +1049,121 @@ impl Section for BudgetConfig {
             "All of the above at once: the page's whole transfer weight.",
             |c, n, t| {
                 c.total = Some(n.size(t, 0)?);
+                Ok(())
+            },
+        ),
+    ]);
+}
+
+/// The `security { .. }` section: what the pages tell a browser to trust.
+impl Section for SecurityConfig {
+    const RULES: Block<Self> = Block(&[
+        (
+            "sri",
+            Flag,
+            "Stamp `integrity` onto every emitted script and stylesheet. Needs `assets { fingerprint }`.",
+            |c, n, t| {
+                c.sri = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "csp",
+            Nested(CspConfig::rows),
+            "The content security policy written into `_headers`. Its presence turns it on.",
+            |c, n, t| c.csp.fill(n, t),
+        ),
+    ]);
+}
+
+/// The `security { csp { .. } }` section: one key per directive, each taking a
+/// CSP source list verbatim.
+impl Section for CspConfig {
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        true
+    }
+
+    const RULES: Block<Self> = Block(&[
+        (
+            "enforce",
+            Flag,
+            "Enforce the policy. Off reports violations without blocking anything.",
+            |c, n, t| {
+                c.enforce = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "hashes",
+            Flag,
+            "Add the digest of every inline script and style the build produced. Turns `html { pretty }` off, since a digest has to cover the bytes as served.",
+            |c, n, t| {
+                c.hashes = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "default",
+            Text,
+            "`default-src`: what every unstated fetch directive falls back to.",
+            |c, n, t| {
+                c.default = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        ("script", Text, "`script-src`.", |c, n, t| {
+            c.script = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("style", Text, "`style-src`.", |c, n, t| {
+            c.style = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("img", Text, "`img-src`.", |c, n, t| {
+            c.img = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("font", Text, "`font-src`.", |c, n, t| {
+            c.font = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("connect", Text, "`connect-src`.", |c, n, t| {
+            c.connect = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("frame", Text, "`frame-src`.", |c, n, t| {
+            c.frame = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        ("object", Text, "`object-src`.", |c, n, t| {
+            c.object = Some(n.string(t, 0)?);
+            Ok(())
+        }),
+        (
+            "base",
+            Text,
+            "`base-uri`: what a `<base>` may repoint relative URLs at.",
+            |c, n, t| {
+                c.base = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "form",
+            Text,
+            "`form-action`: where a form may submit.",
+            |c, n, t| {
+                c.form = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "report",
+            Url,
+            "`report-uri`: where a violation report is posted.",
+            |c, n, t| {
+                c.report = Some(n.url(t, 0)?);
                 Ok(())
             },
         ),

@@ -1,17 +1,19 @@
-//! `_headers`: the `Cache-Control` policy, stated to the host that serves the
-//! built files.
+//! `_headers`: what the host serving the built files is told about them, the
+//! `Cache-Control` policy and the `Content-Security-Policy` both.
 
+use super::csp::{Digests, Policy};
 use super::{Emit, Processor, Site};
 use crate::config::Config;
 use crate::error::Result;
 
-/// Emits a `_headers` rule file from the site's `caching` policy.
+/// Emits a `_headers` rule file from the site's `caching` and `security`
+/// policies.
 ///
-/// The same policy the S3 uploader sets per object, said once to a host that
-/// reads it from the publish directory (Netlify, Cloudflare Pages). Both are
-/// written from `caching { }` rather than each carrying its own, so a site that
-/// deploys to a bucket *and* ships `_headers` cannot state two different
-/// answers to one question.
+/// The caching half is the same policy the S3 uploader sets per object, said
+/// once to a host that reads it from the publish directory (Netlify,
+/// Cloudflare Pages). Both are written from `caching { }` rather than each
+/// carrying its own, so a site that deploys to a bucket *and* ships `_headers`
+/// cannot state two different answers to one question.
 pub(super) struct Headers;
 
 impl Headers {
@@ -20,11 +22,11 @@ impl Headers {
 }
 
 impl Processor for Headers {
-    /// Needs both halves: the file to write, and a policy to write into it.
-    /// `generate { headers }` without `caching { }` would emit an empty rule
-    /// file, which reads as "no policy" and is what the host already assumed.
+    /// Needs the file, and something to put in it. `generate { headers }` alone
+    /// would emit an empty rule file, which reads as "no policy" and is what the
+    /// host already assumed.
     fn enabled(&self, config: &Config) -> bool {
-        config.generate.headers && config.caching.enabled
+        config.generate.headers && (config.caching.enabled || config.security.csp.enabled)
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
@@ -37,11 +39,14 @@ impl Processor for Headers {
         // the names under that prefix. Without `assets { fingerprint }` an asset
         // keeps its authored name across builds and is exactly as mutable as a
         // page, which is the same call `CacheControl::header` makes per object.
-        if config.assets.fingerprint {
+        if config.caching.enabled && config.assets.fingerprint {
             let prefix = config.prefixed(&format!("{}/*", config.asset_prefix()));
-            body.push_str(&Self::rule(&prefix, &config.caching.immutable));
+            body.push_str(&Self::rule(
+                &prefix,
+                &[("Cache-Control", &config.caching.immutable)],
+            ));
         }
-        body.push_str(&Self::rule(&config.prefixed("/*"), &config.caching.default));
+        body.push_str(&Self::rule(&config.prefixed("/*"), &Self::catchall(site)));
         out.file(&site.dist(&[Self::FILE]), &body)?;
         out.note(format_args!("wrote {}", Self::FILE));
         Ok(())
@@ -49,10 +54,31 @@ impl Processor for Headers {
 }
 
 impl Headers {
+    /// The headers every path gets: the caching default, and the policy this
+    /// build's own pages were assembled into.
+    fn catchall(site: &Site) -> Vec<(&'static str, String)> {
+        let config = site.config;
+        let mut headers = Vec::new();
+        if config.caching.enabled {
+            headers.push(("Cache-Control", config.caching.default.clone()));
+        }
+        if config.security.csp.enabled {
+            let digests: Digests = site.outputs.iter().map(|out| out.inline).collect();
+            let policy = Policy::new(&config.security.csp, &digests);
+            headers.push((policy.header(), policy.to_string()));
+        }
+        headers
+    }
+
     /// One rule: the path pattern on its own line, then each header indented
     /// beneath it. The format both hosts read.
-    fn rule(pattern: &str, value: &str) -> String {
-        format!("{pattern}\n  Cache-Control: {value}\n\n")
+    fn rule(pattern: &str, headers: &[(&'static str, impl AsRef<str>)]) -> String {
+        let mut rule = format!("{pattern}\n");
+        for (name, value) in headers {
+            rule.push_str(&format!("  {name}: {}\n", value.as_ref()));
+        }
+        rule.push('\n');
+        rule
     }
 }
 
@@ -90,6 +116,19 @@ mod tests {
         assert!(!Headers.enabled(&config("generate { headers #true }")));
         assert!(!Headers.enabled(&config("caching { }")));
         assert!(Headers.enabled(&config("generate { headers #true }\ncaching { }")));
+    }
+
+    /// A policy is enough on its own: a site can state one without saying
+    /// anything about caching.
+    #[test]
+    fn a_policy_alone_earns_the_file() {
+        assert!(Headers.enabled(&config("generate { headers #true }\nsecurity { csp { } }")));
+        let body = body(&config("generate { headers #true }\nsecurity { csp { } }"));
+        assert!(
+            body.contains("Content-Security-Policy: default-src 'self'"),
+            "{body}"
+        );
+        assert!(!body.contains("Cache-Control"), "{body}");
     }
 
     /// The asset rule is only true where the names are content-addressed, and

@@ -11,6 +11,7 @@
 mod asset;
 mod emitted;
 mod fragment;
+mod inline;
 mod links;
 mod lint;
 mod origin;
@@ -19,8 +20,9 @@ mod srcset;
 mod transform;
 
 pub use asset::{AssetDeps, AssetMap};
-pub use emitted::Emitted;
+pub use emitted::{Emission, Emitted};
 pub use fragment::Fragments;
+pub use inline::Inline;
 pub use links::{LinkDeps, LinkMap};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
@@ -59,6 +61,9 @@ pub struct Renderer {
     links: LinkMap,
     assets: AssetMap,
     srcsets: SrcSets,
+    /// What this build emitted, so a reference can be stamped with the digest
+    /// of the file it names.
+    emitted: Emitted,
     /// Project root, so the externalize transform resolves an image marker's
     /// project-relative path to the source file on disk.
     root: std::path::PathBuf,
@@ -117,6 +122,9 @@ pub struct Rewrite {
     /// as `lints`, and resolved to bytes site-wide, where the sizes of the
     /// files it names are known.
     pub weight: Weight,
+    /// The digests of the page's inline scripts and styles, for the generated
+    /// content security policy. Empty unless one is being generated.
+    pub inline: Inline,
     /// SVG files `svg()` marked that could not be turned into DOM nodes. The
     /// element is already in the page, so the caller must fail rather than ship
     /// an empty `<svg>` where an icon was asked for.
@@ -140,11 +148,18 @@ impl Renderer {
     /// references through `assets` (the processed-asset URL map), adding a
     /// `srcset` to each image with variants recorded in `srcsets`. `root` is the
     /// typst project root absolute link paths resolve against.
-    pub fn new(pages: &[Page], assets: AssetMap, srcsets: SrcSets, root: &std::path::Path) -> Self {
+    pub fn new(
+        pages: &[Page],
+        assets: AssetMap,
+        srcsets: SrcSets,
+        emitted: Emitted,
+        root: &std::path::Path,
+    ) -> Self {
         Self {
             links: LinkMap::new(pages, root),
             assets,
             srcsets,
+            emitted,
             root: root.to_path_buf(),
             transforms: Transforms::builtin(),
             lints: lint::Rules::builtin(),
@@ -179,6 +194,7 @@ impl Renderer {
             links: &self.links,
             assets: &self.assets,
             srcsets: &self.srcsets,
+            emitted: &self.emitted,
             root: &self.root,
             world,
             found: Rewrite::default(),

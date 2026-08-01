@@ -141,7 +141,7 @@ impl Scale {
             images: 0,
         };
         for load in loads {
-            let Some(bytes) = emitted.at(&load.url) else {
+            let Some(bytes) = emitted.at(&load.url).map(|file| file.bytes) else {
                 continue;
             };
             match load.load {
@@ -210,7 +210,7 @@ mod tests {
 
     fn emitted() -> Emitted {
         let mut emitted = Emitted::new(String::new());
-        emitted.insert("/assets/app.js".to_owned(), 900);
+        emitted.insert("/assets/app.js".to_owned(), &[b'x'; 900], false);
         emitted
     }
 

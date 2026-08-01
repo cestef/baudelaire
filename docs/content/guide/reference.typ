@@ -161,6 +161,30 @@ How many bytes one page may ship. Exceeding a budget always fails the build.
 / #raw("images") #raw("size"): Every image it references, responsive alternatives excluded.
 / #raw("total") #raw("size"): All of the above at once: the page's whole transfer weight.
 
+== `security`
+
+What the built pages tell a browser to trust.
+
+/ #raw("sri") #raw("flag"): Stamp `integrity` onto every emitted script and stylesheet. Needs `assets { fingerprint }`.
+
+=== `security.csp`
+
+The content security policy written into `\_headers`. Its presence turns it on.
+
+/ #raw("enforce") #raw("flag"): Enforce the policy. Off reports violations without blocking anything.
+/ #raw("hashes") #raw("flag"): Add the digest of every inline script and style the build produced. Turns `html { pretty }` off, since a digest has to cover the bytes as served.
+/ #raw("default") #raw("text"): `default-src`: what every unstated fetch directive falls back to.
+/ #raw("script") #raw("text"): `script-src`.
+/ #raw("style") #raw("text"): `style-src`.
+/ #raw("img") #raw("text"): `img-src`.
+/ #raw("font") #raw("text"): `font-src`.
+/ #raw("connect") #raw("text"): `connect-src`.
+/ #raw("frame") #raw("text"): `frame-src`.
+/ #raw("object") #raw("text"): `object-src`.
+/ #raw("base") #raw("text"): `base-uri`: what a `\<base\>` may repoint relative URLs at.
+/ #raw("form") #raw("text"): `form-action`: where a form may submit.
+/ #raw("report") #raw("url"): `report-uri`: where a violation report is posted.
+
 == `generate`
 
 The files a build emits beside the pages.
