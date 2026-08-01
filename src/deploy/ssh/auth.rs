@@ -10,6 +10,7 @@ use russh::client::Handle;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::AgentClient;
 use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::hosts::Client;
 use crate::config::SshConfig;
@@ -79,23 +80,7 @@ impl<'a> Auth<'a> {
         user: &str,
         hash: Option<HashAlg>,
     ) -> Result<bool> {
-        let Ok(mut agent) = AgentClient::connect_env().await else {
-            return Ok(false);
-        };
-        let Ok(identities) = agent.request_identities().await else {
-            return Ok(false);
-        };
-        for identity in identities {
-            if let AgentIdentity::PublicKey { key, .. } = identity
-                && let Ok(result) = handle
-                    .authenticate_publickey_with(user, key, hash, &mut agent)
-                    .await
-                && result.success()
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Agent::offer(handle, user, hash).await
     }
 
     /// Authenticate with a password from the environment, stdin, or prompt.
@@ -130,6 +115,71 @@ impl<'a> Auth<'a> {
             (Ok(rest), Some(home)) => PathBuf::from(home).join(rest),
             _ => path.to_owned(),
         }
+    }
+}
+
+/// The ssh-agent, and the one thing about reaching it that is not portable:
+/// where it listens.
+///
+/// Unix has a single answer, the socket `SSH_AUTH_SOCK` names. Windows has two
+/// agents worth trying and each speaks over its own transport, so
+/// `AgentClient` is a different concrete type on each. Only the connecting is
+/// written per platform; [`identities`](Agent::identities), which is all of the
+/// actual protocol, is generic over the transport and written once.
+struct Agent;
+
+impl Agent {
+    /// Offer every identity the agent holds, `true` as soon as one is accepted.
+    #[cfg(unix)]
+    async fn offer(handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
+        match AgentClient::connect_env().await {
+            Ok(mut agent) => Self::identities(&mut agent, handle, user, hash).await,
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// OpenSSH for Windows serves the agent on a named pipe, and is what a
+    /// `ssh` on `PATH` there talks to; Pageant is the other agent people
+    /// actually run, so it is tried after.
+    #[cfg(windows)]
+    async fn offer(handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
+        const PIPE: &str = r"\\.\pipe\openssh-ssh-agent";
+        if let Ok(mut agent) = AgentClient::connect_named_pipe(PIPE).await
+            && Self::identities(&mut agent, handle, user, hash).await?
+        {
+            return Ok(true);
+        }
+        match AgentClient::connect_pageant().await {
+            Ok(mut agent) => Self::identities(&mut agent, handle, user, hash).await,
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// Offer each identity a connected agent holds. Generic over the transport,
+    /// so every platform runs this exact loop.
+    async fn identities<S>(
+        agent: &mut AgentClient<S>,
+        handle: &mut Handle<Client>,
+        user: &str,
+        hash: Option<HashAlg>,
+    ) -> Result<bool>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send,
+    {
+        let Ok(identities) = agent.request_identities().await else {
+            return Ok(false);
+        };
+        for identity in identities {
+            if let AgentIdentity::PublicKey { key, .. } = identity
+                && let Ok(result) = handle
+                    .authenticate_publickey_with(user, key, hash, agent)
+                    .await
+                && result.success()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
