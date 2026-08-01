@@ -8,6 +8,11 @@
 
 use kdl::{KdlDocument, KdlNode};
 
+use crate::config::Named;
+use crate::config::dispatch::Kind::{
+    Block as Nested, Choice, Flag, Items, Number, Numbers, Overlay, Path, Table, Template, Text,
+    Texts, Url,
+};
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::permalink::Permalink;
@@ -47,84 +52,224 @@ impl Config {
 /// what keys are valid: dispatch and "unknown key" suggestions both read it.
 impl Section for Config {
     const RULES: Block<Self> = Block(&[
-        ("site", |c, n, t| {
-            c.site = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("url", |c, n, t| {
-            c.url = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("lang", |c, n, t| {
-            c.lang = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("author", |c, n, t| {
-            c.author = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("theme", |c, n, t| {
-            c.theme = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("paths", |c, n, t| c.paths.fill(n, t)),
-        ("content", |c, n, t| c.content.fill(n, t)),
-        ("languages", |c, n, t| {
-            c.languages = n.unique(t, "language", LanguageConfig::item)?;
-            Ok(())
-        }),
-        ("assets", |c, n, t| c.assets.fill(n, t)),
-        ("html", |c, n, t| c.html.fill(n, t)),
-        ("links", |c, n, t| c.links.fill(n, t)),
-        ("generate", |c, n, t| c.generate.fill(n, t)),
-        ("navigation", |c, n, t| c.navigation.fill(n, t)),
-        ("prune", |c, n, t| {
-            c.prune = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("cache", |c, n, t| c.cache.fill(n, t)),
-        ("caching", |c, n, t| c.caching.fill(n, t)),
-        ("typst", |c, n, t| c.typst.fill(n, t)),
-        ("client", |c, n, t| {
-            c.client = n.table(t)?;
-            Ok(())
-        }),
-        ("hooks", |c, n, t| c.hooks.fill(n, t)),
-        ("announce", |c, n, t| c.announce.fill(n, t)),
-        ("deploy", |c, n, t| c.deploy.fill(n, t)),
-        ("serve", |c, n, t| c.serve.fill(n, t)),
-        (Config::PROFILES, |c, n, t| {
-            c.profiles = n.unique(t, "profile", |child, t| {
-                Ok((child.name().value().to_owned(), child.block(t)?.clone()))
-            })?;
-            Ok(())
-        }),
+        (
+            "site",
+            Text,
+            "The site's name, used in titles, feeds and metadata.",
+            |c, n, t| {
+                c.site = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "url",
+            Url,
+            "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
+            |c, n, t| {
+                c.url = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "lang",
+            Text,
+            "The default language code, e.g. `en`.",
+            |c, n, t| {
+                c.lang = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "author",
+            Text,
+            "The default author, used by any page naming none.",
+            |c, n, t| {
+                c.author = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "theme",
+            Text,
+            "A theme directory whose templates and assets this site layers over.",
+            |c, n, t| {
+                c.theme = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "paths",
+            Nested(Paths::rows),
+            "Where the content, output and asset trees live.",
+            |c, n, t| c.paths.fill(n, t),
+        ),
+        (
+            "content",
+            Nested(ContentConfig::rows),
+            "What the content tree holds and how it is read.",
+            |c, n, t| c.content.fill(n, t),
+        ),
+        (
+            "languages",
+            Items(LanguageConfig::rows),
+            "One block per language, each named by its code.",
+            |c, n, t| {
+                c.languages = n.unique(t, "language", LanguageConfig::item)?;
+                Ok(())
+            },
+        ),
+        (
+            "assets",
+            Nested(AssetConfig::rows),
+            "The pipeline applied to the asset tree.",
+            |c, n, t| c.assets.fill(n, t),
+        ),
+        (
+            "html",
+            Nested(HtmlConfig::rows),
+            "Post-processing of typst's HTML output.",
+            |c, n, t| c.html.fill(n, t),
+        ),
+        (
+            "links",
+            Nested(LinkConfig::rows),
+            "The shape of generated URLs, and how strictly links are checked.",
+            |c, n, t| c.links.fill(n, t),
+        ),
+        (
+            "generate",
+            Nested(GenerateConfig::rows),
+            "The files a build emits beside the pages.",
+            |c, n, t| c.generate.fill(n, t),
+        ),
+        (
+            "navigation",
+            Nested(NavigationConfig::rows),
+            "How a visitor moves between the built pages.",
+            |c, n, t| c.navigation.fill(n, t),
+        ),
+        (
+            "prune",
+            Flag,
+            "Delete anything under the output directory that this build did not produce.",
+            |c, n, t| {
+                c.prune = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "cache",
+            Nested(CacheConfig::rows),
+            "Where incremental build state lives, and whether to use it.",
+            |c, n, t| c.cache.fill(n, t),
+        ),
+        (
+            "caching",
+            Nested(CacheControl::rows),
+            "The `Cache-Control` policy uploaded files are given.",
+            |c, n, t| c.caching.fill(n, t),
+        ),
+        (
+            "typst",
+            Nested(TypstConfig::rows),
+            "Typst engine knobs: language features, inputs, package registry.",
+            |c, n, t| c.typst.fill(n, t),
+        ),
+        (
+            "client",
+            Table,
+            "Constants exposed to client-side JavaScript, as free `key=value` pairs.",
+            |c, n, t| {
+                c.client = n.table(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "hooks",
+            Nested(HooksConfig::rows),
+            "External commands run before and after the build.",
+            |c, n, t| c.hooks.fill(n, t),
+        ),
+        (
+            "announce",
+            Nested(AnnounceConfig::rows),
+            "Where to announce the site's metadata.",
+            |c, n, t| c.announce.fill(n, t),
+        ),
+        (
+            "deploy",
+            Nested(DeployConfig::rows),
+            "Where `baudelaire deploy` uploads the built site.",
+            |c, n, t| c.deploy.fill(n, t),
+        ),
+        (
+            "serve",
+            Nested(ServeConfig::rows),
+            "The development server.",
+            |c, n, t| c.serve.fill(n, t),
+        ),
+        (
+            Config::PROFILES,
+            Overlay,
+            "Named overlays, each selected with `--profile` and each accepting any key on this page.",
+            |c, n, t| {
+                c.profiles = n.unique(t, "profile", |child, t| {
+                    Ok((child.name().value().to_owned(), child.block(t)?.clone()))
+                })?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `paths { .. }` section: directory layout knobs.
 impl Section for Paths {
     const RULES: Block<Self> = Block(&[
-        ("content", |c, n, t| {
-            c.content = n.string(t, 0)?.into();
-            Ok(())
-        }),
-        ("dist", |c, n, t| {
-            c.dist = n.string(t, 0)?.into();
-            Ok(())
-        }),
-        ("assets", |c, n, t| {
-            c.assets = n.string(t, 0)?.into();
-            Ok(())
-        }),
-        ("static", |c, n, t| {
-            c.r#static = n.string(t, 0)?.into();
-            Ok(())
-        }),
-        ("templates", |c, n, t| {
-            c.templates = n.string(t, 0)?.into();
-            Ok(())
-        }),
+        (
+            "content",
+            Path,
+            "The content tree of `.typ` pages.",
+            |c, n, t| {
+                c.content = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
+        (
+            "dist",
+            Path,
+            "Where the built site is written.",
+            |c, n, t| {
+                c.dist = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
+        (
+            "assets",
+            Path,
+            "Assets that go through the pipeline: CSS, JS, images.",
+            |c, n, t| {
+                c.assets = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
+        (
+            "static",
+            Path,
+            "Files copied to the output verbatim, untouched by the pipeline.",
+            |c, n, t| {
+                c.r#static = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
+        (
+            "templates",
+            Path,
+            "Where layouts and partials are imported from.",
+            |c, n, t| {
+                c.templates = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -132,53 +277,83 @@ impl Section for Paths {
 /// read. The directory it lives in is `paths { content }`.
 impl Section for ContentConfig {
     const RULES: Block<Self> = Block(&[
-        ("index", |c, n, t| {
-            let stem = n.string(t, 0)?;
-            // A stem, matched against `Stem::slug`, which never carries an
-            // extension. `index "index.typ"` therefore matches nothing: every
-            // bundle keeps its filename slug, `content/index.typ` publishes to
-            // `/index/`, and the site builds green with no home page at all.
-            // The docs shipped that exact spelling, so refuse it by name.
-            if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
-                return Err(ConfigError::at(
-                    t,
-                    ConfigErrorKind::IndexExtension {
-                        got: n.string(t, 0)?,
-                        stem: stem.to_owned(),
-                    },
-                    n.span(),
-                )
-                .into());
-            }
-            c.index = (!stem.is_empty()).then_some(stem);
-            Ok(())
-        }),
-        ("future", |c, n, t| {
-            c.future = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("draft", |c, n, t| c.draft.fill(n, t)),
-        ("collections", |c, n, t| {
-            c.collections = n.unique(t, "collection", CollectionConfig::item)?;
-            Ok(())
-        }),
-        ("taxonomies", |c, n, t| {
-            c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
-            Ok(())
-        }),
+        (
+            "index",
+            Text,
+            "The filename stem that publishes at its directory's own URL, without extension.",
+            |c, n, t| {
+                let stem = n.string(t, 0)?;
+                // A stem, matched against `Stem::slug`, which never carries an
+                // extension. `index "index.typ"` therefore matches nothing: every
+                // bundle keeps its filename slug, `content/index.typ` publishes to
+                // `/index/`, and the site builds green with no home page at all.
+                // The docs shipped that exact spelling, so refuse it by name.
+                if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
+                    return Err(ConfigError::at(
+                        t,
+                        ConfigErrorKind::IndexExtension {
+                            got: n.string(t, 0)?,
+                            stem: stem.to_owned(),
+                        },
+                        n.span(),
+                    )
+                    .into());
+                }
+                c.index = (!stem.is_empty()).then_some(stem);
+                Ok(())
+            },
+        ),
+        (
+            "future",
+            Flag,
+            "Build pages dated later than now.",
+            |c, n, t| {
+                c.future = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "draft",
+            Nested(DraftConfig::rows),
+            "Whether drafts are built, and where they land.",
+            |c, n, t| c.draft.fill(n, t),
+        ),
+        (
+            "collections",
+            Items(CollectionConfig::rows),
+            "One block per collection, each named by its id.",
+            |c, n, t| {
+                c.collections = n.unique(t, "collection", CollectionConfig::item)?;
+                Ok(())
+            },
+        ),
+        (
+            "taxonomies",
+            Items(TaxonomyConfig::rows),
+            "One line per taxonomy, each named by its id.",
+            |c, n, t| {
+                c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 impl Section for DraftConfig {
     const RULES: Block<Self> = Block(&[
-        ("build", |c, n, t| {
+        ("build", Flag, "Build draft pages at all.", |c, n, t| {
             c.build = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("suffix", |c, n, t| {
-            c.suffix = n.string(t, 0)?;
-            Ok(())
-        }),
+        (
+            "suffix",
+            Text,
+            "Appended to a draft's URL, so a built draft cannot collide with the published page.",
+            |c, n, t| {
+                c.suffix = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -218,31 +393,57 @@ impl CollectionConfig {
 /// addressed, and (in a nested block) the index generated over them.
 impl Section for CollectionConfig {
     const RULES: Block<Self> = Block(&[
-        ("glob", |c, n, t| {
-            c.glob = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("sort", |c, n, t| {
-            c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
-        ("reverse", |c, n, t| {
+        (
+            "glob",
+            Text,
+            "Which content files belong to this collection.",
+            |c, n, t| {
+                c.glob = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "sort",
+            Choice(SortKey::names),
+            "What the collection's members are ordered by.",
+            |c, n, t| {
+                c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        ("reverse", Flag, "Reverse that order.", |c, n, t| {
             c.reverse = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("permalink", |c, n, t| {
-            let raw = n.string(t, 0)?;
-            // validate here so a template typo is a spanned config error,
-            // not a silent fallback to convention at page load
-            Permalink::parse(&raw).map_err(|e| ConfigError::at(t, e.into(), NodeExt::span(n)))?;
-            c.permalink = Some(raw);
-            Ok(())
-        }),
-        ("template", |c, n, t| {
-            c.template = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("paginate", |c, n, t| c.paginate.fill(n, t)),
+        (
+            "permalink",
+            Template,
+            "The URL pattern its pages publish at, e.g. `/{slug}/`.",
+            |c, n, t| {
+                let raw = n.string(t, 0)?;
+                // validate here so a template typo is a spanned config error,
+                // not a silent fallback to convention at page load
+                Permalink::parse(&raw)
+                    .map_err(|e| ConfigError::at(t, e.into(), NodeExt::span(n)))?;
+                c.permalink = Some(raw);
+                Ok(())
+            },
+        ),
+        (
+            "template",
+            Text,
+            "The layout its pages render through.",
+            |c, n, t| {
+                c.template = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "paginate",
+            Nested(PaginateConfig::rows),
+            "Generate an index over the collection. Its presence turns the index on.",
+            |c, n, t| c.paginate.fill(n, t),
+        ),
     ]);
 }
 
@@ -250,26 +451,46 @@ impl Section for CollectionConfig {
 /// index, and every key tunes it.
 impl Section for PaginateConfig {
     const RULES: Block<Self> = Block(&[
-        ("size", |c, n, t| {
-            let n_ = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
-            if n_ < 1 {
-                return Err(ConfigError::paginate_too_small(t, n_, NodeExt::span(n)).into());
-            }
-            c.size = Some(n_ as usize);
-            Ok(())
-        }),
-        ("template", |c, n, t| {
-            c.template = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("mount", |c, n, t| {
-            c.mount = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("prefix", |c, n, t| {
-            c.prefix = n.string(t, 0)?;
-            Ok(())
-        }),
+        (
+            "size",
+            Number,
+            "Pages per index page. Omitted, the index is one page.",
+            |c, n, t| {
+                let n_ = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
+                if n_ < 1 {
+                    return Err(ConfigError::paginate_too_small(t, n_, NodeExt::span(n)).into());
+                }
+                c.size = Some(n_ as usize);
+                Ok(())
+            },
+        ),
+        (
+            "template",
+            Text,
+            "The layout the index renders through.",
+            |c, n, t| {
+                c.template = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "mount",
+            Text,
+            "Where the index publishes, if not at the collection's own path.",
+            |c, n, t| {
+                c.mount = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "prefix",
+            Text,
+            "The path segment before a page number, as in `/posts/page/2/`.",
+            |c, n, t| {
+                c.prefix = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 
     fn enable(&mut self) -> bool {
@@ -291,30 +512,55 @@ impl TaxonomyConfig {
 
 impl Attributed for TaxonomyConfig {
     const ATTRS: Attrs<Self> = Attrs(&[
-        ("key", |c, v, t, s| {
-            c.key = v.as_str(t, s)?;
-            Ok(())
-        }),
-        ("listing", |c, v, t, s| {
-            c.listing = v.boolean(t, s)?;
-            Ok(())
-        }),
-        ("template", |c, v, t, s| {
-            c.template = Some(v.as_str(t, s)?);
-            Ok(())
-        }),
-        ("paginate", |c, v, t, s| {
-            let n = v.integer(t, s)?;
-            if n < 1 {
-                return Err(ConfigError::paginate_too_small(t, n, s).into());
-            }
-            c.paginate = Some(n as usize);
-            Ok(())
-        }),
-        ("prefix", |c, v, t, s| {
-            c.prefix = v.as_str(t, s)?;
-            Ok(())
-        }),
+        (
+            "key",
+            Text,
+            "The frontmatter field its terms are read from. Defaults to the taxonomy's own id.",
+            |c, v, t, s| {
+                c.key = v.as_str(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "listing",
+            Flag,
+            "Generate a page per term, and an index of the terms.",
+            |c, v, t, s| {
+                c.listing = v.boolean(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "template",
+            Text,
+            "The layout those listings render through.",
+            |c, v, t, s| {
+                c.template = Some(v.as_str(t, s)?);
+                Ok(())
+            },
+        ),
+        (
+            "paginate",
+            Number,
+            "Pages per term listing.",
+            |c, v, t, s| {
+                let n = v.integer(t, s)?;
+                if n < 1 {
+                    return Err(ConfigError::paginate_too_small(t, n, s).into());
+                }
+                c.paginate = Some(n as usize);
+                Ok(())
+            },
+        ),
+        (
+            "prefix",
+            Text,
+            "The path segment its listings publish under.",
+            |c, v, t, s| {
+                c.prefix = v.as_str(t, s)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -332,61 +578,121 @@ impl LanguageConfig {
 /// and a client-constant block stay one shape.
 impl Section for LanguageConfig {
     const RULES: Block<Self> = Block(&[
-        ("name", |c, n, t| {
-            c.name = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("dir", |c, n, t| {
-            c.dir = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("site", |c, n, t| {
-            c.site = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("author", |c, n, t| {
-            c.author = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("strings", |c, n, t| {
-            c.strings = n.table(t)?;
-            Ok(())
-        }),
+        (
+            "name",
+            Text,
+            "The language's name in its own language, for a switcher.",
+            |c, n, t| {
+                c.name = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "dir",
+            Text,
+            "Writing direction, `ltr` or `rtl`.",
+            |c, n, t| {
+                c.dir = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "site",
+            Text,
+            "The site name in this language.",
+            |c, n, t| {
+                c.site = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "author",
+            Text,
+            "The default author in this language.",
+            |c, n, t| {
+                c.author = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "strings",
+            Table,
+            "This language's UI string table, as free `key=value` pairs.",
+            |c, n, t| {
+                c.strings = n.table(t)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `assets { .. }` section: the pipeline applied to `paths { assets }`.
 impl Section for AssetConfig {
     const RULES: Block<Self> = Block(&[
-        ("minify", |c, n, t| {
+        ("minify", Flag, "Minify CSS and JavaScript.", |c, n, t| {
             c.minify = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("bundle", |c, n, t| {
-            c.bundle = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("fingerprint", |c, n, t| {
-            c.fingerprint = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("images", |c, n, t| c.images.fill(n, t)),
+        (
+            "bundle",
+            Flag,
+            "Bundle JavaScript modules into one file per entry point.",
+            |c, n, t| {
+                c.bundle = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "fingerprint",
+            Flag,
+            "Put a content hash in each asset's filename, so it can be cached forever.",
+            |c, n, t| {
+                c.fingerprint = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "images",
+            Nested(ImagesConfig::rows),
+            "Image markup and build-time processing.",
+            |c, n, t| c.images.fill(n, t),
+        ),
     ]);
 }
 
 /// The `images { .. }` section: markup annotations and build-time processing.
 impl Section for ImagesConfig {
     const RULES: Block<Self> = Block(&[
-        ("lazy", |c, n, t| {
-            c.lazy = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("extract", |c, n, t| {
-            c.extract = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("optimize", |c, n, t| c.optimize.fill(n, t)),
-        ("responsive", |c, n, t| c.responsive.fill(n, t)),
+        (
+            "lazy",
+            Flag,
+            "Mark images `loading=\"lazy\"`.",
+            |c, n, t| {
+                c.lazy = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "extract",
+            Flag,
+            "Write images typst embedded in the page out as their own files.",
+            |c, n, t| {
+                c.extract = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "optimize",
+            Nested(OptimizeConfig::rows),
+            "Per-format lossless recompression.",
+            |c, n, t| c.optimize.fill(n, t),
+        ),
+        (
+            "responsive",
+            Nested(ResponsiveConfig::rows),
+            "Generate width variants and a `srcset`. Its presence turns them on.",
+            |c, n, t| c.responsive.fill(n, t),
+        ),
     ]);
 }
 
@@ -395,18 +701,33 @@ impl Section for ImagesConfig {
 /// named.
 impl Section for ResponsiveConfig {
     const RULES: Block<Self> = Block(&[
-        ("widths", |c, n, t| {
-            c.widths = n.widths(t)?;
-            Ok(())
-        }),
-        ("quality", |c, n, t| {
-            c.quality = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, 100)? as u8;
-            Ok(())
-        }),
-        ("sizes", |c, n, t| {
-            c.sizes = Some(n.string(t, 0)?);
-            Ok(())
-        }),
+        (
+            "widths",
+            Numbers,
+            "The pixel widths to emit a variant at.",
+            |c, n, t| {
+                c.widths = n.widths(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "quality",
+            Number,
+            "Encoder quality for the generated variants, 1 to 100.",
+            |c, n, t| {
+                c.quality = n.arg(t, 0)?.ranged(t, NodeExt::span(n), 1, 100)? as u8;
+                Ok(())
+            },
+        ),
+        (
+            "sizes",
+            Text,
+            "The `sizes` attribute put on every responsive image.",
+            |c, n, t| {
+                c.sizes = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
     ]);
 
     fn enable(&mut self) -> bool {
@@ -426,109 +747,184 @@ impl Section for ResponsiveConfig {
 /// both as if they were different formats.
 impl Section for OptimizeConfig {
     const RULES: Block<Self> = Block(&[
-        ("png", |c, n, t| c.png.get_or_insert_default().read(n, t)),
-        ("jpeg", |c, n, t| c.jpeg.get_or_insert_default().read(n, t)),
+        (
+            "png",
+            Nested(PngConfig::rows),
+            "Optimize PNGs. Its presence turns them on; the attributes tune it.",
+            |c, n, t| c.png.get_or_insert_default().read(n, t),
+        ),
+        (
+            "jpeg",
+            Nested(JpegConfig::rows),
+            "Optimize JPEGs. Its presence turns them on; the attributes tune it.",
+            |c, n, t| c.jpeg.get_or_insert_default().read(n, t),
+        ),
     ]);
 }
 
 impl Attributed for PngConfig {
     const ATTRS: Attrs<Self> = Attrs(&[
-        ("level", |c, v, t, s| {
-            c.level = v.ranged(t, s, 0, 6)? as u8;
-            Ok(())
-        }),
-        ("strip", |c, v, t, s| {
-            c.strip = v.one::<PngStrip>(t, s)?;
-            Ok(())
-        }),
+        (
+            "level",
+            Number,
+            "Compression effort, 0 to 6. Higher is slower and smaller.",
+            |c, v, t, s| {
+                c.level = v.ranged(t, s, 0, 6)? as u8;
+                Ok(())
+            },
+        ),
+        (
+            "strip",
+            Choice(PngStrip::names),
+            "Which ancillary chunks to discard.",
+            |c, v, t, s| {
+                c.strip = v.one::<PngStrip>(t, s)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 impl Attributed for JpegConfig {
-    const ATTRS: Attrs<Self> = Attrs(&[("quality", |c, v, t, s| {
-        c.quality = v.ranged(t, s, 1, 100)? as u8;
-        Ok(())
-    })]);
+    const ATTRS: Attrs<Self> = Attrs(&[(
+        "quality",
+        Number,
+        "Encoder quality, 1 to 100.",
+        |c, v, t, s| {
+            c.quality = v.ranged(t, s, 1, 100)? as u8;
+            Ok(())
+        },
+    )]);
 }
 
 /// The `html { .. }` section: post-processing of typst's HTML output.
 impl Section for HtmlConfig {
     const RULES: Block<Self> = Block(&[
-        ("pretty", |c, n, t| {
+        ("pretty", Flag, "Indent the emitted HTML.", |c, n, t| {
             c.pretty = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("embed", |c, n, t| {
-            c.embed = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("meta", |c, n, t| {
-            c.meta = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("anchors", |c, n, t| {
-            c.anchors = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("jsonld", |c, n, t| {
-            c.jsonld = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("spans", |c, n, t| {
-            c.spans = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "embed",
+            Flag,
+            "Inline processed assets into the page as `data:` URIs.",
+            |c, n, t| {
+                c.embed = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "meta",
+            Flag,
+            "Emit the `<meta>` description, Open Graph and Twitter tags.",
+            |c, n, t| {
+                c.meta = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "anchors",
+            Flag,
+            "Give every heading an `id` and a self link.",
+            |c, n, t| {
+                c.anchors = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "jsonld",
+            Flag,
+            "Emit JSON-LD structured data for each page.",
+            |c, n, t| {
+                c.jsonld = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "spans",
+            Flag,
+            "Stamp each element with the source span it came from, so `serve` can open it.",
+            |c, n, t| {
+                c.spans = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
         // A list of element names, tried in order. Each is checked here, where
         // the span points at the word the author wrote: an unwritable name would
         // otherwise fail silently at render, as an element the page never has.
-        ("footnotes", |c, n, t| {
-            let span = NodeExt::span(n);
-            let names = n.words(t)?;
-            for name in &names {
-                // The DOM's own judgement of what can be an element, rather than
-                // a second opinion here. Checked at the span the author wrote,
-                // because a name no element can carry would otherwise fail
-                // silently at render, as a container the page simply never has.
-                typst_html::HtmlTag::intern(name).map_err(|why| {
-                    ConfigError::unknown_value(
-                        t,
-                        name,
-                        markup!("name an element your layout emits, like `article`: {}", why),
-                        span,
-                    )
-                })?;
-            }
-            c.footnotes = names.into();
-            Ok(())
-        }),
-        ("highlight", |c, n, t| {
-            c.highlight.enabled = true;
-            // A bare `highlight` rewrites every colour to its hex class; a block
-            // names the scopes the theme paints, so the classes read as meaning
-            // rather than as colours.
-            if n.children().is_some() {
-                c.highlight.scopes = n.pairs(t)?;
-            }
-            Ok(())
-        }),
+        (
+            "footnotes",
+            Texts,
+            "The elements a page's footnotes belong inside, most specific first.",
+            |c, n, t| {
+                let span = NodeExt::span(n);
+                let names = n.words(t)?;
+                for name in &names {
+                    // The DOM's own judgement of what can be an element, rather than
+                    // a second opinion here. Checked at the span the author wrote,
+                    // because a name no element can carry would otherwise fail
+                    // silently at render, as a container the page simply never has.
+                    typst_html::HtmlTag::intern(name).map_err(|why| {
+                        ConfigError::unknown_value(
+                            t,
+                            name,
+                            markup!("name an element your layout emits, like `article`: {}", why),
+                            span,
+                        )
+                    })?;
+                }
+                c.footnotes = names.into();
+                Ok(())
+            },
+        ),
+        (
+            "highlight",
+            Table,
+            "Rewrite syntax-highlight colours to classes. Bare, it uses hex classes; a block names the scopes.",
+            |c, n, t| {
+                c.highlight.enabled = true;
+                // A bare `highlight` rewrites every colour to its hex class; a block
+                // names the scopes the theme paints, so the classes read as meaning
+                // rather than as colours.
+                if n.children().is_some() {
+                    c.highlight.scopes = n.pairs(t)?;
+                }
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `links { .. }` section: URL shape and link checking.
 impl Section for LinkConfig {
     const RULES: Block<Self> = Block(&[
-        ("style", |c, n, t| {
-            c.style = n.arg(t, 0)?.one::<UrlStyle>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
-        ("strict", |c, n, t| {
-            c.strict = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("external", |c, n, t| {
-            c.external = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "style",
+            Choice(UrlStyle::names),
+            "Whether URLs are directories (`clean`) or `.html` files (`flat`).",
+            |c, n, t| {
+                c.style = n.arg(t, 0)?.one::<UrlStyle>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        (
+            "strict",
+            Flag,
+            "Fail the build on a broken internal link instead of warning.",
+            |c, n, t| {
+                c.strict = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "external",
+            Flag,
+            "Also check outbound `http(s)` links over the network.",
+            |c, n, t| {
+                c.external = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -536,32 +932,77 @@ impl Section for LinkConfig {
 /// Each child is opt-in, either a flag or a block whose presence turns it on.
 impl Section for GenerateConfig {
     const RULES: Block<Self> = Block(&[
-        ("sitemap", |c, n, t| {
+        ("sitemap", Flag, "Write `sitemap.xml`.", |c, n, t| {
             c.sitemap = n.boolean(t, 0)?;
             Ok(())
         }),
-        ("redirects", |c, n, t| {
-            c.redirects = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("headers", |c, n, t| {
-            c.headers = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("robots", |c, n, t| c.robots.fill(n, t)),
-        ("llms", |c, n, t| c.llms.fill(n, t)),
-        ("feed", |c, n, t| c.feed.fill(n, t)),
-        ("search", |c, n, t| c.search.fill(n, t)),
-        ("cards", |c, n, t| c.cards.fill(n, t)),
-        ("pdf", |c, n, t| c.pdf.fill(n, t)),
+        (
+            "redirects",
+            Flag,
+            "Write a `_redirects` file from each page's declared aliases.",
+            |c, n, t| {
+                c.redirects = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "headers",
+            Flag,
+            "Write a `_headers` file from the caching policy.",
+            |c, n, t| {
+                c.headers = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "robots",
+            Nested(RobotsConfig::rows),
+            "Write `robots.txt`. Its presence turns it on.",
+            |c, n, t| c.robots.fill(n, t),
+        ),
+        (
+            "llms",
+            Nested(LlmsConfig::rows),
+            "Write `llms.txt`. Its presence turns it on.",
+            |c, n, t| c.llms.fill(n, t),
+        ),
+        (
+            "feed",
+            Nested(FeedConfig::rows),
+            "Write syndication feeds.",
+            |c, n, t| c.feed.fill(n, t),
+        ),
+        (
+            "search",
+            Nested(SearchConfig::rows),
+            "Write a client-side search index.",
+            |c, n, t| c.search.fill(n, t),
+        ),
+        (
+            "cards",
+            Nested(CardsConfig::rows),
+            "Draw a social card per page. Its presence turns it on.",
+            |c, n, t| c.cards.fill(n, t),
+        ),
+        (
+            "pdf",
+            Nested(PdfConfig::rows),
+            "Typeset PDFs beside the pages.",
+            |c, n, t| c.pdf.fill(n, t),
+        ),
     ]);
 }
 
 impl Section for RobotsConfig {
-    const RULES: Block<Self> = Block(&[("disallow", |c, n, t| {
-        c.disallow = n.words(t)?;
-        Ok(())
-    })]);
+    const RULES: Block<Self> = Block(&[(
+        "disallow",
+        Texts,
+        "Paths to disallow, one word each.",
+        |c, n, t| {
+            c.disallow = n.words(t)?;
+            Ok(())
+        },
+    )]);
 
     fn enable(&mut self) -> bool {
         self.enabled = true;
@@ -570,10 +1011,15 @@ impl Section for RobotsConfig {
 }
 
 impl Section for LlmsConfig {
-    const RULES: Block<Self> = Block(&[("summary", |c, n, t| {
-        c.summary = Some(n.string(t, 0)?);
-        Ok(())
-    })]);
+    const RULES: Block<Self> = Block(&[(
+        "summary",
+        Text,
+        "A one-line description of the site, put at the top of the file.",
+        |c, n, t| {
+            c.summary = Some(n.string(t, 0)?);
+            Ok(())
+        },
+    )]);
 
     fn enable(&mut self) -> bool {
         self.enabled = true;
@@ -583,43 +1029,83 @@ impl Section for LlmsConfig {
 
 impl Section for FeedConfig {
     const RULES: Block<Self> = Block(&[
-        ("formats", |c, n, t| {
-            c.formats = n.mapped::<FeedKind>(t)?;
-            Ok(())
-        }),
-        ("limit", |c, n, t| {
-            c.limit = n.count(t, 0)?;
-            Ok(())
-        }),
-        ("terms", |c, n, t| {
-            c.terms = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "formats",
+            Choice(FeedKind::names),
+            "Which feed formats to write, one word each.",
+            |c, n, t| {
+                c.formats = n.mapped::<FeedKind>(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "limit",
+            Number,
+            "How many of the newest pages a feed carries.",
+            |c, n, t| {
+                c.limit = n.count(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "terms",
+            Flag,
+            "Also write a feed per taxonomy term.",
+            |c, n, t| {
+                c.terms = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 impl Section for SearchConfig {
     const RULES: Block<Self> = Block(&[
-        ("formats", |c, n, t| {
-            c.formats = n.mapped::<SearchFormat>(t)?;
-            Ok(())
-        }),
-        ("fields", |c, n, t| {
-            c.fields = n.mapped::<SearchField>(t)?;
-            Ok(())
-        }),
-        ("stopwords", |c, n, t| {
-            c.stopwords = n.words(t)?;
-            Ok(())
-        }),
-        ("minimum", |c, n, t| {
-            c.min_length = n.count(t, 0)?;
-            Ok(())
-        }),
-        ("ui", |c, n, t| {
-            c.ui = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "formats",
+            Choice(SearchFormat::names),
+            "Which index formats to write, one word each.",
+            |c, n, t| {
+                c.formats = n.mapped::<SearchFormat>(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "fields",
+            Choice(SearchField::names),
+            "Which parts of a page go into the index, one word each.",
+            |c, n, t| {
+                c.fields = n.mapped::<SearchField>(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "stopwords",
+            Texts,
+            "Words to leave out of the index, one word each.",
+            |c, n, t| {
+                c.stopwords = n.words(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "minimum",
+            Number,
+            "The shortest word the index keeps.",
+            |c, n, t| {
+                c.min_length = n.count(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "ui",
+            Flag,
+            "Ship the bundled search box as well as the index.",
+            |c, n, t| {
+                c.ui = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -627,17 +1113,22 @@ impl Section for SearchConfig {
 /// social card rendering.
 impl Section for CardsConfig {
     const RULES: Block<Self> = Block(&[
-        ("template", |c, n, t| {
-            c.template = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("width", |c, n, t| {
+        (
+            "template",
+            Text,
+            "The typst template each card is drawn with.",
+            |c, n, t| {
+                c.template = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        ("width", Number, "Card width in pixels.", |c, n, t| {
             c.width = n
                 .arg(t, 0)?
                 .ranged(t, NodeExt::span(n), 1, CardsConfig::MAX)? as u32;
             Ok(())
         }),
-        ("height", |c, n, t| {
+        ("height", Number, "Card height in pixels.", |c, n, t| {
             c.height = n
                 .arg(t, 0)?
                 .ranged(t, NodeExt::span(n), 1, CardsConfig::MAX)? as u32;
@@ -655,17 +1146,32 @@ impl Section for CardsConfig {
 /// block's presence enables that artifact.
 impl Section for PdfConfig {
     const RULES: Block<Self> = Block(&[
-        ("pages", |c, n, t| c.pages.fill(n, t)),
-        ("bundle", |c, n, t| c.bundle.fill(n, t)),
+        (
+            "pages",
+            Nested(PdfPages::rows),
+            "A PDF per page, beside its HTML. Its presence turns it on.",
+            |c, n, t| c.pages.fill(n, t),
+        ),
+        (
+            "bundle",
+            Nested(PdfBundle::rows),
+            "Many pages as one document. Needs a target named below.",
+            |c, n, t| c.bundle.fill(n, t),
+        ),
     ]);
 }
 
 /// The `pages { template .. }` block. Its presence enables the per-page PDF.
 impl Section for PdfPages {
-    const RULES: Block<Self> = Block(&[("template", |c, n, t| {
-        c.template = n.string(t, 0)?;
-        Ok(())
-    })]);
+    const RULES: Block<Self> = Block(&[(
+        "template",
+        Text,
+        "The typst template each page is typeset with.",
+        |c, n, t| {
+            c.template = n.string(t, 0)?;
+            Ok(())
+        },
+    )]);
 
     fn enable(&mut self) -> bool {
         self.enabled = true;
@@ -678,18 +1184,33 @@ impl Section for PdfPages {
 /// bundle needs a target to bind.
 impl Section for PdfBundle {
     const RULES: Block<Self> = Block(&[
-        ("template", |c, n, t| {
-            c.template = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("collections", |c, n, t| {
-            c.collections = n.words(t)?;
-            Ok(())
-        }),
-        ("site", |c, n, t| {
-            c.site = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "template",
+            Text,
+            "The typst template the bundle is typeset with.",
+            |c, n, t| {
+                c.template = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "collections",
+            Texts,
+            "Which collections the bundle gathers, one word each.",
+            |c, n, t| {
+                c.collections = n.words(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "site",
+            Flag,
+            "Bundle the whole site rather than named collections.",
+            |c, n, t| {
+                c.site = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 
     /// Presence is recorded but enables nothing: a bundle binds what the block
@@ -704,9 +1225,24 @@ impl Section for PdfBundle {
 /// pages. Each child block's presence enables that strategy.
 impl Section for NavigationConfig {
     const RULES: Block<Self> = Block(&[
-        ("spa", |c, n, t| c.spa.fill(n, t)),
-        ("standalone", |c, n, t| c.standalone.fill(n, t)),
-        ("speculation", |c, n, t| c.speculation.fill(n, t)),
+        (
+            "spa",
+            Nested(SpaConfig::rows),
+            "Client-side navigation between pages. Its presence turns it on.",
+            |c, n, t| c.spa.fill(n, t),
+        ),
+        (
+            "standalone",
+            Nested(StandaloneConfig::rows),
+            "Export the whole site as one HTML file. Its presence turns it on.",
+            |c, n, t| c.standalone.fill(n, t),
+        ),
+        (
+            "speculation",
+            Nested(SpeculationConfig::rows),
+            "Browser prefetch and prerender hints. Its presence turns them on.",
+            |c, n, t| c.speculation.fill(n, t),
+        ),
     ]);
 }
 
@@ -714,14 +1250,24 @@ impl Section for NavigationConfig {
 /// client-side navigation runtime.
 impl Section for SpaConfig {
     const RULES: Block<Self> = Block(&[
-        ("root", |c, n, t| {
-            c.root = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("prefetch", |c, n, t| {
-            c.prefetch = n.arg(t, 0)?.one::<Prefetch>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
+        (
+            "root",
+            Text,
+            "The element swapped out on navigation.",
+            |c, n, t| {
+                c.root = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "prefetch",
+            Choice(Prefetch::names),
+            "When to fetch a page ahead of the click.",
+            |c, n, t| {
+                c.prefetch = n.arg(t, 0)?.one::<Prefetch>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
     ]);
 
     fn enable(&mut self) -> bool {
@@ -734,18 +1280,28 @@ impl Section for SpaConfig {
 /// enables the single-file export; the rest keep their defaults unless named.
 impl Section for StandaloneConfig {
     const RULES: Block<Self> = Block(&[
-        ("file", |c, n, t| {
-            c.file = n.contained(t)?;
-            Ok(())
-        }),
-        ("entry", |c, n, t| {
+        (
+            "file",
+            Path,
+            "The single file the site is written to.",
+            |c, n, t| {
+                c.file = n.contained(t)?;
+                Ok(())
+            },
+        ),
+        ("entry", Text, "The page that file opens on.", |c, n, t| {
             c.entry = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("router", |c, n, t| {
-            c.router = n.arg(t, 0)?.one::<Router>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
+        (
+            "router",
+            Choice(Router::names),
+            "How it addresses pages once opened.",
+            |c, n, t| {
+                c.router = n.arg(t, 0)?.one::<Router>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
     ]);
 
     fn enable(&mut self) -> bool {
@@ -758,14 +1314,24 @@ impl Section for StandaloneConfig {
 /// the navigation hints.
 impl Section for SpeculationConfig {
     const RULES: Block<Self> = Block(&[
-        ("prefetch", |c, n, t| {
-            c.prefetch = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
-        ("prerender", |c, n, t| {
-            c.prerender = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
-            Ok(())
-        }),
+        (
+            "prefetch",
+            Choice(Eagerness::names),
+            "How eagerly the browser fetches a linked page.",
+            |c, n, t| {
+                c.prefetch = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        (
+            "prerender",
+            Choice(Eagerness::names),
+            "How eagerly it renders one ahead of the click.",
+            |c, n, t| {
+                c.prerender = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
     ]);
 
     fn enable(&mut self) -> bool {
@@ -777,34 +1343,59 @@ impl Section for SpeculationConfig {
 /// The `typst { .. }` section: typst engine knobs.
 impl Section for TypstConfig {
     const RULES: Block<Self> = Block(&[
-        ("features", |c, n, t| {
-            c.features = n.features(t)?;
-            Ok(())
-        }),
-        ("inputs", |c, n, t| {
-            c.inputs = n.pairs(t)?;
-            Ok(())
-        }),
+        (
+            "features",
+            Texts,
+            "Typst language features to enable, or `-name` to disable one. `html` cannot be removed.",
+            |c, n, t| {
+                c.features = n.features(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "inputs",
+            Table,
+            "Values passed to every compile as `sys.inputs`, as free `key=value` pairs.",
+            |c, n, t| {
+                c.inputs = n.pairs(t)?;
+                Ok(())
+            },
+        ),
         // Stored without its trailing slash: the store joins `/preview/..` onto
         // it, and a doubled slash is a 404 from some hosts and a redirect from
         // others.
-        ("registry", |c, n, t| {
-            c.registry = Some(n.url(t, 0)?.trim_end_matches('/').to_owned());
-            Ok(())
-        }),
+        (
+            "registry",
+            Url,
+            "Where typst packages are fetched from.",
+            |c, n, t| {
+                c.registry = Some(n.url(t, 0)?.trim_end_matches('/').to_owned());
+                Ok(())
+            },
+        ),
     ]);
 }
 
 impl Section for CacheConfig {
     const RULES: Block<Self> = Block(&[
-        ("dir", |c, n, t| {
-            c.dir = n.string(t, 0)?.into();
-            Ok(())
-        }),
-        ("incremental", |c, n, t| {
-            c.incremental = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "dir",
+            Path,
+            "Where incremental build state is kept.",
+            |c, n, t| {
+                c.dir = n.string(t, 0)?.into();
+                Ok(())
+            },
+        ),
+        (
+            "incremental",
+            Flag,
+            "Reuse that state. Off, every build is a cold one.",
+            |c, n, t| {
+                c.incremental = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -813,48 +1404,91 @@ impl Section for CacheConfig {
 /// list field.
 impl Section for HooksConfig {
     const RULES: Block<Self> = Block(&[
-        ("before", |c, n, t| {
-            c.before = n.words(t)?;
-            Ok(())
-        }),
-        ("after", |c, n, t| {
-            c.after = n.words(t)?;
-            Ok(())
-        }),
+        (
+            "before",
+            Texts,
+            "Commands run before the asset pipeline, so what they generate is picked up.",
+            |c, n, t| {
+                c.before = n.words(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "after",
+            Texts,
+            "Commands run once the output directory is written.",
+            |c, n, t| {
+                c.after = n.words(t)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `announce { .. }` section: one block per destination backend.
 impl Section for AnnounceConfig {
-    const RULES: Block<Self> = Block(&[("standard", |c, n, t| {
-        StandardConfig::optional(&mut c.standard, n, t)
-    })]);
+    const RULES: Block<Self> = Block(&[(
+        "standard",
+        Nested(StandardConfig::rows),
+        "Announce to standard.site over atproto. Its presence turns it on.",
+        |c, n, t| StandardConfig::optional(&mut c.standard, n, t),
+    )]);
 }
 
 /// The `standard { .. }` block: presence enables the standard.site backend.
 impl Section for StandardConfig {
     const RULES: Block<Self> = Block(&[
-        ("handle", |c, n, t| {
-            c.handle = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("did", |c, n, t| {
-            c.did = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("pds", |c, n, t| {
-            c.pds = n.url(t, 0)?;
-            Ok(())
-        }),
-        ("discover", |c, n, t| {
-            c.discover = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("icon", |c, n, t| {
-            c.icon = Some(n.string(t, 0)?.into());
-            Ok(())
-        }),
-        ("verify", |c, n, t| c.verify.fill(n, t)),
+        (
+            "handle",
+            Text,
+            "The atproto handle the site is announced under.",
+            |c, n, t| {
+                c.handle = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "did",
+            Text,
+            "That handle's DID, if it should not be resolved at build time.",
+            |c, n, t| {
+                c.did = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "pds",
+            Url,
+            "The personal data server the record is written to.",
+            |c, n, t| {
+                c.pds = n.url(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "discover",
+            Flag,
+            "Resolve the PDS from the handle rather than trusting `pds`.",
+            |c, n, t| {
+                c.discover = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "icon",
+            Path,
+            "An icon published with the record.",
+            |c, n, t| {
+                c.icon = Some(n.string(t, 0)?.into());
+                Ok(())
+            },
+        ),
+        (
+            "verify",
+            Nested(VerifyConfig::rows),
+            "Which handle-verification artifacts the build emits.",
+            |c, n, t| c.verify.fill(n, t),
+        ),
     ]);
 }
 
@@ -862,48 +1496,83 @@ impl Section for StandardConfig {
 /// artifacts to emit.
 impl Section for VerifyConfig {
     const RULES: Block<Self> = Block(&[
-        ("wellknown", |c, n, t| {
-            c.wellknown = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("links", |c, n, t| {
-            c.links = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "wellknown",
+            Flag,
+            "Write `/.well-known/atproto-did`.",
+            |c, n, t| {
+                c.wellknown = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "links",
+            Flag,
+            "Add the verification links to the page head.",
+            |c, n, t| {
+                c.links = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `deploy { .. }` section: one block per destination backend.
 impl Section for DeployConfig {
     const RULES: Block<Self> = Block(&[
-        ("s3", |c, n, t| S3Config::optional(&mut c.s3, n, t)),
-        ("ssh", |c, n, t| SshConfig::optional(&mut c.ssh, n, t)),
+        (
+            "s3",
+            Nested(S3Config::rows),
+            "Upload to S3 or an S3-compatible bucket. Its presence turns it on.",
+            |c, n, t| S3Config::optional(&mut c.s3, n, t),
+        ),
+        (
+            "ssh",
+            Nested(SshConfig::rows),
+            "Upload over SSH. Its presence turns it on.",
+            |c, n, t| SshConfig::optional(&mut c.ssh, n, t),
+        ),
     ]);
 }
 
 /// The `s3 { .. }` block: presence enables the S3 backend.
 impl Section for S3Config {
     const RULES: Block<Self> = Block(&[
-        ("bucket", |c, n, t| {
+        ("bucket", Text, "The bucket uploaded into.", |c, n, t| {
             c.bucket = n.string(t, 0)?;
             Ok(())
         }),
-        ("endpoint", |c, n, t| {
-            c.endpoint = Some(n.url(t, 0)?);
-            Ok(())
-        }),
-        ("region", |c, n, t| {
+        (
+            "endpoint",
+            Url,
+            "The API endpoint, for an S3-compatible host such as R2.",
+            |c, n, t| {
+                c.endpoint = Some(n.url(t, 0)?);
+                Ok(())
+            },
+        ),
+        ("region", Text, "The bucket's region.", |c, n, t| {
             c.region = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("prefix", |c, n, t| {
-            c.prefix = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("delete", |c, n, t| {
-            c.delete = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "prefix",
+            Text,
+            "A key prefix every uploaded object goes under.",
+            |c, n, t| {
+                c.prefix = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "delete",
+            Flag,
+            "Delete remote objects this build did not produce.",
+            |c, n, t| {
+                c.delete = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -924,89 +1593,153 @@ impl Section for CacheControl {
     }
 
     const RULES: Block<Self> = Block(&[
-        ("immutable", |c, n, t| {
-            c.immutable = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("default", |c, n, t| {
-            c.default = n.string(t, 0)?;
-            Ok(())
-        }),
+        (
+            "immutable",
+            Text,
+            "The `Cache-Control` value for fingerprinted assets, which can be cached forever.",
+            |c, n, t| {
+                c.immutable = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "default",
+            Text,
+            "The `Cache-Control` value for everything else.",
+            |c, n, t| {
+                c.default = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 /// The `ssh { .. }` block: presence enables the SSH backend.
 impl Section for SshConfig {
     const RULES: Block<Self> = Block(&[
-        ("host", |c, n, t| {
+        ("host", Text, "The host uploaded to.", |c, n, t| {
             c.host = n.string(t, 0)?;
             Ok(())
         }),
-        ("path", |c, n, t| {
-            c.path = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("port", |c, n, t| {
+        (
+            "path",
+            Text,
+            "The remote directory the site is written into.",
+            |c, n, t| {
+                c.path = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        ("port", Number, "The SSH port.", |c, n, t| {
             c.port = n.port(t, 0)?;
             Ok(())
         }),
-        ("user", |c, n, t| {
+        ("user", Text, "The user to connect as.", |c, n, t| {
             c.user = Some(n.string(t, 0)?);
             Ok(())
         }),
-        ("key", |c, n, t| {
-            c.key = Some(n.string(t, 0)?.into());
-            Ok(())
-        }),
-        ("strict", |c, n, t| {
-            c.strict = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("delete", |c, n, t| {
-            c.delete = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "key",
+            Path,
+            "The private key to authenticate with. Prefer an ed25519 key.",
+            |c, n, t| {
+                c.key = Some(n.string(t, 0)?.into());
+                Ok(())
+            },
+        ),
+        (
+            "strict",
+            Flag,
+            "Refuse to connect to a host whose key is not already known.",
+            |c, n, t| {
+                c.strict = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "delete",
+            Flag,
+            "Delete remote files this build did not produce.",
+            |c, n, t| {
+                c.delete = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
 impl Section for ServeConfig {
     const RULES: Block<Self> = Block(&[
-        ("port", |c, n, t| {
-            c.port = n.port(t, 0)?;
-            Ok(())
-        }),
-        ("bind", |c, n, t| {
-            c.bind = n.string(t, 0)?;
-            Ok(())
-        }),
-        ("open", |c, n, t| {
-            c.open = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("watch", |c, n, t| {
-            c.watch = n.boolean(t, 0)?;
-            Ok(())
-        }),
-        ("include", |c, n, t| {
-            c.include = n.words(t)?;
-            Ok(())
-        }),
-        ("exclude", |c, n, t| {
-            c.exclude = n.words(t)?;
-            Ok(())
-        }),
+        (
+            "port",
+            Number,
+            "The port the dev server listens on.",
+            |c, n, t| {
+                c.port = n.port(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "bind",
+            Text,
+            "The address it binds. Defaults to loopback; it has no authentication.",
+            |c, n, t| {
+                c.bind = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "open",
+            Flag,
+            "Open a browser when the server starts.",
+            |c, n, t| {
+                c.open = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "watch",
+            Flag,
+            "Watch the sources and rebuild. Off, it serves what is already built.",
+            |c, n, t| {
+                c.watch = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "include",
+            Texts,
+            "Extra paths to watch, one word each.",
+            |c, n, t| {
+                c.include = n.words(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "exclude",
+            Texts,
+            "Paths to leave unwatched, one word each.",
+            |c, n, t| {
+                c.exclude = n.words(t)?;
+                Ok(())
+            },
+        ),
         // The program and its arguments, each its own word: the command is run
         // directly, never through a shell, so a whole command line in one
         // string would name a program that does not exist. Caught here, where
         // the span points at what the author wrote, rather than as a spawn
         // failure on the first alt-click.
-        ("editor", |c, n, t| {
-            let span = NodeExt::span(n);
-            let words = n.words(t)?;
-            if let [only] = words.as_slice()
-                && only.split_whitespace().count() > 1
-            {
-                return Err(ConfigError::unknown_value(
+        (
+            "editor",
+            Texts,
+            "The command alt-clicking a preview element runs, program and arguments as separate words.",
+            |c, n, t| {
+                let span = NodeExt::span(n);
+                let words = n.words(t)?;
+                if let [only] = words.as_slice()
+                    && only.split_whitespace().count() > 1
+                {
+                    return Err(ConfigError::unknown_value(
                     t,
                     only,
                     markup!(
@@ -1015,9 +1748,10 @@ impl Section for ServeConfig {
                     span,
                 )
                 .into());
-            }
-            c.editor = words;
-            Ok(())
-        }),
+                }
+                c.editor = words;
+                Ok(())
+            },
+        ),
     ]);
 }

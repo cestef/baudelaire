@@ -81,6 +81,15 @@ test features="":
 # directory, not against `--root`, so building from the repo root would write the
 # site to a stray `/public/` instead of to `docs/public`.
 
+# Regenerate the checked-in config reference from the dispatch tables.
+#
+# Committed rather than generated during the docs build: the docs site is a real
+# baudelaire site, so its pages have to be on disk before it builds, and making
+# that build reach into this crate's internals would couple the two. The test
+# below fails when the file and the tables disagree, so a stale copy cannot ship.
+reference:
+    BLESS=1 cargo test --test reference the_checked_in
+
 # Build the docs site the way `.github/workflows/docs.yml` does.
 [working-directory('docs')]
 docs:

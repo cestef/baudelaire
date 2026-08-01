@@ -128,6 +128,11 @@ chores are visible in the git history and change nothing for a site.
   the text can be selected and copied; Escape, the backdrop, and its own button
   dismiss it.
 
+- **docs**: A complete config reference, generated from the parser's own
+  dispatch tables rather than written beside them. Every key `config.kdl`
+  accepts is listed with its value shape and a description, so a key cannot be
+  added without documenting it, or removed and left in the docs.
+
 - **cli**: `baudelaire completions <shell>` prints a completion script for
   `bash`, `elvish`, `fish`, `nushell`, `powershell` or `zsh`, and `baudelaire
   man` prints the manual as a man page. Both write only the document, to stdout.

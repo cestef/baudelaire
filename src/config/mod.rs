@@ -9,6 +9,7 @@ mod node;
 pub mod parse;
 pub mod permalink;
 pub mod profile;
+pub mod reference;
 #[cfg(test)]
 mod tests;
 mod url;
@@ -1289,6 +1290,13 @@ pub trait Named: Copy + PartialEq + Sized + 'static {
             .iter()
             .find(|(known, _)| *known == name)
             .map(|(_, variant)| *variant)
+    }
+
+    /// Every spelling this enum accepts, in declaration order: what the
+    /// generated reference lists for a `Kind::Choice` key, read out of the same
+    /// table that parses them.
+    fn names() -> Vec<&'static str> {
+        Self::NAMES.iter().map(|(name, _)| *name).collect()
     }
 }
 

@@ -1,5 +1,5 @@
 #let frontmatter = (
-  order: 7,
+  order: 8,
   title: "Themes",
   tags: ("guide", "themes"),
 )

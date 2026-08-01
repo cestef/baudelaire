@@ -19,14 +19,97 @@ use crate::ui::{Code, markup};
 
 use super::node::{EntryExt, NodeExt};
 
-/// A `(key, handler)` rule for a node-keyed [`Block`] scope.
-type Rule<T> = (&'static str, fn(&mut T, &KdlNode, &str) -> Result<()>);
+/// A `(key, kind, doc, handler)` rule for a node-keyed [`Block`] scope.
+///
+/// The first three columns are what [`Row`] carries into the generated
+/// reference, and the fourth is what actually parses the key. They are one
+/// tuple rather than a table beside the handlers so that documenting a key and
+/// implementing it are the same edit: a new key cannot be added without a
+/// description, and a removed one cannot linger in the docs.
+type Rule<T> = (
+    &'static str,
+    Kind,
+    &'static str,
+    fn(&mut T, &KdlNode, &str) -> Result<()>,
+);
 
-/// A `(key, handler)` rule for an attribute-keyed [`Attrs`] scope.
+/// A `(key, kind, doc, handler)` rule for an attribute-keyed [`Attrs`] scope.
 type Attr<T> = (
+    &'static str,
+    Kind,
     &'static str,
     fn(&mut T, &KdlValue, &str, SourceSpan) -> Result<()>,
 );
+
+/// The shape of the value a key takes, for the generated reference.
+///
+/// Not derivable from the handler: a closure calling `n.string(t, 0)` is opaque,
+/// so what a key accepts has to be declared alongside it.
+#[derive(Clone, Copy)]
+pub enum Kind {
+    /// A single string: `site "My site"`.
+    Text,
+    /// A boolean: `prune #false`.
+    Flag,
+    /// A whole number: `port 3000`.
+    Number,
+    /// A filesystem path, relative to the project root: `content "content"`.
+    Path,
+    /// A URL: `url "https://example.com"`.
+    Url,
+    /// A permalink template: `permalink "/{slug}/"`.
+    Template,
+    /// One of a fixed set of names. Carried as a function over
+    /// [`Named::names`](crate::config::Named::names) rather than as a literal
+    /// list, so the names the reference prints are read out of the very table
+    /// that parses them.
+    Choice(Names),
+    /// Any number of strings on one line: `footnotes "article" "main"`.
+    Texts,
+    /// Any number of whole numbers on one line: `widths 480 960 1440`.
+    Numbers,
+    /// A block of free `key=value` pairs, the keys chosen by the author.
+    Table,
+    /// A nested block, whose own keys are these.
+    Block(Rows),
+    /// A block of repeated child nodes, each named by the author and each
+    /// accepting these keys.
+    Items(Rows),
+    /// A block of repeated child nodes, each named by the author and each
+    /// accepting *any top-level key*.
+    ///
+    /// Its own variant rather than [`Kind::Items`]`(Config::rows)`, which is
+    /// what it means: that spelling is honest and would send the reference
+    /// walker into an infinite recursion, since a profile can hold a `profiles`
+    /// block of its own.
+    Overlay,
+}
+
+/// A scope's documented rows, as a function rather than a slice so a section can
+/// name its children without this module knowing their Rust types, and so a
+/// cyclic shape could not deadlock a `static`.
+pub type Rows = fn() -> Vec<Row>;
+
+/// The accepted spellings of a [`Kind::Choice`] key.
+pub type Names = fn() -> Vec<&'static str>;
+
+/// One key, as the reference renders it.
+pub struct Row {
+    pub key: &'static str,
+    pub kind: Kind,
+    pub doc: &'static str,
+}
+
+impl Row {
+    /// The rows of a node-keyed table, the shape both [`Section`] and
+    /// [`Attributed`] hand to the reference.
+    fn of<F>(table: &'static [(&'static str, Kind, &'static str, F)]) -> Vec<Self> {
+        table
+            .iter()
+            .map(|&(key, kind, doc, _)| Self { key, kind, doc })
+            .collect()
+    }
+}
 
 /// A node-keyed scope (child nodes matched by name), e.g. the top-level config
 /// or a `serve { ... }` block. The rule table is the single source of truth for
@@ -39,12 +122,17 @@ impl<T> Block<T> {
     pub(super) fn apply(&self, value: &mut T, nodes: &[KdlNode], text: &str) -> Result<()> {
         for node in nodes {
             let key = node.name().value();
-            match self.0.iter().find(|(k, _)| *k == key) {
-                Some((_, handler)) => handler(value, node, text)?,
+            match self.0.iter().find(|(k, ..)| *k == key) {
+                Some((.., handler)) => handler(value, node, text)?,
                 None => return Err(Keys::unknown_key(self.0, text, key, NodeExt::span(node))),
             }
         }
         Ok(())
+    }
+
+    /// This scope's keys, as the reference renders them.
+    fn rows(&self) -> Vec<Row> {
+        Row::of(self.0)
     }
 }
 
@@ -54,8 +142,18 @@ impl<T> Block<T> {
 /// the fill-in-place, presence-enables, and optional-backend policies are
 /// written once here instead of once per section.
 pub(super) trait Section: Sized + 'static {
-    /// This section's `(key, handler)` table.
+    /// This section's `(key, kind, doc, handler)` table.
     const RULES: Block<Self>;
+
+    /// This section's keys, as the reference renders them.
+    ///
+    /// A `fn() -> Vec<Row>` and not a constant, so a parent naming a child
+    /// writes [`Kind::Block`]`(Child::rows)` and never repeats the child's key
+    /// list. That indirection is what makes the generated reference a walk of
+    /// the same tables that parse, rather than a second description of them.
+    fn rows() -> Vec<Row> {
+        Self::RULES.rows()
+    }
 
     /// Run before a block's keys are applied. A section that is turned on by the
     /// mere presence of its block flips its `enabled` flag here and returns
@@ -113,8 +211,14 @@ pub(super) trait Section: Sized + 'static {
 /// collection, a taxonomy, an image format's tuning). The [`Attrs`] counterpart
 /// of [`Section`].
 pub(super) trait Attributed: Sized + 'static {
-    /// This item's `(attribute, handler)` table.
+    /// This item's `(attribute, kind, doc, handler)` table.
     const ATTRS: Attrs<Self>;
+
+    /// This item's attributes, as the reference renders them. The [`Section`]
+    /// counterpart, for the same reason.
+    fn rows() -> Vec<Row> {
+        Self::ATTRS.rows()
+    }
 
     /// How many leading positional arguments the caller consumes itself (a
     /// collection's glob); any other positional is an error.
@@ -158,12 +262,17 @@ impl<T> Attrs<T> {
                 }
                 continue;
             };
-            match self.0.iter().find(|(k, _)| *k == key) {
-                Some((_, handler)) => handler(value, entry.value(), text, span)?,
+            match self.0.iter().find(|(k, ..)| *k == key) {
+                Some((.., handler)) => handler(value, entry.value(), text, span)?,
                 None => return Err(Keys::unknown_key(self.0, text, key, span)),
             }
         }
         Ok(())
+    }
+
+    /// This scope's attributes, as the reference renders them.
+    fn rows(&self) -> Vec<Row> {
+        Row::of(self.0)
     }
 }
 
@@ -184,12 +293,12 @@ impl Keys<'_> {
     /// dispatch `table`. The table is the sole source of truth for validity, so
     /// suggestions can never drift from what actually parses.
     pub(super) fn unknown_key<F>(
-        table: &[(&'static str, F)],
+        table: &[(&'static str, Kind, &'static str, F)],
         text: &str,
         key: &str,
         span: SourceSpan,
     ) -> BaudelaireErrorKind {
-        let names: Vec<&str> = table.iter().map(|(k, _)| *k).collect();
+        let names: Vec<&str> = table.iter().map(|(k, ..)| *k).collect();
         ConfigError::unknown_key(text, key, Keys(&names).help(key, "keys"), span).into()
     }
 
