@@ -165,6 +165,39 @@ jobs:
           base: "."
           paths: target
 
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      # Fetched as a release binary rather than built from source: this job
+      # needs no toolchain, no registry cache and no `target/`, so it stays a
+      # ~20s check instead of a second full compile.
+      - name: cargo-deny
+        env:
+          DENY_VERSION: "0.20.2"
+        run: |
+          set -euo pipefail
+          url="https://github.com/EmbarkStudios/cargo-deny/releases/download"
+          asset="cargo-deny-$DENY_VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL "$url/$DENY_VERSION/$asset.tar.gz" | tar xz --strip-components=1 "$asset/cargo-deny"
+          install -m755 cargo-deny "$HOME/.cargo/bin/cargo-deny"
+
+      # Gating, advisories included. A newly published advisory can fail a PR
+      # that did not cause it, which is the intended trade: baudelaire runs in
+      # CI holding S3 keys, SSH keys and app passwords, so "you are shipping a
+      # known vulnerability" should block rather than wait for someone to read a
+      # report. The nightly schedule means drift surfaces even with no PRs open.
+      #
+      # The fix for a false alarm is an `ignore` entry in `deny.toml` carrying
+      # why it does not apply, never a loosened check.
+      # No `--all-features`: `deny.toml` already sets it, and passing both makes
+      # cargo-deny warn about the duplicate.
+      - name: cargo deny
+        run: cargo deny check
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest

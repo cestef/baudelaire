@@ -12,11 +12,25 @@ SLIM := "--no-default-features"
 # runs last: it is the rarer break, and the default set is what most edits hit.
 
 # Replicate CI locally, cheapest checks first, failing fast.
-ci: fmt clippy test (clippy SLIM) (test SLIM)
+#
+# `audit` needs no toolchain and no compile, so it runs alongside `fmt` at the
+# front rather than behind the two test passes.
+ci: fmt audit clippy test (clippy SLIM) (test SLIM)
 
 # Formatting is compile-free, so it runs first and fails fastest.
 fmt:
     cargo fmt --all --check
+
+# Advisories, licenses, duplicate crates and source registries, per `deny.toml`.
+# Skipped with a note rather than failing when cargo-deny is absent: CI installs
+# it, and a contributor without it should still get through `just ci`.
+audit:
+    #!/usr/bin/env sh
+    if command -v cargo-deny >/dev/null 2>&1; then
+        cargo deny check
+    else
+        echo "cargo-deny not installed, skipping audit (cargo binstall cargo-deny)"
+    fi
 
 # Lint one flavor; compiles the workspace, but cheaper than running the tests.
 clippy features="":

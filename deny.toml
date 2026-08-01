@@ -1,0 +1,131 @@
+# Supply-chain policy for `cargo deny`, run by the `audit` job in
+# `.github/workflows/ci.yml` and locally by `just audit`.
+#
+# Baudelaire is a tool people run inside CI with deploy credentials in scope: an
+# S3 key, an SSH key, an atproto app password. That makes an advisory in the
+# dependency tree a credential-exposure question rather than a hygiene one, and
+# is why this is a gating check and not an informational one.
+
+[graph]
+# Every target the release matrix builds. Without this list `cargo deny` walks
+# the union of all platforms and reports advisories against crates that never
+# reach a shipped binary (a Windows-only crate on a Linux-only tree, and back).
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+# Optional features gate whole modules (`js`, `css`, `images`, `cards`, `pdf`,
+# `ssh`, `announce`), and the `slim` flavor ships with none of them. Checking
+# every feature is what makes this cover both flavors in one pass.
+all-features = true
+
+[advisories]
+# Every entry carries why it does not apply here and what would make it apply
+# again. An advisory is never silenced by loosening the whole check, and an
+# entry whose reasoning has expired is a bug in this file.
+ignore = [
+    # RUSTSEC-2023-0071, `rsa`, reached only through `russh` (the `ssh` deploy
+    # backend). A timing sidechannel in RSA private-key operations, with no
+    # fixed version published upstream, so there is nothing to upgrade to.
+    #
+    # Baudelaire's use is an SSH *client* authenticating to a host the user
+    # chose. Recovering the key needs timing observations of those operations,
+    # which means the deploy target itself is the attacker; a host with your
+    # deploy credentials is already past this. It also only involves the `rsa`
+    # crate at all when the key is RSA, and an ed25519 key never touches this
+    # code path, which is why the deploy guide recommends one.
+    #
+    # Revisit when russh publishes a release on a constant-time `rsa`.
+    { id = "RUSTSEC-2023-0071", reason = "ssh client-side RSA only; ed25519 keys are unaffected" },
+
+    # RUSTSEC-2026-0194 and -0195, `quick-xml 0.38`, both denial-of-service on
+    # malformed XML. Baudelaire itself already uses 0.41, which is patched;
+    # 0.38 arrives through `citationberg` -> `hayagriva` -> `typst-library`,
+    # whose requirement we cannot lift without a typst release.
+    #
+    # That copy parses CSL bibliography styles: typst's bundled styles, or a
+    # `.csl` file the site author put in their own repo. Both are build inputs
+    # the author controls, so the worst case is stalling your own build, not a
+    # reachable service. Nothing in the served site reaches this parser.
+    #
+    # Revisit on a typst bump that moves citationberg to quick-xml >= 0.41.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 is typst's CSL parser; input is author-controlled" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 is typst's CSL parser; input is author-controlled" },
+]
+yanked = "deny"
+unmaintained = "workspace"
+
+[licenses]
+# Derived from the tree as it stands, not copied from a template: every entry
+# below is a license some current dependency actually carries. A new license
+# appearing is meant to fail, so that adopting it is a decision rather than an
+# accident.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+    # File-level copyleft, and only ever reached through unmodified upstream
+    # crates: lightningcss and its cssparser stack (the `css` feature), plus
+    # `option-ext` by way of `dirs`. Modifying one of these in a vendored fork
+    # would carry a source-publication duty; depending on them does not.
+    "MPL-2.0",
+    # Reaches the tree through the compiler-support crates (`ar_archive_writer`
+    # by way of `stacker`, which typst-eval uses to grow the evaluation stack).
+    # The exception only ever widens what Apache-2.0 permits.
+    "Apache-2.0 WITH LLVM-exception",
+]
+confidence-threshold = 0.9
+
+[[licenses.clarify]]
+# ring vendors its license text rather than naming a single SPDX id, so the
+# detector cannot score it on its own.
+name = "ring"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+# A duplicate major version is normal in a tree this size and is not worth
+# failing over; it is worth seeing, because two copies of a crate is how a
+# patched advisory silently fails to take effect.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[[bans.deny]]
+# One miette, and it is v7. A second major version means two diagnostic
+# renderers and two span types, and foreign spans get bridged into ours instead.
+name = "miette"
+wrappers = []
+deny-multiple-versions = true
+
+[[bans.deny]]
+# OpenSSL is in the tree legitimately, but by exactly two paths: `native-tls`
+# (from `ureq`, ours and typst-kit's) and typst-kit's own `openssl`. Both are
+# what `vendored-openssl` exists to statically link for the musl targets.
+#
+# Naming those two is the point: a *third* path means something new started
+# wanting a system OpenSSL, which is a musl build failure discovered at release
+# time rather than here.
+name = "openssl-sys"
+wrappers = ["native-tls", "openssl"]
+
+[sources]
+# Everything comes from crates.io. A git dependency is a release-blocker: it has
+# no version to audit against and no yank mechanism.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
