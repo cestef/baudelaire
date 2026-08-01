@@ -25,7 +25,7 @@ elif command -v wget >/dev/null 2>&1; then
   dl() { wget -qO "$2" "$1" 2>/dev/null; }
 else die "need ${b}curl${x} or ${b}wget${x}"; fi
 
-# linux x86_64/aarch64, macos on apple silicon
+# linux x86_64/aarch64, macos on apple silicon and intel
 src="build from source: ${b}cargo install --git $REPO${x}"
 case $(uname -s) in
   Linux)  os=linux ;;
@@ -37,10 +37,6 @@ case $(uname -m) in
   aarch64 | arm64) arch=aarch64 ;;
   *) die "unsupported arch $(uname -m). $src" ;;
 esac
-# No Intel mac builds: the runner image for them retires in 2027 and the
-# hardware is nearly gone. Source builds still work.
-[ "$os$arch" = macosx86_64 ] && die "no prebuilt binary for Intel Macs. $src"
-
 # The libc suffix, on Linux only: macOS ships one libc and one set of assets.
 # musl build on musl hosts (Alpine), glibc otherwise. LIBC= overrides.
 libc=

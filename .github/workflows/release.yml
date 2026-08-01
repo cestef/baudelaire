@@ -92,6 +92,14 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
             macos: true
+          # Cross-compiled from the Apple Silicon runner rather than run on an
+          # Intel one: the toolchain ships both slices, and it avoids depending
+          # on which Intel runner label GitHub currently offers. Nothing here
+          # runs the resulting binary, so a cross build costs no coverage.
+          - name: macos-x86_64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            macos: true
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -208,11 +216,13 @@ jobs:
           SIZE_ARM_MUSL_SLIM=$(bin_size "baudelaire-linux-aarch64-musl-slim.tar.gz")
           SIZE_MAC_ARM=$(bin_size "baudelaire-macos-aarch64.tar.gz")
           SIZE_MAC_ARM_SLIM=$(bin_size "baudelaire-macos-aarch64-slim.tar.gz")
+          SIZE_MAC_X86=$(bin_size "baudelaire-macos-x86_64.tar.gz")
+          SIZE_MAC_X86_SLIM=$(bin_size "baudelaire-macos-x86_64-slim.tar.gz")
 
           cat > release-notes.md <<EOF
           ## Install
 
-          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon),
+          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon and Intel),
           checksum-verified. Fetch the script, skim it, then run it:
 
           \`\`\`bash
@@ -241,10 +251,9 @@ jobs:
           and you run your own asset tooling.
 
           The \`gnu\` builds link the host's glibc; the fully static \`musl\` builds
-          run anywhere (Alpine, distroless, scratch containers). The macOS build
-          is unsigned and unnotarized, so the first run needs a right-click ->
-          Open, or \`xattr -d com.apple.quarantine baudelaire\`. Intel Macs have
-          no prebuilt binary: \`cargo install baudelaire\` builds one.
+          run anywhere (Alpine, distroless, scratch containers). The macOS builds
+          are unsigned and unnotarized, so the first run needs a right-click ->
+          Open, or \`xattr -d com.apple.quarantine baudelaire\`.
 
           | Artifact | Size |
           |----------|------|
@@ -258,6 +267,8 @@ jobs:
           | \`baudelaire-linux-aarch64-musl-slim\` | ${SIZE_ARM_MUSL_SLIM} |
           | \`baudelaire-macos-aarch64\` | ${SIZE_MAC_ARM} |
           | \`baudelaire-macos-aarch64-slim\` | ${SIZE_MAC_ARM_SLIM} |
+          | \`baudelaire-macos-x86_64\` | ${SIZE_MAC_X86} |
+          | \`baudelaire-macos-x86_64-slim\` | ${SIZE_MAC_X86_SLIM} |
 
           Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
