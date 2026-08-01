@@ -111,6 +111,10 @@ impl Timer {
 /// by scraping styled text off stderr.
 #[derive(serde::Serialize)]
 pub struct Report {
+    /// The shape of this object, so a consumer can refuse one it does not
+    /// understand instead of silently reading a field that moved. First, so it
+    /// is the first thing in the output as well as the first thing to check.
+    pub schema: u32,
     /// Whether the run succeeded. A `--strict` failure is still `false`.
     pub ok: bool,
     /// Absent for a command that builds nothing (`clean`, `new`, `init`).
@@ -122,6 +126,23 @@ pub struct Report {
     /// Every diagnostic collected, warnings and advice alike, in the order they
     /// were reported.
     pub diagnostics: Vec<Diagnostics>,
+}
+
+impl Report {
+    /// The version of the `--json` contract, carried in every report as
+    /// [`schema`](Report::schema).
+    ///
+    /// Bumped when an existing field changes meaning, changes type, or goes
+    /// away. Adding a field does *not* bump it: a consumer reading by name is
+    /// unaffected by a new sibling, and treating additions as breaking would
+    /// train everyone to ignore the number.
+    ///
+    /// The reason it exists before anyone parses this output is that it cannot
+    /// be added afterwards. A consumer written against an unversioned object
+    /// has no way to tell a v1 report from a v2 one, so the first breaking
+    /// change breaks it silently; a consumer that has always seen `schema` can
+    /// refuse what it does not know.
+    pub const SCHEMA: u32 = 1;
 }
 
 /// One collected diagnostic, reduced to what a machine can act on: which class
@@ -239,6 +260,7 @@ impl Ui {
     pub fn summary(&self, ok: bool) -> Report {
         let s = self.state.lock();
         Report {
+            schema: Report::SCHEMA,
             ok,
             pages: s.built.map(|(pages, _)| pages),
             cached: s.built.map(|(_, cached)| cached),

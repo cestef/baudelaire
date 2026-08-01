@@ -128,6 +128,16 @@ chores are visible in the git history and change nothing for a site.
   the text can be selected and copied; Escape, the backdrop, and its own button
   dismiss it.
 
+- **cli**: `--json` reports carry a `schema` number, so a script can refuse an
+  object whose shape it does not know instead of reading a field that moved. It
+  is `1`, and only changes when a field changes meaning or type or goes away;
+  adding a field leaves it alone.
+
+  ```bash
+  baudelaire --json build 2>/dev/null \
+    | jq -e 'if .schema == 1 then .ok else error("unknown report schema") end'
+  ```
+
 ### Fixed
 
 - **build**: A sidecar file deleted from `dist` comes back. A page's HTML is

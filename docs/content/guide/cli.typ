@@ -233,6 +233,7 @@ Accepted by every command.
 
   ```json
   {
+    "schema": 1,
     "ok": true,
     "pages": 51,
     "cached": 50,
@@ -247,6 +248,15 @@ Accepted by every command.
 
   `pages`/`cached` are absent for a command that builds nothing. `ok` is false
   whenever the run failed, `--strict` included.
+
+  `schema` is the version of this object's shape. It changes only when a field
+  changes meaning or type or goes away, never when one is added, so a consumer
+  can check it once and read the rest by name:
+
+  ```bash
+  baudelaire --json build 2>/dev/null \
+    | jq -e 'if .schema == 1 then .ok else error("unknown report schema") end'
+  ```
 / #raw("-V"), #raw("--version"): `-V` is the one line a script greps
   (`baudelaire 0.0.7`); `--version` reports the whole build:
 

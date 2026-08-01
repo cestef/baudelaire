@@ -454,6 +454,10 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
 
     let report: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("stdout should be one JSON object");
+    // The contract's own version, so a consumer can refuse a shape it does not
+    // know. Asserted against the constant rather than a literal: bumping it is
+    // meant to be a deliberate edit in one place, not a test to chase.
+    assert_eq!(report["schema"], baudelaire::ui::Report::SCHEMA);
     assert_eq!(report["ok"], true);
     assert_eq!(report["pages"], 2);
     assert_eq!(report["warnings"], 1);
