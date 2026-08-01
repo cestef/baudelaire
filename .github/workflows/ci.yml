@@ -165,6 +165,43 @@ jobs:
           base: "."
           paths: target
 
+  # There is Windows-aware code in the tree (`src/fs.rs`, `src/engine/hook.rs`)
+  # and nothing that compiles it, so it can rot without anyone noticing. This
+  # job is what notices.
+  #
+  # Compilation only, and no release artifact yet. Two reasons to stop here
+  # rather than add a matrix row to `release.yml`: the e2e tests shell out to
+  # `base64`, which Windows runners do not have, and the default feature set
+  # reaches `aws-lc-sys` through `russh`, whose Windows build wants NASM. Both
+  # flavors run so that the slim one, which drops `ssh` and therefore
+  # `aws-lc-sys` entirely, reports separately from the full one; shipping a
+  # Windows binary is a decision to make once this job has been green.
+  windows:
+    name: windows
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: rust toolchain
+        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+
+      # The workflow-level RUSTFLAGS asks for mold, which is a Linux linker.
+      # `-D warnings` is kept: the point of the job is that warnings here are
+      # real. The `macos` rows in `release.yml` clear it the same way.
+      - name: system linker
+        shell: bash
+        run: echo "RUSTFLAGS=-D warnings" >> "$GITHUB_ENV"
+
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+
+      - name: check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: check (slim)
+        run: cargo check --workspace --all-targets --locked --no-default-features
+
   msrv:
     name: msrv
     runs-on: ubuntu-latest
