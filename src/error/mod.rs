@@ -20,6 +20,7 @@ pub mod annotated;
 pub mod announce;
 pub mod asset;
 pub mod card;
+pub mod cli;
 pub mod config;
 pub mod content;
 pub mod deploy;
@@ -124,6 +125,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Scaffold(Box<crate::error::ScaffoldError>),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Cli(#[from] crate::error::cli::WriteFailed),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

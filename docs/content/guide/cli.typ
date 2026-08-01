@@ -22,6 +22,8 @@ At a glance:
   [`baudelaire announce`], [Announce the site's metadata to atproto (standard.site).],
   [`baudelaire init [dir]`], [Scaffold a whole project.],
   [`baudelaire clean`], [Remove build output and local state.],
+  [`baudelaire completions <shell>`], [Print a shell completion script.],
+  [`baudelaire man`], [Print the manual as a man page.],
 )
 
 === build
@@ -217,6 +219,35 @@ in CI.
 This is the wholesale wipe, and it is not the config's
 #link("config.typ")[`prune`], which sweeps only files no page claims any more
 and runs as part of every build.
+
+=== completions \<shell>
+
+Print a completion script for `bash`, `elvish`, `fish`, `nushell`, `powershell`
+or `zsh` to stdout, and nothing else, so it can be redirected straight into a
+completion directory.
+
+```bash
+baudelaire completions fish > ~/.config/fish/completions/baudelaire.fish
+```
+
+`baudelaire completions --help` prints the line for every shell, including where
+each one expects the file. The directory has to exist and the shell has to be
+told to read it; neither is baudelaire's to arrange.
+
+The script is generated from the same command definition the binary parses with,
+so it offers exactly the subcommands and flags *this* build has. A `slim` build
+compiled without `announce` completes no `announce`.
+
+=== man
+
+Print the manual as a roff man page to stdout.
+
+```bash
+baudelaire man > ~/.local/share/man/man1/baudelaire.1
+```
+
+Generated from the same definition as `--help` and the completion scripts, so
+the three cannot disagree about what a flag does.
 
 == Global flags <global-flags>
 

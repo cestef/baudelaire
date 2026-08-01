@@ -140,6 +140,16 @@ typst-eval = "0.15"
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
+# Both read the same `Cli` derive the binary parses with, so a completion script
+# and a man page cannot describe a flag set this build does not have: the
+# feature-gated subcommands are absent from both exactly when they are absent
+# from `--help`.
+clap_complete = "4"
+# Nushell's generator is a separate crate rather than a `Shell` variant, and
+# leaving it out would mean the shell this project is developed in is the one
+# shell with no completions.
+clap_complete_nushell = "4"
+clap_mangen = "0.2"
 time = { version = "0.3", features = ["parsing", "formatting", "serde"] }
 itertools = "0.15.0"
 kdl = { version = "6" }

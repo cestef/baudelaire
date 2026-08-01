@@ -128,6 +128,19 @@ chores are visible in the git history and change nothing for a site.
   the text can be selected and copied; Escape, the backdrop, and its own button
   dismiss it.
 
+- **cli**: `baudelaire completions <shell>` prints a completion script for
+  `bash`, `elvish`, `fish`, `nushell`, `powershell` or `zsh`, and `baudelaire
+  man` prints the manual as a man page. Both write only the document, to stdout.
+
+  ```bash
+  baudelaire completions fish > ~/.config/fish/completions/baudelaire.fish
+  baudelaire man > ~/.local/share/man/man1/baudelaire.1
+  ```
+
+  Both are generated from the same command definition the binary parses with, so
+  they describe the build they came from: a `slim` binary compiled without
+  `announce` completes and documents no `announce`.
+
 - **cli**: `--json` reports carry a `schema` number, so a script can refuse an
   object whose shape it does not know instead of reading a field that moved. It
   is `1`, and only changes when a field changes meaning or type or goes away;

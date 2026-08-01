@@ -472,6 +472,67 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
     );
 }
 
+/// Every shell the value list offers produces a script, and it goes to stdout
+/// clean: a banner or a progress line in front of it would be sourced by the
+/// shell along with the completions.
+///
+/// Driven off clap's own value list rather than a list written here, so a shell
+/// added to `Shell` is covered without this test being touched.
+#[test]
+fn completions_are_generated_for_every_offered_shell() {
+    use clap::ValueEnum;
+
+    let sb = Site::new();
+    for shell in baudelaire::cli::Shell::value_variants() {
+        let name = shell.to_possible_value().expect("shell is selectable");
+        let name = name.get_name();
+        let out = sb.run(&["completions", name]);
+        assert!(
+            out.status.success(),
+            "{name}: stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let script = String::from_utf8(out.stdout).expect("script is utf-8");
+        assert!(
+            script.contains("baudelaire"),
+            "{name}: script never names the binary: {script}"
+        );
+        // The subcommands it completes are the ones this build actually has,
+        // because both come from the same `Cli` derive.
+        assert!(script.contains("serve"), "{name}: no subcommands: {script}");
+    }
+}
+
+/// An unknown shell is a usage error naming the ones that exist, not a stack of
+/// help text, and not an empty file the user would happily source.
+#[test]
+fn an_unknown_shell_is_a_usage_error() {
+    let sb = Site::new();
+    let out = sb.run(&["completions", "tcsh"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty(), "stdout: {:?}", out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("tcsh"), "{stderr}");
+    assert!(stderr.contains("bash"), "{stderr}");
+}
+
+/// The man page is roff on stdout, headed by the `.TH` line `man` needs to
+/// index it. Nothing here renders it; that it parses is groff's business.
+#[test]
+fn man_writes_a_roff_page_to_stdout() {
+    let sb = Site::new();
+    let out = sb.run(&["man"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let page = String::from_utf8(out.stdout).expect("page is utf-8");
+    assert!(page.contains(".TH baudelaire 1"), "{page}");
+    assert!(page.contains(".SH SYNOPSIS"), "{page}");
+    assert!(page.contains(env!("CARGO_PKG_VERSION")), "{page}");
+}
+
 /// Without the flag, stdout stays empty: that reservation is what makes the
 /// object above safe to pipe.
 #[test]
