@@ -165,6 +165,50 @@ jobs:
           base: "."
           paths: target
 
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      # Read from Cargo.toml rather than written here, for the same reason the
+      # badge reads it: `rust-version` is the claim, and a second copy of it is
+      # a second thing to forget. `facts` in the `check` job parses it the same
+      # way.
+      #
+      # Selected through `RUSTUP_TOOLCHAIN`, not `rustup override`: this repo
+      # has a `rust-toolchain.toml` pinning `stable`, and the environment
+      # variable is the one form that unambiguously outranks it.
+      - name: msrv toolchain
+        run: |
+          set -euo pipefail
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          [ -n "$msrv" ] || { echo "Cargo.toml has no rust-version"; exit 1; }
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
+          echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
+
+      - name: mold linker
+        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        with:
+          rustflags: "false"
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+
+      # `check`, not `clippy`: this job answers "does the declared minimum
+      # actually compile", and clippy's lint set moves between releases, so
+      # linting here would fail on style the MSRV toolchain happens to disagree
+      # about rather than on anything a user would hit.
+      #
+      # Both flavors, because `--no-default-features` compiles a different set
+      # of modules, and `--all-targets` because a contributor on the MSRV builds
+      # the tests too.
+      - name: check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: check (slim)
+        run: cargo check --workspace --all-targets --locked --no-default-features
+
   audit:
     name: audit
     runs-on: ubuntu-latest

@@ -32,6 +32,25 @@ audit:
         echo "cargo-deny not installed, skipping audit (cargo binstall cargo-deny)"
     fi
 
+# Compile both flavors against the declared MSRV, what the `msrv` CI job does.
+#
+# Not a `ci` dependency: it is a second full compile of the tree on a second
+# toolchain, which is a slow thing to put in front of every local run when the
+# only edit that can break it is a new language feature.
+#
+# The version is read from Cargo.toml, and `RUSTUP_TOOLCHAIN` is what selects
+# it: `rust-toolchain.toml` pins `stable`, and the environment variable is the
+# one form that unambiguously outranks it.
+msrv:
+    #!/usr/bin/env sh
+    set -eu
+    version=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+    [ -n "$version" ] || { echo "Cargo.toml has no rust-version"; exit 1; }
+    rustup toolchain install "$version" --profile minimal --no-self-update
+    export RUSTUP_TOOLCHAIN="$version"
+    cargo check --workspace --all-targets --locked
+    cargo check --workspace --all-targets --locked --no-default-features
+
 # Lint one flavor; compiles the workspace, but cheaper than running the tests.
 clippy features="":
     cargo clippy --workspace --all-targets {{ features }} -- -D warnings
