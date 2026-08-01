@@ -133,6 +133,14 @@ chores are visible in the git history and change nothing for a site.
   accepts is listed with its value shape and a description, so a key cannot be
   added without documenting it, or removed and left in the docs.
 
+- **cli**: `baudelaire reference [key]` prints the same config reference from
+  the binary you have, as an indented tree. A dotted key narrows it to one
+  block, which is usually what you want over a hundred and fifty keys:
+
+  ```bash
+  baudelaire reference assets.images
+  ```
+
 - **cli**: `baudelaire completions <shell>` prints a completion script for
   `bash`, `elvish`, `fish`, `nushell`, `powershell` or `zsh`, and `baudelaire
   man` prints the manual as a man page. Both write only the document, to stdout.

@@ -132,6 +132,10 @@ pub enum BaudelaireErrorKind {
 
     #[error(transparent)]
     #[diagnostic(transparent)]
+    CliKey(#[from] crate::error::cli::UnknownKey),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
     Serve(Box<crate::error::serve::ServeError>),
 
     #[error(transparent)]

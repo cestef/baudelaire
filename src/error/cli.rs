@@ -15,6 +15,7 @@ use crate::ui::Code;
 pub enum Generated {
     Completions,
     Man,
+    Reference,
 }
 
 impl Generated {
@@ -24,6 +25,7 @@ impl Generated {
         match self {
             Self::Completions => "baudelaire completions",
             Self::Man => "baudelaire man",
+            Self::Reference => "baudelaire reference",
         }
     }
 
@@ -31,6 +33,7 @@ impl Generated {
         match self {
             Self::Completions => "completion script",
             Self::Man => "man page",
+            Self::Reference => "config reference",
         }
     }
 
@@ -80,4 +83,16 @@ pub struct WriteFailed {
     pub generated: Generated,
     #[source]
     pub source: std::io::Error,
+}
+
+/// `baudelaire reference <key>` was given a path the config has no such key at.
+///
+/// The suggestion comes from the same walk that would have printed it, so the
+/// names offered are exactly the ones that would work.
+#[derive(Debug, Error, Diagnostic)]
+#[error("no config key at {}", Code(.key))]
+#[diagnostic(code(baudelaire::cli::unknown_key), help("{help}"))]
+pub struct UnknownKey {
+    pub key: String,
+    pub help: String,
 }

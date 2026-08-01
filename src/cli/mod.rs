@@ -12,12 +12,12 @@ use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
-use crate::error::cli::Generated;
+use crate::error::cli::{Generated, UnknownKey};
 use crate::error::warning::{CleanDefaults, CleanRefused, Uninferred};
 use crate::error::{
     BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
 };
-use crate::ui::{Level, Ui};
+use crate::ui::{Level, Ui, markup};
 use crate::version::Version;
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
@@ -234,6 +234,8 @@ pub enum Command {
     Completions(CompletionsArgs),
     /// Print this manual as a man page (roff) to stdout.
     Man(ManArgs),
+    /// Print every key config.kdl accepts, with its value shape.
+    Reference(ReferenceArgs),
 }
 
 /// Arguments for `baudelaire build`.
@@ -351,6 +353,14 @@ impl Shell {
         }
         out
     }
+}
+
+/// Arguments for `baudelaire reference`.
+#[derive(Args, Debug, Clone)]
+#[command(after_help = ReferenceArgs::examples())]
+pub struct ReferenceArgs {
+    /// A dotted key path to narrow to, e.g. `assets.images`.
+    pub key: Option<String>,
 }
 
 /// Arguments for `baudelaire man`. Empty, and kept as a struct rather than
@@ -1025,6 +1035,7 @@ impl Command {
             Command::Init(args) => args.run(cx),
             Command::Completions(args) => args.run(cx),
             Command::Man(args) => args.run(cx),
+            Command::Reference(args) => args.run(cx),
         }
     }
 }
@@ -1056,6 +1067,62 @@ impl Run for ManArgs {
         let mut page = Vec::new();
         Generated::Man.check(clap_mangen::Man::new(Cli::command()).render(&mut page))?;
         Generated::Man.emit(&page)?;
+        Ok(())
+    }
+}
+
+impl ReferenceArgs {
+    /// Appended to `reference --help`. The narrowing argument is the part worth
+    /// showing: the bare command prints a hundred and fifty keys.
+    fn examples() -> String {
+        use owo_colors::{OwoColorize, Stream::Stdout};
+
+        let rows = [
+            ("baudelaire reference", "Every key"),
+            ("baudelaire reference assets", "Just the asset pipeline"),
+            (
+                "baudelaire reference deploy.s3",
+                "Just the S3 deploy backend",
+            ),
+        ];
+        let column = rows.iter().map(|(c, _)| c.len()).max().unwrap_or(0) + 2;
+        let mut out = format!(
+            "{}\n",
+            "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
+        );
+        for (command, what) in rows {
+            let pad = " ".repeat(column - command.len());
+            let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
+            let _ = std::fmt::Write::write_fmt(&mut out, format_args!("  {colored}{pad}{what}\n"));
+        }
+        out
+    }
+}
+
+impl Run for ReferenceArgs {
+    fn run(&self, _cx: &Cx) -> Result<()> {
+        use crate::config::reference::{Reference, Terminal};
+
+        let reference = match &self.key {
+            None => Reference::new(),
+            // The nearest real path, and *not* the whole list: there are over a
+            // hundred and fifty of them, and a help that prints them all is a
+            // wall rather than an answer. The command with no argument is the
+            // list, so the help says so instead.
+            Some(key) => Reference::at(key).ok_or_else(|| {
+                let all = Reference::new();
+                let paths = all.paths();
+                let keys = crate::config::dispatch::Keys::of(&paths);
+                UnknownKey {
+                    key: key.clone(),
+                    help: match keys.nearest(key) {
+                        Some(near) => markup!("did you mean `{}`?", near),
+                        None => markup!("run `{}` for every key", "baudelaire reference"),
+                    },
+                }
+            })?,
+        };
+        Generated::Reference.emit(Terminal(&reference).to_string().as_bytes())?;
         Ok(())
     }
 }

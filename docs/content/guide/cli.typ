@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "CLI reference",
-  order: 5,
+  order: 6,
 )
 
 Every command reads `config.kdl` from the current directory (or the path given
@@ -24,6 +24,7 @@ At a glance:
   [`baudelaire clean`], [Remove build output and local state.],
   [`baudelaire completions <shell>`], [Print a shell completion script.],
   [`baudelaire man`], [Print the manual as a man page.],
+  [`baudelaire reference [key]`], [Print every config key and its value shape.],
 )
 
 === build
@@ -237,6 +238,24 @@ told to read it; neither is baudelaire's to arrange.
 The script is generated from the same command definition the binary parses with,
 so it offers exactly the subcommands and flags *this* build has. A `slim` build
 compiled without `announce` completes no `announce`.
+
+=== reference \[key\]
+
+Print every key `config.kdl` accepts, with the shape of its value, as an
+indented tree. Reads no config: it describes the schema, not your site.
+
+```bash
+baudelaire reference                # every key
+baudelaire reference assets.images  # just that block and below
+```
+
+A dotted key narrows the output to that key and its children, which is usually
+what you want: the whole schema is over a hundred and fifty keys. An unknown key
+is an error suggesting the nearest real one.
+
+This is the same data as the #link("reference.typ")[config reference] page,
+printed from the binary you have, and both are generated from the parser's own
+tables.
 
 === man
 
