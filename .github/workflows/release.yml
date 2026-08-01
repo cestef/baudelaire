@@ -234,101 +234,57 @@ jobs:
             local bytes
             case "$archive" in
               *.zip) bytes=$(unzip -l "$archive" 2>/dev/null \
-                       | awk '$NF == "baudelaire.exe" {print $1; exit}') ;;
+                       | awk '/baudelaire\.exe$/ {print $1; exit}') ;;
               *)     bytes=$(tar -tzvf "$archive" 2>/dev/null \
                        | awk '/[[:space:]]baudelaire$/ {print $3; exit}') ;;
             esac
             [ -n "$bytes" ] || { echo "?"; return; }
             awk -v b="$bytes" 'BEGIN { printf "%.1f MB\n", b/1024/1024 }'
           }
-          SIZE_X86=$(bin_size "baudelaire-linux-x86_64.tar.gz")
-          SIZE_ARM=$(bin_size "baudelaire-linux-aarch64.tar.gz")
-          SIZE_X86_SLIM=$(bin_size "baudelaire-linux-x86_64-slim.tar.gz")
-          SIZE_ARM_SLIM=$(bin_size "baudelaire-linux-aarch64-slim.tar.gz")
-          SIZE_X86_MUSL=$(bin_size "baudelaire-linux-x86_64-musl.tar.gz")
-          SIZE_ARM_MUSL=$(bin_size "baudelaire-linux-aarch64-musl.tar.gz")
-          SIZE_X86_MUSL_SLIM=$(bin_size "baudelaire-linux-x86_64-musl-slim.tar.gz")
-          SIZE_ARM_MUSL_SLIM=$(bin_size "baudelaire-linux-aarch64-musl-slim.tar.gz")
-          SIZE_MAC_ARM=$(bin_size "baudelaire-macos-aarch64.tar.gz")
-          SIZE_MAC_ARM_SLIM=$(bin_size "baudelaire-macos-aarch64-slim.tar.gz")
-          SIZE_MAC_X86=$(bin_size "baudelaire-macos-x86_64.tar.gz")
-          SIZE_MAC_X86_SLIM=$(bin_size "baudelaire-macos-x86_64-slim.tar.gz")
-          SIZE_WIN=$(bin_size "baudelaire-windows-x86_64.zip")
-          SIZE_WIN_SLIM=$(bin_size "baudelaire-windows-x86_64-slim.zip")
+          # One row per archive that was actually built, rather than a table
+          # naming every target by hand: adding a row to the build matrix used
+          # to mean remembering to add one here too, and forgetting was silent.
+          ARTIFACTS=$(
+            for path in release/*.tar.gz release/*.zip; do
+              [ -f "$path" ] || continue
+              file=${path#release/}
+              # shellcheck disable=SC2016  # the backticks are markdown code
+              # spans in the output, not command substitution
+              printf '| `%s` | %s |\n' "${file%%.*}" "$(bin_size "$file")"
+            done
+          )
 
-          cat > release-notes.md <<EOF
-          ## Install
+          # This version's CHANGELOG section, verbatim: its own heading to the
+          # next one. `gate` has already refused the tag if there is no such
+          # section, so coming back empty here means the file's shape moved,
+          # which is worth failing on rather than publishing hollow notes.
+          CHANGES=$(awk -v want="## [${VERSION#v}]" '
+            index($0, want) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md)
+          printf '%s' "$CHANGES" | grep -q '[^[:space:]]' || {
+            echo "no CHANGELOG.md section found for ${VERSION#v}"
+            exit 1
+          }
 
-          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon and Intel,
-          Windows x86_64), checksum-verified. On Linux and macOS, fetch the
-          script, skim it, then run it:
-
-          \`\`\`bash
-          curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
-          less install.sh          # read before you run
-          sh install.sh            # PREFIX= to change dir, VERSION=${VERSION} to pin
-          \`\`\`
-
-          Want the smaller binary? \`FLAVOR=slim sh install.sh\`.
-
-          Prefer Cargo? \`cargo binstall baudelaire\` pulls the full tarballs.
-
-          Or install by hand from the archives below:
-
-          \`\`\`bash
-          tar -xzf baudelaire-linux-x86_64.tar.gz
-          install -m 0755 baudelaire ~/.local/bin/
-          \`\`\`
-
-          On Windows the installer script does not apply: unpack
-          \`baudelaire-windows-x86_64.zip\` and put \`baudelaire.exe\` on your
-          \`PATH\`.
-
-          \`\`\`powershell
-          Expand-Archive baudelaire-windows-x86_64.zip -DestinationPath .
-          \`\`\`
-
-          ## Builds
-
-          Two flavors per target. **full** is the default: everything built in.
-          **slim** drops the bundled fonts and the CSS/JS/image pipelines, so it
-          renders with system fonts only and copies \`.css\`/\`.js\`/images verbatim
-          (no minify, bundle, or optimize). Pick slim when your host has the fonts
-          and you run your own asset tooling.
-
-          The \`gnu\` builds link the host's glibc; the fully static \`musl\` builds
-          run anywhere (Alpine, distroless, scratch containers). The macOS builds
-          are unsigned and unnotarized, so the first run needs a right-click ->
-          Open, or \`xattr -d com.apple.quarantine baudelaire\`.
-
-          | Artifact | Size |
-          |----------|------|
-          | \`baudelaire-linux-x86_64\` | ${SIZE_X86} |
-          | \`baudelaire-linux-x86_64-slim\` | ${SIZE_X86_SLIM} |
-          | \`baudelaire-linux-x86_64-musl\` | ${SIZE_X86_MUSL} |
-          | \`baudelaire-linux-x86_64-musl-slim\` | ${SIZE_X86_MUSL_SLIM} |
-          | \`baudelaire-linux-aarch64\` | ${SIZE_ARM} |
-          | \`baudelaire-linux-aarch64-slim\` | ${SIZE_ARM_SLIM} |
-          | \`baudelaire-linux-aarch64-musl\` | ${SIZE_ARM_MUSL} |
-          | \`baudelaire-linux-aarch64-musl-slim\` | ${SIZE_ARM_MUSL_SLIM} |
-          | \`baudelaire-macos-aarch64\` | ${SIZE_MAC_ARM} |
-          | \`baudelaire-macos-aarch64-slim\` | ${SIZE_MAC_ARM_SLIM} |
-          | \`baudelaire-macos-x86_64\` | ${SIZE_MAC_X86} |
-          | \`baudelaire-macos-x86_64-slim\` | ${SIZE_MAC_X86_SLIM} |
-          | \`baudelaire-windows-x86_64\` | ${SIZE_WIN} |
-          | \`baudelaire-windows-x86_64-slim\` | ${SIZE_WIN_SLIM} |
-
-          Every artifact ships a matching \`.sha256\` (the installer too). Verify:
-
-          \`\`\`bash
-          sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256   # shasum -a 256 -c on macOS
-          \`\`\`
-          EOF
+          command -v envsubst >/dev/null 2>&1 || {
+            sudo apt-get update -qq && sudo apt-get install -y -qq gettext-base
+          }
+          # Named explicitly so only these three expand and the `$PATH` and
+          # `${VERSION}`-shaped text in the prose survives. The leading HTML
+          # comment documents the template for whoever edits it and is dropped
+          # rather than published.
+          export VERSION ARTIFACTS CHANGES
+          # shellcheck disable=SC2016  # the shell-format list is envsubst's
+          # argument, and expanding it here is exactly what it must not do
+          sed '/^<!--/,/^-->/d' .github/release-notes.md \
+            | envsubst '${VERSION} ${ARTIFACTS} ${CHANGES}' > release-notes.md
           cat release-notes.md
 
           {
-            echo "size_full=${SIZE_X86}"
-            echo "size_slim=${SIZE_X86_SLIM}"
+            echo "size_full=$(bin_size baudelaire-linux-x86_64.tar.gz)"
+            echo "size_slim=$(bin_size baudelaire-linux-x86_64-slim.tar.gz)"
             echo "version=${VERSION#v}"
           } >> "$GITHUB_OUTPUT"
 
