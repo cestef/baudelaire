@@ -53,6 +53,8 @@ pub enum Kind {
     Flag,
     /// A whole number: `port 3000`.
     Number,
+    /// A byte size, with or without a unit: `html "50kB"`, `js 0`.
+    Size,
     /// A filesystem path, relative to the project root: `content "content"`.
     Path,
     /// A URL: `url "https://example.com"`.

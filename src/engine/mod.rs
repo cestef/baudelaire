@@ -26,7 +26,7 @@ use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
 use crate::engine::check::External;
-use crate::engine::check::{CheckedPage, Compiled, Links};
+use crate::engine::check::{Budgets, CheckedPage, Compiled, Links, Lints};
 #[cfg(feature = "pdf")]
 use crate::engine::compile::bundle::Bundle;
 use crate::engine::compile::image::Images;
@@ -42,7 +42,9 @@ use crate::fs;
 use crate::graph::{
     Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
 };
-use crate::render::{AssetDeps, AssetMap, Fragments, LinkDeps, Renderer, SrcSetDeps, SrcSets};
+use crate::render::{
+    AssetDeps, AssetMap, Emitted, Fragments, LinkDeps, Renderer, SrcSetDeps, SrcSets,
+};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
@@ -442,11 +444,17 @@ impl Engine {
         let processed = assets.process()?;
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
+        let mut emitted = processed.emitted;
         let pass = Pass::new(self, &planned, prepare, processed.map, processed.srcsets);
         let mut cache = self.cache(&pass, &planned, ui)?;
         let (rendered, cached) = self.incremental(&pass, &mut cache, ui)?;
-        self.validate(&rendered, &cached, false, ui)?;
+        // Ahead of validation, which weighs each page against what this build
+        // actually wrote: a typst-embedded image is the usual way a picture
+        // reaches a page, and a budget blind to those would count almost
+        // nothing. Nothing here reads the pages, so the order is free.
         let images = self.images(&rendered, &cached, ui)?;
+        emitted.absorb(images.emitted());
+        self.validate(&rendered, &cached, Some(&emitted), false, ui)?;
         let outputs = Self::outputs(&rendered, &cached);
         Self::write(&outputs)?;
         // Bound from the page *sources*, so a bundle is exported whether its
@@ -764,7 +772,10 @@ impl Engine {
                     .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &pass)),
             )
         })?;
-        self.validate(&rendered, &[], true, ui)?;
+        // No asset pipeline ran and nothing was written, so there is nothing to
+        // weigh a page's loads against: `check` lints, and leaves the budgets to
+        // the build that produces the bytes.
+        self.validate(&rendered, &[], None, true, ui)?;
         ui.flush();
         ui.done(format_args!(
             "checked {} in {}",
@@ -954,6 +965,8 @@ impl Engine {
                 anchors: rewrite.anchors,
                 deep: rewrite.deep,
                 fragments,
+                lints: rewrite.lints,
+                weight: rewrite.weight,
             },
             external: rewrite.external,
             artifacts,
@@ -977,6 +990,7 @@ impl Engine {
         &self,
         rendered: &[Rendered],
         cached: &[(&Page, String, Outputs)],
+        emitted: Option<&Emitted>,
         outbound: bool,
         ui: &Ui,
     ) -> Result<()> {
@@ -985,13 +999,13 @@ impl Engine {
         // serves a page from cache.
         let fresh = rendered
             .iter()
-            .map(|r| (r.page, &r.outputs, r.external.as_slice()));
+            .map(|r| (r.page, r.html.as_str(), &r.outputs, r.external.as_slice()));
         let reused = cached
             .iter()
-            .map(|(page, _, outputs)| (*page, outputs, &[] as &[String]));
+            .map(|(page, html, outputs)| (*page, html.as_str(), outputs, &[] as &[String]));
         let pages: Vec<CheckedPage> = fresh
             .chain(reused)
-            .map(|(page, outputs, external)| CheckedPage {
+            .map(|(page, html, outputs, external)| CheckedPage {
                 label: self.relative(page),
                 source: &page.source,
                 permalink: &page.permalink,
@@ -999,13 +1013,21 @@ impl Engine {
                 external,
                 anchors: &outputs.anchors,
                 deep: &outputs.deep,
+                lints: &outputs.lints,
+                weight: &outputs.weight,
+                html,
             })
             .collect();
         let site = Compiled {
             config: &self.config,
             pages: &pages,
+            emitted,
         };
         Links::run(&site, ui)?;
+        if self.config.lint.enabled {
+            Lints::run(&site, ui)?;
+            Budgets::run(&site)?;
+        }
         if outbound && self.config.links.external {
             External::run(&site, ui)?;
         }

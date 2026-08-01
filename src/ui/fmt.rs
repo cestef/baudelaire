@@ -89,10 +89,48 @@ impl Display for StyledCount<'_> {
 }
 
 /// A byte count in binary units (`512 B`, `1.4 MB`): 1024-based with one
-/// decimal above the byte threshold. The single source of size formatting.
+/// decimal above the byte threshold. The single source of size formatting *and*
+/// of reading a size back in, so a budget is authored in the units the summary
+/// prints.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bytes(pub u64);
 
 impl Bytes {
+    /// The units a size may be written in, largest first so `MB` is matched
+    /// before `B`. The `i` spellings are accepted for authors who want to be
+    /// explicit; they mean the same thing, since these units are 1024-based.
+    const UNITS: &'static [(&'static str, u64)] = &[
+        ("gib", 1 << 30),
+        ("mib", 1 << 20),
+        ("kib", 1 << 10),
+        ("gb", 1 << 30),
+        ("mb", 1 << 20),
+        ("kb", 1 << 10),
+        ("g", 1 << 30),
+        ("m", 1 << 20),
+        ("k", 1 << 10),
+        ("b", 1),
+    ];
+
+    /// A size written as a number and an optional unit (`0`, `500`, `50kB`,
+    /// `1.5 MB`), or `None` when it is neither. Case and inner spaces are
+    /// ignored; a bare number is bytes.
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim().to_ascii_lowercase().replace(' ', "");
+        let (number, scale) = Self::UNITS
+            .iter()
+            .find_map(|&(unit, scale)| Some((text.strip_suffix(unit)?, scale)))
+            .unwrap_or((text.as_str(), 1));
+        let value: f64 = number.parse().ok()?;
+        if !value.is_finite() || value < 0.0 {
+            return None;
+        }
+        let bytes = value * scale as f64;
+        // Beyond this a `f64` no longer counts single bytes, and a budget that
+        // large is a typo rather than an intent.
+        (bytes <= u64::MAX as f64).then_some(Self(bytes as u64))
+    }
+
     /// The scaled number and its unit, split so styling can treat them
     /// separately.
     fn parts(&self) -> (String, &'static str) {
@@ -292,5 +330,24 @@ mod tests {
     fn bytes_scale_binary() {
         assert_eq!(Bytes(512).to_string(), "512 B");
         assert_eq!(Bytes(1_468_006).to_string(), "1.4 MB");
+    }
+
+    /// A size reads back in the units it prints in, plus the spellings an
+    /// author is likely to reach for.
+    #[test]
+    fn sizes_parse_with_or_without_a_unit() {
+        assert_eq!(Bytes::parse("0"), Some(Bytes(0)));
+        assert_eq!(Bytes::parse("500"), Some(Bytes(500)));
+        assert_eq!(Bytes::parse("50kB"), Some(Bytes(51_200)));
+        assert_eq!(Bytes::parse("50 KiB"), Some(Bytes(51_200)));
+        assert_eq!(Bytes::parse("1.5mb"), Some(Bytes(1_572_864)));
+    }
+
+    #[test]
+    fn a_size_that_is_not_a_size_is_rejected() {
+        assert_eq!(Bytes::parse("big"), None);
+        assert_eq!(Bytes::parse("50 furlongs"), None);
+        assert_eq!(Bytes::parse("-1"), None);
+        assert_eq!(Bytes::parse(""), None);
     }
 }

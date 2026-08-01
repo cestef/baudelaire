@@ -27,7 +27,7 @@ mod svg;
 
 pub use externalize::ImageRef;
 
-use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
 use crate::config::Config;
 use crate::content::Page;
@@ -84,6 +84,12 @@ pub(super) struct Cx<'a> {
 /// [`ElementExt::assets`], which parses its candidate list.
 const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
 
+/// The elements a reader deep-links to and an outline is read from, in level
+/// order, so an index into this *is* the heading level. One list, because three
+/// passes ask about headings: the anchor pass, the lint that reports a skipped
+/// level, and anything that comes after them.
+const HEADINGS: &[HtmlTag] = &[tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag::h6];
+
 /// The one replace-or-push rule for an attribute list, shared by
 /// [`ElementExt::set`] and by any pass still assembling attributes that has no
 /// element to hang them off yet.
@@ -117,6 +123,22 @@ pub(super) trait ElementExt {
     /// shared walk over the typed DOM, so no transform hand-rolls its own
     /// recursion.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
+    /// The same walk, read-only: what a pass that only *looks* at the DOM
+    /// takes, since [`walk`](ElementExt::walk) reaches for the mutable children
+    /// of every element it passes and would copy each shared list to hand one
+    /// out.
+    fn visit(&self, f: &mut impl FnMut(&HtmlElement));
+    /// The text this element and its descendants carry, markup dropped: what a
+    /// heading's anchor is slugged from, and the bytes an inline `<script>` or
+    /// `<style>` ships.
+    fn text(&self) -> String;
+    /// This element's heading level, `1`..`6`, or `None` for anything that is
+    /// not a heading.
+    fn heading(&self) -> Option<u8>;
+    /// Whether this element pulls in a stylesheet. `rel` may hold several
+    /// tokens (`rel="preload stylesheet"`), which is why it is not a string
+    /// comparison, and why it is written once.
+    fn stylesheet(&self) -> bool;
     /// This element's `<head>` child, if it has one: the one place a transform
     /// appends head elements, so meta and verification tags find it the same way.
     fn head(&mut self) -> Option<&mut HtmlElement>;
@@ -139,6 +161,42 @@ impl ElementExt for HtmlElement {
                 child.walk(f);
             }
         }
+    }
+
+    fn visit(&self, f: &mut impl FnMut(&HtmlElement)) {
+        f(self);
+        for child in self.children.iter() {
+            if let HtmlNode::Element(child) = child {
+                child.visit(f);
+            }
+        }
+    }
+
+    fn text(&self) -> String {
+        let mut out = String::new();
+        self.visit(&mut |element| {
+            for child in element.children.iter() {
+                if let HtmlNode::Text(text, _) = child {
+                    out.push_str(text);
+                }
+            }
+        });
+        out
+    }
+
+    fn heading(&self) -> Option<u8> {
+        HEADINGS
+            .iter()
+            .position(|&heading| heading == self.tag)
+            .map(|level| level as u8 + 1)
+    }
+
+    fn stylesheet(&self) -> bool {
+        self.tag == tag::link
+            && self.attrs.get(attr::rel).is_some_and(|rel| {
+                rel.split_ascii_whitespace()
+                    .any(|token| token.eq_ignore_ascii_case("stylesheet"))
+            })
     }
 
     fn head(&mut self) -> Option<&mut HtmlElement> {
@@ -181,6 +239,8 @@ impl ElementExt for HtmlElement {
 pub(super) trait DocumentExt {
     /// Visit every element in the document, depth-first.
     fn walk(&mut self, f: impl FnMut(&mut HtmlElement));
+    /// The same, read-only: what the lint pass takes.
+    fn visit(&self, f: impl FnMut(&HtmlElement));
     /// The document's `<head>`, if the page has one.
     fn head(&mut self) -> Option<&mut HtmlElement>;
     /// Rewrite every asset-bearing URL in the document through `f`.
@@ -190,6 +250,10 @@ pub(super) trait DocumentExt {
 impl DocumentExt for HtmlDocument {
     fn walk(&mut self, mut f: impl FnMut(&mut HtmlElement)) {
         self.root_mut().walk(&mut f);
+    }
+
+    fn visit(&self, mut f: impl FnMut(&HtmlElement)) {
+        self.root().visit(&mut f);
     }
 
     fn head(&mut self) -> Option<&mut HtmlElement> {

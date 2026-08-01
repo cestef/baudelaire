@@ -36,6 +36,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **check**: `lint { }`, a linter over the typed DOM. Four rules, each a flag and
+  all on while the block is present: `headings` (a level skipped, `h2` straight
+  to `h4`), `alt` (an image with no text alternative; an empty `alt` is a
+  deliberate "decorative" and passes), `ids` (an id used twice, which silently
+  breaks every deep link into it), and `aria` (a role that is not a role, an
+  `aria-*` attribute ARIA does not define, and an `aria-labelledby` naming an id
+  that is not on the page). Findings are warnings; `lint { strict }` makes them
+  fail the build. Because the check runs on the DOM rather than on the
+  serialized page, every finding is reported against the Typst line that wrote
+  the element.
+
+- **check**: `lint { budget { } }`, per-page weight budgets: `html`, `js`, `css`,
+  `images` and `total`, each written in bytes or in the units the build summary
+  prints (`"50kB"`, `1.5MB`). A page counts its own markup, the bytes of its
+  inline scripts and styles, and every file it loads that this build wrote;
+  responsive `srcset` candidates are excluded, since a visitor is served one of
+  them. Exceeding a budget always fails the build. `baudelaire check` processes
+  no assets and so runs the rules but not the budgets.
+
 - **typst**: `@baudelaire/pages`, the site's page catalogue as a Typst module.
   `pages(lang)` returns one row per authored page of that language, in the site's
   own order, in the same shape a listing's `entries` carry, so the card
@@ -213,6 +232,13 @@ Footnotes moved. A page with a layout now renders its note list inside the
 layout's `<article>` (or `<main>`), where it used to sit after everything else
 in the body. A stylesheet that reached for it with `body > [role=doc-endnotes]`
 needs a new selector; a bare `html { footnotes }` restores the old placement.
+
+The build cache schema changed (`Renderer::SCHEMA` 8 → 9), so the first build
+after upgrading is cold. Nothing to do; it is one rebuild.
+
+`lint { strict }` and any `lint { budget { } }` can fail a build that previously
+passed, which is what they are for. Neither runs on a site that declares no
+`lint` block.
 
 ## [0.0.8] - 2026-07-30
 

@@ -156,6 +156,17 @@ impl ConfigError {
         Self::at(source, ConfigErrorKind::PortRange { got }, span)
     }
 
+    /// A budget written in something that is not a byte size.
+    pub fn bad_size(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::BadSize {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A count field given a negative value.
     pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
@@ -369,6 +380,13 @@ pub enum ConfigErrorKind {
     #[error("port must be 0-65535, got {got}")]
     #[diagnostic(code(baudelaire::config::port_range))]
     PortRange { got: i64 },
+
+    #[error("{} is not a byte size", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::bad_size),
+        help("a size is a number and an optional unit: `0`, `500`, `50kB`, `1.5 MB`")
+    )]
+    BadSize { got: String },
 
     #[error("{} is not https", Code(.got))]
     #[diagnostic(

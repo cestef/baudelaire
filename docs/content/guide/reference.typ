@@ -141,6 +141,26 @@ The shape of generated URLs, and how strictly links are checked.
 / #raw("strict") #raw("flag"): Fail the build on a broken internal link instead of warning.
 / #raw("external") #raw("flag"): Also check outbound `http(s)` links over the network.
 
+== `lint`
+
+Checks run over the built pages. Its presence turns them on.
+
+/ #raw("strict") #raw("flag"): Fail the build on a finding instead of warning.
+/ #raw("headings") #raw("flag"): Report a heading that skips a level, e.g. `h2` straight to `h4`.
+/ #raw("alt") #raw("flag"): Report an image with no `alt` attribute at all (an empty one marks it decorative).
+/ #raw("ids") #raw("flag"): Report an `id` used more than once on a page.
+/ #raw("aria") #raw("flag"): Report an unknown ARIA role or attribute, and one referring to an id that is not there.
+
+=== `lint.budget`
+
+How many bytes one page may ship. Exceeding a budget always fails the build.
+
+/ #raw("html") #raw("size"): The page's own markup, as written to the output directory.
+/ #raw("js") #raw("size"): Every script the page loads, plus its inline `\<script\>` bodies.
+/ #raw("css") #raw("size"): Every stylesheet it loads, plus its inline `\<style\>` bodies.
+/ #raw("images") #raw("size"): Every image it references, responsive alternatives excluded.
+/ #raw("total") #raw("size"): All of the above at once: the page's whole transfer weight.
+
 == `generate`
 
 The files a build emits beside the pages.

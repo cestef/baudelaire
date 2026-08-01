@@ -27,6 +27,7 @@ pub mod deploy;
 pub mod fs;
 pub mod hook;
 pub mod link;
+pub mod lint;
 pub mod output;
 pub mod remote;
 pub mod scaffold;
@@ -48,6 +49,7 @@ pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks, Dead, DeadLinks};
+pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
 pub use output::BaseUrlRequired;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
@@ -101,6 +103,14 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     DeadLinks(#[from] crate::error::link::DeadLinks),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Flaws(#[from] crate::error::lint::Flaws),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Overweights(#[from] crate::error::lint::Overweights),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

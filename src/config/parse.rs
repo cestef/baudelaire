@@ -10,21 +10,22 @@ use kdl::{KdlDocument, KdlNode};
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::{
-    Block as Nested, Choice, Flag, Items, Number, Numbers, Overlay, Path, Table, Template, Text,
-    Texts, Url,
+    Block as Nested, Choice, Flag, Items, Number, Numbers, Overlay, Path, Size, Table, Template,
+    Text, Texts, Url,
 };
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
-    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, FeedKind, GenerateConfig,
-    HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LlmsConfig,
-    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages,
-    PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig,
-    SearchField, SearchFormat, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
-    StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
+    CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig,
+    FeedKind, GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LanguageConfig,
+    LinkConfig, LintConfig, LlmsConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths,
+    PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, RobotsConfig,
+    Router, S3Config, SearchConfig, SearchField, SearchFormat, ServeConfig, SortKey, SpaConfig,
+    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
+    UrlStyle, VerifyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
@@ -135,6 +136,12 @@ impl Section for Config {
             Nested(LinkConfig::rows),
             "The shape of generated URLs, and how strictly links are checked.",
             |c, n, t| c.links.fill(n, t),
+        ),
+        (
+            "lint",
+            Nested(LintConfig::rows),
+            "Checks run over the built pages. Its presence turns them on.",
+            |c, n, t| c.lint.fill(n, t),
         ),
         (
             "generate",
@@ -922,6 +929,120 @@ impl Section for LinkConfig {
             "Also check outbound `http(s)` links over the network.",
             |c, n, t| {
                 c.external = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+    ]);
+}
+
+/// The `lint { .. }` section: the rules run over each built page's DOM, and how
+/// loud a finding is. The block's presence is what turns linting on.
+impl Section for LintConfig {
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        true
+    }
+
+    const RULES: Block<Self> = Block(&[
+        (
+            "strict",
+            Flag,
+            "Fail the build on a finding instead of warning.",
+            |c, n, t| {
+                c.strict = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "headings",
+            Flag,
+            "Report a heading that skips a level, e.g. `h2` straight to `h4`.",
+            |c, n, t| {
+                c.headings = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "alt",
+            Flag,
+            "Report an image with no `alt` attribute at all (an empty one marks it decorative).",
+            |c, n, t| {
+                c.alt = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "ids",
+            Flag,
+            "Report an `id` used more than once on a page.",
+            |c, n, t| {
+                c.ids = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "aria",
+            Flag,
+            "Report an unknown ARIA role or attribute, and one referring to an id that is not there.",
+            |c, n, t| {
+                c.aria = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "budget",
+            Nested(BudgetConfig::rows),
+            "How many bytes one page may ship. Exceeding a budget always fails the build.",
+            |c, n, t| c.budget.fill(n, t),
+        ),
+    ]);
+}
+
+/// The `lint { budget { .. } }` section: per-page weight ceilings.
+impl Section for BudgetConfig {
+    const RULES: Block<Self> = Block(&[
+        (
+            "html",
+            Size,
+            "The page's own markup, as written to the output directory.",
+            |c, n, t| {
+                c.html = Some(n.size(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "js",
+            Size,
+            "Every script the page loads, plus its inline `<script>` bodies.",
+            |c, n, t| {
+                c.js = Some(n.size(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "css",
+            Size,
+            "Every stylesheet it loads, plus its inline `<style>` bodies.",
+            |c, n, t| {
+                c.css = Some(n.size(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "images",
+            Size,
+            "Every image it references, responsive alternatives excluded.",
+            |c, n, t| {
+                c.images = Some(n.size(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "total",
+            Size,
+            "All of the above at once: the page's whole transfer weight.",
+            |c, n, t| {
+                c.total = Some(n.size(t, 0)?);
                 Ok(())
             },
         ),

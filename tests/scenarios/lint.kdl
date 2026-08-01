@@ -1,0 +1,374 @@
+// `lint { }`: accessibility and structure rules over the typed DOM, and
+// per-page weight budgets.
+//
+// Every rule is off until a `lint { }` block asks for them, and a finding is a
+// warning until `strict` says otherwise. A budget is the exception: an explicit
+// limit always fails the build.
+
+scenario "a page with no lint block is never linted" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      = One
+
+      ==== Four
+
+      #html.elem("img", attrs: (src: "/x.png"))
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      // typst-html reserves `h1` for the document title, so `=` is an `h2`.
+      contains "<h5 "
+    }
+  }
+}
+
+scenario "a skipped heading level fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      = One
+
+      ==== Four
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "a heading that steps down one level at a time is fine" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      = One
+
+      == Two
+
+      === Three
+
+      = Back up
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "an image with no alt fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("img", attrs: (src: "/logo.png"))
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "an empty alt and a decorative image are both deliberate" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("img", attrs: (src: "/a.png", alt: ""))
+      #html.elem("img", attrs: (src: "/b.png", "aria-hidden": "true"))
+      #html.elem("img", attrs: (src: "/c.png", role: "presentation"))
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "a rule turned off by name stops reporting" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict
+        alt #false
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("img", attrs: (src: "/logo.png"))
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "a repeated id fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("div", attrs: (id: "intro"))[first]
+      #html.elem("div", attrs: (id: "intro"))[second]
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "an unknown role fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("div", attrs: (role: "buton"))[oops]
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "an aria reference to nothing fails a strict build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("nav", attrs: ("aria-labelledby": "nowhere"))[menu]
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "aria that resolves and roles that exist are left alone" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("h2", attrs: (id: "menu-label"))[Menu]
+      #html.elem("nav", attrs: (role: "navigation", "aria-labelledby": "menu-label"))[menu]
+      #html.elem("div", attrs: (role: "doc-chapter"))[a module role]
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "a finding only warns until strictness is asked for" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("img", attrs: (src: "/logo.png"))
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html"
+  }
+}
+
+scenario "a page over its html budget fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        budget { html 200 }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #lorem(200)
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::budget" }
+  }
+}
+
+scenario "a stylesheet counts against the css budget, not the html one" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets { minify #false }
+      lint {
+        budget { css 500 }
+      }
+      """#
+    "assets/big.css" #"""
+      /* padded well past a kilobyte so the budget has something to catch */
+      .a { color: rebeccapurple; background: white; border: 1px solid black; }
+      .b { color: rebeccapurple; background: white; border: 1px solid black; }
+      .c { color: rebeccapurple; background: white; border: 1px solid black; }
+      .d { color: rebeccapurple; background: white; border: 1px solid black; }
+      .e { color: rebeccapurple; background: white; border: 1px solid black; }
+      .f { color: rebeccapurple; background: white; border: 1px solid black; }
+      .g { color: rebeccapurple; background: white; border: 1px solid black; }
+      .h { color: rebeccapurple; background: white; border: 1px solid black; }
+      .i { color: rebeccapurple; background: white; border: 1px solid black; }
+      .j { color: rebeccapurple; background: white; border: 1px solid black; }
+      .k { color: rebeccapurple; background: white; border: 1px solid black; }
+      .l { color: rebeccapurple; background: white; border: 1px solid black; }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/big.css"))
+
+      Short page.
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::budget" }
+  }
+}
+
+scenario "a page inside every budget builds" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        budget {
+          html "1MB"
+          js 0
+          css "1MB"
+          images "1MB"
+          total "2MB"
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      A page that loads nothing at all.
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html"
+  }
+}
+
+scenario "a budget written in something that is not a size is a config error" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lint {
+        budget { html "quite small" }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::bad_size" }
+  }
+}

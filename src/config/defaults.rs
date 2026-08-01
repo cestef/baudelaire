@@ -6,13 +6,13 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AnnounceConfig, AssetConfig, CacheConfig, CacheControl, CardsConfig, CollectionConfig, Config,
-    ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig, Footnotes, GenerateConfig,
-    HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig, LinkConfig,
-    NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfPages, PngConfig,
-    PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig, SearchField, ServeConfig,
-    SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig,
-    TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
+    CollectionConfig, Config, ContentConfig, DeployConfig, DraftConfig, Eagerness, FeedConfig,
+    Footnotes, GenerateConfig, HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
+    LinkConfig, LintConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths, PdfBundle,
+    PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, Router, S3Config, SearchConfig,
+    SearchField, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 
 impl Default for Config {
@@ -32,6 +32,7 @@ impl Default for Config {
             assets: AssetConfig::default(),
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
+            lint: LintConfig::default(),
             generate: GenerateConfig::default(),
             navigation: NavigationConfig::default(),
             prune: true,
@@ -237,6 +238,26 @@ impl Default for LinkConfig {
             style: UrlStyle::default(),
             strict: true,
             external: false,
+        }
+    }
+}
+
+impl Default for LintConfig {
+    fn default() -> Self {
+        // opt-in as a whole: the presence of a `lint { }` block flips `enabled`.
+        // Every rule is then on, because a block that turns nothing on is not
+        // what an author writing one meant; each is switched off by name.
+        // `strict` follows `links`' lenient half rather than its strict one: a
+        // broken link is a certainty, whereas a missing `alt` is a judgement
+        // about content this tool did not write.
+        Self {
+            enabled: false,
+            strict: false,
+            headings: true,
+            alt: true,
+            ids: true,
+            aria: true,
+            budget: BudgetConfig::default(),
         }
     }
 }

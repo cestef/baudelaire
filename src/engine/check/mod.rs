@@ -5,18 +5,24 @@
 //! policy lives with the check rather than the caller.
 //! [`external::External`] verifies outbound links over the network and
 //! runs from `check` alone, so a build never depends on someone else's host.
-//! Both are plain calls: there was a `Check` trait and a registry around a
+//! [`lint::Lints`] reports what the per-page DOM pass found, and
+//! [`lint::Budgets`] weighs each page against `lint { budget { } }`.
+//! All are plain calls: there was a `Check` trait and a registry around a
 //! single impl, and a trait with one implementation is not an abstraction (see
-//! [`super::emit::Processors`] for the shape to restore if a third arrives).
+//! [`super::emit::Processors`] for the shape to restore if the calls ever need
+//! to be selected rather than listed).
 
 mod external;
+mod lint;
 
 pub(in crate::engine) use external::External;
+pub(in crate::engine) use lint::{Budgets, Lints};
 
 use std::path::Path;
 
 use crate::config::Config;
 use crate::error::{Broken, BrokenLinks, Result};
+use crate::render::{Emitted, Finding, Weight};
 use crate::ui::Ui;
 
 /// Read-only view of the freshly compiled pages handed to every check. Cached
@@ -25,6 +31,10 @@ use crate::ui::Ui;
 pub(super) struct Compiled<'a> {
     pub config: &'a Config,
     pub pages: &'a [CheckedPage<'a>],
+    /// The files this build wrote and their sizes, so a page's recorded loads
+    /// can be turned into bytes. Absent under `check`, which processes no
+    /// assets and so has nothing to weigh them with.
+    pub emitted: Option<&'a Emitted>,
 }
 
 /// One compiled page's validation-relevant facts. Extend this as new checks need
@@ -44,6 +54,12 @@ pub(super) struct CheckedPage<'a> {
     pub anchors: &'a [String],
     /// Resolved `"/url/#fragment"` links this page carries into others.
     pub deep: &'a [String],
+    /// What the lint pass found while this page rendered.
+    pub lints: &'a [Finding],
+    /// What this page ships: its inline bytes and the files it loads.
+    pub weight: &'a Weight,
+    /// The page's own markup, as written to `dist`, for the `html` budget.
+    pub html: &'a str,
 }
 
 /// Broken internal `.typ` links: every reference must resolve to an existing
@@ -135,6 +151,9 @@ mod tests {
             external: &[],
             anchors: &[],
             deep: &[],
+            lints: &[],
+            weight: Weight::EMPTY,
+            html: "",
         }
     }
 
@@ -167,6 +186,7 @@ mod tests {
         let found = Links::dangling(&Compiled {
             config: &config,
             pages: &pages,
+            emitted: None,
         });
         assert_eq!(found.len(), 1);
         assert_eq!(
@@ -195,6 +215,7 @@ mod tests {
             Links::dangling(&Compiled {
                 config: &config,
                 pages: &pages,
+                emitted: None,
             })
             .is_empty()
         );
@@ -208,6 +229,7 @@ mod tests {
         let site = Compiled {
             config: &config,
             pages: &pages,
+            emitted: None,
         };
 
         Links::run(&site, &ui).unwrap();
@@ -224,6 +246,7 @@ mod tests {
         let site = Compiled {
             config: &config,
             pages: &pages,
+            emitted: None,
         };
 
         let err = Links::run(&site, &ui).unwrap_err();
@@ -245,6 +268,7 @@ mod tests {
         let site = Compiled {
             config: &config,
             pages: &pages,
+            emitted: None,
         };
 
         Links::run(&site, &ui).unwrap();

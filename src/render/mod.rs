@@ -9,15 +9,21 @@
 //! [`transform`], one file each.
 
 mod asset;
+mod emitted;
 mod fragment;
 mod links;
+mod lint;
+mod origin;
 mod scope;
 mod srcset;
 mod transform;
 
 pub use asset::{AssetDeps, AssetMap};
+pub use emitted::Emitted;
 pub use fragment::Fragments;
 pub use links::{LinkDeps, LinkMap};
+pub use lint::{Finding, Load, Reference, Weight};
+pub use origin::Site;
 pub use srcset::{SrcSetDeps, SrcSets};
 pub use transform::ImageRef;
 
@@ -57,6 +63,10 @@ pub struct Renderer {
     /// project-relative path to the source file on disk.
     root: std::path::PathBuf,
     transforms: Transforms,
+    /// The lint rules, run over the finished DOM once every transform has had
+    /// its say: a rule judges the page as it will be served, not as typst first
+    /// emitted it.
+    lints: lint::Rules,
 }
 
 /// The findings of running the transform pipeline over one page.
@@ -99,6 +109,14 @@ pub struct Rewrite {
     /// notice an edit. Inlined SVG icons and embedded assets both land here,
     /// which is why they need no cache mechanism of their own.
     pub read: Vec<std::path::PathBuf>,
+    /// What the lint pass found on this page, empty unless `lint { }` is on.
+    /// Recorded rather than reported here: the pass runs inside a rayon map
+    /// over the pages, and a finding is one line of a single site-wide report.
+    pub lints: Vec<Finding>,
+    /// What the page ships, for the budget check. Recorded for the same reason
+    /// as `lints`, and resolved to bytes site-wide, where the sizes of the
+    /// files it names are known.
+    pub weight: Weight,
     /// SVG files `svg()` marked that could not be turned into DOM nodes. The
     /// element is already in the page, so the caller must fail rather than ship
     /// an empty `<svg>` where an icon was asked for.
@@ -129,6 +147,7 @@ impl Renderer {
             srcsets,
             root: root.to_path_buf(),
             transforms: Transforms::builtin(),
+            lints: lint::Rules::builtin(),
         }
     }
 
@@ -165,6 +184,15 @@ impl Renderer {
             found: Rewrite::default(),
         };
         self.transforms.apply(doc, &mut cx);
+        // After the transforms, deliberately: a rule judges the markup as it
+        // will be served, footnotes moved and icons inlined, and a page whose
+        // budget the pipeline blew has no way to say so from the DOM typst
+        // first handed over.
+        if config.lint.enabled {
+            let (lints, weight) = self.lints.run(doc, &config.lint, world);
+            cx.found.lints = lints;
+            cx.found.weight = weight;
+        }
         cx.found
     }
 }

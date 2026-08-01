@@ -7,6 +7,7 @@ use miette::SourceSpan;
 
 use crate::config::value::ValueExt;
 use crate::error::{ConfigError, Result};
+use crate::ui::Bytes;
 
 /// The loopback interface, by the spellings a URL authority can name it.
 struct Loopback;
@@ -42,6 +43,9 @@ pub(super) trait NodeExt {
     fn int(&self, text: &str, idx: usize) -> Result<i64>;
     fn count(&self, text: &str, idx: usize) -> Result<usize>;
     fn port(&self, text: &str, idx: usize) -> Result<u16>;
+    /// A byte size, written either as a plain integer of bytes (`js 0`) or as a
+    /// string carrying a unit (`html "50kB"`).
+    fn size(&self, text: &str, idx: usize) -> Result<Bytes>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
@@ -117,6 +121,19 @@ impl NodeExt for KdlNode {
     fn port(&self, text: &str, idx: usize) -> Result<u16> {
         let n = self.int(text, idx)?;
         u16::try_from(n).map_err(|_| ConfigError::port_range(text, n, NodeExt::span(self)).into())
+    }
+
+    /// A byte size. An integer is bytes and is range-checked like any other
+    /// count; a string is read by [`Bytes::parse`], the same rule that formats
+    /// one, so a budget can be written in the units the build summary prints.
+    fn size(&self, text: &str, idx: usize) -> Result<Bytes> {
+        let span = NodeExt::span(self);
+        let value = self.arg(text, idx)?;
+        if let Some(written) = value.as_string() {
+            return Bytes::parse(written)
+                .ok_or_else(|| ConfigError::bad_size(text, written, span).into());
+        }
+        Ok(Bytes(self.count(text, idx)? as u64))
     }
 
     /// A base-URL argument, required to be `https://` unless it names the

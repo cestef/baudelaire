@@ -35,7 +35,7 @@ use crate::graph::AssetName;
 use rayon::prelude::*;
 
 use crate::engine::layers::{Layered, Layers};
-use crate::render::{AssetMap, SrcSets};
+use crate::render::{AssetMap, Emitted, SrcSets};
 use crate::theme::Theme;
 use memo::Memo;
 
@@ -57,6 +57,9 @@ pub struct Processed {
     /// Responsive width variants, keyed by source path: the render layer's
     /// `srcset` source.
     pub srcsets: SrcSets,
+    /// Every file written and its size, for the site-wide weight check. The
+    /// pipeline is the only thing that knows both, and it knows them here.
+    pub emitted: Emitted,
     pub count: usize,
     pub bytes: u64,
 }
@@ -152,6 +155,7 @@ impl<'a> Assets<'a> {
     pub fn process(&self) -> Result<Processed> {
         let mut out = Processed {
             map: AssetMap::new(self.prefix.clone()),
+            emitted: Emitted::new(self.config.base_path().to_owned()),
             ..Processed::default()
         };
         let sources = self.sources.files()?;
@@ -335,6 +339,7 @@ impl<'a> Assets<'a> {
         fs::write_all(self.dst.join(&dst), bytes)?;
         out.count += 1;
         out.bytes += bytes.len() as u64;
+        out.emitted.insert(ctx.url(&dst), bytes.len() as u64);
         if dst != rel {
             out.map.insert(ctx.url(rel), ctx.url(&dst));
         }

@@ -28,7 +28,9 @@ use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
-use crate::render::{AssetDeps, Fragments, ImageRef, LinkDeps, RenderMaps, SrcSetDeps};
+use crate::render::{
+    AssetDeps, Finding, Fragments, ImageRef, LinkDeps, RenderMaps, SrcSetDeps, Weight,
+};
 use crate::ui::Ui;
 
 /// The on-disk manifest file name under the cache directory.
@@ -131,6 +133,18 @@ pub struct Outputs {
     /// bundled just like a freshly compiled one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fragments: Option<Fragments>,
+    /// What the lint pass found on the page, and what the page ships.
+    ///
+    /// Stored for the same reason as `broken`: both checks run site-wide over
+    /// every page, cached ones included, and a gate that reports nothing on the
+    /// second build is not a gate. The findings are a verdict about the page
+    /// alone and are safe to replay; the weight is deliberately *not* one,
+    /// listing what the page loads and leaving the sizes to be resolved against
+    /// the build that emitted them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lints: Vec<Finding>,
+    #[serde(default, skip_serializing_if = "Weight::is_empty")]
+    pub weight: Weight,
 }
 
 /// The serialized cache manifest: metadata only, no page markup.

@@ -22,6 +22,7 @@ use kdl::KdlDocument;
 use crate::config::dispatch::Section;
 use crate::error::{ConfigError, Result};
 use crate::mime::ImageFormat;
+use crate::ui::Bytes;
 
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use url::{BaseUrl, Basename, Percent, UrlStyle};
@@ -65,6 +66,9 @@ pub struct Config {
     pub html: HtmlConfig,
     /// Link shape and link checking.
     pub links: LinkConfig,
+    /// Post-render linting of the built pages: accessibility and structure
+    /// rules over the typed DOM, and per-page weight budgets.
+    pub lint: LintConfig,
     /// Files the build generates beside the pages: sitemap, robots, llms,
     /// feeds, search indexes, social cards.
     pub generate: GenerateConfig,
@@ -593,6 +597,12 @@ impl std::hash::Hash for Config {
             assets,
             html,
             links,
+            // Shapes no markup, but decides what a page *records* while it
+            // renders: with linting off a page stores no findings and no
+            // weight. Leaving it out would let a build with the rules turned on
+            // serve those pages from cache and report nothing, which is the one
+            // failure mode a gate must not have.
+            lint,
             generate,
             navigation,
             prune,
@@ -618,7 +628,7 @@ impl std::hash::Hash for Config {
             source: _,
         } = self;
         (site, url, lang, author, paths, theme, content, languages).hash(state);
-        (assets, html, links, generate, navigation, prune).hash(state);
+        (assets, html, links, lint, generate, navigation, prune).hash(state);
         (typst, client, cache, hooks, announce, deploy, profile).hash(state);
     }
 }
@@ -768,6 +778,53 @@ pub struct LinkConfig {
     /// flaky host or an airplane can never change what it produces. `check
     /// --external` turns it on for one run.
     pub external: bool,
+}
+
+/// Linting of the built pages: which rules run over the typed DOM, how loud a
+/// finding is, and how many bytes a page may weigh.
+///
+/// Off until a `lint { }` block says otherwise. A lint is a claim about what the
+/// site *should* look like, and inventing one for a site that never asked is the
+/// same opinionated-default problem as a generated page nobody wanted.
+#[derive(Debug, Clone, Hash)]
+pub struct LintConfig {
+    /// Whether the DOM lint pass runs at all; flipped by the block's presence.
+    pub enabled: bool,
+    /// Fail the build on a finding instead of warning, exactly as
+    /// [`LinkConfig::strict`] does for a broken link.
+    pub strict: bool,
+    /// Report a heading that skips a level (`h2` straight to `h4`).
+    pub headings: bool,
+    /// Report an `<img>` carrying no `alt` (an empty one is a decorative image,
+    /// and is fine).
+    pub alt: bool,
+    /// Report an `id` used more than once on one page.
+    pub ids: bool,
+    /// Report an unknown ARIA role or `aria-*` attribute, and one whose id
+    /// reference names nothing on the page.
+    pub aria: bool,
+    /// How many bytes a single page may ship.
+    pub budget: BudgetConfig,
+}
+
+/// Per-page weight limits, in bytes. Each is the ceiling for one class of what
+/// a page ships; `None` is no limit.
+///
+/// Unlike the rules above, a budget always fails the build: it is an assertion
+/// the author wrote down, not an opinion this tool holds.
+#[derive(Debug, Clone, Default, Hash)]
+pub struct BudgetConfig {
+    /// The page's own markup, as written to `dist`.
+    pub html: Option<Bytes>,
+    /// Every script the page loads, plus its inline `<script>` bodies.
+    pub js: Option<Bytes>,
+    /// Every stylesheet it loads, plus its inline `<style>` bodies.
+    pub css: Option<Bytes>,
+    /// Every image it references, responsive candidates excluded: a `srcset`
+    /// offers alternatives, and a visitor is served one of them.
+    pub images: Option<Bytes>,
+    /// All of the above at once, the page's total transfer weight.
+    pub total: Option<Bytes>,
 }
 
 /// Syndication feeds.

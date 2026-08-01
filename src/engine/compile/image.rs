@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::error::warning::ImageCollision;
 use crate::fs;
 use crate::graph::Hash;
-use crate::render::ImageRef;
+use crate::render::{Emitted, ImageRef};
 use crate::ui::Ui;
 
 /// A copy run of externalized images into the asset directory, deduped by served
@@ -24,6 +24,9 @@ use crate::ui::Ui;
 pub(in crate::engine) struct Images {
     /// The asset directory copies land in.
     dir: PathBuf,
+    /// The URL prefix those copies are served under, so a copied image can be
+    /// weighed by the same name the page that shows it references.
+    prefix: String,
     /// The project root, so a diagnostic names `content/a/photo.png` like every
     /// other one rather than `/home/you/mysite/content/a/photo.png`: an
     /// [`ImageRef`] carries an absolute source because the copy needs one.
@@ -31,6 +34,10 @@ pub(in crate::engine) struct Images {
     /// Served name -> (content hash, the source that claimed it), for deduping
     /// identical writes and detecting collisions.
     seen: HashMap<String, (Hash, PathBuf)>,
+    /// Served URL -> size, for the per-page weight budgets. An externalized
+    /// image is the usual way a picture reaches a typst page, so leaving these
+    /// out would have made an `images` budget count almost nothing.
+    emitted: Emitted,
     count: usize,
     bytes: u64,
 }
@@ -39,8 +46,10 @@ impl Images {
     pub fn new(config: &Config, root: &Path) -> Self {
         Self {
             dir: config.asset_staging(),
+            prefix: config.asset_prefix(),
             root: crate::fs::canonical(root),
             seen: HashMap::new(),
+            emitted: Emitted::new(config.base_path().to_owned()),
             count: 0,
             bytes: 0,
         }
@@ -99,6 +108,8 @@ impl Images {
         fs::write_all(&dst, &data)?;
         self.seen
             .insert(image.name.clone(), (hash, image.source.clone()));
+        self.emitted
+            .insert(format!("{}/{}", self.prefix, image.name), data.len() as u64);
         self.count += 1;
         self.bytes += data.len() as u64;
         Ok(())
@@ -118,5 +129,11 @@ impl Images {
     /// Total bytes written.
     pub fn bytes(&self) -> u64 {
         self.bytes
+    }
+
+    /// What was copied and how large each one is, to be weighed alongside what
+    /// the asset pipeline emitted.
+    pub fn emitted(&self) -> &Emitted {
+        &self.emitted
     }
 }
