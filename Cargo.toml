@@ -247,9 +247,75 @@ harness = false
 [lints.rust]
 unsafe_code = "deny"
 
+# `pedantic` and `nursery` wholesale, then subtract. Subtracting from a group is
+# the only form that stays honest as the toolchain adds lints: a hand-listed set
+# silently never grows, and every allow below has to carry a reason for being
+# there.
+#
+# `priority = -1` is what lets the individual `allow`s below outrank the groups;
+# without it cargo rejects the table as ambiguous.
 [lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Restriction lints, which are opt-in one at a time by design: the group as a
+# whole contradicts itself.
 dbg_macro = "warn"
 todo = "warn"
+unimplemented = "warn"
+str_to_string = "warn"
+clone_on_ref_ptr = "warn"
+verbose_file_reads = "warn"
+unnecessary_self_imports = "warn"
+empty_enum_variants_with_brackets = "warn"
+infinite_loop = "warn"
+mem_forget = "warn"
+rc_buffer = "warn"
+float_cmp_const = "warn"
+
+# --- Subtractions from the two groups above. ---
+
+# Public-API bureaucracy. The crate ships a binary; `lib.rs` exists so the tests
+# and benches can reach the engine, not as a surface anyone builds against.
+# Annotating ~500 functions with `#[must_use]` and ~130 with an `# Errors`
+# section buys that hypothetical consumer nothing and buries the doc comments
+# that say something.
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+# Doc comments here are prose, deliberately: a paragraph of why, not a summary
+# line. `too_long_first_doc_paragraph` wants the opposite shape, and
+# `doc_markdown` wants every proper noun in the prose backticked.
+too_long_first_doc_paragraph = "allow"
+doc_markdown = "allow"
+
+# Known-noisy nursery lints, each wrong often enough that the allow costs less
+# than the false positives.
+#
+# `missing_const_for_fn` fires on functions whose const-ness is an accident of
+# the current body. `option_if_let_else` rewrites readable `if let` into nested
+# closures. `significant_drop_tightening` and `future_not_send` chase guard
+# lifetimes and `!Send` futures that no threaded caller exists for.
+# `redundant_pub_crate` argues with `unreachable_pub` about the same items.
+missing_const_for_fn = "allow"
+option_if_let_else = "allow"
+significant_drop_tightening = "allow"
+future_not_send = "allow"
+redundant_pub_crate = "allow"
+
+# `match` on a bool, with both arms spelled out, is used here where the two
+# outcomes are peers rather than a condition and a fallback.
+match_bool = "allow"
+
+# Fires on config structs whose fields really are independent flags, and the
+# suggested fix is a bitflag type that reads worse at every use site.
+struct_excessive_bools = "allow"
+
+# Fires inside test fixtures and generated-content literals, where `{ }` is
+# typst or KDL syntax and not a format placeholder.
+literal_string_with_formatting_args = "allow"
 
 # Size-optimized release. `opt-level = "s"` + thin LTO + a single codegen unit
 # lets the linker drop dead code across the ~500-crate tree; `strip` removes
