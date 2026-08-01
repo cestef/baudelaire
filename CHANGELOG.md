@@ -133,6 +133,14 @@ chores are visible in the git history and change nothing for a site.
   accepts is listed with its value shape and a description, so a key cannot be
   added without documenting it, or removed and left in the docs.
 
+- **cli**: Every command has a short alias, listed in `--help` beside the full
+  name: `b` build, `s` serve, `c` check, `n` new, `d` deploy, `a` announce,
+  `i` init, `cl` clean, `comp` completions, `ref` reference.
+
+  `check` takes `c` and `clean` takes `cl`, not the reverse: `check` is the one
+  that runs in a loop while you write, and one keystroke should not separate
+  compiling the site from deleting it.
+
 - **cli**: `baudelaire reference [key]` prints the same config reference from
   the binary you have, as an indented tree. A dotted key narrows it to one
   block, which is usually what you want over a hundred and fifty keys:

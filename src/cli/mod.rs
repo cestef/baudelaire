@@ -211,30 +211,52 @@ pub struct CommonOverrides {
     pub no_strict_links: bool,
 }
 
+/// Every command carries a short alias, and they are *visible* aliases: they
+/// appear in `--help` beside the full name, because a shorthand nobody can find
+/// is not a shorthand.
+///
+/// The letters are first-come by frequency, not by spelling, which is why
+/// `check` takes `c` and `clean` takes `cl`: `check` runs in a loop while
+/// writing, `clean` runs when something has gone wrong. A single letter for the
+/// destructive one, next to the letter for the harmless one, is also how a
+/// slipped keystroke deletes a build.
+///
+/// These are an API the moment they ship. A future command cannot claim a
+/// letter already listed here, so the table is worth reading before adding one.
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
     /// Build the site (default when no subcommand given).
+    #[command(visible_alias = "b")]
     Build(BuildArgs),
     /// Serve the site with a dev server and live rebuild.
+    #[command(visible_alias = "s")]
     Serve(ServeArgs),
     /// Compile and check links without writing output.
+    #[command(visible_alias = "c")]
     Check(CheckArgs),
     /// Scaffold a new content file.
+    #[command(visible_alias = "n")]
     New(NewArgs),
     /// Announce the site's metadata to the configured destination (atproto/standard.site).
     #[cfg(feature = "announce")]
+    #[command(visible_alias = "a")]
     Announce(AnnounceArgs),
     /// Deploy the built files to the configured destination (S3/R2 or SSH).
+    #[command(visible_alias = "d")]
     Deploy(DeployArgs),
     /// Remove build output and local build state.
+    #[command(visible_alias = "cl")]
     Clean(CleanArgs),
     /// Scaffold a new project (config.kdl + dirs).
+    #[command(visible_alias = "i")]
     Init(InitArgs),
     /// Print a shell completion script to stdout.
+    #[command(visible_alias = "comp")]
     Completions(CompletionsArgs),
     /// Print this manual as a man page (roff) to stdout.
     Man(ManArgs),
     /// Print every key config.kdl accepts, with its value shape.
+    #[command(visible_alias = "ref")]
     Reference(ReferenceArgs),
 }
 

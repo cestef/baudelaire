@@ -8,24 +8,29 @@ to `--config`) and accepts the #link(<global-flags>)[global flags] below.
 
 == Commands
 
-At a glance:
+At a glance. Every command has a short alias, so `baudelaire b` builds and
+`baudelaire s` serves:
 
 #table(
-  columns: 2,
-  align: (left, left),
-  table.header([Command], [What it does]),
-  [`baudelaire build`], [Compile the site into `dist`. The default command.],
-  [`baudelaire serve`], [Build, serve, watch, and live-reload.],
-  [`baudelaire check`], [Compile and report broken links without writing.],
-  [`baudelaire new <path>`], [Scaffold a content file from config and convention.],
-  [`baudelaire deploy`], [Build, then upload the output to the configured S3 or SSH target.],
-  [`baudelaire announce`], [Announce the site's metadata to atproto (standard.site).],
-  [`baudelaire init [dir]`], [Scaffold a whole project.],
-  [`baudelaire clean`], [Remove build output and local state.],
-  [`baudelaire completions <shell>`], [Print a shell completion script.],
-  [`baudelaire man`], [Print the manual as a man page.],
-  [`baudelaire reference [key]`], [Print every config key and its value shape.],
+  columns: 3,
+  align: (left, left, left),
+  table.header([Command], [Short], [What it does]),
+  [`baudelaire build`], [`b`], [Compile the site into `dist`. The default command.],
+  [`baudelaire serve`], [`s`], [Build, serve, watch, and live-reload.],
+  [`baudelaire check`], [`c`], [Compile and report broken links without writing.],
+  [`baudelaire new <path>`], [`n`], [Scaffold a content file from config and convention.],
+  [`baudelaire deploy`], [`d`], [Build, then upload the output to the configured S3 or SSH target.],
+  [`baudelaire announce`], [`a`], [Announce the site's metadata to atproto (standard.site).],
+  [`baudelaire init [dir]`], [`i`], [Scaffold a whole project.],
+  [`baudelaire clean`], [`cl`], [Remove build output and local state.],
+  [`baudelaire completions <shell>`], [`comp`], [Print a shell completion script.],
+  [`baudelaire man`], [], [Print the manual as a man page.],
+  [`baudelaire reference [key]`], [`ref`], [Print every config key and its value shape.],
 )
+
+`check` takes `c` and `clean` takes `cl` rather than the other way around:
+`check` is the one that runs in a loop while you write, and a single keystroke
+should not be the difference between compiling the site and deleting it.
 
 === build
 

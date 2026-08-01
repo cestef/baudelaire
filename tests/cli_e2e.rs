@@ -516,6 +516,41 @@ fn an_unknown_shell_is_a_usage_error() {
     assert!(stderr.contains("bash"), "{stderr}");
 }
 
+/// Every short alias reaches the command it names, and none of them collide.
+///
+/// The pairs are written out rather than derived, on purpose: an alias is an
+/// API the moment it ships, so a change to one should have to be made here too.
+#[test]
+fn short_aliases_reach_their_commands() {
+    let sb = Site::new();
+    let pairs = [
+        ("b", "build"),
+        ("s", "serve"),
+        ("c", "check"),
+        ("n", "new"),
+        ("d", "deploy"),
+        ("cl", "clean"),
+        ("i", "init"),
+        ("comp", "completions"),
+        ("ref", "reference"),
+    ];
+
+    for (alias, full) in pairs {
+        let short = sb.run(&[alias, "--help"]);
+        let long = sb.run(&[full, "--help"]);
+        assert!(
+            short.status.success(),
+            "{alias}: {}",
+            String::from_utf8_lossy(&short.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&short.stdout),
+            String::from_utf8_lossy(&long.stdout),
+            "`{alias}` and `{full}` should be the same command"
+        );
+    }
+}
+
 /// The man page is roff on stdout, headed by the `.TH` line `man` needs to
 /// index it. Nothing here renders it; that it parses is groff's business.
 #[test]
