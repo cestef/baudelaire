@@ -59,6 +59,13 @@ Generate an index over the collection. Its presence turns the index on.
 / #raw("mount") #raw("text"): Where the index publishes, if not at the collection's own path.
 / #raw("prefix") #raw("text"): The path segment before a page number, as in `/posts/page/2/`.
 
+==== `content.collections.schema`
+
+What every member's frontmatter must declare, one line per field.
+
+/ #raw("type") #raw("any | str | bool | int | float | date | list"): The shape the value must have, also writable as the leading positional: `title "str"`.
+/ #raw("optional") #raw("flag"): Let the field be absent. Declaring a field otherwise requires it.
+
 === `content.taxonomies`
 
 One line per taxonomy, each named by its id.

@@ -105,7 +105,7 @@ impl Page {
         // Loading a page evaluates its typst module to read frontmatter; the
         // cache skips both the parse and the evaluation for a page whose source
         // and dependencies are unchanged, returning the body straight from disk.
-        let (mut frontmatter, export, body) = cache.load_page(path, config, project)?;
+        let (mut frontmatter, export, body) = cache.load_page(collection, path, config, project)?;
         let data = if export { Data::Export } else { Data::Empty };
         // Reject a name that is not text before decoding it. `Stem::of` falls
         // back to `index` for one, which is the *bundle index* name: the file

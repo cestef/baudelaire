@@ -17,16 +17,20 @@ use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::permalink::Permalink;
 use crate::config::value::ValueExt;
+// The frontmatter key table is the single source of truth for what a built-in
+// key holds, so a schema declaring one is checked against it rather than
+// against a second list kept here.
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
     CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DraftConfig, Eagerness,
-    FeedConfig, FeedKind, GenerateConfig, HooksConfig, HtmlConfig, ImagesConfig, JpegConfig,
-    LanguageConfig, LinkConfig, LintConfig, LlmsConfig, NavigationConfig, OptimizeConfig,
-    PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch,
-    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
-    SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
+    FeedConfig, FeedKind, FieldSchema, FieldType, GenerateConfig, HooksConfig, HtmlConfig,
+    ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LintConfig, LlmsConfig, NavigationConfig,
+    OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip,
+    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
+    SearchFormat, SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
     StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
+use crate::content::Frontmatter;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
 
@@ -456,6 +460,78 @@ impl Section for CollectionConfig {
             Nested(PaginateConfig::rows),
             "Generate an index over the collection. Its presence turns the index on.",
             |c, n, t| c.paginate.fill(n, t),
+        ),
+        (
+            "schema",
+            Items(FieldSchema::rows),
+            "What every member's frontmatter must declare, one line per field.",
+            |c, n, t| {
+                c.schema = n.unique(t, "schema field", FieldSchema::item)?;
+                Ok(())
+            },
+        ),
+    ]);
+}
+
+impl FieldSchema {
+    /// One `title "str" optional=#true` line: the node name is the frontmatter
+    /// key it constrains, and an optional leading positional its type, so both
+    /// the bare `title` (present, any shape) and the terse `tags "list"` read.
+    fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
+        let key = node.name().value().to_owned();
+        let span = NodeExt::span(node);
+        let mut field = Self::default();
+        if let Some(value) = node.get(0) {
+            field.ty = value.one::<FieldType>(text, span)?;
+        }
+        field.read(node, text)?;
+        // A built-in key's type is fixed by the frontmatter reader, and that
+        // reader runs first: it would reject the value before the schema ever
+        // saw it. A contradiction is therefore unsatisfiable, and fails at the
+        // line that wrote it rather than on every page of the collection.
+        if let Some(builtin) = Frontmatter::builtin(&key)
+            && field.ty != FieldType::Any
+            && field.ty != builtin
+        {
+            return Err(ConfigError::at(
+                text,
+                ConfigErrorKind::FieldConflict {
+                    key,
+                    declared: field.ty.article(),
+                    builtin: builtin.article(),
+                },
+                span,
+            )
+            .into());
+        }
+        Ok((key, field))
+    }
+}
+
+/// One schema field: the shape a frontmatter value must have, and whether the
+/// page may leave it out.
+impl Attributed for FieldSchema {
+    /// The type, written as the leading positional.
+    const LEADING: usize = 1;
+
+    const ATTRS: Attrs<Self> = Attrs(&[
+        (
+            "type",
+            Choice(FieldType::names),
+            "The shape the value must have, also writable as the leading positional: `title \"str\"`.",
+            |c, v, t, s| {
+                c.ty = v.one::<FieldType>(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "optional",
+            Flag,
+            "Let the field be absent. Declaring a field otherwise requires it.",
+            |c, v, t, s| {
+                c.optional = v.boolean(t, s)?;
+                Ok(())
+            },
         ),
     ]);
 }

@@ -23,7 +23,7 @@ pub mod taxonomy;
 pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
 pub use discovery::{Collection, discover};
-pub use frontmatter::Frontmatter;
+pub use frontmatter::{Frontmatter, Origin};
 pub use page::{Data, Page, PageId, Sibling, Siblings};
 pub use pagination::Pagination;
 pub use section::Section;

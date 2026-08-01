@@ -1,6 +1,6 @@
 use miette::Diagnostic;
 
-use crate::config::{Config, PngStrip, SortKey};
+use crate::config::{Config, FieldType, PngStrip, SortKey};
 use crate::error::BaudelaireErrorKind;
 use crate::mime::ImageFormat;
 
@@ -922,5 +922,64 @@ fn index_rejects_a_filename_and_names_the_stem() {
             .index
             .as_deref(),
         Some("_index")
+    );
+}
+
+#[test]
+fn schema_reads_the_type_as_a_positional_or_an_attribute() {
+    let cfg = parse(
+        r#"
+        content {
+            collections {
+                blog {
+                    schema {
+                        title
+                        tags "list"
+                        hero type="str" optional=#true
+                    }
+                }
+            }
+        }
+    "#,
+    );
+    let schema = cfg.schema("blog");
+    assert_eq!(schema.len(), 3);
+    // A bare field constrains presence and nothing else, and is still required.
+    assert_eq!(schema[0].0, "title");
+    assert_eq!(schema[0].1.ty, FieldType::Any);
+    assert!(!schema[0].1.optional);
+    assert_eq!(schema[1].1.ty, FieldType::List);
+    assert_eq!(schema[2].1.ty, FieldType::Str);
+    assert!(schema[2].1.optional);
+    // A collection with no schema, and one with no config at all, constrain nothing.
+    assert!(cfg.schema("notes").is_empty());
+}
+
+/// A built-in key's type is fixed by the frontmatter reader, so a schema
+/// declaring another one could never be satisfied: it fails at the config line
+/// rather than on every page of the collection.
+#[test]
+fn schema_refuses_a_type_a_builtin_key_cannot_hold() {
+    let err = Config::parse("content { collections { blog { schema { title \"int\" } } } }")
+        .expect_err("should refuse");
+    let BaudelaireErrorKind::Config(config) = &err else {
+        panic!("expected a config diagnostic, got: {err:?}");
+    };
+    assert_eq!(
+        config.code().map(|c| c.to_string()).as_deref(),
+        Some("baudelaire::config::field_conflict")
+    );
+    // Declaring the type it does hold, or none at all, is how you require it.
+    assert_eq!(
+        parse("content { collections { blog { schema { title \"str\" } } } }").schema("blog")[0]
+            .1
+            .ty,
+        FieldType::Str
+    );
+    assert_eq!(
+        parse("content { collections { blog { schema { date } } } }").schema("blog")[0]
+            .1
+            .ty,
+        FieldType::Any
     );
 }

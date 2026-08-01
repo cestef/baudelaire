@@ -462,6 +462,13 @@ impl Config {
             .map(|(_, c)| c)
     }
 
+    /// The frontmatter schema a collection's pages must satisfy, empty when it
+    /// declares none (and for a collection with no config block at all).
+    pub fn schema(&self, collection: &str) -> &[(String, FieldSchema)] {
+        self.collection(collection)
+            .map_or(&[], |c| c.schema.as_slice())
+    }
+
     /// The served name of the assets directory: its final path segment, and
     /// the leading segment of every asset URL. The single derivation shared by
     /// the asset pipeline and the embed transform.
@@ -697,6 +704,86 @@ pub struct CollectionConfig {
     pub template: Option<String>,
     /// The generated index over this collection's members.
     pub paginate: PaginateConfig,
+    /// What every member's frontmatter must declare, in declaration order.
+    /// Empty is the default: nothing required, nothing typed.
+    pub schema: Vec<(String, FieldSchema)>,
+}
+
+/// One field a collection's frontmatter schema declares.
+///
+/// Declaring a field *requires* it. A field that may be absent says so with
+/// `optional=#true`, because an absent field is exactly the failure the schema
+/// exists to catch: a template reading `page.frontmatter.hero` for a page that
+/// never set one renders nothing at all, and the build stays green.
+#[derive(Debug, Clone, Default, Hash)]
+pub struct FieldSchema {
+    /// The shape the value must have. [`FieldType::Any`] (the default, and what
+    /// a bare `hero` means) constrains only presence.
+    pub ty: FieldType,
+    /// Whether the page may leave the field out.
+    pub optional: bool,
+}
+
+/// The shape a schema field requires of a frontmatter value.
+///
+/// These are the Typst types a page can write in a frontmatter dict, not a
+/// second type system: `date` is `datetime(..)`, `list` an array of strings (the
+/// only list the rest of the build consumes, taxonomy terms included).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum FieldType {
+    /// Any value at all: the field must merely be there.
+    #[default]
+    Any,
+    Str,
+    Bool,
+    Int,
+    Float,
+    /// A `datetime(..)`, with or without a time of day.
+    Date,
+    /// An array of strings.
+    List,
+}
+
+impl Named for FieldType {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("any", Self::Any),
+        ("str", Self::Str),
+        ("bool", Self::Bool),
+        ("int", Self::Int),
+        ("float", Self::Float),
+        ("date", Self::Date),
+        ("list", Self::List),
+    ];
+}
+
+impl FieldType {
+    /// How a diagnostic names this type ("a string"), so the schema errors read
+    /// like the built-in frontmatter ones rather than printing a config keyword.
+    pub fn article(self) -> &'static str {
+        match self {
+            Self::Any => "any value",
+            Self::Str => "a string",
+            Self::Bool => "a boolean",
+            Self::Int => "an integer",
+            Self::Float => "a float",
+            Self::Date => "a date",
+            Self::List => "a list of strings",
+        }
+    }
+
+    /// A Typst literal of this type, for the "add the field" help. Beside
+    /// [`article`](Self::article) because a message that says what is missing
+    /// and one that shows how to write it are the same fact.
+    pub fn example(self) -> &'static str {
+        match self {
+            Self::Any | Self::Str => "\"..\"",
+            Self::Bool => "false",
+            Self::Int => "0",
+            Self::Float => "0.0",
+            Self::Date => "datetime(year: 2024, month: 1, day: 1)",
+            Self::List => "(\"..\",)",
+        }
+    }
 }
 
 /// A collection's generated index: whether there is one, how it is chunked, and

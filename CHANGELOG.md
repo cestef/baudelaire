@@ -36,6 +36,32 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **content**: `collections { <id> { schema { } } }`, a frontmatter schema per
+  collection. One line per field, the field's name and the type it must hold
+  (`str`, `bool`, `int`, `float`, `date`, `list`, `any`):
+
+  ```kdl
+  content {
+    collections {
+      blog {
+        schema {
+          title "str"
+          tags "list"
+          hero "str" optional=#true
+        }
+      }
+    }
+  }
+  ```
+
+  Declaring a field requires it; `optional=#true` lets it be absent, and a field
+  written bare (`author`) is required but unconstrained. A page that omits a
+  required field or writes the wrong type fails the build with the offending
+  frontmatter line underlined, instead of a template silently rendering nothing.
+  A recognized key can be required too, but its type is already fixed by the
+  build: declaring a different one is a config error. A collection with no
+  `schema` block constrains nothing, which stays the default.
+
 - **check**: `lint { }`, a linter over the typed DOM. Four rules, each a flag and
   all on while the block is present: `headings` (a level skipped, `h2` straight
   to `h4`), `alt` (an image with no text alternative; an empty `alt` is a

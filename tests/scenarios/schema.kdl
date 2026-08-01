@@ -1,0 +1,264 @@
+// A collection's frontmatter schema. Declaring a field requires it, and the
+// build fails at the page rather than rendering a template's empty hole.
+
+scenario "a satisfied schema builds" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              title "str"
+              hero "str" optional=#true
+              tags "list"
+            }
+          }
+        }
+        taxonomies { tags }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", tags: ("rust",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html" { contains "body" }
+  }
+}
+
+scenario "a required field the page never declared fails the build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "str" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::missing" }
+  }
+}
+
+scenario "a page declaring no frontmatter at all fails a schema that requires a field" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { title } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      body with no frontmatter
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::missing" }
+  }
+}
+
+scenario "a wrong-typed field fails the build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "str" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", hero: 3,)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}
+
+scenario "a list with a non-string element is not a list of strings" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { authors "list" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", authors: ("a", 2),)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}
+
+scenario "an optional field may be absent, and is still typed when present" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "str" optional=#true } }
+        }
+      }
+      """#
+    "content/blog/absent.typ" #"""
+      #let frontmatter = (title: "A",)
+      absent body
+      """#
+  }
+  expect {
+    ok
+    file "blog/absent/index.html" { contains "absent body" }
+  }
+}
+
+scenario "an optional field with the wrong type still fails" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "str" optional=#true } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", hero: false,)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}
+
+scenario "a bare field name requires presence and nothing else" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", hero: 3,)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html"
+  }
+}
+
+scenario "a built-in date field is required by the schema and typed by the built-in" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { date "date" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::missing" }
+  }
+}
+
+scenario "a schema type contradicting a built-in key fails at the config line" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { title "int" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_conflict" }
+  }
+}
+
+scenario "an unknown schema type is a config error with the valid ones listed" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "strr" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::unknown_value" }
+  }
+}
+
+scenario "a schema constrains only its own collection" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { hero "str" } }
+        }
+      }
+      """#
+    "content/notes/note.typ" #"""
+      #let frontmatter = (title: "N",)
+      note body
+      """#
+  }
+  expect {
+    ok
+    file "notes/note/index.html" { contains "note body" }
+  }
+}

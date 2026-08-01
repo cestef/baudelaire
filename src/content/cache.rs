@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use typst::foundations::Module;
 
 use crate::config::Config;
-use crate::content::Frontmatter;
+use crate::content::{Frontmatter, Origin};
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::{FileDigests, Hash, Renderer};
 use crate::world::Project;
@@ -46,8 +46,9 @@ struct Entry {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Manifest {
     /// Fingerprint of the config inputs that change how frontmatter is
-    /// interpreted (the configured taxonomy keys). A change invalidates every
-    /// entry: a key that was `extra` yesterday may be a taxonomy today.
+    /// interpreted or judged. A change invalidates every entry: a key that was
+    /// `extra` yesterday may be a taxonomy today, and frontmatter that passed
+    /// its collection's schema yesterday may not satisfy today's.
     salt: Option<Hash>,
     /// Entries keyed by page source path.
     pages: BTreeMap<PathBuf, Entry>,
@@ -103,6 +104,7 @@ impl DiscoveryCache {
     /// and the result recorded for the next build.
     pub fn load_page(
         &self,
+        collection: &str,
         path: &Path,
         config: &Config,
         project: &Project,
@@ -120,10 +122,11 @@ impl DiscoveryCache {
         // Miss (or caching disabled, or non-UTF-8): parse and evaluate the page.
         let source = project.source(path)?;
         Frontmatter::check(&source, path)?;
+        let origin = Origin::new(&source, path, collection);
         let hash = Hash::of_bytes(source.text().as_bytes());
         let (frontmatter, export) = if self.enabled {
             let (module, deps) = project.module_tracked(&source)?;
-            let extracted = Self::interpret(&module, path, config)?;
+            let extracted = Self::interpret(&module, &origin, config)?;
             let deps = deps
                 .files()
                 .iter()
@@ -140,7 +143,7 @@ impl DiscoveryCache {
             );
             extracted
         } else {
-            Self::interpret(&project.module(&source)?, path, config)?
+            Self::interpret(&project.module(&source)?, &origin, config)?
         };
         Ok((frontmatter, export, source.text().to_owned()))
     }
@@ -179,8 +182,8 @@ impl DiscoveryCache {
 
     /// Read the `frontmatter` export from an evaluated module, defaulting when
     /// the module exports none.
-    fn interpret(module: &Module, path: &Path, config: &Config) -> Result<(Frontmatter, bool)> {
-        match Frontmatter::extract(module, path, config)? {
+    fn interpret(module: &Module, origin: &Origin, config: &Config) -> Result<(Frontmatter, bool)> {
+        match Frontmatter::extract(module, origin, config)? {
             Some(frontmatter) => Ok((frontmatter, true)),
             None => Ok((Frontmatter::default(), false)),
         }
@@ -204,6 +207,12 @@ impl DiscoveryCache {
     /// configured taxonomy keys (which keys are collected as taxonomies rather
     /// than passed through to `extra`), and the renderer that parsed them, so an
     /// upgrade that changes how a frontmatter value is read is not a cache hit.
+    ///
+    /// The collection schemas join them, with the globs that decide which
+    /// collection a page belongs to. A hit reuses a validation as much as an
+    /// extraction: without the schemas, tightening one would leave every
+    /// unchanged page passing under the old one, and without the globs, moving
+    /// a page into a stricter collection by editing only the config would too.
     fn salt(config: &Config) -> Hash {
         let keys: Vec<&str> = config
             .content
@@ -211,7 +220,13 @@ impl DiscoveryCache {
             .iter()
             .map(|(_, t)| t.key.as_str())
             .collect();
-        Hash::of(&(keys, Renderer::current()))
+        let schemas: Vec<_> = config
+            .content
+            .collections
+            .iter()
+            .map(|(id, c)| (id, &c.glob, &c.schema))
+            .collect();
+        Hash::of(&(keys, schemas, Renderer::current()))
     }
 }
 
@@ -236,5 +251,34 @@ mod tests {
         assert_eq!(decode(b"a\xef\xbb\xbfb").as_deref(), Some("a\u{feff}b"));
         // Invalid UTF-8 routes to the parse path.
         assert_eq!(decode(b"\xff\xfe"), None);
+    }
+
+    /// A hit reuses a page's *validation* as much as its extraction: the page
+    /// never re-evaluates, so the schema it was judged against has to be part
+    /// of what makes the entry valid. Tightening a schema, or moving a page
+    /// into a stricter collection by editing only a glob, would otherwise leave
+    /// every unchanged page passing under the old rules.
+    #[test]
+    fn the_salt_covers_the_schemas_and_the_globs_that_select_their_pages() {
+        let salt = |text: &str| {
+            DiscoveryCache::salt(&crate::config::Config::parse(text).expect("should parse"))
+        };
+        let none = salt("content { collections { blog { sort \"date\" } } }");
+        let required = salt("content { collections { blog { schema { hero \"str\" } } } }");
+        let optional =
+            salt("content { collections { blog { schema { hero \"str\" optional=#true } } } }");
+        let typed = salt("content { collections { blog { schema { hero \"list\" } } } }");
+        let globbed =
+            salt("content { collections { blog \"posts/**\" { schema { hero \"str\" } } } }");
+        assert_ne!(none, required);
+        assert_ne!(required, optional);
+        assert_ne!(required, typed);
+        assert_ne!(required, globbed);
+        // A setting that changes neither which pages are judged nor how is not
+        // a reason to re-evaluate every page on the site.
+        assert_eq!(
+            salt("content { collections { blog { sort \"date\" } } }"),
+            salt("content { collections { blog { sort \"title\"; reverse #true } } }")
+        );
     }
 }

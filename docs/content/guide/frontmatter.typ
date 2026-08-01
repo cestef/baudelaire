@@ -84,6 +84,58 @@ collects a list of terms:
 With `taxonomies { tags }` configured, `tags` groups the page under each term.
 See #link("../features/content/taxonomies.typ")[taxonomies].
 
+== Schemas
+
+Extra keys are free-form, which is what makes them useful and what makes them
+easy to get wrong: a template reading `page.frontmatter.hero` for a page that
+never set one renders an empty hole, and the build stays green. A collection can
+say what its members must carry:
+
+```kdl
+content {
+  collections {
+    blog {
+      schema {
+        title "str"
+        tags "list"
+        hero "str" optional=#true
+        author
+      }
+    }
+  }
+}
+```
+
+Declaring a field *requires* it. A field that may be absent says so with
+`optional=#true`; a field with no type at all (`author` above) is required but
+unconstrained. A page that breaks the schema fails the build, pointing at the
+line in its frontmatter:
+
+```
+  × frontmatter `hero` must be a string, but is of type `integer`
+   ╭─[content/blog/post.typ:3:9]
+ 2 │   title: "Hello",
+ 3 │   hero: 3,
+   ·         ┬
+   ·         ╰── not the declared type
+   ╰────
+  help: write it as `hero: ".."`, or change the `blog` collection's schema
+```
+
+The types are the Typst ones a frontmatter dict can hold, not a second type
+system: `str`, `bool`, `int`, `float`, `date` (a `datetime(..)`), `list` (an
+array of strings), and `any`.
+
+A recognized key can appear in a schema too, to require it: `date` above makes
+every post carry a date. Its type is already fixed by the build, so declaring a
+different one (`title "int"`) is a config error rather than a rule no page could
+ever satisfy.
+
+#callout(kind: "note")[
+  A collection with no `schema` block constrains nothing, which is the default.
+  Schemas are per collection: a `blog` schema says nothing about `notes`.
+]
+
 == Everything else
 
 Unknown keys are not errors: they pass through as *extra* frontmatter, yours to

@@ -2,72 +2,140 @@ use crate::config::PermalinkCtx;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use miette::SourceSpan;
 use serde::{Deserialize, Serialize};
 use typst::foundations::{Datetime, Dict, Module, Value};
 use typst::syntax::{
-    Source,
-    ast::{Expr, Markup},
+    Source, SyntaxNode,
+    ast::{AstNode, DictItem, Expr, LetBinding, Markup},
 };
 
 use crate::codegen;
-use crate::config::Config;
 use crate::config::dispatch::Keys;
-use crate::error::{ContentError, Result};
+use crate::config::{Config, FieldType};
+use crate::error::{ContentError, Result, SchemaError};
 
 /// A frontmatter field parser: reads the evaluated value into its slot on `fm`,
 /// naming `path`/`key` on a type mismatch (never silently dropped).
 type Field = fn(fm: &mut Frontmatter, value: &Value, path: &Path, key: &str) -> Result<()>;
 
-/// The recognized built-in frontmatter keys and how each parses, the single
-/// source of truth for both dispatch and the typo suggester, so a new key is one
-/// row here and the two can't drift (taxonomy keys are configured, so they are
-/// recognized dynamically, not listed). Mirrors `config::dispatch`'s tables.
-const FIELDS: &[(&str, Field)] = &[
-    ("title", |fm, v, p, k| {
+/// The recognized built-in frontmatter keys, what each holds, and how each
+/// parses: the single source of truth for dispatch, the typo suggester, and the
+/// check that a collection's schema cannot declare a built-in as something it
+/// can never be. A new key is one row here and the three can't drift (taxonomy
+/// keys are configured, so they are recognized dynamically, not listed).
+/// Mirrors `config::dispatch`'s tables.
+const FIELDS: &[(&str, FieldType, Field)] = &[
+    ("title", FieldType::Str, |fm, v, p, k| {
         fm.title = Some(v.string(p, k)?);
         Ok(())
     }),
-    ("date", |fm, v, p, k| {
+    ("date", FieldType::Date, |fm, v, p, k| {
         fm.date = Some(v.date(p, k)?);
         Ok(())
     }),
-    ("updated", |fm, v, p, k| {
+    ("updated", FieldType::Date, |fm, v, p, k| {
         fm.updated = Some(v.date(p, k)?);
         Ok(())
     }),
-    ("expiry", |fm, v, p, k| {
+    ("expiry", FieldType::Date, |fm, v, p, k| {
         fm.expiry = Some(v.date(p, k)?);
         Ok(())
     }),
-    ("draft", |fm, v, p, k| {
+    ("draft", FieldType::Bool, |fm, v, p, k| {
         fm.draft = v.boolean(p, k)?;
         Ok(())
     }),
-    ("slug", |fm, v, p, k| {
+    ("slug", FieldType::Str, |fm, v, p, k| {
         fm.slug = Some(v.string(p, k)?);
         Ok(())
     }),
-    ("lang", |fm, v, p, k| {
+    ("lang", FieldType::Str, |fm, v, p, k| {
         fm.lang = Some(v.string(p, k)?);
         Ok(())
     }),
-    ("translation", |fm, v, p, k| {
+    ("translation", FieldType::Str, |fm, v, p, k| {
         fm.translation = Some(v.string(p, k)?);
         Ok(())
     }),
-    ("template", |fm, v, p, k| {
+    ("template", FieldType::Str, |fm, v, p, k| {
         fm.template = Some(v.string(p, k)?);
         Ok(())
     }),
-    ("order", |fm, v, p, k| {
+    ("order", FieldType::Int, |fm, v, p, k| {
         fm.order = Some(v.integer(p, k)?);
         Ok(())
     }),
-    ("redirect", |fm, v, p, k| {
+    ("redirect", FieldType::List, |fm, v, p, k| {
         fm.redirect = v.strings(p, k)?;
         Ok(())
     }),
 ];
+
+/// Where a frontmatter dict came from: the page source its spans point into,
+/// the path errors name it by, and the collection whose schema constrains it.
+///
+/// One value rather than three parameters threaded through extraction, because
+/// every one of them exists to make a diagnostic precise and they are always
+/// needed together.
+pub struct Origin<'a> {
+    source: &'a Source,
+    path: &'a Path,
+    collection: &'a str,
+}
+
+impl<'a> Origin<'a> {
+    pub fn new(source: &'a Source, path: &'a Path, collection: &'a str) -> Self {
+        Self {
+            source,
+            path,
+            collection,
+        }
+    }
+
+    /// The byte span of `key`'s value inside `#let frontmatter = (..)`, or of
+    /// the binding itself when `key` is `None`: a field that is absent has
+    /// nowhere of its own to point at.
+    ///
+    /// `None` when the frontmatter is not a dict literal this can locate (it
+    /// may be computed, or imported), which leaves the diagnostic snippet-less
+    /// rather than underlining an arbitrary offset.
+    fn span(&self, key: Option<&str>) -> Option<SourceSpan> {
+        let binding = Self::binding(self.source.root())?;
+        let node = match key {
+            None => binding.to_untyped(),
+            Some(key) => {
+                let Expr::Dict(dict) = binding.init()? else {
+                    return None;
+                };
+                dict.items().find_map(|item| match item {
+                    DictItem::Named(named) if named.name().get() == key => {
+                        Some(named.expr().to_untyped())
+                    }
+                    _ => None,
+                })?
+            }
+        };
+        let range = self.source.find(node.span())?.range();
+        Some(SourceSpan::new(range.start.into(), range.len()))
+    }
+
+    /// The `#let frontmatter = ..` binding anywhere in the tree, so a page that
+    /// declares it inside a code block is located just as well as the
+    /// conventional top-level form.
+    fn binding(node: &SyntaxNode) -> Option<LetBinding<'_>> {
+        if let Some(binding) = node.cast::<LetBinding>()
+            && binding
+                .kind()
+                .bindings()
+                .iter()
+                .any(|ident| ident.get() == "frontmatter")
+        {
+            return Some(binding);
+        }
+        node.children().find_map(Self::binding)
+    }
+}
 
 /// Parsed frontmatter for a single page.
 ///
@@ -185,26 +253,47 @@ impl Frontmatter {
             })
     }
 
+    /// What a built-in frontmatter key holds, if `key` is one. Read by the
+    /// config parser, so a collection schema declaring a built-in as something
+    /// it can never be fails at the line that wrote it rather than on every
+    /// page of the collection.
+    pub fn builtin(key: &str) -> Option<FieldType> {
+        FIELDS
+            .iter()
+            .find(|(name, ..)| *name == key)
+            .map(|&(_, ty, _)| ty)
+    }
+
     /// Read a page's frontmatter from its evaluated module's `frontmatter`
     /// export (`#let frontmatter = (..)`). Returns `None` when the module
-    /// exports none. `path` names the file in errors; `config` supplies the
-    /// taxonomy keys to recognize.
-    pub fn extract(module: &Module, path: &Path, config: &Config) -> Result<Option<Self>> {
+    /// exports none. `origin` names the file in errors and supplies the
+    /// collection whose schema applies; `config` supplies the taxonomy keys to
+    /// recognize.
+    pub fn extract(module: &Module, origin: &Origin, config: &Config) -> Result<Option<Self>> {
         let Some(binding) = module.scope().get("frontmatter") else {
+            // A collection requiring fields is not satisfied by declaring no
+            // frontmatter at all: the emptiest page is exactly the one the
+            // schema exists to catch.
+            Self::validate(&Dict::new(), origin, config)?;
             return Ok(None);
         };
         let value = binding.read();
         let Value::Dict(dict) = value else {
-            return Err(ContentError::frontmatter_not_dict(path, value).into());
+            return Err(ContentError::frontmatter_not_dict(origin.path, value).into());
         };
-        Self::from_dict(dict, path, config).map(Some)
+        Self::from_dict(dict, origin, config).map(Some)
     }
 
     /// Interpret the evaluated frontmatter dict. A known key with a wrong-typed
     /// value is an error (never silently dropped); a configured taxonomy key
     /// collects its terms; a key that is a near-miss of a known one is a typo
     /// error; anything else passes through to `extra`.
-    fn from_dict(dict: &Dict, path: &Path, config: &Config) -> Result<Self> {
+    fn from_dict(dict: &Dict, origin: &Origin, config: &Config) -> Result<Self> {
+        // Before reading, not after: a schema violation on a built-in key would
+        // otherwise surface as whatever the built-in reader made of the value,
+        // which says nothing about the collection that asked for it.
+        Self::validate(dict, origin, config)?;
+        let path = origin.path;
         let taxonomies: Vec<&str> = config
             .content
             .taxonomies
@@ -214,8 +303,8 @@ impl Frontmatter {
         let mut fm = Self::default();
         for (key, val) in dict {
             let key = key.as_str();
-            match FIELDS.iter().find(|(name, _)| *name == key) {
-                Some((_, parse)) => parse(&mut fm, val, path, key)?,
+            match FIELDS.iter().find(|(name, ..)| *name == key) {
+                Some((.., parse)) => parse(&mut fm, val, path, key)?,
                 None if taxonomies.contains(&key) => {
                     fm.taxonomies
                         .insert(key.to_owned(), val.strings(path, key)?);
@@ -233,13 +322,44 @@ impl Frontmatter {
         Ok(fm)
     }
 
+    /// Hold the declared dict to the schema of the collection the page belongs
+    /// to. A collection declaring none constrains nothing, which is the default
+    /// and the whole of the previous behaviour.
+    fn validate(dict: &Dict, origin: &Origin, config: &Config) -> Result<()> {
+        for (key, field) in config.schema(origin.collection) {
+            let error = match dict.get(key.as_str()) {
+                Err(_) if field.optional => continue,
+                Err(_) => SchemaError::missing(
+                    origin.path,
+                    origin.source.text(),
+                    origin.span(None),
+                    origin.collection,
+                    key,
+                    field.ty,
+                ),
+                Ok(value) if value.fits(field.ty) => continue,
+                Ok(value) => SchemaError::mismatch(
+                    origin.path,
+                    origin.source.text(),
+                    origin.span(Some(key)),
+                    origin.collection,
+                    key,
+                    field.ty,
+                    value.kind(),
+                ),
+            };
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
     /// The known key a typo'd `key` most likely meant, if it is a near-miss of
     /// one (and not itself a real extra key). Reuses the config did-you-mean
     /// over the one known-key set (built-ins plus configured taxonomies).
     fn suggest(key: &str, taxonomies: &[&str]) -> Option<String> {
         let known: Vec<&str> = FIELDS
             .iter()
-            .map(|(name, _)| *name)
+            .map(|(name, ..)| *name)
             .chain(taxonomies.iter().copied())
             .collect();
         Keys::of(&known).nearest(key).map(str::to_owned)
@@ -257,6 +377,10 @@ trait ValueExt {
     fn integer(&self, path: &Path, key: &str) -> Result<i64>;
     fn date(&self, path: &Path, key: &str) -> Result<time::Date>;
     fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>>;
+    /// Whether this value has the shape a collection's schema declared. The
+    /// read-only counterpart of the accessors above: they parse one known key,
+    /// this judges any key against a configured type.
+    fn fits(&self, ty: FieldType) -> bool;
     /// This value's typst type name, for error messages.
     fn kind(&self) -> &'static str;
 }
@@ -323,7 +447,98 @@ impl ValueExt for Value {
         }
     }
 
+    fn fits(&self, ty: FieldType) -> bool {
+        match ty {
+            FieldType::Any => true,
+            FieldType::Str => matches!(self, Self::Str(_)),
+            FieldType::Bool => matches!(self, Self::Bool(_)),
+            FieldType::Int => matches!(self, Self::Int(_)),
+            FieldType::Float => matches!(self, Self::Float(_)),
+            // The same two datetime shapes `date` reads: a time of day alone
+            // is not a date, and would be dropped rather than ordered.
+            FieldType::Date => matches!(
+                self,
+                Self::Datetime(Datetime::Date(_) | Datetime::Datetime(_))
+            ),
+            // Element-wise, like `strings`: an array holding one integer is not
+            // a list of strings, and would fail the moment anything read it.
+            FieldType::List => {
+                matches!(self, Self::Array(items) if items.iter().all(|v| matches!(v, Self::Str(_))))
+            }
+        }
+    }
+
     fn kind(&self) -> &'static str {
         self.ty().long_name()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FieldType, Origin, ValueExt};
+    use typst::foundations::{Str, Value};
+    use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+
+    fn page(text: &str) -> Source {
+        let path = RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("page.typ").expect("a valid vpath"),
+        );
+        Source::new(FileId::unique(path), text.into())
+    }
+
+    fn origin(source: &Source) -> Origin<'_> {
+        Origin::new(source, std::path::Path::new("page.typ"), "blog")
+    }
+
+    /// The span is what makes a schema failure readable, and it is the one part
+    /// the build never exercises on a green run: a locator that silently
+    /// returned `None` would leave every one of these diagnostics snippet-less.
+    #[test]
+    fn a_key_locates_its_own_value_and_a_missing_one_the_binding() {
+        let text = "#let frontmatter = (\n  title: \"Hello\",\n  hero: 3,\n)\n\nBody.\n";
+        let source = page(text);
+        let origin = origin(&source);
+
+        let hero = origin.span(Some("hero")).expect("hero has a value");
+        assert_eq!(&text[hero.offset()..hero.offset() + hero.len()], "3");
+        let title = origin.span(Some("title")).expect("title has a value");
+        assert_eq!(
+            &text[title.offset()..title.offset() + title.len()],
+            "\"Hello\""
+        );
+        // A key that is not there points at the binding, which is the thing
+        // that should have carried it.
+        // The binding node starts at `let`: in markup the `#` is a token of
+        // its own, ahead of the expression.
+        let binding = origin.span(None).expect("the binding");
+        assert!(text[binding.offset()..].starts_with("let frontmatter"));
+        assert_eq!(origin.span(Some("absent")), None);
+    }
+
+    /// A binding the locator cannot read leaves the diagnostic snippet-less
+    /// rather than underlining an arbitrary offset.
+    #[test]
+    fn a_frontmatter_that_is_not_a_dict_literal_locates_nothing() {
+        let imported = page("#import \"meta.typ\": frontmatter\n");
+        assert_eq!(origin(&imported).span(None), None);
+
+        let computed = page("#let frontmatter = build()\n");
+        // The binding is still where it is; only the key inside it is not.
+        assert!(origin(&computed).span(None).is_some());
+        assert_eq!(origin(&computed).span(Some("title")), None);
+    }
+
+    #[test]
+    fn a_list_fits_only_when_every_element_is_a_string() {
+        let list = |items: Vec<Value>| Value::Array(items.into_iter().collect());
+        let text = |s: &str| Value::Str(Str::from(s));
+        assert!(list(vec![text("a"), text("b")]).fits(FieldType::List));
+        assert!(list(vec![]).fits(FieldType::List));
+        assert!(!list(vec![text("a"), Value::Int(2)]).fits(FieldType::List));
+        assert!(!text("a").fits(FieldType::List));
+        // `any` is presence alone, so every one of them satisfies it.
+        assert!(Value::Int(2).fits(FieldType::Any));
+        assert!(!Value::Int(2).fits(FieldType::Str));
     }
 }

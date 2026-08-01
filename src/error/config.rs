@@ -409,6 +409,23 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::duplicate_id))]
     DuplicateId { noun: &'static str, id: String },
 
+    /// A schema field declaring a type its built-in frontmatter key cannot
+    /// hold. Nothing would ever satisfy it, so it fails here rather than on
+    /// every page of the collection.
+    #[error("schema field {} must be {builtin}, not {declared}", Code(.key))]
+    #[diagnostic(
+        code(baudelaire::config::field_conflict),
+        help(
+            "{} is a built-in frontmatter key with a fixed type: drop the type to require it as it is",
+            Code(.key)
+        )
+    )]
+    FieldConflict {
+        key: String,
+        declared: &'static str,
+        builtin: &'static str,
+    },
+
     #[error("duplicate {} in {}", Code(.name), Code(.scope))]
     #[diagnostic(code(baudelaire::config::duplicate_entry))]
     DuplicateEntry { name: String, scope: String },

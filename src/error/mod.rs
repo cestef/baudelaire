@@ -31,6 +31,7 @@ pub mod lint;
 pub mod output;
 pub mod remote;
 pub mod scaffold;
+pub mod schema;
 pub mod serialize;
 pub mod serve;
 pub mod svg;
@@ -53,6 +54,7 @@ pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
 pub use output::BaseUrlRequired;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
+pub use schema::SchemaError;
 pub use serialize::{Artifact, SerializeError};
 pub use serve::ServeError;
 pub use svg::SvgError;
@@ -135,6 +137,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Scaffold(Box<crate::error::ScaffoldError>),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Schema(Box<crate::error::SchemaError>),
 
     #[error(transparent)]
     #[diagnostic(transparent)]
