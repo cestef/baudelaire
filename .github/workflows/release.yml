@@ -100,6 +100,14 @@ jobs:
             runner: macos-latest
             target: x86_64-apple-darwin
             macos: true
+          # The one target that is neither tar nor ELF: it packages a `.zip`
+          # around a `.exe`, which is what `windows: true` selects below.
+          # `install.sh` is POSIX and does not cover it, so the release notes
+          # point Windows users at the archive directly.
+          - name: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            windows: true
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -112,12 +120,17 @@ jobs:
           targets: ${{ matrix.target }}
       - name: mold linker
         uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        if: ${{ !matrix.macos }}
+        if: ${{ !matrix.macos && !matrix.windows }}
         with:
           rustflags: "false"
 
+      # mold is a Linux linker, so both non-Linux targets fall back to the
+      # platform's own. `shell: bash` is what makes this one line work on the
+      # Windows runner too, where the default shell is PowerShell and `>>` to
+      # `$GITHUB_ENV` would not mean this.
       - name: system linker
-        if: matrix.macos
+        if: ${{ matrix.macos || matrix.windows }}
+        shell: bash
         run: echo "RUSTFLAGS=" >> "$GITHUB_ENV"
 
       - name: musl toolchain
@@ -133,6 +146,11 @@ jobs:
           EXTRA_FEATURES: ${{ matrix.musl && 'vendored-openssl' || '' }}
           CC_x86_64_unknown_linux_musl: musl-gcc
           CC_aarch64_unknown_linux_musl: musl-gcc
+          # What the binary is called and what goes around it. Windows is the
+          # only target that differs on either, and naming both here keeps
+          # `package` free of per-platform branching beyond the archive step.
+          BIN: ${{ matrix.windows && 'baudelaire.exe' || 'baudelaire' }}
+          ARCHIVE: ${{ matrix.windows && 'zip' || 'tar.gz' }}
         run: |
           set -euo pipefail
           checksum() {
@@ -143,23 +161,33 @@ jobs:
             local suffix="$1"; shift
             cargo build --release --target ${{ matrix.target }} \
               ${EXTRA_FEATURES:+--features "$EXTRA_FEATURES"} "$@"
-            local out="baudelaire-${{ matrix.name }}${suffix}.tar.gz"
-            tar -C "target/${{ matrix.target }}/release" -czf "$out" baudelaire
+            local out="baudelaire-${{ matrix.name }}${suffix}.${ARCHIVE}"
+            local dir="target/${{ matrix.target }}/release"
+            # Both archives hold the bare binary at the root, so extracting
+            # either leaves one file next to you and the install line in the
+            # release notes is the same shape on every platform.
+            #
+            # `root` is captured before the subshell rather than read back as
+            # `$OLDPWD`: 7z writes to a path relative to where it runs.
+            local root; root=$(pwd)
+            case "$ARCHIVE" in
+              zip) ( cd "$dir" && 7z a -bso0 "$root/$out" "$BIN" ) ;;
+              *)   tar -C "$dir" -czf "$out" "$BIN" ;;
+            esac
             checksum "$out" > "$out.sha256"
             ls -la "$out" "$out.sha256"
           }
           package ""
           package "-slim" --no-default-features
 
-      - name: upload tarballs
+      # Globbed rather than listed: the four names differ by platform now
+      # (`.tar.gz` against `.zip`), and a wildcard that covers both beats
+      # duplicating the matrix's own branching here.
+      - name: upload archives
         uses: actions/upload-artifact@v7
         with:
           name: baudelaire-${{ matrix.name }}
-          path: |
-            baudelaire-${{ matrix.name }}.tar.gz
-            baudelaire-${{ matrix.name }}.tar.gz.sha256
-            baudelaire-${{ matrix.name }}-slim.tar.gz
-            baudelaire-${{ matrix.name }}-slim.tar.gz.sha256
+          path: baudelaire-${{ matrix.name }}*
 
       - name: save cargo registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
@@ -197,12 +225,19 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ inputs.tag || github.ref_name }}"
+          # The size of the binary *inside* the archive, not of the archive, so
+          # the table says what lands on disk. Reads either container: the
+          # Windows rows are `.zip`, every other row is `.tar.gz`.
           bin_size() {
-            local tarball="release/$1"
-            [ -f "$tarball" ] || { echo "?"; return; }
+            local archive="release/$1"
+            [ -f "$archive" ] || { echo "?"; return; }
             local bytes
-            bytes=$(tar -tzvf "$tarball" 2>/dev/null \
-              | awk '/[[:space:]]baudelaire$/ {print $3; exit}')
+            case "$archive" in
+              *.zip) bytes=$(unzip -l "$archive" 2>/dev/null \
+                       | awk '$NF == "baudelaire.exe" {print $1; exit}') ;;
+              *)     bytes=$(tar -tzvf "$archive" 2>/dev/null \
+                       | awk '/[[:space:]]baudelaire$/ {print $3; exit}') ;;
+            esac
             [ -n "$bytes" ] || { echo "?"; return; }
             awk -v b="$bytes" 'BEGIN { printf "%.1f MB\n", b/1024/1024 }'
           }
@@ -218,12 +253,15 @@ jobs:
           SIZE_MAC_ARM_SLIM=$(bin_size "baudelaire-macos-aarch64-slim.tar.gz")
           SIZE_MAC_X86=$(bin_size "baudelaire-macos-x86_64.tar.gz")
           SIZE_MAC_X86_SLIM=$(bin_size "baudelaire-macos-x86_64-slim.tar.gz")
+          SIZE_WIN=$(bin_size "baudelaire-windows-x86_64.zip")
+          SIZE_WIN_SLIM=$(bin_size "baudelaire-windows-x86_64-slim.zip")
 
           cat > release-notes.md <<EOF
           ## Install
 
-          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon and Intel),
-          checksum-verified. Fetch the script, skim it, then run it:
+          Prebuilt binary (Linux x86_64/aarch64, macOS Apple Silicon and Intel,
+          Windows x86_64), checksum-verified. On Linux and macOS, fetch the
+          script, skim it, then run it:
 
           \`\`\`bash
           curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
@@ -235,11 +273,19 @@ jobs:
 
           Prefer Cargo? \`cargo binstall baudelaire\` pulls the full tarballs.
 
-          Or install by hand from the tarballs below:
+          Or install by hand from the archives below:
 
           \`\`\`bash
           tar -xzf baudelaire-linux-x86_64.tar.gz
           install -m 0755 baudelaire ~/.local/bin/
+          \`\`\`
+
+          On Windows the installer script does not apply: unpack
+          \`baudelaire-windows-x86_64.zip\` and put \`baudelaire.exe\` on your
+          \`PATH\`.
+
+          \`\`\`powershell
+          Expand-Archive baudelaire-windows-x86_64.zip -DestinationPath .
           \`\`\`
 
           ## Builds
@@ -269,6 +315,8 @@ jobs:
           | \`baudelaire-macos-aarch64-slim\` | ${SIZE_MAC_ARM_SLIM} |
           | \`baudelaire-macos-x86_64\` | ${SIZE_MAC_X86} |
           | \`baudelaire-macos-x86_64-slim\` | ${SIZE_MAC_X86_SLIM} |
+          | \`baudelaire-windows-x86_64\` | ${SIZE_WIN} |
+          | \`baudelaire-windows-x86_64-slim\` | ${SIZE_WIN_SLIM} |
 
           Every artifact ships a matching \`.sha256\` (the installer too). Verify:
 
