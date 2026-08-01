@@ -1,0 +1,65 @@
+// Content-hashed asset names, and the references rewritten to follow them.
+//
+// The whole point is a name the *build* chose, so every case here captures it
+// off the file that references it and asserts against that binding, rather
+// than hard-coding a hash that changes with the bytes.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { fingerprint #true }
+      """#
+  }
+}
+
+scenario "a fingerprinted asset is renamed and its page reference rewritten" {
+  requires "css"
+  files {
+    "assets/style.css" #"""
+      body{color:red}
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.css"))
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      capture "css" #"/assets/(style\.[0-9a-f]+\.css)"#
+      // The original name must be gone from the markup, not merely joined by
+      // the hashed one.
+      missing "href=\"/assets/style.css\""
+    }
+    file "assets/{css}"
+    absent "assets/style.css"
+  }
+}
+
+scenario "a url() inside a stylesheet is fingerprinted too" {
+  requires "css"
+  files {
+    "assets/style.css" #"""
+      body{background:url(bg.png)}
+      """#
+    "assets/bg.png" png="8x8"
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // Nothing on a page names the stylesheet, so the pattern is the entry
+    // point: exactly one hashed `style.*.css`, and its `url()` names the
+    // image's hashed name rather than the original.
+    file "assets/style.*.css" {
+      capture "bg" #"/assets/(bg\.[0-9a-f]+\.png)"#
+      missing "(bg.png)"
+    }
+    file "assets/{bg}"
+    absent "assets/bg.png"
+  }
+}

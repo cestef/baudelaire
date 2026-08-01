@@ -3,9 +3,11 @@
 //! The bulk of what used to live here is now data under `tests/scenarios/`; see
 //! `tests/scenarios.rs` for the format and for why each of these stayed. In
 //! short, they need something a scenario has no vocabulary for: the CLI's own
-//! stderr, a name the build generated (a fingerprint hash) fed back into a
-//! second assertion, byte-level comparisons, the cache's internals, or two
-//! builds in a row.
+//! stderr, the cache's internal files, or the library's own return values.
+//!
+//! Several of the old reasons are gone: a generated name fed into a second
+//! assertion is a `capture`, byte-level comparisons are `identical`/`smaller`,
+//! and several builds in a row are `build { }` steps.
 
 mod common;
 
@@ -268,66 +270,6 @@ fn build_context_exposed_via_sys_inputs() {
     );
     assert!(html.contains("site=T"), "site mirror exposed: {html}");
     assert!(html.contains("mode=build"), "build mode exposed: {html}");
-}
-
-#[cfg(feature = "css")]
-#[test]
-fn fingerprint_renames_assets_and_rewrites_references() {
-    let site = Site::new();
-    site.write(
-        "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  fingerprint #true\n}\n",
-    );
-    site.write("assets/style.css", "body{color:red}");
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\n#html.elem(\"link\", attrs: (rel: \"stylesheet\", href: \"/assets/style.css\"))",
-    );
-    site.stats();
-    // The original name is gone; a content-hashed one replaces it.
-    let names = site.files("public/assets");
-    assert!(!names.iter().any(|n| n == "style.css"), "{names:?}");
-    let hashed = names
-        .iter()
-        .find(|n| n.starts_with("style.") && has_ext(n, "css"))
-        .expect("a fingerprinted stylesheet");
-    // The page reference is rewritten to the hashed URL.
-    let html = fs::read_to_string(site.root.join("public/posts/a/index.html")).unwrap();
-    assert!(html.contains(&format!("/assets/{hashed}")), "{html}");
-    assert!(!html.contains("href=\"/assets/style.css\""), "{html}");
-}
-
-#[cfg(feature = "css")]
-#[test]
-fn css_url_references_are_fingerprinted() {
-    let site = Site::new();
-    site.write(
-        "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  fingerprint #true\n}\n",
-    );
-    site.write("assets/style.css", "body{background:url(bg.png)}");
-    site.write("assets/bg.png", "PNGDATA");
-    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
-    site.stats();
-    let names = site.files("public/assets");
-    let bg = names
-        .iter()
-        .find(|n| n.starts_with("bg.") && has_ext(n, "png"))
-        .expect("a fingerprinted image");
-    let css_name = names
-        .iter()
-        .find(|n| n.starts_with("style.") && has_ext(n, "css"))
-        .expect("a fingerprinted stylesheet");
-    let css = fs::read_to_string(site.root.join(format!("public/assets/{css_name}"))).unwrap();
-    // The `url()` now points at the image's hashed name, not the original.
-    assert!(
-        css.contains(&format!("/assets/{bg}")),
-        "url() not rewritten: {css}"
-    );
-    assert!(
-        !css.contains("bg.png\"") && !css.contains("(bg.png)"),
-        "stale url(): {css}"
-    );
 }
 
 #[test]

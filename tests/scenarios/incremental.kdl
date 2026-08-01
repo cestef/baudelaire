@@ -1,0 +1,286 @@
+// Incremental builds and dependency tracking, as sequences of builds over one
+// site. Several of these exist to *confirm* a specific claim: that wrapping the
+// shared, comemo-memoized world in `Tracked` captures a page's true dependency
+// set (transitive imports and shared modules included). Each such case edits
+// only a transitive or shared input and asserts the affected page's *output*
+// actually changed, so a missed dependency leaves stale HTML and fails here.
+//
+// What stays in `incremental_e2e.rs` is what a step cannot reach: the cache's
+// own files (a corrupt manifest, a corrupt blob), a site that moves on disk,
+// and anything asserting on the CLI's logs.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      """#
+  }
+}
+
+scenario "an unchanged rebuild reuses every page" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      beta
+      """#
+  }
+  build { }
+  build { expect { ok; pages 2; cached 2 } }
+}
+
+scenario "editing a page rebuilds only it" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      beta
+      """#
+  }
+  build { }
+  build {
+    files {
+      "content/posts/a.typ" #"""
+        #let frontmatter = (title: "A",)
+        ALPHA2
+        """#
+    }
+    expect {
+      ok
+      pages 2
+      cached 1
+      file "posts/a/index.html" { contains "ALPHA2" }
+    }
+  }
+}
+
+scenario "publishing a page leaves every unrelated page cached" {
+  // Nothing here links to the new page, so nothing here depends on it.
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      beta
+      """#
+  }
+  build { }
+  build {
+    files {
+      "content/posts/c.typ" #"""
+        #let frontmatter = (title: "C",)
+        gamma
+        """#
+    }
+    expect { ok; pages 3; cached 2 }
+  }
+}
+
+scenario "editing a transitive import invalidates the page that reaches it" {
+  // a imports b, b imports c. Editing only c must rebuild a, proving the
+  // transitive dependency was captured. Modules live at the project root so
+  // they are not discovered as pages.
+  files {
+    "c.typ" #"""
+      #let value = "ORIGINAL"
+      """#
+    "b.typ" #"""
+      #import "/c.typ": value
+      #let msg = value
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #import "/b.typ": msg
+      #msg
+      """#
+  }
+  build { expect { ok; file "posts/a/index.html" { contains "ORIGINAL" } } }
+  build {
+    files {
+      "c.typ" #"""
+        #let value = "CHANGED"
+        """#
+    }
+    expect {
+      ok
+      cached 0
+      file "posts/a/index.html" { contains "CHANGED" }
+    }
+  }
+}
+
+scenario "a shared module is a dependency of every page that imports it" {
+  // Both pages import the same module, and within one build they share the
+  // comemo-memoized world. Editing it must rebuild BOTH, proving the
+  // dependency is recorded even when the second page's compile reuses comemo's
+  // cached evaluation of the shared module.
+  files {
+    "shared.typ" #"""
+      #let v = "V1"
+      """#
+    "content/posts/x.typ" #"""
+      #let frontmatter = (title: "X",)
+      #import "/shared.typ": v
+      #v
+      """#
+    "content/posts/y.typ" #"""
+      #let frontmatter = (title: "Y",)
+      #import "/shared.typ": v
+      #v
+      """#
+  }
+  build {
+    expect {
+      ok
+      file "posts/x/index.html" { contains "V1" }
+      file "posts/y/index.html" { contains "V1" }
+    }
+  }
+  build {
+    files {
+      "shared.typ" #"""
+        #let v = "V2"
+        """#
+    }
+    expect {
+      ok
+      cached 0
+      file "posts/x/index.html" { contains "V2" }
+      file "posts/y/index.html" { contains "V2" }
+    }
+  }
+}
+
+scenario "editing a layout template rebuilds the pages bound to it" {
+  files {
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", body)
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", template: "post.typ",)
+      alpha
+      """#
+  }
+  build { expect { ok; file "posts/a/index.html" { contains "<main>" } } }
+  build {
+    files {
+      "templates/post.typ" #"""
+        #let post(page, body) = html.elem("section", body)
+        """#
+    }
+    expect {
+      ok
+      cached 0
+      file "posts/a/index.html" { contains "<section>" }
+    }
+  }
+}
+
+scenario "retitling a page invalidates the sibling whose pager names it" {
+  // A page's prev/next links carry its neighbour's title, baked into the
+  // neighbour's layout wrapper. Retitling one must rebuild the sibling whose
+  // nav points at it; otherwise its "next" link goes stale.
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content { collections { posts { template "post.typ" } } }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("html", html.elem("body", {
+        body
+        if page.nav.next != none { html.elem("a", attrs: (href: page.nav.next.url), page.nav.next.title) }
+      }))
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", order: 1,)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", order: 2,)
+      beta
+      """#
+  }
+  build { expect { ok; file "posts/a/index.html" { contains ">B<" } } }
+  build {
+    files {
+      "content/posts/b.typ" #"""
+        #let frontmatter = (title: "BEE", order: 2,)
+        beta
+        """#
+    }
+    expect {
+      ok
+      cached 0
+      file "posts/a/index.html" { contains "BEE" }
+    }
+  }
+}
+
+scenario "generated listings are cached like any other page" {
+  // Taxonomy and pagination pages have synthetic sources that never touch
+  // disk. Their fingerprint is the text typst compiles, so an unchanged
+  // rebuild must reuse them alongside the real pages.
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content { taxonomies { tags listing=#true } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", tags: ("x",),)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", tags: ("x",),)
+      beta
+      """#
+  }
+  build { }
+  // 2 posts + tags/index + tags/x, every one of them from cache.
+  build { expect { ok; pages 4; cached 4 } }
+}
+
+scenario "a deleted page is pruned from the output, husk directory and all" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B",)
+      beta
+      """#
+  }
+  build { expect { ok; file "posts/b/index.html" } }
+  build {
+    remove "content/posts/b.typ"
+    expect {
+      ok
+      file "posts/a/index.html"
+      absent "posts/b/index.html"
+      absent "posts/b"
+    }
+  }
+}
+
+scenario "turning the cache off does not poison the build after it" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      alpha
+      """#
+  }
+  build { }
+  build { cache #false; expect { ok; cached 0 } }
+  build { expect { ok; cached 1 } }
+}

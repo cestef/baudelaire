@@ -7,30 +7,18 @@
 //! cached result. Each such test edits only a transitive/shared input and
 //! asserts the affected page's *output* actually changed on rebuild; a missed
 //! dependency would leave stale HTML and fail the test.
+//!
+//! The plainest of those sequences are now data in `tests/scenarios/incremental.kdl`,
+//! since a scenario's `build { }` steps express "build, edit, rebuild, count".
+//! What stays here needs more than the site's own files: the cache's internals
+//! (a corrupt manifest, a corrupt blob), a site that moves on disk, a symlinked
+//! content tree, or the CLI's own logs.
 
 mod common;
 
 use std::fs;
 
 use common::{CONFIG, Site};
-
-#[test]
-fn second_build_reuses_all_pages() {
-    let site = Site::with(CONFIG);
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\",)\nbeta",
-    );
-
-    site.stats();
-    let second = site.stats();
-    // Nothing changed -> every page served from cache.
-    assert_eq!((second.pages, second.cached), (2, 2));
-}
 
 #[test]
 fn corrupt_manifest_warns_and_rebuilds() {
@@ -57,189 +45,6 @@ fn corrupt_manifest_warns_and_rebuilds() {
     assert!(
         logs.contains("unreadable cache manifest"),
         "expected a warning: {logs}"
-    );
-}
-
-#[test]
-fn editing_a_page_rebuilds_only_it() {
-    let site = Site::with(CONFIG);
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\",)\nbeta",
-    );
-    site.stats();
-
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nALPHA2",
-    );
-    let stats = site.stats();
-
-    // One page recompiled, the other reused.
-    assert_eq!((stats.pages, stats.cached), (2, 1));
-    assert!(site.output("posts/a/index.html").contains("ALPHA2"));
-}
-
-#[test]
-fn retitling_a_page_invalidates_its_sibling() {
-    // A page's prev/next links carry its neighbour's title, baked into the
-    // neighbour's layout wrapper. Retitling one must therefore rebuild the
-    // sibling whose nav points at it; otherwise its "next" link goes stale.
-    let site = Site::with(
-        "site \"T\"\ncontent {\n  collections {\n    posts { template \"post.typ\" }\n  }\n}\n",
-    );
-    site.write(
-        "templates/post.typ",
-        "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", {\n  body\n  if page.nav.next != none { html.elem(\"a\", attrs: (href: page.nav.next.url), page.nav.next.title) }\n}))\n",
-    );
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\", order: 1,)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\", order: 2,)\nbeta",
-    );
-    site.stats();
-    assert!(site.output("posts/a/index.html").contains('B'));
-
-    // Retitle b; a's next-link title must follow.
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"BEE\", order: 2,)\nbeta",
-    );
-    let stats = site.stats();
-    assert!(
-        site.output("posts/a/index.html").contains("BEE"),
-        "sibling nav should reflect the neighbour's new title"
-    );
-    assert_eq!(
-        stats.cached, 0,
-        "retitling b must recompile a (its sibling nav changed)"
-    );
-}
-
-#[test]
-fn editing_transitive_import_invalidates_page() {
-    // a imports b, b imports c. Editing only c must rebuild a, proving the
-    // transitive dependency was captured.
-    let site = Site::with(CONFIG);
-    // Modules live at the project root so they aren't discovered as pages.
-    site.write("c.typ", "#let value = \"ORIGINAL\"");
-    site.write("b.typ", "#import \"/c.typ\": value\n#let msg = value");
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\n#import \"/b.typ\": msg\n#msg",
-    );
-    site.stats();
-    assert!(site.output("posts/a/index.html").contains("ORIGINAL"));
-
-    // Change only the leaf module.
-    site.write("c.typ", "#let value = \"CHANGED\"");
-    let stats = site.stats();
-
-    assert!(
-        site.output("posts/a/index.html").contains("CHANGED"),
-        "transitive dep change did not propagate: c was not tracked as a dep of a"
-    );
-    assert_eq!(
-        stats.cached, 0,
-        "page a should have been recompiled, not cached"
-    );
-}
-
-#[test]
-fn shared_module_tracked_for_every_page() {
-    // Two pages import the same module; within one build they share the
-    // comemo-memoized world. Editing the module must rebuild BOTH, proving
-    // the dependency is recorded even when the second page's compile reuses
-    // comemo's cached evaluation of the shared module.
-    let site = Site::with(CONFIG);
-    site.write("shared.typ", "#let v = \"V1\"");
-    site.write(
-        "content/posts/x.typ",
-        "#let frontmatter = (title: \"X\",)\n#import \"/shared.typ\": v\n#v",
-    );
-    site.write(
-        "content/posts/y.typ",
-        "#let frontmatter = (title: \"Y\",)\n#import \"/shared.typ\": v\n#v",
-    );
-    site.stats();
-    assert!(site.output("posts/x/index.html").contains("V1"));
-    assert!(site.output("posts/y/index.html").contains("V1"));
-
-    site.write("shared.typ", "#let v = \"V2\"");
-    let stats = site.stats();
-
-    assert_eq!(stats.cached, 0, "neither page may be served from cache");
-    assert!(
-        site.output("posts/x/index.html").contains("V2"),
-        "x not invalidated by shared module change"
-    );
-    assert!(
-        site.output("posts/y/index.html").contains("V2"),
-        "y not invalidated by shared module change (comemo re-validation claim is false)"
-    );
-}
-
-#[test]
-fn editing_layout_template_rebuilds_dependent_pages() {
-    // The layout template is imported through the tracked world, so editing it
-    // must invalidate every page bound to it.
-    let site = Site::with(CONFIG);
-    site.write(
-        "templates/post.typ",
-        "#let post(page, body) = html.elem(\"main\", body)",
-    );
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\", template: \"post.typ\",)\nalpha",
-    );
-    site.stats();
-    assert!(site.output("posts/a/index.html").contains("<main>"));
-
-    site.write(
-        "templates/post.typ",
-        "#let post(page, body) = html.elem(\"section\", body)",
-    );
-    let stats = site.stats();
-    assert!(
-        site.output("posts/a/index.html").contains("<section>"),
-        "template change did not invalidate the page"
-    );
-    assert_eq!(stats.cached, 0, "page should have rebuilt");
-}
-
-#[test]
-fn generated_pages_are_cached() {
-    // Taxonomy/pagination pages have synthetic sources that never touch disk.
-    // Their fingerprint is the text typst compiles, so an unchanged rebuild must
-    // reuse them alongside the real pages, not silently recompile every time.
-    let site = Site::with(CONFIG);
-    site.write(
-        "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\\\ncontent {\n  taxonomies {\n    tags listing=#true\n  }\n}\n",
-    );
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\", tags: (\"x\",),)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\", tags: (\"x\",),)\nbeta",
-    );
-
-    site.stats();
-    let second = site.stats();
-    // 2 posts + tags/index + tags/x = 4 pages, all served from cache.
-    assert_eq!(
-        (second.pages, second.cached),
-        (4, 4),
-        "generated pages must be cached on an unchanged rebuild"
     );
 }
 
@@ -352,30 +157,6 @@ fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
         site.output("posts/a/index.html").contains("/posts/bee/"),
         "a's link should follow b"
     );
-}
-
-#[test]
-fn adding_an_unrelated_page_leaves_every_other_page_cached() {
-    // Publishing a post must not recompile the archive. Nothing here links to
-    // the new page, so nothing here depends on it.
-    let site = Site::with(CONFIG);
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\",)\nbeta",
-    );
-    site.stats();
-
-    site.write(
-        "content/posts/c.typ",
-        "#let frontmatter = (title: \"C\",)\ngamma",
-    );
-    let stats = site.stats();
-
-    assert_eq!((stats.pages, stats.cached), (3, 2));
 }
 
 #[test]
@@ -814,27 +595,6 @@ fn a_page_reading_the_clock_records_the_date_as_a_dependency() {
 /// `--no-cache` costs one cold build, not two: the manifest it writes must be
 /// fingerprinted like any other, or the next normal build sees a mismatch and
 /// rebuilds the whole site.
-#[test]
-fn no_cache_does_not_poison_the_next_build() {
-    let site = Site::with(CONFIG);
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\",)\nbeta",
-    );
-    site.build();
-    site.run(&["build", "--no-cache"]);
-
-    let next = site.build();
-
-    assert!(
-        next.contains("2 cached"),
-        "a --no-cache run left the cache unusable: {next}"
-    );
-}
 
 // ---- Stale-output pruning -------------------------------------------------
 //
@@ -843,35 +603,6 @@ fn no_cache_does_not_poison_the_next_build() {
 // permalink, a taxonomy term whose last page dropped it). Otherwise `dist`
 // only grows and keeps serving files no source maps to. These lock in that
 // pruning across the ways an output can be orphaned.
-
-#[test]
-fn deleted_page_is_pruned_from_dist() {
-    let site = Site::with(CONFIG);
-    site.write(
-        "content/posts/a.typ",
-        "#let frontmatter = (title: \"A\",)\nalpha",
-    );
-    site.write(
-        "content/posts/b.typ",
-        "#let frontmatter = (title: \"B\",)\nbeta",
-    );
-    site.stats();
-    assert!(site.exists("public/posts/b/index.html"));
-
-    // Remove one source and rebuild: its output must not linger.
-    fs::remove_file(site.path("content/posts/b.typ")).unwrap();
-    site.stats();
-    assert!(
-        site.exists("public/posts/a/index.html"),
-        "surviving page was wrongly pruned"
-    );
-    assert!(
-        !site.exists("public/posts/b/index.html"),
-        "deleted page's output was not pruned"
-    );
-    // The emptied directory should be gone too, not left as a husk.
-    assert!(!site.exists("public/posts/b"), "empty dir left behind");
-}
 
 #[test]
 fn renamed_page_prunes_the_old_permalink() {
