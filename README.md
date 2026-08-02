@@ -20,8 +20,8 @@
 
 ## A page
 
-Content is a `.typ` file. Its frontmatter is an ordinary Typst binding, not a
-foreign block of YAML the compiler cannot see:
+Content is a `.typ` file. Frontmatter is an ordinary Typst binding, not a block
+of YAML the compiler can't see:
 
 ```typ
 #let frontmatter = (
@@ -34,15 +34,15 @@ foreign block of YAML the compiler cannot see:
 = A heading
 
 Some *content*, a #link("https://typst.app")[link], and anything else Typst can
-set: maths, figures, footnotes, tables.
+set: math, figures, footnotes, tables.
 ```
 
-Dropped in `content/posts/hello.typ`, that publishes to `/posts/hello/`, joins
-the feeds and the sitemap, appears under `/tags/typst/`, and gets prev/next
-links from its neighbours. Nothing above is configuration; it is the page.
+Drop that in `content/posts/hello.typ` and it publishes at `/posts/hello/`,
+joins the feeds and the sitemap, shows up under `/tags/typst/`, and gets
+prev/next links from its neighbors. None of it is configuration.
 
-The layout that wraps it is Typst too, and it builds real DOM rather than
-splicing strings:
+The layout that wraps it is Typst too, and builds real DOM instead of splicing
+strings:
 
 ```typ
 #import "@baudelaire/html:0.1.0": h
@@ -60,8 +60,8 @@ splicing strings:
 
 ## Install
 
-Prebuilt binaries for Linux (x86_64/aarch64) and macOS on Apple Silicon. Fetch
-the script, skim it, then run it:
+Prebuilt binaries for Linux (x86_64/aarch64), macOS, and Windows. Fetch the
+script, read it, run it:
 
 ```sh
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
@@ -83,7 +83,7 @@ cargo install --git https://github.com/cestef/baudelaire   # build from git
 ```
 
 Flags, slim builds, and what the installer does and does not verify:
-[installation](https://baudelaire.cstef.dev/guide/install/).
+[installation](https://baudelaire.cstef.dev/start/install/).
 
 ## Start
 
@@ -99,13 +99,14 @@ Your site is at [localhost:1821](http://localhost:1821), rebuilding as you save.
 ## Themes
 
 A theme is templates, assets, and config defaults shipped as one unit, named
-like any Typst dependency. Three come with the repository:
+like any Typst dependency. Four come with the repository:
 
 | | |
 |---|---|
-| [`albatros`](https://github.com/cestef/baudelaire/tree/main/themes/albatros) | A centred blog. System sans, light and dark, tags, reading time. |
+| [`albatros`](https://github.com/cestef/baudelaire/tree/main/themes/albatros) | A blog. Centered column, light and dark, tags, reading time. |
 | [`spleen`](https://github.com/cestef/baudelaire/tree/main/themes/spleen) | A terminal. Monospace throughout, dark first, no JavaScript. |
-| [`voyage`](https://github.com/cestef/baudelaire/tree/main/themes/voyage) | A multilingual journal. Serif headings, language switcher, localized dates. |
+| [`phares`](https://github.com/cestef/baudelaire/tree/main/themes/phares) | A manual. Sidebar from your content tree, search palette, on-page outline. |
+| [`paysage`](https://github.com/cestef/baudelaire/tree/main/themes/paysage) | A portfolio. Landing page, project grid, one case study per project. |
 
 Copy one into your project and name it:
 
