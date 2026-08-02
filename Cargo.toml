@@ -171,7 +171,12 @@ notify = "8"
 notify-debouncer-full = "0.7"
 tiny_http = "0.12"
 open = "5"
-lightningcss = { version = "1.0.0-alpha.71", optional = true }
+# `default-features = false` drops `bundler`, `nodejs` and `sourcemap`. The
+# handler only parses, minifies and reads back `dependencies`, none of which
+# live behind those. What they cost is `parcel_sourcemap` and with it `rkyv`
+# 0.7, whose derives are the only thing in the tree still on `syn` 1: ~150
+# cpu-seconds and 15 crates for three features nothing calls.
+lightningcss = { version = "1.0.0-alpha.71", default-features = false, optional = true }
 rolldown = { version = "1", optional = true }
 # Wanted by two independent capabilities: `js` (rolldown drives an async
 # bundler) and `ssh` (russh is async). The feature list is the union of what
@@ -183,7 +188,17 @@ tokio = { version = "1.52.3", features = [
   "time",
   "io-util",
 ], optional = true }
-russh = { version = "0.62.2", optional = true }
+# `ring` rather than russh's default `aws-lc-rs` backend. aws-lc-sys is a large
+# C/assembly build: ~180 cpu-seconds, 162 of them one build script, and it drags
+# `cmake` and a host C toolchain into every cross-compiled release target. It
+# was also the last thing on the cold build's critical path, gating russh and so
+# the whole link. `ring` covers the algorithms the SFTP deploy uses, and
+# `deploy_ssh_e2e` handshakes against a real in-process server to prove it.
+russh = { version = "0.62.2", default-features = false, features = [
+  "ring",
+  "rsa",
+  "flate2",
+], optional = true }
 russh-sftp = { version = "2.3.0", optional = true }
 rolldown_common = { version = "1", optional = true }
 oxipng = { version = "10.1.1", default-features = false, features = [
@@ -222,8 +237,15 @@ miette = { version = "7" }
 regex = { version = "1" }
 serde_json = { version = "1" }
 criterion = { version = "0.8", features = ["html_reports"] }
-# In-process SSH/SFTP server for the deploy end-to-end test.
-russh = "0.62.2"
+# In-process SSH/SFTP server for the deploy end-to-end test. The backend has to
+# match the one above: cargo unifies features across the two dependency kinds,
+# so a default-featured dev-dependency would pull aws-lc-rs back into every
+# `cargo test` and undo the trim.
+russh = { version = "0.62.2", default-features = false, features = [
+  "ring",
+  "rsa",
+  "flate2",
+] }
 russh-sftp = "2.3.0"
 rand = "0.10"
 tokio = { version = "1.52.3", features = ["rt", "net", "io-util"] }

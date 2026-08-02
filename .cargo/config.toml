@@ -1,0 +1,29 @@
+# Dependency codegen for the dev profile, set here rather than in Cargo.toml
+# because a config profile outranks a manifest one: a `[profile.dev.package."*"]`
+# in `~/.cargo/config.toml` silently replaces a manifest block, and this file is
+# the only place that reliably wins for a checkout of this repo.
+#
+# `opt-level = 0`, not `1`. Optimizing the ~640-crate tree was measured against
+# not optimizing it, cold, `cargo build --all-targets`, on 14 cores:
+#
+#   opt-level = 1   303s
+#   opt-level = 0   115s
+#
+# and the resulting binary was the same speed on all three workloads tried: the
+# docs site (64 pages), a synthetic 486-page blog, and that blog with a PDF
+# sidecar per post (402 PDFs, the paged-layout path, 17.3s either way). Typst's
+# hot paths are memoized through comemo and the rest is allocation and I/O, so
+# there is nothing here for `-O1` to win without cross-crate inlining.
+#
+# If a workload does turn out to be dependency-compute-bound, raise that one
+# crate rather than the glob: `[profile.dev.package.typst-layout]`.
+[profile.dev.package."*"]
+opt-level = 0
+debug = false
+
+# Build scripts and proc macros are exempt from `package."*"` and default to 0.
+# This tree derives heavily, so an optimized syn/serde_derive runs every
+# expansion faster, for a small one-time cost.
+[profile.dev.build-override]
+opt-level = 1
+debug = false
