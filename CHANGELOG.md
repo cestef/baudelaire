@@ -10,6 +10,25 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **install**: `install.ps1`, the Windows counterpart of `install.sh`. Same
+  knobs under the same names (as environment variables: `$env:VERSION`,
+  `$env:PREFIX`, `$env:FLAVOR`), same steps, same checksum promise. It resolves
+  the latest release, downloads `baudelaire-windows-x86_64.zip`, verifies its
+  `sha256`, and installs to `%LOCALAPPDATA%\Programs\baudelaire`. Like
+  `install.sh` it never edits `PATH`, printing the line that would instead.
+
+  ```powershell
+  irm https://baudelaire.cstef.dev/install.ps1 -OutFile install.ps1
+  .\install.ps1
+  ```
+
+  Windows on ARM is refused by name rather than served the `x86_64` build to run
+  under emulation.
+
 ## [0.0.9] - 2026-08-01
 
 ### Breaking

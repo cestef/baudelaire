@@ -36,8 +36,17 @@ FLAVOR=slim sh install.sh           # the smaller build, see below
 With Cargo, `cargo binstall baudelaire` fetches these same archives, and
 `cargo install baudelaire` builds from source.
 
-On Windows, unpack `baudelaire-windows-x86_64.zip` and put `baudelaire.exe` on
-your `PATH`; the installer script is POSIX-only.
+On Windows, in PowerShell:
+
+```powershell
+irm https://baudelaire.cstef.dev/install.ps1 -OutFile install.ps1
+notepad install.ps1     # read before you run
+.\install.ps1
+```
+
+Same knobs, as environment variables: `$env:VERSION`, `$env:PREFIX`,
+`$env:FLAVOR`. Or unpack `baudelaire-windows-x86_64.zip` by hand and put
+`baudelaire.exe` on your `PATH`.
 
 By hand, on Linux or macOS:
 

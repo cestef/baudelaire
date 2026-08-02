@@ -67,6 +67,11 @@ the script, skim it, then run it:
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
 less install.sh          # read before you run
 sh install.sh
+
+# Windows, in PowerShell:
+# irm https://baudelaire.cstef.dev/install.ps1 -OutFile install.ps1
+# notepad install.ps1    # read before you run
+# .\install.ps1
 ```
 
 Or with Cargo:

@@ -220,6 +220,21 @@ jobs:
         shell: bash
         run: echo "RUSTFLAGS=-D warnings" >> "$GITHUB_ENV"
 
+      # The one job with a PowerShell host, so the one place `install.ps1` can
+      # be held to anything at all. It is shipped as a release asset and served
+      # from the docs site, and a syntax error in it would surface as a broken
+      # install rather than as a failing build.
+      - name: install script parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object { Write-Host "$($_.Extent.StartLineNumber): $($_.Message)" }
+            exit 1
+          }
+
       - name: restore cargo registry
         uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
 

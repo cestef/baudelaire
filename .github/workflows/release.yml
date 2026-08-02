@@ -102,8 +102,8 @@ jobs:
             macos: true
           # The one target that is neither tar nor ELF: it packages a `.zip`
           # around a `.exe`, which is what `windows: true` selects below.
-          # `install.sh` is POSIX and does not cover it, so the release notes
-          # point Windows users at the archive directly.
+          # `install.sh` is POSIX and does not cover it; `install.ps1` is its
+          # counterpart, shipped beside it and serving this archive.
           - name: windows-x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
@@ -216,8 +216,10 @@ jobs:
         run: |
           mkdir -p release
           find dist -mindepth 2 -type f -exec mv -t release {} +
-          cp install.sh release/
-          ( cd release && sha256sum install.sh > install.sh.sha256 )
+          for script in install.sh install.ps1; do
+            cp "$script" release/
+            ( cd release && sha256sum "$script" > "$script.sha256" )
+          done
           ls -la release
 
       - name: release notes

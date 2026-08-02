@@ -9,9 +9,10 @@ is built in, so there is nothing else to install.
 == Prebuilt binary
 
 The quickest path, no Rust toolchain needed. Prebuilt binaries are published for
-Linux (`x86_64` and `aarch64`) and for macOS on Apple Silicon. The installer
-picks the right one, downloads the release tarball, verifies its checksum, and
-drops `baudelaire` in `~/.local/bin`.
+Linux (`x86_64` and `aarch64`, each in a `gnu` and a `musl` build), for macOS on
+both Apple Silicon and Intel, and for Windows on `x86_64`. The installer picks
+the right one, downloads the release archive, verifies its checksum, and drops
+the binary in `~/.local/bin`.
 
 It is deliberately readable, so fetch it, skim it, then run it:
 
@@ -21,6 +22,19 @@ less install.sh          # read before you run
 sh install.sh
 ```
 
+On Windows, `install.ps1` is the same script in PowerShell: the same knobs under
+the same names, the same steps, the same checksum promise. It installs to
+`%LOCALAPPDATA%\Programs\baudelaire`.
+
+```powershell
+irm https://baudelaire.cstef.dev/install.ps1 -OutFile install.ps1
+notepad install.ps1     # read before you run
+.\install.ps1
+```
+
+Neither installer edits your `PATH`. When the install directory is not already
+on it, both print the line that adds it.
+
 The checksum it verifies is the `sha256` published alongside the tarball, from
 the same origin as the tarball itself. That catches a corrupted or truncated
 download; it is not a signature, and it is not evidence about who built the
@@ -28,7 +42,8 @@ release.
 
 Set `PREFIX=` to install elsewhere, or `VERSION=vX.Y.Z` to pin a release. On
 Linux the installer picks the `musl` build on a musl host and the `gnu` one
-otherwise; `LIBC=musl` forces it.
+otherwise; `LIBC=musl` forces it. In PowerShell the same knobs are environment
+variables: `$env:PREFIX`, `$env:VERSION`, `$env:FLAVOR`.
 
 The macOS build is unsigned and unnotarized, so Gatekeeper blocks the first run.
 Clear the quarantine flag once:
@@ -37,7 +52,9 @@ Clear the quarantine flag once:
 xattr -d com.apple.quarantine ~/.local/bin/baudelaire
 ```
 
-Intel Macs have no prebuilt binary; `cargo install baudelaire` builds one.
+Windows on ARM has no prebuilt binary. It would run the `x86_64` one under
+emulation, so the installer refuses rather than quietly handing you a slow
+build; `cargo install baudelaire` compiles a native one.
 
 == With cargo
 
@@ -62,6 +79,10 @@ renderer ~1 MiB.
 
 ```sh
 FLAVOR=slim sh install.sh
+```
+
+```powershell
+$env:FLAVOR = "slim"; .\install.ps1
 ```
 
 Building it yourself is `cargo install baudelaire --no-default-features`, and
