@@ -13,6 +13,7 @@ use typst::{
     utils::LazyHash,
 };
 mod context;
+pub(crate) mod generated;
 pub mod image_rule;
 pub(crate) mod module;
 mod packages;

@@ -65,6 +65,10 @@ stale, edited or missing can mislead an editor and never change a page.
   The symbols resolve either way. Re-run after upgrading baudelaire.
 ]
 
+`baudelaire packages --uninstall` takes them back off, removing baudelaire's own
+namespace directory and nothing else in there. `clean` does not touch them: it
+sweeps project state, and these are machine-global.
+
 == html
 
 `h` is `html.elem` without the `attrs:` wrapper. Named arguments become

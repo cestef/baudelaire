@@ -29,6 +29,7 @@ pub mod hook;
 pub mod link;
 pub mod lint;
 pub mod output;
+pub mod packages;
 pub mod remote;
 pub mod scaffold;
 pub mod schema;
@@ -52,6 +53,7 @@ pub use hook::{HookError, Phase as HookPhase};
 pub use link::{Broken, BrokenLinks, Dead, DeadLinks};
 pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
 pub use output::BaseUrlRequired;
+pub use packages::PackagesError;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
 pub use schema::SchemaError;
@@ -133,6 +135,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Content(Box<crate::error::ContentError>),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Packages(Box<crate::error::PackagesError>),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

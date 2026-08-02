@@ -15,10 +15,12 @@ use crate::config::Config;
 use crate::error::cli::{Generated, UnknownKey};
 use crate::error::warning::{CleanDefaults, CleanRefused, Uninferred};
 use crate::error::{
-    BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
+    BaudelaireErrorKind, ConfigError, FsError, Op, PackagesError, Result, ScaffoldError,
+    StrictWarnings,
 };
 use crate::ui::{Level, Ui, markup};
 use crate::version::Version;
+use crate::world::module::Packages;
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
 /// (section headers, usage), green for the literals you type (commands and
@@ -258,6 +260,9 @@ pub enum Command {
     /// Print every key config.kdl accepts, with its value shape.
     #[command(visible_alias = "ref")]
     Reference(ReferenceArgs),
+    /// Install the `@baudelaire/*` typst modules where an editor can resolve them.
+    #[command(visible_alias = "pkg")]
+    Packages(PackagesArgs),
 }
 
 /// Arguments for `baudelaire build`.
@@ -383,6 +388,18 @@ impl Shell {
 pub struct ReferenceArgs {
     /// A dotted key path to narrow to, e.g. `assets.images`.
     pub key: Option<String>,
+}
+
+/// Arguments for `baudelaire packages`.
+#[derive(Args, Debug, Clone)]
+#[command(after_help = PackagesArgs::explanation())]
+pub struct PackagesArgs {
+    /// Install into this directory instead of typst's own package directory.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
+    /// Remove what a previous install wrote, instead of installing.
+    #[arg(long)]
+    pub uninstall: bool,
 }
 
 /// Arguments for `baudelaire man`. Empty, and kept as a struct rather than
@@ -1061,6 +1078,7 @@ impl Command {
             Self::Completions(args) => args.run(cx),
             Self::Man(args) => args.run(cx),
             Self::Reference(args) => args.run(cx),
+            Self::Packages(args) => args.run(cx),
         }
     }
 }
@@ -1121,6 +1139,103 @@ impl ReferenceArgs {
             let _ = std::fmt::Write::write_fmt(&mut out, format_args!("  {colored}{pad}{what}\n"));
         }
         out
+    }
+}
+
+impl PackagesArgs {
+    /// Appended to `packages --help`. The command exists for one reason, and a
+    /// reader who does not know that reason cannot guess it from the name.
+    fn explanation() -> String {
+        use owo_colors::{OwoColorize, Stream::Stdout};
+
+        format!(
+            "{}\n  \
+             The `@baudelaire/*` modules a template imports are generated during a\n  \
+             build, so an editor has nothing to resolve and marks the import unknown.\n  \
+             This writes them out as ordinary typst packages, where typst's own\n  \
+             resolution (and every editor built on it) finds them.\n\n  \
+             A build never reads what this writes, so a stale copy cannot change a\n  \
+             page. Re-run it after upgrading baudelaire.\n",
+            "About:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
+        )
+    }
+
+    /// The project whose data the modules are generated from.
+    ///
+    /// Optional, and deliberately: `html` and `site` are worth installing from
+    /// anywhere (after an upgrade, say, with no project in sight), and the two
+    /// table modules install empty outside a project exactly as they do inside
+    /// one that has never been built.
+    fn config(cx: &Cx) -> Config {
+        cx.announced("installing modules for").unwrap_or_else(|_| {
+            cx.ui.banner("installing modules");
+            Config {
+                root: cx.root.path().to_path_buf(),
+                ..Config::default()
+            }
+        })
+    }
+
+    /// Where to install: the named directory, else typst's own.
+    fn directory(&self) -> Result<PathBuf> {
+        match &self.path {
+            Some(path) => Ok(path.clone()),
+            None => Packages::directory().ok_or_else(|| PackagesError::NoDirectory.into()),
+        }
+    }
+}
+
+impl Run for PackagesArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        let dir = self.directory()?;
+        if self.uninstall {
+            cx.ui.banner("removing modules");
+            // The inverse of installing belongs to the command that installs,
+            // not to `clean`: this is machine-global state that no config
+            // locates, and `--path` means only the install that wrote it knows
+            // where it went. `clean` stays what it says it is, project state.
+            let removed = Packages::uninstall(&dir)?;
+            match removed {
+                Some(path) => cx.ui.done(format_args!("removed {}", path.display())),
+                None => cx.ui.done("nothing installed"),
+            }
+            return Ok(());
+        }
+        let config = Self::config(cx);
+        let installed = Packages::new(&config).install(&dir)?;
+
+        cx.ui.done(format_args!(
+            "installed {} modules into {}",
+            installed.len(),
+            dir.display()
+        ));
+        let rows: Vec<String> = installed
+            .iter()
+            .map(|module| format!("@baudelaire/{}", module.name))
+            .collect();
+        cx.ui.tree(&rows);
+        // The two table modules are built from the site's own pages, so before a
+        // first build there is nothing to copy and they install empty. Symbols
+        // resolve either way; only the values are missing, and the next install
+        // after a build fills them in.
+        if installed.iter().any(|module| module.empty) {
+            cx.ui.detail(format_args!(
+                "{} have no data until the site has been built once",
+                installed
+                    .iter()
+                    .filter(|module| module.empty)
+                    .map(|module| module.name)
+                    .collect::<Vec<_>>()
+                    .join(" and ")
+            ));
+        }
+        if self.path.is_some() {
+            cx.ui.detail(format_args!(
+                "point your editor at it: tinymist.packagePath = {}",
+                dir.display()
+            ));
+        }
+        Ok(())
     }
 }
 

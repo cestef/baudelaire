@@ -29,6 +29,21 @@ chores are visible in the git history and change nothing for a site.
   Windows on ARM is refused by name rather than served the `x86_64` build to run
   under emulation.
 
+- **packages**: `baudelaire packages` writes the generated `@baudelaire/*` Typst
+  modules to disk as ordinary packages, so an editor can resolve the imports a
+  template carries instead of marking them unknown. It installs into typst's own
+  package directory by default, and `--path <dir>` names another (pair it with
+  `tinymist.packagePath`). `init` runs it for a fresh project.
+
+  A build is unaffected either way: the compiler answers `@baudelaire/*` from
+  memory before typst's package resolution runs, so an installed copy that is
+  stale or missing can mislead an editor and never change a page. Re-run it after
+  upgrading.
+
+  `baudelaire packages --uninstall` removes them again, taking baudelaire's own
+  namespace directory and nothing else in that directory. `clean` is untouched by
+  this: it sweeps project state, and these modules are machine-global.
+
 ### Fixed
 
 - **reference**: three key descriptions in `baudelaire reference` (and the

@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::codegen::{Let, Value};
+use crate::config::Config;
 use crate::error::Result;
-use crate::world::module::generated;
 
 /// One per-language table, written out as Typst source and imported as
 /// `@baudelaire/<module>`.
@@ -22,7 +22,7 @@ use crate::world::module::generated;
 ///
 /// The files are generated build state, not source: rewritten every build,
 /// never edited, and safe to delete.
-pub(in crate::engine) struct Generated {
+pub(crate) struct Generated {
     /// The module this backs, which is also the accessor a template calls:
     /// `@baudelaire/sections` exports `sections(lang)`.
     module: &'static str,
@@ -35,17 +35,33 @@ impl Generated {
     /// only through the accessor named after the module.
     const TABLE: &'static str = "__table";
 
-    pub(in crate::engine) fn new(module: &'static str, trees: BTreeMap<String, Value>) -> Self {
+    pub(crate) fn new(module: &'static str, trees: BTreeMap<String, Value>) -> Self {
         Self { module, trees }
     }
 
     /// Where this file lives, relative to the project root.
     ///
     /// Templates never spell it: they import `@baudelaire/<module>`, and the
-    /// module registry resolves that to this path. The path is the registry's
-    /// to decide, so it is asked rather than restated.
-    pub(in crate::engine) fn path(&self) -> PathBuf {
-        generated(self.module)
+    /// module registry resolves that to this path.
+    ///
+    /// Under [`Config::SCRATCH`] because it is regenerable build state:
+    /// gitignored, wiped by `clean`, and outside every root `serve` watches, so
+    /// writing it cannot retrigger the build that wrote it.
+    pub(crate) fn path(&self) -> PathBuf {
+        Self::of(self.module)
+    }
+
+    /// The same path for a module named directly, which the registry needs to
+    /// serve a file-backed module before any `Generated` exists.
+    pub(crate) fn of(module: &str) -> PathBuf {
+        Config::scratch("generated").join(format!("{module}.typ"))
+    }
+
+    /// The table with nothing in it: what a module reads as before a build has
+    /// written the real one. Every language resolves to an empty value, which
+    /// is what the accessor already promises for a language that was not built.
+    pub(crate) fn empty(module: &'static str) -> Self {
+        Self::new(module, BTreeMap::new())
     }
 
     /// Write the file under `root`, creating its directory.
@@ -53,7 +69,7 @@ impl Generated {
     /// Run once per build and before any page compiles, because a template's
     /// `#import` has to resolve on the very first build in a fresh checkout,
     /// where nothing has written it yet.
-    pub(in crate::engine) fn write(&self, root: &Path) -> Result<()> {
+    pub(crate) fn write(&self, root: &Path) -> Result<()> {
         crate::fs::write_all(root.join(self.path()), self.source())
     }
 
@@ -62,7 +78,7 @@ impl Generated {
     /// A function rather than a bare dict so a template reads `sections(page.lang)`
     /// on a multilingual site and a single-language one alike, and so an unbuilt
     /// language yields an empty value instead of failing the page that asked.
-    fn source(&self) -> String {
+    pub(crate) fn source(&self) -> String {
         let table = Value::dict(
             self.trees
                 .iter()

@@ -88,6 +88,21 @@ pub struct VcsMissing {
     pub tool: &'static str,
 }
 
+/// The editor-tooling mirror of the `@baudelaire/*` modules could not be
+/// written during `init`. Nothing about the site is affected: a build serves
+/// those modules from memory, so this only means an editor will mark the
+/// imports unresolved until `baudelaire packages` succeeds.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("typst modules not installed for editor tooling: {}", Text(.reason))]
+#[diagnostic(
+    code(baudelaire::packages::skipped),
+    severity(warning),
+    help("the site still builds; run `baudelaire packages --path <dir>` to choose a location")
+)]
+pub struct PackagesSkipped {
+    pub reason: String,
+}
+
 /// Two different externalized images resolved to the same served filename. Only
 /// the first is kept, so one image would be wrong; the author must rename a
 /// source or enable `assets { fingerprint }` to disambiguate by

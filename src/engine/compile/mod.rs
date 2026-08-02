@@ -16,7 +16,6 @@
 pub(super) mod bundle;
 #[cfg(feature = "cards")]
 pub(super) mod card;
-pub(super) mod generated;
 pub(super) mod image;
 pub(super) mod layout;
 #[cfg(feature = "sidecars")]

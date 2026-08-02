@@ -325,6 +325,10 @@ it; a narrowed `clean --cache` does not. Off a terminal the full sweep stops
 rather than answering for itself, so pass `-y` in CI. A target that would swallow
 the project (`paths { dist "." }`) is refused.
 
+`clean` sweeps project state only. The `@baudelaire/*` modules installed for
+editor tooling are machine-global and no config locates them, so they are
+`baudelaire packages --uninstall`, below.
+
 This is not the config's `prune`, which sweeps only files no page claims and runs
 as part of every build.
 
@@ -369,8 +373,9 @@ printed from the binary you have.
 == packages
 
 ```sh
-baudelaire packages                       # into typst's package directory
+baudelaire packages                         # into typst's package directory
 baudelaire packages --path .typst-packages  # somewhere else
+baudelaire packages --uninstall             # take them back off
 ```
 
 Writes the four #link("typst-modules.typ")[`@baudelaire/*` modules] to disk as
@@ -381,8 +386,13 @@ ordinary typst packages, so an editor stops marking their imports unresolved.
   columns: 2,
   align: (left, left),
   table.header([Flag], [Does]),
-  [`--path DIR`], [Install here instead. Set `tinymist.packagePath` to the same directory.],
+  [`--path DIR`], [Install here (or uninstall from here) instead. Set `tinymist.packagePath` to the same directory.],
+  [`--uninstall`], [Remove what an install wrote, and nothing else in that directory.],
 )
 
 A project is optional: outside one, `sections` and `pages` install empty. A build
 never reads what this writes, so a stale install can't change a page.
+
+Uninstalling removes baudelaire's own namespace directory only, so `@local`
+packages sitting beside it are untouched. An install made with `--path` comes off
+the same way: `baudelaire packages --uninstall --path <dir>`.

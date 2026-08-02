@@ -34,12 +34,16 @@ use typst::syntax::{
     package::{PackageSpec, PackageVersion},
 };
 use typst_kit::files::{FileLoader, FsRoot, SystemFiles};
-use typst_kit::packages::SystemPackages;
+use typst_kit::packages::{FsPackages, SystemPackages};
 
-use super::BuildContext;
+use time::OffsetDateTime;
+
+use super::generated::Generated;
+use super::{BuildContext, Mode};
 use crate::codegen::{Let, Value};
 use crate::config::Config;
 use crate::config::dispatch::Keys;
+use crate::error::Result;
 use crate::graph::Hash;
 
 /// The package namespace every generated module lives in.
@@ -123,15 +127,6 @@ pub(crate) const SECTIONS: &str = "sections";
 /// The page catalogue module: `pages(lang)`.
 pub(crate) const PAGES: &str = "pages";
 
-/// Where a file-backed module's source lives, relative to the project root.
-///
-/// Under [`Config::SCRATCH`] because it is regenerable build state: gitignored,
-/// wiped by `clean`, and outside every root `serve` watches, so writing it
-/// cannot retrigger the build that wrote it.
-pub(crate) fn generated(name: &str) -> PathBuf {
-    Config::scratch("generated").join(format!("{name}.typ"))
-}
-
 /// Where a module's entrypoint source comes from.
 enum Entrypoint {
     /// Generated with the world and served from memory. Holds nothing volatile,
@@ -165,7 +160,7 @@ impl Modules {
             })
             .collect();
         for name in FILES {
-            entrypoints.insert(name, Entrypoint::File(root.join(generated(name))));
+            entrypoints.insert(name, Entrypoint::File(root.join(Generated::of(name))));
         }
         Self { entrypoints }
     }
@@ -396,5 +391,211 @@ impl Module for Site {
 
     fn body(&self) -> &'static str {
         include_str!("typ/site.typ")
+    }
+}
+
+/// The generated modules written to disk as ordinary Typst packages, so editor
+/// tooling can resolve `@baudelaire/*`.
+///
+/// A build never reads them. [`Files::load`] answers this namespace from memory
+/// before typst's package resolution runs, so an installed copy that is stale,
+/// edited or absent can mislead an editor and can never change a page. That is
+/// what makes installing them safe: they are a mirror, not a source.
+///
+/// The two file-backed modules are the reason this is a copy rather than a
+/// symlink: their tables are derived from the site that was last built, so a
+/// second project on the same machine overwrites the values, never the API.
+pub struct Packages {
+    modules: Modules,
+}
+
+/// One installed package.
+pub struct Installed {
+    pub name: &'static str,
+    /// Whether the module's data came from a real build, or is the empty table
+    /// a project that has never been built has to make do with.
+    pub empty: bool,
+}
+
+impl Packages {
+    /// The directory typst resolves a non-`preview` package from, which is what
+    /// every editor built on typst reads. Asked of typst-kit rather than spelled
+    /// out here, so the mirror lands wherever typst itself would look.
+    ///
+    /// `None` when the platform has no data directory: there is then nowhere
+    /// zero-config to install to, and the caller has to name one.
+    pub fn directory() -> Option<PathBuf> {
+        FsPackages::system_data().map(|packages| packages.path().to_path_buf())
+    }
+
+    /// The registry as this project would serve it.
+    pub fn new(config: &Config) -> Self {
+        let root = crate::fs::canonical(&config.root);
+        let context = BuildContext::detect(&root, OffsetDateTime::now_utc(), config, Mode::Build);
+        let tree = Value::from(&context);
+        Self {
+            modules: Modules::new(&ModuleCx { context: &tree }, &root),
+        }
+    }
+
+    /// Everything an install owns inside a package directory: one namespace
+    /// directory and nothing else. What [`install`](Self::install) writes into
+    /// and what `clean --packages` removes, stated once so the two can never
+    /// disagree about the boundary. Anything above it belongs to whoever else
+    /// puts packages there.
+    pub fn owned(dir: &Path) -> PathBuf {
+        dir.join(NAMESPACE)
+    }
+
+    /// Remove what an install wrote into `dir`, and nothing else in there: the
+    /// package directory is shared with whatever else a reader keeps in it,
+    /// `@local` packages included, so only baudelaire's own namespace directory
+    /// is ever removed. `None` when there was nothing to remove.
+    pub fn uninstall(dir: &Path) -> Result<Option<PathBuf>> {
+        let owned = Self::owned(dir);
+        if !owned.exists() {
+            return Ok(None);
+        }
+        crate::fs::remove_dir_all(&owned)?;
+        Ok(Some(owned))
+    }
+
+    /// Write every module under `dir` as `<namespace>/<name>/<version>/`, the
+    /// layout typst looks for, and report what landed where.
+    pub fn install(&self, dir: &Path) -> Result<Vec<Installed>> {
+        let mut installed = Vec::new();
+        for (name, entrypoint) in &self.modules.entrypoints {
+            let (source, empty) = match entrypoint {
+                Entrypoint::Memory(bytes) => (String::from_utf8_lossy(bytes).into_owned(), false),
+                // Written by the last build. Absent on a project that has never
+                // been built, which is exactly the moment `init` installs, so
+                // the empty table stands in: every symbol resolves, and the
+                // next install after a build fills in the values.
+                Entrypoint::File(path) => match std::fs::read_to_string(path) {
+                    Ok(source) => (source, false),
+                    Err(_) => (Generated::empty(name).source(), true),
+                },
+            };
+            let target = Self::owned(dir).join(name).join(VERSION.to_string());
+            crate::fs::write_all(target.join(MANIFEST), Modules::manifest(name))?;
+            crate::fs::write_all(target.join(ENTRYPOINT), source)?;
+            installed.push(Installed { name, empty });
+        }
+        Ok(installed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use typst::syntax::package::PackageSpec;
+
+    /// The point of installing is that *typst's* resolver finds them, so the
+    /// assertion goes through typst-kit's own package lookup rather than
+    /// checking for files by path: a layout that satisfies this is a layout an
+    /// editor resolves.
+    #[test]
+    fn an_installed_module_resolves_the_way_typst_resolves_a_package() {
+        let dir = tempfile::tempdir().unwrap();
+        let installed = Packages::new(&Config::default())
+            .install(dir.path())
+            .expect("install");
+
+        let packages = FsPackages::new(dir.path());
+        for module in &installed {
+            let spec = PackageSpec {
+                namespace: NAMESPACE.into(),
+                name: module.name.into(),
+                version: VERSION,
+            };
+            assert!(
+                packages.obtain(&spec).is_some(),
+                "typst cannot resolve @{NAMESPACE}/{}",
+                module.name
+            );
+        }
+    }
+
+    /// Nothing on disk may become the source of truth: the build answers this
+    /// namespace from memory, and an install that could shadow it would make a
+    /// stale mirror a wrong build.
+    #[test]
+    fn the_registry_serves_memory_regardless_of_what_is_installed() {
+        let modules = Modules::new(
+            &ModuleCx {
+                context: &Value::None,
+            },
+            Path::new("."),
+        );
+        let spec = PackageSpec {
+            namespace: NAMESPACE.into(),
+            name: "html".into(),
+            version: VERSION,
+        };
+        let served = modules
+            .load(&spec, &VirtualPath::new(ENTRYPOINT).expect("a valid vpath"))
+            .expect("html is served");
+        assert!(String::from_utf8_lossy(&served).contains(Html.body()));
+    }
+
+    /// Uninstalling takes baudelaire's namespace directory and nothing around
+    /// it: the package directory is shared with a reader's own `@local`
+    /// packages, and taking the lot would be a very bad way to learn that.
+    #[test]
+    fn uninstalling_leaves_the_rest_of_the_package_directory_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let neighbour = dir.path().join("local").join("theme").join("0.1.0");
+        std::fs::create_dir_all(&neighbour).unwrap();
+        Packages::new(&Config::default())
+            .install(dir.path())
+            .expect("install");
+
+        let removed = Packages::uninstall(dir.path()).expect("uninstall");
+        assert_eq!(
+            removed.as_deref(),
+            Some(Packages::owned(dir.path()).as_path())
+        );
+        assert!(!Packages::owned(dir.path()).exists());
+        assert!(neighbour.exists());
+        // A second run is not an error: there is simply nothing there.
+        assert!(
+            Packages::uninstall(dir.path())
+                .expect("uninstall")
+                .is_none()
+        );
+    }
+
+    /// A project that has never been built still installs every module, with
+    /// the table ones empty rather than missing, so an editor resolves the
+    /// import either way.
+    #[test]
+    fn table_modules_install_empty_before_a_first_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let config = Config {
+            root: project.path().to_path_buf(),
+            ..Config::default()
+        };
+        let installed = Packages::new(&config).install(dir.path()).expect("install");
+
+        // Sorted, because the registry is a `BTreeMap` and `FILES` is written in
+        // declaration order: the claim is which modules, not in what order.
+        let mut empty: Vec<&str> = installed
+            .iter()
+            .filter(|module| module.empty)
+            .map(|module| module.name)
+            .collect();
+        empty.sort_unstable();
+        let mut expected = FILES;
+        expected.sort_unstable();
+        assert_eq!(empty, expected);
+        let source = std::fs::read_to_string(
+            dir.path()
+                .join(NAMESPACE)
+                .join(SECTIONS)
+                .join("0.1.0/lib.typ"),
+        )
+        .unwrap();
+        assert!(source.contains("#let sections(lang)"));
     }
 }

@@ -27,8 +27,8 @@ use crate::theme::Theme;
 use crate::world::Project;
 use crate::world::module;
 
-use super::generated::Generated;
 use super::layout::{Bind, Body, Context, Layout};
+use crate::world::generated::Generated;
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
 /// typst will compile, and that text's fingerprint, before the costly parse

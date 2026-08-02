@@ -11,11 +11,14 @@ use crate::cli::{InitArgs, NewArgs, Root};
 use crate::codegen::Value;
 use crate::config::{Config, SortKey};
 use crate::content::{Collection, Frontmatter, Page, Slug};
-use crate::error::Result;
-use crate::error::warning::{PermalinkTaken, ScaffoldExists, VcsFailed, VcsMissing};
+use crate::error::warning::{
+    PackagesSkipped, PermalinkTaken, ScaffoldExists, VcsFailed, VcsMissing,
+};
+use crate::error::{PackagesError, Result};
 use crate::fs;
 use crate::ui::{Paths, Ui};
 use crate::world::Project;
+use crate::world::module::Packages;
 
 /// Declarative scaffold: the files to create under a root, written in one pass
 /// so nothing is laid down until every one of them is known.
@@ -128,6 +131,8 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         Repo::new(&target, vcs).setup(ui)?;
     }
 
+    packages(ui, &target);
+
     ui.blank();
     ui.done_plain(format_args!(
         "{} project ready in {}",
@@ -141,6 +146,33 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         "baudelaire serve".cyan()
     ));
     Ok(())
+}
+
+/// Mirror the generated `@baudelaire/*` modules into typst's package directory,
+/// so the imports the scaffolded templates carry resolve in an editor from the
+/// first minute.
+///
+/// A warning rather than an error: this is tooling convenience, and a platform
+/// with no data directory (or one that is read-only) is no reason to fail a
+/// scaffold that otherwise succeeded. The site builds either way, since a build
+/// serves these modules from memory and never reads what this writes.
+fn packages(ui: &Ui, target: &Path) {
+    let config = Config {
+        root: target.to_path_buf(),
+        ..Config::default()
+    };
+    let installed = Packages::directory()
+        .ok_or_else(|| PackagesError::NoDirectory.into())
+        .and_then(|dir| Packages::new(&config).install(&dir));
+    match installed {
+        Ok(modules) => ui.detail(format_args!(
+            "installed {} typst modules for editor tooling",
+            modules.len()
+        )),
+        Err(error) => ui.warn(PackagesSkipped {
+            reason: error.to_string(),
+        }),
+    }
 }
 
 /// Project metadata for a fresh scaffold: prompted interactively, or defaulted
