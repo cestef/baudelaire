@@ -365,7 +365,7 @@ impl Section for DraftConfig {
         (
             "suffix",
             Text,
-            "Appended to a draft's URL, so a built draft cannot collide with the published page.",
+            "The filename marker that flags a draft, peeled off the stem: `post.draft.typ`.",
             |c, n, t| {
                 c.suffix = n.string(t, 0)?;
                 Ok(())
@@ -1786,7 +1786,7 @@ impl Section for StandardConfig {
         (
             "discover",
             Flag,
-            "Resolve the PDS from the handle rather than trusting `pds`.",
+            "Show the publication on standard.site's discovery surfaces.",
             |c, n, t| {
                 c.discover = n.boolean(t, 0)?;
                 Ok(())
@@ -1817,7 +1817,7 @@ impl Section for VerifyConfig {
         (
             "wellknown",
             Flag,
-            "Write `/.well-known/atproto-did`.",
+            "Write `/.well-known/site.standard.publication`, naming the publication record.",
             |c, n, t| {
                 c.wellknown = n.boolean(t, 0)?;
                 Ok(())

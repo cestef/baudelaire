@@ -29,6 +29,16 @@ chores are visible in the git history and change nothing for a site.
   Windows on ARM is refused by name rather than served the `x86_64` build to run
   under emulation.
 
+### Fixed
+
+- **reference**: three key descriptions in `baudelaire reference` (and the
+  generated config reference) described something the build does not do.
+  `content { draft { suffix } }` is a filename marker peeled off the stem, not
+  something appended to a URL; `announce { standard { discover } }` opts the
+  publication into standard.site's discovery surfaces rather than resolving the
+  PDS from the handle; and `announce { standard { verify { wellknown } } }`
+  writes `/.well-known/site.standard.publication`, not `/.well-known/atproto-did`.
+
 ## [0.0.9] - 2026-08-01
 
 ### Breaking
