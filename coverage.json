@@ -1,7 +1,7 @@
 {
- "badge": "2d5964b3c6b10fb4",
- "commit": "8e17535e33e6d3b629ed8fd648116fe854d5e121",
- "covered": 8202,
+ "badge": "63aeb3f0b8893073",
+ "commit": "39a680b6ffd0cc20072f316b75f18059c3ec3f8b",
+ "covered": 9020,
  "files": {
   "src/announce/mod.rs": [
    43,
@@ -24,8 +24,8 @@
    36
   ],
   "src/cli/mod.rs": [
-   200,
-   254
+   263,
+   331
   ],
   "src/cli/prompt.rs": [
    2,
@@ -36,36 +36,36 @@
    8
   ],
   "src/cli/scaffold.rs": [
-   265,
-   342
+   263,
+   340
   ],
   "src/cli/serve.rs": [
-   75,
-   343
+   73,
+   341
   ],
   "src/codegen.rs": [
    96,
    107
   ],
   "src/config/defaults.rs": [
-   90,
-   90
+   97,
+   97
   ],
   "src/config/dispatch.rs": [
-   69,
-   71
+   81,
+   82
   ],
   "src/config/mod.rs": [
-   234,
-   247
+   258,
+   279
   ],
   "src/config/node.rs": [
-   107,
-   113
+   114,
+   120
   ],
   "src/config/parse.rs": [
-   451,
-   516
+   521,
+   622
   ],
   "src/config/permalink.rs": [
    74,
@@ -75,17 +75,21 @@
    23,
    23
   ],
+  "src/config/reference.rs": [
+   77,
+   98
+  ],
   "src/config/url.rs": [
-   55,
-   56
+   54,
+   55
   ],
   "src/config/value.rs": [
-   51,
-   59
+   54,
+   62
   ],
   "src/content/cache.rs": [
-   70,
-   70
+   75,
+   75
   ],
   "src/content/date.rs": [
    23,
@@ -96,8 +100,8 @@
    78
   ],
   "src/content/frontmatter.rs": [
-   91,
-   93
+   146,
+   153
   ],
   "src/content/generate.rs": [
    7,
@@ -148,16 +152,16 @@
    86
   ],
   "src/deploy/s3.rs": [
-   169,
-   180
+   171,
+   182
   ],
   "src/deploy/sigv4.rs": [
-   51,
-   51
+   55,
+   55
   ],
   "src/deploy/ssh/auth.rs": [
-   21,
-   48
+   23,
+   51
   ],
   "src/deploy/ssh/hosts.rs": [
    15,
@@ -168,8 +172,12 @@
    34
   ],
   "src/deploy/ssh/session.rs": [
-   96,
-   106
+   98,
+   108
+  ],
+  "src/digest.rs": [
+   24,
+   26
   ],
   "src/engine/asset/css.rs": [
    82,
@@ -196,8 +204,8 @@
    51
   ],
   "src/engine/asset/mod.rs": [
-   105,
-   106
+   107,
+   108
   ],
   "src/engine/asset/module.rs": [
    125,
@@ -207,25 +215,29 @@
    76,
    83
   ],
+  "src/engine/check/lint.rs": [
+   65,
+   67
+  ],
   "src/engine/check/mod.rs": [
    31,
    31
   ],
   "src/engine/compile/bundle.rs": [
-   88,
-   94
+   89,
+   95
   ],
   "src/engine/compile/card.rs": [
-   56,
-   58
+   49,
+   51
   ],
   "src/engine/compile/generated.rs": [
    15,
    15
   ],
   "src/engine/compile/image.rs": [
-   36,
-   41
+   42,
+   47
   ],
   "src/engine/compile/layout.rs": [
    34,
@@ -240,32 +252,36 @@
    13
   ],
   "src/engine/compile/prepare.rs": [
-   107,
-   109
+   109,
+   111
   ],
   "src/engine/compile/sidecar.rs": [
    40,
    40
+  ],
+  "src/engine/emit/csp.rs": [
+   66,
+   70
   ],
   "src/engine/emit/feed.rs": [
    116,
    122
   ],
   "src/engine/emit/headers.rs": [
-   14,
-   14
+   30,
+   30
   ],
   "src/engine/emit/llms.rs": [
    38,
    39
   ],
   "src/engine/emit/mod.rs": [
-   55,
-   58
+   54,
+   57
   ],
   "src/engine/emit/redirect.rs": [
-   43,
-   43
+   45,
+   45
   ],
   "src/engine/emit/robots.rs": [
    18,
@@ -308,8 +324,8 @@
    15
   ],
   "src/engine/mod.rs": [
-   355,
-   369
+   374,
+   388
   ],
   "src/engine/prune.rs": [
    19,
@@ -324,8 +340,8 @@
    25
   ],
   "src/engine/text.rs": [
-   75,
-   83
+   74,
+   81
   ],
   "src/error/annotated.rs": [
    14,
@@ -343,13 +359,17 @@
    0,
    5
   ],
+  "src/error/cli.rs": [
+   5,
+   20
+  ],
   "src/error/config.rs": [
-   111,
-   120
+   116,
+   125
   ],
   "src/error/content.rs": [
-   40,
-   42
+   39,
+   41
   ],
   "src/error/deploy.rs": [
    7,
@@ -367,6 +387,10 @@
    58,
    78
   ],
+  "src/error/lint.rs": [
+   61,
+   111
+  ],
   "src/error/mod.rs": [
    6,
    10
@@ -374,6 +398,10 @@
   "src/error/scaffold.rs": [
    10,
    12
+  ],
+  "src/error/schema.rs": [
+   31,
+   44
   ],
   "src/error/serialize.rs": [
    0,
@@ -393,7 +421,7 @@
   ],
   "src/error/typ.rs": [
    52,
-   54
+   55
   ],
   "src/error/warning.rs": [
    0,
@@ -432,8 +460,8 @@
    7
   ],
   "src/mime.rs": [
-   41,
-   41
+   40,
+   40
   ],
   "src/remote.rs": [
    34,
@@ -443,37 +471,73 @@
    17,
    17
   ],
+  "src/render/emitted.rs": [
+   16,
+   16
+  ],
   "src/render/fragment.rs": [
    42,
    43
+  ],
+  "src/render/inline.rs": [
+   13,
+   14
   ],
   "src/render/links.rs": [
    41,
    41
   ],
+  "src/render/lint/alt.rs": [
+   5,
+   5
+  ],
+  "src/render/lint/aria.rs": [
+   24,
+   27
+  ],
+  "src/render/lint/headings.rs": [
+   9,
+   9
+  ],
+  "src/render/lint/ids.rs": [
+   7,
+   7
+  ],
+  "src/render/lint/mod.rs": [
+   53,
+   53
+  ],
+  "src/render/lint/weigh.rs": [
+   24,
+   27
+  ],
   "src/render/mod.rs": [
-   20,
-   20
+   26,
+   26
+  ],
+  "src/render/origin.rs": [
+   26,
+   27
   ],
   "src/render/scope.rs": [
-   112,
-   114
+   110,
+   112
   ],
   "src/render/srcset.rs": [
    11,
    11
   ],
   "src/render/transform/anchors.rs": [
-   33,
-   35
+   22,
+   23
   ],
   "src/render/transform/base.rs": [
    7,
    7
   ],
   "src/render/transform/embed.rs": [
-   42,
-   43
+   25,
+   26
   ],
   "src/render/transform/externalize.rs": [
    24,
@@ -495,6 +559,10 @@
    9,
    9
   ],
+  "src/render/transform/integrity.rs": [
+   27,
+   29
+  ],
   "src/render/transform/lang.rs": [
    6,
    7
@@ -504,8 +572,8 @@
    199
   ],
   "src/render/transform/mod.rs": [
-   90,
-   91
+   114,
+   115
   ],
   "src/render/transform/outbound.rs": [
    11,
@@ -520,8 +588,8 @@
    23
   ],
   "src/render/transform/spans.rs": [
-   25,
-   26
+   7,
+   7
   ],
   "src/render/transform/speculation.rs": [
    23,
@@ -540,8 +608,8 @@
    39
   ],
   "src/ui/fmt.rs": [
-   74,
-   77
+   83,
+   87
   ],
   "src/ui/marker.rs": [
    15,
@@ -568,7 +636,7 @@
    37
   ],
   "src/world/context.rs": [
-   67,
+   68,
    70
   ],
   "src/world/image_rule.rs": [
@@ -588,8 +656,8 @@
    7
   ]
  },
- "percent": 87.59,
+ "percent": 87.07,
  "schema": 2,
- "total": 9364,
- "updated": "2026-08-01T06:19:42+00:00"
+ "total": 10360,
+ "updated": "2026-08-02T06:23:32+00:00"
 }
