@@ -4,8 +4,8 @@
 use kdl::KdlValue;
 use miette::SourceSpan;
 
-use crate::config::Named;
 use crate::config::dispatch::Keys;
+use crate::config::{FieldType, Named};
 use crate::error::{ConfigError, Result};
 
 /// A `${VAR}` reference whose variable is unset and which carries no
@@ -76,6 +76,10 @@ pub(super) trait ValueExt {
     /// unknown one with a nearest-match hint: the single-value counterpart of
     /// `NodeExt::mapped`, so [`Named::NAMES`] drives both parsing and error help.
     fn one<T: Named>(&self, text: &str, span: SourceSpan) -> Result<T>;
+    /// Read a string value as a schema field's type expression (`list<dict>`).
+    /// Its own reader and not [`ValueExt::one`] because a type is a shape rather
+    /// than a name: the set it is drawn from is infinite.
+    fn ty(&self, text: &str, span: SourceSpan) -> Result<FieldType>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
     /// straight through to client JS (`baudelaire:config`). Strings expand
     /// `${VAR}` like every other config string; a non-finite float is an error.
@@ -159,6 +163,11 @@ impl ValueExt for KdlValue {
     fn one<T: Named>(&self, text: &str, span: SourceSpan) -> Result<T> {
         let name = self.as_str(text, span)?;
         T::of(&name).ok_or_else(|| Keys::unknown_value(T::NAMES, text, &name, span))
+    }
+
+    fn ty(&self, text: &str, span: SourceSpan) -> Result<FieldType> {
+        let src = self.as_str(text, span)?;
+        FieldType::parse(&src).map_err(|e| e.at(text, span))
     }
 }
 

@@ -241,6 +241,152 @@ scenario "an unknown schema type is a config error with the valid ones listed" {
   }
 }
 
+scenario "a list names what it holds" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { widths "list<int>" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", widths: (480, 960),)
+      body
+      """#
+    "content/blog/wrong.typ" #"""
+      #let frontmatter = (title: "W", widths: (480, "960"),)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}
+
+scenario "a nested dict is checked field by field" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              author "dict" {
+                name "str"
+                email "str" optional=#true
+              }
+            }
+          }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", author: (name: "A"),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html" { contains "body" }
+  }
+}
+
+scenario "a field the nested dict is missing fails the build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              author "dict" { name "str" }
+            }
+          }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", author: (email: "a@example.com"),)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::missing" }
+  }
+}
+
+scenario "a list of dicts holds every element to the same fields" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              authors "list<dict>" { name "str" }
+            }
+          }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", authors: ((name: "A"), (name: 2)),)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}
+
+scenario "a type expression that never closes fails at the config line" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { widths "list<int" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::type_expr" }
+  }
+}
+
+scenario "a block on a type that holds no dictionary fails at the config line" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { widths "list<int>" { name "str" } } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_not_dict" }
+  }
+}
+
 scenario "a schema constrains only its own collection" {
   files {
     "config.kdl" #"""

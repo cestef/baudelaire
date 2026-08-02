@@ -28,27 +28,45 @@ pub struct SchemaError {
 }
 
 impl SchemaError {
-    /// A required field the page never declared. `span` points at the
-    /// `frontmatter` binding, since what is missing has no place of its own.
+    /// A required field the page never declared. `span` points at whatever
+    /// should have held it, since what is missing has no place of its own.
+    ///
+    /// `key` is dotted for a field inside a dictionary (`author.email`), which
+    /// names it exactly but is not how it would be written: the help says where
+    /// the leaf goes instead.
     pub fn missing(
         page: &std::path::Path,
         source: &str,
         span: Option<SourceSpan>,
         collection: &str,
         key: &str,
-        ty: FieldType,
+        ty: &FieldType,
     ) -> Self {
+        let (leaf, parent) = Self::split(key);
+        // Two whole strings rather than one with a phrase interpolated: an
+        // argument is escaped on the way in, so a nested `markup!` would arrive
+        // with its own delimiters written out as text.
+        let help = match parent {
+            Some(parent) => markup!(
+                "add `{}: {}` to `{}` in `#let frontmatter`, or declare it `optional=#true` in the `{}` collection's schema",
+                leaf,
+                ty.example(),
+                parent,
+                collection
+            ),
+            None => markup!(
+                "add `{}: {}` to `#let frontmatter`, or declare it `optional=#true` in the `{}` collection's schema",
+                leaf,
+                ty.example(),
+                collection
+            ),
+        };
         Self::new(
             page,
             source,
             span,
             SchemaErrorKind::Missing {
-                help: markup!(
-                    "add `{}: {}` to `#let frontmatter`, or declare it `optional=#true` in the `{}` collection's schema",
-                    key,
-                    ty.example(),
-                    collection
-                ),
+                help,
                 collection: collection.to_owned(),
                 key: key.to_owned(),
             },
@@ -63,9 +81,10 @@ impl SchemaError {
         span: Option<SourceSpan>,
         collection: &str,
         key: &str,
-        ty: FieldType,
+        ty: &FieldType,
         got: &str,
     ) -> Self {
+        let (leaf, _) = Self::split(key);
         Self::new(
             page,
             source,
@@ -73,15 +92,24 @@ impl SchemaError {
             SchemaErrorKind::Mismatch {
                 help: markup!(
                     "write it as `{}: {}`, or change the `{}` collection's schema",
-                    key,
+                    leaf,
                     ty.example(),
                     collection
                 ),
-                expected: ty,
+                expected: ty.clone(),
                 key: key.to_owned(),
                 got: got.to_owned(),
             },
         )
+    }
+
+    /// A dotted key as the field itself and whatever contains it: what the help
+    /// needs, since only the leaf is ever written as a key.
+    fn split(key: &str) -> (&str, Option<&str>) {
+        match key.rsplit_once('.') {
+            Some((parent, leaf)) => (leaf, Some(parent)),
+            None => (key, None),
+        }
     }
 
     fn new(

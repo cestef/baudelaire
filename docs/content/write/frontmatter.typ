@@ -135,8 +135,43 @@ schema fails the build, pointing at the line in its frontmatter:
 ```
 
 The types are the Typst ones a frontmatter dict can hold, not a second type
-system: `str`, `bool`, `int`, `float`, `date` (a `datetime(..)`), `list` (an
-array of strings), and `any`.
+system:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Type], [Holds]),
+  [`str`, `bool`, `int`, `float`], [The scalar of that name.],
+  [`date`], [A `datetime(..)`, with or without a time of day.],
+  [`list<T>`], [An array whose every element is a `T`. Bare `list` is `list<str>`.],
+  [`dict`], [A dictionary, whose own fields a block declares.],
+  [`any`], [Anything: the field must merely be there.],
+)
+
+A list says what it holds, so the parameter nests as deep as the data does:
+
+```kdl
+schema {
+  widths "list<int>"
+  matrix "list<list<int>>"
+  author "dict" {
+    name "str"
+    email "str" optional=#true
+  }
+  authors "list<dict>" {
+    name "str"
+  }
+}
+```
+
+A block declares the fields of the dictionary the type ends in, through however
+many lists wrap it. Nested fields are checked the same way, and are required
+unless they say `optional=#true` themselves. The diagnostic names the one that
+broke, down to the element:
+
+```text
+  × frontmatter `authors.1.name` must be a string, but is of type `integer`
+```
 
 A recognized key can appear in a schema, to require it. Its type is already
 fixed by the build, so declaring a different one (`title "int"`) is a config

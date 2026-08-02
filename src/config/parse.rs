@@ -464,7 +464,7 @@ impl Section for CollectionConfig {
         (
             "schema",
             Items(FieldSchema::rows),
-            "What every member's frontmatter must declare, one line per field.",
+            "What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.",
             |c, n, t| {
                 c.schema = n.unique(t, "schema field", FieldSchema::item)?;
                 Ok(())
@@ -477,14 +477,31 @@ impl FieldSchema {
     /// One `title "str" optional=#true` line: the node name is the frontmatter
     /// key it constrains, and an optional leading positional its type, so both
     /// the bare `title` (present, any shape) and the terse `tags "list"` read.
+    ///
+    /// A `{ .. }` block declares the fields of the dictionary the type ends in,
+    /// through however many `list<..>` wrap it, and recurses through this same
+    /// reader: `authors "list<dict>" { name "str" }`.
     fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let key = node.name().value().to_owned();
         let span = NodeExt::span(node);
         let mut field = Self::default();
         if let Some(value) = node.get(0) {
-            field.ty = value.one::<FieldType>(text, span)?;
+            field.ty = value.ty(text, span)?;
         }
         field.read(node, text)?;
+        if node.children().is_some() {
+            let fields = node.unique(text, "schema field", Self::item)?;
+            let declared = field.ty.article();
+            let Some(dict) = field.ty.fields_mut() else {
+                return Err(ConfigError::at(
+                    text,
+                    ConfigErrorKind::FieldNotDict { key, declared },
+                    span,
+                )
+                .into());
+            };
+            *dict = fields;
+        }
         // A built-in key's type is fixed by the frontmatter reader, and that
         // reader runs first: it would reject the value before the schema ever
         // saw it. A contradiction is therefore unsatisfiable, and fails at the
@@ -518,9 +535,9 @@ impl Attributed for FieldSchema {
         (
             "type",
             Choice(FieldType::names),
-            "The shape the value must have, also writable as the leading positional: `title \"str\"`.",
+            "The shape the value must have, also writable as the leading positional: `title \"str\"`. A list names what it holds: `list<int>`, `list<dict>`.",
             |c, v, t, s| {
-                c.ty = v.one::<FieldType>(t, s)?;
+                c.ty = v.ty(t, s)?;
                 Ok(())
             },
         ),

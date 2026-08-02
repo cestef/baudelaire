@@ -14,6 +14,32 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **content**: a collection's `schema` types nest. A list names what it holds
+  (`list<int>`, `list<list<int>>`), a `dict` field declares its own fields in a
+  block, and the two compose as `list<dict>`:
+
+  ```kdl
+  content {
+    collections {
+      blog {
+        schema {
+          widths "list<int>"
+          authors "list<dict>" {
+            name "str"
+            email "str" optional=#true
+          }
+        }
+      }
+    }
+  }
+  ```
+
+  The block declares the fields of the dictionary the type ends in, through
+  however many lists wrap it, and nested fields are required unless they say
+  `optional=#true` themselves. A failure names the field that broke down to the
+  element (`authors.1.name`) and underlines it in the page. Bare `list` still
+  means `list<str>`, so nothing written before this changes meaning.
+
 - **install**: `install.ps1`, the Windows counterpart of `install.sh`. Same
   knobs under the same names (as environment variables: `$env:VERSION`,
   `$env:PREFIX`, `$env:FLAVOR`), same steps, same checksum promise. It resolves
@@ -53,6 +79,16 @@ chores are visible in the git history and change nothing for a site.
   publication into standard.site's discovery surfaces rather than resolving the
   PDS from the handle; and `announce { standard { verify { wellknown } } }`
   writes `/.well-known/site.standard.publication`, not `/.well-known/atproto-did`.
+
+### Upgrading
+
+A schema field's `{ }` block used to be read and thrown away; it now declares
+the fields of a `dict`, so a block on a type that holds no dictionary
+(`hero "str" { .. }`) fails the config rather than being ignored.
+
+Frontmatter is judged against the schema when a page is discovered, and the
+cache that skips that work keys on the schema, whose shape changed. The first
+build after upgrading re-reads every page's frontmatter. Nothing to do.
 
 ## [0.0.9] - 2026-08-01
 

@@ -422,8 +422,26 @@ pub enum ConfigErrorKind {
     )]
     FieldConflict {
         key: String,
-        declared: &'static str,
-        builtin: &'static str,
+        declared: String,
+        builtin: String,
+    },
+
+    /// A schema field given a block of fields, whose type ends in no dictionary
+    /// for them to belong to.
+    #[error("schema field {} is {declared}, so it has no fields", Code(.key))]
+    #[diagnostic(
+        code(baudelaire::config::field_not_dict),
+        help("a block declares what a `dict` holds: write the type as `dict` or `list<dict>`")
+    )]
+    FieldNotDict { key: String, declared: String },
+
+    /// A schema type expression that never closes, or wraps nothing.
+    #[error("{} is not a type", Code(.ty))]
+    #[diagnostic(code(baudelaire::config::type_expr))]
+    TypeExpr {
+        ty: String,
+        #[help]
+        help: String,
     },
 
     #[error("duplicate {} in {}", Code(.name), Code(.scope))]
