@@ -54,6 +54,49 @@ export function initNavSections() {
   }
 }
 
+// The sidebar is its own scroll box, and every click is a full page load, so
+// without this it snaps back to the top on each navigation. The offset rides in
+// sessionStorage: per tab, gone when the tab is, which is the lifetime of the
+// reading session it belongs to.
+export function keepNavScroll() {
+  const KEY = "nav-scroll";
+  const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
+
+  const stored = () => {
+    try {
+      return Number(sessionStorage.getItem(KEY)) || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Restore first, then check the current page's link is actually on screen: a
+  // jump into a section the reader had scrolled away from would otherwise land
+  // them on an offset that hides where they are. The correction is applied to
+  // `scrollTop` by hand rather than with `scrollIntoView`, which would walk up
+  // and scroll the article too.
+  sidebar.scrollTop = stored();
+  const active = sidebar.querySelector('a[aria-current="page"]');
+  if (active) {
+    const link = active.getBoundingClientRect();
+    const box = sidebar.getBoundingClientRect();
+    if (link.top < box.top || link.bottom > box.bottom) {
+      sidebar.scrollTop += link.top - box.top - (box.height - link.height) / 2;
+    }
+  }
+
+  // Written on the way out rather than on every scroll frame: one storage write
+  // per navigation. `pagehide` covers a click, a reload and a back/forward.
+  addEventListener("pagehide", () => {
+    try {
+      sessionStorage.setItem(KEY, String(sidebar.scrollTop));
+    } catch {
+      /* private mode: the sidebar just starts at the top */
+    }
+  });
+}
+
 export function initMobileNav() {
   const toggle = document.querySelector("[data-nav-toggle]");
   const sidebar = document.getElementById("sidebar");

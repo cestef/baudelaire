@@ -2,16 +2,13 @@
   title: "Not found",
   template: "page.typ",
 )
-#import "/templates/theme.typ": link-to
 
-There is nothing at this address. It may have moved, or the link that brought
-you here may have been wrong from the start.
+Nothing here. The page moved, or the link was wrong from the start.
 
-/ #link("/")[Home]: what baudelaire is, and why Typst.
-/ #link("/guide/quickstart/")[Quickstart]: a site running in about a minute.
-/ #link("/guide/config/")[Configuration]: every block in `config.kdl`.
-/ #link("/themes/")[Themes]: the three that ship, with live demos.
-/ #link("/blog/")[Blog]: what has changed lately.
+- #link("/")[Home], what baudelaire is and why Typst.
+- #link("/start/quickstart/")[Quickstart], a site running in about a minute.
+- #link("/configure/overview/")[Configuration], every block in `config.kdl`.
+- #link("/themes/")[Themes], the four that ship, with live demos.
+- #link("/blog/")[Blog], what changed lately.
 
-Searching is often faster than guessing: press #html.elem("kbd")[/] anywhere on
-this site.
+Faster than guessing: press #html.elem("kbd")[/] and search.

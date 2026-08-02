@@ -59,8 +59,9 @@
   #h("a", class: "skip-link", href: "#main", "Skip to content")
   #h("a", class: "brand", href: "/", "Baudelaire")
   #h("nav", class: "top-nav", aria-label: "Primary")[
-    #link-to("/guide/install/", "Guide")
-    #link-to("/features/", "Features")
+    #link-to("/start/install/", "Docs")
+    #link-to("/configure/reference/", "Reference")
+    #link-to("/themes/", "Themes")
     #link-to("/blog/", "Blog")
   ]
   #search-trigger
@@ -111,7 +112,14 @@
 // pages, and their order, come from `page.sections` (the build's own view of
 // the site), so the sidebar can never drift from the content or from the
 // prev/next pager, which read the same source.
-#let _doc-groups = (("guide", "Guide"), ("features", "Features"))
+#let _doc-groups = (
+  ("start", "Start"),
+  ("write", "Write"),
+  ("configure", "Configure"),
+  ("build", "Build"),
+  ("ship", "Ship"),
+  ("lookup", "Look up"),
+)
 
 #let sidebar(sections) = {
   // `sections` is a tree: `(id, pages: ((url, title), ..), children: (..))`,

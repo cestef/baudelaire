@@ -2,89 +2,89 @@
   title: "Themes",
   template: "page.typ",
 )
-#import "/templates/theme.typ": callout, link-to
+#import "/templates/theme.typ": callout
 
-A theme ships a site's templates, assets, and config defaults as one unit. Name
-one and your site has a look without your writing a template; override any part
-of it by having your own file at the same path.
+A theme is a site's templates, assets, and config defaults shipped as one unit.
+Name one in `config.kdl` and you have a site without writing a template:
 
-Four ship with baudelaire, one per kind of site. Pick by what your site *is*.
+```kdl
+theme "themes/albatros"
+```
 
-/ #link("/themes/albatros/")[albatros] --- *you write posts*: a centred column
-  at a comfortable measure, tag chips, reading time, light and dark, and a
-  language switcher on a site that has editions.
-/ #link("/themes/spleen/")[spleen] --- *you write posts and want no script*: a
-  terminal. Monospace throughout, a prompt for a masthead, posts listed like a
-  directory, dark first. Not "minimal JavaScript": none.
-/ #link("/themes/phares/")[phares] --- *you document something*: a sidebar built
-  from your own `content/` tree, a search palette on #html.elem("kbd")[/], the
-  page's headings down the right, and prev/next that runs the length of the
-  manual.
-/ #link("/themes/paysage/")[paysage] --- *you show work*: a landing page, a grid
-  of projects that builds itself from what you publish, and one case study per
-  project.
+Four ship with baudelaire, one per kind of site. Each name links a live demo,
+built from content that theme was designed for.
 
-Each name links a live demo, built from content that theme was designed for: the
-blog themes share one set of posts, `phares` gets a small manual, `paysage` gets
-a few projects.
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Theme], [For], [Looks like]),
+  link("/themes/albatros/")[albatros],
+  [You write posts.],
+  [Centered column, tag chips, reading time, light and dark, language switcher.],
 
-== Getting one running
+  link("/themes/spleen/")[spleen],
+  [You write posts and want no script.],
+  [A terminal. Monospace throughout, dark first, zero JavaScript.],
 
-Three steps, and the first two are one line each.
+  link("/themes/phares/")[phares],
+  [You document something.],
+  [Sidebar from your own `content/` tree, search palette, headings down the right.],
 
-+ *Copy the theme into your project.* It has to sit inside the project root,
-  because a Typst import cannot leave it. From a checkout of the repository,
-  that is `cp -r themes/albatros /path/to/site/themes/albatros`.
+  link("/themes/paysage/")[paysage],
+  [You show work.],
+  [Landing page, project grid that builds itself, one case study per project.],
+)
 
-+ *Name it in `config.kdl`.*
+== Run one
 
-  ```kdl
-  theme "themes/albatros"
-  ```
+```sh
+cp -r themes/albatros /path/to/site/themes/albatros
+```
 
-+ *Write a page it recognises.* Every theme wants a `title`; the rest is in its
-  own README. For `albatros`, a post is:
+```kdl
+theme "themes/albatros"
+```
 
-  ```typ
-  #let frontmatter = (
-    title: "Hello",
-    date: datetime(year: 2026, month: 7, day: 31),
-    tags: ("intro",),
-    summary: "One line, shown under the entry in the index.",
-  )
+Then write a page it recognizes. Every theme wants a `title`, and each README
+lists the rest. An `albatros` post:
 
-  Body text.
-  ```
+```typ
+#let frontmatter = (
+  title: "Hello",
+  date: datetime(year: 2026, month: 7, day: 31),
+  tags: ("intro",),
+  summary: "One line, shown under the entry in the index.",
+)
 
-  Put it in `content/posts/hello.typ` and build. The theme's `theme.kdl` already
-  declared the `posts` collection, its index, the `tags` taxonomy, and the feeds.
+Body text.
+```
 
-Installed into your Typst package directory instead of copied, a theme is named
-the way any dependency is, and every project on the machine can use it:
+Save it as `content/posts/hello.typ` and build. The theme's `theme.kdl` already
+declared the `posts` collection, its index, the `tags` taxonomy, and the feeds.
+
+The directory has to sit inside your project root, since a Typst import can't
+leave it. Installed into your Typst package directory instead, a theme is named
+like any other dependency and every project on the machine can use it:
 
 ```kdl
 theme "@local/albatros:0.1.0"
 ```
 
 #callout(kind: "note")[
-  Everything a theme provides is a *default*: your file at the same relative
-  path wins, and your config wins key by key. Adopting one never touches your
-  `site`, `url`, or `author`.
-
-  The one exception is lists. Declaring `content { collections { .. } }`
-  yourself replaces the theme's set rather than adding to it, so copy its block
-  if you only meant to add a collection.
+  Everything a theme provides is a default: your file at the same path wins, and
+  your config wins key by key. Lists are the exception. Declaring
+  `content { collections { .. } }` yourself replaces the theme's set instead of
+  adding to it, so copy its block if you only meant to add one.
 ]
 
-== Changing one
+== Change one
 
-Copy the file you want to change out of the theme and into your own tree at the
-same relative path: `templates/page.typ` for a layout, `assets/style.css` for
-the look. Nothing else changes.
+Copy the file you want to change into your own tree at the same relative path:
+`templates/page.typ` for a layout, `assets/style.css` for the look. Nothing else
+moves.
 
-For a recolour, every theme here declares its palette as custom properties at
-the top of its stylesheet, so restating a few of them is smaller than forking
-the file:
+For a recolor, every theme declares its palette as custom properties at the top
+of its stylesheet, so restating a few beats forking the file:
 
 ```css
 :root {
@@ -93,9 +93,8 @@ the file:
 }
 ```
 
-The #link("/guide/themes/")[themes chapter] covers adopting, overriding, and
-writing your own end to end;
-#link("/features/build/themes/")[the reference] covers how the layering works.
+#link("start/themes.typ")[Picking and adopting a theme] is the guide, and
+#link("write/theme-authoring.typ")[writing your own] is the page after it.
 The four live in
-#link("https://github.com/cestef/baudelaire/tree/main/themes")[`themes/`] in the
-repository, each with a README.
+#link("https://github.com/cestef/baudelaire/tree/main/themes")[`themes/`], each
+with a README.

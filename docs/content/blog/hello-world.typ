@@ -13,7 +13,7 @@ pipeline has something to render.
 
 Regular text, #emph[emphasis], #strong[strong], `inline raw`, #underline[underline],
 #strike[strike], #highlight[highlight], H#sub[2]O and E = mc#super[2]. A
-#link("https://typst.app")[link out], and a #link("../guide/quickstart.typ")[link to
+#link("https://typst.app")[link out], and a #link("../start/quickstart.typ")[link to
 another page] that the build resolves and checks.
 
 #quote(block: true, attribution: [nobody in particular])[

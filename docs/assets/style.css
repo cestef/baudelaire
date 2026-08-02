@@ -398,6 +398,13 @@ button,
   position: sticky;
   top: 3.4rem;
   align-self: start;
+  /* Taller than the viewport once every group is expanded, so it scrolls in
+     place rather than being clipped by the sticky box. `overscroll-behavior`
+     keeps a flick at either end from scrolling the article underneath. */
+  max-height: calc(100vh - 3.4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   padding: 2.25rem 1rem 2.25rem 1.5rem;
   border-right: 1px solid var(--rule);
   font-family: var(--sans);
@@ -694,9 +701,14 @@ blockquote {
   border-left: 2px solid var(--wine);
 }
 
-/* Tables */
+/* Tables. The reference pages are mostly key tables, so they carry the reading
+   weight here: `display: block` is what lets a wide one scroll inside the
+   column instead of pushing the whole page sideways on a phone. */
 table {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   font-size: 0.92rem;
 }
@@ -705,7 +717,14 @@ th,
 td {
   padding: 0.5rem 0.7rem;
   text-align: left;
+  vertical-align: top;
   border-bottom: 1px solid var(--rule);
+}
+
+/* A key or a flag is the row's handle: never break it across lines. */
+td:first-child code,
+td:first-child {
+  white-space: nowrap;
 }
 
 th {
@@ -1089,6 +1108,8 @@ ul.listing {
 
   .sidebar {
     position: static;
+    max-height: none;
+    overflow-y: visible;
     border-right: none;
     border-bottom: 1px solid var(--rule);
     display: none;

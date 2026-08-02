@@ -16,9 +16,17 @@ paths {
 // What is a page and how pages group. Collections and taxonomies read from
 // `paths { content }`, so they belong next to it.
 content {
+  // One collection per task-shaped documentation group, each ordered by the
+  // `order` key its pages declare. `paginate` with no `size` gives the group a
+  // single index page at its own URL (`/write/`), so a trimmed URL lands
+  // somewhere.
   collections {
-    guide { sort "order"; template "page.typ" }
-    features { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    start { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    write { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    configure { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    build { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    ship { sort "order"; template "page.typ"; paginate { template "list.typ" } }
+    lookup { sort "order"; template "page.typ"; paginate { template "list.typ" } }
     blog { sort "date"; reverse #true; template "page.typ"; paginate { size 5; template "list.typ" } }
   }
 
@@ -95,14 +103,14 @@ prune #true
 // templates, assets and static; anything else a build reads has to say so here
 // or an edit to it will not reload.
 serve {
-  include "icons/**/*.svg"
+  include "icons/**/*.svg" "generated/**/*.typ"
 }
 
 // Build-time constants handed to client JavaScript through the
 // `baudelaire:config` virtual module. The config page renders this very block
 // live from that module, dogfooding the define-style injection.
 client {
-  repo "https://codeberg.org/cstef/baudelaire"
+  repo "https://github.com/cestef/baudelaire"
   edits #true
 }
 
