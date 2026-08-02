@@ -1,5 +1,6 @@
 //! The generated config reference is checked in, and this is what keeps it
-//! honest.
+//! honest. What is generated is a data module (`docs/generated/reference.typ`);
+//! the page that renders it is an ordinary hand-written docs page.
 //!
 //! The docs site is a real baudelaire site, so its pages have to exist on disk
 //! before it builds; the reference cannot be generated during the docs build
@@ -8,15 +9,15 @@
 //! rather than shipping a reference that describes a config the parser no
 //! longer accepts.
 
-use baudelaire::config::reference::{Page, Reference};
+use baudelaire::config::reference::{Module, Reference};
 
 /// Relative to the crate root, which is where cargo runs an integration test.
-const PATH: &str = "docs/content/guide/reference.typ";
+const PATH: &str = "docs/generated/reference.typ";
 
 /// Regenerate with `just reference`, which is this test with `BLESS=1`.
 #[test]
 fn the_checked_in_reference_matches_the_dispatch_tables() {
-    let expected = Page(&Reference::new()).to_string();
+    let expected = Module(&Reference::new()).to_string();
 
     if std::env::var_os("BLESS").is_some() {
         std::fs::write(PATH, &expected).expect("write the reference");
