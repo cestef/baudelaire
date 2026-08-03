@@ -5,8 +5,9 @@
 //! policy lives with the check rather than the caller.
 //! [`external::External`] verifies outbound links over the network and
 //! runs from `check` alone, so a build never depends on someone else's host.
-//! [`lint::Lints`] reports what the per-page DOM pass found, and
-//! [`lint::Budgets`] weighs each page against `lint { budget { } }`.
+//! [`lint::Lints`] reports what the per-page DOM pass found,
+//! [`lint::Budgets`] weighs each page against `lint { budget { } }`, and
+//! [`Orphans`] names the pages nothing links to.
 //! All are plain calls: there was a `Check` trait and a registry around a
 //! single impl, and a trait with one implementation is not an abstraction (see
 //! [`super::emit::Processors`] for the shape to restore if the calls ever need
@@ -18,11 +19,12 @@ mod lint;
 pub(in crate::engine) use external::External;
 pub(in crate::engine) use lint::{Budgets, Lints};
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::config::Config;
-use crate::error::{Broken, BrokenLinks, Result};
-use crate::render::{Emitted, Finding, Weight};
+use crate::error::{Broken, BrokenLinks, Orphan, OrphanPages, Result};
+use crate::render::{Emitted, Finding, Outbound, Weight};
 use crate::ui::Ui;
 
 /// Read-only view of the freshly compiled pages handed to every check. Cached
@@ -58,6 +60,19 @@ pub(super) struct CheckedPage<'a> {
     pub lints: &'a [Finding],
     /// What this page ships: its inline bytes and the files it loads.
     pub weight: &'a Weight,
+    /// The pages this page's own content links to. Empty unless the site asked
+    /// for the link graph (`links { backlinks }` or `links { orphans }`).
+    pub outbound: &'a Outbound,
+    /// The pages this one lists, when the build generated it: a paginated
+    /// index's members, a term page's pages, the terms of a term index. Empty
+    /// for a page an author wrote.
+    pub lists: &'a [String],
+    /// Whether the build wrote this page rather than an author: a paginated
+    /// index, a term page, the term index.
+    pub generated: bool,
+    /// Whether the page belongs to the site's navigation at all
+    /// ([`crate::content::Page::listed`]): the not-found page does not.
+    pub listed: bool,
     /// The page's own markup, as written to `dist`, for the `html` budget.
     pub html: &'a str,
 }
@@ -131,6 +146,62 @@ impl Links {
     }
 }
 
+/// The pages nothing links to.
+///
+/// The inverse question to a page's backlinks, off the same recorded edges: a
+/// page no other page's *content* points at is one a reader reaches only by
+/// knowing its URL. Template chrome is not an answer to it, which is exactly why
+/// the edges leave chrome out: a page linked from every layout's nav and from
+/// nowhere else is precisely the page an author wants to hear about.
+pub(super) struct Orphans;
+
+impl Orphans {
+    /// A site's entry points, which nothing is expected to link to: the root of
+    /// each language.
+    fn roots(config: &Config) -> Vec<String> {
+        config
+            .langs()
+            .iter()
+            .map(|lang| config.localize(lang, "/"))
+            .collect()
+    }
+
+    pub(super) fn run(site: &Compiled, ui: &Ui) {
+        let Some(counts) = site.config.links.orphans else {
+            return;
+        };
+        let linked: HashSet<&str> = site
+            .pages
+            .iter()
+            .flat_map(|page| {
+                // What a listing lists is a way in only while generated pages
+                // count as one; what an author wrote always is.
+                let listed = if counts.counts(true) { page.lists } else { &[] };
+                page.outbound
+                    .pages()
+                    .chain(listed.iter().map(String::as_str))
+            })
+            .collect();
+        let roots = Self::roots(site.config);
+        let orphans: Vec<Orphan> = site
+            .pages
+            .iter()
+            // A generated listing is nobody's forgotten page, and neither is the
+            // one a host serves for an unmatched URL.
+            .filter(|page| page.listed && !page.generated)
+            .filter(|page| !roots.iter().any(|root| root == page.permalink))
+            .filter(|page| !linked.contains(page.permalink))
+            .map(|page| Orphan {
+                page: page.label.clone(),
+                url: page.permalink.to_owned(),
+            })
+            .collect();
+        if !orphans.is_empty() {
+            ui.warn(OrphanPages::from(orphans));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -154,6 +225,10 @@ mod tests {
             lints: &[],
             weight: Weight::EMPTY,
             html: "",
+            outbound: Outbound::EMPTY,
+            lists: &[],
+            generated: false,
+            listed: true,
         }
     }
 

@@ -31,7 +31,9 @@ impl Section {
     pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Self> {
         let mut root = Self::new("");
         for page in pages {
-            if matches!(page.data, Data::Generated(_)) || page.lang != lang || !page.listed(config)
+            if matches!(page.data, Data::Generated { .. })
+                || page.lang != lang
+                || !page.listed(config)
             {
                 continue;
             }

@@ -884,6 +884,52 @@ pub struct LinkConfig {
     /// second time (see `Engine::backlinks`), which a site that shows none
     /// should not pay for.
     pub backlinks: bool,
+    /// Report the pages nothing links to, and what counts as a link. `None`
+    /// leaves the report off.
+    pub orphans: Option<Linked>,
+}
+
+/// What counts as pointing at a page, for the orphan report.
+///
+/// A layout never does under either: a sidebar links every page from every page,
+/// so counting one would mean no page is ever an orphan. The difference is
+/// whether a page the *build* generated counts as a reader's way in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Linked {
+    /// Any page's link. A post reached from its paginated index or from a term
+    /// page is reached, so the report names only what a reader cannot get to at
+    /// all.
+    #[default]
+    Any,
+    /// Only a link on a page an author wrote. A post reached from its index and
+    /// from nowhere else is named, which is the question a documentation site
+    /// asks: did anyone write about this page?
+    Authored,
+}
+
+impl Named for Linked {
+    const NAMES: &'static [(&'static str, Self)] =
+        &[("any", Self::Any), ("authored", Self::Authored)];
+}
+
+impl Linked {
+    /// Whether a link on this page counts. `generated` is whether the build
+    /// wrote the page rather than an author.
+    pub fn counts(self, generated: bool) -> bool {
+        !generated || self == Self::Any
+    }
+}
+
+impl LinkConfig {
+    /// Whether this build needs the site's link graph at all.
+    ///
+    /// The one gate the render pass records edges behind, and the one both
+    /// readers of them share: a page's backlinks and the orphan report are the
+    /// same graph asked two questions. Without it nothing walks a link's origin
+    /// and no page carries the edges in its cache entry.
+    pub fn graph(&self) -> bool {
+        self.backlinks || self.orphans.is_some()
+    }
 }
 
 /// What the built pages tell a browser to trust: the integrity of the files

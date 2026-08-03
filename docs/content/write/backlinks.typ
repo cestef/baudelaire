@@ -111,6 +111,57 @@ one per repaired page would cost more than the pass it repairs.
   always safe; branching your own links on them is not.
 ]
 
+== Orphans
+
+The same edges, read the other way: the pages nothing links to.
+
+```kdl
+links {
+  orphans "any"        // or "authored"
+}
+```
+
+```
+baudelaire::links::orphans
+
+  ⚠ 2 pages linked from nowhere
+  help: link each from a page that is reachable, or drop `links { orphans }`
+
+  ⚠ `guide/exporting.typ` is linked from nowhere, and serves at `/guide/exporting/`
+  ⚠ `notes/scratch.typ` is linked from nowhere, and serves at `/notes/scratch/`
+```
+
+A link counts when an author wrote it, in prose, whether spelled as a `.typ`
+path or as a URL. A layout never counts: a sidebar links every page from every
+page, so counting one would mean nothing is ever an orphan. What the mode
+decides is whether the build's own listings count.
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Mode], [Names a page when]),
+  [`any`], [nothing points at it at all, a #link("collections/pagination.typ")[paginated index] and a #link("collections/taxonomies.typ")[term page] included. A blog post reached from `/blog/` is reached, so the report names only what a reader cannot get to.],
+  [`authored`], [nobody *wrote* about it, an index being no answer. The question a documentation site asks; on a blog it names every post, which is the trade.],
+)
+
+Left out of the report itself, since nobody forgot to link them: the root of
+each language, the generated listings, and the
+#link("../ship/navigating.typ")[not-found page].
+
+A listing's entries come from the page set and not from its markup, so a
+listing with a #link("templates.typ")[template] of its own counts the same as
+the default one: the links its template draws are the template's, like any
+other chrome.
+
+So a page it names is one a reader can only reach by knowing the URL. It is a
+report and never a failure: a landing page linked from a hand-written menu and
+from nowhere else is an ordinary thing to have, and only you can say which of
+these is a mistake. `baudelaire build --strict` turns every warning into a
+failure if you want it enforced in CI.
+
+Either switch turns on the link graph, so a site that wants only the report pays
+for the edges and none of the second compiles.
+
 == Without the switch
 
 `page.backlinks` is always bound, so a template reading it never fails. With

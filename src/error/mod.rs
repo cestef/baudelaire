@@ -50,7 +50,7 @@ pub use content::ContentError;
 pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
-pub use link::{Broken, BrokenLinks, Dead, DeadLinks};
+pub use link::{Broken, BrokenLinks, Dead, DeadLinks, Orphan, OrphanPages};
 pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
 pub use mirror::MirrorError;
 pub use output::BaseUrlRequired;

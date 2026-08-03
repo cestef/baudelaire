@@ -151,7 +151,7 @@ impl<'a> Prepare<'a> {
             return Ok((FileId::new(rooted), text, fingerprint));
         };
         let id = match &page.data {
-            Data::Generated(_) => FileId::new(rooted.clone()),
+            Data::Generated { .. } => FileId::new(rooted.clone()),
             _ => Self::wrapper(&rooted),
         };
         let dir = self.dir(template);
@@ -207,7 +207,7 @@ impl<'a> Prepare<'a> {
     ) -> String {
         let vpath = Self::rooted_str(rooted);
         let body = match &page.data {
-            Data::Generated(_) => Body::Inline(&page.body),
+            Data::Generated { .. } => Body::Inline(&page.body),
             _ => Body::Include,
         };
         self.with(page, backlinks, |context| {
@@ -247,7 +247,7 @@ impl<'a> Prepare<'a> {
         let bind = match &page.data {
             Data::Export => Bind::Import,
             Data::Empty => Bind::Literal("(:)"),
-            Data::Generated(dict) => Bind::Literal(dict),
+            Data::Generated { dict, .. } => Bind::Literal(dict),
         };
         f(Context {
             data: bind,

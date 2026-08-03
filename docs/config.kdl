@@ -58,6 +58,11 @@ html {
 // files instead.
 links {
   style "clean"
+  // Reachability: the sidebar does not count as a way in, but the generated
+  // group indexes do. Run `orphans "authored"` by hand to ask the stricter
+  // question -- did anyone *write* about this page -- which is noisy here only
+  // because a blog post is reached from its index and nothing else.
+  orphans "any"
 }
 
 // Asset pipeline: minify CSS (lightningcss), bundle + minify the TypeScript

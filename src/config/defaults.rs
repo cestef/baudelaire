@@ -243,6 +243,10 @@ impl Default for LinkConfig {
             // Off: a page whose backlinks change is compiled twice, which a
             // site that shows none must not pay for.
             backlinks: false,
+            // Off: a page reachable only from a hand-written nav is a normal
+            // thing to have, so this is a question a site asks, not one it is
+            // asked on every build.
+            orphans: None,
         }
     }
 }

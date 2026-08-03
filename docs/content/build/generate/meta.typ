@@ -60,7 +60,7 @@ none: it draws the page title, so that's what its `og:image:alt` says.
   [#link("https://ogp.me")[Open Graph]], [`og:type`, `og:title`, `og:description`, `og:url`, `og:site_name`, `og:locale`, `og:image`, `og:image:alt`.],
   [Article], [`article:published_time`, `article:modified_time`, `article:author`, one `article:tag` per taxonomy term. Dated pages only.],
   [Twitter Card], [`twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`.],
-  [Link relations], [`canonical`, one `alternate` per translation plus `x-default`, one `alternate` per #link("feeds.typ")[feed format], and the page's #link("pdf.typ")[PDF] when it has one.],
+  [Link relations], [`canonical`, one `alternate` per translation plus `x-default`, one `alternate` per #link("feeds.typ")[feed format], the page's #link("pdf.typ")[PDF] when it has one, and the #link("manifest.typ")[web app manifest] when the site writes one.],
 )
 
 A dated page is an `article`, everything else a `website`. Several unfurlers

@@ -138,6 +138,53 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     assert!(logs.contains("╰─ public"), "output dir shown: {logs}");
 }
 
+/// The orphan report is only worth having if it names the right pages: the one
+/// nothing points at, and not the one every layout points at. A report that
+/// counted the nav would name nothing at all on a site with a nav, which is
+/// every site.
+#[test]
+fn the_orphan_report_names_the_page_no_content_links_to() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        "site \"T\"\nlinks {\n  orphans \"any\"\n}\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
+    );
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = html.elem(\"main\", \
+         link(\"/content/lonely.typ\")[nav] + body)\n",
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"post.typ\",)\n#link(\"seen.typ\")[seen]",
+    );
+    site.write(
+        "content/seen.typ",
+        "#let frontmatter = (title: \"Seen\", template: \"post.typ\",)\nlinked from home",
+    );
+    site.write(
+        "content/lonely.typ",
+        "#let frontmatter = (title: \"Lonely\", template: \"post.typ\",)\nlinked from the layout",
+    );
+
+    let logs = site.build();
+
+    assert!(
+        logs.contains("/lonely/"),
+        "the orphan says where it is served: {logs}"
+    );
+    // Named as *orphans*, specifically: every page also appears in the build's
+    // own progress lines.
+    let orphaned = |page: &str| logs.contains(&format!("`{page}` is linked from nowhere"));
+    assert!(orphaned("lonely.typ"), "{logs}");
+    assert!(
+        !orphaned("seen.typ"),
+        "a page linked from content is not an orphan: {logs}"
+    );
+    // The home page is an entry point, not a page anyone forgot to link.
+    assert!(!orphaned("index.typ"), "the root is not one: {logs}");
+}
+
 #[cfg(feature = "images")]
 #[test]
 fn optimize_losslessly_shrinks_png_assets() {

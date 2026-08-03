@@ -263,3 +263,43 @@ impl Diagnostic for DeadLinks {
         Some(Box::new(self.0.iter().map(|l| l as &dyn Diagnostic)))
     }
 }
+
+/// A page no other page's content links to.
+///
+/// Not an error and not a span: the problem is an *absence*, so there is nothing
+/// in the page to underline. It names where the page is and where it is served,
+/// which is what an author needs to decide whether it wants linking or wants
+/// deleting.
+#[derive(Debug, thiserror::Error, Diagnostic)]
+#[error("{} is linked from nowhere, and serves at {}", Code(.page), Code(.url))]
+#[diagnostic(code(baudelaire::links::orphan), severity(warning))]
+pub struct Orphan {
+    /// The page, relative to the content root.
+    pub page: String,
+    /// Its permalink.
+    pub url: String,
+}
+
+/// The pages a reader can only reach by knowing the URL.
+///
+/// A report rather than a gate: a landing page linked from a hand-written nav is
+/// an orphan by this definition and a perfectly ordinary thing to have, so it is
+/// on the author to read the list. Generated listings and the not-found page are
+/// left out, since nobody forgot to link those.
+#[derive(Debug, thiserror::Error, Diagnostic)]
+#[error("{} linked from nowhere", crate::ui::Count::pages(.pages.len()))]
+#[diagnostic(
+    code(baudelaire::links::orphans),
+    severity(warning),
+    help("link each from a page that is reachable, or drop `links {{ orphans }}`")
+)]
+pub struct OrphanPages {
+    #[related]
+    pub pages: Vec<Orphan>,
+}
+
+impl From<Vec<Orphan>> for OrphanPages {
+    fn from(pages: Vec<Orphan>) -> Self {
+        Self { pages }
+    }
+}

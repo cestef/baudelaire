@@ -26,7 +26,7 @@ use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
 use crate::engine::check::External;
-use crate::engine::check::{Budgets, CheckedPage, Compiled, Links, Lints};
+use crate::engine::check::{Budgets, CheckedPage, Compiled, Links, Lints, Orphans};
 #[cfg(feature = "pdf")]
 use crate::engine::compile::bundle::Bundle;
 use crate::engine::compile::image::Images;
@@ -689,7 +689,7 @@ impl Engine {
                 Some(recorded) => Some((page, recorded.clone())),
                 // A generated listing contributes no edges at all, so there is
                 // nothing to scan it for; see the render transform.
-                None if matches!(page.data, Data::Generated(_)) => None,
+                None if matches!(page.data, Data::Generated { .. }) => None,
                 None => Some((
                     page,
                     Outbound::scanned(
@@ -1260,6 +1260,13 @@ impl Engine {
                 lints: &outputs.lints,
                 weight: &outputs.weight,
                 html,
+                outbound: &outputs.outbound,
+                lists: match &page.data {
+                    Data::Generated { lists, .. } => lists,
+                    _ => &[],
+                },
+                generated: matches!(page.data, Data::Generated { .. }),
+                listed: page.listed(&self.config),
             })
             .collect();
         let site = Compiled {
@@ -1268,6 +1275,7 @@ impl Engine {
             emitted,
         };
         Links::run(&site, ui)?;
+        Orphans::run(&site, ui);
         if self.config.lint.enabled {
             Lints::run(&site, ui)?;
             Budgets::run(&site)?;

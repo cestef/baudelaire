@@ -41,7 +41,8 @@
 //! closing delimiter, so bodies need no escaping.
 //!
 //! Failure is matched on the miette diagnostic *code*, never on message text, so
-//! rewording an error does not break a scenario. The same holds for `warns`.
+//! rewording an error does not break a scenario. The same holds for `warns`, and
+//! for `unwarned "baudelaire::x"`, which claims a code was *not* reported.
 //!
 //! ## Shared setup
 //!
@@ -765,6 +766,10 @@ struct Expect {
     /// Warning codes the run must have reported. Extra warnings are allowed:
     /// a case names the one it is about, not every one the build may add.
     warns: Vec<String>,
+    /// Diagnostic codes that must *not* be reported: the claim that a check
+    /// stayed quiet about a page, which is as much a part of what a report means
+    /// as the pages it does name.
+    unwarned: Vec<String>,
     outputs: Vec<Output>,
     absent: Vec<String>,
 }
@@ -776,6 +781,7 @@ impl Expect {
             pages: None,
             cached: None,
             warns: Vec::new(),
+            unwarned: Vec::new(),
             outputs: Vec::new(),
             absent: Vec::new(),
         };
@@ -786,6 +792,7 @@ impl Expect {
                 "file" => expect.outputs.push(Output::parse(child)?),
                 "absent" => expect.absent.push(string_arg(child)?),
                 "warns" => expect.warns.push(string_arg(child)?),
+                "unwarned" => expect.unwarned.push(string_arg(child)?),
                 "pages" | "cached" => {
                     let count = number(child, "n")
                         .or_else(|| {
@@ -821,6 +828,11 @@ impl Expect {
                     true => format!("expected warning `{want}`, but nothing warned"),
                     false => format!("expected warning `{want}`, got: {}", reported.join(", ")),
                 });
+            }
+        }
+        for unwanted in &self.unwarned {
+            if reported.iter().any(|got| got == unwanted) {
+                failures.push(format!("warned `{unwanted}`, expected silence about it"));
             }
         }
         if let Ok(stats) = &run.result {

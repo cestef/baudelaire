@@ -18,9 +18,20 @@ pub enum Data {
     /// A real file with no export: the wrapper passes an empty dict and
     /// `#include`s the file.
     Empty,
-    /// A generated listing with no file: the wrapper inlines this dict literal
-    /// (built by [`crate::codegen::Value`]) together with the generated body.
-    Generated(String),
+    /// A generated listing with no file: the wrapper inlines `dict` (built by
+    /// [`crate::codegen::Value`]) together with the generated body.
+    Generated {
+        dict: String,
+        /// The permalinks the listing lists.
+        ///
+        /// Carried structurally because the rendered page cannot be asked: a
+        /// listing with a template of its own draws its entries from the
+        /// template, so the links are the *template's* and are excluded from the
+        /// link graph exactly like a sidebar's. What a listing lists is a fact
+        /// about the plan, not about the markup, and the orphan report needs it
+        /// to know a reader can reach a page from an index.
+        lists: Vec<String>,
+    },
 }
 
 /// A link to a neighbouring page: its URL and display title. Exposed to
@@ -292,7 +303,7 @@ impl Page {
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
         config.generate.cards.active()
             && self.frontmatter.text("image").is_none()
-            && !matches!(self.data, Data::Generated(_))
+            && !matches!(self.data, Data::Generated { .. })
     }
 
     /// Whether this page gets a PDF beside its HTML.
@@ -302,7 +313,7 @@ impl Page {
     /// have to agree. A generated listing is excluded: a tag index is a table of
     /// contents for a site, not a document anyone prints.
     pub fn wants_pdf(&self, config: &crate::config::Config) -> bool {
-        config.generate.pdf.pages.active() && !matches!(self.data, Data::Generated(_))
+        config.generate.pdf.pages.active() && !matches!(self.data, Data::Generated { .. })
     }
 
     /// The most recent dated pages of one language, newest first, capped at
@@ -316,7 +327,7 @@ impl Page {
         limit: usize,
     ) -> Vec<&'a Self> {
         let candidates = pages.iter().filter(|p| {
-            !matches!(p.data, Data::Generated(_)) && p.lang == lang && p.listed(config)
+            !matches!(p.data, Data::Generated { .. }) && p.lang == lang && p.listed(config)
         });
         Self::newest(candidates, limit)
     }
@@ -424,7 +435,7 @@ impl Page {
         }
         for page in pages
             .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)) && p.listed(config))
+            .filter(|p| !matches!(p.data, Data::Generated { .. }) && p.listed(config))
         {
             out.entry(page.lang.clone())
                 .or_default()

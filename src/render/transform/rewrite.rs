@@ -32,18 +32,26 @@ impl Transform for Links {
         } = cx;
         let lang = config.multilingual().then_some(page.lang.as_str());
         // Which of this page's links are *its own*, rather than its layout's.
-        // A generated listing links every page it lists, and a term page every
-        // page carrying the term, neither of which the author wrote: counted as
-        // edges they would drown out the ones that were.
-        // ...and only while something reads them: with `links { backlinks }` off
-        // nothing inverts the graph, so a page pays neither the check below nor
-        // a manifest field per build.
+        // A generated listing writes none of its own: what it lists is a fact
+        // about the plan and travels on the page itself (`Data::Generated`),
+        // because a listing with a template draws its entries from the template
+        // and those links are the template's, chrome like any other.
+        // ...and only while something reads the graph: with neither backlinks
+        // nor the orphan report asked for, a page pays neither the check below
+        // nor a manifest field per build.
         let content = match page.data {
-            Data::Generated(_) => None,
-            _ => config.links.backlinks.then_some(*content),
+            Data::Generated { .. } => None,
+            _ => config.links.graph().then_some(*content),
         };
         doc.walk(|element| {
             let span = element.span;
+            // Asked only of a link that named a page, and so of a handful of
+            // elements rather than of every node the page is made of.
+            let authored = || {
+                content
+                    .as_ref()
+                    .is_some_and(|dir| Origins::authored_under(span, dir))
+            };
             element.rewrite(&[attr::href, attr::src], |value| {
                 let resolution = links.classify(value, &page.source, lang);
                 // Every probe becomes a dependency, whether or not it matched,
@@ -58,13 +66,7 @@ impl Transform for Links {
                         if url.contains('#') {
                             found.deep.push(url.clone());
                         }
-                        // Asked only of a link that resolved, and so of a
-                        // handful of elements rather than of every node the
-                        // page is made of.
-                        if content
-                            .as_ref()
-                            .is_some_and(|dir| Origins::authored_under(span, dir))
-                        {
+                        if authored() {
                             found.outbound.record(&url, &page.permalink);
                         }
                         Some(url)
@@ -73,7 +75,16 @@ impl Transform for Links {
                         found.broken.push(value.to_owned());
                         None
                     }
-                    Link::Passthrough => None,
+                    Link::Passthrough => {
+                        // A link already written as a URL still reaches a page:
+                        // an author writing `/guide/`, and every generated index,
+                        // which links its members by permalink because it has no
+                        // source path to name them by.
+                        if authored() && links.served(value).is_some() {
+                            found.outbound.record(value, &page.permalink);
+                        }
+                        None
+                    }
                 }
             });
         });

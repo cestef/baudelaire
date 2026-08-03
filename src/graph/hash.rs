@@ -151,6 +151,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 13: a generated listing records its links too, so the orphan report can
+    /// see that a page is reachable from an index. An entry written before this
+    /// has none for a listing, so every page reachable only from one would be
+    /// reported as linked from nowhere.
     /// 12: those recorded links keep their `#fragment`, so a backlink can say
     /// which section it aimed at. An entry written before this recorded the page
     /// alone, so a cached page's backlinks would be grouped under no section at
@@ -186,7 +190,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 12;
+    const SCHEMA: u32 = 13;
 
     pub fn current() -> Self {
         Self {

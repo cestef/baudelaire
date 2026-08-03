@@ -1,6 +1,6 @@
 //! Resolution of source-relative links to permalinks.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,10 @@ use crate::graph::Hash;
 pub struct Outbound(BTreeSet<String>);
 
 impl Outbound {
+    /// The links of a page that has none: what a check reads for a build that
+    /// never asked for the graph.
+    pub const EMPTY: &'static Self = &Self(BTreeSet::new());
+
     /// Record a resolved link written on the page permalinked `from`. A page
     /// linking to itself is not an edge, whichever of its own sections it names:
     /// it says nothing a reader already on that page does not know.
@@ -41,6 +45,14 @@ impl Outbound {
     /// The URLs this page links to, in a stable order.
     pub fn targets(&self) -> impl Iterator<Item = &str> {
         self.0.iter().map(String::as_str)
+    }
+
+    /// The same links as the *pages* they name, `#fragment` dropped: what asking
+    /// "is anything pointing at this page?" reads. A page named both plainly and
+    /// by section appears twice, which no caller cares about and every caller
+    /// would otherwise dedup for itself.
+    pub fn pages(&self) -> impl Iterator<Item = &str> {
+        self.targets().map(|target| super::Tail::of(target).path)
     }
 
     /// Whether the page links to nothing, so a manifest entry can leave the
@@ -256,6 +268,11 @@ impl Resolution {
 #[derive(Debug, Default)]
 pub struct LinkMap {
     by_source: HashMap<PathBuf, String>,
+    /// Every permalink this site serves, so a link written as a URL rather than
+    /// as a source path can still be recognized as naming a page. Generated
+    /// listings are in here even though they are not in `by_source`: a link to a
+    /// term page is a link to a page, whoever wrote it.
+    urls: HashSet<String>,
     /// The typst project root: absolute link paths (`/posts/hello.typ`)
     /// resolve against it, mirroring typst's own path convention.
     root: PathBuf,
@@ -274,11 +291,12 @@ impl LinkMap {
     pub fn new(pages: &[Page], root: &Path) -> Self {
         let by_source = pages
             .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)))
+            .filter(|p| !matches!(p.data, Data::Generated { .. }))
             .map(|p| (crate::fs::resolved(&p.source), p.permalink.clone()))
             .collect();
         Self {
             by_source,
+            urls: pages.iter().map(|p| p.permalink.clone()).collect(),
             root: root.to_path_buf(),
         }
     }
@@ -292,6 +310,20 @@ impl LinkMap {
         self.by_source
             .iter()
             .map(|(source, permalink)| (source.as_path(), permalink.as_str()))
+    }
+
+    /// The page a raw link already spelled as a URL names, if this site serves
+    /// one there.
+    ///
+    /// A `.typ` link is the way to cross-reference a page and the only spelling
+    /// that survives a rename, but it is not the only one that *reaches* a page:
+    /// an author writing `/guide/` means the guide, and a generated index links
+    /// its members by permalink because it has no source path to name them by.
+    /// Both are edges of the link graph, and neither goes through
+    /// [`LinkMap::classify`], which exists to rewrite what has to be rewritten.
+    pub fn served(&self, raw: &str) -> Option<&str> {
+        let path = super::Tail::of(raw).path;
+        self.urls.get(path).map(String::as_str)
     }
 
     /// Classify a raw link written in `from`'s body: passthrough, resolved to a
@@ -508,6 +540,21 @@ mod tests {
         let from = std::path::Path::new("a.typ");
 
         assert!(map.classify("https://x.com", from, None).probed.is_empty());
+    }
+
+    /// A link written as a URL names a page too, which is how a generated index
+    /// reaches its members: it has no source path to name them by.
+    #[test]
+    fn a_link_spelled_as_a_url_still_names_a_page() {
+        let pages = [page("A", "/a/"), page("B", "/b/")];
+        let map = LinkMap::new(&pages, std::path::Path::new("."));
+
+        assert_eq!(map.served("/b/"), Some("/b/"));
+        // The section is not part of the page's identity, and a page this site
+        // does not serve is not one of ours.
+        assert_eq!(map.served("/b/#install"), Some("/b/"));
+        assert_eq!(map.served("/nowhere/"), None);
+        assert_eq!(map.served("https://example.com/b/"), None);
     }
 
     /// The cold-build guess: what a page's source looks like it links to,

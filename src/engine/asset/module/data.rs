@@ -141,7 +141,7 @@ impl Module for Taxonomies {
         for page in cx
             .pages
             .iter()
-            .filter(|p| !matches!(p.data, Data::Generated(_)))
+            .filter(|p| !matches!(p.data, Data::Generated { .. }))
         {
             let link = Value::dict([
                 ("url", Value::str(&page.permalink)),

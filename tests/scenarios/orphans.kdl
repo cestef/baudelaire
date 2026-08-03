@@ -1,0 +1,206 @@
+// `links { orphans }`: the pages nothing links to, off the same recorded edges
+// backlinks are read from.
+
+scenario "a page nothing links to is reported, and a linked one is not" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        templates "templates"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { template "post.typ" }
+        }
+      }
+      links {
+        orphans "any"
+      }
+      """#
+    // Every page carries a nav link to `lonely`, which is exactly the case the
+    // report has to see through: chrome is not a link an author wrote.
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", body + html.elem("nav",
+        link("/content/posts/lonely.typ")[home]))
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      #link("posts/reachable.typ")[a post]
+      """#
+    "content/posts/reachable.typ" #"""
+      #let frontmatter = (title: "Reachable")
+      linked from the home page
+      """#
+    "content/posts/lonely.typ" #"""
+      #let frontmatter = (title: "Lonely")
+      linked from the layout alone
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::links::orphans"
+    file "posts/lonely/index.html"
+  }
+}
+
+scenario "a site whose pages all link to each other reports nothing" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      links {
+        orphans "any"
+      }
+      """#
+    // The home page is an entry point, so nothing is expected to link to it.
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      #link("a.typ")[a]
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("index.typ")[home]
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::links::orphans"
+  }
+}
+
+scenario "generated listings are nobody's forgotten page" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags listing=#true
+        }
+      }
+      links {
+        orphans "any"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      #link("a.typ")[a]
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A", tags: ("rust",))
+      tagged
+      """#
+  }
+  expect {
+    ok
+    // The term page and the term index are linked from nowhere by definition,
+    // and reporting them would bury the pages that matter.
+    unwarned "baudelaire::links::orphans"
+    file "tags/rust/index.html"
+  }
+}
+
+scenario "a page an index lists is reachable, and not reported" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { paginate { size 5 } }
+        }
+      }
+      links {
+        orphans "any"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      the site
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2026, month: 1, day: 2))
+      alpha
+      """#
+  }
+  expect {
+    ok
+    // Nothing an author wrote points at the post: the generated index does. A
+    // report that ignored an index would name every post on every blog.
+    unwarned "baudelaire::links::orphans"
+    file "posts/a/index.html"
+  }
+}
+
+scenario "the strict mode names a page only an index links" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { paginate { size 5 } }
+        }
+      }
+      links {
+        orphans "authored"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      the site
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2026, month: 1, day: 2))
+      alpha
+      """#
+  }
+  expect {
+    ok
+    // The same site `any` calls reachable: under `authored` the question is
+    // whether anyone *wrote* about the page, and the index is not an answer.
+    warns "baudelaire::links::orphans"
+  }
+}
+
+scenario "the report costs nothing unless it is asked for" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      #link("a.typ")[a]
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A")
+      alpha
+      """#
+    "content/lonely.typ" #"""
+      #let frontmatter = (title: "Lonely")
+      nothing points here
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::links::orphans"
+  }
+}

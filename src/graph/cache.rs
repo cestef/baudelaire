@@ -597,7 +597,7 @@ impl Cache {
     fn key(&self, page: &Page) -> PathBuf {
         let path = Self::portable(&self.root, &page.source);
         match page.data {
-            Data::Generated(_) => Path::new(GENERATED).join(path),
+            Data::Generated { .. } => Path::new(GENERATED).join(path),
             Data::Export | Data::Empty => path,
         }
     }
@@ -701,7 +701,13 @@ mod tests {
         let path = path.to_str().expect("utf-8 tempdir");
 
         let real = cache.key(&page(path, Data::Empty));
-        let listing = cache.key(&page(path, Data::Generated(String::new())));
+        let listing = cache.key(&page(
+            path,
+            Data::Generated {
+                dict: String::new(),
+                lists: Vec::new(),
+            },
+        ));
 
         assert_ne!(real, listing);
         assert!(listing.starts_with(GENERATED), "{listing:?}");

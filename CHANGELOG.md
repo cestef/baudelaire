@@ -45,7 +45,9 @@ chores are visible in the git history and change nothing for a site.
 
 - **links**: backlinks. `links { backlinks #true }` hands every page the pages
   whose content links to it, as `page.backlinks`, each entry `(url, title, lang,
-  fragments)` and ordered by URL.
+  fragments)` and ordered by URL. A link written as a URL (`#link("/guide/")`)
+  counts alongside the `.typ` spelling; a generated index is not a source, or
+  every page it lists would be backlinked from it.
 
   ```kdl
   links {
@@ -84,6 +86,28 @@ chores are visible in the git history and change nothing for a site.
   Content whose *own links* depend on its backlinks never settles: the build
   stops after the second attempt and warns
   (`baudelaire::backlinks::unstable`).
+
+- **links**: `links { orphans "any" }` reports the pages nothing links to;
+  `orphans "authored"` reports the pages nobody *wrote* about.
+
+  ```
+  ⚠ 2 pages linked from nowhere
+    ⚠ `guide/exporting.typ` is linked from nowhere, and serves at `/guide/exporting/`
+  ```
+
+  A link counts when an author wrote it, spelled as a `.typ` path or as a URL. A
+  layout never does: a sidebar links every page from every page. The mode decides
+  whether the build's own listings count: under `any` a paginated index and a
+  term page are ways in, so the report names only pages a reader cannot get to;
+  under `authored` they are not, which names a post reached from its index and
+  from nowhere else. The root of each language, the listings themselves and the
+  not-found page are left out of both.
+
+  A listing's entries are read from the page set, not from its markup, so a
+  listing with a template of its own counts like the default one.
+
+  A report, never a failure. Either switch turns the link graph on, so a site
+  that wants only the report pays for the edges and none of the second compiles.
 
 ### Performance
 
@@ -857,17 +881,24 @@ passed, which is what they are for. Neither runs on a site that declares no
   no debug events and said nothing about why. A run that passes no `-v` still
   honours the variable, which stays the only way to see a dependency's events.
 
-- **links**: `links { orphans #true }` reports the pages no other page's content
-  links to.
+- **links**: `links { orphans "any" }` reports the pages nothing links to;
+  `orphans "authored"` reports the pages nobody *wrote* about.
 
   ```
   ⚠ 2 pages linked from nowhere
     ⚠ `guide/exporting.typ` is linked from nowhere, and serves at `/guide/exporting/`
   ```
 
-  It reads the same edges backlinks do, so a page reached only from a layout's
-  nav counts: a nav is not something an author wrote about that page. The root
-  of each language, generated term pages and the not-found page are left out.
+  A link counts when an author wrote it, spelled as a `.typ` path or as a URL. A
+  layout never does: a sidebar links every page from every page. The mode decides
+  whether the build's own listings count: under `any` a paginated index and a
+  term page are ways in, so the report names only pages a reader cannot get to;
+  under `authored` they are not, which names a post reached from its index and
+  from nowhere else. The root of each language, the listings themselves and the
+  not-found page are left out of both.
+
+  A listing's entries are read from the page set, not from its markup, so a
+  listing with a template of its own counts like the default one.
 
   A report, never a failure. Either switch turns the link graph on, so a site
   that wants only the report pays for the edges and none of the second compiles.

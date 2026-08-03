@@ -131,6 +131,13 @@ is billed to `html`.
   leaves the budgets to `baudelaire build`, which has the bytes.
 ]
 
+== Elsewhere
+
+Two checks live outside this block, because neither is about a page's own
+markup: broken internal links (`links { strict }`, see
+#link("../write/pages.typ")[pages]) and the pages nothing links to
+(`links { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
+
 == Under the cache
 
 Both halves survive an #link("incremental.typ")[incremental build]. A page

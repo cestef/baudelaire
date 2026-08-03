@@ -25,11 +25,11 @@ use crate::config::{
     CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DisplayMode, DraftConfig,
     Eagerness, FeedConfig, FeedKind, FieldSchema, FieldType, GenerateConfig, HooksConfig,
     HtmlConfig, IconConfig, IconPurpose, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig,
-    LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig, PaginateConfig,
-    Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
-    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, SecurityConfig,
-    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
-    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    Linked, LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig,
+    PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch,
+    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
+    SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
+    StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::content::Frontmatter;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
@@ -1051,6 +1051,15 @@ impl Section for LinkConfig {
             "Hand each page the pages whose content links to it, as `page.backlinks`.",
             |c, n, t| {
                 c.backlinks = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "orphans",
+            Choice(Linked::names),
+            "Report the pages nothing links to, counting `any` page's links or only those an author wrote.",
+            |c, n, t| {
+                c.orphans = Some(n.arg(t, 0)?.one::<Linked>(t, NodeExt::span(n))?);
                 Ok(())
             },
         ),

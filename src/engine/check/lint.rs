@@ -195,6 +195,10 @@ mod tests {
     /// A page carrying one weight ledger and the given markup.
     fn page<'a>(html: &'a str, weight: &'a Weight, lints: &'a [Finding]) -> CheckedPage<'a> {
         CheckedPage {
+            outbound: crate::render::Outbound::EMPTY,
+            lists: &[],
+            generated: false,
+            listed: true,
             label: "post.typ".into(),
             source: Path::new("post.typ"),
             permalink: "/post/",
