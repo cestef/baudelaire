@@ -27,9 +27,37 @@ links {
 }
 ```
 
-Each entry is `(url, title, lang)`: where the linking page is, what it calls
-itself, and which edition of the site it belongs to. They come ordered by URL,
-so the markup is the same on every build.
+Each entry is `(url, title, lang, fragments)`: where the linking page is, what
+it calls itself, which edition of the site it belongs to, and which of *your*
+headings it aimed at. They come ordered by URL, so the markup is the same on
+every build.
+
+== Grouping by section
+
+`fragments` holds the heading ids a page linked to, without the `#`, and is
+empty when it linked to the page rather than into it. A page that links here
+three times is still one entry carrying every section it named, so a plain
+"linked from" list never says one name twice.
+
+```typ
+// Everything that linked to this heading.
+#let cited(page, id) = page.backlinks.filter(l => id in l.fragments)
+```
+
+```typ
+#let post(page, body) = {
+  body
+  for id in ("install", "usage") {
+    let sources = page.backlinks.filter(l => id in l.fragments)
+    if sources.len() > 0 {
+      h("p", "Linked to #" + id + " by " + sources.map(l => l.title).join(", "))
+    }
+  }
+}
+```
+
+Ids are the ones baudelaire puts on your headings, the same ones a
+`#link("page.typ#install")` resolves against.
 
 == What counts as a link
 
@@ -42,8 +70,8 @@ Only what an author wrote in the content tree, and only
   table.header([Counts], [Doesn't]),
   [`#link("../other.typ")` in a page's body], [Anything a template emits: the nav, the sidebar, `page.nav`, the backlink list itself],
   [A link in a file the page `#include`s from `content/`], [Links on a generated listing or taxonomy term page],
-  [Two links to one page, as one entry], [A link to the page's own URL],
-  [A link to `other.typ#section`, as a link to the page], [An external or non-`.typ` href],
+  [Two links to one page, as one entry], [A link to the page's own URL, section or not],
+  [A link to `other.typ#section`, as a link to the page *and* to the section], [An external or non-`.typ` href],
 )
 
 Without the first rule a shared layout would make every page a backlink of every

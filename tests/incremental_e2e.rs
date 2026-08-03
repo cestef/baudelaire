@@ -590,9 +590,13 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
             .cloned()
             .unwrap_or_default()
     };
-    // The fragment and the repeat collapse into the one page a links to, and a
-    // link to itself is not an edge.
-    assert_eq!(outbound("a"), ["/posts/b/"], "{manifest}");
+    // Each distinct link is an edge, section and all, so the page at the other
+    // end can group who linked to what. A link to itself is not one.
+    assert_eq!(
+        outbound("a"),
+        ["/posts/b/", "/posts/b/#install"],
+        "{manifest}"
+    );
     // b writes no links at all: the one in its markup is its layout's.
     assert!(outbound("b").is_empty(), "{manifest}");
 }

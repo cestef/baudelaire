@@ -92,6 +92,41 @@ scenario "a link added on a rebuild reaches the page it points at" {
   }
 }
 
+scenario "a backlink says which section it aimed at" {
+  files {
+    "templates/post.typ" #"""
+      #let sections(l) = if l.fragments.len() > 0 { l.fragments.join(" ") } else { "" }
+      #let post(page, body) = html.elem("main", body + html.elem("nav",
+        page.backlinks.map(l => html.elem("a",
+          attrs: (href: l.url, "data-at": sections(l)), l.title)).join()))
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("b.typ#install")[install] #link("b.typ#usage")[usage] #link("b.typ")[all of it]
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "C")
+      #link("b.typ")[to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      == Install
+      == Usage
+      """#
+  }
+  expect {
+    ok
+    file "posts/b/index.html" {
+      // a linked three times and is still named once, carrying both sections.
+      contains #"data-at="install usage""#
+      // c linked to the page itself, so it aimed at no section (an empty
+      // attribute serializes bare).
+      contains #"href="/posts/c/" data-at>"#
+      missing #"data-at="install usage install""#
+    }
+  }
+}
+
 scenario "an unchanged site repairs nothing on a rebuild" {
   files {
     "content/posts/a.typ" #"""

@@ -9,12 +9,14 @@ use crate::codegen::Value;
 use crate::content::{Data, Page};
 use crate::graph::Hash;
 
-/// The pages one page's own content links to: this page's contribution to the
-/// site's link graph, as permalinks.
+/// The links one page's own content carries: this page's contribution to the
+/// site's link graph, as the resolved URLs it points at.
 ///
-/// A set, so the order is the same on every build and two links to one page are
-/// one edge. What a link addresses *within* a page (`#fragment`, `?query`) is
-/// dropped: the edge names the page, not the paragraph.
+/// A set, so the order is the same on every build and the same link written
+/// twice is one edge. Each target is kept whole, `#fragment` and all, because a
+/// link into a page's section says more than a link to the page: it is what lets
+/// the page at the other end group who linked to *what*. Which paragraph they
+/// add up to one edge from is [`Backlinks`]'s business, not this type's.
 ///
 /// Only links written in the content tree are collected. A layout's nav, a
 /// sidebar, and the prev/next pair are links every page carries by virtue of its
@@ -26,16 +28,15 @@ pub struct Outbound(BTreeSet<String>);
 
 impl Outbound {
     /// Record a resolved link written on the page permalinked `from`. A page
-    /// linking to itself is not an edge: it says nothing a reader of that page
-    /// does not already know.
+    /// linking to itself is not an edge, whichever of its own sections it names:
+    /// it says nothing a reader already on that page does not know.
     pub fn record(&mut self, url: &str, from: &str) {
-        let target = super::Tail::of(url).path;
-        if target != from {
-            self.0.insert(target.to_owned());
+        if super::Tail::of(url).path != from {
+            self.0.insert(url.to_owned());
         }
     }
 
-    /// The permalinks this page links to, in a stable order.
+    /// The URLs this page links to, in a stable order.
     pub fn targets(&self) -> impl Iterator<Item = &str> {
         self.0.iter().map(String::as_str)
     }
@@ -65,7 +66,8 @@ pub enum Backlinks {
     On(BTreeMap<String, Vec<Backlink>>),
 }
 
-/// One inbound link, as a template renders it.
+/// One inbound link, as a template renders it: a page, once, whichever of this
+/// page's sections it pointed at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Backlink {
     /// The permalink of the page that links here.
@@ -74,28 +76,45 @@ pub struct Backlink {
     /// Its language, so a template can drop or mark a link from another edition
     /// of the site: an `en` page linking a `fr` one is a real edge.
     pub lang: String,
+    /// The heading ids it aimed at, without the `#`, in a stable order. Empty
+    /// when it linked to the page rather than into it, which is what lets a
+    /// template group its backlinks by section and still name a source once.
+    pub fragments: Vec<String>,
 }
 
 impl Backlinks {
-    /// Invert `edges` (each page's own outbound links) over `pages`.
+    /// Invert `edges`: each page's own outbound links become, for every page
+    /// they name, the pages that name it.
     ///
-    /// Sources are ordered by permalink, so the value a page compiles against is
-    /// the same on every build: an order that depended on which pages hit the
-    /// cache would refingerprint pages that nothing changed about.
+    /// A source appears once per page it links to, however many links it wrote
+    /// and however many sections they aimed at: those collect into
+    /// [`Backlink::fragments`] instead, so the plain "linked from" list never
+    /// says one name twice. Sources come ordered by permalink, so the value a
+    /// page compiles against is the same on every build: an order that depended
+    /// on which pages hit the cache would refingerprint pages that nothing
+    /// changed about.
     pub fn new<'a>(edges: impl Iterator<Item = (&'a Page, &'a Outbound)>) -> Self {
-        let mut inverted: BTreeMap<String, Vec<Backlink>> = BTreeMap::new();
+        let mut inverted: BTreeMap<String, BTreeMap<String, Backlink>> = BTreeMap::new();
         for (page, outbound) in edges {
             for target in outbound.targets() {
-                inverted
-                    .entry(target.to_owned())
+                let split = super::Tail::of(target);
+                let source = inverted
+                    .entry(split.path.to_owned())
                     .or_default()
-                    .push(Backlink::from(page));
+                    .entry(page.permalink.clone())
+                    .or_insert_with(|| Backlink::from(page));
+                // A `?query` is not a section, and neither is a bare `#`.
+                if let Some(anchor) = split.tail.strip_prefix('#').filter(|a| !a.is_empty()) {
+                    source.fragments.push(anchor.to_owned());
+                }
             }
         }
-        for sources in inverted.values_mut() {
-            sources.sort_by(|a, b| a.url.cmp(&b.url));
-        }
-        Self::On(inverted)
+        Self::On(
+            inverted
+                .into_iter()
+                .map(|(target, sources)| (target, sources.into_values().collect()))
+                .collect(),
+        )
     }
 
     /// The pages linking to `page`, empty when none do or when the feature is
@@ -110,13 +129,17 @@ impl Backlinks {
     }
 
     /// What a page's backlinks are handed to its template as: an array of
-    /// `(url, title, lang)` dicts, `page.backlinks`.
+    /// `(url, title, lang, fragments)` dicts, `page.backlinks`.
     pub fn value(&self, page: &Page) -> Value {
         Value::array(self.of(page).iter().map(|source| {
             Value::dict([
                 ("url", Value::str(&source.url)),
                 ("title", Value::str(&source.title)),
                 ("lang", Value::str(&source.lang)),
+                (
+                    "fragments",
+                    Value::array(source.fragments.iter().map(Value::str)),
+                ),
             ])
         }))
     }
@@ -133,13 +156,15 @@ impl Backlinks {
 }
 
 /// A page names itself in a backlink by the three things a link needs: where it
-/// is, what to call it, and what language it is in.
+/// is, what to call it, and what language it is in. What it aimed at is the
+/// link's, not the page's, and is filled in as the graph is inverted.
 impl From<&Page> for Backlink {
     fn from(page: &Page) -> Self {
         Self {
             url: page.permalink.clone(),
             title: page.frontmatter.title.clone().unwrap_or_default(),
             lang: page.lang.clone(),
+            fragments: Vec::new(),
         }
     }
 }
@@ -315,22 +340,67 @@ impl LinkMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{LinkMap, Outbound};
+    use super::{Backlinks, LinkMap, Outbound};
+    use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+    use std::path::PathBuf;
 
-    /// An edge names a page, so two links to one page (or to two of its
-    /// sections) are one edge, and a page never links to itself.
+    /// A link is kept whole, so the page at the other end can tell which of its
+    /// sections was aimed at. The same link written twice is still one edge, and
+    /// a page never links to itself, whichever of its own sections it names.
     #[test]
-    fn an_edge_names_a_page_once() {
+    fn an_edge_keeps_what_the_link_aimed_at() {
         let mut outbound = Outbound::default();
         outbound.record("/posts/b/#install", "/posts/a/");
-        outbound.record("/posts/b/?utm=x", "/posts/a/");
+        outbound.record("/posts/b/#install", "/posts/a/");
         outbound.record("/posts/b/", "/posts/a/");
-        outbound.record("/posts/c/", "/posts/a/");
         outbound.record("/posts/a/#top", "/posts/a/");
         assert_eq!(
             outbound.targets().collect::<Vec<_>>(),
-            ["/posts/b/", "/posts/c/"]
+            ["/posts/b/", "/posts/b/#install"]
         );
+    }
+
+    /// Inverting names each source once per page it links to, however many links
+    /// it wrote: the sections they aimed at collect on that one entry, which is
+    /// what lets a template group by section without listing a page twice.
+    #[test]
+    fn a_source_is_named_once_and_carries_the_sections_it_aimed_at() {
+        let mut outbound = Outbound::default();
+        for target in ["/posts/b/", "/posts/b/#install", "/posts/b/#usage"] {
+            outbound.record(target, "/posts/a/");
+        }
+        let (source, target) = (page("A", "/posts/a/"), page("B", "/posts/b/"));
+        let backlinks = Backlinks::new(std::iter::once((&source, &outbound)));
+
+        let sources = backlinks.of(&target);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].url, "/posts/a/");
+        assert_eq!(sources[0].title, "A");
+        assert_eq!(sources[0].fragments, ["install", "usage"]);
+        // A page nothing points at is linked from nowhere, not from everywhere.
+        assert!(backlinks.of(&source).is_empty());
+    }
+
+    /// The pages a backlink test links between: a title and a permalink are all
+    /// an inbound link is made of.
+    fn page(title: &str, permalink: &str) -> Page {
+        Page {
+            id: PageId::new("posts", title),
+            source: PathBuf::from(format!("content/posts/{title}.typ")),
+            frontmatter: Frontmatter {
+                title: Some(title.to_owned()),
+                ..Frontmatter::default()
+            },
+            body: String::new(),
+            data: Data::Empty,
+            collection: "posts".into(),
+            permalink: permalink.to_owned(),
+            output: PathBuf::new(),
+            template: None,
+            lang: "en".into(),
+            siblings: Siblings::default(),
+            translations: Vec::new(),
+        }
     }
 
     #[test]

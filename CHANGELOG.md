@@ -44,8 +44,8 @@ chores are visible in the git history and change nothing for a site.
   install it, so the build warns (`baudelaire::manifest::icons`).
 
 - **links**: backlinks. `links { backlinks #true }` hands every page the pages
-  whose content links to it, as `page.backlinks`, each entry `(url, title,
-  lang)` and ordered by URL.
+  whose content links to it, as `page.backlinks`, each entry `(url, title, lang,
+  fragments)` and ordered by URL.
 
   ```kdl
   links {
@@ -60,11 +60,18 @@ chores are visible in the git history and change nothing for a site.
   }
   ```
 
+  `fragments` holds the heading ids the linking page aimed at, so a template can
+  group its backlinks by section:
+
+  ```typ
+  #let cited(page, id) = page.backlinks.filter(l => id in l.fragments)
+  ```
+
   Only links an author wrote in the content tree count: a layout's nav, the
   prev/next pair and a generated listing's index are links a page carries by
   virtue of its template, and counting them would make every page a backlink of
-  every other. Two links to one page are one entry, a `#fragment` names the
-  page, and a page never backlinks itself.
+  every other. A page that links here three times is one entry carrying every
+  section it named, and a page never backlinks itself.
 
   The pages linking to a page are not knowable until every page has rendered, so
   a build compiles against the graph the last build recorded and compiles again
@@ -79,8 +86,8 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
-- The build cache records two more things per page: the pages that page's own
-  content links to, and the digest of the backlinks it was compiled with. A
+- The build cache records two more things per page: the links that page's own
+  content carries, and the digest of the backlinks it was compiled with. A
   manifest written before this records neither, so the cache schema is bumped
   and the first build after upgrading is a cold one. Nothing to change.
 

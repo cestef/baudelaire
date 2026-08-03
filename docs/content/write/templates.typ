@@ -59,7 +59,7 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
   [`translations`], [array], [`(lang, url, title)` per edition, this page's included.],
   [`strings`], [dict], [The current language's UI string table.],
   [`reading`], [dict], [`(words, minutes)`, from the page's own source.],
-  [`backlinks`], [array], [`(url, title, lang)` per page whose content links here. Empty unless `links { backlinks }` is on.],
+  [`backlinks`], [array], [`(url, title, lang, fragments)` per page whose content links here. Empty unless `links { backlinks }` is on.],
   [`date`], [dict], [`(iso, display)`, or `none` when the page carries no date.],
 )
 

@@ -151,6 +151,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 12: those recorded links keep their `#fragment`, so a backlink can say
+    /// which section it aimed at. An entry written before this recorded the page
+    /// alone, so a cached page's backlinks would be grouped under no section at
+    /// all and a template grouping by one would show them nowhere.
     /// 11: `Outputs` carries the pages each page's own content links to, which
     /// the site-wide link graph is assembled from. An entry written before this
     /// records none, so a cached page would contribute no edges and the pages it
@@ -182,7 +186,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 11;
+    const SCHEMA: u32 = 12;
 
     pub fn current() -> Self {
         Self {
