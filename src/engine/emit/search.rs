@@ -23,6 +23,7 @@
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 
+use rayon::prelude::*;
 use serde::Serialize;
 
 use super::script::Script;
@@ -82,11 +83,15 @@ impl Corpus {
     ///
     /// The order is load-bearing: the inverted index keys postings by document
     /// *position*, and `site.outputs` is ordered by which pages hit the cache.
+    /// The sort restores it whatever order the documents were built in, which is
+    /// what lets them be built across the pool: stripping the markup off a page
+    /// reads only that page, and on a large site it is the slowest thing a build
+    /// does after compiling.
     fn build(site: &Site, fields: &[SearchField], lang: &str) -> Self {
         let has = |field| fields.contains(&field);
         let mut documents: Vec<Document> = site
             .outputs
-            .iter()
+            .par_iter()
             .filter(|out| out.page.lang == lang && out.page.listed(site.config))
             .map(|out| Document {
                 url: out.page.permalink.clone(),
@@ -131,25 +136,73 @@ impl Corpus {
     /// with tokens shorter than `min_length` or listed in `stopwords` dropped.
     fn inverted_json(&self, stopwords: &[String], min_length: usize) -> Result<String> {
         let stop: HashSet<&str> = stopwords.iter().map(String::as_str).collect();
-        let mut postings: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        for (id, doc) in self.documents.iter().enumerate() {
-            for token in doc.tokens() {
-                if token.len() < min_length || stop.contains(token.as_str()) {
-                    continue;
-                }
-                let ids = postings.entry(token).or_default();
-                // one doc's tokens are visited contiguously, so checking the last
-                // id keeps each posting list duplicate-free.
-                if ids.last() != Some(&id) {
-                    ids.push(id);
-                }
-            }
-        }
+        // Every word of every page becomes a normalized key, which on a large
+        // site is the slowest thing a build does outside the compiles. Each
+        // chunk of documents indexes itself across the pool and the chunks are
+        // merged pairwise.
+        let postings = self
+            .documents
+            .par_iter()
+            .enumerate()
+            .fold(Postings::default, |mut postings, (id, doc)| {
+                postings.add(id, doc, &stop, min_length);
+                postings
+            })
+            .reduce(Postings::default, Postings::merge);
         let index = Inverted {
             documents: self.documents.iter().map(Meta::from).collect(),
             postings,
         };
         Artifact::SearchIndex.json(&index)
+    }
+}
+
+/// Which documents carry each term, their ids ascending: the half of an
+/// inverted index a query looks a term up in.
+///
+/// A type rather than a bare map because it is built in pieces and put back
+/// together, and both halves of that have to agree about the one invariant the
+/// client relies on: a posting list is sorted and holds each id once.
+#[derive(Default, Serialize)]
+#[serde(transparent)]
+struct Postings(BTreeMap<String, Vec<usize>>);
+
+impl Postings {
+    /// Index one document under every term it carries, skipping tokens the site
+    /// excludes.
+    fn add(&mut self, id: usize, doc: &Document, stop: &HashSet<&str>, min_length: usize) {
+        for token in doc.tokens() {
+            if token.len() < min_length || stop.contains(token.as_str()) {
+                continue;
+            }
+            let ids = self.0.entry(token).or_default();
+            // one doc's tokens are visited contiguously, so checking the last
+            // id keeps each posting list duplicate-free.
+            if ids.last() != Some(&id) {
+                ids.push(id);
+            }
+        }
+    }
+
+    /// Fold `later` into these.
+    ///
+    /// Chunks cover contiguous ranges of document ids and are combined in order,
+    /// so appending is almost always what this is: the check is what keeps the
+    /// invariant true if it ever is not, rather than trusting the pool's shape.
+    fn merge(mut self, later: Self) -> Self {
+        for (term, ids) in later.0 {
+            let list = self.0.entry(term).or_default();
+            let ordered = match (list.last(), ids.first()) {
+                (Some(seen), Some(next)) => seen < next,
+                _ => true,
+            };
+            list.extend(ids);
+            if !ordered {
+                list.sort_unstable();
+                list.dedup();
+            }
+        }
+        self
     }
 }
 
@@ -227,7 +280,7 @@ impl<'a> From<&'a Document> for Meta<'a> {
 #[derive(Serialize)]
 struct Inverted<'a> {
     documents: Vec<Meta<'a>>,
-    postings: BTreeMap<String, Vec<usize>>,
+    postings: Postings,
 }
 
 /// The query tokenizer, one definition for both engines and for the palette
@@ -442,5 +495,36 @@ mod tests {
         assert_eq!(postings["rust"], serde_json::json!([0]));
         // Stopword "is" and sub-min-length tokens are excluded.
         assert!(postings.get("is").is_none(), "stopword dropped: {json}");
+    }
+
+    /// The index is built in chunks across the pool and merged, so a posting
+    /// list must come out sorted and duplicate-free however the chunks fall.
+    /// The client looks a term up and takes the ids as given.
+    #[test]
+    fn merged_posting_lists_stay_sorted_and_unique() {
+        let postings = |pairs: &[(&str, &[usize])]| {
+            Postings(
+                pairs
+                    .iter()
+                    .map(|(term, ids)| ((*term).to_owned(), ids.to_vec()))
+                    .collect(),
+            )
+        };
+        let merged =
+            |a: &[(&str, &[usize])], b: &[(&str, &[usize])]| postings(a).merge(postings(b)).0;
+
+        // The ordinary case: chunks cover contiguous ranges, so appending is all
+        // the merge is.
+        assert_eq!(merged(&[("t", &[0, 1])], &[("t", &[2])])["t"], [0, 1, 2]);
+        // ...and the two that must not corrupt the list if the pool ever hands
+        // them over the other way round, or overlapping.
+        assert_eq!(merged(&[("t", &[2])], &[("t", &[0, 1])])["t"], [0, 1, 2]);
+        assert_eq!(merged(&[("t", &[0, 1])], &[("t", &[1, 2])])["t"], [0, 1, 2]);
+        // A term only one side has survives either way.
+        let both = merged(&[("a", &[0])], &[("b", &[1])]);
+        assert_eq!(
+            (both["a"].as_slice(), both["b"].as_slice()),
+            (&[0][..], &[1][..])
+        );
     }
 }

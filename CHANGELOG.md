@@ -86,6 +86,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Performance
 
+- **search**: the inverted index is built across the thread pool. Tokenizing
+  every word of every page was the slowest thing a build did outside the
+  compiles: on a 1,000-page site it was 113 ms of a 265 ms rebuild, and is now
+  under 10 ms. The index itself is unchanged.
+
 - **build**: each page's compile input (its wrapper text and the fingerprint
   that validates it) is prepared across the pool rather than one page at a time
   ahead of the compiles. Same site: a rebuild that reused every page went from
