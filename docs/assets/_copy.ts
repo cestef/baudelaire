@@ -8,7 +8,7 @@ const CHECK_ICON =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
 // Mount a button on one code block, wrapping its `<pre>` for positioning.
-function mount(pre) {
+function mount(pre: HTMLPreElement): void {
   if (pre.parentElement?.classList.contains("code-block")) return;
 
   const wrap = document.createElement("div");
@@ -23,7 +23,7 @@ function mount(pre) {
   button.innerHTML = COPY_ICON;
   wrap.append(button);
 
-  let revert;
+  let revert: ReturnType<typeof setTimeout> | undefined;
   button.addEventListener("click", async () => {
     try {
       // `innerText`, not `textContent`: a block whose lines can be toggled (the
@@ -48,8 +48,8 @@ function mount(pre) {
 // Add a copy button to every code block in the article. No-ops on pages with
 // none. The Clipboard API needs a secure context, so buttons quietly do nothing
 // over plain HTTP; `baudelaire serve` and the deployed site are both fine.
-export function initCopyButtons() {
-  for (const pre of document.querySelectorAll("#main pre")) {
+export function initCopyButtons(): void {
+  for (const pre of document.querySelectorAll<HTMLPreElement>("#main pre")) {
     mount(pre);
   }
 }

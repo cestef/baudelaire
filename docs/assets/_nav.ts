@@ -2,13 +2,15 @@
 // collapsible navigation on small screens. Pure progressive enhancement: the
 // links work without any of this.
 
-function normalize(pathname) {
+function normalize(pathname: string): string {
   return pathname.replace(/\/+$/, "") || "/";
 }
 
-export function markActiveNav() {
+export function markActiveNav(): void {
   const here = normalize(location.pathname);
-  for (const link of document.querySelectorAll(".sidebar a")) {
+  for (const link of document.querySelectorAll<HTMLAnchorElement>(
+    ".sidebar a",
+  )) {
     if (normalize(new URL(link.href).pathname) === here) {
       link.setAttribute("aria-current", "page");
     }
@@ -18,14 +20,17 @@ export function markActiveNav() {
 // Collapsible subsections. The markup ships closed (and works with no JS); here
 // we open the section holding the current page, mark its trail, and restore any
 // the reader had expanded.
-export function initNavSections() {
+export function initNavSections(): void {
   const KEY = "nav-open";
-  const sections = document.querySelectorAll("details[data-nav-section]");
+  const sections = document.querySelectorAll<HTMLDetailsElement>(
+    "details[data-nav-section]",
+  );
   if (!sections.length) return;
 
-  let opened;
+  let opened: Set<string>;
   try {
-    opened = new Set(JSON.parse(localStorage.getItem(KEY) || "[]"));
+    const stored: unknown = JSON.parse(localStorage.getItem(KEY) || "[]");
+    opened = new Set(Array.isArray(stored) ? stored.map(String) : []);
   } catch {
     opened = new Set();
   }
@@ -33,7 +38,8 @@ export function initNavSections() {
   const persist = () => {
     const open = [...sections]
       .filter((d) => d.open)
-      .map((d) => d.dataset.navSection);
+      .map((d) => d.dataset.navSection)
+      .filter((id): id is string => id !== undefined);
     try {
       localStorage.setItem(KEY, JSON.stringify(open));
     } catch {
@@ -47,7 +53,7 @@ export function initNavSections() {
     if (active) {
       details.open = true;
       details.classList.add("is-active");
-    } else if (opened.has(id)) {
+    } else if (id !== undefined && opened.has(id)) {
       details.open = true;
     }
     details.addEventListener("toggle", persist);
@@ -58,7 +64,7 @@ export function initNavSections() {
 // without this it snaps back to the top on each navigation. The offset rides in
 // sessionStorage: per tab, gone when the tab is, which is the lifetime of the
 // reading session it belongs to.
-export function keepNavScroll() {
+export function keepNavScroll(): void {
   const KEY = "nav-scroll";
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
@@ -97,7 +103,7 @@ export function keepNavScroll() {
   });
 }
 
-export function initMobileNav() {
+export function initMobileNav(): void {
   const toggle = document.querySelector("[data-nav-toggle]");
   const sidebar = document.getElementById("sidebar");
   if (!toggle || !sidebar) return;

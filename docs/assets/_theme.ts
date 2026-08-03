@@ -5,15 +5,15 @@
 const KEY = "bd-theme";
 const root = document.documentElement;
 
-function prefersDark() {
+function prefersDark(): boolean {
   return matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function isDark() {
+function isDark(): boolean {
   return root.dataset.theme ? root.dataset.theme === "dark" : prefersDark();
 }
 
-export function initTheme() {
+export function initTheme(): void {
   const stored = localStorage.getItem(KEY);
   if (stored) root.dataset.theme = stored;
 

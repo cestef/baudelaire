@@ -8,7 +8,7 @@ import config from "baudelaire:config";
 
 // Homepage "Latest writing": the most recent dated pages, straight from the
 // same data that generates the RSS/Atom feeds.
-export function mountRecent(limit = 5) {
+export function mountRecent(limit = 5): void {
   const mount = document.querySelector("[data-recent]");
   if (!mount || !feed.length) return;
 
@@ -47,7 +47,7 @@ export function mountRecent(limit = 5) {
 
 // Config page: print this site's live `client { }` block, exactly as any bundle
 // would receive it from `baudelaire:config`.
-export function mountConfig() {
+export function mountConfig(): void {
   const mount = document.querySelector("[data-config]");
   if (!mount) return;
   const json = JSON.stringify(config, null, 2);

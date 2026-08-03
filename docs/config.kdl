@@ -60,12 +60,15 @@ links {
   style "clean"
 }
 
-// Asset pipeline: minify CSS (lightningcss), bundle + minify JS (rolldown), and
-// content-hash filenames for far-future caching.
+// Asset pipeline: minify CSS (lightningcss), bundle + minify the TypeScript
+// entry (rolldown), and content-hash filenames for far-future caching. The
+// tsconfig is pinned rather than discovered, so an editor and the build read
+// the same one.
 assets {
   minify #true
   bundle #true
   fingerprint #true
+  tsconfig "tsconfig.json"
 }
 
 // Files the build emits beside the pages themselves.
@@ -73,7 +76,7 @@ generate {
   sitemap #true
 
   // Client-side search: a flat document index. The palette UI is the generated
-  // client, imported into assets/main.js as the `baudelaire:search` virtual
+  // client, imported into assets/main.ts as the `baudelaire:search` virtual
   // module and bundled by rolldown. The `body` field powers result snippets.
   search {
     formats "json"
@@ -114,8 +117,9 @@ client {
   edits #true
 }
 
-// `baudelaire build --profile dev` skips the asset pipeline (faster rebuilds)
-// and includes draft pages.
+// `baudelaire build --profile dev` skips the parts of the asset pipeline that
+// only matter to a deployed site, and includes draft pages. Bundling stays on:
+// the scripts are TypeScript, so without it the page has no `main.js` to load.
 profiles {
   dev {
     content {
@@ -125,7 +129,6 @@ profiles {
     }
     assets {
       minify #false
-      bundle #false
       fingerprint #false
     }
   }
