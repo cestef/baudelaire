@@ -27,6 +27,29 @@ Optional, and worth having:
 The e2e tests shell out to `curl`, `base64` and `git`. A missing one of those
 looks like a product bug, so install them first.
 
+### Editing the docs site
+
+`docs/` is a real baudelaire site, so its templates import `@baudelaire/*` and
+its scripts import `baudelaire:*`. Both are generated at build time, so an
+editor resolves neither until they are written out:
+
+```bash
+just mirror
+```
+
+That writes `docs/.baudelaire/generated/` (gitignored, swept by `clean`). The
+TypeScript half is already on the `include` list in `docs/tsconfig.json`; point
+typst at the other half once, per project rather than per machine, since the
+tables describe this site:
+
+```jsonc
+// tinymist
+"tinymist.typstExtraArgs": ["--package-path", "<abs path>/docs/.baudelaire/generated/packages"]
+```
+
+`TYPST_PACKAGE_PATH` does the same for the typst CLI. Re-run `just mirror` after
+changing a module in `src/world/module/` or `src/engine/asset/module/`.
+
 ## Before you push
 
 ```bash

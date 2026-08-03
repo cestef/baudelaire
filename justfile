@@ -97,6 +97,17 @@ reference:
 docs:
     cargo run -q -- build
 
+# Mirror the generated modules for the docs site, so an editor resolves the
+# `@baudelaire/*` imports its templates carry and the `baudelaire:*` imports its
+# scripts carry.
+#
+# Not a `docs` dependency: a build already rewrites the TypeScript declarations,
+# and the typst packages only move when this crate's modules do. Point tinymist
+# at `docs/.baudelaire/generated/packages` once (see CONTRIBUTING).
+[working-directory('docs')]
+mirror:
+    cargo run -q -- mirror
+
 # A live demo site per shipped theme, into `docs/public/themes/<name>/`, so the
 # docs site can link a real example of each.
 #
