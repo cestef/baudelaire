@@ -14,6 +14,15 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **assets**: TypeScript and JSX entry points. `bundle` now claims `.ts`,
+  `.mts`, `.cts`, `.tsx`, `.jsx` and `.cjs` alongside `.js` and `.mjs`; types
+  are stripped, JSX is transformed, and the result is served as `.js` under
+  either spelling. An extension left out of that list used to fall through to
+  the verbatim copy, so a `.tsx` entry shipped its unstripped source to the
+  browser.
+
+  Nothing is type-checked: the bundler transforms, as esbuild and Vite do.
+
 - **content**: a collection's `schema` types nest. A list names what it holds
   (`list<int>`, `list<list<int>>`), a `dict` field declares its own fields in a
   block, and the two compose as `list<dict>`:

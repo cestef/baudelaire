@@ -99,3 +99,43 @@ scenario "bundling inlines js imports and drops the partials" {
     absent "assets/_util.js"
   }
 }
+
+scenario "a typescript entry is bundled to js with its types stripped" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+      }
+      """#
+    "assets/_util.cts" #"""
+      export function hi(): number { return 42; }
+      """#
+    "assets/main.mts" #"""
+      import { hi } from './_util.cts';
+      const answer: number = hi();
+      console.log(answer);
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // Served as JavaScript, whatever the entry was written in...
+    file "assets/main.js" {
+      contains "42"
+      missing ": number"
+    }
+    // ...and neither the entry nor the partial is left behind unbundled.
+    absent "assets/main.mts"
+    absent "assets/_util.cts"
+  }
+}

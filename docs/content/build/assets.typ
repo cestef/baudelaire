@@ -27,7 +27,7 @@ assets {
   [`bundle`],
   [flag],
   [`#false`],
-  [Bundles `.js`, `.mjs` and `.ts` entry points with #link("https://rolldown.rs")[rolldown], resolving imports and shaking out dead code.],
+  [Bundles `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts` and `.tsx` entry points with #link("https://rolldown.rs")[rolldown], resolving imports and shaking out dead code.],
 
   [`fingerprint`],
   [flag],

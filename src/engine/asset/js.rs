@@ -19,6 +19,12 @@ use crate::render::AssetMap;
 use super::module::{ModuleCx, Virtual};
 use super::{Ctx, Handler, PathExt, Phase};
 
+/// Every extension the bundler reads as a script, which is rolldown's own
+/// module-type table for the ECMAScript family. An extension left out of this
+/// list is not "unsupported": it falls through to the verbatim copy, so a
+/// `.tsx` entry used to ship its unstripped types to the browser.
+const SCRIPTS: &[&str] = &["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"];
+
 /// JavaScript entries: bundled when `bundle` is on. A file whose name starts
 /// with `_` is a partial: pulled in through imports, never emitted standalone.
 /// With bundling off, JS is left to the verbatim copy.
@@ -29,11 +35,7 @@ pub(super) struct Script;
 
 impl Handler for Script {
     fn claims(&self, file: &Path, config: &Config) -> bool {
-        config.assets.bundle
-            && matches!(
-                file.ext().to_ascii_lowercase().as_str(),
-                "js" | "mjs" | "ts"
-            )
+        config.assets.bundle && SCRIPTS.contains(&file.ext().to_ascii_lowercase().as_str())
     }
 
     fn phase(&self) -> Phase {
