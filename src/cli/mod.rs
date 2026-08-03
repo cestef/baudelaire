@@ -1137,13 +1137,20 @@ impl MirrorArgs {
                  \n\
                  A build never reads what this writes, so a stale copy cannot change a\n\
                  page. Every build refreshes the declarations; re-run this after\n\
-                 upgrading baudelaire."
+                 upgrading baudelaire.\n\
+                 \n\
+                 The run ends in the one setting each family needs, so an editor\n\
+                 resolves it. `-v` lists every module it wrote."
             ),
             help::Examples::new(&[
-                ("baudelaire mirror", "Into typst's package directory"),
+                ("baudelaire mirror", "Into .baudelaire/generated"),
+                (
+                    "baudelaire mirror --global",
+                    "Typst packages into typst's own directory, shared"
+                ),
                 (
                     "baudelaire mirror --path .typst",
-                    "Into a directory of your own"
+                    "Typst packages into a directory of your own"
                 ),
                 ("baudelaire mirror --uninstall", "Take it all back off"),
             ])
@@ -1181,18 +1188,11 @@ impl Run for MirrorArgs {
             // to `clean`: an install is machine-global state that no config
             // locates, and `--path` means only the run that wrote it knows
             // where it went. `clean` stays what it says it is, project state.
-            for removed in mirror.uninstall()? {
-                cx.ui.done(&removed);
-            }
+            mirror.uninstall()?.render(cx.ui);
             return Ok(());
         }
-        for written in mirror.install()? {
-            cx.ui.done(&written);
-            cx.ui.tree(&written.modules);
-            for note in written.notes {
-                cx.ui.report(note);
-            }
-        }
+        let settings = mirror.install()?.render(cx.ui);
+        settings.render(cx.ui);
         Ok(())
     }
 }

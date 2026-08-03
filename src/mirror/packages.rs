@@ -3,18 +3,18 @@
 
 use std::path::PathBuf;
 
-use crate::error::warning::{MirrorElsewhere, MirrorUnbuilt};
+use crate::error::warning::MirrorUnbuilt;
 use crate::error::{MirrorError, Result};
-use crate::ui::{Code, List, Text};
+use crate::ui::{Code, List, Paths};
 use crate::world::module::{Package, Packages};
 
-use super::{Advice, Mirror, Mirrored, Target};
+use super::{Advice, Mirror, Mirrored, Setup, Target};
 
 pub(super) struct Typst;
 
 impl Target for Typst {
     fn label(&self) -> &'static str {
-        "typst modules"
+        "typst module"
     }
 
     fn mirrored(&self, mirror: &Mirror) -> Result<Mirrored> {
@@ -38,16 +38,26 @@ impl Target for Typst {
         }
         // Anywhere but typst's own directory has to be pointed at, which is the
         // price of a per-project copy: typst reads one path, and only that one
-        // needs no telling.
-        if !mirror.global {
-            notes.push(Box::new(MirrorElsewhere {
-                dir: Text(crate::fs::canonical(&base).display().to_string()),
-            }));
-        }
+        // needs no telling. Absolute, and deliberately: this value is pasted
+        // into an editor's settings, where there is no cwd to be relative to.
+        // Through `resolved`, since the directory is computed before it is
+        // written and `canonical` would hand back the relative path unchanged.
+        let setup = match mirror.global {
+            true => Vec::new(),
+            false => vec![Setup {
+                tool: "typst",
+                value: format!(
+                    "--package-path {}",
+                    Paths(&crate::fs::resolved(&base).display().to_string())
+                ),
+                hint: Some("or TYPST_PACKAGE_PATH; tinymist takes it in typstExtraArgs"),
+            }],
+        };
         Ok(Mirrored {
             base,
             generated: Box::new(packages),
             modules,
+            setup,
             notes,
         })
     }

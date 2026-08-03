@@ -20,19 +20,20 @@ mod packages;
 #[cfg(feature = "js")]
 mod types;
 
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use std::fmt::Display;
-
 use miette::Diagnostic;
+use owo_colors::OwoColorize;
 
 use crate::config::Config;
 use crate::error::Result;
 use crate::generated::Generated;
-use crate::ui::Paths;
+use crate::ui::{Count, Level, Paths, Ui};
 
-/// One thing a reader has to do or know once a family is mirrored, as a typed
+/// One thing a reader has to *know* once a family is mirrored, as a typed
 /// advice diagnostic: rendered with the warnings, counted against nothing.
+/// What a reader has to *do* is a [`Setup`] instead.
 type Advice = Box<dyn Diagnostic + Send + Sync>;
 
 /// One family of generated modules, mirrored where an editor resolves it.
@@ -41,7 +42,9 @@ type Advice = Box<dyn Diagnostic + Send + Sync>;
 /// out is a row that is not there, which is why the `js` feature is spelled
 /// here rather than at the call sites.
 trait Target {
-    /// What the family is called in the command's own output.
+    /// What one of the family's modules is called in the command's own output,
+    /// singular: the run counts them and [`Count`] does the plural, so no
+    /// family spells its own.
     fn label(&self) -> &'static str;
 
     /// Everything this target would write for `mirror`, computed but not
@@ -76,50 +79,170 @@ struct Mirrored {
     generated: Box<dyn Generated>,
     /// One row per module, as a reader names it: `@baudelaire/pages`.
     modules: Vec<String>,
-    /// What to point an editor at, what is empty until a first build.
+    /// The settings this family still needs to resolve in an editor.
+    setup: Vec<Setup>,
+    /// What is true of the mirror and is nobody's fault: what is empty until a
+    /// first build.
     notes: Vec<Advice>,
 }
 
-/// What one target wrote, and the line a run reports it with.
-pub struct Written {
-    label: &'static str,
-    path: PathBuf,
-    /// One row per module, for the caller to list under the line.
-    pub modules: Vec<String>,
-    /// What the reader has to do or know next.
-    pub notes: Vec<Advice>,
+/// One setting a reader has to make for a mirrored family to resolve, and the
+/// tool that reads it.
+///
+/// Deliberately not a diagnostic. These are the *point* of the command, not
+/// something that went wrong with it, and a successful run whose last word is a
+/// block of `☞` advice reads as one that half-failed. They print as the run's
+/// own result, in one aligned block, at the bottom where a reader looks for
+/// what to do next.
+struct Setup {
+    /// The tool the setting belongs to, as the arrow's label.
+    tool: &'static str,
+    /// The setting itself, ready to paste.
+    value: String,
+    /// Where else the same setting goes, dimmed under it. `None` when there is
+    /// only one place for it.
+    hint: Option<&'static str>,
 }
 
-impl Display for Written {
+/// A path as the reader would type it: relative to the project when it is
+/// inside it, absolute when it is not (`--global`, or a `--path` elsewhere).
+/// Both reports render their paths through this, so neither prints a
+/// forty-column absolute path for a directory two levels down.
+struct Shown<'a> {
+    root: &'a Path,
+    path: &'a Path,
+}
+
+impl Display for Shown<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "mirrored {} {} into {}",
-            self.modules.len(),
-            self.label,
-            Paths(&self.path.display().to_string())
-        )
+        let path = self.path.strip_prefix(self.root).unwrap_or(self.path);
+        write!(f, "{}", Paths(&path.display().to_string()))
     }
 }
 
-/// What one target removed, and the line a run reports it with. Nothing to
-/// remove is not an error: a second uninstall is a no-op, and says so.
-pub struct Removed {
+/// What one target wrote.
+struct Written {
+    label: &'static str,
+    path: PathBuf,
+    /// One row per module, listed under the line when asked for.
+    modules: Vec<String>,
+    notes: Vec<Advice>,
+}
+
+/// What a whole run wrote, and the shape it prints in.
+///
+/// The printing lives here rather than in the CLI because it is one shape for
+/// every caller: `mirror` prints it, `init` prints it, and a family added later
+/// is one more row in it.
+pub struct Install {
+    families: Vec<Written>,
+    /// The settings the run still needs, gathered across the families so they
+    /// print as one block rather than one per family.
+    setup: Vec<Setup>,
+    /// The project the paths are reported relative to.
+    root: PathBuf,
+}
+
+impl Install {
+    /// One result line per family: how many modules landed, and where.
+    ///
+    /// The module names come only with `-v`. There are sixteen of them, they
+    /// are the same sixteen every time, and a reader whose next move is in
+    /// [`setup`](Self::setup) had to scroll past all of them to reach it.
+    ///
+    /// Takes the run by value because a note is a boxed diagnostic that the
+    /// [`Ui`] takes ownership of; the settings are read back off the returned
+    /// [`Settings`], which is what a caller wants anyway (`init` prints them
+    /// half a project later).
+    pub fn render(self, ui: &Ui) -> Settings {
+        // Padded so the paths line up in a column: the count is what differs
+        // between the rows, and an unaligned second column reads as two
+        // unrelated lines rather than as a table of two.
+        let counts: Vec<String> = self
+            .families
+            .iter()
+            .map(|family| Count::of(family.modules.len(), family.label).to_string())
+            .collect();
+        let width = counts.iter().map(String::len).max().unwrap_or_default();
+        for (family, plain) in self.families.iter().zip(&counts) {
+            ui.done(format_args!(
+                "{}{}  {}",
+                Count::of(family.modules.len(), family.label).styled(),
+                " ".repeat(width - plain.len()),
+                Shown {
+                    root: &self.root,
+                    path: &family.path
+                }
+            ));
+            if ui.level() >= Level::Verbose {
+                ui.tree(&family.modules);
+            }
+        }
+        for note in self.families.into_iter().flat_map(|family| family.notes) {
+            ui.report(note);
+        }
+        Settings(self.setup)
+    }
+}
+
+/// The settings an install still needs, held back so a caller prints them where
+/// they belong: `mirror` right under its result, `init` in its closing block,
+/// half a project later, where a reader is already looking for the next step.
+pub struct Settings(Vec<Setup>);
+
+impl Settings {
+    /// Print them as one aligned block under a heading. Nothing at all when
+    /// there is nothing to set, which is what `--global` buys.
+    pub fn render(&self, ui: &Ui) {
+        if self.0.is_empty() {
+            return;
+        }
+        ui.section("editor setup");
+        for setting in &self.0 {
+            ui.arrow(setting.tool, &setting.value);
+            if let Some(hint) = setting.hint {
+                ui.item(hint.dimmed());
+            }
+        }
+    }
+}
+
+/// What a whole run removed. Nothing to remove is not an error: a second
+/// uninstall is a no-op, and says so.
+pub struct Removal {
+    families: Vec<Removed>,
+    root: PathBuf,
+}
+
+impl Removal {
+    pub fn render(&self, ui: &Ui) {
+        for family in &self.families {
+            match &family.path {
+                Some(path) => ui.done(format_args!(
+                    "removed {} from {}",
+                    family.plural(),
+                    Shown {
+                        root: &self.root,
+                        path
+                    }
+                )),
+                None => ui.detail(format_args!("no {} to remove", family.plural())),
+            }
+        }
+    }
+}
+
+/// What one target removed.
+struct Removed {
     label: &'static str,
     path: Option<PathBuf>,
 }
 
-impl Display for Removed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.path {
-            Some(path) => write!(
-                f,
-                "removed {} from {}",
-                self.label,
-                Paths(&path.display().to_string())
-            ),
-            None => write!(f, "no {} to remove", self.label),
-        }
+impl Removed {
+    /// The family named as a group, since an uninstall takes all of them or
+    /// none: there is no count to agree with here.
+    fn plural(&self) -> String {
+        format!("{}s", self.label)
     }
 }
 
@@ -145,25 +268,30 @@ impl<'a> Mirror<'a> {
     }
 
     /// Write every family, reporting what landed where.
-    pub fn install(&self) -> Result<Vec<Written>> {
-        builtin()
-            .iter()
-            .map(|target| {
-                let mirrored = target.mirrored(self)?;
-                mirrored.generated.write(&mirrored.base)?;
-                Ok(Written {
-                    label: target.label(),
-                    path: target.owned(self)?,
-                    modules: mirrored.modules,
-                    notes: mirrored.notes,
-                })
-            })
-            .collect()
+    pub fn install(&self) -> Result<Install> {
+        let mut families = Vec::new();
+        let mut setup = Vec::new();
+        for target in &builtin() {
+            let mirrored = target.mirrored(self)?;
+            mirrored.generated.write(&mirrored.base)?;
+            setup.extend(mirrored.setup);
+            families.push(Written {
+                label: target.label(),
+                path: target.owned(self)?,
+                modules: mirrored.modules,
+                notes: mirrored.notes,
+            });
+        }
+        Ok(Install {
+            families,
+            setup,
+            root: self.config.root.clone(),
+        })
     }
 
     /// Remove what an install wrote, and nothing beside it.
-    pub fn uninstall(&self) -> Result<Vec<Removed>> {
-        builtin()
+    pub fn uninstall(&self) -> Result<Removal> {
+        let families = builtin()
             .iter()
             .map(|target| {
                 let owned = target.owned(self)?;
@@ -172,7 +300,11 @@ impl<'a> Mirror<'a> {
                     path: Self::discard(&owned)?.then_some(owned),
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Removal {
+            families,
+            root: self.config.root.clone(),
+        })
     }
 
     /// Remove one target's own path, whether that is a directory of packages or
@@ -245,8 +377,8 @@ mod tests {
 
         let written = mirror(&config, dir.path()).install().expect("install");
 
-        assert_eq!(written.len(), builtin().len());
-        for family in &written {
+        assert_eq!(written.families.len(), builtin().len());
+        for family in &written.families {
             assert!(family.path.exists(), "{} wrote nothing", family.label);
             assert!(!family.modules.is_empty(), "{} named nothing", family.label);
         }
@@ -266,12 +398,12 @@ mod tests {
 
         let removed = mirror(&config, dir.path()).uninstall().expect("uninstall");
 
-        assert!(removed.iter().all(|family| family.path.is_some()));
+        assert!(removed.families.iter().all(|f| f.path.is_some()));
         assert!(!Packages::namespace(dir.path()).exists());
         assert!(neighbour.exists());
         // A second run is not an error: there is simply nothing there.
         let again = mirror(&config, dir.path()).uninstall().expect("uninstall");
-        assert!(again.iter().all(|family| family.path.is_none()));
+        assert!(again.families.iter().all(|f| f.path.is_none()));
     }
 
     /// The reason the packages default into the project: three of the four
@@ -307,7 +439,7 @@ mod tests {
 
         let written = mirror(&config, dir.path()).install().expect("install");
 
-        let typst = written.first().expect("the typst family is first");
+        let typst = written.families.first().expect("the typst family is first");
         assert!(
             typst.notes.iter().any(|note| {
                 note.code()

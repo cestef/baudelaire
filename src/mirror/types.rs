@@ -11,15 +11,15 @@ use std::path::PathBuf;
 
 use crate::engine::asset::Declarations;
 use crate::error::Result;
-use crate::error::warning::MirrorInclude;
+use crate::ui::Paths;
 
-use super::{Mirror, Mirrored, Target};
+use super::{Mirror, Mirrored, Setup, Target};
 
 pub(super) struct Types;
 
 impl Target for Types {
     fn label(&self) -> &'static str {
-        "typescript declarations"
+        "typescript declaration"
     }
 
     fn mirrored(&self, mirror: &Mirror) -> Result<Mirrored> {
@@ -27,9 +27,18 @@ impl Target for Types {
         Ok(Mirrored {
             base: mirror.config.root.clone(),
             modules: declarations.modules().to_vec(),
-            notes: vec![Box::new(MirrorInclude {
-                path: Declarations::path().display().to_string(),
-            })],
+            // The declarations are ambient: TypeScript reads them only through a
+            // project's own `tsconfig.json`, so writing them is half the job.
+            // Project-relative, since that is how a `tsconfig.json` names paths.
+            setup: vec![Setup {
+                tool: "tsconfig",
+                value: format!(
+                    "add {} to the include list",
+                    Paths(&Declarations::path().display().to_string())
+                ),
+                hint: None,
+            }],
+            notes: Vec::new(),
             generated: Box::new(declarations),
         })
     }

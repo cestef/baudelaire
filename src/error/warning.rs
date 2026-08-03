@@ -105,35 +105,6 @@ pub struct MirrorUnbuilt {
     pub modules: String,
 }
 
-/// Packages were mirrored somewhere typst does not look by itself, so an editor
-/// has to be told where they went.
-#[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("the packages are where typst does not look by itself")]
-#[diagnostic(
-    code(baudelaire::mirror::elsewhere),
-    severity(advice),
-    help(
-        "point typst at them: `--package-path {}` (or `TYPST_PACKAGE_PATH`; tinymist takes it in `typstExtraArgs`), or run `baudelaire mirror --global`",
-        Text(.dir)
-    )
-)]
-pub struct MirrorElsewhere {
-    pub dir: Text<String>,
-}
-
-/// The declarations are ambient: TypeScript reads them only through a project's
-/// own `tsconfig.json`, so writing them is half the job.
-#[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("declarations are read through `tsconfig.json`")]
-#[diagnostic(
-    code(baudelaire::mirror::include),
-    severity(advice),
-    help("add {} to the `include` list", Code(.path))
-)]
-pub struct MirrorInclude {
-    pub path: String,
-}
-
 /// The editor-tooling mirror could not be written during `init`. Nothing about
 /// the site is affected: a build serves every generated module from memory, so
 /// this only means an editor will mark the imports unresolved until

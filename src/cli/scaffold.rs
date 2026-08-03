@@ -14,7 +14,7 @@ use crate::content::{Collection, Frontmatter, Page, Slug};
 use crate::error::Result;
 use crate::error::warning::{MirrorSkipped, PermalinkTaken, ScaffoldExists, VcsFailed, VcsMissing};
 use crate::fs;
-use crate::mirror::Mirror;
+use crate::mirror::{Mirror, Settings};
 use crate::ui::{Paths, Ui};
 use crate::world::Project;
 
@@ -129,7 +129,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         Repo::new(&target, vcs).setup(ui)?;
     }
 
-    packages(ui, &target);
+    let settings = packages(ui, &target);
 
     ui.blank();
     ui.done_plain(format_args!(
@@ -143,6 +143,12 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         "baudelaire build".cyan(),
         "baudelaire serve".cyan()
     ));
+    // Last, because it is the one thing here that a reader has to act on: a
+    // scaffold that mirrors the modules and never says they need pointing at
+    // leaves every import in the templates it just wrote marked unresolved.
+    if let Some(settings) = settings {
+        settings.render(ui);
+    }
     Ok(())
 }
 
@@ -153,20 +159,19 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
 /// with no data directory (or one that is read-only) is no reason to fail a
 /// scaffold that otherwise succeeded. The site builds either way, since a build
 /// serves these modules from memory and never reads what this writes.
-fn packages(ui: &Ui, target: &Path) {
+fn packages(ui: &Ui, target: &Path) -> Option<Settings> {
     let config = Config {
         root: target.to_path_buf(),
         ..Config::default()
     };
     match Mirror::new(&config, None, false).install() {
-        Ok(written) => {
-            for family in written {
-                ui.detail(format_args!("{family}, for editor tooling"));
-            }
+        Ok(install) => Some(install.render(ui)),
+        Err(error) => {
+            ui.warn(MirrorSkipped {
+                reason: error.to_string(),
+            });
+            None
         }
-        Err(error) => ui.warn(MirrorSkipped {
-            reason: error.to_string(),
-        }),
     }
 }
 
