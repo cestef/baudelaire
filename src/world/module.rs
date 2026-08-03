@@ -25,6 +25,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use typst::diag::{FileError, FileResult, PackageError};
 use typst::ecow::EcoString;
@@ -146,6 +147,22 @@ enum Entrypoint {
 /// The modules of one build, as `name -> entrypoint`.
 struct Modules {
     entrypoints: BTreeMap<&'static str, Entrypoint>,
+    /// Whether this build has written the file-backed tables yet, and whether
+    /// anything read one before it did. See [`Modules::published`].
+    tables: Tables,
+}
+
+/// How far this build has got with the file-backed tables.
+///
+/// A content page may import one, and discovery evaluates a page whole to reach
+/// its `frontmatter`, so the read can land before the build has anything to
+/// write: the catalogue is derived from the frontmatter being read. The table
+/// answers empty then, and this records that it happened, because the store
+/// caches what it was handed and the compile must not be given that answer.
+#[derive(Default)]
+struct Tables {
+    written: AtomicBool,
+    read_early: AtomicBool,
 }
 
 impl Modules {
@@ -162,7 +179,19 @@ impl Modules {
         for name in FILES {
             entrypoints.insert(name, Entrypoint::File(root.join(Generated::of(name))));
         }
-        Self { entrypoints }
+        Self {
+            entrypoints,
+            tables: Tables::default(),
+        }
+    }
+
+    /// Record that this build's tables are on disk, and report whether anything
+    /// read one before they were: the caller's cue to drop what the file store
+    /// cached, so the compile reads the tables this build wrote rather than the
+    /// empty (or previous) one discovery was handed.
+    fn published(&self) -> bool {
+        self.tables.written.store(true, Ordering::Relaxed);
+        self.tables.read_early.load(Ordering::Relaxed)
     }
 
     /// The file backing `id`, when it names a file-backed module's entrypoint.
@@ -191,7 +220,7 @@ impl Modules {
 
     /// Serve a file from the generated module named by `spec`.
     fn load(&self, spec: &PackageSpec, vpath: &VirtualPath) -> FileResult<Bytes> {
-        let Some(entrypoint) = self.entrypoints.get(spec.name.as_str()) else {
+        let Some((name, entrypoint)) = self.entrypoints.get_key_value(spec.name.as_str()) else {
             // `NotFound` would send the reader looking for a package to
             // install; naming the ones that exist is the whole answer.
             return Err(FileError::Package(PackageError::Other(Some(
@@ -207,13 +236,26 @@ impl Modules {
             MANIFEST => Ok(Bytes::from_string(Self::manifest(&spec.name))),
             ENTRYPOINT => match entrypoint {
                 Entrypoint::Memory(source) => Ok(source.clone()),
-                // Written by the build before any page compiles. Missing means
-                // something read it earlier than that (a page's frontmatter
-                // importing the site's own shape), which is circular and has
-                // no answer to give.
-                Entrypoint::File(path) => std::fs::read(path)
-                    .map(Bytes::new)
-                    .map_err(|e| FileError::from_io(e, path)),
+                // Written by the build before any page compiles, so a template
+                // reads the real table. A content page importing one is read
+                // earlier than that, during discovery: the table it is asking
+                // for is derived from the frontmatter that read is producing,
+                // so the honest answer there is the empty one every module
+                // already promises for a language that was not built. The read
+                // is recorded, and `published` hands the caller the job of
+                // discarding it once the real table lands.
+                Entrypoint::File(path) => {
+                    if !self.tables.written.load(Ordering::Relaxed) {
+                        self.tables.read_early.store(true, Ordering::Relaxed);
+                    }
+                    match std::fs::read(path) {
+                        Ok(bytes) => Ok(Bytes::new(bytes)),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                            Ok(Bytes::from_string(Generated::empty(name).source()))
+                        }
+                        Err(e) => Err(FileError::from_io(e, path)),
+                    }
+                }
             },
             // A module is exactly two files, so any other path is a typo in a
             // deep import (`@baudelaire/html:0.1.0/extra.typ`).
@@ -322,6 +364,12 @@ impl Files {
     /// A content fingerprint over the generated modules, for the build cache.
     pub(super) fn fingerprint(&self) -> Hash {
         self.modules.fingerprint()
+    }
+
+    /// The build has written its file-backed tables; `true` if one was served
+    /// before that, and the store is holding an answer that is now wrong.
+    pub(super) fn published(&self) -> bool {
+        self.modules.published()
     }
 }
 

@@ -165,6 +165,55 @@ fn the_page_catalogue_is_bound_per_language() {
     );
 }
 
+/// A *content* page may read the catalogue too, and it is a harder case than a
+/// template: discovery evaluates a page whole to reach its `frontmatter`, so the
+/// import lands before the build has written the table it is asking for. The
+/// read is answered empty and re-read once the real table is on disk, so a first
+/// build in a fresh checkout counts every page rather than failing on a missing
+/// file or reporting zero.
+#[test]
+fn a_content_page_reads_the_catalogue_on_a_first_build() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write(
+        "content/index.typ",
+        r#"
+        #let frontmatter = (title: "Home",)
+        #import "@baudelaire/site:0.1.0": lang
+        #import "@baudelaire/pages:0.1.0": pages
+        Pages: #pages(lang).len()
+        "#,
+    );
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx\n");
+    site.write("content/b.typ", "#let frontmatter = (title: \"B\",)\nx\n");
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(html.contains("Pages: 3"), "{html}");
+}
+
+/// ...and the count moves with the site: adding a page invalidates the pages
+/// that read the catalogue, in the build that added it.
+#[test]
+fn the_catalogue_a_content_page_reads_tracks_the_page_set() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write(
+        "content/index.typ",
+        r#"
+        #let frontmatter = (title: "Home",)
+        #import "@baudelaire/pages:0.1.0": pages
+        Pages: #pages("en").len()
+        "#,
+    );
+    site.stats();
+    assert!(site.output("index.html").contains("Pages: 1"));
+
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx\n");
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(html.contains("Pages: 2"), "{html}");
+}
+
 /// A misspelled module suggests the real one rather than sending the reader off
 /// to install a package that was never meant to exist.
 #[test]

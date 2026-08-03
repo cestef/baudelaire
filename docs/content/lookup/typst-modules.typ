@@ -276,3 +276,21 @@ order, collection by collection, each in its collection's sort order.
   from memory would make one rename recompile everything. As files, typst records
   an ordinary file dependency and only the templates that import them rebuild.
 ]
+
+=== From a content page
+
+A page may import the catalogue itself, which is how this site's home page
+counts its own pages:
+
+```typ
+#import "@baudelaire/site:0.1.0": lang
+#import "@baudelaire/pages:0.1.0": pages
+
+This site has #pages(lang).len() pages.
+```
+
+The rendered page holds the real catalogue. Reading it while *frontmatter* is
+being collected is the one thing it cannot do: the catalogue is built from the
+frontmatter of every page, this one included, so at that moment it reads empty.
+Deriving a `title`, a `slug`, or a `date` from `pages()` gets you nothing;
+showing a count, a list, or a grid in the body works.

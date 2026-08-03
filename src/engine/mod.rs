@@ -582,6 +582,11 @@ impl Engine {
         for file in prepare.generated() {
             file.write(self.project.root())?;
         }
+        // A content page that imports a table was served the empty one during
+        // discovery (the table is derived from the frontmatter that read was
+        // producing). Now that the real ones are on disk, the world drops what
+        // it cached, so the compile reads what this build wrote.
+        self.project.tables_written();
         Ok(prepare)
     }
 

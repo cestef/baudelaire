@@ -72,6 +72,26 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **typst modules**: a *content* page can import `@baudelaire/pages` (or
+  `@baudelaire/sections`). It used to fail the build on a first run in a fresh
+  checkout, with `file not found (searched at .baudelaire/generated/pages.typ)`,
+  and to silently serve the previous build's table afterwards. Frontmatter
+  discovery evaluates a page whole, so the import lands before the build has
+  written the table; that read now answers the empty table every module already
+  promises for a language that was not built, and the page's own compile reads
+  the table this build wrote.
+
+  ```typ
+  #import "@baudelaire/site:0.1.0": lang
+  #import "@baudelaire/pages:0.1.0": pages
+
+  This site has #pages(lang).len() pages.
+  ```
+
+  A `title`, `slug`, or `date` computed from `pages()` still gets nothing: the
+  catalogue is built from the frontmatter being collected, so it is empty at
+  that moment and no ordering can change it.
+
 - **reference**: three key descriptions in `baudelaire reference` (and the
   generated config reference) described something the build does not do.
   `content { draft { suffix } }` is a filename marker peeled off the stem, not

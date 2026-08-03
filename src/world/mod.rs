@@ -21,6 +21,7 @@ mod packages;
 pub use context::{BuildContext, Mode};
 pub(crate) use packages::Registry;
 
+use parking_lot::RwLock;
 use typst_kit::{files::FileStore, files::FsRoot, fonts::FontStore, packages::SystemPackages};
 
 use module::{Files, ModuleCx};
@@ -49,7 +50,9 @@ pub struct Project {
     /// System fonts, discovered lazily on first glyph lookup: a fully-cached
     /// rebuild compiles nothing, so it never pays to scan the font directories.
     fonts: Arc<LazyLock<FontStore>>,
-    files: Arc<FileStore<Files>>,
+    /// Behind a lock because one build writes files the store has already
+    /// served: see [`Project::tables_written`].
+    files: Arc<RwLock<FileStore<Files>>>,
     root: PathBuf,
     now: OffsetDateTime,
     context: BuildContext,
@@ -118,12 +121,12 @@ impl Project {
         Ok(Self {
             lib: Arc::new(LazyHash::new(library)),
             fonts: Arc::new(LazyLock::new(Self::system_fonts)),
-            files: Arc::new(FileStore::new(Files::new(
+            files: Arc::new(RwLock::new(FileStore::new(Files::new(
                 &ModuleCx { context: &tree },
                 &project_root,
                 FsRoot::new(project_root.clone()),
                 SystemPackages::from(Registry(config.typst.registry.as_deref())),
-            ))),
+            )))),
             root: project_root,
             now,
             context,
@@ -168,7 +171,24 @@ impl Project {
     /// the build cache. A virtual module has no path, so it can never appear in
     /// a page's dependency set; see [`module`] for why this is sound.
     pub fn modules(&self) -> crate::graph::Hash {
-        self.files.loader().fingerprint()
+        self.files.read().loader().fingerprint()
+    }
+
+    /// The generated tables (`@baudelaire/sections`, `@baudelaire/pages`) are
+    /// on disk. Called once per build, by the pass that writes them.
+    ///
+    /// A content page that imports one is evaluated during discovery, before
+    /// this: it is handed the empty table, and the store keeps that answer for
+    /// the file id. Dropping the loaded slots here is what makes the page's
+    /// *compile* read the table this build wrote. Nothing else in the build
+    /// rewrites a file it has already served, so this is the one place that
+    /// needs it, and the cost is paid only by a site that reads a table from
+    /// content.
+    pub fn tables_written(&self) {
+        let mut files = self.files.write();
+        if files.loader().published() {
+            files.reset();
+        }
     }
 
     /// The dotted base naming build metadata in typst source.
@@ -210,7 +230,7 @@ impl Project {
     /// store: discovery and compilation read one parse.
     pub fn source(&self, path: &Path) -> Result<Source> {
         let id = FileId::new(self.virtualize(path)?);
-        self.files.source(id).map_err(|e| {
+        self.files.read().source(id).map_err(|e| {
             let kind = match &e {
                 FileError::NotFound(_) => std::io::ErrorKind::NotFound,
                 FileError::AccessDenied => std::io::ErrorKind::PermissionDenied,
@@ -284,7 +304,7 @@ impl Project {
 
     /// Resolve a file id the compiler touched back to its filesystem path.
     pub fn path_of(&self, id: FileId) -> Option<PathBuf> {
-        self.files.loader().resolve(id).ok()
+        self.files.read().loader().resolve(id).ok()
     }
 
     /// The files a tracked compilation read, excluding its own `main` source
@@ -448,11 +468,11 @@ impl World for PageWorld {
         if id == self.main.id() {
             return Ok(self.main.clone());
         }
-        self.project.files.source(id)
+        self.project.files.read().source(id)
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        self.project.files.file(id)
+        self.project.files.read().file(id)
     }
 
     fn font(&self, index: usize) -> Option<Font> {
