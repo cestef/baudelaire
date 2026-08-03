@@ -55,7 +55,7 @@ impl Handler for Script {
         _map: &AssetMap,
         ctx: &Ctx,
     ) -> Result<Option<Vec<u8>>> {
-        if Self::partial(file) {
+        if Self::silent(file) {
             return Ok(None);
         }
         let bundler = ctx.bundler.expect("bundler present when bundling");
@@ -64,11 +64,30 @@ impl Handler for Script {
 }
 
 impl Script {
-    /// Whether `file` is an import-only partial (`_name.js`).
+    /// Whether the bundle only ever *reads* `file`, so it is not an entry and
+    /// emits nothing: an import-only partial (`_name.ts`), or a type
+    /// declaration (`name.d.ts`), which carries no runtime code to bundle in
+    /// the first place and was otherwise written out as an empty `name.d.js`.
+    fn silent(file: &Path) -> bool {
+        Self::partial(file) || Self::declaration(file)
+    }
+
+    /// Whether `file` is an import-only partial (`_name.ts`).
     fn partial(file: &Path) -> bool {
         file.file_name()
             .and_then(|n| n.to_str())
             .is_some_and(|n| n.starts_with('_'))
+    }
+
+    /// Whether `file` is a type declaration. Read off the *stem's* own
+    /// extension (`globals.d` in `globals.d.ts`) rather than matched as a
+    /// literal `.d.ts` suffix, so `.d.mts` and `.d.cts` are the same rule
+    /// rather than two more cases to remember.
+    fn declaration(file: &Path) -> bool {
+        file.file_stem()
+            .map(Path::new)
+            .and_then(Path::extension)
+            .is_some_and(|e| e.eq_ignore_ascii_case("d"))
     }
 }
 

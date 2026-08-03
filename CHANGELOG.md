@@ -96,6 +96,9 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **assets**: a `.d.ts` in the asset tree is read for its types and no longer
+  bundled as an entry of its own, which wrote an empty `.d.js` beside it.
+
 - **typst modules**: a *content* page can import `@baudelaire/pages` (or
   `@baudelaire/sections`). It used to fail the build on a first run in a fresh
   checkout, with `file not found (searched at .baudelaire/generated/pages.typ)`,

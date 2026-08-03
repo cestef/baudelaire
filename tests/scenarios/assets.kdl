@@ -251,3 +251,40 @@ scenario "a tsconfig without bundling is inert" {
     warns "baudelaire::config::inert"
   }
 }
+
+scenario "a type declaration is read, not emitted" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+      }
+      """#
+    "assets/globals.d.ts" #"""
+      declare module "virtual:answer" {
+        export const answer: number;
+      }
+      """#
+    "assets/main.ts" #"""
+      console.log(42);
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/main.js" { contains "42" }
+    // Types are not code: the declaration used to be bundled on its own and
+    // written out as an empty `globals.d.js`.
+    absent "assets/globals.d.js"
+    absent "assets/globals.d.ts"
+  }
+}
