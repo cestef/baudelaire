@@ -129,7 +129,7 @@ Named arguments become attributes, positional ones become children. Hyphenated n
 
 #callout(kind: "tip")[
   These packages exist only while baudelaire compiles, so an editor marks the
-  import unresolved. `baudelaire packages` writes them out where tinymist looks.
+  import unresolved. `baudelaire mirror` writes them out where tinymist looks.
   See #link("../lookup/typst-modules.typ")[typst modules].
 ]
 

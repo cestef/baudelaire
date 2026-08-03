@@ -42,11 +42,13 @@ These packages only exist while baudelaire is compiling, so an editor has
 nothing to resolve and marks the import unknown. Write them out once:
 
 ```sh
-baudelaire packages
+baudelaire mirror
 ```
 
-That installs all four into typst's own package directory, where tinymist and
-anything else built on typst finds them. `baudelaire init` does it for you.
+That writes all four into typst's own package directory, where tinymist and
+anything else built on typst finds them, and the
+#link("js-modules.typ")[`baudelaire:*` declarations] into the project.
+`baudelaire init` does it for you.
 
 #table(
   columns: 2,
@@ -65,13 +67,8 @@ stale, edited or missing can mislead an editor and never change a page.
   The symbols resolve either way. Re-run after upgrading baudelaire.
 ]
 
-The same command writes `.baudelaire/generated/baudelaire.d.ts`, typing the
-#link("js-modules.typ")[`baudelaire:*` JavaScript modules] for a TypeScript
-entry. That one goes into the project, not into the package directory:
-TypeScript resolves a declaration through `tsconfig.json`.
-
-`baudelaire packages --uninstall` takes them back off, removing baudelaire's own
-namespace directory and nothing else in there, and the declarations with them.
+`baudelaire mirror --uninstall` takes them back off, removing baudelaire's own
+namespace directory and nothing else in there, and the declarations with it.
 `clean` does not touch the packages: it sweeps project state, and those are
 machine-global.
 

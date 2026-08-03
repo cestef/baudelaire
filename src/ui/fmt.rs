@@ -223,6 +223,26 @@ impl Display for Paths<'_> {
     }
 }
 
+/// Renders items as prose: `a`, `a and b`, `a, b and c`. For a message naming a
+/// handful of things, so no caller joins a list by hand and they all read the
+/// same way.
+pub struct List<'a, T>(pub &'a [T]);
+
+impl<T: Display> Display for List<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let last = self.0.len().saturating_sub(1);
+        for (i, item) in self.0.iter().enumerate() {
+            let separator = match i {
+                0 => "",
+                n if n == last => " and ",
+                _ => ", ",
+            };
+            write!(f, "{separator}{item}")?;
+        }
+        Ok(())
+    }
+}
+
 /// Wall-clock `HH:MM:SS` (UTC) stamped on dev-server log lines.
 pub(super) fn clock() -> String {
     let t = OffsetDateTime::now_utc();

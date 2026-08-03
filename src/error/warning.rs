@@ -88,18 +88,61 @@ pub struct VcsMissing {
     pub tool: &'static str,
 }
 
-/// The editor-tooling mirror of the `@baudelaire/*` modules could not be
-/// written during `init`. Nothing about the site is affected: a build serves
-/// those modules from memory, so this only means an editor will mark the
-/// imports unresolved until `baudelaire packages` succeeds.
+/// A table module was mirrored with no data in it, because the site has never
+/// been built. Advice, not a warning: every symbol still resolves, so an editor
+/// is served either way and only the values are missing.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("typst modules not installed for editor tooling: {}", Text(.reason))]
+#[error("{modules} have no data until the site has been built once")]
 #[diagnostic(
-    code(baudelaire::packages::skipped),
-    severity(warning),
-    help("the site still builds; run `baudelaire packages --path <dir>` to choose a location")
+    code(baudelaire::mirror::unbuilt),
+    severity(advice),
+    help("build the site, then mirror again to fill the tables in")
 )]
-pub struct PackagesSkipped {
+pub struct MirrorUnbuilt {
+    /// The modules, already marked up (see [`crate::ui::markup!`]): one code
+    /// span each, so a list of them reads as a list rather than as one name
+    /// with commas in it.
+    pub modules: String,
+}
+
+/// Packages were mirrored somewhere typst does not look by itself, so an editor
+/// has to be told where they went.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("mirrored outside typst's own package directory")]
+#[diagnostic(
+    code(baudelaire::mirror::elsewhere),
+    severity(advice),
+    help("point your editor at it: `tinymist.packagePath = {}`", Text(.dir))
+)]
+pub struct MirrorElsewhere {
+    pub dir: Text<String>,
+}
+
+/// The declarations are ambient: TypeScript reads them only through a project's
+/// own `tsconfig.json`, so writing them is half the job.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("declarations are read through `tsconfig.json`")]
+#[diagnostic(
+    code(baudelaire::mirror::include),
+    severity(advice),
+    help("add {} to the `include` list", Code(.path))
+)]
+pub struct MirrorInclude {
+    pub path: String,
+}
+
+/// The editor-tooling mirror could not be written during `init`. Nothing about
+/// the site is affected: a build serves every generated module from memory, so
+/// this only means an editor will mark the imports unresolved until
+/// `baudelaire mirror` succeeds.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("modules not mirrored for editor tooling: {}", Text(.reason))]
+#[diagnostic(
+    code(baudelaire::mirror::skipped),
+    severity(warning),
+    help("the site still builds; run `baudelaire mirror --path <dir>` to choose a location")
+)]
+pub struct MirrorSkipped {
     pub reason: String,
 }
 

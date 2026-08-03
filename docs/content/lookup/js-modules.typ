@@ -24,11 +24,11 @@ data.
 == TypeScript
 
 Nothing on disk holds these modules, so an editor reads every import of one as
-unknown. `baudelaire packages` writes the declarations out, alongside the typst
-ones:
+unknown. `baudelaire mirror` writes the declarations out, alongside the typst
+packages:
 
 ```sh
-baudelaire packages
+baudelaire mirror
 ```
 
 That writes `.baudelaire/generated/baudelaire.d.ts`. Put it on your `include`
@@ -40,8 +40,8 @@ list:
 
 `site`, `config` and `i18n` are typed from your own config, so `config.api` is
 the type your `client { }` block gives it, not `unknown`. Re-run after changing
-that block; a build never reads the file, so a stale copy misleads an editor and
-changes no page.
+that block; a build never reads the file back, so a stale copy misleads an
+editor and changes no page.
 
 == The modules
 

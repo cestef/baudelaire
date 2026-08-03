@@ -28,7 +28,7 @@ use crate::world::Project;
 use crate::world::module;
 
 use super::layout::{Bind, Body, Context, Layout};
-use crate::world::generated::Generated;
+use crate::world::generated::Table;
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
 /// typst will compile, and that text's fingerprint, before the costly parse
@@ -89,10 +89,10 @@ impl<'a> Prepare<'a> {
     /// One per file-backed module, as an array sized by that registry, so a
     /// module added there without a table to write it fails to compile rather
     /// than resolving to a file nothing produces.
-    pub(in crate::engine) fn generated(&self) -> [Generated; module::FILES.len()] {
+    pub(in crate::engine) fn generated(&self) -> [Table; module::FILES.len()] {
         [
-            Generated::new(module::SECTIONS, self.trees.clone()),
-            Generated::new(
+            Table::new(module::SECTIONS, self.trees.clone()),
+            Table::new(
                 module::PAGES,
                 Page::catalogue(self.pages, self.config)
                     .into_iter()

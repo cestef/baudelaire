@@ -40,7 +40,7 @@ use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Severity};
 use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
-pub use fmt::{Bytes, Count, Dur, Paths, term_width, wrap};
+pub use fmt::{Bytes, Count, Dur, List, Paths, term_width, wrap};
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;
 pub use markup::{Code, Markup, Styled, Text};

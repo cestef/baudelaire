@@ -1,6 +1,7 @@
 //! Command-line interface: per-subcommand args, dispatch, and the wiring of
 //! terminal output ([`crate::ui`]) and debug logging (`tracing`).
 
+mod help;
 pub mod prompt;
 pub mod remote;
 pub mod scaffold;
@@ -15,12 +16,11 @@ use crate::config::Config;
 use crate::error::cli::{Generated, UnknownKey};
 use crate::error::warning::{CleanDefaults, CleanRefused, Uninferred};
 use crate::error::{
-    BaudelaireErrorKind, ConfigError, FsError, Op, PackagesError, Result, ScaffoldError,
-    StrictWarnings,
+    BaudelaireErrorKind, ConfigError, FsError, Op, Result, ScaffoldError, StrictWarnings,
 };
+use crate::mirror::Mirror;
 use crate::ui::{Level, Ui, markup};
 use crate::version::Version;
-use crate::world::module::Packages;
 
 /// Help colouring, matched to the terminal UI palette: cyan for structure
 /// (section headers, usage), green for the literals you type (commands and
@@ -260,9 +260,9 @@ pub enum Command {
     /// Print every key config.kdl accepts, with its value shape.
     #[command(visible_alias = "ref")]
     Reference(ReferenceArgs),
-    /// Install the `@baudelaire/*` typst modules where an editor can resolve them.
-    #[command(visible_alias = "pkg")]
-    Packages(PackagesArgs),
+    /// Write the generated modules where an editor can resolve them.
+    #[command(visible_aliases = ["packages", "pkg"])]
+    Mirror(MirrorArgs),
 }
 
 /// Arguments for `baudelaire build`.
@@ -390,15 +390,15 @@ pub struct ReferenceArgs {
     pub key: Option<String>,
 }
 
-/// Arguments for `baudelaire packages`.
+/// Arguments for `baudelaire mirror`.
 #[derive(Args, Debug, Clone)]
-#[command(after_help = PackagesArgs::explanation())]
-pub struct PackagesArgs {
-    /// Install into this directory instead of typst's own package directory.
-    #[arg(long, value_name = "DIR")]
+#[command(after_help = MirrorArgs::help())]
+pub struct MirrorArgs {
+    /// Write the typst packages here instead of typst's own package directory.
+    #[arg(long, value_name = "DIR", help_heading = group::TARGETS)]
     pub path: Option<PathBuf>,
-    /// Remove what a previous install wrote, instead of installing.
-    #[arg(long)]
+    /// Remove what a previous run wrote, instead of writing.
+    #[arg(long, help_heading = group::TARGETS)]
     pub uninstall: bool,
 }
 
@@ -825,29 +825,14 @@ impl Cli {
     /// escapes never leak when piped or under `NO_COLOR`: the same policy
     /// [`crate::ui`] uses.
     fn examples() -> String {
-        use owo_colors::{OwoColorize, Stream::Stdout};
-        use std::fmt::Write;
-        // The description column: past the longest command, with a two-space
-        // gutter. Padding is measured on the *visible* length, so the ANSI
-        // escapes cannot skew the alignment.
-        let column = EXAMPLES.iter().map(|(c, _)| c.len()).max().unwrap_or(0) + 2;
-        let mut out = format!(
-            "{}\n",
-            "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
-        );
-        for (command, desc) in EXAMPLES {
-            // The command in green: the "literal you type" accent.
-            let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
-            let pad = " ".repeat(column - command.len());
-            let _ = writeln!(out, "  {colored}{pad}{desc}");
+        help::Examples {
+            rows: EXAMPLES,
+            footer: Some(&format!(
+                "Run {} for command-specific options.",
+                help::Literal("baudelaire <command> --help")
+            )),
         }
-        let _ = write!(
-            out,
-            "\nRun {} for command-specific options.",
-            "baudelaire <command> --help"
-                .if_supports_color(Stdout, |t| t.green().bold().to_string())
-        );
-        out
+        .to_string()
     }
 
     /// The parsed config: read from `--config`, then narrowed by the active
@@ -1078,7 +1063,7 @@ impl Command {
             Self::Completions(args) => args.run(cx),
             Self::Man(args) => args.run(cx),
             Self::Reference(args) => args.run(cx),
-            Self::Packages(args) => args.run(cx),
+            Self::Mirror(args) => args.run(cx),
         }
     }
 }
@@ -1118,164 +1103,89 @@ impl ReferenceArgs {
     /// Appended to `reference --help`. The narrowing argument is the part worth
     /// showing: the bare command prints a hundred and fifty keys.
     fn examples() -> String {
-        use owo_colors::{OwoColorize, Stream::Stdout};
-
-        let rows = [
+        help::Examples::new(&[
             ("baudelaire reference", "Every key"),
             ("baudelaire reference assets", "Just the asset pipeline"),
             (
                 "baudelaire reference deploy.s3",
                 "Just the S3 deploy backend",
             ),
-        ];
-        let column = rows.iter().map(|(c, _)| c.len()).max().unwrap_or(0) + 2;
-        let mut out = format!(
-            "{}\n",
-            "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
-        );
-        for (command, what) in rows {
-            let pad = " ".repeat(column - command.len());
-            let colored = command.if_supports_color(Stdout, |t| t.green().bold().to_string());
-            let _ = std::fmt::Write::write_fmt(&mut out, format_args!("  {colored}{pad}{what}\n"));
-        }
-        out
+        ])
+        .to_string()
     }
 }
 
-impl PackagesArgs {
-    /// Appended to `packages --help`. The command exists for one reason, and a
+impl MirrorArgs {
+    /// Appended to `mirror --help`: the command exists for one reason, and a
     /// reader who does not know that reason cannot guess it from the name.
-    fn explanation() -> String {
-        use owo_colors::{OwoColorize, Stream::Stdout};
-
+    fn help() -> String {
         format!(
-            "{}\n  \
-             The `@baudelaire/*` modules a template imports are generated during a\n  \
-             build, so an editor has nothing to resolve and marks the import unknown.\n  \
-             This writes them out as ordinary typst packages, where typst's own\n  \
-             resolution (and every editor built on it) finds them.\n\n  \
-             A build never reads what this writes, so a stale copy cannot change a\n  \
-             page. Re-run it after upgrading baudelaire.\n",
-            "About:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
+            "{}\n{}",
+            help::About(
+                "The `@baudelaire/*` typst modules a template imports and the\n\
+                 `baudelaire:*` modules a bundled script imports are generated during\n\
+                 a build, so an editor has nothing on disk to resolve and marks every\n\
+                 import unknown. This writes both out where an editor finds them: the\n\
+                 typst modules as ordinary packages, the JavaScript ones as one\n\
+                 TypeScript declaration file in the project.\n\
+                 \n\
+                 A build never reads what this writes, so a stale copy cannot change a\n\
+                 page. Re-run it after upgrading baudelaire."
+            ),
+            help::Examples::new(&[
+                ("baudelaire mirror", "Into typst's package directory"),
+                (
+                    "baudelaire mirror --path .typst",
+                    "Into a directory of your own"
+                ),
+                ("baudelaire mirror --uninstall", "Take it all back off"),
+            ])
         )
     }
 
-    /// The project whose data the modules are generated from.
+    /// The project whose data the modules are generated from, announced under
+    /// the verb of the run.
     ///
-    /// Optional, and deliberately: `html` and `site` are worth installing from
+    /// Optional, and deliberately: `html` and `site` are worth mirroring from
     /// anywhere (after an upgrade, say, with no project in sight), and the two
-    /// table modules install empty outside a project exactly as they do inside
+    /// table modules mirror empty outside a project exactly as they do inside
     /// one that has never been built.
-    fn config(cx: &Cx) -> Config {
-        cx.announced("installing modules for").unwrap_or_else(|_| {
-            cx.ui.banner("installing modules");
+    fn config(&self, cx: &Cx) -> Config {
+        let verb = match self.uninstall {
+            true => "removing modules for",
+            false => "mirroring modules for",
+        };
+        cx.announced(verb).unwrap_or_else(|_| {
+            cx.ui.banner(verb.trim_end_matches(" for"));
             Config {
                 root: cx.root.path().to_path_buf(),
                 ..Config::default()
             }
         })
     }
-
-    /// Write (or, with `config` absent, remove) the TypeScript declarations for
-    /// the `baudelaire:*` modules.
-    ///
-    /// They go into the *project*, not into `--path`: TypeScript resolves an
-    /// ambient declaration through `tsconfig.json`, so a machine-global copy
-    /// would be one nothing includes. That is also why removing them is not
-    /// `--path`'s business, and why `clean` sweeping project state takes them
-    /// with it.
-    #[cfg(feature = "js")]
-    fn declarations(cx: &Cx, config: Option<&Config>) -> Result<()> {
-        use crate::engine::asset::Declarations;
-
-        let root = cx.root.path();
-        let Some(config) = config else {
-            if Declarations::remove(root)? {
-                cx.ui
-                    .done(format_args!("removed {}", Declarations::path().display()));
-            }
-            return Ok(());
-        };
-        Declarations::new(config).write(root)?;
-        cx.ui
-            .done(format_args!("wrote {}", Declarations::path().display()));
-        cx.ui.detail(format_args!(
-            "add it to your tsconfig: \"include\": [\"{}\"]",
-            Declarations::path().display()
-        ));
-        Ok(())
-    }
-
-    /// Without the `js` feature there are no `baudelaire:*` modules to declare.
-    /// Fallible like its counterpart, which writes a file: the call site is the
-    /// same in both flavors.
-    #[cfg(not(feature = "js"))]
-    #[allow(clippy::unnecessary_wraps)]
-    fn declarations(_cx: &Cx, _config: Option<&Config>) -> Result<()> {
-        Ok(())
-    }
-
-    /// Where to install: the named directory, else typst's own.
-    fn directory(&self) -> Result<PathBuf> {
-        match &self.path {
-            Some(path) => Ok(path.clone()),
-            None => Packages::directory().ok_or_else(|| PackagesError::NoDirectory.into()),
-        }
-    }
 }
 
-impl Run for PackagesArgs {
+impl Run for MirrorArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        let dir = self.directory()?;
+        let config = self.config(cx);
+        let mirror = Mirror::new(&config, self.path.as_deref());
         if self.uninstall {
-            cx.ui.banner("removing modules");
-            // The inverse of installing belongs to the command that installs,
-            // not to `clean`: this is machine-global state that no config
-            // locates, and `--path` means only the install that wrote it knows
+            // The inverse of mirroring belongs to the command that mirrors, not
+            // to `clean`: an install is machine-global state that no config
+            // locates, and `--path` means only the run that wrote it knows
             // where it went. `clean` stays what it says it is, project state.
-            let removed = Packages::uninstall(&dir)?;
-            match removed {
-                Some(path) => cx.ui.done(format_args!("removed {}", path.display())),
-                None => cx.ui.done("nothing installed"),
+            for removed in mirror.uninstall()? {
+                cx.ui.done(&removed);
             }
-            Self::declarations(cx, None)?;
             return Ok(());
         }
-        let config = Self::config(cx);
-        let installed = Packages::new(&config).install(&dir)?;
-
-        cx.ui.done(format_args!(
-            "installed {} modules into {}",
-            installed.len(),
-            dir.display()
-        ));
-        let rows: Vec<String> = installed
-            .iter()
-            .map(|module| format!("@baudelaire/{}", module.name))
-            .collect();
-        cx.ui.tree(&rows);
-        // The two table modules are built from the site's own pages, so before a
-        // first build there is nothing to copy and they install empty. Symbols
-        // resolve either way; only the values are missing, and the next install
-        // after a build fills them in.
-        if installed.iter().any(|module| module.empty) {
-            cx.ui.detail(format_args!(
-                "{} have no data until the site has been built once",
-                installed
-                    .iter()
-                    .filter(|module| module.empty)
-                    .map(|module| module.name)
-                    .collect::<Vec<_>>()
-                    .join(" and ")
-            ));
+        for written in mirror.install()? {
+            cx.ui.done(&written);
+            cx.ui.tree(&written.modules);
+            for note in written.notes {
+                cx.ui.report(note);
+            }
         }
-        if self.path.is_some() {
-            cx.ui.detail(format_args!(
-                "point your editor at it: tinymist.packagePath = {}",
-                dir.display()
-            ));
-        }
-        Self::declarations(cx, Some(&config))?;
         Ok(())
     }
 }

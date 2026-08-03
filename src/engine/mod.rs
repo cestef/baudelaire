@@ -39,6 +39,9 @@ use crate::engine::summary::Summary;
 use crate::error::warning::{FeatureMissing, SettingInert};
 use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
+// The trait only: this module has a `Generated` of its own, naming the
+// post-build outputs rather than the files a build writes for tooling.
+use crate::generated::Generated as _;
 use crate::graph::{
     Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
 };
@@ -589,8 +592,9 @@ impl Engine {
     /// first compile, including in a fresh checkout where nothing has run yet.
     fn prepare<'a>(&'a self, pages: &'a [Page]) -> Result<Prepare<'a>> {
         let prepare = Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages);
-        for file in prepare.generated() {
-            file.write(self.project.root())?;
+        let root = self.project.root();
+        for table in prepare.generated() {
+            table.write(root)?;
         }
         // A content page that imports a table was served the empty one during
         // discovery (the table is derived from the frontmatter that read was

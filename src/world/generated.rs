@@ -3,11 +3,11 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::codegen::{Let, Value};
 use crate::config::Config;
-use crate::error::Result;
+use crate::generated::{File, Generated};
 
 /// One per-language table, written out as Typst source and imported as
 /// `@baudelaire/<module>`.
@@ -22,7 +22,7 @@ use crate::error::Result;
 ///
 /// The files are generated build state, not source: rewritten every build,
 /// never edited, and safe to delete.
-pub(crate) struct Generated {
+pub(crate) struct Table {
     /// The module this backs, which is also the accessor a template calls:
     /// `@baudelaire/sections` exports `sections(lang)`.
     module: &'static str,
@@ -30,7 +30,7 @@ pub(crate) struct Generated {
     trees: BTreeMap<String, Value>,
 }
 
-impl Generated {
+impl Table {
     /// The private binding holding the per-language values, which callers reach
     /// only through the accessor named after the module.
     const TABLE: &'static str = "__table";
@@ -52,7 +52,7 @@ impl Generated {
     }
 
     /// The same path for a module named directly, which the registry needs to
-    /// serve a file-backed module before any `Generated` exists.
+    /// serve a file-backed module before any [`Table`] exists.
     pub(crate) fn of(module: &str) -> PathBuf {
         Config::scratch("generated").join(format!("{module}.typ"))
     }
@@ -62,15 +62,6 @@ impl Generated {
     /// is what the accessor already promises for a language that was not built.
     pub(crate) fn empty(module: &'static str) -> Self {
         Self::new(module, BTreeMap::new())
-    }
-
-    /// Write the file under `root`, creating its directory.
-    ///
-    /// Run once per build and before any page compiles, because a template's
-    /// `#import` has to resolve on the very first build in a fresh checkout,
-    /// where nothing has written it yet.
-    pub(crate) fn write(&self, root: &Path) -> Result<()> {
-        crate::fs::write_all(root.join(self.path()), self.source())
     }
 
     /// The generated Typst source.
@@ -97,15 +88,24 @@ impl Generated {
     }
 }
 
+/// Written once per build and before any page compiles, because a template's
+/// `#import` of a table has to resolve on the very first build in a fresh
+/// checkout, where nothing has written one yet.
+impl Generated for Table {
+    fn files(&self) -> Vec<File> {
+        vec![File::new(self.path(), self.source())]
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Generated;
+    use super::Table;
     use crate::codegen::Value;
     use crate::world::module::{PAGES, SECTIONS};
     use std::collections::BTreeMap;
 
-    fn sections(langs: &[(&str, &str)]) -> Generated {
-        Generated::new(
+    fn sections(langs: &[(&str, &str)]) -> Table {
+        Table::new(
             SECTIONS,
             langs
                 .iter()
@@ -140,7 +140,7 @@ mod tests {
     /// one template without colliding.
     #[test]
     fn the_accessor_is_named_after_the_module() {
-        let source = Generated::new(PAGES, BTreeMap::new()).source();
+        let source = Table::new(PAGES, BTreeMap::new()).source();
 
         assert!(
             source.contains("#let pages(lang) = __table.at(lang, default: ())"),

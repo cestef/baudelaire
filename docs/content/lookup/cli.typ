@@ -31,7 +31,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`completions <shell>`], [`comp`], [Print a shell completion script to stdout.],
   [`man`], [--], [Print the manual as roff to stdout.],
   [`reference [key]`], [`ref`], [Print every config key and its value shape.],
-  [`packages`], [`pkg`], [Install the `@baudelaire/*` typst modules for editor tooling.],
+  [`mirror`], [`packages`, `pkg`], [Write the generated modules to disk for editor tooling.],
 )
 
 #callout(kind: "warn")[
@@ -327,7 +327,7 @@ the project (`paths { dist "." }`) is refused.
 
 `clean` sweeps project state only. The `@baudelaire/*` modules installed for
 editor tooling are machine-global and no config locates them, so they are
-`baudelaire packages --uninstall`, below.
+`baudelaire mirror --uninstall`, below.
 
 This is not the config's `prune`, which sweeps only files no page claims and runs
 as part of every build.
@@ -370,29 +370,32 @@ and fifty keys. An unknown key is an error suggesting the nearest real one.
 Same data as the #link("../configure/reference.typ")[config reference] page,
 printed from the binary you have.
 
-== packages
+== mirror
 
 ```sh
-baudelaire packages                         # into typst's package directory
-baudelaire packages --path .typst-packages  # somewhere else
-baudelaire packages --uninstall             # take them back off
+baudelaire mirror                         # both families, default locations
+baudelaire mirror --path .typst-packages  # typst packages somewhere else
+baudelaire mirror --uninstall             # take it all back off
 ```
 
-Writes the four #link("typst-modules.typ")[`@baudelaire/*` modules] to disk as
-ordinary typst packages, so an editor stops marking their imports unresolved.
-`init` runs it for you; run it again after upgrading baudelaire.
+Writes every generated module where an editor resolves it: the
+#link("typst-modules.typ")[`@baudelaire/*` modules] as ordinary typst packages,
+and the #link("js-modules.typ")[`baudelaire:*` modules] as one TypeScript
+declaration file in the project. `init` runs it for you; run it again after
+upgrading baudelaire.
 
 #table(
   columns: 2,
   align: (left, left),
   table.header([Flag], [Does]),
-  [`--path DIR`], [Install here (or uninstall from here) instead. Set `tinymist.packagePath` to the same directory.],
-  [`--uninstall`], [Remove what an install wrote, and nothing else in that directory.],
+  [`--path DIR`], [Write the typst packages here (or remove them from here) instead. Set `tinymist.packagePath` to the same directory.],
+  [`--uninstall`], [Remove what a run wrote, and nothing else in those locations.],
 )
 
-A project is optional: outside one, `sections` and `pages` install empty. A build
-never reads what this writes, so a stale install can't change a page.
+A project is optional: outside one, `sections` and `pages` are written empty. A
+build never reads any of it, so a stale copy can't change a page.
 
-Uninstalling removes baudelaire's own namespace directory only, so `@local`
-packages sitting beside it are untouched. An install made with `--path` comes off
-the same way: `baudelaire packages --uninstall --path <dir>`.
+Uninstalling removes baudelaire's own namespace directory and its declaration
+file only, so `@local` packages sitting beside them are untouched. A run made
+with `--path` comes off the same way: `baudelaire mirror --uninstall --path
+<dir>`.

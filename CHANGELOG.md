@@ -38,20 +38,6 @@ chores are visible in the git history and change nothing for a site.
   by walking up from the file, as `tsc` does. A pinned file is not a watched
   source: name it in `serve { include }` for the dev server to see edits to it.
 
-- **packages**: `baudelaire packages` also writes
-  `.baudelaire/generated/baudelaire.d.ts`, typing every `baudelaire:*` module a
-  bundled entry can import. Put it on the `include` list:
-
-  ```json
-  { "include": ["assets/**/*.ts", ".baudelaire/generated/baudelaire.d.ts"] }
-  ```
-
-  `site`, `config` and `i18n` are typed from the site's own values, so a
-  `client { }` constant carries the type the config gives it rather than
-  `unknown`. It goes into the project rather than into `--path`, since
-  TypeScript resolves a declaration through `tsconfig.json`, and
-  `--uninstall` removes it.
-
 - **content**: a collection's `schema` types nest. A list names what it holds
   (`list<int>`, `list<list<int>>`), a `dict` field declares its own fields in a
   block, and the two compose as `list<dict>`:
@@ -93,20 +79,26 @@ chores are visible in the git history and change nothing for a site.
   Windows on ARM is refused by name rather than served the `x86_64` build to run
   under emulation.
 
-- **packages**: `baudelaire packages` writes the generated `@baudelaire/*` Typst
-  modules to disk as ordinary packages, so an editor can resolve the imports a
-  template carries instead of marking them unknown. It installs into typst's own
-  package directory by default, and `--path <dir>` names another (pair it with
-  `tinymist.packagePath`). `init` runs it for a fresh project.
+- **mirror**: `baudelaire mirror` (`packages`, `pkg`) writes every generated
+  module where an editor resolves it: the `@baudelaire/*` typst modules as
+  ordinary packages, and the `baudelaire:*` JavaScript modules as one TypeScript
+  declaration file in the project. `init` runs it for a fresh project.
 
-  A build is unaffected either way: the compiler answers `@baudelaire/*` from
-  memory before typst's package resolution runs, so an installed copy that is
-  stale or missing can mislead an editor and never change a page. Re-run it after
-  upgrading.
+  ```sh
+  baudelaire mirror                         # both, default locations
+  baudelaire mirror --path .typst-packages  # typst packages somewhere else
+  baudelaire mirror --uninstall             # take it all back off
+  ```
 
-  `baudelaire packages --uninstall` removes them again, taking baudelaire's own
-  namespace directory and nothing else in that directory. `clean` is untouched by
-  this: it sweeps project state, and these modules are machine-global.
+  The typst packages go to typst's own package directory unless `--path` names
+  another (pair it with `tinymist.packagePath`); the declarations always go into
+  the project, since TypeScript resolves them through `tsconfig.json`.
+  `--uninstall` takes back baudelaire's own namespace directory and that one
+  file, and nothing beside them.
+
+  A build never reads any of it, so a stale copy cannot change a page: the
+  compiler answers `@baudelaire/*` from memory before typst's package
+  resolution runs. Re-run it after upgrading baudelaire.
 
 ### Fixed
 
