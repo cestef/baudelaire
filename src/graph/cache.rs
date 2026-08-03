@@ -29,8 +29,8 @@ use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
-    AssetDeps, Backlinks, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps,
-    SrcSetDeps, Weight,
+    AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
+    Weight,
 };
 use crate::ui::Ui;
 
@@ -360,23 +360,16 @@ impl Cache {
         self.roots.iter().map(Root::from).collect()
     }
 
-    /// The backlinks this build starts from: the link graph the last build
-    /// recorded, inverted over the pages this one plans to write.
+    /// The links the last build recorded for `page`, if it has seen it.
     ///
-    /// A prediction, never trusted: what a page is actually compiled with is
-    /// checked against the graph this build produces, and the pages that
-    /// disagree are compiled again (see `Engine::backlinks`). Being one build
-    /// behind is the point, since an edit that changes no links leaves it exact,
-    /// which is nearly every edit.
-    ///
-    /// Pages the manifest has never seen contribute nothing, and pages it
-    /// remembers that no longer exist are dropped with the page set they are
-    /// keyed against.
-    pub fn predicted(&self, pages: &[Page]) -> Backlinks {
-        Backlinks::new(pages.iter().filter_map(|page| {
-            let entry = self.prev.pages.get(&self.key(page))?;
-            Some((page, &entry.outputs.outbound))
-        }))
+    /// What this build's backlinks are predicted from before it has rendered
+    /// anything: never trusted, since what a page is actually compiled with is
+    /// checked against the graph this build produces and the pages that disagree
+    /// are compiled again (see `Engine::backlinks`). Being one build behind is
+    /// the point, because an edit that changes no links leaves it exact, which
+    /// is nearly every edit.
+    pub fn recorded(&self, page: &Page) -> Option<&Outbound> {
+        Some(&self.prev.pages.get(&self.key(page))?.outputs.outbound)
     }
 
     /// Cached HTML for `page` if still valid: its content fingerprint, every

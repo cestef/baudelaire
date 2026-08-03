@@ -21,7 +21,7 @@ use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::codegen::Value;
 use crate::config::{Config, SearchConfig};
-use crate::content::{Page, plan};
+use crate::content::{Data, Page, plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
@@ -505,7 +505,8 @@ impl Engine {
         // rendered. `backlinks` below replaces them with the truth and
         // recompiles whatever the guess got wrong.
         if self.config.links.backlinks {
-            pass.prepare.assume(cache.predicted(&planned.pages));
+            pass.prepare
+                .assume(self.predicted(&pass, &cache, &planned.pages));
         }
         let (mut rendered, mut cached) = self.incremental(&pass, &mut cache, ui)?;
         self.backlinks(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
@@ -670,6 +671,40 @@ impl Engine {
         Ok((rendered, cached))
     }
 
+    /// What each page's backlinks are guessed to be before anything has
+    /// rendered: the graph the last build recorded, and for a page it never saw,
+    /// the one that page's source looks like it has.
+    ///
+    /// The second half is what makes a *cold* build cheap. With the manifest
+    /// alone the guess on a first build was that nothing linked anywhere, so
+    /// every page with an inbound link was compiled twice; scanning the sources
+    /// gets the ordinary site (whose links are written out literally) right on
+    /// the first pass. Neither half is trusted: [`Engine::backlinks`] checks
+    /// both against the site the build actually renders.
+    fn predicted(&self, pass: &Pass<'_>, cache: &Cache, pages: &[Page]) -> Backlinks {
+        let links = pass.renderer.maps().links;
+        let edges: Vec<(&Page, Outbound)> = pages
+            .par_iter()
+            .filter_map(|page| match cache.recorded(page) {
+                Some(recorded) => Some((page, recorded.clone())),
+                // A generated listing contributes no edges at all, so there is
+                // nothing to scan it for; see the render transform.
+                None if matches!(page.data, Data::Generated(_)) => None,
+                None => Some((
+                    page,
+                    Outbound::scanned(
+                        &self.project.source(&page.source).ok()?,
+                        &page.source,
+                        &page.permalink,
+                        links,
+                        self.config.multilingual().then_some(page.lang.as_str()),
+                    ),
+                )),
+            })
+            .collect();
+        Backlinks::new(edges.iter().map(|(page, outbound)| (*page, outbound)))
+    }
+
     /// Make every page's backlinks true, compiling again the ones whose
     /// prediction the site disagreed with.
     ///
@@ -708,7 +743,8 @@ impl Engine {
             // the graph directly instead put pages that cannot carry backlinks
             // at all (a listing with no template of its own) permanently at odds
             // with a value they never see.
-            pass.prepare.assume(Backlinks::new(Self::edges(rendered, cached)));
+            pass.prepare
+                .assume(Backlinks::new(Self::edges(rendered, cached)));
             let stale: Vec<&'a Page> = Self::stale(&pass.prepare, rendered, cached).collect();
             if stale.is_empty() {
                 return Ok(());
@@ -750,7 +786,8 @@ impl Engine {
         // Only what is *still* wrong: the last round may have settled the site,
         // in which case there is nothing to say. Warning regardless read "0
         // still disagree" and, under `--strict`, failed a build that converged.
-        pass.prepare.assume(Backlinks::new(Self::edges(rendered, cached)));
+        pass.prepare
+            .assume(Backlinks::new(Self::edges(rendered, cached)));
         let unstable: Vec<String> = Self::stale(&pass.prepare, rendered, cached)
             .map(|page| self.relative(page))
             .collect();

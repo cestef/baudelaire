@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use typst::syntax::{Source, ast};
+
 use crate::codegen::Value;
 use crate::content::{Data, Page};
 use crate::graph::Hash;
@@ -47,6 +49,39 @@ impl Outbound {
         self.0.is_empty()
     }
 
+    /// What a page's source *looks* like it links to: every string literal in it
+    /// that resolves to a page, read the way the render pass reads a link.
+    ///
+    /// Only ever a guess, and only used as one: it is what a cold build predicts
+    /// each page's backlinks from, before there is a rendered site to invert
+    /// (see `Engine::backlinks`). Both kinds of wrong are harmless, because the
+    /// graph the build actually produces is what every page is checked against
+    /// and a page guessed wrongly is simply compiled again. A link built in a
+    /// loop is missed; a `.typ` path written for some other reason is counted.
+    ///
+    /// Reading every string rather than the arguments of `link` calls is
+    /// deliberate: it costs one walk, needs to know nothing about how a link is
+    /// spelled, and cannot go stale when that changes.
+    pub fn scanned(
+        source: &Source,
+        page: &Path,
+        permalink: &str,
+        links: &LinkMap,
+        lang: Option<&str>,
+    ) -> Self {
+        let mut out = Self::default();
+        let mut stack = vec![source.root()];
+        while let Some(node) = stack.pop() {
+            stack.extend(node.children());
+            let Some(raw) = node.cast::<ast::Str>() else {
+                continue;
+            };
+            if let Link::Resolved(url) = links.classify(&raw.get(), page, lang).link {
+                out.record(&url, permalink);
+            }
+        }
+        out
+    }
 }
 
 /// The site's link graph, inverted: for each page, the pages whose content
@@ -340,7 +375,7 @@ impl LinkMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backlinks, LinkMap, Outbound};
+    use super::{Backlinks, LinkMap, Outbound, Source};
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use std::path::PathBuf;
 
@@ -386,7 +421,7 @@ mod tests {
     fn page(title: &str, permalink: &str) -> Page {
         Page {
             id: PageId::new("posts", title),
-            source: PathBuf::from(format!("content/posts/{title}.typ")),
+            source: PathBuf::from(format!("content/{}.typ", title.to_lowercase())),
             frontmatter: Frontmatter {
                 title: Some(title.to_owned()),
                 ..Frontmatter::default()
@@ -473,6 +508,29 @@ mod tests {
         let from = std::path::Path::new("a.typ");
 
         assert!(map.classify("https://x.com", from, None).probed.is_empty());
+    }
+
+    /// The cold-build guess: what a page's source looks like it links to,
+    /// resolved through the same map the render pass uses. Only a guess, so it
+    /// is allowed to be wide; it must not be *wrong* about what resolves.
+    #[test]
+    fn a_scan_finds_the_links_a_source_writes_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("content")).unwrap();
+        for name in ["a.typ", "b.typ"] {
+            std::fs::write(root.join("content").join(name), "").unwrap();
+        }
+        let pages = [page("A", "/a/"), page("B", "/b/")];
+        let map = LinkMap::new(&pages, root);
+        let text = r#"#link("b.typ")[to b] #link("a.typ")[self] #image("photo.png") "b.typ""#;
+        let source = Source::detached(text);
+
+        let scanned = Outbound::scanned(&source, &pages[0].source, &pages[0].permalink, &map, None);
+
+        // The link to b, once, however many strings named it; the self-link and
+        // the non-page reference are not edges.
+        assert_eq!(scanned.targets().collect::<Vec<_>>(), ["/b/"]);
     }
 
     #[test]

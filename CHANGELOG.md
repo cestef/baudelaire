@@ -74,8 +74,9 @@ chores are visible in the git history and change nothing for a site.
   section it named, and a page never backlinks itself.
 
   The pages linking to a page are not knowable until every page has rendered, so
-  a build compiles against the graph the last build recorded and compiles again
-  only the pages that turn out to disagree with this one. An edit that changes
+  a build compiles against a guess (the graph the last build recorded, or on a
+  first build the links each source writes out literally) and compiles again
+  only the pages that turn out to disagree with the site. An edit that changes
   no links repairs nothing; adding a link recompiles the page it points at.
   Social cards and PDFs are not redrawn by that second compile and carry no
   backlinks.
@@ -85,6 +86,12 @@ chores are visible in the git history and change nothing for a site.
   (`baudelaire::backlinks::unstable`).
 
 ### Performance
+
+- **links**: a cold build guesses each page's backlinks by reading the `.typ`
+  links its source writes out, rather than assuming nothing links anywhere. On
+  a 1,000-page site where every link is written by hand, the first build now
+  compiles each page once instead of compiling 969 of them twice: 513 ms to
+  403 ms before the other two changes below.
 
 - **search**: the inverted index is built across the thread pool. Tokenizing
   every word of every page was the slowest thing a build did outside the
@@ -849,6 +856,21 @@ passed, which is what they are for. Neither runs on a site that declares no
   discard the verbosity count, so `RUST_LOG=warn baudelaire -vv build` printed
   no debug events and said nothing about why. A run that passes no `-v` still
   honours the variable, which stays the only way to see a dependency's events.
+
+- **links**: `links { orphans #true }` reports the pages no other page's content
+  links to.
+
+  ```
+  ⚠ 2 pages linked from nowhere
+    ⚠ `guide/exporting.typ` is linked from nowhere, and serves at `/guide/exporting/`
+  ```
+
+  It reads the same edges backlinks do, so a page reached only from a layout's
+  nav counts: a nav is not something an author wrote about that page. The root
+  of each language, generated term pages and the not-found page are left out.
+
+  A report, never a failure. Either switch turns the link graph on, so a site
+  that wants only the report pays for the edges and none of the second compiles.
 
 ### Performance
 

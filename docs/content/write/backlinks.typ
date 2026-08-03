@@ -93,8 +93,11 @@ That means:
   nothing else;
 - retitling a page rewrites the pages it links to, since the title is in their
   backlink lists;
-- the first build of a site, with no previous graph to guess from, compiles the
-  pages that have inbound links twice.
+- the first build of a site has no previous graph to guess from, so it guesses
+  from the sources instead: the `.typ` links a page writes out literally are
+  read straight off it. A site whose links are written by hand (nearly every
+  site) compiles each page once even cold; one that builds links in a loop pays
+  a second compile for the pages that were guessed wrong.
 
 Sidecars are not redrawn by the second compile: a #link("../build/generate/cards.typ")[social card]
 and a #link("../build/generate/pdf.typ")[PDF] carry no backlinks, and redrawing
