@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
+use std::path::Path;
 
 use typst::syntax::{FileId, Source, Span, VirtualRoot};
 use typst::{World, WorldExt};
@@ -77,6 +78,23 @@ impl<'a> Origins<'a> {
         })
     }
 
+    /// Whether `span` was written in a `.typ` file under `dir`
+    /// (project-relative): the test for "did an author write this, or did a
+    /// template?".
+    ///
+    /// The extension is checked, not merely the directory, because a page's
+    /// synthetic wrapper sits at the page's own path with a suffix
+    /// (`content/a.typ@layout`) and would otherwise pass for content it is not.
+    pub(super) fn authored_under(span: Span, dir: &Path) -> bool {
+        // Straight off the span's own path, allocating nothing: this is asked of
+        // every link a page carries, and [`Origins::site`] would build (and
+        // throw away) a `String` per question.
+        Self::file(span).is_some_and(|id| {
+            let file = Path::new(id.vpath().get_without_slash());
+            file.starts_with(dir) && file.extension().is_some_and(|ext| ext == "typ")
+        })
+    }
+
     /// Where `span` was authored, as `file:line:column`.
     pub(super) fn locate(&mut self, span: Span) -> Option<Origin> {
         let (id, range) = self.bytes(span)?;
@@ -90,11 +108,16 @@ impl<'a> Origins<'a> {
 
     /// The shared half: which file a span belongs to, and the bytes it covers.
     fn bytes(&self, span: Span) -> Option<(FileId, Range<usize>)> {
+        Some((Self::file(span)?, self.world.range(span)?))
+    }
+
+    /// The project file a span was written in, or `None` for anything the
+    /// author cannot open: a detached span (an element this crate synthesized),
+    /// or one in a package, whose paths name a download cache rather than the
+    /// site.
+    fn file(span: Span) -> Option<FileId> {
         let id = span.id()?;
-        if matches!(id.root(), VirtualRoot::Package(_)) {
-            return None;
-        }
-        Some((id, self.world.range(span)?))
+        (!matches!(id.root(), VirtualRoot::Package(_))).then_some(id)
     }
 
     /// The parsed source of `id`, looked up once per file. A file the world

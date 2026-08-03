@@ -1031,6 +1031,7 @@ impl Engine {
                 broken: rewrite.broken,
                 anchors: rewrite.anchors,
                 deep: rewrite.deep,
+                outbound: rewrite.outbound,
                 fragments,
                 lints: rewrite.lints,
                 weight: rewrite.weight,
@@ -1175,6 +1176,9 @@ impl<'a> Pass<'a> {
                 srcsets,
                 emitted,
                 engine.project.root(),
+                // Resolved here, once: it costs a canonicalization and every
+                // page's links are tested against the same answer.
+                engine.config.paths.under(engine.project.root()).content,
             ),
             analyzer: Analyzer::new(
                 planned.tracked.iter().map(Root::from).collect::<Roots>(),

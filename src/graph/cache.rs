@@ -29,7 +29,8 @@ use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
-    AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, RenderMaps, SrcSetDeps, Weight,
+    AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
+    Weight,
 };
 use crate::ui::Ui;
 
@@ -127,6 +128,14 @@ pub struct Outputs {
     pub anchors: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deep: Vec<String>,
+    /// The pages this page's own content links to.
+    ///
+    /// Stored for the same reason as `anchors` and `deep`: the link graph is
+    /// assembled site-wide from every page, cache hits included, and a page
+    /// absent from it is a page whose links silently stop being backlinks of
+    /// anything the moment it is served from cache.
+    #[serde(default, skip_serializing_if = "Outbound::is_empty")]
+    pub outbound: Outbound,
     /// The page's head and body markup, captured only while the single-file
     /// export is on. Stored because it cannot be recovered from the rendered
     /// page afterwards without parsing it, and a cache-served page has to be

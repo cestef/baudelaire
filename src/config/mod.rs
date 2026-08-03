@@ -163,6 +163,42 @@ impl Paths {
             .into_iter()
             .find(|(_, path)| crate::fs::resolved(root.join(path)).starts_with(&dist))
     }
+
+    /// The directories typst sees, as *it* spells them: relative to the project
+    /// root, which is how a span, a dependency path and an import all name a
+    /// file.
+    ///
+    /// Both sides go through [`crate::fs::resolved`], the spelling the link map
+    /// and the dependency tracker already key on, because either can be reached
+    /// through a symlink: comparing them lexically leaves a configured directory
+    /// looking like it sits outside the very root it is under.
+    pub fn under(&self, root: &Path) -> Rooted {
+        let root = crate::fs::resolved(root);
+        let relative = |dir: &Path| {
+            let dir = crate::fs::resolved(dir);
+            dir.strip_prefix(&root)
+                .map_or_else(|_| dir.clone(), Path::to_path_buf)
+        };
+        Rooted {
+            content: relative(&self.content),
+            templates: relative(&self.templates),
+        }
+    }
+}
+
+/// The configured source directories in the compiler's spelling, from
+/// [`Paths::under`]. Only the two typst reads: `dist`, `assets` and `static` are
+/// walked by the build itself and never named in a span or an import.
+///
+/// A directory outside the root keeps its absolute path: there is no
+/// root-relative spelling of it, and inventing one would name a different place.
+pub struct Rooted {
+    /// Where pages are authored: what a link's origin is tested against to tell
+    /// an author's own reference from a layout's chrome.
+    pub content: PathBuf,
+    /// Where layouts live: what a wrapper's root-absolute `#import` resolves
+    /// against.
+    pub templates: PathBuf,
 }
 
 /// What the content tree holds and how it is read. The directory itself is

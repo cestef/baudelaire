@@ -72,6 +72,10 @@ pub(super) struct Cx<'a> {
     /// Project root, so the externalize and svg transforms resolve a marker's
     /// project-relative path to the source file on disk.
     pub root: &'a std::path::Path,
+    /// The content tree as the compiler spells it, resolved once for the build:
+    /// what a link's origin is tested against to tell an author's own reference
+    /// from a layout's chrome.
+    pub content: &'a std::path::Path,
     /// The world this page compiled in, so a transform can ask what a node's
     /// span points at: the source files, as the compiler read them.
     pub world: &'a crate::world::PageWorld,

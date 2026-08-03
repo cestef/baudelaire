@@ -43,6 +43,13 @@ chores are visible in the git history and change nothing for a site.
   A manifest with no icons is still written, and nothing will ever offer to
   install it, so the build warns (`baudelaire::manifest::icons`).
 
+### Upgrading
+
+- The build cache records one more thing per page: the pages that page's own
+  content links to, which the coming backlinks feature inverts. A manifest
+  written before this records none, so the cache schema is bumped and the first
+  build after upgrading is a cold one. Nothing to change.
+
 ## [0.0.10] - 2026-08-03
 
 ### Added

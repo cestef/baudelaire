@@ -556,6 +556,46 @@ fn a_warm_cache_survives_the_site_moving() {
     );
 }
 
+/// The link graph is built from what an *author* wrote, so a page records the
+/// pages its own content points at and nothing its layout does. A nav that links
+/// every page from every page would otherwise make every page a neighbour of
+/// every other, and the backlinks derived from it worthless.
+#[test]
+fn a_page_records_its_own_links_and_not_its_layout_s() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
+    );
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = html.elem(\"main\", \
+         link(\"/content/posts/a.typ\")[home] + body)\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", template: \"post.typ\",)\n\
+         #link(\"b.typ#install\")[b] #link(\"b.typ\")[again] #link(\"a.typ\")[self]",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\", template: \"post.typ\",)\n= Install\nbeta",
+    );
+    site.stats();
+
+    let manifest = site.read(".baudelaire/cache/manifest.json");
+    let entries: serde_json::Value = serde_json::from_str(&manifest).expect("manifest parses");
+    let outbound = |page: &str| {
+        entries["pages"][format!("content/posts/{page}.typ")]["outputs"]["outbound"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+    // The fragment and the repeat collapse into the one page a links to, and a
+    // link to itself is not an edge.
+    assert_eq!(outbound("a"), ["/posts/b/"], "{manifest}");
+    // b writes no links at all: the one in its markup is its layout's.
+    assert!(outbound("b").is_empty(), "{manifest}");
+}
+
 /// `datetime.today()` is a build input the file-dependency tracker cannot see:
 /// it goes through the `World`, which records `source`/`file` only. Recording it
 /// as a read of `sys.inputs.baudelaire.date` is what makes a page printing the

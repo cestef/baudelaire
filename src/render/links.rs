@@ -1,9 +1,49 @@
 //! Resolution of source-relative links to permalinks.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::content::{Data, Page};
+
+/// The pages one page's own content links to: this page's contribution to the
+/// site's link graph, as permalinks.
+///
+/// A set, so the order is the same on every build and two links to one page are
+/// one edge. What a link addresses *within* a page (`#fragment`, `?query`) is
+/// dropped: the edge names the page, not the paragraph.
+///
+/// Only links written in the content tree are collected. A layout's nav, a
+/// sidebar, and the prev/next pair are links every page carries by virtue of its
+/// template, and counting them would make every page a neighbour of every other.
+/// See [`crate::render::transform::rewrite`] for where that line is drawn.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Outbound(BTreeSet<String>);
+
+impl Outbound {
+    /// Record a resolved link written on the page permalinked `from`. A page
+    /// linking to itself is not an edge: it says nothing a reader of that page
+    /// does not already know.
+    pub fn record(&mut self, url: &str, from: &str) {
+        let target = super::Tail::of(url).path;
+        if target != from {
+            self.0.insert(target.to_owned());
+        }
+    }
+
+    /// The permalinks this page links to, in a stable order.
+    pub fn targets(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
+    /// Whether the page links to nothing, so a manifest entry can leave the
+    /// field out entirely.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// How a raw link in page markup should be treated.
 #[derive(Debug, PartialEq, Eq)]
@@ -176,7 +216,23 @@ impl LinkMap {
 
 #[cfg(test)]
 mod tests {
-    use super::LinkMap;
+    use super::{LinkMap, Outbound};
+
+    /// An edge names a page, so two links to one page (or to two of its
+    /// sections) are one edge, and a page never links to itself.
+    #[test]
+    fn an_edge_names_a_page_once() {
+        let mut outbound = Outbound::default();
+        outbound.record("/posts/b/#install", "/posts/a/");
+        outbound.record("/posts/b/?utm=x", "/posts/a/");
+        outbound.record("/posts/b/", "/posts/a/");
+        outbound.record("/posts/c/", "/posts/a/");
+        outbound.record("/posts/a/#top", "/posts/a/");
+        assert_eq!(
+            outbound.targets().collect::<Vec<_>>(),
+            ["/posts/b/", "/posts/c/"]
+        );
+    }
 
     #[test]
     fn external_links_are_recognized() {

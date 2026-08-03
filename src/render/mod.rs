@@ -23,7 +23,7 @@ pub use asset::{AssetDeps, AssetMap};
 pub use emitted::{Emission, Emitted};
 pub use fragment::Fragments;
 pub use inline::Inline;
-pub use links::{LinkDeps, LinkMap};
+pub use links::{LinkDeps, LinkMap, Outbound};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
 pub use srcset::{SrcSetDeps, SrcSets};
@@ -64,6 +64,10 @@ pub struct Renderer {
     /// What this build emitted, so a reference can be stamped with the digest
     /// of the file it names.
     emitted: Emitted,
+    /// The content tree as the compiler spells it (project-relative), resolved
+    /// once here because every page's links are tested against it and the answer
+    /// is the same for the whole build.
+    content: std::path::PathBuf,
     /// Project root, so the externalize transform resolves an image marker's
     /// project-relative path to the source file on disk.
     root: std::path::PathBuf,
@@ -93,6 +97,10 @@ pub struct Rewrite {
     /// The asset-map entries this page's references consulted, its dependency
     /// on the processed-asset tree.
     pub assets: AssetDeps,
+    /// The pages this page's *content* links to: its edges of the site's link
+    /// graph, which the backlink pass inverts. Template chrome is left out; see
+    /// [`Outbound`].
+    pub outbound: Outbound,
     /// Images lifted out of the DOM, for the engine to copy into `dist`.
     pub images: Vec<ImageRef>,
     /// Outbound `http(s)` link targets the page carries, collected only when
@@ -155,9 +163,11 @@ impl Renderer {
         srcsets: SrcSets,
         emitted: Emitted,
         root: &std::path::Path,
+        content: std::path::PathBuf,
     ) -> Self {
         Self {
             links: LinkMap::new(pages, root),
+            content,
             assets,
             srcsets,
             emitted,
@@ -197,6 +207,7 @@ impl Renderer {
             srcsets: &self.srcsets,
             emitted: &self.emitted,
             root: &self.root,
+            content: &self.content,
             world,
             found: Rewrite::default(),
         };

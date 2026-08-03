@@ -15,6 +15,7 @@
 //! [`Layout`] renders the text; this decides what goes into it.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 
@@ -49,6 +50,10 @@ pub(in crate::engine) struct Prepare<'a> {
     /// putting it in the wrapper would make every page's fingerprint depend on
     /// every other page's title and URL.
     trees: BTreeMap<String, Value>,
+    /// The template directory as the compiler spells it, resolved once: every
+    /// page's wrapper names it, and canonicalizing per page would pay for the
+    /// same answer once per page.
+    templates: PathBuf,
 }
 
 impl<'a> Prepare<'a> {
@@ -64,6 +69,7 @@ impl<'a> Prepare<'a> {
             theme,
             pages,
             trees: BTreeMap::new(),
+            templates: config.paths.under(project.root()).templates,
         };
         // Built once from the whole page set and shared by every consumer, so
         // the file templates import, the JS module, and any future reader can
@@ -211,15 +217,10 @@ impl<'a> Prepare<'a> {
     ///
     /// The project's own template directory, expressed relative to the root
     /// because a typst import is root-absolute in the compiler's terms, not the
-    /// config's. A template the project does not have falls back to the theme's
-    /// package, which the compiler resolves by spec rather than by path.
+    /// config's, and resolved once for the build rather than per page. A
+    /// template the project does not have falls back to the theme's package,
+    /// which the compiler resolves by spec rather than by path.
     pub(in crate::engine) fn template_root(&self, template: &str) -> String {
-        let project = self
-            .config
-            .paths
-            .templates
-            .strip_prefix(self.project.root())
-            .unwrap_or(&self.config.paths.templates);
         match self.theme {
             Some(theme)
                 if !self.config.paths.templates.join(template).is_file()
@@ -227,7 +228,7 @@ impl<'a> Prepare<'a> {
             {
                 theme.templates()
             }
-            _ => format!("/{}", project.display()),
+            _ => format!("/{}", self.templates.display()),
         }
     }
 
