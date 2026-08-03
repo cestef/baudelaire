@@ -1,7 +1,7 @@
 {
- "badge": "63aeb3f0b8893073",
- "commit": "39a680b6ffd0cc20072f316b75f18059c3ec3f8b",
- "covered": 9020,
+ "badge": "92e64dfe5a549afb",
+ "commit": "e54e5c2898019579d8520ad8d5ab53776fc9cf60",
+ "covered": 9056,
  "files": {
   "src/announce/mod.rs": [
    43,
@@ -24,8 +24,8 @@
    36
   ],
   "src/cli/mod.rs": [
-   263,
-   331
+   266,
+   375
   ],
   "src/cli/prompt.rs": [
    2,
@@ -36,15 +36,15 @@
    8
   ],
   "src/cli/scaffold.rs": [
-   263,
-   340
+   272,
+   351
   ],
   "src/cli/serve.rs": [
    73,
    341
   ],
   "src/codegen.rs": [
-   96,
+   97,
    107
   ],
   "src/config/defaults.rs": [
@@ -76,8 +76,8 @@
    23
   ],
   "src/config/reference.rs": [
-   77,
-   98
+   71,
+   89
   ],
   "src/config/url.rs": [
    54,
@@ -230,10 +230,6 @@
   "src/engine/compile/card.rs": [
    49,
    51
-  ],
-  "src/engine/compile/generated.rs": [
-   15,
-   15
   ],
   "src/engine/compile/image.rs": [
    42,
@@ -394,6 +390,10 @@
   "src/error/mod.rs": [
    6,
    10
+  ],
+  "src/error/packages.rs": [
+   0,
+   2
   ],
   "src/error/scaffold.rs": [
    10,
@@ -639,6 +639,10 @@
    68,
    70
   ],
+  "src/world/generated.rs": [
+   19,
+   19
+  ],
   "src/world/image_rule.rs": [
    16,
    16
@@ -648,16 +652,16 @@
    175
   ],
   "src/world/module.rs": [
-   85,
-   86
+   110,
+   112
   ],
   "src/world/packages.rs": [
    7,
    7
   ]
  },
- "percent": 87.07,
+ "percent": 86.76,
  "schema": 2,
- "total": 10360,
- "updated": "2026-08-02T06:23:32+00:00"
+ "total": 10438,
+ "updated": "2026-08-03T06:46:13+00:00"
 }
