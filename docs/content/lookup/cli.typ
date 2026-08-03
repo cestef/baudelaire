@@ -393,7 +393,8 @@ upgrading baudelaire.
 )
 
 A project is optional: outside one, `sections` and `pages` are written empty. A
-build never reads any of it, so a stale copy can't change a page.
+build never reads any of it, so a stale copy can't change a page, and every
+build rewrites the declarations.
 
 Uninstalling removes baudelaire's own namespace directory and its declaration
 file only, so `@local` packages sitting beside them are untouched. A run made

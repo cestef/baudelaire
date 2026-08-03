@@ -273,3 +273,31 @@ fn a_renamed_entry_resolves_under_both_names() {
         "both spellings should resolve to {served}: {html}"
     );
 }
+
+/// Every build writes the declarations, so an editor's types follow the config
+/// without anyone re-running `baudelaire packages`. They are typed from the
+/// site's own values, which is what a fixed hand-written `.d.ts` cannot be.
+#[test]
+fn a_build_writes_declarations_typed_from_this_site() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        &config("client {\n  api \"https://example.com\"\n  retries 3\n}"),
+    );
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx");
+    site.stats();
+
+    let declared = site.read(".baudelaire/generated/baudelaire.d.ts");
+    assert!(
+        declared.contains(r#"declare module "baudelaire:config""#),
+        "{declared}"
+    );
+    assert!(declared.contains("export const api: string;"), "{declared}");
+    assert!(
+        declared.contains("export const retries: number;"),
+        "{declared}"
+    );
+    // The declarations are not the bundle: a site that bundles nothing still
+    // gets them, since an editor resolves imports before anything is built.
+    assert!(!site.exists("public/assets/main.js"));
+}

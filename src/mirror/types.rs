@@ -2,6 +2,10 @@
 //! TypeScript resolves an ambient declaration through `tsconfig.json` and a
 //! machine-global copy would be one nothing includes. `--path` does not reach
 //! this target, and `clean`, which sweeps project state, takes it with it.
+//!
+//! Every build writes this file too (see [`crate::engine`]), so the types
+//! follow the config without anyone re-running a command; mirroring it here is
+//! what covers a checkout that has not been built yet.
 
 use std::path::PathBuf;
 

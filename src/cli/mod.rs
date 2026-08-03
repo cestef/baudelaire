@@ -1130,7 +1130,8 @@ impl MirrorArgs {
                  TypeScript declaration file in the project.\n\
                  \n\
                  A build never reads what this writes, so a stale copy cannot change a\n\
-                 page. Re-run it after upgrading baudelaire."
+                 page. Every build refreshes the declarations; re-run this after\n\
+                 upgrading baudelaire."
             ),
             help::Examples::new(&[
                 ("baudelaire mirror", "Into typst's package directory"),

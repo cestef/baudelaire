@@ -100,6 +100,19 @@ chores are visible in the git history and change nothing for a site.
   compiler answers `@baudelaire/*` from memory before typst's package
   resolution runs. Re-run it after upgrading baudelaire.
 
+- **types**: every build writes `.baudelaire/generated/baudelaire.d.ts`, typing
+  the `baudelaire:*` modules a bundled entry imports. Put it on the `include`
+  list:
+
+  ```json
+  { "include": ["assets/**/*.ts", ".baudelaire/generated/baudelaire.d.ts"] }
+  ```
+
+  `site`, `config` and `i18n` are typed from the site's own values, so a
+  `client { }` constant carries the type the config gives it rather than
+  `unknown`. `baudelaire mirror` writes the same file, for a checkout that has
+  not been built yet.
+
 ### Fixed
 
 - **assets**: a `.d.ts` in the asset tree is read for its types and no longer

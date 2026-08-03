@@ -590,12 +590,19 @@ impl Engine {
     /// Writing the tree out is part of building the inputs, not a step a caller
     /// can forget: a template's `#import` of it has to resolve on the very
     /// first compile, including in a fresh checkout where nothing has run yet.
+    ///
+    /// The TypeScript declarations ride along, for the same reason and with the
+    /// opposite deadline: nothing in the build reads them back, but writing
+    /// them here is what keeps an editor's types following the config instead
+    /// of the last time someone ran `baudelaire mirror`.
     fn prepare<'a>(&'a self, pages: &'a [Page]) -> Result<Prepare<'a>> {
         let prepare = Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages);
         let root = self.project.root();
         for table in prepare.generated() {
             table.write(root)?;
         }
+        #[cfg(feature = "js")]
+        crate::engine::asset::Declarations::of(&self.config).write(root)?;
         // A content page that imports a table was served the empty one during
         // discovery (the table is derived from the frontmatter that read was
         // producing). Now that the real ones are on disk, the world drops what
