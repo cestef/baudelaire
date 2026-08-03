@@ -720,9 +720,12 @@ td {
   border-bottom: 1px solid var(--rule);
 }
 
-/* A key or a flag is the row's handle: never break it across lines. */
-td:first-child code,
-td:first-child {
+/* A key or a flag is the row's handle, so the code that spells it does not break
+   across lines. The rule sits on the code and never on the cell: `white-space`
+   inherits, so a cell-level `nowrap` overrides the wrapping the narrow-screen
+   rule at the bottom of this file turns back on, and that is what leaves a phone
+   reading three words to a line beside a column of untouchable flags. */
+td:first-child code {
   white-space: nowrap;
 }
 
@@ -1562,6 +1565,14 @@ ul.listing {
    anyway. */
 @media (max-width: 640px) {
   code {
+    white-space: normal;
+  }
+
+  /* Including the row handles in the table above, which are the ones that hurt:
+     an unbreakable `completions <shell>` takes half the row and leaves the
+     column explaining it three words to a line. Same specificity as the rule
+     that pinned them, so it is the width that decides, not the cascade. */
+  td:first-child code {
     white-space: normal;
   }
 }
