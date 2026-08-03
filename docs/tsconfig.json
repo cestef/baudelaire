@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["assets/**/*.ts"]
+  "include": ["assets/**/*.ts", ".baudelaire/generated/baudelaire.d.ts"]
 }

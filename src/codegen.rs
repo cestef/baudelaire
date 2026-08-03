@@ -298,6 +298,90 @@ impl fmt::Display for Js<'_> {
     }
 }
 
+/// Displays the TypeScript *type* a [`Value`] has: `Ts(&value).to_string()`.
+///
+/// The odd one out among the adapters, which render a value *as* source in a
+/// target language. This renders what a declaration file has to say about it,
+/// so a generated module's data can be typed from the very tree the module is
+/// built from instead of from a hand-written shape that drifts from it.
+///
+/// Types come from one sample, so it describes what this build serves, not
+/// every build: a string field is `string`, and one that happens to be absent
+/// here is `null`.
+pub struct Ts<'a>(pub &'a Value);
+
+impl fmt::Display for Ts<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Value::Str(_) => f.write_str("string"),
+            Value::Int(_) | Value::Float(_) => f.write_str("number"),
+            Value::Bool(_) => f.write_str("boolean"),
+            // A Typst-only expression reaches JavaScript as `null`, exactly as
+            // an absent value does, so the two type the same.
+            Value::Raw(_) | Value::None => f.write_str("null"),
+            Value::Array(items) => match Self::union(items) {
+                // An empty array constrains nothing, and `never[]` would refuse
+                // every element a later build puts in it.
+                None => f.write_str("unknown[]"),
+                Some(item) => write!(f, "Array<{item}>"),
+            },
+            Value::Dict(pairs) if pairs.is_empty() => f.write_str("Record<string, never>"),
+            Value::Dict(pairs) => {
+                f.write_str("{ ")?;
+                for (i, (key, value)) in pairs.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str("; ")?;
+                    }
+                    match ident(key) {
+                        true => f.write_str(key)?,
+                        false => write!(f, "{}", JsonStr(key))?,
+                    }
+                    write!(f, ": {}", Self(value))?;
+                }
+                f.write_str(" }")
+            }
+        }
+    }
+}
+
+impl Ts<'_> {
+    /// The union of the element types of `items`, deduplicated in first-seen
+    /// order, or `None` when there are no elements to read one from.
+    ///
+    /// Deduplicated because rows of one shape are the common case, and a
+    /// hundred identical members would otherwise be spelled a hundred times.
+    fn union<'a>(items: &'a [Value]) -> Option<String> {
+        let mut types: Vec<String> = Vec::new();
+        for item in items {
+            let rendered = Ts::<'a>(item).to_string();
+            if !types.contains(&rendered) {
+                types.push(rendered);
+            }
+        }
+        (!types.is_empty()).then(|| types.join(" | "))
+    }
+}
+
+/// Displays a string as a JSON (and so JavaScript) string literal.
+struct JsonStr<'a>(&'a str);
+
+impl fmt::Display for JsonStr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = String::new();
+        JsFmt::string(self.0, &mut out);
+        f.write_str(&out)
+    }
+}
+
+/// Whether `s` is a plain JavaScript identifier, and so needs no quoting as an
+/// object key or a declared name. Reserved words are *not* excluded: they are
+/// legal keys, and only the callers that emit bindings care.
+pub(crate) fn ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    let head = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$');
+    head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
 /// Displays a Typst `let` binding: `#let name = <value>`, with the value
 /// rendered by [`Typst`]. The one way generated module source binds a value, so
 /// no caller ever formats a binding (and its escaping) by hand.
@@ -321,7 +405,7 @@ impl fmt::Display for Content<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Js, Let, Str, Typst, Value};
+    use super::{Js, Let, Str, Ts, Typst, Value};
 
     #[test]
     fn escapes_quotes_and_backslashes() {
@@ -381,5 +465,40 @@ mod tests {
     fn round_trips_a_typst_string_value() {
         let typst = typst::foundations::Value::Str("hi".into());
         assert_eq!(Value::from(&typst).as_str(), Some("hi"));
+    }
+
+    #[test]
+    fn renders_the_type_a_value_has() {
+        assert_eq!(
+            Ts(&sample()).to_string(),
+            "{ title: string; n: number; ok: boolean; items: Array<string>; missing: null; empty: Record<string, never> }"
+        );
+    }
+
+    /// Rows of one shape are the common case, and repeating a member type once
+    /// per element would make a catalogue's type unreadable.
+    #[test]
+    fn an_array_types_as_the_union_of_its_members_once_each() {
+        let v = Value::array([Value::Int(1), Value::Int(2), Value::str("x")]);
+        assert_eq!(Ts(&v).to_string(), "Array<number | string>");
+    }
+
+    /// An empty array constrains nothing: `never[]` would refuse every element
+    /// the next build puts in it.
+    #[test]
+    fn an_empty_collection_stays_open() {
+        assert_eq!(Ts(&Value::array([])).to_string(), "unknown[]");
+        assert_eq!(
+            Ts(&Value::dict::<&str>([])).to_string(),
+            "Record<string, never>"
+        );
+    }
+
+    /// A key that is not an identifier has to be quoted, or the type does not
+    /// parse; the same rule the JS renderer applies to every key.
+    #[test]
+    fn quotes_a_key_that_is_not_an_identifier() {
+        let v = Value::dict([("a b", Value::Int(1))]);
+        assert_eq!(Ts(&v).to_string(), "{ \"a b\": number }");
     }
 }

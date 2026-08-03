@@ -9,6 +9,8 @@
 //! which module emits what.
 
 mod csp;
+#[cfg(feature = "js")]
+pub(crate) mod dts;
 mod feed;
 mod headers;
 mod llms;

@@ -21,6 +21,28 @@ pipeline]. They are the JavaScript counterpart of the
 #link("typst-modules.typ")[`@baudelaire/*` Typst modules], built from the same
 data.
 
+== TypeScript
+
+Nothing on disk holds these modules, so an editor reads every import of one as
+unknown. `baudelaire packages` writes the declarations out, alongside the typst
+ones:
+
+```sh
+baudelaire packages
+```
+
+That writes `.baudelaire/generated/baudelaire.d.ts`. Put it on your `include`
+list:
+
+```json
+{ "include": ["assets/**/*.ts", ".baudelaire/generated/baudelaire.d.ts"] }
+```
+
+`site`, `config` and `i18n` are typed from your own config, so `config.api` is
+the type your `client { }` block gives it, not `unknown`. Re-run after changing
+that block; a build never reads the file, so a stale copy misleads an editor and
+changes no page.
+
 == The modules
 
 #table(

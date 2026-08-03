@@ -102,7 +102,9 @@ the output is always served as `.js`, and both spellings resolve:
 ```
 
 Nothing is type-checked. The bundler transforms, as esbuild and Vite do; run
-`tsc --noEmit` in CI or a #link("hooks.typ")[`before` hook] for that.
+`tsc --noEmit` in CI or a #link("hooks.typ")[`before` hook] for that. The
+`baudelaire:*` modules an entry imports are typed by `baudelaire packages`: see
+#link("../lookup/js-modules.typ")[JS modules].
 
 A `tsconfig.json` supplies the rest: `paths` aliases, `jsxImportSource`,
 `experimentalDecorators`. One is discovered per script, walking up from the file

@@ -38,6 +38,20 @@ chores are visible in the git history and change nothing for a site.
   by walking up from the file, as `tsc` does. A pinned file is not a watched
   source: name it in `serve { include }` for the dev server to see edits to it.
 
+- **packages**: `baudelaire packages` also writes
+  `.baudelaire/generated/baudelaire.d.ts`, typing every `baudelaire:*` module a
+  bundled entry can import. Put it on the `include` list:
+
+  ```json
+  { "include": ["assets/**/*.ts", ".baudelaire/generated/baudelaire.d.ts"] }
+  ```
+
+  `site`, `config` and `i18n` are typed from the site's own values, so a
+  `client { }` constant carries the type the config gives it rather than
+  `unknown`. It goes into the project rather than into `--path`, since
+  TypeScript resolves a declaration through `tsconfig.json`, and
+  `--uninstall` removes it.
+
 - **content**: a collection's `schema` types nest. A list names what it holds
   (`list<int>`, `list<list<int>>`), a `dict` field declares its own fields in a
   block, and the two compose as `list<dict>`:

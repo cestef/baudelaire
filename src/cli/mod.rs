@@ -1176,6 +1176,45 @@ impl PackagesArgs {
         })
     }
 
+    /// Write (or, with `config` absent, remove) the TypeScript declarations for
+    /// the `baudelaire:*` modules.
+    ///
+    /// They go into the *project*, not into `--path`: TypeScript resolves an
+    /// ambient declaration through `tsconfig.json`, so a machine-global copy
+    /// would be one nothing includes. That is also why removing them is not
+    /// `--path`'s business, and why `clean` sweeping project state takes them
+    /// with it.
+    #[cfg(feature = "js")]
+    fn declarations(cx: &Cx, config: Option<&Config>) -> Result<()> {
+        use crate::engine::asset::Declarations;
+
+        let root = cx.root.path();
+        let Some(config) = config else {
+            if Declarations::remove(root)? {
+                cx.ui
+                    .done(format_args!("removed {}", Declarations::path().display()));
+            }
+            return Ok(());
+        };
+        Declarations::new(config).write(root)?;
+        cx.ui
+            .done(format_args!("wrote {}", Declarations::path().display()));
+        cx.ui.detail(format_args!(
+            "add it to your tsconfig: \"include\": [\"{}\"]",
+            Declarations::path().display()
+        ));
+        Ok(())
+    }
+
+    /// Without the `js` feature there are no `baudelaire:*` modules to declare.
+    /// Fallible like its counterpart, which writes a file: the call site is the
+    /// same in both flavors.
+    #[cfg(not(feature = "js"))]
+    #[allow(clippy::unnecessary_wraps)]
+    fn declarations(_cx: &Cx, _config: Option<&Config>) -> Result<()> {
+        Ok(())
+    }
+
     /// Where to install: the named directory, else typst's own.
     fn directory(&self) -> Result<PathBuf> {
         match &self.path {
@@ -1199,6 +1238,7 @@ impl Run for PackagesArgs {
                 Some(path) => cx.ui.done(format_args!("removed {}", path.display())),
                 None => cx.ui.done("nothing installed"),
             }
+            Self::declarations(cx, None)?;
             return Ok(());
         }
         let config = Self::config(cx);
@@ -1235,6 +1275,7 @@ impl Run for PackagesArgs {
                 dir.display()
             ));
         }
+        Self::declarations(cx, Some(&config))?;
         Ok(())
     }
 }

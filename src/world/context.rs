@@ -86,6 +86,20 @@ impl BuildContext {
     /// composes the tracked key from it.
     pub(super) const DATE: &'static str = "date";
 
+    /// The context a build of `config`'s project would see right now.
+    ///
+    /// For the generators that run *outside* a build and still have to serve
+    /// what one would: the `@baudelaire/*` typst packages and the `baudelaire:*`
+    /// TypeScript declarations, both written by `baudelaire packages`.
+    pub fn of(config: &Config) -> Self {
+        Self::detect(
+            &crate::fs::canonical(&config.root),
+            OffsetDateTime::now_utc(),
+            config,
+            Mode::Build,
+        )
+    }
+
     /// Detect build metadata for the site rooted at `root`.
     pub(super) fn detect(root: &Path, now: OffsetDateTime, config: &Config, mode: Mode) -> Self {
         Self {

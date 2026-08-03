@@ -37,10 +37,8 @@ use typst::syntax::{
 use typst_kit::files::{FileLoader, FsRoot, SystemFiles};
 use typst_kit::packages::{FsPackages, SystemPackages};
 
-use time::OffsetDateTime;
-
+use super::BuildContext;
 use super::generated::Generated;
-use super::{BuildContext, Mode};
 use crate::codegen::{Let, Value};
 use crate::config::Config;
 use crate::config::dispatch::Keys;
@@ -479,8 +477,7 @@ impl Packages {
     /// The registry as this project would serve it.
     pub fn new(config: &Config) -> Self {
         let root = crate::fs::canonical(&config.root);
-        let context = BuildContext::detect(&root, OffsetDateTime::now_utc(), config, Mode::Build);
-        let tree = Value::from(&context);
+        let tree = Value::from(&BuildContext::of(config));
         Self {
             modules: Modules::new(&ModuleCx { context: &tree }, &root),
         }

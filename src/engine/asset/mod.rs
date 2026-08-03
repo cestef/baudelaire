@@ -48,6 +48,11 @@ use js::Js;
 #[cfg(feature = "js")]
 use module::ModuleCx;
 
+/// The TypeScript declarations for the `baudelaire:*` modules, written by
+/// `baudelaire packages` beside the typst ones.
+#[cfg(feature = "js")]
+pub use module::Declarations;
+
 /// The outcome of processing the asset tree: the request->served URL map (only
 /// entries renamed by fingerprinting appear), the count of files emitted
 /// (partials excluded), and their total byte size.
