@@ -10,6 +10,7 @@ use rolldown::plugin::Pluginable;
 use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinifyOptions};
 use rolldown_common::CodeSplittingMode;
 use rolldown_common::Output;
+use rolldown_common::TsConfig;
 
 use crate::config::Config;
 use crate::error::{AssetError, Result};
@@ -78,6 +79,9 @@ pub(super) struct Js {
     runtime: tokio::runtime::Runtime,
     cwd: PathBuf,
     minify: bool,
+    /// The site's pinned `tsconfig.json`, absolute. `None` leaves rolldown on
+    /// its own discovery, which walks up from each module as `tsc` does.
+    tsconfig: Option<TsConfig>,
     plugin: Arc<dyn Pluginable>,
 }
 
@@ -99,8 +103,27 @@ impl Js {
             runtime,
             cwd,
             minify: cx.config.assets.minify,
+            tsconfig: cx
+                .config
+                .assets
+                .tsconfig
+                .as_deref()
+                .map(|path| Self::tsconfig(&cx.config.root, path))
+                .transpose()?,
             plugin: Arc::new(Virtual::new(cx)),
         })
+    }
+
+    /// Pin the configured `tsconfig.json`, absolute. Resolved against the
+    /// project root rather than left as written: the bundler's `cwd` is the
+    /// asset directory, which is the one base a root-relative path is *not*
+    /// written against.
+    fn tsconfig(root: &Path, path: &Path) -> Result<TsConfig> {
+        let full = root.join(path);
+        match fs::canonicalize(&full) {
+            Ok(full) => Ok(TsConfig::Manual(full)),
+            Err(_) => Err(AssetError::tsconfig(path.display()).into()),
+        }
     }
 
     /// Bundle a single entry to its output code.
@@ -119,6 +142,7 @@ impl Js {
             // that did not exist in `dist`.
             code_splitting: Some(CodeSplittingMode::Bool(false)),
             minify: self.minify.then(|| RawMinifyOptions::Bool(true)),
+            tsconfig: self.tsconfig.clone(),
             ..BundlerOptions::default()
         };
         let mut bundler = BundlerBuilder::default()

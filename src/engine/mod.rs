@@ -231,6 +231,16 @@ const INERT: &[Inert] = &[
         effect: "JavaScript is copied verbatim, and only stylesheets are minified",
         help: "turn on `assets { bundle }` to minify JavaScript too",
     },
+    // The bundler is the only thing that reads a tsconfig: with `bundle` off,
+    // scripts are copied verbatim and the pinned file is never opened.
+    Inert {
+        setting: "assets { tsconfig }",
+        asked: |config| config.assets.tsconfig.is_some(),
+        needs: "assets { bundle }",
+        met: |config| config.assets.bundle,
+        effect: "TypeScript and JSX are copied verbatim, untransformed",
+        help: "turn on `assets { bundle }`, or drop the `tsconfig` path",
+    },
     // Term feeds sit beside term listing pages, and a taxonomy publishes none
     // unless it asks: `terms` alone wrote no files and warned about nothing.
     Inert {

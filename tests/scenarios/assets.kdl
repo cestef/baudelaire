@@ -139,3 +139,115 @@ scenario "a typescript entry is bundled to js with its types stripped" {
     absent "assets/_util.cts"
   }
 }
+
+scenario "a pinned tsconfig resolves paths and the jsx runtime" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+        tsconfig "tsconfig.json"
+      }
+      """#
+    "tsconfig.json" #"""
+      {
+        "compilerOptions": {
+          "jsx": "react-jsx",
+          "jsxImportSource": "@runtime",
+          "baseUrl": ".",
+          "paths": {
+            "@runtime/jsx-runtime": ["./assets/_runtime.ts"],
+            "@util": ["./assets/_util.ts"]
+          }
+        }
+      }
+      """#
+    "assets/_runtime.ts" #"""
+      export const jsx = (tag: string, props: Record<string, unknown>) => ({ tag, props });
+      """#
+    "assets/_util.ts" #"""
+      export const answer: number = 42;
+      """#
+    "assets/main.tsx" #"""
+      import { answer } from "@util";
+      export const view = (label: string) => <p class="tag">{label}</p>;
+      console.log(view(String(answer)));
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/main.js" {
+      // The `paths` alias resolved, so the partial is inlined...
+      contains "42"
+      // ...and JSX went through the runtime the config named, not react's.
+      missing "react/jsx-runtime"
+      missing "<p class"
+    }
+  }
+}
+
+scenario "a tsconfig path that is not there names the setting" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+        tsconfig "tooling/tsconfig.json"
+      }
+      """#
+    "assets/main.ts" #"""
+      console.log(1);
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::asset::tsconfig" }
+  }
+}
+
+scenario "a tsconfig without bundling is inert" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        tsconfig "tsconfig.json"
+      }
+      """#
+    "tsconfig.json" #"""
+      { "compilerOptions": { "jsx": "react-jsx" } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::config::inert"
+  }
+}

@@ -56,6 +56,20 @@ pub enum AssetError {
         source: std::io::Error,
     },
 
+    /// The site pinned a `tsconfig.json` that is not there. Caught before the
+    /// first entry is bundled, so the message names the setting rather than
+    /// arriving as a bundler failure under whichever script happened to be
+    /// reached first.
+    #[cfg(feature = "js")]
+    #[error("no TypeScript config at {}", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::asset::tsconfig),
+        help(
+            "`assets {{ tsconfig }}` is a path relative to the project root; drop it to let the bundler find one per script"
+        )
+    )]
+    Tsconfig { path: String },
+
     /// oxipng could not optimize the PNG.
     #[cfg(feature = "images")]
     #[error("failed to optimize image asset {}", Code(.path))]
@@ -83,6 +97,13 @@ impl AssetError {
         Self::Js {
             path: path.to_string(),
             detail: Text(detail.to_string()),
+        }
+    }
+
+    #[cfg(feature = "js")]
+    pub fn tsconfig(path: impl std::fmt::Display) -> Self {
+        Self::Tsconfig {
+            path: path.to_string(),
         }
     }
 

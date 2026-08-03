@@ -762,6 +762,15 @@ impl Section for AssetConfig {
             },
         ),
         (
+            "tsconfig",
+            Path,
+            "The `tsconfig.json` TypeScript and JSX are transformed against. Unset, one is discovered per script.",
+            |c, n, t| {
+                c.tsconfig = Some(n.string(t, 0)?.into());
+                Ok(())
+            },
+        ),
+        (
             "images",
             Nested(ImagesConfig::rows),
             "Image markup and build-time processing.",

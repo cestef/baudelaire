@@ -33,6 +33,11 @@ assets {
   [flag],
   [`#false`],
   [Puts a content hash in each output filename, and rewrites every reference to match.],
+
+  [`tsconfig`],
+  [path],
+  [discovered],
+  [The `tsconfig.json` TypeScript and JSX are transformed against. See #link(<typescript>)[TypeScript and JSX].],
 )
 
 Images sit in a nested `images` block and run on their own switches. See
@@ -86,9 +91,44 @@ exactly those files.
   code names an asset by its logical path.
 ]
 
+== TypeScript and JSX <typescript>
+
+Entry points may be `.ts`, `.mts`, `.cts`, `.tsx` or `.jsx` as well as `.js`,
+`.mjs` and `.cjs`. Types are stripped and JSX is transformed on the way through;
+the output is always served as `.js`, and both spellings resolve:
+
+```typ
+#html.elem("script", attrs: (type: "module", src: "/assets/main.js"))
+```
+
+Nothing is type-checked. The bundler transforms, as esbuild and Vite do; run
+`tsc --noEmit` in CI or a #link("hooks.typ")[`before` hook] for that.
+
+A `tsconfig.json` supplies the rest: `paths` aliases, `jsxImportSource`,
+`experimentalDecorators`. One is discovered per script, walking up from the file
+as `tsc` does. Pin one instead when the scripts sit far from it, or when more
+than one is in reach:
+
+```kdl
+assets {
+  bundle #true
+  tsconfig "tsconfig.json"
+}
+```
+
+The path is relative to the project root, and the build fails if nothing is
+there. JSX defaults to the automatic runtime, so `jsxImportSource` (or a plain
+`react` dependency) decides what the transformed code imports.
+
+#callout(kind: "note")[
+  A pinned `tsconfig.json` is not a watched source. Add it to
+  `serve { include "tsconfig.json" }` for the dev server to rebuild when it
+  changes.
+]
+
 == Partials
 
-A JavaScript file whose name starts with `_` is import-only. It is pulled into
+A script whose name starts with `_` is import-only. It is pulled into
 whatever imports it and never emitted on its own:
 
 ```text

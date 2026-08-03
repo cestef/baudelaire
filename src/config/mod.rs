@@ -1641,6 +1641,11 @@ pub struct AssetConfig {
     /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
     /// rewrite references, for far-future caching.
     pub fingerprint: bool,
+    /// The `tsconfig.json` the bundler transforms TypeScript and JSX against,
+    /// relative to the project root. `None` means the bundler discovers one per
+    /// module, walking up from the file as `tsc` does; a path pins the whole
+    /// site to one file, wherever the scripts live.
+    pub tsconfig: Option<PathBuf>,
     /// Image handling (lazy loading, extraction, optimization, responsive
     /// variants), for both pipeline assets and typst-embedded rasters.
     pub images: ImagesConfig,

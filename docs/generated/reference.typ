@@ -50,6 +50,7 @@
   (path: "assets.minify", key: "minify", shape: "flag", doc: "Minify CSS and JavaScript.", depth: 1, section: false),
   (path: "assets.bundle", key: "bundle", shape: "flag", doc: "Bundle JavaScript modules into one file per entry point.", depth: 1, section: false),
   (path: "assets.fingerprint", key: "fingerprint", shape: "flag", doc: "Put a content hash in each asset's filename, so it can be cached forever.", depth: 1, section: false),
+  (path: "assets.tsconfig", key: "tsconfig", shape: "path", doc: "The `tsconfig.json` TypeScript and JSX are transformed against. Unset, one is discovered per script.", depth: 1, section: false),
   (path: "assets.images", key: "images", shape: "block", doc: "Image markup and build-time processing.", depth: 1, section: true),
   (path: "assets.images.lazy", key: "lazy", shape: "flag", doc: "Mark images `loading=\"lazy\"`.", depth: 2, section: false),
   (path: "assets.images.extract", key: "extract", shape: "flag", doc: "Write images typst embedded in the page out as their own files.", depth: 2, section: false),

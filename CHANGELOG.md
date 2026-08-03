@@ -23,6 +23,21 @@ chores are visible in the git history and change nothing for a site.
 
   Nothing is type-checked: the bundler transforms, as esbuild and Vite do.
 
+- **assets**: `assets { tsconfig }` pins the `tsconfig.json` TypeScript and JSX
+  are transformed against, for `paths` aliases, `jsxImportSource` and the rest.
+
+  ```kdl
+  assets {
+    bundle #true
+    tsconfig "tsconfig.json"
+  }
+  ```
+
+  The path is relative to the project root, and a path with nothing at it fails
+  the build (`baudelaire::asset::tsconfig`). Unset, one is discovered per script
+  by walking up from the file, as `tsc` does. A pinned file is not a watched
+  source: name it in `serve { include }` for the dev server to see edits to it.
+
 - **content**: a collection's `schema` types nest. A list names what it holds
   (`list<int>`, `list<list<int>>`), a `dict` field declares its own fields in a
   block, and the two compose as `list<dict>`:
