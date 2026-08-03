@@ -385,6 +385,16 @@ under `.baudelaire/generated/packages/`, and the
 `.baudelaire/generated/baudelaire.d.ts`. `init` runs it for you; run it again
 after upgrading baudelaire.
 
+The run closes on the settings it still needs, ready to paste. `-v` lists every
+module it wrote.
+
+```
+◆ editor setup
+➜ typst     --package-path /abs/path/.baudelaire/generated/packages
+  ↳ or TYPST_PACKAGE_PATH; tinymist takes it in typstExtraArgs
+➜ tsconfig  add .baudelaire/generated/baudelaire.d.ts to the include list
+```
+
 #table(
   columns: 2,
   align: (left, left),
@@ -397,9 +407,8 @@ after upgrading baudelaire.
 Both families land in the project by default, because three of the four typst
 modules describe *this* site: `site` from its config, `sections` and `pages`
 from its pages. One shared copy of those shows one project's data to every other
-project's editor. The price is one setting, which the run prints:
-`--package-path` for the typst CLI (or `TYPST_PACKAGE_PATH`), which tinymist
-takes in `typstExtraArgs`.
+project's editor. The price is that one typst setting; `--global` is the trade
+that buys it back.
 
 A project is optional: outside one, `sections` and `pages` are written empty. A
 build never reads any of it, so a stale copy can't change a page, and every
