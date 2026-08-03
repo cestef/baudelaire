@@ -84,6 +84,13 @@ chores are visible in the git history and change nothing for a site.
   stops after the second attempt and warns
   (`baudelaire::backlinks::unstable`).
 
+### Performance
+
+- **build**: each page's compile input (its wrapper text and the fingerprint
+  that validates it) is prepared across the pool rather than one page at a time
+  ahead of the compiles. Same site: a rebuild that reused every page went from
+  265 ms to 150 ms with the change above.
+
 ### Upgrading
 
 - The build cache records two more things per page: the links that page's own

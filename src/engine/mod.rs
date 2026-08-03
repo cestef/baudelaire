@@ -1334,10 +1334,20 @@ impl<'a> Pass<'a> {
     /// be built is stale, so its error is reported by the compile pass with
     /// every other page's.
     fn split(&self, cache: &mut Cache) -> (Vec<Reused<'a>>, Vec<(&'a Page, Result<Prepared>)>) {
+        // Built across the pool first, because a page's input is pure and
+        // independent of every other: it canonicalizes the page's path and
+        // formats its wrapper text, which on a large site is the whole of a
+        // serial prologue nothing else was waiting on. The probe below stays
+        // ordered, since it mutates the cache and stages what it reuses.
+        let prepared: Vec<(&'a Page, Result<Prepared>)> = self
+            .pages
+            .par_iter()
+            .map(|page| (page, self.prepare.input(page)))
+            .collect();
         let mut cached = Vec::new();
         let mut stale = Vec::new();
-        for page in self.pages {
-            match self.prepare.input(page) {
+        for (page, input) in prepared {
+            match input {
                 Ok((id, text, fingerprint)) => {
                     // The existence check comes first so a page that has to be
                     // recompiled anyway leaves no reuse bookkeeping behind.
