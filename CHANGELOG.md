@@ -90,11 +90,15 @@ chores are visible in the git history and change nothing for a site.
   baudelaire mirror --uninstall             # take it all back off
   ```
 
-  The typst packages go to typst's own package directory unless `--path` names
-  another (pair it with `tinymist.packagePath`); the declarations always go into
-  the project, since TypeScript resolves them through `tsconfig.json`.
-  `--uninstall` takes back baudelaire's own namespace directory and that one
-  file, and nothing beside them.
+  Both land in the project, under `.baudelaire/generated/`: three of the four
+  typst modules describe *this* site (`site` from its config, `sections` and
+  `pages` from its pages), so one machine-global copy would show one project's
+  data to every other project's editor. Point typst at them once, with
+  `--package-path` / `TYPST_PACKAGE_PATH` (tinymist takes it in
+  `typstExtraArgs`); the run prints the line. `--global` writes typst's own
+  package directory instead, where they resolve with nothing configured, and
+  `--path <dir>` names a third place. `--uninstall` takes back exactly what a
+  run wrote.
 
   A build never reads any of it, so a stale copy cannot change a page: the
   compiler answers `@baudelaire/*` from memory before typst's package

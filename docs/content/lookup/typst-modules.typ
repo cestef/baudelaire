@@ -45,16 +45,30 @@ nothing to resolve and marks the import unknown. Write them out once:
 baudelaire mirror
 ```
 
-That writes all four into typst's own package directory, where tinymist and
-anything else built on typst finds them, and the
-#link("js-modules.typ")[`baudelaire:*` declarations] into the project.
-`baudelaire init` does it for you.
+That writes all four into `.baudelaire/generated/packages/`, alongside the
+#link("js-modules.typ")[`baudelaire:*` declarations]. `baudelaire init` does it
+for you.
+
+They go in the project rather than in typst's own package directory because
+three of them describe *this* site, and one machine-global copy would show one
+project's title and pages to every other project's editor. So point typst at
+the directory once:
+
+```sh
+export TYPST_PACKAGE_PATH="$PWD/.baudelaire/generated/packages"
+```
+
+```json
+// tinymist
+"tinymist.typstExtraArgs": ["--package-path", "/abs/path/.baudelaire/generated/packages"]
+```
 
 #table(
   columns: 2,
   align: (left, left),
   table.header([Flag], [Does]),
-  [`--path DIR`], [Install somewhere else. Point your editor at it with `tinymist.packagePath`.],
+  [`--global`], [Write into typst's own package directory instead: nothing to configure, one copy shared by every project.],
+  [`--path DIR`], [Write somewhere else again.],
 )
 
 A build never reads what this writes: the compiler answers `@baudelaire/*` from
@@ -69,8 +83,8 @@ stale, edited or missing can mislead an editor and never change a page.
 
 `baudelaire mirror --uninstall` takes them back off, removing baudelaire's own
 namespace directory and nothing else in there, and the declarations with it.
-`clean` does not touch the packages: it sweeps project state, and those are
-machine-global.
+`clean` sweeps them too, since they are project state now; a `--global` install
+is not project state, so only `--uninstall --global` takes that one off.
 
 == html
 

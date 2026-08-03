@@ -394,8 +394,12 @@ pub struct ReferenceArgs {
 #[derive(Args, Debug, Clone)]
 #[command(after_help = MirrorArgs::help())]
 pub struct MirrorArgs {
-    /// Write the typst packages here instead of typst's own package directory.
-    #[arg(long, value_name = "DIR", help_heading = group::TARGETS)]
+    /// Write the typst packages into typst's own package directory, shared with
+    /// every other project, instead of into this one.
+    #[arg(long, help_heading = group::TARGETS)]
+    pub global: bool,
+    /// Write the typst packages here instead, wherever that is.
+    #[arg(long, value_name = "DIR", conflicts_with = "global", help_heading = group::TARGETS)]
     pub path: Option<PathBuf>,
     /// Remove what a previous run wrote, instead of writing.
     #[arg(long, help_heading = group::TARGETS)]
@@ -1127,7 +1131,9 @@ impl MirrorArgs {
                  a build, so an editor has nothing on disk to resolve and marks every\n\
                  import unknown. This writes both out where an editor finds them: the\n\
                  typst modules as ordinary packages, the JavaScript ones as one\n\
-                 TypeScript declaration file in the project.\n\
+                 TypeScript declaration file. Both land in the project, since three\n\
+                 of the four typst modules describe *this* site; `--global` shares\n\
+                 one copy of them between every project instead.\n\
                  \n\
                  A build never reads what this writes, so a stale copy cannot change a\n\
                  page. Every build refreshes the declarations; re-run this after\n\
@@ -1169,7 +1175,7 @@ impl MirrorArgs {
 impl Run for MirrorArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = self.config(cx);
-        let mirror = Mirror::new(&config, self.path.as_deref());
+        let mirror = Mirror::new(&config, self.path.as_deref(), self.global);
         if self.uninstall {
             // The inverse of mirroring belongs to the command that mirrors, not
             // to `clean`: an install is machine-global state that no config

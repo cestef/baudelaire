@@ -128,13 +128,20 @@ pub struct Mirror<'a> {
     /// The project whose data the modules are generated from, and whose `root`
     /// a project-local target writes under.
     config: &'a Config,
-    /// `--path`: where a machine-global target writes instead of its default.
+    /// `--path`: where the packages go instead of the default.
     dir: Option<&'a Path>,
+    /// `--global`: put the packages in typst's own package directory, where
+    /// they resolve with nothing configured and every project shares one copy.
+    global: bool,
 }
 
 impl<'a> Mirror<'a> {
-    pub fn new(config: &'a Config, dir: Option<&'a Path>) -> Self {
-        Self { config, dir }
+    pub fn new(config: &'a Config, dir: Option<&'a Path>, global: bool) -> Self {
+        Self {
+            config,
+            dir,
+            global,
+        }
     }
 
     /// Write every family, reporting what landed where.
@@ -189,7 +196,7 @@ mod tests {
 
     /// A mirror against a throwaway project and package directory.
     fn mirror<'a>(project: &'a Config, dir: &'a Path) -> Mirror<'a> {
-        Mirror::new(project, Some(dir))
+        Mirror::new(project, Some(dir), false)
     }
 
     fn project(root: &Path) -> Config {
@@ -265,6 +272,28 @@ mod tests {
         // A second run is not an error: there is simply nothing there.
         let again = mirror(&config, dir.path()).uninstall().expect("uninstall");
         assert!(again.iter().all(|family| family.path.is_none()));
+    }
+
+    /// The reason the packages default into the project: three of the four
+    /// typst modules describe *this* site, so one machine-global copy would
+    /// show one project's pages to every other project's editor.
+    #[test]
+    fn two_projects_do_not_share_a_mirror() {
+        let one = tempfile::tempdir().unwrap();
+        let two = tempfile::tempdir().unwrap();
+        let (first, second) = (project(one.path()), project(two.path()));
+
+        for config in [&first, &second] {
+            Mirror::new(config, None, false).install().expect("install");
+        }
+
+        for config in [&first, &second] {
+            let served = config
+                .root
+                .join(Packages::project())
+                .join("baudelaire/site/0.1.0/lib.typ");
+            assert!(served.exists(), "{} has no mirror", config.root.display());
+        }
     }
 
     /// A project that has never been built still mirrors every module, with the

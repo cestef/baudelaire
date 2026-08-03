@@ -67,12 +67,24 @@ pub struct Packages {
 }
 
 impl Packages {
-    /// The directory typst resolves a non-`preview` package from, which is what
-    /// every editor built on typst reads. Asked of typst-kit rather than spelled
-    /// out here, so a mirror lands wherever typst itself would look.
+    /// Where the packages go inside a project, relative to its root: beside the
+    /// generated tables and the TypeScript declarations, under
+    /// [`Config::SCRATCH`].
+    ///
+    /// The default, because three of the four modules are derived from *this*
+    /// project (`site` from its config, `sections` and `pages` from its pages).
+    /// One machine-global copy of those is one project's data shown to every
+    /// other project's editor.
+    pub fn project() -> PathBuf {
+        Config::scratch("generated").join("packages")
+    }
+
+    /// The directory typst resolves a non-`preview` package from with nothing
+    /// configured, which is what `--global` asks for. Asked of typst-kit rather
+    /// than spelled out here, so it lands wherever typst itself would look.
     ///
     /// `None` when the platform has no data directory: there is then nowhere
-    /// zero-config to install to, and the caller has to name one.
+    /// zero-config to write to, and the caller has to name one.
     pub fn directory() -> Option<PathBuf> {
         FsPackages::system_data().map(|packages| packages.path().to_path_buf())
     }

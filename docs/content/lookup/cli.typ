@@ -373,24 +373,33 @@ printed from the binary you have.
 == mirror
 
 ```sh
-baudelaire mirror                         # both families, default locations
-baudelaire mirror --path .typst-packages  # typst packages somewhere else
-baudelaire mirror --uninstall             # take it all back off
+baudelaire mirror              # into .baudelaire/generated/
+baudelaire mirror --global     # typst packages into typst's own directory
+baudelaire mirror --uninstall  # take it all back off
 ```
 
 Writes every generated module where an editor resolves it: the
-#link("typst-modules.typ")[`@baudelaire/*` modules] as ordinary typst packages,
-and the #link("js-modules.typ")[`baudelaire:*` modules] as one TypeScript
-declaration file in the project. `init` runs it for you; run it again after
-upgrading baudelaire.
+#link("typst-modules.typ")[`@baudelaire/*` modules] as ordinary typst packages
+under `.baudelaire/generated/packages/`, and the
+#link("js-modules.typ")[`baudelaire:*` modules] as
+`.baudelaire/generated/baudelaire.d.ts`. `init` runs it for you; run it again
+after upgrading baudelaire.
 
 #table(
   columns: 2,
   align: (left, left),
   table.header([Flag], [Does]),
-  [`--path DIR`], [Write the typst packages here (or remove them from here) instead. Set `tinymist.packagePath` to the same directory.],
+  [`--global`], [Put the typst packages in typst's own package directory, where they resolve with nothing configured and every project shares one copy.],
+  [`--path DIR`], [Put the typst packages here (or remove them from here) instead.],
   [`--uninstall`], [Remove what a run wrote, and nothing else in those locations.],
 )
+
+Both families land in the project by default, because three of the four typst
+modules describe *this* site: `site` from its config, `sections` and `pages`
+from its pages. One shared copy of those shows one project's data to every other
+project's editor. The price is one setting, which the run prints:
+`--package-path` for the typst CLI (or `TYPST_PACKAGE_PATH`), which tinymist
+takes in `typstExtraArgs`.
 
 A project is optional: outside one, `sections` and `pages` are written empty. A
 build never reads any of it, so a stale copy can't change a page, and every
@@ -398,5 +407,4 @@ build rewrites the declarations.
 
 Uninstalling removes baudelaire's own namespace directory and its declaration
 file only, so `@local` packages sitting beside them are untouched. A run made
-with `--path` comes off the same way: `baudelaire mirror --uninstall --path
-<dir>`.
+with `--global` or `--path` comes off the same way, with the same flag.

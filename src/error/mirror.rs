@@ -10,7 +10,11 @@ pub enum MirrorError {
     #[error("no typst package directory on this platform")]
     #[diagnostic(
         code(baudelaire::mirror::directory),
-        help("name one yourself: {}", Code(&"baudelaire mirror --path <dir>"))
+        help(
+            "drop {} to write into the project instead, or name a directory with {}",
+            Code(&"--global"),
+            Code(&"--path <dir>")
+        )
     )]
     NoDirectory,
 }

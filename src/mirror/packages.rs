@@ -36,9 +36,12 @@ impl Target for Typst {
                 modules: List(&unbuilt).to_string(),
             }));
         }
-        if mirror.dir.is_some() {
+        // Anywhere but typst's own directory has to be pointed at, which is the
+        // price of a per-project copy: typst reads one path, and only that one
+        // needs no telling.
+        if !mirror.global {
             notes.push(Box::new(MirrorElsewhere {
-                dir: Text(base.display().to_string()),
+                dir: Text(crate::fs::canonical(&base).display().to_string()),
             }));
         }
         Ok(Mirrored {
@@ -58,11 +61,13 @@ impl Target for Typst {
 }
 
 impl Typst {
-    /// Where the packages go: the named directory, else typst's own.
+    /// Where the packages go: the named directory, else typst's own under
+    /// `--global`, else this project's own.
     fn directory(mirror: &Mirror) -> Result<PathBuf> {
-        match mirror.dir {
-            Some(dir) => Ok(dir.to_path_buf()),
-            None => Packages::directory().ok_or_else(|| MirrorError::NoDirectory.into()),
+        match (mirror.dir, mirror.global) {
+            (Some(dir), _) => Ok(dir.to_path_buf()),
+            (None, true) => Packages::directory().ok_or_else(|| MirrorError::NoDirectory.into()),
+            (None, false) => Ok(mirror.config.root.join(Packages::project())),
         }
     }
 }

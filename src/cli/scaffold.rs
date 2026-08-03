@@ -158,7 +158,7 @@ fn packages(ui: &Ui, target: &Path) {
         root: target.to_path_buf(),
         ..Config::default()
     };
-    match Mirror::new(&config, None).install() {
+    match Mirror::new(&config, None, false).install() {
         Ok(written) => {
             for family in written {
                 ui.detail(format_args!("{family}, for editor tooling"));

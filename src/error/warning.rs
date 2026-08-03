@@ -108,11 +108,14 @@ pub struct MirrorUnbuilt {
 /// Packages were mirrored somewhere typst does not look by itself, so an editor
 /// has to be told where they went.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
-#[error("mirrored outside typst's own package directory")]
+#[error("the packages are where typst does not look by itself")]
 #[diagnostic(
     code(baudelaire::mirror::elsewhere),
     severity(advice),
-    help("point your editor at it: `tinymist.packagePath = {}`", Text(.dir))
+    help(
+        "point typst at them: `--package-path {}` (or `TYPST_PACKAGE_PATH`; tinymist takes it in `typstExtraArgs`), or run `baudelaire mirror --global`",
+        Text(.dir)
+    )
 )]
 pub struct MirrorElsewhere {
     pub dir: Text<String>,
