@@ -35,9 +35,12 @@ impl Transform for Links {
         // A generated listing links every page it lists, and a term page every
         // page carrying the term, neither of which the author wrote: counted as
         // edges they would drown out the ones that were.
+        // ...and only while something reads them: with `links { backlinks }` off
+        // nothing inverts the graph, so a page pays neither the check below nor
+        // a manifest field per build.
         let content = match page.data {
             Data::Generated(_) => None,
-            _ => Some(*content),
+            _ => config.links.backlinks.then_some(*content),
         };
         doc.walk(|element| {
             let span = element.span;

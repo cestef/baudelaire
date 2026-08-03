@@ -23,7 +23,7 @@ pub use asset::{AssetDeps, AssetMap};
 pub use emitted::{Emission, Emitted};
 pub use fragment::Fragments;
 pub use inline::Inline;
-pub use links::{LinkDeps, LinkMap, Outbound};
+pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
 pub use srcset::{SrcSetDeps, SrcSets};

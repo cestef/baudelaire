@@ -24,6 +24,7 @@ use crate::config::Config;
 use crate::content::{Data, Iso, Localized, Page, Section, Sibling, Siblings, Strings};
 use crate::error::Result;
 use crate::graph::Hash;
+use crate::render::Backlinks;
 use crate::theme::Theme;
 use crate::world::Project;
 use crate::world::module;
@@ -54,6 +55,14 @@ pub(in crate::engine) struct Prepare<'a> {
     /// page's wrapper names it, and canonicalizing per page would pay for the
     /// same answer once per page.
     templates: PathBuf,
+    /// The backlinks each page is compiled against.
+    ///
+    /// A *prediction* until the site has rendered: it starts as what the last
+    /// build recorded (or nothing, on a cold one), and the repair pass replaces
+    /// it with the graph this build actually produced before recompiling the
+    /// pages that disagree. [`Backlinks::Off`] until a build sets one, which is
+    /// also what a site with the feature off compiles against.
+    backlinks: Backlinks,
 }
 
 impl<'a> Prepare<'a> {
@@ -70,6 +79,7 @@ impl<'a> Prepare<'a> {
             pages,
             trees: BTreeMap::new(),
             templates: config.paths.under(project.root()).templates,
+            backlinks: Backlinks::Off,
         };
         // Built once from the whole page set and shared by every consumer, so
         // the file templates import, the JS module, and any future reader can
@@ -80,6 +90,24 @@ impl<'a> Prepare<'a> {
             .map(|lang| ((*lang).to_owned(), base.sections(lang)))
             .collect();
         Self { trees, ..base }
+    }
+
+    /// Compile the next pages against `backlinks`: what the last build recorded
+    /// before pass one, what this build produced before a repair.
+    pub(in crate::engine) fn assume(&mut self, backlinks: Backlinks) {
+        self.backlinks = backlinks;
+    }
+
+    /// The digest of the backlinks `page` was compiled with, which the repair
+    /// pass checks the finished site's graph against.
+    ///
+    /// `None` where the page never saw them: the feature is off, or the page has
+    /// no template and so no wrapper to carry the value. Recording a digest for
+    /// one of those would claim the compiled text holds something it does not,
+    /// and recompile the page to byte-identical output whenever the graph moved.
+    pub(in crate::engine) fn digest(&self, page: &Page) -> Option<Hash> {
+        page.template.as_ref()?;
+        self.backlinks.digest(page)
     }
 
     /// The site config this pass renders against. Read by the bundle, which
@@ -126,10 +154,20 @@ impl<'a> Prepare<'a> {
             Data::Generated(_) => FileId::new(rooted.clone()),
             _ => Self::wrapper(&rooted),
         };
-        let text = self.bind(page, &rooted, &self.template_root(template), template);
-        // hash the exact text typst compiles; the parse into a `Source` is
-        // deferred to the compile, run only for stale pages.
-        let fingerprint = Hash::of_bytes(text.as_bytes());
+        let dir = self.dir(template);
+        // The page's identity is its wrapper as it would read with *no*
+        // backlinks, and the text it compiles is that same wrapper carrying the
+        // ones this build assumes. The two differ on purpose: at cache-split
+        // time the site's link graph does not exist yet, so a fingerprint over
+        // the real value would check a page against something the build has not
+        // computed. What it was actually compiled with is recorded separately
+        // (`Outputs::backlinks`) and verified once the graph is known.
+        let bare = self.bound(page, &rooted, &dir, template, &Backlinks::Off);
+        let fingerprint = Hash::of_bytes(bare.as_bytes());
+        let text = match self.backlinks.of(page).is_empty() {
+            true => bare,
+            false => self.bound(page, &rooted, &dir, template, &self.backlinks),
+        };
         Ok((id, text, fingerprint))
     }
 
@@ -140,6 +178,12 @@ impl<'a> Prepare<'a> {
     /// template for each sidecar that wraps the page (the PDF). They must hand
     /// the template the same `page` dict, or `page.strings` means one thing on
     /// screen and another on paper.
+    ///
+    /// Backlinks are the one exception, and are always empty here: a sidecar is
+    /// a paged compile of the page, and a card or a printed PDF has nothing to
+    /// click. Redrawing every sidecar whenever a page gained an inbound link
+    /// would also make the repair pass cost what the whole build does.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn bind(
         &self,
         page: &Page,
@@ -147,12 +191,26 @@ impl<'a> Prepare<'a> {
         dir: &str,
         file: &str,
     ) -> String {
+        self.bound(page, rooted, dir, file, &Backlinks::Off)
+    }
+
+    /// [`Prepare::bind`] against a given set of backlinks: the one place the
+    /// wrapper text is assembled, so the fingerprinted spelling and the compiled
+    /// one can differ in that value alone and in nothing else.
+    fn bound(
+        &self,
+        page: &Page,
+        rooted: &RootedPath,
+        dir: &str,
+        file: &str,
+        backlinks: &Backlinks,
+    ) -> String {
         let vpath = Self::rooted_str(rooted);
         let body = match &page.data {
             Data::Generated(_) => Body::Inline(&page.body),
             _ => Body::Include,
         };
-        self.with(page, |context| {
+        self.with(page, backlinks, |context| {
             Layout::new(dir, file, &vpath, context, body).to_string()
         })
     }
@@ -162,7 +220,7 @@ impl<'a> Prepare<'a> {
     /// there is no wrapper module per page to hold the binding.
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn dict(&self, page: &Page, frontmatter: &str) -> String {
-        self.with(page, |context| context.dict(&frontmatter))
+        self.with(page, &Backlinks::Off, |context| context.dict(&frontmatter))
     }
 
     /// Build this page's [`Context`] and hand it to `f`.
@@ -170,7 +228,7 @@ impl<'a> Prepare<'a> {
     /// The pieces borrow from locals, so they cannot be returned; taking the
     /// consumer instead keeps every caller reading one construction rather than
     /// each assembling its own and drifting.
-    fn with<T>(&self, page: &Page, f: impl FnOnce(Context<'_>) -> T) -> T {
+    fn with<T>(&self, page: &Page, backlinks: &Backlinks, f: impl FnOnce(Context<'_>) -> T) -> T {
         let taxonomies = Typst(&page.taxonomies()).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
@@ -181,6 +239,10 @@ impl<'a> Prepare<'a> {
         // Derived from this page's own body, so it names nothing outside the
         // page and cannot widen the fingerprint the way a site-wide value would.
         let reading = Typst(&Self::reading(&page.body)).to_string();
+        // Names only the pages that link *here*, the same line `nav` sits on: a
+        // page's neighbours, never the site. What keeps it out of the page's
+        // fingerprint is in [`Prepare::input`], not here.
+        let backlinks = Typst(&backlinks.value(page)).to_string();
         let date = Typst(&self.date(page)).to_string();
         let bind = match &page.data {
             Data::Export => Bind::Import,
@@ -195,6 +257,7 @@ impl<'a> Prepare<'a> {
             translations: &translations,
             strings: &strings,
             reading: &reading,
+            backlinks: &backlinks,
             date: &date,
         })
     }
@@ -220,7 +283,7 @@ impl<'a> Prepare<'a> {
     /// config's, and resolved once for the build rather than per page. A
     /// template the project does not have falls back to the theme's package,
     /// which the compiler resolves by spec rather than by path.
-    pub(in crate::engine) fn template_root(&self, template: &str) -> String {
+    pub(in crate::engine) fn dir(&self, template: &str) -> String {
         match self.theme {
             Some(theme)
                 if !self.config.paths.templates.join(template).is_file()

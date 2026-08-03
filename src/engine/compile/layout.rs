@@ -60,6 +60,14 @@ pub(in crate::engine) struct Context<'a> {
     /// `(words: 1200, minutes: 6)`, exposed as `page.reading`. Derived from
     /// this page's own source, so it names nothing outside the page.
     pub reading: &'a str,
+    /// The pages whose content links to this one, as an array literal:
+    /// `((url: "..", title: "..", lang: "en"), ..)`, exposed as
+    /// `page.backlinks`. Empty unless `links { backlinks }` is on.
+    ///
+    /// Wrapper text like the rest, but the one entry that is *not* part of the
+    /// page's cache fingerprint: the graph it comes from does not exist until
+    /// every page has rendered. See [`crate::engine::compile::prepare`].
+    pub backlinks: &'a str,
     /// The page's date in both forms as a dict literal,
     /// `(iso: "2026-07-30", display: "30 juillet 2026")`, or `none` when the
     /// page carries no date. Exposed as `page.date`: typst's own
@@ -85,10 +93,11 @@ impl Context<'_> {
             translations,
             strings,
             reading,
+            backlinks,
             date,
         } = self;
         format!(
-            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, date: {date})",
+            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date})",
             Str(lang)
         )
     }
@@ -190,6 +199,7 @@ mod tests {
                 translations: "()",
                 strings: "(:)",
                 reading: "(words: 0, minutes: 0)",
+                backlinks: "()",
                 date: "none",
             },
             Body::Include,
@@ -199,7 +209,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), date: none), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -218,6 +228,7 @@ mod tests {
                 translations: "()",
                 strings: "(:)",
                 reading: "(words: 0, minutes: 0)",
+                backlinks: "()",
                 date: "none",
             },
             Body::Inline("listing body"),
@@ -226,7 +237,7 @@ mod tests {
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), date: none), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)\n\
              listing body"
         );
     }
@@ -245,6 +256,7 @@ mod tests {
                 translations: "()",
                 strings: "(:)",
                 reading: "(words: 0, minutes: 0)",
+                backlinks: "()",
                 date: "none",
             },
             Body::Include,
@@ -269,6 +281,7 @@ mod tests {
                 translations: "()",
                 strings: "(:)",
                 reading: "(words: 0, minutes: 0)",
+                backlinks: "()",
                 date: "none",
             },
             Body::Inline("b"),
@@ -277,7 +290,7 @@ mod tests {
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), date: none), __body)"
+                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)"
             ),
             "{out}"
         );

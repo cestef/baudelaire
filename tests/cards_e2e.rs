@@ -178,6 +178,56 @@ fn a_deleted_card_is_redrawn_even_though_the_page_is_otherwise_a_hit() {
     assert_eq!(before, after);
 }
 
+/// A page repaired for its backlinks keeps its card's template as a dependency.
+///
+/// A repair compiles the page's markup again and draws no sidecar, so the deps
+/// it records name only the HTML compile's files. Recorded as-is they replaced
+/// the entry the full compile wrote, and the card template stopped being an
+/// input to the page: editing it changed no hash the cache checks, the page
+/// stayed a hit, and `dist` kept serving the image the old template drew.
+#[test]
+fn a_repaired_page_keeps_the_card_template_as_a_dependency() {
+    let site = site(r#"cards { template "card.typ"; width 800; height 418 }"#);
+    site.write(
+        "config.kdl",
+        &format!(
+            "{}
+links {{ backlinks #true }}
+",
+            site.read("config.kdl").trim_end()
+        ),
+    );
+    // b is linked from a, so a cold build compiles it against an empty
+    // prediction and the repair pass compiles it a second time.
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"b.typ\")[to b]",
+    );
+    site.write(
+        "content/posts/b.typ",
+        "#let frontmatter = (title: \"B\",)\nbeta",
+    );
+    site.stats();
+    let before = std::fs::read(site.path("public/cards/posts/b.png")).expect("card");
+
+    site.write(
+        "templates/card.typ",
+        "#let card(data) = rect(width: 100%, height: 100%, fill: rgb(\"#654321\"))[\n\
+         #text(size: 48pt)[#data.title]\n]\n",
+    );
+    let stats = site.stats();
+
+    assert_eq!(
+        stats.cached, 0,
+        "the card template every page draws through changed, so none may be reused"
+    );
+    let after = std::fs::read(site.path("public/cards/posts/b.png")).expect("card");
+    assert_ne!(
+        before, after,
+        "the repaired page's card should have been redrawn"
+    );
+}
+
 /// Off unless asked for: rendering a page per card is the most expensive thing
 /// a build can do per page.
 #[test]

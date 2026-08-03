@@ -29,8 +29,8 @@ use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
-    AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
-    Weight,
+    AssetDeps, Backlinks, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps,
+    SrcSetDeps, Weight,
 };
 use crate::ui::Ui;
 
@@ -136,6 +136,17 @@ pub struct Outputs {
     /// anything the moment it is served from cache.
     #[serde(default, skip_serializing_if = "Outbound::is_empty")]
     pub outbound: Outbound,
+    /// The digest of the backlinks this page was compiled with, `None` when it
+    /// was compiled with none at all (`links { backlinks }` off).
+    ///
+    /// The page's *second-stage* input, and the only one not folded into the
+    /// fingerprint the cache splits on: the graph it comes from does not exist
+    /// until every page has rendered, so a page is compiled against a predicted
+    /// value and this is what the repair pass checks the real one against. A
+    /// page whose digest still matches is left alone, cached or freshly
+    /// compiled alike.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlinks: Option<Hash>,
     /// The page's head and body markup, captured only while the single-file
     /// export is on. Stored because it cannot be recovered from the rendered
     /// page afterwards without parsing it, and a cache-served page has to be
@@ -349,6 +360,25 @@ impl Cache {
         self.roots.iter().map(Root::from).collect()
     }
 
+    /// The backlinks this build starts from: the link graph the last build
+    /// recorded, inverted over the pages this one plans to write.
+    ///
+    /// A prediction, never trusted: what a page is actually compiled with is
+    /// checked against the graph this build produces, and the pages that
+    /// disagree are compiled again (see `Engine::backlinks`). Being one build
+    /// behind is the point, since an edit that changes no links leaves it exact,
+    /// which is nearly every edit.
+    ///
+    /// Pages the manifest has never seen contribute nothing, and pages it
+    /// remembers that no longer exist are dropped with the page set they are
+    /// keyed against.
+    pub fn predicted(&self, pages: &[Page]) -> Backlinks {
+        Backlinks::new(pages.iter().filter_map(|page| {
+            let entry = self.prev.pages.get(&self.key(page))?;
+            Some((page, &entry.outputs.outbound))
+        }))
+    }
+
     /// Cached HTML for `page` if still valid: its content fingerprint, every
     /// dependency, and the manifest fingerprint are all unchanged, and its blob
     /// is still present in the object store. A hit carries the entry into the
@@ -504,6 +534,34 @@ impl Cache {
                 outputs: outputs.clone(),
             },
         );
+    }
+
+    /// Record a page compiled again for its backlinks alone, keeping the
+    /// dependencies its *first* compile recorded.
+    ///
+    /// A repair draws no sidecars, so nothing it saw includes the card or PDF
+    /// template that compile read, and those are inputs to the page's output all
+    /// the same (the compile folds them in for exactly that reason).
+    /// Recording the repair the ordinary way narrowed the entry to the HTML
+    /// compile's own files: editing a card helper then changed no hash this
+    /// cache checks, the page stayed a hit, and `dist` kept serving the image
+    /// the old helper drew. The union is what the page depends on, since a
+    /// repair reads a subset of what the full compile did.
+    pub fn relink(&mut self, compiled: Recorded<'_>) {
+        let key = self.key(compiled.page);
+        let inherited = self
+            .next
+            .pages
+            .get(&key)
+            .map(|entry| entry.deps.clone())
+            .unwrap_or_default();
+        self.record(compiled);
+        if let Some(entry) = self.next.pages.get_mut(&key) {
+            // The fresh hashes win where both saw a file: same build, same
+            // digests, but the repair's are the ones it actually read.
+            let fresh = std::mem::replace(&mut entry.deps, inherited);
+            entry.deps.extend(fresh);
+        }
     }
 
     /// Persist the manifest and every referenced HTML blob, then drop objects no

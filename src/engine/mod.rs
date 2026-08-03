@@ -36,7 +36,7 @@ use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
-use crate::error::warning::{FeatureMissing, SettingInert};
+use crate::error::warning::{BacklinksUnstable, FeatureMissing, SettingInert};
 use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
 // The trait only: this module has a `Generated` of its own, naming the
@@ -46,7 +46,8 @@ use crate::graph::{
     Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
 };
 use crate::render::{
-    AssetDeps, AssetMap, Emitted, Fragments, LinkDeps, Renderer, SrcSetDeps, SrcSets,
+    AssetDeps, AssetMap, Backlinks, Emitted, Fragments, LinkDeps, Outbound, Renderer, SrcSetDeps,
+    SrcSets,
 };
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
@@ -392,6 +393,12 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// How many times [`Engine::backlinks`] may recompile before it stops and
+    /// warns. Two: the first repair settles every site whose content does not
+    /// branch on its own backlinks, and the second exists to notice that it did
+    /// not rather than to keep trying.
+    const REPAIRS: usize = 2;
+
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
         // Ahead of everything, including the gates: this is the one check whose
         // failure destroys the project rather than the build. Checked here and
@@ -481,7 +488,7 @@ impl Engine {
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let mut emitted = processed.emitted;
-        let pass = Pass::new(
+        let mut pass = Pass::new(
             self,
             &planned,
             prepare,
@@ -493,7 +500,15 @@ impl Engine {
             emitted.clone(),
         );
         let mut cache = self.cache(&pass, &planned, ui)?;
-        let (rendered, cached) = self.incremental(&pass, &mut cache, ui)?;
+        // Pass one compiles each page against the backlinks the *last* build
+        // recorded, because this build's are not knowable until every page has
+        // rendered. `backlinks` below replaces them with the truth and
+        // recompiles whatever the guess got wrong.
+        if self.config.links.backlinks {
+            pass.prepare.assume(cache.predicted(&planned.pages));
+        }
+        let (mut rendered, mut cached) = self.incremental(&pass, &mut cache, ui)?;
+        self.backlinks(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
         // Ahead of validation, which weighs each page against what this build
         // actually wrote: a typst-embedded image is the usual way a picture
         // reaches a page, and a budget blind to those would count almost
@@ -653,6 +668,124 @@ impl Engine {
             ui.page(self.relative(page), PageStatus::Cached);
         }
         Ok((rendered, cached))
+    }
+
+    /// Make every page's backlinks true, compiling again the ones whose
+    /// prediction the site disagreed with.
+    ///
+    /// The pages linking to a page are known only once every page has rendered,
+    /// so pass one compiles against a guess (the graph the last build recorded)
+    /// and this checks it: each page's recorded digest against the graph this
+    /// build actually produced. Correctness comes from the check, speed from the
+    /// guess being right, which it is whenever an edit changed no links.
+    ///
+    /// A repaired page keeps the sidecars pass one drew for it: those are not
+    /// redrawn (see [`Sidecars::none`]) and the build still has to write them.
+    ///
+    /// Repairing changes what a page's *own* content links to only if that
+    /// content branches on its backlinks, so the graph re-settles at once in
+    /// every ordinary site. [`Engine::REPAIRS`] bounds the pathological case,
+    /// which warns rather than looping: an unstable graph is a site to fix, not
+    /// a build to hang.
+    fn backlinks<'a>(
+        &self,
+        pass: &mut Pass<'a>,
+        cache: &mut Cache,
+        rendered: &mut Vec<Rendered<'a>>,
+        cached: &mut Vec<Reused<'a>>,
+        ui: &Ui,
+    ) -> Result<()> {
+        if !self.config.links.backlinks {
+            return Ok(());
+        }
+        // A repair is the page's markup again and nothing beside it.
+        pass.sidecars = Sidecars::none();
+        for _ in 0..Self::REPAIRS {
+            // The graph this build produced becomes what pages are compiled
+            // against *before* anything is checked against it, so the question
+            // asked here is the one the compile answers: what would this page be
+            // compiled with now, and is that what it was compiled with? Asking
+            // the graph directly instead put pages that cannot carry backlinks
+            // at all (a listing with no template of its own) permanently at odds
+            // with a value they never see.
+            pass.prepare.assume(Backlinks::new(Self::edges(rendered, cached)));
+            let stale: Vec<&'a Page> = Self::stale(&pass.prepare, rendered, cached).collect();
+            if stale.is_empty() {
+                return Ok(());
+            }
+            debug!(pages = stale.len(), "backlinks repaired");
+            let inputs: Vec<(&'a Page, Result<Prepared>)> = {
+                let prepare = &pass.prepare;
+                stale.into_iter().map(|p| (p, prepare.input(p))).collect()
+            };
+            let pass = &*pass;
+            let repaired = self.render_pages("relinking", inputs, ui, |(page, prepared)| {
+                (
+                    page,
+                    prepared
+                        .and_then(|(id, text, fp)| self.compile(page, id, text, fp, pass))
+                        .map(Rendered::silenced),
+                )
+            })?;
+            for mut page in repaired {
+                // The entry keeps the dependencies the *full* compile recorded:
+                // this one drew no sidecars, so it never saw the files they read.
+                cache.relink((&page).into());
+                if let Some(at) = rendered
+                    .iter()
+                    .position(|r| std::ptr::eq(r.page, page.page))
+                {
+                    // The sidecars pass one drew for it, which this compile did
+                    // not redraw and the build still has to write.
+                    page.artifacts = std::mem::take(&mut rendered[at].artifacts);
+                    rendered[at] = page;
+                } else {
+                    // A cache hit that had to be recompiled stops being one. Its
+                    // sidecars are already on disk, which is what let it be a hit.
+                    cached.retain(|(cached, ..)| !std::ptr::eq(*cached, page.page));
+                    rendered.push(page);
+                }
+            }
+        }
+        // Only what is *still* wrong: the last round may have settled the site,
+        // in which case there is nothing to say. Warning regardless read "0
+        // still disagree" and, under `--strict`, failed a build that converged.
+        pass.prepare.assume(Backlinks::new(Self::edges(rendered, cached)));
+        let unstable: Vec<String> = Self::stale(&pass.prepare, rendered, cached)
+            .map(|page| self.relative(page))
+            .collect();
+        if !unstable.is_empty() {
+            ui.warn(BacklinksUnstable { pages: unstable });
+        }
+        Ok(())
+    }
+
+    /// Every page's own outbound links, freshly compiled and cache-served alike:
+    /// this build's link graph, which [`Backlinks`] inverts.
+    fn edges<'a, 'r>(
+        rendered: &'r [Rendered<'a>],
+        cached: &'r [Reused<'a>],
+    ) -> impl Iterator<Item = (&'a Page, &'r Outbound)> {
+        rendered
+            .iter()
+            .map(|r| (r.page, &r.outputs.outbound))
+            .chain(cached.iter().map(|(page, _, out)| (*page, &out.outbound)))
+    }
+
+    /// The pages whose backlinks are not what compiling them now would give
+    /// them: what each was compiled against (this build or an earlier one) put
+    /// against what `prepare` would hand it today.
+    fn stale<'a, 'r>(
+        prepare: &'r Prepare<'a>,
+        rendered: &'r [Rendered<'a>],
+        cached: &'r [Reused<'a>],
+    ) -> impl Iterator<Item = &'a Page> + 'r {
+        rendered
+            .iter()
+            .map(|r| (r.page, r.outputs.backlinks))
+            .chain(cached.iter().map(|(page, _, out)| (*page, out.backlinks)))
+            .filter(|&(page, was)| was != prepare.digest(page))
+            .map(|(page, _)| page)
     }
 
     /// Copy every page's externalized images into the (freshly regenerated)
@@ -1032,6 +1165,11 @@ impl Engine {
                 anchors: rewrite.anchors,
                 deep: rewrite.deep,
                 outbound: rewrite.outbound,
+                // What this compile *assumed* about the rest of the site, kept
+                // so the repair pass can tell it from what the site turned out
+                // to be. `None` while the feature is off, which is what leaves
+                // such a page immune to the graph entirely.
+                backlinks: pass.prepare.digest(page),
                 fragments,
                 lints: rewrite.lints,
                 weight: rewrite.weight,
@@ -1303,6 +1441,19 @@ struct Rendered<'a> {
     /// with the destination it was drawn for.
     artifacts: Vec<Artifact>,
     warnings: Vec<TypstSourceDiagnostic>,
+}
+
+impl Rendered<'_> {
+    /// The same page with its compile warnings dropped.
+    ///
+    /// A backlink repair compiles the very same source a second time, so typst
+    /// raises the very same warnings: reported again they would print twice and
+    /// count twice in the build summary, telling an author there are more
+    /// problems than there are.
+    fn silenced(mut self) -> Self {
+        self.warnings.clear();
+        self
+    }
 }
 
 /// The cache stores the subset of a compile that survives it. The rest

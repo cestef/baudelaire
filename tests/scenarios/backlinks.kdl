@@ -1,0 +1,230 @@
+// `page.backlinks`: the pages whose content links to this one, made true by a
+// second compile of whatever the first pass guessed wrong.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        templates "templates"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { template "post.typ" }
+        }
+      }
+      links {
+        backlinks #true
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", body + html.elem("nav",
+        page.backlinks.map(l => html.elem("a", attrs: (href: l.url), l.title)).join()))
+      """#
+  }
+}
+
+scenario "a page shows the pages that link to it, on the first build" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("b.typ")[to b]
+      """#
+    "content/posts/c.typ" #"""
+      #let frontmatter = (title: "C")
+      #link("b.typ")[also to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  expect {
+    ok
+    // b is linked from both, in permalink order, and the titles come from the
+    // linking pages' frontmatter.
+    file "posts/b/index.html" {
+      order #"href="/posts/a/""# #"href="/posts/c/""#
+      contains ">A<"
+      contains ">C<"
+    }
+    // ...and a page nothing links to shows nothing, rather than every page
+    // that shares its layout.
+    file "posts/a/index.html" {
+      contains "<nav></nav>"
+    }
+  }
+}
+
+scenario "a link added on a rebuild reaches the page it points at" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      nothing yet
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  // The first build settles with b linked from nowhere.
+  build { expect { ok; pages 2; cached 0 } }
+  build {
+    files {
+      "content/posts/a.typ" #"""
+        #let frontmatter = (title: "A")
+        #link("b.typ")[to b]
+        """#
+    }
+    expect {
+      ok
+      // a is stale and recompiles; b was a cache hit until the graph disagreed
+      // with what it had been compiled against, which is what the repair pass
+      // is for. Serving it from cache would have shipped stale markup.
+      pages 2
+      cached 0
+      file "posts/b/index.html" {
+        contains #"href="/posts/a/""#
+      }
+    }
+  }
+}
+
+scenario "an unchanged site repairs nothing on a rebuild" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("b.typ")[to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  build { expect { ok; pages 2; cached 0 } }
+  build {
+    expect {
+      ok
+      // The whole point of predicting from the last build's graph: with nothing
+      // changed the guess is exact, every page is a hit, and the second pass
+      // compiles nothing at all.
+      pages 2
+      cached 2
+      file "posts/b/index.html" {
+        contains #"href="/posts/a/""#
+      }
+    }
+  }
+}
+
+scenario "a listing that carries no backlinks settles like every other page" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        templates "templates"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { template "post.typ" }
+        }
+        taxonomies {
+          tags listing=#true
+        }
+      }
+      links {
+        backlinks #true
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", tags: ("rust",))
+      #link("b.typ")[to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", tags: ("rust",))
+      beta
+      """#
+  }
+  build { expect { ok } }
+  build {
+    expect {
+      // The generated term pages have no template of their own, so they are
+      // handed no backlinks at all. Checked against the graph rather than
+      // against what compiling them would give them, they disagreed with it on
+      // every build: two wasted repair rounds and a warning that the site never
+      // settled, for a page that cannot carry the value.
+      ok
+      pages 4
+      cached 4
+    }
+  }
+}
+
+scenario "retitling a linking page updates the backlink it left behind" {
+  files {
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("b.typ")[to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  build { expect { ok } }
+  build {
+    files {
+      "content/posts/a.typ" #"""
+        #let frontmatter = (title: "Alpha")
+        #link("b.typ")[to b]
+        """#
+    }
+    expect {
+      ok
+      // The backlink carries the linking page's title, so retitling a page
+      // rewrites every page it links to.
+      file "posts/b/index.html" {
+        contains ">Alpha<"
+        missing ">A<"
+      }
+    }
+  }
+}
+
+scenario "backlinks stay off unless asked for, and cost nothing when off" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        templates "templates"
+        dist "public"
+      }
+      content {
+        collections {
+          posts { template "post.typ" }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A")
+      #link("b.typ")[to b]
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  expect {
+    ok
+    // The value is always bound, so a template reading it never fails; with the
+    // feature off it is simply empty and no page is compiled twice.
+    file "posts/b/index.html" {
+      missing #"href="/posts/a/""#
+    }
+  }
+}

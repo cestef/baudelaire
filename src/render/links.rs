@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::codegen::Value;
 use crate::content::{Data, Page};
+use crate::graph::Hash;
 
 /// The pages one page's own content links to: this page's contribution to the
 /// site's link graph, as permalinks.
@@ -42,6 +44,103 @@ impl Outbound {
     /// field out entirely.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+}
+
+/// The site's link graph, inverted: for each page, the pages whose content
+/// links to it.
+///
+/// [`Outbound`] is what one page contributes; this is what the whole set of them
+/// adds up to, and what a template renders as "linked from". It exists only
+/// after every page has rendered, which is why a page compiles against a
+/// *predicted* one and is recompiled when the prediction turns out wrong (see
+/// `Engine::backlinks`).
+pub enum Backlinks {
+    /// `links { backlinks }` is off. A page compiles with an empty set and
+    /// records no digest, so nothing about the graph can ever invalidate it.
+    Off,
+    /// Sources keyed by the permalink they point at. A page absent from the map
+    /// is linked from nowhere.
+    On(BTreeMap<String, Vec<Backlink>>),
+}
+
+/// One inbound link, as a template renders it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Backlink {
+    /// The permalink of the page that links here.
+    pub url: String,
+    pub title: String,
+    /// Its language, so a template can drop or mark a link from another edition
+    /// of the site: an `en` page linking a `fr` one is a real edge.
+    pub lang: String,
+}
+
+impl Backlinks {
+    /// Invert `edges` (each page's own outbound links) over `pages`.
+    ///
+    /// Sources are ordered by permalink, so the value a page compiles against is
+    /// the same on every build: an order that depended on which pages hit the
+    /// cache would refingerprint pages that nothing changed about.
+    pub fn new<'a>(edges: impl Iterator<Item = (&'a Page, &'a Outbound)>) -> Self {
+        let mut inverted: BTreeMap<String, Vec<Backlink>> = BTreeMap::new();
+        for (page, outbound) in edges {
+            for target in outbound.targets() {
+                inverted
+                    .entry(target.to_owned())
+                    .or_default()
+                    .push(Backlink::from(page));
+            }
+        }
+        for sources in inverted.values_mut() {
+            sources.sort_by(|a, b| a.url.cmp(&b.url));
+        }
+        Self::On(inverted)
+    }
+
+    /// The pages linking to `page`, empty when none do or when the feature is
+    /// off.
+    pub fn of(&self, page: &Page) -> &[Backlink] {
+        match self {
+            Self::Off => &[],
+            Self::On(inverted) => inverted
+                .get(&page.permalink)
+                .map_or(&[], |sources| sources.as_slice()),
+        }
+    }
+
+    /// What a page's backlinks are handed to its template as: an array of
+    /// `(url, title, lang)` dicts, `page.backlinks`.
+    pub fn value(&self, page: &Page) -> Value {
+        Value::array(self.of(page).iter().map(|source| {
+            Value::dict([
+                ("url", Value::str(&source.url)),
+                ("title", Value::str(&source.title)),
+                ("lang", Value::str(&source.lang)),
+            ])
+        }))
+    }
+
+    /// The digest of what `page` was, or would be, compiled with. `None` when
+    /// the feature is off: there is then nothing to validate a page against, and
+    /// a recorded digest would only force a rebuild when it was turned on.
+    pub fn digest(&self, page: &Page) -> Option<Hash> {
+        match self {
+            Self::Off => None,
+            Self::On(_) => Some(Hash::of(&self.value(page))),
+        }
+    }
+}
+
+/// A page names itself in a backlink by the three things a link needs: where it
+/// is, what to call it, and what language it is in.
+impl From<&Page> for Backlink {
+    fn from(page: &Page) -> Self {
+        Self {
+            url: page.permalink.clone(),
+            title: page.frontmatter.title.clone().unwrap_or_default(),
+            lang: page.lang.clone(),
+        }
     }
 }
 

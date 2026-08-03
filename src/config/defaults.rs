@@ -240,6 +240,9 @@ impl Default for LinkConfig {
             style: UrlStyle::default(),
             strict: true,
             external: false,
+            // Off: a page whose backlinks change is compiled twice, which a
+            // site that shows none must not pay for.
+            backlinks: false,
         }
     }
 }

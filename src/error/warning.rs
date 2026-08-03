@@ -8,6 +8,8 @@
 
 use std::path::PathBuf;
 
+use itertools::Itertools;
+
 use super::BaudelaireErrorKind;
 use crate::ui::{Code, Text};
 
@@ -324,6 +326,28 @@ pub struct ManifestUnreadable {
     pub path: PathBuf,
     #[source]
     pub source: serde_json::Error,
+}
+
+/// A site whose backlinks never settled.
+///
+/// A page's backlinks are made true by compiling it again, which changes what
+/// *it* links to only if its content branches on them. When it does, every
+/// repair moves the graph and there is no answer to converge on. The build ships
+/// the last one it computed rather than looping, and says which pages are still
+/// disagreeing with it.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("backlinks did not settle: {} still disagree with the site's links", .pages.len())]
+#[diagnostic(
+    code(baudelaire::backlinks::unstable),
+    severity(warning),
+    help(
+        "these pages link somewhere different depending on their own `page.backlinks`: {}",
+        .pages.iter().map(Code).format(", ")
+    )
+)]
+pub struct BacklinksUnstable {
+    /// The pages still disagreeing, project-relative.
+    pub pages: Vec<String>,
 }
 
 /// A `generate { manifest }` block that names no icon.

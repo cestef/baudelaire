@@ -174,7 +174,7 @@ impl<'a> Bundle<'a> {
             ));
         }
         Ok(Module {
-            import: format!("{}/{}", prepare.template_root(&cfg.template), cfg.template),
+            import: format!("{}/{}", prepare.dir(&cfg.template), cfg.template),
             func: std::path::Path::new(&cfg.template)
                 .file_stem()
                 .and_then(|s| s.to_str())

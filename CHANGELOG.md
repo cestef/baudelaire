@@ -43,12 +43,46 @@ chores are visible in the git history and change nothing for a site.
   A manifest with no icons is still written, and nothing will ever offer to
   install it, so the build warns (`baudelaire::manifest::icons`).
 
+- **links**: backlinks. `links { backlinks #true }` hands every page the pages
+  whose content links to it, as `page.backlinks`, each entry `(url, title,
+  lang)` and ordered by URL.
+
+  ```kdl
+  links {
+    backlinks #true
+  }
+  ```
+
+  ```typ
+  #let post(page, body) = {
+    body
+    h("ul", for l in page.backlinks { h("li", h("a", href: l.url, l.title)) })
+  }
+  ```
+
+  Only links an author wrote in the content tree count: a layout's nav, the
+  prev/next pair and a generated listing's index are links a page carries by
+  virtue of its template, and counting them would make every page a backlink of
+  every other. Two links to one page are one entry, a `#fragment` names the
+  page, and a page never backlinks itself.
+
+  The pages linking to a page are not knowable until every page has rendered, so
+  a build compiles against the graph the last build recorded and compiles again
+  only the pages that turn out to disagree with this one. An edit that changes
+  no links repairs nothing; adding a link recompiles the page it points at.
+  Social cards and PDFs are not redrawn by that second compile and carry no
+  backlinks.
+
+  Content whose *own links* depend on its backlinks never settles: the build
+  stops after the second attempt and warns
+  (`baudelaire::backlinks::unstable`).
+
 ### Upgrading
 
-- The build cache records one more thing per page: the pages that page's own
-  content links to, which the coming backlinks feature inverts. A manifest
-  written before this records none, so the cache schema is bumped and the first
-  build after upgrading is a cold one. Nothing to change.
+- The build cache records two more things per page: the pages that page's own
+  content links to, and the digest of the backlinks it was compiled with. A
+  manifest written before this records neither, so the cache schema is bumped
+  and the first build after upgrading is a cold one. Nothing to change.
 
 ## [0.0.10] - 2026-08-03
 

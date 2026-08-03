@@ -557,13 +557,14 @@ fn a_warm_cache_survives_the_site_moving() {
 }
 
 /// The link graph is built from what an *author* wrote, so a page records the
-/// pages its own content points at and nothing its layout does. A nav that links
+/// pages its own content points at and nothing its layout does. Recorded only
+/// while `links { backlinks }` asks for it, since nothing else reads the graph. A nav that links
 /// every page from every page would otherwise make every page a neighbour of
 /// every other, and the backlinks derived from it worthless.
 #[test]
 fn a_page_records_its_own_links_and_not_its_layout_s() {
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
+        "site \"T\"\nlinks {\n  backlinks #true\n}\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "templates/post.typ",

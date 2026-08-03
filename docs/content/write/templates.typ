@@ -59,6 +59,7 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
   [`translations`], [array], [`(lang, url, title)` per edition, this page's included.],
   [`strings`], [dict], [The current language's UI string table.],
   [`reading`], [dict], [`(words, minutes)`, from the page's own source.],
+  [`backlinks`], [array], [`(url, title, lang)` per page whose content links here. Empty unless `links { backlinks }` is on.],
   [`date`], [dict], [`(iso, display)`, or `none` when the page carries no date.],
 )
 
@@ -73,7 +74,7 @@ Read optional frontmatter defensively, since a page may not declare it:
   A page's URL and collection are not on `page`. Nothing else in the wrapper may name other pages either, or every page's cache identity would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
 ]
 
-`page.nav` is the exception, and only because it names two neighbors rather than the site. See #link("collections/navigation.typ")[prev / next links], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
+`page.nav` and `page.backlinks` are the exceptions, and only because each names a page's neighbors rather than the site. See #link("collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
 
 == Listing templates
 

@@ -1045,6 +1045,15 @@ impl Section for LinkConfig {
                 Ok(())
             },
         ),
+        (
+            "backlinks",
+            Flag,
+            "Hand each page the pages whose content links to it, as `page.backlinks`.",
+            |c, n, t| {
+                c.backlinks = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 

@@ -44,7 +44,7 @@ impl Sidecar for Pdf {
         let template = &cx.config.generate.pdf.pages.template;
         Ok(cx
             .prepare
-            .bind(page, rooted, &cx.prepare.template_root(template), template))
+            .bind(page, rooted, &cx.prepare.dir(template), template))
     }
 
     /// Identified by the page's permalink: stable across builds, and unique on

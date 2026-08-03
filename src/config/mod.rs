@@ -877,6 +877,13 @@ pub struct LinkConfig {
     /// flaky host or an airplane can never change what it produces. `check
     /// --external` turns it on for one run.
     pub external: bool,
+    /// Hand each page the pages whose content links to it, as `page.backlinks`.
+    ///
+    /// Opt-in because it is the one page value that cannot be known before the
+    /// site has rendered: a page whose backlinks turn out wrong is compiled a
+    /// second time (see `Engine::backlinks`), which a site that shows none
+    /// should not pay for.
+    pub backlinks: bool,
 }
 
 /// What the built pages tell a browser to trust: the integrity of the files

@@ -132,6 +132,14 @@ impl Sidecars {
         ])
     }
 
+    /// A registry that draws nothing, for a compile that only wants the page's
+    /// markup again: the backlink repair pass. A card and a printed PDF carry no
+    /// backlinks, and redrawing one per repaired page would cost more than the
+    /// pass it repairs.
+    pub(in crate::engine) fn none() -> Self {
+        Self(Vec::new())
+    }
+
     /// Draw every sidecar this page wants, with the merged dependency set of
     /// their compiles.
     pub(in crate::engine) fn draw(
@@ -174,6 +182,11 @@ impl Sidecars {
 #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
 impl Sidecars {
     pub(in crate::engine) fn builtin() -> Self {
+        Self
+    }
+
+    /// Nothing is registered either way; see the `sidecars` counterpart.
+    pub(in crate::engine) fn none() -> Self {
         Self
     }
 

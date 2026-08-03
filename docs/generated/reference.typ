@@ -77,6 +77,7 @@
   (path: "links.style", key: "style", shape: "clean | flat", doc: "Whether URLs are directories (`clean`) or `.html` files (`flat`).", depth: 1, section: false),
   (path: "links.strict", key: "strict", shape: "flag", doc: "Fail the build on a broken internal link instead of warning.", depth: 1, section: false),
   (path: "links.external", key: "external", shape: "flag", doc: "Also check outbound `http(s)` links over the network.", depth: 1, section: false),
+  (path: "links.backlinks", key: "backlinks", shape: "flag", doc: "Hand each page the pages whose content links to it, as `page.backlinks`.", depth: 1, section: false),
   (path: "lint", key: "lint", shape: "block", doc: "Checks run over the built pages. Its presence turns them on.", depth: 0, section: true),
   (path: "lint.strict", key: "strict", shape: "flag", doc: "Fail the build on a finding instead of warning.", depth: 1, section: false),
   (path: "lint.headings", key: "headings", shape: "flag", doc: "Report a heading that skips a level, e.g. `h2` straight to `h4`.", depth: 1, section: false),
