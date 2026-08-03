@@ -88,7 +88,6 @@ a:hover {
 /* Ease interactive state changes. Disabled under prefers-reduced-motion below. */
 a,
 button,
-.cards a,
 .icon-btn,
 .search-trigger,
 .sidebar li a,
@@ -791,13 +790,78 @@ th {
   color: #b5732a;
 }
 
-/* Home hero + feature grid */
-.hero {
-  max-width: 40rem;
+/* ---- Home ---------------------------------------------------------------- */
+/* One column, one row style, one pane style. Everything on the landing page is
+   left-aligned to the same edge as the prose: nothing is centred, and no block
+   gets a decorative background it has not earned. */
+.layout-full {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.lead {
-  font-size: 1.25rem;
+.home {
+  max-width: 54rem;
+}
+
+/* typst-html sets `==` a level down, so a section heading here is an `h3`. */
+.home h3 {
+  margin-top: 4rem;
+  margin-bottom: 1.25rem;
+  font-size: 1.55rem;
+  letter-spacing: -0.01em;
+}
+
+/* Anything that lays itself out (a grid, a flex row, a block line) beats the
+   user-agent rule behind `hidden`, so every togglable piece restates it.
+   Missing one ships the closed state visible. */
+.demo-tabs[hidden],
+.panes[hidden],
+.pane[hidden],
+.emit-line[hidden] {
+  display: none;
+}
+
+.hero {
+  margin-bottom: 1rem;
+  padding-bottom: 3rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(2.3rem, 5.5vw, 3.4rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* The second sentence of the title, in the accent. A block, so the two halves
+   stack on their own lines at every width. */
+.hero-em {
+  display: block;
+  font-style: italic;
+  color: var(--wine-ink);
+}
+
+/* No rule under the hero title: the section already ends in one. */
+.hero-title::after {
+  content: none;
+}
+
+.hero-lead {
+  max-width: 38rem;
+  margin: 1.5rem 0 2rem;
+  font-size: 1.2rem;
   line-height: 1.55;
   color: var(--ink-soft);
 }
@@ -806,10 +870,9 @@ th {
   display: inline-flex;
   gap: 0.5rem;
   align-items: center;
-  margin-top: 0.5rem;
-  padding: 0.55rem 1.1rem;
+  padding: 0.7rem 1.25rem;
   font-family: var(--sans);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: #fff;
   background: var(--wine);
@@ -822,11 +885,30 @@ th {
   text-decoration: none;
 }
 
+.cta .icon {
+  display: inline-block;
+}
+
+/* `_copy.js` wraps a `pre` in `.code-block` and positions its button against
+   that wrapper, so the width has to sit on the wrapper too. Constrain the `pre`
+   alone and the button parks at the far right of an empty column. */
+.hero>pre,
+.hero .code-block {
+  max-width: 38rem;
+  margin: 2rem 0 0;
+}
+
+.hero .code-block pre {
+  max-width: none;
+  margin: 0;
+}
+
+/* Cards: the one navigation grid, for the "start here" links. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   gap: 1rem;
-  margin: 1.5rem 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -840,8 +922,8 @@ th {
   flex-direction: column;
   gap: 0.3rem;
   height: 100%;
-  padding: 1.1rem 1.15rem;
-  line-height: 1.4;
+  padding: 1.25rem 1.35rem;
+  line-height: 1.45;
   background: var(--paper-raised);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -852,13 +934,11 @@ th {
 .cards a:hover {
   border-color: var(--wine);
   text-decoration: none;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
 }
 
 .card-icon {
   color: var(--wine);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
 
 .cards strong {
@@ -868,19 +948,15 @@ th {
 }
 
 .cards span {
-  font-size: 0.87rem;
+  font-size: 0.88rem;
   color: var(--muted);
 }
 
-.cta .icon {
-  display: inline-block;
-}
-
-/* ---- Recent-writing widget (baudelaire:feed) ---------------------------- */
+/* Rows: dated posts, and the explorer's switches. The whole row is the target. */
 .recent-list {
-  list-style: none;
-  margin: 1.25rem 0 0;
+  margin: 0;
   padding: 0;
+  list-style: none;
   border-top: 1px solid var(--rule);
 }
 
@@ -888,39 +964,286 @@ th {
   margin: 0;
 }
 
+/* A dated post: title, then the date pushed to the far edge. */
 .recent-link {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 0.25rem;
+  gap: 0.4rem 1.25rem;
+  padding: 0.85rem 0.6rem;
   border-bottom: 1px solid var(--rule);
   text-decoration: none;
   color: var(--ink);
 }
 
 .recent-link:hover {
+  background: var(--wine-soft);
   text-decoration: none;
-  color: var(--wine-ink);
 }
 
 .recent-title {
   font-family: var(--sans);
-  font-weight: 600;
   font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .recent-link:hover .recent-title {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: var(--wine-ink);
 }
 
 .recent-date {
-  flex: none;
   font-family: var(--sans);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Two panes, side by side, on the one grid both widgets share. */
+.panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+  margin-top: 1.25rem;
+}
+
+/* A pane is a label above a box; the box takes the rest, so a pair ends on the
+   same line however tall the taller one is. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pane> :last-child {
+  flex: 1;
+}
+
+.pane pre {
+  margin: 0;
+}
+
+.code-block>pre {
+  height: 100%;
+}
+
+.pane-label {
+  margin: 0 0 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The rendered half sits in a box matched to the code block beside it: same
+   border, radius and padding, so the pair reads as one comparison. */
+.demo-out {
+  padding: 1rem 1.15rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+}
+
+.demo-out> :first-child {
+  margin-top: 0;
+}
+
+.demo-out> :last-child {
+  margin-bottom: 0;
+}
+
+.demo-out h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.demo-out table {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Tabs over the example. Sized as buttons, not as chips. */
+.demo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.demo-tab {
+  padding: 0.5rem 1.1rem;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.demo-tab:hover {
+  color: var(--wine-ink);
+  border-color: var(--wine);
+}
+
+.demo-tab.is-active {
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  border-color: var(--wine);
+}
+
+/* The generate { } explorer: one switch per artifact, on the same grid as the
+   cards above, over the panes they drive. A switch is a card you can turn on,
+   so it is built from the card's own box and marks its state with the accent
+   the rest of the page already uses for "current". */
+.toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.2rem 0.75rem;
+  align-items: start;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.toggle:hover:not(:disabled) {
+  border-color: var(--wine);
+}
+
+/* Until JS enables them these are a legend of what the block below turns on,
+   so they should not advertise a click they will not honour. */
+.toggle:disabled {
+  cursor: default;
+}
+
+/* The box that carries the state, and the only thing that moves when a switch
+   flips: the check is always in the DOM, transparent until it is on. */
+.toggle-mark {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-top: 0.1rem;
+  color: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--paper);
+}
+
+.toggle[aria-checked="true"] {
+  background: var(--wine-soft);
+  border-color: var(--wine);
+}
+
+.toggle[aria-checked="true"] .toggle-mark {
+  color: #fff;
+  background: var(--wine);
+  border-color: var(--wine);
+}
+
+.toggle-title {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.toggle[aria-checked="true"] .toggle-title {
+  color: var(--wine-ink);
+}
+
+.toggle-note {
+  grid-column: 2;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* Each config line is its own element, so a toggle can hide one without the
+   browser rebuilding text typst already highlighted. */
+.emit-line {
+  display: block;
+}
+
+/* Same size as every other code block on the page. */
+.emit-line code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+  white-space: pre;
+}
+
+/* The output tree: real elements, not an ASCII drawing, so each entry can carry
+   an icon and light up when the option that writes it is ticked. */
+.tree {
+  padding: 1rem 1.15rem;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.tree-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Every level but the first indents under a guide rule, clear of both the icon
+   to its left and the names it runs beside. */
+.tree-list .tree-list {
+  margin: 0.15rem 0 0.15rem 0.6rem;
+  padding-left: 1.1rem;
+  border-left: 1px solid var(--rule);
+}
+
+.tree-list li {
+  margin: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.2rem 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tree-row svg {
+  flex: none;
+  color: var(--rule);
+}
+
+.tree-row.is-dir {
+  color: var(--ink-soft);
+}
+
+.tree-row.is-dir svg {
+  color: var(--muted);
+}
+
+/* Written by a ticked option: the accent is the whole point of the widget. */
+.tree-row.is-new,
+.tree-row.is-new svg {
+  color: var(--wine-ink);
 }
 
 /* ---- Live config widget (baudelaire:config) ----------------------------- */
@@ -1123,6 +1446,13 @@ ul.listing {
   .content {
     padding: 2rem 1.25rem 3.5rem;
   }
+
+  /* Source and output stack rather than shrink: half a phone column is not a
+     code block. */
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
 
   .site-footer {
     padding: 2rem 1.25rem;

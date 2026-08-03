@@ -183,11 +183,121 @@
   }))
 })
 
+// Source beside output, from one string: the left pane is the snippet as
+// written, the right pane is `eval` of that same string, compiled into this page
+// by the same typst that compiled the rest of it. There is nothing to keep in
+// sync and no screenshot to go stale.
+//
+// `variants` is `((tab, file, source), ..)`. Every variant is rendered at build
+// time and shipped; the tab bar only swaps which one is shown, so a reader with
+// no JavaScript still gets the first one, whole.
+#let demo(variants) = h("div", class: "demo", data-demo: true)[
+  #h("div",
+    class: "demo-tabs",
+    role: "tablist",
+    aria-label: "Example",
+    hidden: true,
+    data-demo-tabs: true,
+    for (i, (tab, ..)) in variants.enumerate() {
+      h("button",
+        type: "button",
+        role: "tab",
+        id: "demo-tab-" + str(i),
+        class: classes("demo-tab", ("is-active", i == 0)),
+        aria-selected: if i == 0 { "true" } else { "false" },
+        aria-controls: "demo-pane-" + str(i),
+        tabindex: if i == 0 { "0" } else { "-1" },
+        data-demo-tab: str(i),
+        tab)
+    })
+  #for (i, (_, file, src)) in variants.enumerate() {
+    h("div",
+      class: "panes",
+      id: "demo-pane-" + str(i),
+      role: "tabpanel",
+      aria-labelledby: "demo-tab-" + str(i),
+      hidden: i != 0,
+      data-demo-pane: str(i),
+      {
+        h("div", class: "pane", {
+          h("p", class: "pane-label", file)
+          raw(src, lang: "typ", block: true)
+        })
+        h("div", class: "pane", {
+          h("p", class: "pane-label", "what it renders")
+          h("div", class: "demo-out", eval(src, mode: "markup"))
+        })
+      })
+  }
+]
+
+// The `generate { }` block, as a thing you operate: one switch per artifact,
+// laid out on the same grid as `cards`, over the config and the output tree the
+// checked set adds up to.
+//
+// Each option carries the one config line it adds and the files that line
+// writes, so the KDL and the tree come from this list rather than from two
+// copies of it. `_home.js` reads the data attributes; with no script the
+// switches ship disabled and the config shows the set they already display.
+#let emit-explorer(options, block: "generate") = h(
+  "div",
+  class: "emit",
+  data-emit: true,
+)[
+  #h("div", class: "toggles", for opt in options {
+    let on = opt.at("on", default: false)
+    // A `button` rather than a checkbox: the whole card is the control, it
+    // needs no label to align against, and `role="switch"` says what it does.
+    // Dead controls are worse than none, so it ships disabled and `_home.js`
+    // enables it.
+    h("button",
+      type: "button",
+      class: "toggle",
+      role: "switch",
+      aria-checked: if on { "true" } else { "false" },
+      disabled: true,
+      data-emit-option: opt.id,
+      data-files: opt.at("files", default: ()).join(","),
+      data-page-files: opt.at("page-files", default: ()).join(","),
+      {
+        h("span", class: "toggle-mark", aria-hidden: "true", lucide("check", size: 12))
+        h("span", class: "toggle-title", opt.label)
+        h("span", class: "toggle-note", opt.note)
+      })
+  })
+  #h("div", class: "panes")[
+    // Every option's line is highlighted at build time and shipped; toggling one
+    // shows or hides its line rather than rewriting the block, so the KDL here is
+    // always typst's own highlighting and never a string built in the browser.
+    #h("div", class: "pane")[
+      #h("p", class: "pane-label", "config.kdl")
+      #h("pre", class: "emit-kdl", {
+        h("span", class: "emit-line", raw(block + " {", lang: "kdl"))
+        for opt in options {
+          h("span",
+            class: "emit-line",
+            hidden: not opt.at("on", default: false),
+            data-emit-line: opt.id,
+            raw("  " + opt.kdl, lang: "kdl"))
+        }
+        h("span", class: "emit-line", raw("}", lang: "kdl"))
+      })
+    ]
+    #h("div", class: "pane", hidden: true, data-emit-tree-pane: true)[
+      #h("p", class: "pane-label", "public/")
+      #h("div", class: "tree", data-emit-tree: true)
+    ]
+  ]
+]
+
 #let tag-row(tags) = h("div", class: "tag-row", aria-label: "Tags", for tag in tags {
   link-to("/tags/" + tag + "/", "#" + tag)
 })
 
-#let shell(title, main, tags: (), sections: ()) = {
+// The one page chrome. `sections: none` drops the sidebar and lets the article
+// span the column; `heading: false` suppresses the generated `h1`, for a page
+// that titles itself. The landing page is the only caller of either.
+#let shell(title, main, tags: (), sections: (), heading: true, class: none) = {
   set document(title: title)
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
@@ -195,11 +305,11 @@
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
   site-header
-  h("div", class: "layout")[
-    #sidebar(sections)
+  h("div", class: classes("layout", ("layout-full", sections == none)))[
+    #if sections != none { sidebar(sections) }
     #h("main", class: "content", id: "main")[
-      #h("article")[
-        #h("h1", title)
+      #h("article", class: class)[
+        #if heading { h("h1", title) }
         #main
         #if tags.len() > 0 { tag-row(tags) }
       ]

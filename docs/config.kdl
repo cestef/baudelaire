@@ -103,7 +103,7 @@ prune #true
 // templates, assets and static; anything else a build reads has to say so here
 // or an edit to it will not reload.
 serve {
-  include "icons/**/*.svg" "generated/**/*.typ"
+  include "icons/**/*.svg" "generated/**/*.typ" "data/*.csv"
 }
 
 // Build-time constants handed to client JavaScript through the
