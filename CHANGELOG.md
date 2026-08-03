@@ -161,6 +161,21 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+With `assets { bundle #true }`, a `.ts`, `.mts`, `.cts`, `.tsx`, `.jsx` or
+`.cjs` file in the asset tree is now an entry the bundler owns, where it used to
+fall through to the verbatim copy. Two things follow for a site that already had
+one.
+
+It has to parse. A file the bundler cannot read now fails a build that used to
+copy it and ship it, unstripped, to the browser.
+
+It is served as `.js`. A `src` or `href` in a template follows it, since both
+spellings are mapped, but a URL assembled at runtime in client JS, or linked
+from outside the site, still names the old path.
+
+Nothing changes with bundling off, which is the default: JavaScript and
+TypeScript alike are copied as they are written.
+
 A schema field's `{ }` block used to be read and thrown away; it now declares
 the fields of a `dict`, so a block on a type that holds no dictionary
 (`hero "str" { .. }`) fails the config rather than being ignored.
