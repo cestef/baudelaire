@@ -8,8 +8,7 @@ const CHECK_ICON =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
 // Mount a button on one code block, wrapping its `<pre>` for positioning.
-function mount(code) {
-  const pre = code.parentElement;
+function mount(pre) {
   if (pre.parentElement?.classList.contains("code-block")) return;
 
   const wrap = document.createElement("div");
@@ -27,7 +26,10 @@ function mount(code) {
   let revert;
   button.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(code.textContent);
+      // `innerText`, not `textContent`: a block whose lines can be toggled (the
+      // home page's config explorer) must copy what is on screen, not the lines
+      // hidden behind an unticked box.
+      await navigator.clipboard.writeText(pre.innerText);
     } catch {
       return; // no clipboard access (insecure context, denied permission)
     }
@@ -47,7 +49,7 @@ function mount(code) {
 // none. The Clipboard API needs a secure context, so buttons quietly do nothing
 // over plain HTTP; `baudelaire serve` and the deployed site are both fine.
 export function initCopyButtons() {
-  for (const code of document.querySelectorAll("#main pre > code")) {
-    mount(code);
+  for (const pre of document.querySelectorAll("#main pre")) {
+    mount(pre);
   }
 }
