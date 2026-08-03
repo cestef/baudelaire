@@ -14,6 +14,7 @@ pub(crate) mod dts;
 mod feed;
 mod headers;
 mod llms;
+mod manifest;
 mod redirect;
 mod robots;
 mod script;
@@ -181,6 +182,7 @@ impl Processors {
             Box::new(robots::Robots),
             Box::new(headers::Headers),
             Box::new(llms::Llms),
+            Box::new(manifest::WebManifest),
             Box::new(feed::Feeds),
             Box::new(search::SearchIndex),
             #[cfg(feature = "announce")]

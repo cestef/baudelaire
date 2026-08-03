@@ -45,6 +45,7 @@ impl Mime {
             "woff" => "font/woff",
             "ttf" => "font/ttf",
             "json" => "application/json",
+            "webmanifest" => "application/manifest+json",
             "xml" => "application/xml",
             "txt" => "text/plain",
             "pdf" => Self::PDF,

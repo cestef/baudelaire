@@ -326,6 +326,25 @@ pub struct ManifestUnreadable {
     pub source: serde_json::Error,
 }
 
+/// A `generate { manifest }` block that names no icon.
+///
+/// The manifest is still written, and it is still valid: the members it lacks
+/// are what a browser needs to *install* the site, so without them the file is
+/// emitted, linked from every page, and nothing ever offers to add the site to a
+/// home screen. That silence is exactly what a green build should not leave
+/// unexplained.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("the web app manifest names no icon, so the site cannot be installed")]
+#[diagnostic(
+    code(baudelaire::manifest::icons),
+    severity(warning),
+    help(
+        "add `icons {{ \"/icon-512.png\" size=512 }}` to `generate {{ manifest }}`; \
+         a launcher wants a 192 and a 512"
+    )
+)]
+pub struct ManifestIcons;
+
 /// A feature that needs the site's public address found no `url` in config.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("no `url` configured: {feature} {effect}")]

@@ -10,6 +10,39 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **generate**: `manifest.webmanifest`, the web app manifest a browser reads to
+  install the site to a home screen. The block's presence writes it, one per
+  language, and every page gains a `<link rel="manifest">` pointing at its own
+  language's (plus a `theme-color` meta tag when `theme` is set).
+
+  ```kdl
+  generate {
+    manifest {
+      short "Baudelaire"
+      display "standalone"
+      theme "#101014"
+      icons {
+        "/icons/app-192.png" size=192
+        "/icons/app-512.png" size=512 purpose="maskable"
+      }
+    }
+  }
+  ```
+
+  What the build knows it fills in: `name` from `site`, `start` and `scope` from
+  where that language's site begins, an icon's media type from its extension,
+  and a base path onto every URL it writes. An authored `start`/`scope` is
+  localized like the default it replaces, so `start "/home/"` launches the
+  French app into `/fr/home/` rather than out of its own scope. An icon with no `size` declares
+  `any`, which is what a vector icon actually offers.
+
+  A manifest with no icons is still written, and nothing will ever offer to
+  install it, so the build warns (`baudelaire::manifest::icons`).
+
 ## [0.0.10] - 2026-08-03
 
 ### Added

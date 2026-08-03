@@ -1,0 +1,120 @@
+// The web app manifest, and the tag that makes a browser look for it.
+
+scenario "a manifest block writes a manifest every page links to" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      generate {
+        manifest {
+          short "T"
+          description "A test site"
+          display "minimal"
+          theme "#101014"
+          background "#ffffff"
+          icons {
+            "/icons/app-192.png" size=192
+            "/icons/app-512.png" size=512 purpose="maskable"
+            "/icons/app.svg"
+          }
+        }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      Hello.
+      """#
+  }
+  expect {
+    ok
+    file "manifest.webmanifest" {
+      // The name is the site title: what the build knows, it fills in.
+      contains #""name":"T""#
+      contains #""short_name":"T""#
+      contains #""start_url":"/""#
+      contains #""scope":"/""#
+      // `minimal` is one config word; the member it writes is not.
+      contains #""display":"minimal-ui""#
+      contains ##""theme_color":"#101014""##
+      contains #""sizes":"192x192""#
+      contains #""type":"image/png""#
+      contains #""purpose":"maskable""#
+      // A vector icon scales rather than claiming a size it does not have.
+      contains #""sizes":"any""#
+      contains #""type":"image/svg+xml""#
+    }
+    // Without the tag the file is written and nothing ever reads it.
+    file "index.html" {
+      contains #"rel="manifest""#
+      contains #"href="/manifest.webmanifest""#
+      contains ##"name="theme-color" content="#101014""##
+    }
+  }
+}
+
+scenario "each language gets a manifest launching into its own scope" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lang "en"
+      languages {
+        en { site "T" }
+        fr { site "Le T" }
+      }
+      generate {
+        manifest {
+          icons {
+            "/icon.png" size=512
+          }
+        }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      Hello.
+      """#
+    "content/index.fr.typ" #"""
+      #let frontmatter = (title: "Accueil")
+      Bonjour.
+      """#
+  }
+  expect {
+    ok
+    file "manifest.webmanifest" {
+      contains #""lang":"en""#
+      contains #""start_url":"/""#
+    }
+    file "fr/manifest.webmanifest" {
+      // The French app is named in French and stays inside the French site.
+      contains #""name":"Le T""#
+      contains #""lang":"fr""#
+      contains #""start_url":"/fr/""#
+      contains #""scope":"/fr/""#
+    }
+    file "fr/index.html" {
+      contains #"href="/fr/manifest.webmanifest""#
+    }
+  }
+}
+
+scenario "a manifest with no icon warns: nothing will offer to install it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      generate {
+        manifest
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home")
+      Hello.
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::manifest::icons"
+    // Still written, and still valid: what it lacks is what installs it.
+    file "manifest.webmanifest" {
+      contains #""display":"standalone""#
+    }
+  }
+}

@@ -22,13 +22,14 @@ use crate::config::value::ValueExt;
 // against a second list kept here.
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
-    CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DraftConfig, Eagerness,
-    FeedConfig, FeedKind, FieldSchema, FieldType, GenerateConfig, HooksConfig, HtmlConfig,
-    ImagesConfig, JpegConfig, LanguageConfig, LinkConfig, LintConfig, LlmsConfig, NavigationConfig,
-    OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip,
-    Prefetch, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
-    SearchFormat, SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
-    StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
+    CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DisplayMode, DraftConfig,
+    Eagerness, FeedConfig, FeedKind, FieldSchema, FieldType, GenerateConfig, HooksConfig,
+    HtmlConfig, IconConfig, IconPurpose, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig,
+    LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig, PaginateConfig,
+    Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat, SecurityConfig,
+    ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig, StandaloneConfig,
+    StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::content::Frontmatter;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
@@ -1315,6 +1316,12 @@ impl Section for GenerateConfig {
             |c, n, t| c.llms.fill(n, t),
         ),
         (
+            "manifest",
+            Nested(ManifestConfig::rows),
+            "Write `manifest.webmanifest`. Its presence turns it on.",
+            |c, n, t| c.manifest.fill(n, t),
+        ),
+        (
             "feed",
             Nested(FeedConfig::rows),
             "Write syndication feeds.",
@@ -1373,6 +1380,138 @@ impl Section for LlmsConfig {
         self.enabled = true;
         true
     }
+}
+
+/// The `manifest { .. }` block. Its presence enables the manifest; every key is
+/// something only the author knows, since what the build knows it fills in
+/// itself.
+impl Section for ManifestConfig {
+    const RULES: Block<Self> = Block(&[
+        (
+            "name",
+            Text,
+            "The installed app's name. Defaults to the site title.",
+            |c, n, t| {
+                c.name = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "short",
+            Text,
+            "The name a launcher shows when the full one does not fit.",
+            |c, n, t| {
+                c.short = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "description",
+            Text,
+            "One line about the app, shown by an install prompt.",
+            |c, n, t| {
+                c.description = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "display",
+            Choice(DisplayMode::names),
+            "How the installed app is presented.",
+            |c, n, t| {
+                c.display = n.arg(t, 0)?.one::<DisplayMode>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        (
+            "theme",
+            Text,
+            "CSS colour of the browser UI around the app, and of every page's `theme-color`.",
+            |c, n, t| {
+                c.theme = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "background",
+            Text,
+            "CSS colour painted before the first page has rendered.",
+            |c, n, t| {
+                c.background = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "start",
+            Text,
+            "Where launching the installed app lands, per language. Defaults to the language's root.",
+            |c, n, t| {
+                c.start = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "scope",
+            Text,
+            "The URLs the installed app covers, per language. Defaults to the language's root.",
+            |c, n, t| {
+                c.scope = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "icons",
+            Items(IconConfig::rows),
+            "One line per icon, each named by the path it is served from.",
+            |c, n, t| {
+                c.icons = n
+                    .unique(t, "icon", IconConfig::item)?
+                    .into_iter()
+                    .map(|(_, icon)| icon)
+                    .collect();
+                Ok(())
+            },
+        ),
+    ]);
+
+    fn enable(&mut self) -> bool {
+        self.enabled = true;
+        true
+    }
+}
+
+impl IconConfig {
+    /// One `"/icon-512.png" size=512` line: the node name is the path the image
+    /// is served from, which is also what makes two icons the same icon.
+    fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
+        let src = node.name().value().to_owned();
+        let mut icon = Self::from(src.clone());
+        icon.read(node, text)?;
+        Ok((src, icon))
+    }
+}
+
+impl Attributed for IconConfig {
+    const ATTRS: Attrs<Self> = Attrs(&[
+        (
+            "size",
+            Number,
+            "The square edge in pixels. Absent means the image scales to any size.",
+            |c, v, t, s| {
+                c.size = Some(v.bounded(t, s, 1, 4096)?);
+                Ok(())
+            },
+        ),
+        (
+            "purpose",
+            Choice(IconPurpose::names),
+            "What a launcher may do with the image.",
+            |c, v, t, s| {
+                c.purpose = v.one::<IconPurpose>(t, s)?;
+                Ok(())
+            },
+        ),
+    ]);
 }
 
 impl Section for FeedConfig {

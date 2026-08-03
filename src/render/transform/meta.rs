@@ -12,7 +12,7 @@
 
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
-use crate::config::{BaseUrl, Config};
+use crate::config::{BaseUrl, Config, ManifestConfig};
 use crate::content::{Iso, Page};
 
 use super::{Cx, DocumentExt, Transform};
@@ -112,6 +112,7 @@ impl Card<'_> {
         }
         self.alternates(&mut tags);
         self.feeds(&mut tags);
+        self.manifest(&mut tags);
         self.pdf(&mut tags);
         if self.config.html.jsonld {
             tags.push(Self::jsonld(&facts));
@@ -200,6 +201,32 @@ impl Card<'_> {
                     .with_attr(attr::href, &href)
                     .into(),
             );
+        }
+    }
+
+    /// The `<link rel="manifest">` pointing at this page's language's manifest,
+    /// and the `theme-color` that manifest declares.
+    ///
+    /// Without the link the file is written and nothing reads it: a browser
+    /// learns a site is installable from the page, not from the file's presence.
+    /// The colour is repeated as a meta tag because it tints the browser UI on
+    /// an ordinary visit too, long before anyone installs anything.
+    fn manifest(&self, tags: &mut Vec<HtmlNode>) {
+        let manifest = &self.config.generate.manifest;
+        if !manifest.enabled {
+            return;
+        }
+        tags.push(
+            HtmlElement::new(tag::link)
+                .with_attr(attr::rel, "manifest")
+                .with_attr(
+                    attr::href,
+                    ManifestConfig::url(self.config, &self.page.lang),
+                )
+                .into(),
+        );
+        if let Some(theme) = &manifest.theme {
+            tags.push(Self::named("theme-color", theme));
         }
     }
 
