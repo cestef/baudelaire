@@ -86,7 +86,7 @@ runner is always covered. Pin a release with `VERSION`:
 ```yaml
       - name: install baudelaire
         run: |
-          curl -fsSL https://baudelaire.cstef.dev/install.sh | VERSION=v0.0.9 sh
+          curl -fsSL https://baudelaire.cstef.dev/install.sh | VERSION=v0.0.10 sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 ```
 

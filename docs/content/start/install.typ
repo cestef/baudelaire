@@ -44,13 +44,13 @@ on, or named parameters on a downloaded copy.
   align: (left, left, left),
   table.header([Variable], [Default], [Does]),
   [`PREFIX`], [`~/.local/bin`], [Where the binary lands.],
-  [`VERSION`], [latest], [Pin a release, e.g. `v0.0.9`.],
+  [`VERSION`], [latest], [Pin a release, e.g. `v0.0.10`.],
   [`FLAVOR`], [`full`], [`slim` for the stripped build (below).],
   [`LIBC`], [auto], [`gnu` or `musl`. Linux only; PowerShell has no equivalent.],
 )
 
 ```sh
-PREFIX=/usr/local/bin VERSION=v0.0.9 sh install.sh
+PREFIX=/usr/local/bin VERSION=v0.0.10 sh install.sh
 ```
 
 Prebuilt binaries exist for Linux (`x86_64` and `aarch64`, each `gnu` and
