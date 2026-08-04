@@ -25,8 +25,10 @@ pub(crate) struct Paged<'a> {
     /// The segments page 2 and later hang under, unlocalized: `["blog"]` for a
     /// collection, `["tags", "rust"]` for a term.
     root: &'a [&'a str],
-    /// Where page 1 sits, unlocalized. `None` puts it at `root` (a collection's
-    /// `mount` is what moves it, e.g. `/` for a blog home).
+    /// Where page 1 sits, unlocalized. `None` puts it at `root`, which is what
+    /// a taxonomy term does; a collection passes
+    /// [`CollectionConfig::home`](crate::config::CollectionConfig::home), the
+    /// single answer to where that collection lives.
     mount: Option<&'a str>,
     /// Path segment before the number (`/blog/page/2/`); empty drops it.
     prefix: &'a str,
@@ -156,9 +158,9 @@ impl Generate for Pagination {
 struct Section<'a> {
     id: &'a str,
     template: Option<String>,
-    /// Permalink of page 1 ([`crate::config::CollectionConfig::mount`]); later
+    /// Permalink of page 1 ([`crate::config::CollectionConfig::home`]); later
     /// pages hang under it.
-    mount: Option<String>,
+    mount: String,
     /// Path segment before a page number (`/{id}/{prefix}/{n}/`); empty drops it.
     prefix: &'a str,
     members: Vec<&'a Page>,
@@ -189,7 +191,7 @@ impl<'a> Section<'a> {
         Some(Self {
             id: &collection.id,
             template: paginate.template.clone(),
-            mount: paginate.mount.clone(),
+            mount: collection.config.home(&collection.id),
             prefix: &paginate.prefix,
             members,
             per_page,
@@ -206,7 +208,7 @@ impl<'a> Section<'a> {
         }
         let paged = Paged::new(
             std::slice::from_ref(&self.id),
-            self.mount.as_deref(),
+            Some(&self.mount),
             self.prefix,
             "",
             self.per_page,

@@ -265,7 +265,7 @@ impl<'a> Prepare<'a> {
             backlinks: &backlinks,
             date: &date,
             url: &self.config.prefixed(&page.permalink),
-            collection: &page.collection,
+            collection: page.section(),
             assets: &assets,
         })
     }

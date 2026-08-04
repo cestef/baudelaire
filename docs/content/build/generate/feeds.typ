@@ -108,6 +108,44 @@ has only `pubDate`, which is the publication date.
 A feed with nothing dated in it writes no file at all, rather than a valid but
 empty one.
 
+=== A feed per collection
+
+The site feed carries everything dated, which is the wrong granularity for a
+site that publishes more than one kind of thing: a reader who wants the essays
+takes the release notes too. Ask on the collection:
+
+```kdl
+content {
+  collections {
+    posts { feed #true; paginate { template "list.typ" } }
+  }
+}
+```
+
+Adds `/posts/rss.xml` next to `/posts/`, carrying only that collection's dated
+pages under the same `limit`. Members of the collection advertise it in their
+`<head>` alongside the site feed, named `Site - Posts` so a reader tells the two
+apart in a subscribe dialog.
+
+Per collection rather than one flag over all of them, because most collections
+want no feed: nobody subscribes to a `docs` tree.
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Ask for], [Get]),
+  [`feed` on a collection], [that collection's members, at its index],
+  [`feed { terms }`], [one per taxonomy term, at each term listing],
+  [neither], [the site feed alone, carrying everything dated],
+)
+
+#callout(kind: "warn")[
+  A feed's home is the index it sits beside, so the collection needs a
+  `paginate { }` block; the build says so if it has none. A collection mounted
+  at `/` wants the site feed's own file and is told the same way: the site feed
+  keeps it.
+]
+
 === A feed per tag
 
 ```kdl

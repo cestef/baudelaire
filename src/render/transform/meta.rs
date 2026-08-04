@@ -189,19 +189,31 @@ impl Card<'_> {
         let Some(base) = self.config.base() else {
             return;
         };
-        let scope = self.config.scope(&self.page.lang, "");
-        let title = self.config.title(&self.page.lang);
-        for kind in &self.config.generate.feed.formats {
-            let href = self.config.generate.feed.url(*kind, &base, &scope);
-            tags.push(
-                HtmlElement::new(tag::link)
-                    .with_attr(attr::rel, "alternate")
-                    .with_attr(attr::r#type, kind.mime())
-                    .with_attr(attr::title, title)
-                    .with_attr(attr::href, &href)
-                    .into(),
-            );
-        }
+        let site = self.config.title(&self.page.lang);
+        let advertise = |scope: &str, title: &str, tags: &mut Vec<HtmlNode>| {
+            for kind in &self.config.generate.feed.formats {
+                let href = self.config.generate.feed.url(*kind, &base, scope);
+                tags.push(
+                    HtmlElement::new(tag::link)
+                        .with_attr(attr::rel, "alternate")
+                        .with_attr(attr::r#type, kind.mime())
+                        .with_attr(attr::title, title)
+                        .with_attr(attr::href, &href)
+                        .into(),
+                );
+            }
+        };
+        advertise(&self.config.scope(&self.page.lang, ""), site, tags);
+        // A page in a collection that carries its own feed advertises that one
+        // too, which is the whole point of having it: a reader on a post is
+        // offered the posts, not the everything. Both the location and the name
+        // come from the config, which is what keeps this tag and the file the
+        // feed processor wrote from disagreeing. It reads only the page's own
+        // collection, so it widens no page's cache identity.
+        let Some(own) = self.config.channel(self.page.section(), &self.page.lang) else {
+            return;
+        };
+        advertise(&own.scope, &own.title, tags);
     }
 
     /// The `<link rel="manifest">` pointing at this page's language's manifest,

@@ -123,6 +123,312 @@ scenario "term feeds stay off by default" {
   }
 }
 
+// The site feed carries everything dated, which is the wrong granularity for a
+// site that publishes more than one kind of thing. A collection feed sits
+// beside that collection's index and carries only its members.
+scenario "a collection feed sits beside its index and carries only its members" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true; paginate { template "list.typ" } }
+          notes { paginate { template "list.typ" } }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+    "content/notes/n.typ" #"""
+      #let frontmatter = (title: "N", date: datetime(year: 2024, month: 1, day: 3),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "posts/rss.xml" {
+      contains "https://example.com/posts/a/"
+      missing "/notes/n/"
+      contains "<title>T - Posts</title>"
+      // Its home is the index it sits beside, so an aggregator neither merges
+      // it with the site feed nor links a reader to a page nobody wrote.
+      contains "<link>https://example.com/posts/</link>"
+    }
+    // A collection that did not ask gets none, which is the point of the key
+    // being per collection: a `docs` tree wants no feed.
+    absent "notes/rss.xml"
+    file "rss.xml" {
+      contains "/posts/a/"
+      contains "/notes/n/"
+    }
+    // The whole reason for having one: a reader on a post is offered the posts,
+    // not the everything.
+    file "posts/a/index.html" {
+      contains #"href="https://example.com/posts/rss.xml""#
+      contains #"title="T - Posts""#
+      contains #"href="https://example.com/rss.xml""#
+    }
+    // A page outside the collection advertises the site feed alone.
+    file "notes/n/index.html" { missing "/posts/rss.xml" }
+  }
+}
+
+// A `mount` moves the index, and the feed follows it: the two cannot disagree
+// about where the collection lives.
+scenario "a mounted collection carries its feed at the mount" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true; paginate { mount "/blog/"; template "list.typ" } }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/rss.xml" { contains "<link>https://example.com/blog/</link>" }
+    absent "posts/rss.xml"
+    file "posts/a/index.html" { contains #"href="https://example.com/blog/rss.xml""# }
+  }
+}
+
+// Mounted at the root, a collection wants the file the site feed is already
+// written to. One file cannot be two feeds, and overwriting the site feed with
+// the narrower one is the outcome nobody asked for.
+scenario "a collection mounted at the site root is told it has no feed of its own" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true; paginate { mount "/"; template "list.typ" } }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::feed::mounted"
+    // The site feed keeps the path, and says what it always said.
+    file "rss.xml" { contains "<title>T</title>" }
+    // And no page offers a second subscription to that same file, which would
+    // contradict the warning on every page of the site.
+    file "posts/a/index.html" { missing "T - Posts" }
+  }
+}
+
+// Each language's feed sits under its own prefix, and a member advertises the
+// one in its own language.
+scenario "a collection feed is written per language" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      lang "en"
+      languages {
+        en { }
+        fr { }
+      }
+      content {
+        collections {
+          posts { feed #true; paginate { template "list.typ" } }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "A en français", date: datetime(year: 2024, month: 1, day: 2),)
+      corps
+      """#
+  }
+  expect {
+    ok
+    file "posts/rss.xml" {
+      contains "https://example.com/posts/a/"
+      missing "/fr/posts/a/"
+    }
+    file "fr/posts/rss.xml" {
+      contains "https://example.com/fr/posts/a/"
+      missing #"<link>https://example.com/posts/a/</link>"#
+    }
+    file "fr/posts/a/index.html" { contains #"href="https://example.com/fr/posts/rss.xml""# }
+    // The generated index is a member of no feed, but it advertises its own
+    // language's: its collection is the language-scoped section internally, and
+    // a reader must not be handed the default language's feed because of it.
+    file "fr/posts/index.html" { contains #"href="https://example.com/fr/posts/rss.xml""# }
+  }
+}
+
+// A feed with nothing dated writes no file, so nothing may advertise one.
+scenario "an undated collection advertises no feed it does not have" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          docs { feed #true; paginate { template "list.typ" } }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/docs/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    absent "docs/rss.xml"
+    // Known gap, pinned so it is a decision rather than a surprise: the tag is
+    // written from the config, which cannot know the collection turned out to
+    // have nothing dated in it. Asking the page set here would tie every page's
+    // cache identity to every other page's dates.
+    file "docs/a/index.html" { contains "/docs/rss.xml" }
+  }
+}
+
+// Two collections asking, one of them unable: the row cannot name which, so it
+// must not claim the other's feed went unwritten either.
+scenario "one collection without an index does not cost the other its feed" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true; paginate { template "list.typ" } }
+          docs { feed #true }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+    "content/docs/d.typ" #"""
+      #let frontmatter = (title: "D", date: datetime(year: 2024, month: 1, day: 3),)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::config::inert"
+    file "posts/rss.xml" { contains "/posts/a/" }
+    absent "docs/rss.xml"
+  }
+}
+
+// The collection key sits far from `generate { feed { } }`, so asking there and
+// naming no format is the likely first-use mistake.
+scenario "a collection feed with no configured format is reported as inert" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true; paginate { template "list.typ" } }
+        }
+      }
+      """#
+    "templates/list.typ" #"""
+      #let list(page, body) = body
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::config::inert"
+    absent "posts/rss.xml"
+    absent "rss.xml"
+  }
+}
+
+// A feed's home is the collection's index, so a collection with none has
+// nowhere to put one and is told rather than silently writing nothing.
+scenario "a collection feed without an index is reported as inert" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { feed #true }
+        }
+      }
+      generate {
+        feed { formats "rss" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::config::inert"
+    absent "posts/rss.xml"
+  }
+}
+
 scenario "only the configured feed format is emitted: atom" {
   files {
     "config.kdl" #"""

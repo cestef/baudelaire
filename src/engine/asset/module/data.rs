@@ -182,20 +182,26 @@ impl Module for Feed {
         // default language's: one bundle serves the whole site, so a French
         // page's widget had nothing of its own to show.
         let items = cx.config.langs().into_iter().flat_map(|lang| {
-            Page::recent(cx.pages, cx.config, lang, cx.config.generate.feed.limit)
-                .into_iter()
-                .map(|page| {
-                    Value::dict([
-                        ("url", Value::str(&page.permalink)),
-                        ("title", Value::str(page.title())),
-                        ("lang", Value::str(&page.lang)),
-                        (
-                            "date",
-                            Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
-                        ),
-                    ])
-                })
-                .collect::<Vec<_>>()
+            Page::recent(
+                cx.pages,
+                cx.config,
+                lang,
+                cx.config.generate.feed.limit,
+                None,
+            )
+            .into_iter()
+            .map(|page| {
+                Value::dict([
+                    ("url", Value::str(&page.permalink)),
+                    ("title", Value::str(page.title())),
+                    ("lang", Value::str(&page.lang)),
+                    (
+                        "date",
+                        Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),
+                    ),
+                ])
+            })
+            .collect::<Vec<_>>()
         });
         vec![("baudelaire:feed".into(), Esm::value(&Value::array(items)))]
     }

@@ -28,6 +28,27 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **collections**: `feed`, a syndication feed of one collection's members.
+
+  ```kdl
+  content {
+    collections {
+      posts { feed #true; paginate { template "list.typ" } }
+    }
+  }
+  ```
+
+  Written beside the collection's index (`/posts/rss.xml`) in every configured
+  format, carrying only that collection's dated pages under the same `limit`,
+  and advertised in each member's `<head>` beside the site feed. The site feed
+  carries everything dated, which is the wrong granularity for a site that
+  publishes more than one kind of thing: a reader who wants the essays had to
+  take the release notes too. Per collection rather than one flag over all of
+  them, because most collections want no feed at all. A feed's home is the index
+  it sits beside, so the collection needs `paginate { }`, and one mounted at `/`
+  is told the site feed keeps that file rather than being overwritten by the
+  narrower of the two.
+
 - **config**: a top-level `redirect { }` block, for the old paths no page owns.
 
   ```kdl

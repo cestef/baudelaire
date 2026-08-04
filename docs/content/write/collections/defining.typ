@@ -39,10 +39,12 @@ a collection named after that top directory, with every default below. Declaring
   [`permalink`], [template], [`/{path}/{slug}/`], [The URL pattern its pages publish at.],
   [`template`], [str], [--], [The layout its pages render through.],
   [`paginate`], [block], [--], [Generate an index over the collection.],
+  [`feed`], [bool], [`#false`], [Also write a feed of its members, beside that index.],
   [`schema`], [block], [--], [What every member's frontmatter must declare.],
 )
 
-`paginate` is on #link("pagination.typ")[listings and pagination]; `schema` is on
+`paginate` is on #link("pagination.typ")[listings and pagination]; `feed` is on
+#link("../../build/generate/feeds.typ")[feeds]; `schema` is on
 #link("../frontmatter.typ")[frontmatter].
 
 == Which files belong

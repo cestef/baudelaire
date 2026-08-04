@@ -464,6 +464,26 @@ pub struct RedirectsShadowed {
     pub path: PathBuf,
 }
 
+/// A collection asked for a feed, and its index is mounted where the site feed
+/// already sits (`paginate { mount "/" }` on a blog that is the whole site).
+/// One file cannot be two feeds, and the site feed is the more inclusive of the
+/// two, so it keeps the path and the collection's is not written.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error(
+    "{} is mounted where a site feed is, so it has no feed of its own",
+    Code(.collection)
+)]
+#[diagnostic(
+    code(baudelaire::feed::mounted),
+    severity(warning),
+    help(
+        "the site feed already carries these pages: drop `feed` from the collection, or mount its index somewhere of its own"
+    )
+)]
+pub struct FeedMounted {
+    pub collection: String,
+}
+
 /// The site emits no not-found page. A static host answers an unmatched URL
 /// with whatever it has, which is its own generic page, not the site's.
 ///

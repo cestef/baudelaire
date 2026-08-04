@@ -47,7 +47,7 @@ collapse into ordinary Typst functions.
   [`taxonomies`], [`content { taxonomies { } }`],
   [`permalinks`], [`permalink` on the collection],
   [`pagination.pagerSize`, older `paginate`], [`paginate { size }` on the collection],
-  [`outputs` with `RSS`], [`generate { feed { formats } }`],
+  [`outputs` with `RSS`], [`generate { feed { formats } }`; per section, `feed #true` on the collection],
   [`enableRobotsTXT`], [`generate { robots { } }`],
   [`sitemap`], [`generate { sitemap #true }`],
   [`minify`], [`assets { minify }` for CSS and JS; HTML is not minified],

@@ -76,6 +76,7 @@ content {
   [`paginate_path`], [`paginate { prefix }`],
   [`template`], [`paginate { template }`],
   [`page_template`], [`template`],
+  [`generate_feeds`], [`feed #true`, which writes it beside the section index],
   [`transparent`], [a `glob` reaching into the subdirectories],
   [`redirect_to`], [a `redirect` on the destination page],
 )

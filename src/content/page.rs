@@ -316,16 +316,39 @@ impl Page {
     /// `limit`: authored content carrying a date. The single "recent posts"
     /// selection shared by the syndication feeds and the `baudelaire:feed`
     /// module, so a language's feed lists only its own posts.
+    ///
+    /// `within` narrows it to one collection, which is what a collection's own
+    /// feed carries. Narrowed here rather than at the caller so a clause added
+    /// to this rule reaches every feed: a per-collection filter written beside
+    /// it would keep listing what the site feed had learned to leave out.
     pub fn recent<'a>(
         pages: &'a [Self],
         config: &Config,
         lang: &str,
         limit: usize,
+        within: Option<&str>,
     ) -> Vec<&'a Self> {
         let candidates = pages.iter().filter(|p| {
-            !matches!(p.data, Data::Generated { .. }) && p.lang == lang && p.listed(config)
+            !matches!(p.data, Data::Generated { .. })
+                && p.lang == lang
+                && p.listed(config)
+                && within.is_none_or(|id| p.collection == id)
         });
         Self::newest(candidates, limit)
+    }
+
+    /// The collection this page belongs to, as the collection is named in the
+    /// config.
+    ///
+    /// A generated listing's [`collection`](Self::collection) is its
+    /// *language-scoped* section (`fr/tags`), which is what keeps two editions
+    /// of one listing distinct on disk. Everything that means "which collection
+    /// is this" wants the section itself, and each reader used to strip the
+    /// prefix again.
+    pub fn section(&self) -> &str {
+        self.collection
+            .strip_prefix(&format!("{}/", self.lang))
+            .unwrap_or(&self.collection)
     }
 
     /// The newest `limit` dated pages among `pages`, newest first; undated ones

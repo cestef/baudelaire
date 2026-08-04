@@ -481,6 +481,15 @@ impl Section for CollectionConfig {
             |c, n, t| c.paginate.fill(n, t),
         ),
         (
+            "feed",
+            Flag,
+            "Also write a feed of this collection's members, beside its index.",
+            |c, n, t| {
+                c.feed = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
             "schema",
             Items(FieldSchema::rows),
             "What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.",

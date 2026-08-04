@@ -32,6 +32,7 @@
   (path: "content.collections.paginate.template", key: "template", shape: "text", doc: "The layout the index renders through.", depth: 3, section: false),
   (path: "content.collections.paginate.mount", key: "mount", shape: "text", doc: "Where the index publishes, if not at the collection's own path.", depth: 3, section: false),
   (path: "content.collections.paginate.prefix", key: "prefix", shape: "text", doc: "The path segment before a page number, as in `/posts/page/2/`.", depth: 3, section: false),
+  (path: "content.collections.feed", key: "feed", shape: "flag", doc: "Also write a feed of this collection's members, beside its index.", depth: 2, section: false),
   (path: "content.collections.schema", key: "schema", shape: "named blocks", doc: "What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.", depth: 2, section: true),
   (path: "content.collections.schema.type", key: "type", shape: "any | str | bool | int | float | date | dict | list | list<..>", doc: "The shape the value must have, also writable as the leading positional: `title \"str\"`. A list names what it holds: `list<int>`, `list<dict>`.", depth: 3, section: false),
   (path: "content.collections.schema.optional", key: "optional", shape: "flag", doc: "Let the field be absent. Declaring a field otherwise requires it.", depth: 3, section: false),

@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use kdl::KdlDocument;
 
 use crate::config::dispatch::Section;
+use crate::content::listing::Titlecase;
 use crate::error::{ConfigError, Result};
 use crate::mime::ImageFormat;
 use crate::ui::Bytes;
@@ -537,6 +538,36 @@ impl Config {
             .map(|(_, c)| c)
     }
 
+    /// Collection `id`'s own feed in `lang`, or `None` when it has none.
+    ///
+    /// The single answer, because two things have to agree about it: the
+    /// processor that writes the file and the `<head>` tag every member
+    /// advertises it with. A page pointing at a feed no build wrote is a dead
+    /// subscribe button, and nothing downstream would notice. Both facts come
+    /// back together for the same reason.
+    ///
+    /// Three ways to have none: the collection did not ask, it publishes no
+    /// index for the feed to sit beside (a feed's `<link>` would name a page
+    /// nobody wrote), or it sits exactly where a *site* feed already does, in
+    /// which case that file is taken and the site feed, the more inclusive of
+    /// the two, keeps it.
+    pub fn channel(&self, id: &str, lang: &str) -> Option<Channel> {
+        let collection = self.collection(id)?;
+        (collection.feed && collection.paginate.enabled)
+            .then(|| self.localize(lang, &collection.home(id)))
+            .map(|url| url.trim_matches('/').to_owned())
+            .filter(|scope| {
+                !self
+                    .langs()
+                    .iter()
+                    .any(|other| self.scope(other, "") == *scope)
+            })
+            .map(|scope| Channel {
+                scope,
+                title: format!("{} - {}", self.title(lang), Titlecase(id)),
+            })
+    }
+
     /// The layout a page renders through: what its own frontmatter names, else
     /// its collection's `template`. `None` means no layout at all, and the
     /// page's own markup is the document.
@@ -827,6 +858,20 @@ impl std::hash::Hash for Config {
     }
 }
 
+/// A collection's own syndication feed: where its file goes and what it calls
+/// itself, from [`Config::channel`].
+///
+/// One value rather than two lookups, because the file the build writes and the
+/// tag a page advertises it with are the same feed, and a reader sees the tag's
+/// title before ever fetching the file.
+pub struct Channel {
+    /// The directory the feed files are written to, under the output root and
+    /// under the site's own path (`posts`, `fr/posts`).
+    pub scope: String,
+    /// The feed's title, in the language it is written for.
+    pub title: String,
+}
+
 /// Per-collection override.
 #[derive(Debug, Clone, Hash)]
 pub struct CollectionConfig {
@@ -842,9 +887,39 @@ pub struct CollectionConfig {
     pub template: Option<String>,
     /// The generated index over this collection's members.
     pub paginate: PaginateConfig,
+    /// Also write a feed of this collection's members, beside its index, in
+    /// every configured format.
+    ///
+    /// The site feed carries everything dated, which is the wrong granularity
+    /// for a site that publishes more than one kind of thing: a reader who
+    /// wants the essays has to take the release notes too. Per collection
+    /// rather than a blanket flag, because on any site with a `docs` or a
+    /// `pages` collection most of them want no feed at all.
+    pub feed: bool,
     /// What every member's frontmatter must declare, in declaration order.
     /// Empty is the default: nothing required, nothing typed.
     pub schema: Vec<(String, FieldSchema)>,
+}
+
+impl CollectionConfig {
+    /// Where this collection's index sits, before localization: the
+    /// `paginate { mount }` if one moves it, else `/{id}/`, always rooted.
+    ///
+    /// The rooting is not cosmetic: an unrooted `mount "blog"` localizes to
+    /// `/frblog` rather than `/fr/blog`, and this now names an output file as
+    /// well as a permalink.
+    ///
+    /// The single answer, so the index page, the feed written beside it and the
+    /// autodiscovery tag pointing at that feed cannot disagree about where the
+    /// collection lives. [`crate::content::Pagination`] takes it as page 1's
+    /// permalink rather than deriving the same rule again.
+    pub fn home(&self, id: &str) -> String {
+        match self.paginate.mount.as_deref() {
+            Some(mount) if mount.starts_with('/') => mount.to_owned(),
+            Some(mount) => format!("/{mount}"),
+            None => Permalink::join(&[id]),
+        }
+    }
 }
 
 /// A collection's generated index: whether there is one, how it is chunked, and

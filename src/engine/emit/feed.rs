@@ -5,9 +5,10 @@ use time::OffsetDateTime;
 use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
-use super::{Emit, Processor, Site};
-use crate::config::{BaseUrl, Config, FeedConfig, FeedKind, Permalink};
+use super::{Emit, Processor, Site, Warn};
+use crate::config::{BaseUrl, Channel, Config, FeedConfig, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
+use crate::error::warning::FeedMounted;
 use crate::error::{Artifact, FeedDateError, Result};
 
 /// The timestamp behavior each feed standard mandates: RSS wants RFC 2822
@@ -52,6 +53,7 @@ impl Processor for Feeds {
                 site.config,
                 lang,
                 site.config.generate.feed.limit,
+                None,
             );
             let scope = site.config.scope(lang, "");
             let feed = Feed::new(
@@ -64,6 +66,7 @@ impl Processor for Feeds {
             );
             Self::emit(site, out, &feed)?;
         }
+        Self::collections(site, out, &base)?;
         if site.config.generate.feed.terms {
             Self::terms(site, out, &base)?;
         }
@@ -72,6 +75,62 @@ impl Processor for Feeds {
 }
 
 impl Feeds {
+    /// A feed per collection that asked for one, written beside that
+    /// collection's index, so a reader can follow the essays without also
+    /// taking the release notes.
+    ///
+    /// Where each one goes, what it calls itself, and whether it has one at
+    /// all is [`Config::channel`]: the same answer the `<head>` tag advertising
+    /// it is built from, so a page can never point at a file this pass declined
+    /// to write, nor name it something else.
+    fn collections(site: &Site, out: &mut dyn Emit, base: &BaseUrl) -> Result<()> {
+        for (id, collection) in &site.config.content.collections {
+            // The `paginate` half is what `engine::gate` warns about, and the
+            // warning states that no feed is written: it has to be true here or
+            // the diagnostic describes a build that did not happen.
+            if !collection.feed || !collection.paginate.enabled {
+                continue;
+            }
+            let channels: Vec<(&str, Channel)> = site
+                .config
+                .langs()
+                .into_iter()
+                .filter_map(|lang| Some((lang, site.config.channel(id, lang)?)))
+                .collect();
+            // Asked for, able to have one, and yet no language places it
+            // anywhere: the collection sits where a site feed already does, and
+            // that file is taken. Said once, since the mount is one config line.
+            if channels.is_empty() {
+                out.warn(FeedMounted {
+                    collection: id.clone(),
+                });
+                continue;
+            }
+            for (lang, channel) in channels {
+                let dated = Page::recent(
+                    site.pages,
+                    site.config,
+                    lang,
+                    site.config.generate.feed.limit,
+                    Some(id),
+                );
+                Self::emit(
+                    site,
+                    out,
+                    &Feed::new(
+                        base,
+                        &channel.title,
+                        site.config.description(lang),
+                        &dated,
+                        &channel.scope,
+                        &site.config.generate.feed,
+                    ),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     /// A feed per taxonomy term, written beside that term's listing page, so a
     /// reader can follow one tag instead of the whole site.
     ///

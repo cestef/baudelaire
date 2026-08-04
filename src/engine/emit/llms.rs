@@ -57,7 +57,7 @@ impl Processor for Llms {
             {
                 let _ = write!(md, "\n> {summary}\n");
             }
-            for (collection, pages) in Self::sections(&pages, lang) {
+            for (collection, pages) in Self::sections(&pages) {
                 let _ = write!(md, "\n## {collection}\n\n");
                 for page in pages {
                     let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
@@ -79,16 +79,13 @@ impl Llms {
     /// sections and the pages within them.
     ///
     /// A generated listing's collection is the language-scoped section
-    /// (`fr/tags`), so the scope is stripped here: within one language's file
-    /// it is noise, and it split what is one section into two headings.
-    fn sections<'a>(pages: &[&'a Page], lang: &str) -> Vec<(&'a str, Vec<&'a Page>)> {
-        let prefix = format!("{lang}/");
+    /// (`fr/tags`), which [`Page::section`] is what strips: within one
+    /// language's file the scope is noise, and it split one section into two
+    /// headings.
+    fn sections<'a>(pages: &[&'a Page]) -> Vec<(&'a str, Vec<&'a Page>)> {
         let mut sections: Vec<(&str, Vec<&Page>)> = Vec::new();
         for page in pages {
-            let name = page
-                .collection
-                .strip_prefix(&prefix)
-                .unwrap_or(&page.collection);
+            let name = page.section();
             match sections.iter_mut().find(|(seen, _)| *seen == name) {
                 Some((_, list)) => list.push(page),
                 None => sections.push((name, vec![page])),

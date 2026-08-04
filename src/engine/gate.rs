@@ -184,6 +184,39 @@ const INERT: &[Inert] = &[
         effect: "no per-term feed is written",
         help: "set `listing` on the taxonomy whose terms should carry a feed",
     },
+    // A collection feed is written beside the collection's index and takes that
+    // index as its home, so a collection with none has nowhere to put one: the
+    // feed would advertise a `<link>` no page answers.
+    Inert {
+        setting: "content { collections { feed } }",
+        asked: |config| config.content.collections.iter().any(|(_, c)| c.feed),
+        needs: "a `paginate` block on that collection",
+        met: |config| {
+            config
+                .content
+                .collections
+                .iter()
+                .all(|(_, c)| !c.feed || c.paginate.enabled)
+        },
+        // One row cannot name which collection, so it says "that collection"
+        // rather than claiming none was written: with two asking and one
+        // paginated, the paginated one does get its feed.
+        effect: "that collection's feed is not written",
+        help: "add `paginate { }` to the collection, which is the page its feed points at",
+    },
+    // Both kinds of subsidiary feed ride on the formats the site writes, and
+    // naming none turns feeds off wholesale: the collection key sits far from
+    // `generate { feed { } }`, so asking there and nowhere else was silence.
+    Inert {
+        setting: "a `feed` beside a collection or a term",
+        asked: |config| {
+            config.generate.feed.terms || config.content.collections.iter().any(|(_, c)| c.feed)
+        },
+        needs: "generate { feed { formats } }",
+        met: |config| !config.generate.feed.formats.is_empty(),
+        effect: "no feed of any kind is written",
+        help: "name the formats to write (`formats \"rss\"`), or drop the `feed` that asked",
+    },
     // Both tune the prebuilt inverted index and reach no other format, so a
     // site on `formats \"json\"` tuned nothing at all.
     Inert {

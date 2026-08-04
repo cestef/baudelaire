@@ -425,6 +425,7 @@ impl Default for CollectionConfig {
             permalink: None,
             template: None,
             paginate: PaginateConfig::default(),
+            feed: false,
             // no schema is the default: a collection constrains its members'
             // frontmatter only when it says so.
             schema: Vec::new(),
