@@ -136,7 +136,7 @@ fn the_page_catalogue_is_bound_per_language() {
         #import "@baudelaire/pages:0.1.0": pages
         #let page(data, body) = [
           #for entry in pages("en") [
-            #entry.collection/#entry.label/#entry.date/#entry.extra.at("summary", default: "-")/#entry.taxonomies.at("tags", default: ()).len();
+            #entry.collection/#entry.label/#entry.date/#entry.extra.at("summary", default: "-")/#entry.taxonomies.at("tags", default: ()).len()/#(if entry.description == none { "-" } else { entry.description });
           ]
         ]
         "#,
@@ -153,10 +153,14 @@ fn the_page_catalogue_is_bound_per_language() {
 
     let html = site.output("index.html");
     // An undated page carries `date: none`, which prints as nothing.
-    assert!(html.contains("_root/Home//-/0"), "root page row: {html}");
+    assert!(html.contains("_root/Home//-/0/-"), "root page row: {html}");
+    // `description` is resolved from the `summary` alias, so a row shows the
+    // preview whichever spelling the page used. A template reading
+    // `extra.summary` sees only its own spelling, which is why the resolved
+    // field exists.
     assert!(
-        html.contains("posts/Hello/2026-07-14/A summary./1"),
-        "post row carries date, extra and taxonomies: {html}"
+        html.contains("posts/Hello/2026-07-14/A summary./1/A summary."),
+        "post row carries date, extra, taxonomies and the resolved description: {html}"
     );
     // The taxonomy index at `/tags/` is a generated listing, so it is absent.
     assert!(

@@ -4,11 +4,11 @@
 
 // Generated listing page (taxonomy terms, paginated indexes). Each entry
 // carries `url`, `label`, an optional `date` and `note`, and the source page's
-// `extra` frontmatter, so a dated blog index can show dates and summaries
+// resolved `description`, so a dated blog index can show dates and summaries
 // while a tag index shows counts, all from one template.
 #let list(page, body) = shell(page.frontmatter.title, {
   h("ul", class: "listing", for entry in page.frontmatter.entries {
-    let summary = entry.extra.at("summary", default: none)
+    let summary = entry.description
     h("li", class: "entry", h("a", href: entry.url, class: "entry-link", {
       h("span", class: "entry-head", {
         h("span", class: "entry-title", entry.label)

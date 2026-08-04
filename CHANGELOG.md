@@ -134,6 +134,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **listings**: a row carries `description`, resolved from a page's
+  `description` or its `summary` alias, and every shipped template reads it. A
+  listing used to reach into `entry.extra.summary` itself, so a site that wrote
+  `description`, the spelling the docs teach and the one that fills the meta tag
+  and the feed, got a blank preview under every entry. The scaffolds and themes
+  that hardcoded the alias are updated, and the same field is on
+  `@baudelaire/pages` and `baudelaire:pages`.
+
 - **init**: `--theme` scaffolds a project the theme can render. It wrote a
   starter shape's whole config over the theme: a `collections` list (which
   replaces a theme's rather than merging), and `template` keys naming layouts

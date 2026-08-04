@@ -5,9 +5,9 @@
   // A single-element Typst array needs the trailing comma. Without it this is
   // the string "intro", not a list of one tag.
   tags: ("intro", "typst"),
-  // Frontmatter keys Baudelaire does not claim are yours to use. This one shows
-  // up in listings as `entry.extra.summary`.
-  summary: "What you get when a post is a Typst document rather than markdown.",
+  // The one-line summary. It fills the meta description, the feed entry and
+  // the search index, and listings read it as `entry.description`.
+  description: "What you get when a post is a Typst document rather than markdown.",
 )
 
 This is a post. It is also a Typst document, so the whole language is here:

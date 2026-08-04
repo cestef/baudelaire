@@ -9,6 +9,8 @@ export interface Entry {
   /** The date as this page's language renders it. */
   display: string | null;
   note: string | null;
+  /** The page's one-line summary, from `description` or its `summary` alias. */
+  description: string | null;
   /** Taxonomy name to the terms this page carries. */
   taxonomies: Record<string, string[]>;
   /** Whatever else the page's frontmatter declared. */

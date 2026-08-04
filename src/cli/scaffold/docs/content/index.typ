@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Documentation",
-  summary: "Everything you need to run and extend this site.",
+  description: "Everything you need to run and extend this site.",
 )
 #import "/templates/theme.typ": callout
 

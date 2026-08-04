@@ -278,6 +278,7 @@ A row is the same shape a generated listing hands its template as
   [`date`], [The date, ISO, or `none`.],
   [`display`], [The same date, localized, or `none`.],
   [`note`], [A trailing annotation, or `none`.],
+  [`description`], [Its one-line summary, from `description` or the `summary` alias.],
   [`taxonomies`], [A dict of `taxonomy -> (terms..)`.],
   [`extra`], [The page's own remaining frontmatter.],
 )

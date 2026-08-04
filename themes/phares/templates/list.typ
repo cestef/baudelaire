@@ -16,8 +16,9 @@
       h("li", class: classes("entry", ("dated", entry.date != none)), {
         h("a", class: "entry-title", href: entry.url, entry.label)
         if entry.note != none { h("span", class: "count", entry.note) }
-        let summary = entry.extra.at("summary", default: none)
-        if summary != none { h("p", class: "entry-summary", summary) }
+        if entry.description != none {
+          h("p", class: "entry-summary", entry.description)
+        }
       })
     })
 

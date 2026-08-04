@@ -20,9 +20,12 @@
       h("a", class: "entry-title", href: entry.url, entry.label)
       if entry.date != none { h("time", class: "meta", entry.date) }
       if entry.note != none { h("span", class: "meta", entry.note) }
-      // Anything else a post put in its frontmatter is here under `extra`.
-      let summary = entry.extra.at("summary", default: none)
-      if summary != none { h("p", class: "entry-summary", summary) }
+      // The post's one-line summary, whether it wrote `description` or
+      // `summary`: the build resolves the two into one field. Anything else it
+      // put in its frontmatter is under `extra`.
+      if entry.description != none {
+        h("p", class: "entry-summary", entry.description)
+      }
     })
   })
 

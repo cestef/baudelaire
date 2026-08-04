@@ -173,7 +173,7 @@
       }
     })
   }
-  let summary = entry.extra.at("summary", default: entry.extra.at("description", default: none))
+  let summary = entry.description
   if summary != none { h("p", class: "entry-summary", summary) }
 })
 

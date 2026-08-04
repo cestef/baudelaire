@@ -102,12 +102,13 @@
 // catalogue share, so the same call renders the landing page's selection, the
 // `/work/` index, and a `stack` term page.
 //
-// `cover` (an image path), `summary`, and `role` come from the project's own
-// frontmatter, which arrives whole as `entry.extra`.
+// `cover` (an image path) and `role` come from the project's own frontmatter,
+// which arrives whole as `entry.extra`. The summary is `entry.description`,
+// which the build already resolved from `description` or its `summary` alias.
 #let work-card(page, entry) = {
   let extra = entry.extra
   let cover = extra.at("cover", default: none)
-  let summary = extra.at("summary", default: extra.at("description", default: none))
+  let summary = entry.description
   h("li", class: "card", h("a", class: "card-link", href: entry.url, {
     if cover != none {
       h("span", class: "card-cover", h("img", src: cover, alt: "", loading: "lazy"))

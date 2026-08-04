@@ -1,7 +1,7 @@
 #let frontmatter = (
   order: 2,
   title: "Configuration",
-  summary: "Collections, generated files, and profiles in config.kdl.",
+  description: "Collections, generated files, and profiles in config.kdl.",
   tags: ("guide",),
 )
 #import "/templates/theme.typ": callout

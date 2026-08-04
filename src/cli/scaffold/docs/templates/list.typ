@@ -17,8 +17,9 @@
     h("ul", class: "listing", for entry in page.frontmatter.entries {
       h("li", h("a", class: "entry", href: entry.url, {
         h("span", class: "entry-title", entry.label)
-        let summary = entry.extra.at("summary", default: none)
-        if summary != none { h("span", class: "entry-summary", summary) }
+        if entry.description != none {
+          h("span", class: "entry-summary", entry.description)
+        }
       }))
     })
     let nav = page.frontmatter.nav

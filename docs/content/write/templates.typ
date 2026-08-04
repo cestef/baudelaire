@@ -108,8 +108,9 @@ Each row:
   [`date`], [str], [ISO-8601 day, or `none`.],
   [`display`], [str], [The same date written the way its language writes one, or `none`.],
   [`note`], [str], [A trailing annotation (a term index puts its count here), or `none`.],
+  [`description`], [str], [Its one-line summary, from `description` or the `summary` alias, or `none`.],
   [`taxonomies`], [dict], [The source page's terms.],
-  [`extra`], [dict], [Its remaining frontmatter, for summaries and cover images.],
+  [`extra`], [dict], [Its remaining frontmatter, for cover images and anything else it declared.],
 )
 
 `page.frontmatter.nav` on a listing is pagination: `prev` and `next` are plain URL strings, not the `(url, title)` dicts `page.nav` uses on a real page. `body` is a generated fallback list, which a template that draws `entries` itself can ignore.

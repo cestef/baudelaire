@@ -85,7 +85,7 @@ It arrives with the standard fields filled in. Open it and write:
   title: "First Post",
   date: datetime(year: 2026, month: 8, day: 2),
   tags: ("intro",),
-  summary: "Shown under the entry in the index.",
+  description: "Shown under the entry in the index.",
 )
 
 This is *real Typst*, not markdown. You get functions, variables, imports,
@@ -110,8 +110,10 @@ is grouped, ordered and addressed follows from there. See
 #link("../write/collections/defining.typ")[collections].
 
 Every key frontmatter understands is on
-#link("../write/frontmatter.typ")[frontmatter]. Keys baudelaire doesn't claim
-are yours: `summary` above reaches templates as `entry.extra.summary`.
+#link("../write/frontmatter.typ")[frontmatter]. `description` above fills the
+meta tag, the feed entry and the search index, and a listing reads it back as
+`entry.description`. Keys baudelaire doesn't claim are yours, and reach a
+template as `entry.extra.<key>`.
 
 == Build
 

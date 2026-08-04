@@ -90,8 +90,8 @@ impl Module for Assets {
 }
 
 /// `baudelaire:pages`: the authored content pages as `{ url, label,
-/// collection, lang, date, display, note, taxonomies, extra }`, for client
-/// nav, related-posts, and prefetch.
+/// collection, lang, date, display, note, description, taxonomies, extra }`,
+/// for client nav, related-posts, and prefetch.
 ///
 /// One row is [`Page::entry`], the same value a generated listing's entries and
 /// the Typst `@baudelaire/pages` catalogue are built from, so the shape a theme

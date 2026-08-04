@@ -50,6 +50,12 @@ pub struct Item {
     /// `<time datetime>` wants.
     display: Option<String>,
     note: Option<String>,
+    /// The page's one-line summary, resolved once by
+    /// [`Frontmatter::description`] so a listing preview cannot disagree with
+    /// the `<meta>` tag, the feed entry and the announced record. Reading
+    /// `extra.summary` instead is how a theme silently loses the preview of
+    /// every page that spelled it `description`.
+    description: Option<String>,
     /// The page's taxonomy terms, keyed by taxonomy (e.g. `tags`, `categories`),
     /// exposed as-is so a template picks whichever it wants, never flattened.
     taxonomies: BTreeMap<String, Vec<String>>,
@@ -66,6 +72,7 @@ impl Item {
             date: None,
             display: None,
             note: None,
+            description: None,
             taxonomies: BTreeMap::new(),
             extra: Value::dict::<&str>([]),
         }
@@ -97,12 +104,13 @@ impl Item {
         }
         .dated(date)
         .shown(display)
+        .described(page.frontmatter.description())
         .with_taxonomies(page.frontmatter.taxonomies.clone())
         .extra(extra)
     }
 
     /// This row as a typst [`Value`]: `(url, label, collection, lang, date,
-    /// display, note, taxonomies, extra)`.
+    /// display, note, description, taxonomies, extra)`.
     ///
     /// The single rendering of a row, so a listing's `entries`, the
     /// `@baudelaire/pages` catalogue and its JavaScript counterpart cannot
@@ -116,6 +124,7 @@ impl Item {
             ("date", Value::opt(self.date.clone())),
             ("display", Value::opt(self.display.clone())),
             ("note", Value::opt(self.note.clone())),
+            ("description", Value::opt(self.description.clone())),
             (
                 "taxonomies",
                 Value::dict(self.taxonomies.iter().map(|(name, terms)| {
@@ -154,6 +163,14 @@ impl Item {
     /// Attach the ISO date, shown by dated listings (e.g. a blog index).
     pub fn dated(mut self, date: Option<String>) -> Self {
         self.date = date;
+        self
+    }
+
+    /// Attach the page's one-line summary, exposed to the template as
+    /// `entry.description`. Built from [`Frontmatter::description`], so a page
+    /// that wrote `summary` and one that wrote `description` read the same here.
+    pub fn described(mut self, description: Option<String>) -> Self {
+        self.description = description;
         self
     }
 

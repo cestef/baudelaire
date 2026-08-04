@@ -1,7 +1,7 @@
 #let frontmatter = (
   order: 1,
   title: "Getting started",
-  summary: "Run the site, add a page, and see it in the sidebar.",
+  description: "Run the site, add a page, and see it in the sidebar.",
   tags: ("guide",),
 )
 #import "/templates/theme.typ": callout
@@ -37,7 +37,7 @@ Create `content/guide/writing.typ`:
 #let frontmatter = (
   order: 3,
   title: "Writing",
-  summary: "How pages are written.",
+  description: "How pages are written.",
 )
 
 Pages are Typst, so you get headings, lists, code blocks, math, and your own
