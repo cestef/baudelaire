@@ -202,6 +202,26 @@ fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
     );
 }
 
+/// `--dir` addresses a directory the verbs write to and delete from, and it is
+/// the one path here a project did not resolve itself, so a path that climbs
+/// out of the project is refused rather than written.
+#[test]
+#[cfg(feature = "themes")]
+fn a_theme_directory_outside_the_project_is_refused() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    let out = site.run(&["theme", "add", "albatros", "--dir", "../elsewhere"]);
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("baudelaire::theme::outside"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !site.path("../elsewhere").exists(),
+        "nothing was written outside the project"
+    );
+}
+
 /// Removing keeps work: a file you edited stays, and so does the record, so the
 /// same command with `--force` can still finish the job.
 #[test]

@@ -327,6 +327,10 @@ chores are visible in the git history and change nothing for a site.
   `theme list`, and `info`, `update` and `remove` reported it as not installed
   unless you repeated the `--dir` you had used to add it.
 
+- **theme**: `--dir` outside the project is refused instead of written. The
+  build cannot use a theme there (a Typst import cannot leave the root), so the
+  files it wrote could never be read.
+
 - **theme**: `theme add` records only the files it wrote. It re-recorded the
   whole shipped set, digested from the running binary, so a second `add` over an
   install from an earlier baudelaire disowned every file that binary had written:

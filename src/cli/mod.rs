@@ -1394,9 +1394,20 @@ impl ThemeArgsFor {
     /// the run says so, otherwise what the config's `theme` line names, so the
     /// two halves of adopting a theme agree without the reader holding a path
     /// in mind.
+    /// `--dir` is checked here, and here only: it is the one path in this
+    /// command a project did not resolve for itself, and it addresses a
+    /// directory the verbs write to and delete from. The build refuses a theme
+    /// outside the root anyway (a Typst import cannot reach one), so a `--dir`
+    /// that climbs out could only ever write files nothing would read.
     fn vendored(&self, cx: &Cx, configured: Option<&str>) -> Result<Vendored> {
         let theme = crate::theme::Bundled::find(&self.name)?;
-        let rel = self.dir.clone().unwrap_or_else(|| theme.dir(configured));
+        let rel = match &self.dir {
+            None => theme.dir(configured),
+            Some(dir) => crate::fs::Contained::new(dir)
+                .ok_or_else(|| crate::error::ThemeError::outside(&dir.display().to_string()))?
+                .path()
+                .to_path_buf(),
+        };
         Ok(Vendored {
             dir: cx.root.join(&rel),
             theme,
