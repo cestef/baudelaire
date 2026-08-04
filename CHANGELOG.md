@@ -353,6 +353,10 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **cli**: `--version` names the `themes` feature. It was missing from the table
+  that report reads, so a build carrying the `theme` command and nothing else
+  called itself `slim`, which is the one thing that report exists to answer.
+
 - **themes**: a theme installed as a Typst package renders. Its layouts were
   imported as a package subpath (`@local/plume:0.1.0/templates/page.typ`), which
   typst reads as a version, so every page of a package-themed site failed with

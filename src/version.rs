@@ -48,6 +48,7 @@ impl Version {
         ("js", cfg!(feature = "js")),
         ("pdf", cfg!(feature = "pdf")),
         ("ssh", cfg!(feature = "ssh")),
+        ("themes", cfg!(feature = "themes")),
     ];
 
     /// The released flavor this binary matches, named the way `install.sh`
