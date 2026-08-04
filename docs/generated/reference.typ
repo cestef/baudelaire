@@ -39,7 +39,7 @@
   (path: "content.taxonomies.listing", key: "listing", shape: "flag", doc: "Generate a page per term, and an index of the terms.", depth: 2, section: false),
   (path: "content.taxonomies.template", key: "template", shape: "text", doc: "The layout those listings render through.", depth: 2, section: false),
   (path: "content.taxonomies.paginate", key: "paginate", shape: "number", doc: "Pages per term listing.", depth: 2, section: false),
-  (path: "content.taxonomies.prefix", key: "prefix", shape: "text", doc: "The path segment its listings publish under.", depth: 2, section: false),
+  (path: "content.taxonomies.prefix", key: "prefix", shape: "text", doc: "The path segment before a term page's number, as in `/tags/rust/page/2/`.", depth: 2, section: false),
   (path: "languages", key: "languages", shape: "named blocks", doc: "One block per language, each named by its code.", depth: 0, section: true),
   (path: "languages.name", key: "name", shape: "text", doc: "The language's name in its own language, for a switcher.", depth: 1, section: false),
   (path: "languages.dir", key: "dir", shape: "text", doc: "Writing direction, `ltr` or `rtl`.", depth: 1, section: false),

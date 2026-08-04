@@ -666,7 +666,7 @@ impl Attributed for TaxonomyConfig {
         (
             "prefix",
             Text,
-            "The path segment its listings publish under.",
+            "The path segment before a term page's number, as in `/tags/rust/page/2/`.",
             |c, v, t, s| {
                 c.prefix = v.as_str(t, s)?;
                 Ok(())
