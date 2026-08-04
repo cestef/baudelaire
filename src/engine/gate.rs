@@ -157,16 +157,13 @@ const INERT: &[Inert] = &[
         effect: "no bundled document is written",
         help: "name the collections to bind (`collections \"guide\"`), or set `site #true` for the whole site",
     },
-    // `minify` is documented as covering CSS and JS, but the JS handler is
-    // gated on `bundle` in full: an unbundled `.js` is copied verbatim.
-    Inert {
-        setting: "assets { minify }",
-        asked: |config| config.assets.minify,
-        needs: "assets { bundle }",
-        met: |config| config.assets.bundle,
-        effect: "JavaScript is copied verbatim, and only stylesheets are minified",
-        help: "turn on `assets { bundle }` to minify JavaScript too",
-    },
+    // `assets { minify }` has no row of its own. It minifies stylesheets on its
+    // own, which is the whole of what a site with no JavaScript asked for, and
+    // this table is for settings that produce *nothing*. The row that used to
+    // sit here fired on every such site, including the `docs` starter, and the
+    // only way to silence it was to turn on a bundler the site had no use for.
+    // The bundle-only half of `minify` is documented on the asset pipeline page.
+    //
     // The bundler is the only thing that reads a tsconfig: with `bundle` off,
     // scripts are copied verbatim and the pinned file is never opened.
     Inert {
@@ -370,11 +367,6 @@ mod tests {
     #[test]
     fn each_inert_setting_reports_until_its_dependency_is_set() {
         let cases = [
-            (
-                "assets { minify }",
-                "assets { minify #true }",
-                "assets { minify #true; bundle #true }",
-            ),
             (
                 "generate { feed { terms } }",
                 "generate { feed { formats \"rss\"; terms #true } }",
