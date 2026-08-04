@@ -121,8 +121,14 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         ui.blank();
     }
 
+    let files = template.files(&details.vars());
+    // What the shape already configures is not appended a second time: `--with
+    // search` on a shape whose config already sets `formats`, `fields` and a
+    // palette used to bolt a barer `search { formats "json" }` on beneath it.
+    let extras = Extra::wanted(&extras, &files, ui);
+
     let mut scaffold = Scaffold::new(&target).ignore();
-    for file in template.files(&details.vars()) {
+    for file in files {
         if (args.theme.is_some() && file.themed()) || (args.no_sample && file.sample()) {
             continue;
         }
@@ -716,6 +722,11 @@ pub(super) mod templates {
         /// node in order and a nested section fills in place, so a second
         /// `generate { .. }` merges into the first rather than replacing it.
         pub fragment: &'static str,
+        /// Whether the starter shape already asked for this. A shape that
+        /// configures the feature itself (the `docs` one configures search, with
+        /// fields and a palette) would otherwise be handed a second, barer block
+        /// saying the same thing.
+        pub present: fn(&crate::config::Config) -> bool,
     }
 
     /// The registered optional features.
@@ -726,22 +737,27 @@ pub(super) mod templates {
         Extra {
             name: "spa",
             fragment: "\n// Client-side navigation between the built pages.\nnavigation {\n  spa { }\n}\n",
+            present: |config| config.navigation.spa.enabled,
         },
         Extra {
             name: "standalone",
             fragment: "\n// Also emit the whole site as one self-contained HTML file.\nnavigation {\n  standalone { }\n}\n",
+            present: |config| config.navigation.standalone.enabled,
         },
         Extra {
             name: "speculation",
             fragment: "\n// Browser-native prefetch hints for same-site links.\nnavigation {\n  speculation { }\n}\n",
+            present: |config| config.navigation.speculation.enabled,
         },
         Extra {
             name: "search",
             fragment: "\n// Client-side search index.\ngenerate {\n  search { formats \"json\" }\n}\n",
+            present: |config| !config.generate.search.formats.is_empty(),
         },
         Extra {
             name: "pdf",
             fragment: "\n// A PDF of every page, from `templates/print.typ`.\ngenerate {\n  pdf { pages { template \"print.typ\" } }\n}\n",
+            present: |config| config.generate.pdf.enabled(),
         },
     ];
 
@@ -803,6 +819,42 @@ pub(super) mod templates {
         /// scaffold a site missing the very feature it asked for, silently.
         pub fn resolve(names: &[String]) -> crate::error::Result<Vec<&'static Self>> {
             names.iter().map(|name| Self::find(name)).collect()
+        }
+
+        /// The extras that still have something to add, given what the starter
+        /// shape's own config already declares. A shape that configures the
+        /// feature is left alone and reported, rather than handed a second block
+        /// that says less than the one already there.
+        ///
+        /// A config that does not parse yields every extra: appending is then
+        /// the honest thing to do, and the parse error is not this function's to
+        /// report (a test parses every shipped shape).
+        pub fn wanted(
+            extras: &[&'static Self],
+            files: &[File],
+            ui: &crate::ui::Ui,
+        ) -> Vec<&'static Self> {
+            let Some(config) = files
+                .iter()
+                .find(|f| f.is_config())
+                .and_then(|f| crate::config::Config::parse(&f.body).ok())
+            else {
+                return extras.to_vec();
+            };
+            extras
+                .iter()
+                .filter(|extra| {
+                    let present = (extra.present)(&config);
+                    if present {
+                        ui.detail(format_args!(
+                            "{} is already part of this shape",
+                            extra.name
+                        ));
+                    }
+                    !present
+                })
+                .copied()
+                .collect()
         }
 
         fn find(name: &str) -> crate::error::Result<&'static Self> {
@@ -1036,6 +1088,22 @@ pub(super) mod templates {
                     });
                 }
             }
+        }
+
+        /// A feature the shape already configures is dropped rather than
+        /// appended: the `docs` shape sets `search` with its fields and its
+        /// palette, and a second, barer block underneath said less.
+        #[test]
+        fn an_extra_the_shape_already_configures_is_dropped() {
+            let ui = crate::ui::Ui::new(crate::ui::Level::Silent);
+            let docs = Template::find("docs").expect("docs shape");
+            let files = docs.files(&vars());
+            let asked = Extra::resolve(&["search".to_owned(), "pdf".to_owned()]).expect("features");
+            let wanted = Extra::wanted(&asked, &files, &ui);
+            assert_eq!(
+                wanted.iter().map(|e| e.name).collect::<Vec<_>>(),
+                vec!["pdf"]
+            );
         }
 
         /// An unknown template names the real ones rather than failing bare.
