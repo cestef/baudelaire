@@ -312,6 +312,32 @@ impl Serve {
         self.request(path, false)
     }
 
+    /// Wait for `/` to serve a body containing `want`, re-issuing `edit`
+    /// between attempts.
+    ///
+    /// [`Serve::start`] returns as soon as the port accepts a connection, and
+    /// the server binds it *before* its first build and before the watcher is
+    /// registered. An edit landing in that window is seen by nobody, and no
+    /// later event ever arrives to make up for it, so a test that only polls is
+    /// waiting for a rebuild that will never happen: on a loaded machine that
+    /// window stretches from microseconds to seconds and the test hangs until
+    /// its own budget runs out. Re-issuing the edit is what closes it.
+    ///
+    /// The retry interval is deliberately longer than the watcher's 500ms
+    /// debounce: a repeat inside that window would keep resetting the very
+    /// timer it is waiting on.
+    pub fn awaiting(&self, want: &str, edit: impl Fn()) -> bool {
+        (0..10).any(|round| {
+            if round > 0 {
+                edit();
+            }
+            (0..20).any(|_| {
+                std::thread::sleep(Duration::from_millis(100));
+                self.get("/").1.contains(want)
+            })
+        })
+    }
+
     /// Like [`Serve::get`], but sends the path verbatim (`curl --path-as-is`) so
     /// `..` segments reach the server instead of being collapsed by the client:
     /// the only way to exercise path-traversal defenses.

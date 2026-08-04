@@ -331,21 +331,24 @@ fn a_config_reload_moves_the_served_root() {
     let srv = Serve::start(&t, &[]);
     assert!(srv.get("/").1.contains("first dist"));
 
-    t.write(
-        "content/index.typ",
-        "#let frontmatter = (title: \"H\",)\nsecond dist",
-    );
-    t.write(
-        "config.kdl",
-        "site \"S\"\npaths {\n  content \"content\"\n  dist \"other\"\n}\nserve { open #false; }",
-    );
+    // The rebuild is debounced, and an edit made before the watcher is up is
+    // seen by nobody, so the edit is re-issued until it lands.
+    let edit = || {
+        t.write(
+            "content/index.typ",
+            "#let frontmatter = (title: \"H\",)\nsecond dist",
+        );
+        t.write(
+            "config.kdl",
+            "site \"S\"\npaths {\n  content \"content\"\n  dist \"other\"\n}\nserve { open #false; }",
+        );
+    };
+    edit();
 
-    // The rebuild is debounced; poll until the new root is being served.
-    let served = (0..30).any(|_| {
-        std::thread::sleep(Duration::from_millis(100));
-        srv.get("/").1.contains("second dist")
-    });
-    assert!(served, "still serving the old dist after a config reload");
+    assert!(
+        srv.awaiting("second dist", edit),
+        "still serving the old dist after a config reload"
+    );
 }
 
 /// A build failure is a warning whether it is the first build or a later one:
@@ -367,15 +370,18 @@ fn a_failing_first_build_keeps_the_server_up() {
     // Nothing built, so the request 404s; the point is that it answers at all.
     assert_eq!(srv.get("/").0, 404);
 
-    t.write(
-        "content/index.typ",
-        "#let frontmatter = (title: \"H\",)\nfixed",
+    let edit = || {
+        t.write(
+            "content/index.typ",
+            "#let frontmatter = (title: \"H\",)\nfixed",
+        );
+    };
+    edit();
+
+    assert!(
+        srv.awaiting("fixed", edit),
+        "server did not recover once the page was fixed"
     );
-    let served = (0..30).any(|_| {
-        std::thread::sleep(Duration::from_millis(100));
-        srv.get("/").1.contains("fixed")
-    });
-    assert!(served, "server did not recover once the page was fixed");
 }
 
 /// Slugs keep Unicode letters, and a browser percent-encodes every non-ASCII
