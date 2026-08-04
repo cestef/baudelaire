@@ -111,3 +111,40 @@ fn a_missing_theme_is_a_precise_error() {
     let err = Config::load(&site.read("config.kdl"), &site.root).expect_err("missing theme");
     assert!(format!("{err}").contains("themes/absent"), "{err}");
 }
+
+/// The shipped themes are in the binary, so adopting one is two commands and no
+/// download: `theme add` writes it, and the site builds against it.
+#[test]
+#[cfg(feature = "themes")]
+fn a_shipped_theme_is_written_into_the_project_and_builds() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://example.com"
+        theme "themes/albatros"
+        paths { content "content"; dist "public"; assets "assets" }
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\",)\nhello",
+    );
+    let out = site.run(&["theme", "add", "albatros"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(site.root.join("themes/albatros/theme.kdl").is_file());
+
+    let out = site.run(&["build"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The theme binds root pages, so the home page comes out wrapped in its
+    // chrome rather than as the bare body typst rendered.
+    let html = site.read("public/index.html");
+    assert!(html.contains("<header"), "no theme chrome: {html}");
+}

@@ -14,7 +14,10 @@ keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = [
     "/docs",
-    "/themes",
+    # The four themes are `include_dir!`d into the binary by the `themes`
+    # feature, so they are package contents; the demo sites built from them are
+    # not, and are the bulk of the directory.
+    "/themes/demo",
     "/.github",
     "/public",
     "/.jj",
@@ -51,7 +54,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce"]
+default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce", "themes"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -63,6 +66,12 @@ embedded-fonts = ["typst-kit/embedded-fonts"]
 # ask gets a `baudelaire::feature::missing` warning naming the setting, the
 # feature, and what was emitted instead. The table driving those warnings is
 # `GATES` in `src/engine/mod.rs`; a new gated capability is one row there.
+
+# The four shipped themes, carried inside the binary so `baudelaire theme add`
+# writes one without a download: ~230 KiB of Typst and CSS. Off means the `theme`
+# command is not built, and a theme is a directory you put in the project
+# yourself.
+themes = []
 
 # JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
 # the `baudelaire:*` virtual modules): ~2.5 MiB of oxc/rolldown/tokio. Off means

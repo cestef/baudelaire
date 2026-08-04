@@ -170,7 +170,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
     // theme is where the config says it is, and `init` naming a directory
     // nobody has put anything in yet is the ordinary case.
     if let Some(spec) = &args.theme {
-        Placement::of(spec, &target).render(ui);
+        Placement::of(spec, &target).settle(ui, &target)?;
     }
     // Last, because it is the one thing here that a reader has to act on: a
     // scaffold that mirrors the modules and never says they need pointing at
@@ -181,17 +181,22 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
     Ok(())
 }
 
-/// Where a `--theme` spec says the theme has to be, and whether it is there
-/// yet. A directory theme is a path inside the project, and `init` runs before
-/// anyone has put one there, so this is the one instruction a themed scaffold
-/// leaves its reader with.
+/// What a `--theme` spec asks of the scaffold: a directory theme is a path
+/// inside the project, and `init` runs before anyone has put one there.
+///
+/// Three answers, and only the last leaves the reader with work: the shipped
+/// themes are in the binary, so a spec naming one is written on the spot rather
+/// than described.
 enum Placement<'a> {
-    /// A directory spec naming nothing yet: the usual case, and the only one
-    /// with something to say.
-    Missing(&'a str),
-    /// A package spec, or a directory already in place: the build will resolve
-    /// it, and there is nothing for the reader to do.
+    /// A package spec, or a directory already in place: the build resolves it.
     Resolved,
+    /// A directory spec whose name is one of the shipped themes, which this run
+    /// writes there.
+    #[cfg(feature = "themes")]
+    Shipped(&'a str, &'static crate::theme::Bundled),
+    /// A directory spec naming a theme baudelaire does not carry: the reader
+    /// has to put it there.
+    Missing(&'a str),
 }
 
 impl<'a> Placement<'a> {
@@ -199,25 +204,53 @@ impl<'a> Placement<'a> {
     /// package spec (`@local/name:1.0.0`) is resolved from a package directory
     /// rather than the project, so it is nothing this can check.
     fn of(spec: &'a str, target: &Path) -> Self {
-        match spec.starts_with('@') || target.join(spec).is_dir() {
-            true => Self::Resolved,
-            false => Self::Missing(spec),
+        if spec.starts_with('@') || target.join(spec).is_dir() {
+            return Self::Resolved;
         }
+        #[cfg(feature = "themes")]
+        if let Some(theme) = crate::theme::Bundled::named_by(spec) {
+            return Self::Shipped(spec, theme);
+        }
+        Self::Missing(spec)
     }
 
-    fn render(&self, ui: &Ui) {
-        let Self::Missing(spec) = self else {
-            return;
-        };
-        ui.section("theme");
-        ui.arrow("missing", Paths(spec));
-        ui.item(
-            format_args!(
-                "put its directory there, then build; the four that ship with baudelaire are at {}/start/themes/",
-                env!("CARGO_PKG_HOMEPAGE")
-            )
-            .dimmed(),
-        );
+    /// Write what can be written, and say what cannot. Installing here rather
+    /// than leaving an instruction is what makes the documented one-liner
+    /// (`init --theme "themes/albatros"`) a project that builds.
+    ///
+    /// The signature is the same in both flavors, so the caller is: with no
+    /// themes carried there is nothing to write, and the `target` to write it
+    /// into and the failure of writing it both go with them.
+    #[cfg_attr(
+        not(feature = "themes"),
+        allow(unused_variables, clippy::unnecessary_wraps)
+    )]
+    fn settle(&self, ui: &Ui, target: &Path) -> Result<()> {
+        match self {
+            Self::Resolved => {}
+            #[cfg(feature = "themes")]
+            Self::Shipped(spec, theme) => {
+                let written = theme.install(&target.join(spec))?;
+                ui.section("theme");
+                ui.arrow(
+                    theme.name,
+                    format_args!("{} files to {}", written.len(), Paths(spec)),
+                );
+                ui.item(theme.about.dimmed());
+            }
+            Self::Missing(spec) => {
+                ui.section("theme");
+                ui.arrow("missing", Paths(spec));
+                ui.item(
+                    format_args!(
+                        "put its directory there before building; {}/start/themes/ covers what a theme is",
+                        env!("CARGO_PKG_HOMEPAGE")
+                    )
+                    .dimmed(),
+                );
+            }
+        }
+        Ok(())
     }
 }
 

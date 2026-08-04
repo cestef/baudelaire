@@ -263,6 +263,42 @@ pub enum Command {
     /// Write the generated modules where an editor can resolve them.
     #[command(visible_aliases = ["packages", "pkg"])]
     Mirror(MirrorArgs),
+    /// List the themes this binary ships, or write one into the project.
+    #[cfg(feature = "themes")]
+    #[command(visible_alias = "th")]
+    Theme(ThemeArgs),
+}
+
+/// Arguments for `baudelaire theme`.
+#[cfg(feature = "themes")]
+#[derive(Args, Debug, Clone)]
+pub struct ThemeArgs {
+    #[command(subcommand)]
+    pub what: ThemeCommand,
+}
+
+/// What `baudelaire theme` does. Two verbs: read the shelf, take one off it.
+#[cfg(feature = "themes")]
+#[derive(Subcommand, Debug, Clone)]
+pub enum ThemeCommand {
+    /// List the themes this binary ships.
+    #[command(visible_alias = "ls")]
+    List,
+    /// Copy a shipped theme into the project.
+    Add(ThemeAddArgs),
+}
+
+/// Arguments for `baudelaire theme add`.
+#[cfg(feature = "themes")]
+#[derive(Args, Debug, Clone)]
+pub struct ThemeAddArgs {
+    /// Which theme to write. `baudelaire theme list` names them.
+    pub name: String,
+
+    /// Where to write it, if not `themes/<name>`. It has to stay inside the
+    /// project: a Typst import cannot reach outside the root.
+    #[arg(long, value_name = "DIR")]
+    pub dir: Option<PathBuf>,
 }
 
 /// Arguments for `baudelaire build`.
@@ -1072,6 +1108,8 @@ impl Command {
             Self::Man(args) => args.run(cx),
             Self::Reference(args) => args.run(cx),
             Self::Mirror(args) => args.run(cx),
+            #[cfg(feature = "themes")]
+            Self::Theme(args) => args.run(cx),
         }
     }
 }
@@ -1197,6 +1235,62 @@ impl Run for MirrorArgs {
         }
         let settings = mirror.install()?.render(cx.ui);
         settings.render(cx.ui);
+        Ok(())
+    }
+}
+
+/// The shipped themes: what they are, and how one gets into a project.
+///
+/// A theme is files, and until this existed the answer to "where do I get one"
+/// was to clone the repository: the docs said so, and `init --theme` scaffolded
+/// a config naming a directory nobody had put anything in yet.
+#[cfg(feature = "themes")]
+impl Run for ThemeArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        match &self.what {
+            ThemeCommand::List => {
+                for theme in crate::theme::BUNDLED {
+                    cx.ui.arrow(theme.name, theme.about);
+                }
+                cx.ui.detail(markup!(
+                    "write one with `{}`",
+                    "baudelaire theme add <name>"
+                ));
+                Ok(())
+            }
+            ThemeCommand::Add(args) => args.run(cx),
+        }
+    }
+}
+
+#[cfg(feature = "themes")]
+impl Run for ThemeAddArgs {
+    fn run(&self, cx: &Cx) -> Result<()> {
+        use crate::theme::Bundled;
+
+        let theme = Bundled::find(&self.name)?;
+        // The default is the directory the config line names, so the two halves
+        // of adopting a theme agree without the reader holding a path in mind.
+        let rel = self
+            .dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("themes").join(theme.name));
+        let dir = cx.root.join(&rel);
+        let written = theme.install(&dir)?;
+        let spec = rel.display().to_string();
+        match written.len() {
+            0 => cx.ui.done(markup!("`{}` is already there", &spec)),
+            n => cx
+                .ui
+                .done(markup!("wrote {} files to `{}`", n.to_string(), &spec)),
+        }
+        cx.ui.detail(theme.about);
+        cx.ui.section("next");
+        cx.ui.arrow("config.kdl", markup!("`theme \"{}\"`", &spec));
+        cx.ui.item(markup!(
+            "then `{}`; the theme's README says what it reads from a page",
+            "baudelaire build"
+        ));
         Ok(())
     }
 }

@@ -37,12 +37,27 @@ pub enum ThemeError {
     #[error("theme directory {} does not exist", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::missing),
-        help("create it, or name a published theme as `@namespace/name:version`")
+        help(
+            "create it, `baudelaire theme add <name>` to write one of the shipped              themes there, or name a published theme as `@namespace/name:version`"
+        )
     )]
     Missing { path: String },
+
+    #[error("no theme named {} ships with baudelaire", Code(.name))]
+    #[diagnostic(code(baudelaire::theme::unknown), help("{help}"))]
+    Unknown { name: String, help: String },
 }
 
 impl ThemeError {
+    /// `help` is the nearest-name suggestion built from the bundled table, and
+    /// arrives already marked up.
+    pub fn unknown(name: &str, help: String) -> Self {
+        Self::Unknown {
+            name: name.to_owned(),
+            help,
+        }
+    }
+
     /// The parser's own message, kept as text: naming typst's error type here
     /// would put the compiler's package API in this crate's error API for one
     /// string.

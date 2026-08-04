@@ -32,6 +32,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`man`], [--], [Print the manual as roff to stdout.],
   [`reference [key]`], [`ref`], [Print every config key and its value shape.],
   [`mirror`], [`packages`, `pkg`], [Write the generated modules to disk for editor tooling.],
+  [`theme`], [`th`], [List the themes this binary ships, or write one into the project.],
 )
 
 #callout(kind: "warn")[
@@ -257,7 +258,7 @@ stylesheet come from the theme instead, and the run closes on where to put it.
   table.header([Flag], [Default], [Does]),
   [`-t, --template <name>`], [`blog`], [Starter shape. Unused with `--theme`.],
   [`--with <feature,..>`], [--], [Switch on optional features. One the shape already configures is skipped.],
-  [`--theme <spec>`], [--], [Scaffold against a #link("../start/themes.typ")[theme]: identity, paths and a preview, and nothing the theme declares.],
+  [`--theme <spec>`], [--], [Scaffold against a #link("../start/themes.typ")[theme]: identity, paths and a preview, and nothing the theme declares. A spec naming a shipped theme also writes it.],
   [`--title <text>`], [prompted], [Site title.],
   [`--author <name>`], [prompted], [Site author, defaulted from git `user.name`.],
   [`--url <url>`], [prompted], [Canonical base URL.],
@@ -333,6 +334,29 @@ editor tooling are machine-global and no config locates them, so they are
 
 This is not the config's `prune`, which sweeps only files no page claims and runs
 as part of every build.
+
+== theme
+
+```sh
+baudelaire theme list          # the four shipped themes, one line each
+baudelaire theme add albatros  # writes themes/albatros/
+```
+
+`add` copies the named theme into the project and closes on the `theme` line to
+put in `config.kdl`. Files already there are kept, so a second run over an edited
+copy changes nothing rather than undoing your edits. `--dir <path>` writes it
+somewhere else inside the project root, which is as far as a Typst import can
+reach.
+
+The themes are carried in the binary, so neither command touches the network.
+See #link("../start/themes.typ")[themes] for what each one is, and
+#link("../write/theme-authoring.typ")[writing a theme] for making your own.
+
+#callout(kind: "note")[
+  This command only exists in a build with the `themes` feature. A `slim` binary
+  carries no themes; a theme there is a directory you put in the project
+  yourself.
+]
 
 == completions
 

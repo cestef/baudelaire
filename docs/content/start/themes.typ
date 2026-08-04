@@ -41,28 +41,27 @@ Each name links a live demo. The #link("/themes/")[themes page] has all four.
 
 == Get one
 
-The four above live in the
-#link("https://github.com/cestef/baudelaire/tree/main/themes")[repository], one
-directory each. Take the one you want:
+All four are in the binary. Write one into the project:
 
 ```sh
-git clone --depth 1 https://github.com/cestef/baudelaire /tmp/baudelaire
-mkdir -p themes && cp -r /tmp/baudelaire/themes/albatros themes/
+baudelaire theme list          # the four, one line each
+baudelaire theme add albatros  # writes themes/albatros/
 ```
 
-Nothing downloads a theme for you: a theme is files, and which files they are is
-a thing to read before you build against them.
+Nothing is downloaded: the files land in your project and are yours from that
+moment, to read, edit, or replace.
 
 == Adopt it
 
-Name the directory you just copied:
+Name the directory it landed in:
 
 ```kdl
 theme "themes/albatros"
 ```
 
 It has to sit inside the project root, because a Typst import can't reach
-outside it.
+outside it. `--dir` puts it somewhere else inside the root; name that path
+instead.
 
 Installed into your Typst package directory instead, a theme is named as a
 package and shared across every project on the machine:
@@ -87,14 +86,16 @@ would replace the theme's rather than add to it.
 baudelaire init my-site --theme "themes/albatros"
 ```
 
-The theme is not fetched, so `init` closes on where to put it, and the first
-build is the step after that:
+A spec naming one of the four is written on the spot, so that one command is a
+project that builds:
 
 ```text
 ◆ theme
-➜ missing   themes/albatros
-  ↳ put its directory there, then build
+➜ albatros  11 files to themes/albatros
 ```
+
+A spec naming anything else is yours to put there, and the run says so rather
+than leaving the first build to find out.
 
 `--template` is not used with `--theme`: what a starter shape would contribute
 is the part the theme already declares.

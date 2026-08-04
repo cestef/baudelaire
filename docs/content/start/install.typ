@@ -117,6 +117,8 @@ What `slim` leaves out:
     `deploy { s3 }` is unaffected.],
   [`announce`], [`announce { standard }` warns, the `announce` command is gone,
     and the verification artifacts are not emitted.],
+  [`themes`], [The `theme` command is gone, and the four shipped themes are not
+    carried; a theme there is a directory you put in the project yourself.],
 )
 
 Turning one off never changes what a site that doesn't ask for it produces. A
