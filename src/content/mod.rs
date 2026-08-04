@@ -101,19 +101,35 @@ impl Claim {
     fn unique(pages: &[Page], config: &Config) -> Result<()> {
         let mut seen: std::collections::HashMap<std::path::PathBuf, String> =
             std::collections::HashMap::new();
-        for page in pages {
-            for claim in Self::of(page, config) {
-                if let Some(first) = seen.insert(claim.output.clone(), claim.origin.clone()) {
-                    return Err(ContentError::collision(
-                        &claim.output.display().to_string(),
-                        &first,
-                        &claim.origin,
-                    )
-                    .into());
-                }
+        let claims = pages
+            .iter()
+            .flat_map(|page| Self::of(page, config))
+            .chain(Self::declared(config));
+        for claim in claims {
+            if let Some(first) = seen.insert(claim.output.clone(), claim.origin.clone()) {
+                return Err(ContentError::collision(
+                    &claim.output.display().to_string(),
+                    &first,
+                    &claim.origin,
+                )
+                .into());
             }
         }
         Ok(())
+    }
+
+    /// Every file the config's own `redirect { }` pairs will write.
+    ///
+    /// An old path with no page behind it is still a file in `dist`, so it
+    /// belongs in the same accounting as the pages: a pair aimed at a path some
+    /// page does own would otherwise bury that page under a stub forwarding
+    /// away from it, and the site would lose a page to a config line. Last, so
+    /// a page is always the claim reported as the first.
+    fn declared(config: &Config) -> impl Iterator<Item = Self> + '_ {
+        config.redirect.iter().map(|(old, _)| Self {
+            output: config.destination(old),
+            origin: markup!("`redirect {{ \"{}\" }}` in the config", old),
+        })
     }
 
     /// Every file `page` will write: its own HTML, plus one stub per

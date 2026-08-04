@@ -81,6 +81,7 @@
   (path: "links.external", key: "external", shape: "flag", doc: "Also check outbound `http(s)` links over the network.", depth: 1, section: false),
   (path: "links.backlinks", key: "backlinks", shape: "flag", doc: "Hand each page the pages whose content links to it, as `page.backlinks`.", depth: 1, section: false),
   (path: "links.orphans", key: "orphans", shape: "any | authored", doc: "Report the pages nothing links to, counting `any` page's links or only those an author wrote.", depth: 1, section: false),
+  (path: "redirect", key: "redirect", shape: "key=value ..", doc: "Old paths no page owns, each forwarded to where its content moved.", depth: 0, section: false),
   (path: "lint", key: "lint", shape: "block", doc: "Checks run over the built pages. Its presence turns them on.", depth: 0, section: true),
   (path: "lint.strict", key: "strict", shape: "flag", doc: "Fail the build on a finding instead of warning.", depth: 1, section: false),
   (path: "lint.headings", key: "headings", shape: "flag", doc: "Report a heading that skips a level, e.g. `h2` straight to `h4`.", depth: 1, section: false),

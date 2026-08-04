@@ -116,13 +116,20 @@ generate {
 Both are on #link("../../write/collections/redirects.typ")[redirects], including
 why the two cannot be served at once.
 
-#callout(kind: "warn")[
-  `redirect` is a frontmatter key, so only an authored page can claim an old
-  path. A generated listing (a collection index, a term page) has no source file
-  and can claim nothing, which is why Zola's `/blog/page/1/` and Hugo's
-  `/posts/page/1/` have no equivalent here: those are aliases of a page that is
-  itself generated. If inbound links point at one, it takes a host rule.
-]
+`redirect` is a frontmatter key, so only a page that still exists can claim an
+old path that way. Zola's `/blog/page/1/`, Hugo's `page/1` under every term, and
+a section you dropped on the way over have no source file to declare anything
+in. Claim those in the config, old path first:
+
+```kdl
+redirect {
+  "/blog/page/1/" "/blog/"
+  "/tags/rs/" "/tags/rust/"
+}
+```
+
+Same output, same `generate { redirects }` switch. A pair aiming at a path some
+page already publishes fails the build rather than burying that page.
 
 == Feeds
 

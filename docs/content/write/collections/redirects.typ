@@ -19,6 +19,34 @@ Baudelaire writes a small HTML stub at each old path: a meta refresh, a canonica
   One old path still needs the trailing comma: `redirect: ("/setup/",)`. Without it the value is a string, not a list.
 ]
 
+== Paths no page owns
+
+Frontmatter only speaks for a page that still exists. A generated index, a term listing and a page you deleted have no frontmatter, so the config claims those paths instead:
+
+```kdl
+redirect {
+  "/blog/page/1/" "/blog/"
+  "/tags/rs/" "/tags/rust/"
+  "/shop/" "https://shop.example.com"
+}
+```
+
+Old path first, destination second. Both sides are literal: nothing is localized, because you read these off the old site rather than copying them per language. A destination that names another host forwards off the site, which is the one case a moved section has no other answer for.
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Declare it], [When]),
+  [`redirect` in frontmatter], [the content moved, and a page still holds it],
+  [`redirect { }` in the config], [the path was generated, or nothing holds it any more],
+)
+
+Both produce the same output, whichever format you pick below.
+
+#callout(kind: "note")[
+  A pair aiming at a path some page already publishes fails the build. The alternative is a page buried under a stub that forwards away from it, which would be a page lost to one config line.
+]
+
 == Real 301s
 
 A stub is a client-side round trip: the browser loads a page, reads the refresh, and asks again. Netlify and Cloudflare Pages both read a `_redirects` file from the publish directory instead, so on those hosts turn it on:

@@ -34,6 +34,7 @@ impl Default for Config {
             assets: AssetConfig::default(),
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
+            redirect: Vec::default(),
             lint: LintConfig::default(),
             security: SecurityConfig::default(),
             generate: GenerateConfig::default(),

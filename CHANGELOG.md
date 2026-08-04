@@ -28,6 +28,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **config**: a top-level `redirect { }` block, for the old paths no page owns.
+
+  ```kdl
+  redirect {
+    "/blog/page/1/" "/blog/"
+    "/tags/rs/" "/tags/rust/"
+    "/shop/" "https://shop.example.com"
+  }
+  ```
+
+  Frontmatter `redirect` speaks for a page that still exists. A paginated
+  `page/1/` another generator wrote, a renamed term listing and a section you
+  deleted have no frontmatter to declare anything in, and until now nothing could
+  claim those paths back. Old path first, destination second; both sides literal,
+  and a destination may name another host. Stubs or `_redirects` rules exactly as
+  a frontmatter `redirect` produces, under the same `generate { redirects }`
+  switch. A pair aiming at a path some page already publishes fails the build
+  rather than burying that page under a stub forwarding away from it.
+
 - **frontmatter**: `path`, the URL a page publishes at, replacing its
   collection's permalink pattern and its slug both.
 

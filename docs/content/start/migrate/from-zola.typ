@@ -226,7 +226,7 @@ build resolves and checks.
   columns: 2,
   align: (left, left),
   table.header([Zola output], [Here]),
-  [`/blog/page/1/`], [not written. Page 1 of an index is only its own URL, and a generated index cannot declare a `redirect`, so an inbound link to `page/1` needs a host rule.],
+  [`/blog/page/1/`], [not written. Page 1 of an index is only its own URL; a top-level `redirect { "/blog/page/1/" "/blog/" }` claims the old path back.],
   [`404.html`], [authored: write `content/404.typ`. Zola ships a default template, so this one is easy to lose in the move.],
   [`/style.css` from `sass/`], [`/assets/style.css`. The asset tree's last path segment is the URL prefix, and only `static/` publishes at the root.],
   [`search_index.en.js` + `elasticlunr.min.js`], [`search.json`, and `generate { search { ui } }` for a bundled palette. Custom search code is rewritten, not ported.],

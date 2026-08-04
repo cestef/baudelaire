@@ -12,8 +12,24 @@ use crate::error::warning::{RedirectCollision, RedirectsShadowed};
 use crate::ui::Count;
 
 /// Emits a redirect stub for every `redirect` old-path in a page's
-/// frontmatter, forwarding it to that page's permalink.
+/// frontmatter, forwarding it to that page's permalink, and for every literal
+/// pair the config declares.
 pub(super) struct Redirects;
+
+/// One declared redirect, whatever declared it: the two sources differ only in
+/// where the old path and the target come from, so they are emitted by one
+/// loop rather than two that would drift.
+struct Rule<'a> {
+    /// The old path, localized if a page declared it.
+    old: String,
+    /// Where it forwards to, base-path prefixed.
+    target: String,
+    /// The language whose strings the stub is written in.
+    lang: &'a str,
+    /// The page that declared it; absent for a config pair, which is exactly
+    /// the case this exists for and so has no source file to name.
+    source: Option<&'a PathBuf>,
+}
 
 impl Processor for Redirects {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
@@ -32,39 +48,36 @@ impl Processor for Redirects {
         // and each write also pushed a duplicate path, so the summary counted a
         // file it had overwritten. Keep the first and say so, as the sibling
         // image-collision path does.
-        let mut claimed: BTreeMap<PathBuf, &PathBuf> = BTreeMap::new();
-        for page in site.pages {
-            for old in &page.frontmatter.redirect {
-                // Localized like the target it forwards to. Translating a page
-                // by copying its frontmatter (the documented workflow) copies
-                // the `redirect` list too, so unlocalized old paths made both
-                // editions claim one output file and hard-failed the build.
-                let old = site.config.localize(&page.lang, old);
-                let destination = site.config.destination(&old);
-                if let Some(kept) = claimed.get(&destination) {
+        let mut claimed: BTreeMap<PathBuf, Option<&PathBuf>> = BTreeMap::new();
+        for rule in Self::declared(site) {
+            let destination = site.config.destination(&rule.old);
+            if let Some(kept) = claimed.get(&destination) {
+                // Reachable only if [`Claim::unique`] let two claims on one
+                // output file through, which it does not. Kept as the last
+                // word on which stub survives, and it names the page that lost
+                // one whenever a page is what declared the loser.
+                if let (Some(kept), Some(dropped)) = (kept, rule.source) {
                     out.warn(RedirectCollision {
-                        old: old.clone(),
+                        old: rule.old.clone(),
                         kept: (*kept).clone(),
-                        dropped: page.source.clone(),
+                        dropped: dropped.clone(),
                     });
-                    continue;
                 }
-                let target = site.config.prefixed(&page.permalink);
-                // A rule file and a stub cannot coexist: both hosts that read
-                // one serve a static file in preference to a redirect rule, so
-                // the stub would win at the old path and the 301 would never
-                // fire.
-                if rules_wanted {
-                    rules.push((site.config.prefixed(&old), target));
-                } else {
-                    let strings = Strings::new(site.config, &page.lang);
-                    out.file(
-                        &destination,
-                        &Self::stub(&target, strings.get("redirecting"), &page.lang),
-                    )?;
-                }
-                claimed.insert(destination, &page.source);
+                continue;
             }
+            // A rule file and a stub cannot coexist: both hosts that read one
+            // serve a static file in preference to a redirect rule, so the stub
+            // would win at the old path and the 301 would never fire.
+            if rules_wanted {
+                rules.push((site.config.prefixed(&rule.old), rule.target));
+            } else {
+                let strings = Strings::new(site.config, rule.lang);
+                out.file(
+                    &destination,
+                    &Self::stub(&rule.target, strings.get("redirecting"), rule.lang),
+                )?;
+            }
+            claimed.insert(destination, rule.source);
         }
         if !rules.is_empty() {
             out.file(&path, &Self::rules(&rules))?;
@@ -77,6 +90,39 @@ impl Processor for Redirects {
 }
 
 impl Redirects {
+    /// Every redirect the site declares: one per frontmatter `redirect` entry,
+    /// then the config's own pairs.
+    ///
+    /// Pages first, so a config pair can never take an old path out from under
+    /// the page that declared it.
+    fn declared<'a>(site: &'a Site<'a>) -> impl Iterator<Item = Rule<'a>> {
+        let pages = site.pages.iter().flat_map(|page| {
+            page.frontmatter.redirect.iter().map(|old| Rule {
+                // Localized like the target it forwards to. Translating a page
+                // by copying its frontmatter (the documented workflow) copies
+                // the `redirect` list too, so unlocalized old paths made both
+                // editions claim one output file and hard-failed the build.
+                old: site.config.localize(&page.lang, old),
+                target: site.config.prefixed(&page.permalink),
+                lang: &page.lang,
+                source: Some(&page.source),
+            })
+        });
+        // A config pair is literal on both sides: nobody copied it per
+        // language, and the path it claims is one the author read off an old
+        // site, so localizing it would claim a path that never existed. The
+        // target passes through `prefixed` all the same, since a site under a
+        // subdirectory still has to forward within it, and an absolute URL to
+        // another host is left alone by that.
+        let config = site.config.redirect.iter().map(|(old, new)| Rule {
+            old: old.clone(),
+            target: site.config.prefixed(new),
+            lang: &site.config.lang,
+            source: None,
+        });
+        pages.chain(config)
+    }
+
     /// The rule file Netlify and Cloudflare Pages read from the publish
     /// directory. One name, since both hosts spell it the same.
     const RULES: &'static str = "_redirects";

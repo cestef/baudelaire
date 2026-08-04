@@ -75,6 +75,14 @@ pub struct Config {
     pub html: HtmlConfig,
     /// Link shape and link checking.
     pub links: LinkConfig,
+    /// Old paths with no page behind them, each paired with where it moved.
+    ///
+    /// A frontmatter `redirect` covers a page that still exists and can speak
+    /// for itself. This covers everything else that used to be a URL: a
+    /// paginated `page/1/` another generator wrote, a renamed term listing, a
+    /// section that is gone. Neither a generated index nor a deleted page has
+    /// frontmatter to declare anything in, so the claim has to live here.
+    pub redirect: Vec<(String, String)>,
     /// Post-render linting of the built pages: accessibility and structure
     /// rules over the typed DOM, and per-page weight budgets.
     pub lint: LintConfig,
@@ -764,6 +772,7 @@ impl std::hash::Hash for Config {
             assets,
             html,
             links,
+            redirect,
             // Shapes no markup, but decides what a page *records* while it
             // renders: with linting off a page stores no findings and no
             // weight. Leaving it out would let a build with the rules turned on
@@ -811,7 +820,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            assets, html, links, lint, security, generate, navigation, prune,
+            assets, html, links, redirect, lint, security, generate, navigation, prune,
         )
             .hash(state);
         (typst, client, cache, hooks, announce, deploy, profile).hash(state);

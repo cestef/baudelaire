@@ -152,6 +152,15 @@ impl Section for Config {
             |c, n, t| c.links.fill(n, t),
         ),
         (
+            "redirect",
+            Table,
+            "Old paths no page owns, each forwarded to where its content moved.",
+            |c, n, t| {
+                c.redirect = n.pairs(t)?;
+                Ok(())
+            },
+        ),
+        (
             "lint",
             Nested(LintConfig::rows),
             "Checks run over the built pages. Its presence turns them on.",

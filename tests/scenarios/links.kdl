@@ -130,6 +130,92 @@ scenario "generate redirects writes a rule file instead of stubs" {
   }
 }
 
+// `redirect` on a page covers a page that still exists. A paginated `page/1/`,
+// a renamed term listing and a deleted section have no frontmatter to declare
+// anything in, so the config claims those paths instead.
+scenario "the config redirects a path no page owns" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      redirect {
+        "/blog/page/1/" "/posts/"
+        "/2019/gone/" "/posts/new/"
+        "/elsewhere/" "https://example.org/moved"
+      }
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/page/1/index.html" { contains "url=/posts/" }
+    file "2019/gone/index.html" { contains "url=/posts/new/" }
+    // An absolute target forwards off the site untouched: a section that moved
+    // to another host is the case with no other answer.
+    file "elsewhere/index.html" { contains "url=https://example.org/moved" }
+    file "posts/new/index.html"
+  }
+}
+
+// One emitter, one format switch: a config pair is a redirect like any other
+// and joins the rule file rather than being left behind as a stub the host
+// would serve in preference to its own rule.
+scenario "config redirects join the generated rule file" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        redirects #true
+      }
+      redirect {
+        "/blog/page/1/" "/posts/"
+      }
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new", redirect: ("/old",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "_redirects" {
+      contains "/old /posts/new/ 301"
+      contains "/blog/page/1/ /posts/ 301"
+    }
+    absent "blog/page/1/index.html"
+  }
+}
+
+// The whole point of the claim accounting: a config line must not be able to
+// bury a page under a stub that forwards away from it.
+scenario "a config redirect onto a real page is a collision" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      redirect {
+        "/posts/new/" "/posts/other/"
+      }
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::collision" }
+  }
+}
+
 // A fragment used to be `Link::Passthrough`: resolved as part of the URL and
 // never checked, so renaming a heading silently broke every deep link into it.
 scenario "a link to a heading that does not exist is caught" {
