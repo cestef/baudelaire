@@ -51,6 +51,20 @@ baudelaire theme add albatros  # writes themes/albatros/
 Nothing is downloaded: the files land in your project and are yours from that
 moment, to read, edit, or replace.
 
+A theme from anywhere else is the same command with a different spec:
+
+```sh
+baudelaire theme add ./elsewhere/plume            # a directory on this machine
+baudelaire theme add @preview/plume:1.0.0         # the Typst package store
+baudelaire theme add gh:owner/plume#v1.2.0        # a forge repository, at a tag
+baudelaire theme add https://x.dev/plume.tar.gz   # an archive
+```
+
+A repository or an archive that holds a whole project takes `--subdir
+themes/plume`, naming the directory the theme is in. Whichever it came from, the
+copy records where it came from, so `update` goes back there. The
+#link("../lookup/cli.typ")[CLI page] has the whole table.
+
 `add` leaves a small record beside them saying which files it wrote, which is
 what later lets `baudelaire theme update <name>` bring the untouched ones
 forward without walking over your edits:

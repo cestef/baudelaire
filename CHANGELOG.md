@@ -50,6 +50,22 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **theme**: `theme add` takes a spec rather than one of four names, and fetches
+  from wherever it points: a directory on this machine (`./plume`), the Typst
+  package store (`@preview/plume:1.0.0`), a repository on a forge
+  (`gh:owner/plume#v1.2.0`, `gl:`, `cb:`, `sr:`, a GitHub or Codeberg URL, or
+  `forgejo:host/owner/plume` for a self-hosted instance), or an archive over http
+  (`.tar.gz`, `.tgz`, `.zip`). A repository or an archive that holds a whole
+  project takes `--subdir <path>`, naming the theme inside it.
+
+  The copy records where it came from, so `theme update` goes back to the same
+  source without being told again, and keeps your edits exactly as before. A
+  repository copy records the ref it follows and what the forge served for it.
+
+  A repository is fetched as the forge's own source archive of one revision, not
+  cloned: the same files in one request, and no git on the host or in the
+  binary.
+
 - **collections**: `feed`, a syndication feed of one collection's members.
 
   ```kdl
