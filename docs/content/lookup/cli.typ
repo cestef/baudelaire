@@ -32,7 +32,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`man`], [--], [Print the manual as roff to stdout.],
   [`reference [key]`], [`ref`], [Print every config key and its value shape.],
   [`mirror`], [`packages`, `pkg`], [Write the generated modules to disk for editor tooling.],
-  [`theme`], [`th`], [List the themes this binary ships, or write one into the project.],
+  [`theme <verb>`], [`th`], [List, add, inspect, update or remove a shipped theme.],
 )
 
 #callout(kind: "warn")[
@@ -338,17 +338,58 @@ as part of every build.
 == theme
 
 ```sh
-baudelaire theme list          # the four shipped themes, one line each
-baudelaire theme add albatros  # writes themes/albatros/
+baudelaire theme list             # the four shipped themes, and what you have installed
+baudelaire theme add albatros     # writes themes/albatros/
+baudelaire theme info albatros    # what it ships, and what your copy has become
+baudelaire theme update albatros  # rewrite it from this binary, keeping your edits
+baudelaire theme remove albatros  # take it back off
 ```
 
-`add` copies the named theme into the project and closes on the `theme` line to
-put in `config.kdl`. Files already there are kept, so a second run over an edited
-copy changes nothing rather than undoing your edits. `--dir <path>` writes it
-somewhere else inside the project root, which is as far as a Typst import can
-reach.
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Command], [Alias], [Does]),
+  [`list`], [`ls`], [The shipped themes, each marked with where it is installed and how many files you have edited.],
+  [`add <name>`], [--], [Write it into the project and name the `config.kdl` line. Files already there are kept.],
+  [`info <name>`], [--], [Its templates, the collections and taxonomies its `theme.kdl` declares, and the state of your copy.],
+  [`update <name>`], [`up`], [Rewrite the files you have not touched from this binary.],
+  [`remove <name>`], [`rm`, `uninstall`], [Delete the files still baudelaire's.],
+)
 
-The themes are carried in the binary, so neither command touches the network.
+`--dir <path>` puts the theme somewhere other than `themes/<name>`, as long as it
+stays inside the project root, which is as far as a Typst import can reach.
+
+Everything is carried in the binary, so no command here touches the network.
+
+=== What is yours <lock>
+
+A theme is *vendored*: its files are in your project, committed with it, and
+yours to edit. So `add` leaves a `.baudelaire-lock.json` beside them, recording
+which theme it is, which baudelaire wrote it, and what each file digests to in
+that baudelaire. That record is the whole of baudelaire's package state, and it
+exists to answer one question: which of these files are still ours?
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Your copy of a file], [`update` / `remove` does]),
+  [Untouched since it was written], [Rewrites it / deletes it.],
+  [Edited], [Leaves it and says so. `--force` overrides.],
+  [Deleted], [Leaves it deleted: an update that puts a file back undoes a decision.],
+  [Yours, not the theme's], [Never touches it.],
+)
+
+A `remove` that kept something keeps the record with it, so the same command
+with `--force` can still finish. A theme you wrote or copied in by hand has no
+record, so it is entirely yours and `update` will not touch it without `--force`.
+
+#callout(kind: "note")[
+  There is no lockfile for anything else, and nothing to resolve: a directory
+  theme is files in your repository, and a published one (`@namespace/name:1.0.0`)
+  is pinned by the exact version in its spec, resolved through Typst's own
+  package store.
+]
+
 See #link("../start/themes.typ")[themes] for what each one is, and
 #link("../write/theme-authoring.typ")[writing a theme] for making your own.
 

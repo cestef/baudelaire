@@ -46,6 +46,22 @@ pub enum ThemeError {
     #[error("no theme named {} ships with baudelaire", Code(.name))]
     #[diagnostic(code(baudelaire::theme::unknown), help("{help}"))]
     Unknown { name: String, help: String },
+
+    #[error("no theme baudelaire installed is at {}", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::theme::uninstalled),
+        help(
+            "`baudelaire theme add <name>` writes one there; a theme you wrote or copied              in yourself is yours to move and delete"
+        )
+    )]
+    Uninstalled { path: String },
+
+    #[error("the theme record at {} could not be written: {}", Code(.path), Text(.why))]
+    #[diagnostic(
+        code(baudelaire::theme::lock),
+        help("it records which files are baudelaire's, so `theme update` can keep yours")
+    )]
+    Lock { path: String, why: String },
 }
 
 impl ThemeError {
@@ -55,6 +71,20 @@ impl ThemeError {
         Self::Unknown {
             name: name.to_owned(),
             help,
+        }
+    }
+
+    pub fn not_installed(path: &str) -> Self {
+        Self::Uninstalled {
+            path: path.to_owned(),
+        }
+    }
+
+    /// The serializer's own message, kept as text.
+    pub fn lock(path: impl std::fmt::Display, why: impl std::fmt::Display) -> Self {
+        Self::Lock {
+            path: path.to_string(),
+            why: why.to_string(),
         }
     }
 

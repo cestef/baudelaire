@@ -277,28 +277,50 @@ pub struct ThemeArgs {
     pub what: ThemeCommand,
 }
 
-/// What `baudelaire theme` does. Two verbs: read the shelf, take one off it.
+/// What `baudelaire theme` does, in the shape the verbs already have elsewhere:
+/// read the shelf, take one, see what it is, bring it forward, put it back.
 #[cfg(feature = "themes")]
 #[derive(Subcommand, Debug, Clone)]
 pub enum ThemeCommand {
-    /// List the themes this binary ships.
+    /// List the themes this binary ships, and what the project has installed.
     #[command(visible_alias = "ls")]
     List,
     /// Copy a shipped theme into the project.
-    Add(ThemeAddArgs),
+    Add(ThemeArgsFor),
+    /// Report what a theme declares, and what an installed copy has become.
+    Info(ThemeArgsFor),
+    /// Rewrite an installed copy from this binary, keeping your edits.
+    #[command(visible_alias = "up")]
+    Update(ThemeUpdateArgs),
+    /// Take an installed copy back off.
+    #[command(visible_aliases = ["rm", "uninstall"])]
+    Remove(ThemeUpdateArgs),
 }
 
-/// Arguments for `baudelaire theme add`.
+/// Arguments for the `theme` verbs that name one theme.
 #[cfg(feature = "themes")]
 #[derive(Args, Debug, Clone)]
-pub struct ThemeAddArgs {
-    /// Which theme to write. `baudelaire theme list` names them.
+pub struct ThemeArgsFor {
+    /// Which theme. `baudelaire theme list` names them.
     pub name: String,
 
-    /// Where to write it, if not `themes/<name>`. It has to stay inside the
+    /// Where it lives, if not `themes/<name>`. It has to stay inside the
     /// project: a Typst import cannot reach outside the root.
     #[arg(long, value_name = "DIR")]
     pub dir: Option<PathBuf>,
+}
+
+/// Arguments for the two `theme` verbs that write over what is there.
+#[cfg(feature = "themes")]
+#[derive(Args, Debug, Clone)]
+pub struct ThemeUpdateArgs {
+    #[command(flatten)]
+    pub theme: ThemeArgsFor,
+
+    /// Replace (or delete) the files you have edited too. Without it they are
+    /// kept and reported, which is the point of the record `add` leaves.
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// Arguments for `baudelaire build`.
@@ -1249,34 +1271,73 @@ impl Run for ThemeArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         match &self.what {
             ThemeCommand::List => {
-                for theme in crate::theme::BUNDLED {
-                    cx.ui.arrow(theme.name, theme.about);
-                }
-                cx.ui.detail(markup!(
-                    "write one with `{}`",
-                    "baudelaire theme add <name>"
-                ));
+                Self::list(cx);
                 Ok(())
             }
-            ThemeCommand::Add(args) => args.run(cx),
+            ThemeCommand::Add(args) => args.add(cx),
+            ThemeCommand::Info(args) => args.info(cx),
+            ThemeCommand::Update(args) => args.update(cx),
+            ThemeCommand::Remove(args) => args.remove(cx),
         }
     }
 }
 
 #[cfg(feature = "themes")]
-impl Run for ThemeAddArgs {
-    fn run(&self, cx: &Cx) -> Result<()> {
+impl ThemeArgs {
+    /// The shelf, with what this project has taken off it: a theme already
+    /// installed says where, and whether the copy still matches the binary.
+    fn list(cx: &Cx) {
+        use crate::theme::{BUNDLED, Lock, State};
+
+        for theme in BUNDLED {
+            cx.ui.arrow(theme.name, theme.about);
+            let dir = cx.root.join("themes").join(theme.name);
+            let Some(lock) = Lock::read(&dir) else {
+                continue;
+            };
+            let edited = lock
+                .state(&dir, &theme.shipped())
+                .iter()
+                .filter(|file| file.state == State::Edited)
+                .count();
+            let note = match edited {
+                0 => markup!("installed at `{}`", format!("themes/{}", theme.name)),
+                1 => markup!(
+                    "installed at `{}`, 1 file edited",
+                    format!("themes/{}", theme.name)
+                ),
+                n => markup!(
+                    "installed at `{}`, {} files edited",
+                    format!("themes/{}", theme.name),
+                    n.to_string()
+                ),
+            };
+            cx.ui.item(note);
+        }
+        cx.ui.detail(markup!(
+            "`{}` writes one into the project",
+            "baudelaire theme add <name>"
+        ));
+    }
+}
+
+#[cfg(feature = "themes")]
+impl ThemeArgsFor {
+    /// Where this theme lives in the project. The default is the directory the
+    /// config line names, so the two halves of adopting a theme agree without
+    /// the reader holding a path in mind.
+    fn rel(&self, theme: &crate::theme::Bundled) -> PathBuf {
+        self.dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("themes").join(theme.name))
+    }
+
+    fn add(&self, cx: &Cx) -> Result<()> {
         use crate::theme::Bundled;
 
         let theme = Bundled::find(&self.name)?;
-        // The default is the directory the config line names, so the two halves
-        // of adopting a theme agree without the reader holding a path in mind.
-        let rel = self
-            .dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("themes").join(theme.name));
-        let dir = cx.root.join(&rel);
-        let written = theme.install(&dir)?;
+        let rel = self.rel(theme);
+        let written = theme.install(&cx.root.join(&rel))?;
         let spec = rel.display().to_string();
         match written.len() {
             0 => cx.ui.done(markup!("`{}` is already there", &spec)),
@@ -1291,6 +1352,143 @@ impl Run for ThemeAddArgs {
             "then `{}`; the theme's README says what it reads from a page",
             "baudelaire build"
         ));
+        Ok(())
+    }
+
+    /// What the theme is, and what this project's copy of it has become: the
+    /// layouts it ships, the config it declares, and the files you have changed.
+    fn info(&self, cx: &Cx) -> Result<()> {
+        use crate::theme::{Bundled, Lock, State};
+
+        let theme = Bundled::find(&self.name)?;
+        let shipped = theme.shipped();
+        cx.ui.done_plain(markup!("`{}`", theme.name));
+        cx.ui.detail(theme.about);
+
+        cx.ui.section("ships");
+        let templates: Vec<String> = shipped
+            .iter()
+            .filter_map(|file| file.path().strip_prefix("templates").ok())
+            .map(|rel| rel.display().to_string())
+            .collect();
+        cx.ui.arrow("templates", templates.join(", "));
+        cx.ui.arrow("files", shipped.len().to_string());
+        // What the theme declares is read from the theme's own `theme.kdl`,
+        // parsed as the build parses it, so this cannot describe a theme the
+        // build would read differently.
+        let defaults = shipped
+            .iter()
+            .find(|file| file.path() == std::path::Path::new("theme.kdl"))
+            .and_then(|file| file.contents_utf8())
+            .and_then(|text| Config::parse(text).ok());
+        if let Some(config) = defaults {
+            let collections: Vec<&str> = config
+                .content
+                .collections
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect();
+            if !collections.is_empty() {
+                cx.ui.arrow("collections", collections.join(", "));
+            }
+            let taxonomies: Vec<&str> = config
+                .content
+                .taxonomies
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect();
+            if !taxonomies.is_empty() {
+                cx.ui.arrow("taxonomies", taxonomies.join(", "));
+            }
+        }
+
+        let rel = self.rel(theme);
+        let dir = cx.root.join(&rel);
+        let Some(lock) = Lock::read(&dir) else {
+            cx.ui.section("installed");
+            cx.ui.detail(markup!(
+                "not here; `{}` writes it",
+                format!("baudelaire theme add {}", theme.name)
+            ));
+            return Ok(());
+        };
+        cx.ui.section("installed");
+        cx.ui
+            .arrow("at", markup!("`{}`", rel.display().to_string()));
+        cx.ui
+            .arrow("written by", markup!("baudelaire `{}`", &lock.baudelaire));
+        for file in lock.state(&dir, &shipped) {
+            let state = match file.state {
+                State::Pristine => continue,
+                State::Edited => "edited",
+                State::Gone => "deleted",
+                State::Added => "new in this version",
+            };
+            cx.ui
+                .item(markup!("{} `{}`", state, file.rel.display().to_string()));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "themes")]
+impl ThemeUpdateArgs {
+    fn update(&self, cx: &Cx) -> Result<()> {
+        use crate::theme::{Bundled, State};
+
+        let theme = Bundled::find(&self.theme.name)?;
+        let rel = self.theme.rel(theme);
+        let tracked = theme.update(&cx.root.join(&rel), self.force)?;
+        let count = |state: State| tracked.iter().filter(|f| f.state == state).count();
+        cx.ui.done(markup!(
+            "`{}` is at baudelaire `{}`",
+            rel.display().to_string(),
+            crate::VERSION
+        ));
+        let kept = count(State::Edited);
+        if kept > 0 && !self.force {
+            cx.ui.section("kept");
+            for file in tracked.iter().filter(|f| f.state == State::Edited) {
+                cx.ui.item(markup!("`{}`", file.rel.display().to_string()));
+            }
+            cx.ui.detail(markup!(
+                "yours, so they were left alone; `{}` replaces them too",
+                "--force"
+            ));
+        }
+        Ok(())
+    }
+
+    fn remove(&self, cx: &Cx) -> Result<()> {
+        use crate::theme::{Bundled, State};
+
+        let theme = Bundled::find(&self.theme.name)?;
+        let rel = self.theme.rel(theme);
+        let tracked = Bundled::uninstall(&cx.root.join(&rel), self.force)?;
+        let kept: Vec<_> = tracked
+            .iter()
+            .filter(|f| f.state == State::Edited && !self.force)
+            .collect();
+        cx.ui.done(markup!(
+            "removed `{}` from `{}`",
+            theme.name,
+            rel.display().to_string()
+        ));
+        if !kept.is_empty() {
+            cx.ui.section("kept");
+            for file in kept {
+                cx.ui.item(markup!("`{}`", file.rel.display().to_string()));
+            }
+            cx.ui.detail(markup!(
+                "edited since it was written; `{}` deletes them too",
+                "--force"
+            ));
+        }
+        cx.ui.section("next");
+        cx.ui.arrow(
+            "config.kdl",
+            markup!("drop the `{}` line", format!("theme \"{}\"", rel.display())),
+        );
         Ok(())
     }
 }

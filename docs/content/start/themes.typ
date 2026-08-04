@@ -51,6 +51,19 @@ baudelaire theme add albatros  # writes themes/albatros/
 Nothing is downloaded: the files land in your project and are yours from that
 moment, to read, edit, or replace.
 
+`add` leaves a small record beside them saying which files it wrote, which is
+what later lets `baudelaire theme update <name>` bring the untouched ones
+forward without walking over your edits:
+
+```sh
+baudelaire theme info albatros    # what it ships, and what your copy has become
+baudelaire theme update albatros  # keeps every file you have changed
+baudelaire theme remove albatros  # and this keeps them too, unless --force
+```
+
+The #link("../lookup/cli.typ")[CLI page] has the whole table of what each verb
+does to a file you have edited, deleted, or added.
+
 == Adopt it
 
 Name the directory it landed in:
@@ -139,7 +152,8 @@ One rule: *your file wins*, file by file, across `templates/`, `assets/` and
 ```
 
 Nothing else has to move. A theme you've overridden two files of is still a
-theme you upgrade by replacing its directory.
+theme `baudelaire theme update` brings forward: the two files you changed are
+kept, the rest are rewritten.
 
 Writing one of your own is #link("../write/theme-authoring.typ")[a page of its
 own].

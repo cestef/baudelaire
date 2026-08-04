@@ -257,11 +257,29 @@ chores are visible in the git history and change nothing for a site.
   baudelaire theme add albatros  # writes themes/albatros/, then names the config line
   ```
 
-  `add` never overwrites a file already there, so a second run over a theme you
-  have edited changes nothing. `--dir` writes it elsewhere inside the project
-  root. `init --theme "themes/albatros"` writes it for you as part of the
-  scaffold. The `themes` cargo feature carries them (~230 KiB); a `slim` binary
-  has neither the themes nor the command.
+  Five verbs, and `--dir` on each to put the theme somewhere other than
+  `themes/<name>`:
+
+  | | |
+  |---|---|
+  | `list` | The four, each marked with where it is installed and how many files you have edited. |
+  | `add` | Write it in and name the `config.kdl` line. |
+  | `info` | Its templates, the collections and taxonomies its `theme.kdl` declares, and the state of your copy. |
+  | `update` | Rewrite the files you have not touched from this binary. |
+  | `remove` | Delete the files still baudelaire's. |
+
+  `add` leaves a `.baudelaire-lock.json` beside the files recording what each
+  digests to in that binary, which is what `update` and `remove` read to tell
+  your edits from ours: an edited file is kept and reported (`--force`
+  overrides), a deleted one stays deleted, and a file that was never the
+  theme's is never touched. It is the only lockfile baudelaire has, and it
+  exists because a theme is *vendored* rather than resolved; a published theme
+  (`@namespace/name:1.0.0`) is pinned by its own spec through Typst's package
+  store.
+
+  `init --theme "themes/albatros"` writes the theme as part of the scaffold. The
+  `themes` cargo feature carries them (~230 KiB); a `slim` binary has neither the
+  themes nor the command.
 
 - **build**: a template nothing supplies is one typed diagnostic
   (`baudelaire::template::missing`) naming the file, what asked for it (a config

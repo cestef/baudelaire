@@ -148,3 +148,90 @@ fn a_shipped_theme_is_written_into_the_project_and_builds() {
     let html = site.read("public/index.html");
     assert!(html.contains("<header"), "no theme chrome: {html}");
 }
+
+/// The record `theme add` leaves is what tells your edits from ours: an update
+/// rewrites the files you have not touched, keeps the ones you have, and leaves
+/// a file you deleted deleted.
+#[test]
+#[cfg(feature = "themes")]
+fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    assert!(site.run(&["theme", "add", "albatros"]).status.success());
+    assert!(site.exists("themes/albatros/.baudelaire-lock.json"));
+
+    let page = site.path("themes/albatros/templates/page.typ");
+    let shipped = std::fs::read_to_string(&page).expect("read");
+
+    // Two files that are the author's: one edited, one deleted.
+    let style = site.path("themes/albatros/assets/style.css");
+    std::fs::write(&style, "/* mine */\n").expect("edit");
+    let home = site.path("themes/albatros/templates/home.typ");
+    std::fs::remove_file(&home).expect("delete");
+
+    // Twice: the record says what baudelaire's copy is, so a file kept because
+    // it was edited is still the author's on the run after.
+    for run in 1..=2 {
+        let out = site.run(&["theme", "update", "albatros"]);
+        assert!(
+            out.status.success(),
+            "run {run} stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&page).expect("read"),
+            shipped,
+            "run {run}: an untouched file is still the binary's"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&style).expect("read"),
+            "/* mine */\n",
+            "run {run}: an edited file is the author's"
+        );
+        assert!(!home.exists(), "run {run}: a deleted file stays deleted");
+    }
+
+    // ...and --force takes the edit back.
+    assert!(
+        site.run(&["theme", "update", "albatros", "--force"])
+            .status
+            .success()
+    );
+    assert_ne!(
+        std::fs::read_to_string(&style).expect("read"),
+        "/* mine */\n"
+    );
+}
+
+/// Removing keeps work: a file you edited stays, and so does the record, so the
+/// same command with `--force` can still finish the job.
+#[test]
+#[cfg(feature = "themes")]
+fn removing_refuses_to_delete_what_you_edited() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    assert!(site.run(&["theme", "add", "spleen"]).status.success());
+    let style = site.path("themes/spleen/assets/style.css");
+    std::fs::write(&style, "/* mine */\n").expect("edit");
+
+    let out = site.run(&["theme", "remove", "spleen"]);
+    assert!(out.status.success());
+    assert!(style.exists(), "an edited file is not deleted");
+    assert!(
+        site.exists("themes/spleen/.baudelaire-lock.json"),
+        "the record stays while it still tracks something"
+    );
+    assert!(
+        !site.exists("themes/spleen/templates/page.typ"),
+        "everything still ours is gone"
+    );
+
+    assert!(
+        site.run(&["theme", "remove", "spleen", "--force"])
+            .status
+            .success()
+    );
+    assert!(!style.exists());
+    assert!(
+        !site.path("themes/spleen").exists(),
+        "the directory goes too"
+    );
+}
