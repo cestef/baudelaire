@@ -340,6 +340,7 @@ scenario "the pipeline publishes artifacts, never the sources it read" {
 // Bundling turns a script source into an artifact, and only that: the partial
 // it imports and the declarations beside it stay out.
 scenario "bundling publishes the bundle and none of its inputs" {
+  requires "js"
   files {
     "config.kdl" #"""
       site "T"
