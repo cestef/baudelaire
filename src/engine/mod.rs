@@ -123,7 +123,7 @@ impl Engine {
         let (config, gaps) = Gate::resolve(config);
         let inert = Inert::resolve(&config);
         let theme = Theme::of(&config)?;
-        let project = Project::new(&config, mode)?;
+        let project = Project::new(&config, mode, theme.as_ref())?;
         Ok(Self {
             project,
             config,

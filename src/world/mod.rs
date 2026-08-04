@@ -60,7 +60,12 @@ pub struct Project {
 
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.
-    pub fn new(config: &Config, mode: Mode) -> Result<Self> {
+    ///
+    /// The theme is passed in rather than resolved here: the caller has already
+    /// resolved it (a package theme is a download), and the two must be the same
+    /// theme or the compiler would import layouts from one and the build would
+    /// layer assets from the other.
+    pub fn new(config: &Config, mode: Mode, theme: Option<&crate::theme::Theme>) -> Result<Self> {
         let project_root = crate::fs::canonical(&config.root);
 
         let now = OffsetDateTime::now_utc();
@@ -126,6 +131,9 @@ impl Project {
                 &project_root,
                 FsRoot::new(project_root.clone()),
                 SystemPackages::from(Registry(config.typst.registry.as_deref())),
+                theme
+                    .and_then(crate::theme::Theme::mount)
+                    .map(|(prefix, root)| (prefix, root.to_path_buf())),
             )))),
             root: project_root,
             now,

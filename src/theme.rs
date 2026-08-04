@@ -36,9 +36,22 @@ use crate::world::Registry;
 pub struct Theme {
     /// Where the theme's files live, for the layered asset and static trees.
     root: PathBuf,
-    /// The Typst import root of its templates: a package spec, or a
-    /// root-absolute project path.
-    import: String,
+    /// How a layout of this theme is imported.
+    import: Import,
+}
+
+/// How Typst reaches a theme's files.
+///
+/// The two cases are not two spellings of one path. A directory theme is inside
+/// the project, so its layouts import by project path; a package's files are not
+/// reachable by *any* import string, so they are served under a project path
+/// instead: see [`Theme::mount`].
+#[derive(Debug, Clone)]
+enum Import {
+    /// A directory inside the project, as a root-absolute project path.
+    Project(String),
+    /// A package, served under the mount point.
+    Mounted,
 }
 
 impl Theme {
@@ -48,6 +61,10 @@ impl Theme {
     const ASSETS: &'static str = "assets";
     const STATIC: &'static str = "static";
     const CONFIG: &'static str = "theme.kdl";
+
+    /// The scratch subdirectory a *package* theme's own root is served under,
+    /// so that its layouts can be imported at all. See [`Theme::mount`].
+    const MOUNT: &'static str = "theme";
 
     /// The theme a config names, if it names one: every field the resolution
     /// reads lives on the config, so the two callers (the config's own theme
@@ -83,9 +100,7 @@ impl Theme {
             .map_err(|why| ThemeError::unavailable(spec, why))?;
         Ok(Self {
             root: root.path().to_path_buf(),
-            // A package spec is itself a path root to the compiler, so this
-            // resolves wherever the store happened to unpack it.
-            import: parsed.to_string(),
+            import: Import::Mounted,
         })
     }
 
@@ -102,13 +117,45 @@ impl Theme {
         }
         Ok(Self {
             root,
-            import: format!("/{}", rel.path().display()),
+            import: Import::Project(format!("/{}", rel.path().display())),
         })
     }
 
     /// Where the theme's files are.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The project path a package theme's root is served under, and the
+    /// directory it is served from: `None` for a directory theme, whose files
+    /// are already in the project.
+    ///
+    /// A Typst import string cannot name a file *inside* a package: everything
+    /// after the `:` is read as a version, so
+    /// `@local/plume:0.1.0/templates/page.typ` fails as `0/templates/page is
+    /// not a valid patch version`, and a package theme's layouts would be
+    /// unreachable. The package's root is mounted under the project instead, so
+    /// a layout import is an ordinary path import and everything a theme does
+    /// relative to itself (`../parts.typ`, a `show raw` palette) keeps working.
+    ///
+    /// Nothing is copied: the mount is served straight out of the package store
+    /// by [`crate::world::Project`], so there is no vendored second copy to go
+    /// stale and nothing to clean up.
+    ///
+    /// It lives under the scratch directory, the one path a project has already
+    /// ceded to baudelaire, and shadows anything a site put there.
+    pub fn mount(&self) -> Option<(String, &Path)> {
+        match self.import {
+            Import::Project(_) => None,
+            Import::Mounted => Some((Self::mounted(), &self.root)),
+        }
+    }
+
+    /// The mount point as Typst spells a path: project-rooted, `/`-joined, no
+    /// leading slash, so it can be both matched against a file id's virtual
+    /// path and written into an import.
+    fn mounted() -> String {
+        format!("{}/{}", Config::SCRATCH, Self::MOUNT)
     }
 
     /// The theme's asset directory, whether or not it exists.
@@ -136,7 +183,11 @@ impl Theme {
     /// The Typst import root for the theme's templates: its own root plus the
     /// template directory, which is what a layout import is written against.
     pub fn templates(&self) -> String {
-        format!("{}/{}", self.import, Self::TEMPLATES)
+        let root = match &self.import {
+            Import::Project(path) => path.clone(),
+            Import::Mounted => format!("/{}", Self::mounted()),
+        };
+        format!("{root}/{}", Self::TEMPLATES)
     }
 }
 

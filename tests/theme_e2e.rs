@@ -235,3 +235,88 @@ fn removing_refuses_to_delete_what_you_edited() {
         "the directory goes too"
     );
 }
+
+/// A theme installed as a Typst package layers exactly as a directory one does.
+///
+/// It could not: the layout import was written as a package subpath
+/// (`@local/plume:0.1.0/templates/page.typ`), which typst reads as a version and
+/// rejects, so every page of a package-themed site failed to compile while its
+/// assets and `theme.kdl` came through. The package's root is served under the
+/// project instead, which is what makes the import a path again.
+///
+/// Unix only, and through the binary: the package store is found under the
+/// user's data directory, so this moves `HOME` for the child process rather
+/// than for the test runner.
+#[test]
+#[cfg(unix)]
+fn a_package_theme_supplies_its_layouts_assets_and_defaults() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://example.net"
+        theme "@local/plume:0.1.0"
+        paths { content "content"; dist "public" }
+        "#,
+    );
+    let home = site.path("home");
+    let package = home.join(".local/share/typst/packages/local/plume/0.1.0");
+    let write = |rel: &str, contents: &str| {
+        let path = package.join(rel);
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+        std::fs::write(path, contents).expect("write");
+    };
+    write(
+        "typst.toml",
+        "[package]\nname = \"plume\"\nversion = \"0.1.0\"\nentrypoint = \"lib.typ\"\n",
+    );
+    write("lib.typ", "#let marker = \"from the package\"\n");
+    // Relative, the way a theme has to import its own pieces: it is the second
+    // thing the mount has to get right, after the layout itself.
+    write(
+        "parts.typ",
+        "#let shell(body) = html.elem(\"main\")[#body]\n",
+    );
+    write(
+        "templates/page.typ",
+        "#import \"../parts.typ\": shell\n#let page(data, body) = shell(body)\n",
+    );
+    write("assets/style.css", "body { color: red }\n");
+    write("static/robots.txt", "package\n");
+    write("theme.kdl", "lang \"fr\"\n");
+
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHello.\n",
+    );
+
+    let out = site.run_with(
+        &["build"],
+        // Both, because a data directory is `XDG_DATA_HOME` when it is set and
+        // under `HOME` when it is not.
+        &[
+            ("HOME", &home.display().to_string()),
+            (
+                "XDG_DATA_HOME",
+                &home.join(".local/share").display().to_string(),
+            ),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "build failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let html = site.output("index.html");
+    assert!(html.contains("<main>"), "the package's layout ran: {html}");
+    assert!(html.contains("Hello."), "{html}");
+    assert!(
+        html.contains("lang=\"fr\""),
+        "its theme.kdl applied: {html}"
+    );
+    assert!(site.exists("public/robots.txt"), "its static files publish");
+    assert!(
+        !site.files("public/assets").is_empty(),
+        "its assets publish"
+    );
+}

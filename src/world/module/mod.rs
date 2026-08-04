@@ -325,10 +325,40 @@ impl Modules {
     }
 }
 
-/// The project's file loader: generated `@baudelaire/*` modules first,
-/// everything else from the filesystem through typst-kit's own loader.
+/// A package theme's root, served under a project path.
+///
+/// The compiler reaches a package only through a specifier, and a specifier
+/// cannot name a file inside one, so a theme installed as a package is mounted
+/// into the project's own path space: see [`crate::theme::Theme::mount`].
+struct Mount {
+    /// The virtual path the theme answers under, as a file id spells it.
+    prefix: String,
+    /// Where those files actually are.
+    root: FsRoot,
+}
+
+impl Mount {
+    /// The theme's own virtual path for `id`, or `None` if `id` is not under
+    /// the mount. Matched on whole segments, so a project's `.baudelaire/themes`
+    /// is not read as a file of `.baudelaire/theme`.
+    fn within(&self, id: FileId) -> Option<VirtualPath> {
+        if id.root() != &VirtualRoot::Project {
+            return None;
+        }
+        let rest = id.vpath().get_without_slash().strip_prefix(&self.prefix)?;
+        match rest.is_empty() {
+            true => VirtualPath::new("").ok(),
+            false => VirtualPath::new(rest.strip_prefix('/')?).ok(),
+        }
+    }
+}
+
+/// The project's file loader: generated `@baudelaire/*` modules first, a
+/// mounted package theme next, and everything else from the filesystem through
+/// typst-kit's own loader.
 pub(super) struct Files {
     modules: Modules,
+    theme: Option<Mount>,
     system: SystemFiles,
 }
 
@@ -338,11 +368,24 @@ impl Files {
         root: &Path,
         project: FsRoot,
         packages: SystemPackages,
+        theme: Option<(String, PathBuf)>,
     ) -> Self {
         Self {
             modules: Modules::new(cx, root),
+            theme: theme.map(|(prefix, root)| Mount {
+                prefix,
+                root: FsRoot::new(root),
+            }),
             system: SystemFiles::new(project, packages),
         }
+    }
+
+    /// The mounted theme's own path for `id`, when one is mounted and `id` is
+    /// under it. The single test both serving and path resolution ask, so the
+    /// mount cannot serve one file and resolve another.
+    fn mounted(&self, id: FileId) -> Option<(&FsRoot, VirtualPath)> {
+        let mount = self.theme.as_ref()?;
+        Some((&mount.root, mount.within(id)?))
     }
 
     /// The filesystem path of `id`.
@@ -359,6 +402,11 @@ impl Files {
             return Err(FileError::Other(Some(EcoString::from(
                 "a generated module has no file system path",
             ))));
+        }
+        // A mounted theme resolves into the package store, which is where its
+        // files are and what a page depending on one has to be tracked against.
+        if let Some((root, vpath)) = self.mounted(id) {
+            return root.resolve(&vpath);
         }
         self.system.resolve(id)
     }
@@ -377,8 +425,11 @@ impl Files {
 
 impl FileLoader for Files {
     fn load(&self, id: FileId) -> FileResult<Bytes> {
-        match Modules::owner(&id) {
-            Some(spec) => self.modules.load(spec, id.vpath()),
+        if let Some(spec) = Modules::owner(&id) {
+            return self.modules.load(spec, id.vpath());
+        }
+        match self.mounted(id) {
+            Some((root, vpath)) => root.load(&vpath),
             None => self.system.load(id),
         }
     }
@@ -387,7 +438,46 @@ impl FileLoader for Files {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use typst::syntax::package::PackageSpec;
+    use typst::syntax::{RootedPath, package::PackageSpec};
+
+    /// A mounted theme answers for the files under it and for nothing else: a
+    /// sibling that merely starts with the same letters is the project's own.
+    #[test]
+    fn a_mount_claims_only_what_is_under_it() {
+        let mount = Mount {
+            prefix: ".baudelaire/theme".to_owned(),
+            root: FsRoot::new(PathBuf::from("/packages/plume")),
+        };
+        let id = |path: &str| {
+            FileId::new(RootedPath::new(
+                VirtualRoot::Project,
+                VirtualPath::new(path).expect("a valid vpath"),
+            ))
+        };
+        assert_eq!(
+            mount
+                .within(id("/.baudelaire/theme/templates/page.typ"))
+                .map(VirtualPath::into_with_slash)
+                .as_deref(),
+            Some("/templates/page.typ")
+        );
+        assert!(mount.within(id("/.baudelaire/themes/page.typ")).is_none());
+        assert!(mount.within(id("/templates/page.typ")).is_none());
+        // A package's own file is the compiler's to resolve, never the mount's,
+        // whatever it is called.
+        assert!(
+            mount
+                .within(FileId::new(RootedPath::new(
+                    VirtualRoot::Package(PackageSpec {
+                        namespace: "preview".into(),
+                        name: "plume".into(),
+                        version: VERSION,
+                    }),
+                    VirtualPath::new(".baudelaire/theme/lib.typ").expect("a valid vpath"),
+                )))
+                .is_none()
+        );
+    }
 
     /// Nothing on disk may become the source of truth: the build answers this
     /// namespace from memory, and an install that could shadow it would make a

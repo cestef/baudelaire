@@ -103,6 +103,18 @@ impl Site {
         self.cmd(args).output().expect("run binary")
     }
 
+    /// [`Site::run`] with extra environment, for behaviour the environment
+    /// shapes rather than the config: a Typst package store is found under the
+    /// user's data directory, so a test that installs a package into one has to
+    /// move the whole home.
+    pub fn run_with(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
+        let mut cmd = self.cmd(args);
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+        cmd.output().expect("run binary")
+    }
+
     /// Spawn a long-running command (e.g. `serve`), reaped on drop.
     pub fn spawn(&self, args: &[&str]) -> Child {
         Child(self.cmd(args).spawn().expect("spawn binary"))
@@ -223,9 +235,11 @@ impl Run {
     }
 }
 
-/// A [`Project`] for a test config: module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world,
+/// theme included: a package theme is served through it.
 pub fn project(cfg: &Config) -> Project {
-    Project::new(cfg, baudelaire::world::Mode::Build).expect("project")
+    let theme = baudelaire::theme::Theme::of(cfg).expect("theme");
+    Project::new(cfg, baudelaire::world::Mode::Build, theme.as_ref()).expect("project")
 }
 
 /// Load one page the way discovery does, against a cold cache.

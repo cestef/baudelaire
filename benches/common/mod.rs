@@ -23,9 +23,11 @@ use baudelaire::world::Project;
 /// build groups all report on the same axis.
 pub const PAGE_COUNTS: [usize; 3] = [16, 64, 256];
 
-/// A [`Project`] for a test config: module evaluation needs the real world.
+/// A [`Project`] for a test config: module evaluation needs the real world,
+/// theme included: a package theme is served through it.
 pub fn project(cfg: &Config) -> Project {
-    Project::new(cfg, Mode::Build).expect("project")
+    let theme = baudelaire::theme::Theme::of(cfg).expect("theme");
+    Project::new(cfg, Mode::Build, theme.as_ref()).expect("project")
 }
 
 /// Which branch of `Prepare::input` a fixture site's pages take.

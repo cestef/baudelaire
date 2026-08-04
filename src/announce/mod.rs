@@ -94,7 +94,8 @@ fn configured(config: &Config) -> Vec<Box<dyn Backend<SiteView<'_>>>> {
 /// content pages are included: generated index and taxonomy pages are site
 /// navigation, not publishable documents.
 fn view(config: &Config) -> Result<SiteView<'_>> {
-    let project = crate::world::Project::new(config, crate::world::Mode::Build)?;
+    let theme = crate::theme::Theme::of(config)?;
+    let project = crate::world::Project::new(config, crate::world::Mode::Build, theme.as_ref())?;
     let collections = discover(config, &project)?;
     let documents = collections
         .iter()

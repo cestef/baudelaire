@@ -314,6 +314,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **themes**: a theme installed as a Typst package renders. Its layouts were
+  imported as a package subpath (`@local/plume:0.1.0/templates/page.typ`), which
+  typst reads as a version, so every page of a package-themed site failed with
+  `0/templates/page is not a valid patch version` while the theme's assets and
+  `theme.kdl` came through as usual. The package's own root is now served under
+  the project, so an import is a path again and a theme's relative imports
+  (`../parts.typ`, a `show raw` palette) resolve as they do in a directory theme.
+
 - **theme**: every verb looks where the config's `theme` line says the theme is,
   not only in `themes/<name>`. A theme installed anywhere else was invisible to
   `theme list`, and `info`, `update` and `remove` reported it as not installed

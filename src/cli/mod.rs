@@ -1644,8 +1644,12 @@ impl Run for NewArgs {
         // A project lets `new` read the existing content: next order in an
         // ordered collection, and permalink collisions. Both are conveniences,
         // so a content tree that cannot be opened costs the inference and warns
-        // rather than refusing to write the file.
-        let project = match crate::world::Project::new(&config, crate::engine::Mode::Build) {
+        // rather than refusing to write the file. The theme is part of that: a
+        // page of an existing site may import one of its modules.
+        let opened = crate::theme::Theme::of(&config).and_then(|theme| {
+            crate::world::Project::new(&config, crate::engine::Mode::Build, theme.as_ref())
+        });
+        let project = match opened {
             Ok(project) => Some(project),
             Err(error) => {
                 cx.ui.warn(Uninferred {
