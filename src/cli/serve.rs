@@ -420,7 +420,10 @@ impl Handler {
             self.open(req, &url);
             return;
         }
-        match self.resolve(&url) {
+        // Bound before the match, not in it: the guard would otherwise live to
+        // the end of the arm, and `respond_404` locks the route again.
+        let file = Self::resolve(&self.route.lock(), &url);
+        match file {
             Some(file) => self.serve_file(req, &file, 200),
             None => self.respond_404(req, &url),
         }
@@ -456,31 +459,37 @@ impl Handler {
         // these too. (It may still interleave with a concurrent rebuild
         // status line; acceptable for now.)
         self.ui.request(404, url);
-        let (dist, scope) = {
-            let route = self.route.lock();
-            (route.dist.clone(), route.scope(url).map(str::to_owned))
-        };
         // The build writes one not-found page per language; a request inside a
         // language's own subtree gets that language's, and everything else the
-        // default one.
-        let candidates = scope
-            .map(|code| dist.join(code).join(crate::config::Config::NOT_FOUND))
-            .into_iter()
-            .chain([dist.join(crate::config::Config::NOT_FOUND)]);
-        for candidate in candidates {
-            if let Some(page) = self.within(&candidate) {
-                self.serve_file(req, &page, 404);
-                return;
+        // default one. One lock for the whole lookup, so the page and the root
+        // it is checked against come from the same route.
+        let found = {
+            let route = self.route.lock();
+            let scoped = route
+                .scope(url)
+                .map(|code| route.dist.join(code).join(crate::config::Config::NOT_FOUND));
+            scoped
+                .into_iter()
+                .chain([route.dist.join(crate::config::Config::NOT_FOUND)])
+                .find_map(|candidate| Self::within(&route, &candidate))
+        };
+        match found {
+            Some(page) => self.serve_file(req, &page, 404),
+            None => {
+                let _ = req.respond(Response::empty(404));
             }
         }
-        let _ = req.respond(Response::empty(404));
     }
 
     /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every
     /// candidate is checked to stay within `dist` (see [`Handler::within`]), so
     /// a `..`-laden or symlinked request can never escape the served root.
-    fn resolve(&self, url: &str) -> Option<PathBuf> {
-        let route = self.route.lock().clone();
+    ///
+    /// One route for the whole resolution. It used to clone the route and then
+    /// re-lock once per candidate, so the path a request resolved to and the
+    /// root it was checked against could come from two different configs when a
+    /// reload landed between them.
+    fn resolve(route: &Route, url: &str) -> Option<PathBuf> {
         let path = url.split('?').next().unwrap_or(url);
         let rel = path
             .strip_prefix(&route.base)
@@ -492,9 +501,9 @@ impl Handler {
         // this produces, so decoding cannot open a traversal.
         let rel = Percent::decode(rel);
         let base = route.dist.join(&rel);
-        self.within(&base)
-            .or_else(|| self.within(&base.join("index.html")))
-            .or_else(|| self.within(&route.dist.join(format!("{rel}.html"))))
+        Self::within(route, &base)
+            .or_else(|| Self::within(route, &base.join("index.html")))
+            .or_else(|| Self::within(route, &route.dist.join(format!("{rel}.html"))))
     }
 
     /// Hand a stamped source location to the configured editor.
@@ -551,9 +560,9 @@ impl Handler {
     /// `dist`, else `None`. The single guard against path traversal: both the
     /// root and the candidate are canonical, so `..` segments and symlinks that
     /// would leave the served tree are rejected before any read.
-    fn within(&self, candidate: &Path) -> Option<PathBuf> {
+    fn within(route: &Route, candidate: &Path) -> Option<PathBuf> {
         let canon = crate::fs::canonicalize(candidate).ok()?;
-        (canon.starts_with(&self.route.lock().dist) && canon.is_file()).then_some(canon)
+        (canon.starts_with(&route.dist) && canon.is_file()).then_some(canon)
     }
 }
 
