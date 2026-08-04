@@ -308,6 +308,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **cards**: a card template a theme ships is the one the card draws with. The
+  check that a template exists accepted either layer's, but the card built its
+  import path out of the project's `templates/` alone, so a site relying on the
+  theme's `card.typ` passed the check and then failed every card-bearing page
+  with `file not found`.
+
 - **links**: a link an author wrote as a URL (`#link("/guide/")`) is an edge of
   the link graph whether or not the page exists yet. The page writing it now
   records that it asked, so adding a page at that URL rebuilds the linker and

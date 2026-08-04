@@ -243,3 +243,35 @@ fn no_cards_without_the_block() {
     let html = site.output("posts/hello/index.html");
     assert!(!html.contains("og:image"), "{html}");
 }
+
+/// A card template a *theme* ships is the one the card draws with. `verify`
+/// accepts a template supplied by either layer, so a project with no
+/// `templates/card.typ` of its own passed the check and then failed every
+/// card-bearing page on typst's own `file not found`: the card built its import
+/// path out of the project's template directory alone.
+#[test]
+fn a_theme_supplies_the_card_template() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://example.com"
+        theme "themes/plume"
+        paths { content "content"; dist "public"; templates "templates" }
+        generate { cards { template "card.typ"; width 800; height 418 } }
+        "#,
+    );
+    site.write("themes/plume/theme.kdl", "");
+    site.write(
+        "themes/plume/templates/card.typ",
+        "#let card(data) = rect(width: 100%, height: 100%, fill: rgb(\"#654321\"))[\n\
+         #text(size: 48pt)[#data.title]\n]\n",
+    );
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hello\",)\nbody",
+    );
+    site.stats();
+
+    let png = std::fs::read(site.path("public/cards/posts/hello.png")).expect("card");
+    assert_eq!(dimensions(&png), (800, 418));
+}

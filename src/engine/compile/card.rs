@@ -43,7 +43,13 @@ impl Sidecar for Card {
     /// A card is a poster of its own shape, so it takes the page's data flat
     /// and ignores the layout bindings [`Cx`] also carries.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
-        Ok(Self::module(cx.config, page, rooted))
+        let template = &cx.config.generate.cards.template;
+        Ok(Self::module(
+            cx.config,
+            page,
+            rooted,
+            &cx.prepare.dir(template),
+        ))
     }
 
     fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>> {
@@ -85,18 +91,15 @@ impl Card {
     /// The page rule is set *before* the import so a template that wants a
     /// different size can still say so, and after nothing else, so the default
     /// is exactly the configured card.
-    fn module(config: &Config, page: &Page, rooted: &RootedPath) -> String {
-        let templates = config
-            .paths
-            .templates
-            .strip_prefix(&config.root)
-            .unwrap_or(&config.paths.templates);
+    ///
+    /// `dir` is the import root the template is loaded from, resolved by
+    /// [`Prepare::dir`](crate::engine::compile::prepare) the way every other
+    /// template is: it derived its own from `config.paths.templates`, which
+    /// looked only at the project and so failed on a theme's `card.typ` after
+    /// `verify` had accepted it, with typst's own `file not found`.
+    fn module(config: &Config, page: &Page, rooted: &RootedPath, dir: &str) -> String {
         Template {
-            import: format!(
-                "/{}/{}",
-                templates.display(),
-                config.generate.cards.template
-            ),
+            import: format!("{dir}/{}", config.generate.cards.template),
             func: std::path::Path::new(&config.generate.cards.template)
                 .file_stem()
                 .and_then(|s| s.to_str())
