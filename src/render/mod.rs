@@ -26,7 +26,7 @@ pub use inline::Inline;
 pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
-pub use srcset::{SrcSetDeps, SrcSets};
+pub use srcset::{Candidate, SrcSetDeps, SrcSets};
 pub use transform::ImageRef;
 
 use typst_html::HtmlDocument;
@@ -209,6 +209,7 @@ impl Renderer {
             content: &self.content,
             world,
             found: Rewrite::default(),
+            extracted: std::collections::BTreeMap::new(),
         };
         self.transforms.apply(doc, &mut cx);
         // After the transforms, deliberately: a rule judges the markup as it

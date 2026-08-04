@@ -151,11 +151,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// 14: an image that lives in the asset tree is referenced where the
-    /// pipeline serves it rather than extracted a second time. An entry written
-    /// before this records the extraction, so a cached page would keep copying
-    /// the source bytes over the processed ones, and one for a nested asset
-    /// holds the flattened URL that copy was served at.
+    /// 14: extraction and the asset pipeline agree about images. One that
+    /// lives in the asset tree is referenced where the pipeline serves it
+    /// rather than extracted a second time, and one lifted out of a page
+    /// carries the responsive widths its `srcset` promised. An entry written
+    /// before this records the duplicate extraction and no widths, so a cached
+    /// page would keep copying source bytes over processed ones and would show
+    /// a `srcset`-less image beside a freshly rendered one that has it.
     /// 13: a generated listing records its links too, so the orphan report can
     /// see that a page is reachable from an index. An entry written before this
     /// has none for a listing, so every page reachable only from one would be

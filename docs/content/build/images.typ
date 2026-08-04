@@ -78,24 +78,27 @@ other asset.
   `html { embed }` is on, which inlines processed assets on purpose.
 ]
 
-An extracted image is `optimize`d like any other, so a photo sitting beside its
-page (the #link("../write/pages.typ")[page bundle] layout) is not the one
-unrecompressed file on the site. `responsive` is the exception, and the one
-reason to keep a shared image under `assets/`:
+An extracted image gets everything a file in the asset tree gets: `optimize`,
+`responsive` variants, a fingerprinted name, and the same cross-build memo, so a
+photo sitting beside its page (the #link("../write/pages.typ")[page bundle]
+layout) is not the poor relation of one under `assets/`.
 
-#table(
-  columns: 3,
-  align: (left, left, left),
-  table.header([Where the file is], [`optimize`], [`responsive`]),
-  [Under `assets/`], [yes], [yes],
-  [Beside the page, extracted], [yes], [no],
-)
+```typ
+#image("photo.png")
+```
 
-A `srcset` names files that have to exist when the page naming them renders, and
-an extracted image is only known to exist once that page *has* rendered. An
-image in the asset tree is processed before any page compiles, so its variants
-are there to offer. Referencing one from a page (`#image("/assets/photo.png")`)
-gets the full pipeline and no second copy.
+```html
+<img src="/assets/photo.png"
+     srcset="/assets/photo-480.png 480w, /assets/photo-960.png 960w, /assets/photo.png 1600w"
+     sizes="(min-width: 60rem) 640px, 100vw">
+```
+
+The page names those variants before they exist, from the source's own width;
+the copy that materializes the image cuts exactly the widths the page promised.
+
+Referencing an image that already lives under `assets/`
+(`#image("/assets/photo.png")`) points the page at the pipeline's own copy
+rather than making a second one.
 
 Set `extract #false` to keep typst's inlining.
 

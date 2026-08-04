@@ -175,11 +175,25 @@ chores are visible in the git history and change nothing for a site.
   optimized full-size image beside it.
 
 - **images**: an image extracted from a page (the page-bundle layout, a photo
-  beside the `.typ` that shows it) is optimized like one in the asset tree. It
-  was copied byte for byte, which made it the one unrecompressed file on the
-  site. `responsive` still covers the asset tree only: a `srcset` names files
-  that must exist when the page naming them renders, and an extracted image is
-  known only after it has.
+  beside the `.typ` that shows it) goes through the whole pipeline: the same
+  optimizer, the same `responsive` variants, the same cross-build memo. It was
+  copied byte for byte, so it was both the one unrecompressed file on the site
+  and the one `<img>` with no `srcset`.
+
+  ```typ
+  #image("photo.png")
+  ```
+
+  ```html
+  <img src="/assets/photo.png"
+       srcset="/assets/photo-480.png 480w, /assets/photo.png 1600w"
+       sizes="(min-width: 60rem) 640px, 100vw">
+  ```
+
+  The page names the variants from the source's own width before they exist, and
+  the copy that materializes the image cuts exactly those widths. A fingerprinted
+  variant carries the source's digest, since the two change together and the page
+  names the file first.
 
 - **links**: a cold build guesses each page's backlinks by reading the `.typ`
   links its source writes out, rather than assuming nothing links anywhere. On
@@ -199,10 +213,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
-- The build cache records two more things per page: the links that page's own
-  content carries, and the digest of the backlinks it was compiled with. A
-  manifest written before this records neither, so the cache schema is bumped
-  and the first build after upgrading is a cold one. Nothing to change.
+- The build cache records three more things per page: the links that page's own
+  content carries, the digest of the backlinks it was compiled with, and the
+  responsive widths each extracted image was promised. A manifest written before
+  this records none of them, so the cache schema is bumped and the first build
+  after upgrading is a cold one. Nothing to change.
 
 - A template a config or a page names and nothing supplies now fails the build
   with `baudelaire::template::missing`. Such a build already failed, in typst's

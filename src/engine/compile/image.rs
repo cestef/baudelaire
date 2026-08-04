@@ -18,19 +18,31 @@ use crate::graph::Hash;
 use crate::render::{Emitted, ImageRef};
 use crate::ui::Ui;
 
+/// One extracted image's outputs: the primary bytes to write under its served
+/// name, and the downscales to write beside it as `(width, bytes)`. Named
+/// because two flavors return it and clippy is right that the tuple was getting
+/// hard to read.
+type Rendered = (Vec<u8>, Vec<(u32, Vec<u8>)>);
+
 /// A copy run of externalized images into the asset directory, deduped by served
 /// name. The first source to claim a name wins; a later source with different
 /// bytes is a collision and warns rather than overwriting.
 pub(in crate::engine) struct Images {
     /// The asset directory copies land in.
     dir: PathBuf,
-    /// The per-format optimizer settings, so a picture colocated with the page
-    /// that shows it is recompressed like one in the asset tree. Held as the
-    /// config's own value rather than re-read per image, and carried in both
-    /// flavors so the copy path has one shape: a build with no optimizer
-    /// compiled in reads it no more than it reads the settings themselves.
+    /// The image settings a copy is made under: the optimizer each file goes
+    /// through, and the responsive widths cut beside it. Held as the config's
+    /// own values rather than re-read per image, and carried in both flavors so
+    /// the copy path has one shape: a build with no encoder compiled in reads
+    /// them no more than it cuts anything.
     #[cfg_attr(not(feature = "images"), allow(dead_code))]
-    optimize: crate::config::OptimizeConfig,
+    settings: crate::config::ImagesConfig,
+    /// The cross-build memo the asset pipeline uses, keyed the same way: an
+    /// unchanged picture is not re-optimized and its variants are not re-cut on
+    /// every build, which a copy that runs on cache hits as well as fresh
+    /// renders would otherwise do.
+    #[cfg_attr(not(feature = "images"), allow(dead_code))]
+    memo: crate::engine::asset::memo::Memo,
     /// The URL prefix those copies are served under, so a copied image can be
     /// weighed by the same name the page that shows it references.
     prefix: String,
@@ -53,7 +65,8 @@ impl Images {
     pub fn new(config: &Config, root: &Path) -> Self {
         Self {
             dir: config.asset_staging(),
-            optimize: config.assets.images.optimize.clone(),
+            settings: config.assets.images.clone(),
+            memo: crate::engine::asset::memo::Memo::new(config),
             prefix: config.asset_prefix(),
             root: crate::fs::canonical(root),
             seen: HashMap::new(),
@@ -81,15 +94,16 @@ impl Images {
         Ok(self)
     }
 
-    /// Copy one image unless another source already claimed its name.
+    /// Copy one image unless another source already claimed its name, and cut
+    /// the width variants the page that showed it promised.
     ///
-    /// The bytes go through the same optimizer the asset pipeline runs, so a
-    /// picture colocated with its page (the page-bundle layout) is not the one
-    /// unoptimized file on the site. What it does *not* get is a `srcset`: the
-    /// variants a page offers have to exist when that page renders, and this
-    /// copy runs after every page has.
+    /// Everything the asset pipeline does to a picture in `assets/` is done
+    /// here to one lifted out of a page: the same optimizer, the same
+    /// downscales, the same memo across builds. The page named the variants
+    /// before they existed (`ImageRef::widths`), and this is where they come to
+    /// exist; the two agree because both spell a variant's name one way.
     fn add(&mut self, image: &ImageRef, ui: &Ui) -> Result<()> {
-        let data = self.tightened(fs::read(&image.source)?, &image.source)?;
+        let (data, cut) = self.rendered(image)?;
         let hash = Hash::of_bytes(&data);
         match self.seen.get(&image.name) {
             // identical bytes already written under this name: nothing to do.
@@ -122,26 +136,75 @@ impl Images {
         fs::write_all(&dst, &data)?;
         self.seen
             .insert(image.name.clone(), (hash, image.source.clone()));
-        // No digest: `integrity` is for the scripts and stylesheets a page
-        // loads, and an `<img>` carries none.
-        self.emitted
-            .insert(format!("{}/{}", self.prefix, image.name), &data, false);
-        self.count += 1;
-        self.bytes += data.len() as u64;
+        self.wrote(&image.name, &data);
+        for (width, bytes) in cut {
+            let name = ImageRef::variant(&image.name, width);
+            // A pipeline asset of that name wins here as it does above: it was
+            // written before any page rendered, and this is the copy.
+            if self.dir.join(&name).exists() {
+                continue;
+            }
+            fs::write_all(self.dir.join(&name), &bytes)?;
+            self.wrote(&name, &bytes);
+        }
         Ok(())
     }
 
-    /// `bytes` through the configured optimizer for their format, or unchanged
-    /// where the flavor has no optimizer to run.
-    #[cfg(feature = "images")]
-    fn tightened(&self, bytes: Vec<u8>, source: &Path) -> Result<Vec<u8>> {
-        crate::engine::asset::image::Raster::tightened(bytes, source, &self.optimize)
+    /// Record a written file: its size for the page weight budgets, and its
+    /// share of what the run reports.
+    fn wrote(&mut self, name: &str, bytes: &[u8]) {
+        // No digest: `integrity` is for the scripts and stylesheets a page
+        // loads, and an `<img>` carries none.
+        self.emitted
+            .insert(format!("{}/{}", self.prefix, name), bytes, false);
+        self.count += 1;
+        self.bytes += bytes.len() as u64;
     }
 
+    /// What this image renders to: the optimized primary bytes and the widths
+    /// cut beside it, from the memo when nothing that shapes them has changed.
+    #[cfg(feature = "images")]
+    fn rendered(&self, image: &ImageRef) -> Result<Rendered> {
+        use crate::engine::asset::image::Raster;
+
+        let source = fs::read(&image.source)?;
+        let key = self.memo.key(&source, Path::new(&image.name));
+        if let Some((Some(primary), variants)) = self.memo.get(&key) {
+            let cut = variants
+                .into_iter()
+                .filter_map(|variant| Some((variant.width, variant.bytes?)))
+                .collect();
+            return Ok((primary, cut));
+        }
+        let primary = Raster::tightened(source, &image.source, &self.settings.optimize)?;
+        let cut = Raster::downscaled(
+            &image.source,
+            &image.widths,
+            &self.settings.responsive,
+            &self.settings.optimize,
+        )?;
+        self.memo.put(
+            &key,
+            Some(&primary),
+            &cut.iter()
+                .map(|(width, bytes)| crate::engine::asset::handler::Variant {
+                    rel: PathBuf::from(ImageRef::variant(&image.name, *width)),
+                    width: *width,
+                    bytes: Some(bytes.clone()),
+                })
+                .collect::<Vec<_>>(),
+        );
+        Ok((primary, cut))
+    }
+
+    /// No encoder compiled in: the file is copied as it is, and the page that
+    /// showed it promised no variants ([`ImageRef::widths`] is empty there).
+    /// The signature mirrors the `images`-on one, which is why it takes a
+    /// `self` it has nothing to read.
     #[cfg(not(feature = "images"))]
-    #[allow(clippy::unnecessary_wraps, clippy::unused_self)]
-    fn tightened(&self, bytes: Vec<u8>, _source: &Path) -> Result<Vec<u8>> {
-        Ok(bytes)
+    #[allow(clippy::unused_self)]
+    fn rendered(&self, image: &ImageRef) -> Result<Rendered> {
+        Ok((fs::read(&image.source)?, Vec::new()))
     }
 
     /// A path as diagnostics spell it: relative to the project root when it

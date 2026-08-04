@@ -8,7 +8,7 @@ use std::path::Path;
 use image::{DynamicImage, imageops::FilterType};
 
 use super::exif::Orientation;
-use crate::config::{Config, JpegConfig, OptimizeConfig, PngConfig, PngStrip};
+use crate::config::{Config, JpegConfig, OptimizeConfig, PngConfig, PngStrip, ResponsiveConfig};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::mime::ImageFormat;
@@ -52,49 +52,30 @@ impl Handler for Raster {
     }
 
     fn variants(&self, file: &Path, rel: &Path, ctx: &Ctx) -> Result<Vec<Variant>> {
-        let responsive = &ctx.config.assets.images.responsive;
-        let Some(format) = ImageFormat::from_ext(file.ext()) else {
+        let images = &ctx.config.assets.images;
+        if !images.responsive.enabled {
+            return Ok(Vec::new());
+        }
+        // Header only: the widths worth cutting are decided from the source's
+        // own, and the decode belongs to the cut itself.
+        let Ok((full, _)) = image::image_dimensions(file) else {
             return Ok(Vec::new());
         };
-        if !responsive.enabled {
+        let widths = images.responsive.applicable(full);
+        let cut = Self::downscaled(file, &widths, &images.responsive, &images.optimize)?;
+        if cut.is_empty() {
             return Ok(Vec::new());
         }
-        let bytes = fs::read(file)?;
-        let source = Self::decode(&bytes, format, file)?;
-        let full = source.width();
-        // Only downscale: a target at or above the source width is skipped, never
-        // upscaled. Deduped and sorted so the srcset is tidy and deterministic.
-        let mut widths: Vec<u32> = responsive
-            .widths
-            .iter()
-            .copied()
-            .filter(|&w| w < full)
-            .collect();
-        widths.sort_unstable();
-        widths.dedup();
-        if widths.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut variants = Vec::with_capacity(widths.len() + 1);
-        for width in widths {
-            let scaled = source.resize(width, u32::MAX, FilterType::Lanczos3);
-            // Through the optimizer, like the source: an encoder writing a
-            // downscale straight out is not competitive with one recompressing
-            // it, and a 960px variant heavier than the optimized full-size
-            // image made the `srcset` a page offered cost the reader bytes.
-            let encoded = Self::tightened(
-                Self::encode(&scaled, format, responsive.quality, file)?,
-                file,
-                &ctx.config.assets.images.optimize,
-            )?;
-            variants.push(Variant {
+        let mut variants: Vec<Variant> = cut
+            .into_iter()
+            .map(|(width, bytes)| Variant {
                 // `photo.jpg` -> `photo-480.jpg`, the same splice a fingerprint
                 // uses, so a variant is named like every other asset.
                 rel: rel.suffixed(&format!("-{width}")),
                 width,
-                bytes: Some(encoded),
-            });
-        }
+                bytes: Some(bytes),
+            })
+            .collect();
         // The source itself is the largest candidate; its bytes are render()'s
         // primary output, so it carries none here.
         variants.push(Variant {
@@ -107,6 +88,42 @@ impl Handler for Raster {
 }
 
 impl Raster {
+    /// `widths` cut from `file`, each optimized like the source it came from,
+    /// as `(width, bytes)` in the order given. Empty for a file this build
+    /// cannot decode, or for no widths at all.
+    ///
+    /// The one place a downscale is produced, because two callers produce them:
+    /// the pipeline, for a file in the asset tree, and the copy that
+    /// materializes an image lifted out of a page, whose widths were promised
+    /// by that page's `srcset` before these bytes existed.
+    pub(in crate::engine) fn downscaled(
+        file: &Path,
+        widths: &[u32],
+        responsive: &ResponsiveConfig,
+        optimize: &OptimizeConfig,
+    ) -> Result<Vec<(u32, Vec<u8>)>> {
+        let Some(format) = ImageFormat::from_ext(file.ext()) else {
+            return Ok(Vec::new());
+        };
+        if widths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let source = Self::decode(&fs::read(file)?, format, file)?;
+        widths
+            .iter()
+            .map(|&width| {
+                let scaled = source.resize(width, u32::MAX, FilterType::Lanczos3);
+                // Through the optimizer, like the source: an encoder writing a
+                // downscale straight out is not competitive with one
+                // recompressing it, and a 960px variant heavier than the
+                // optimized full-size image made the `srcset` a page offered
+                // cost the reader bytes.
+                let encoded = Self::encode(&scaled, format, responsive.quality, file)?;
+                Ok((width, Self::tightened(encoded, file, optimize)?))
+            })
+            .collect()
+    }
+
     /// `bytes` through the format's optimizer, keeping whichever of the input
     /// and the result is smaller. The single rule for it: an optimizer must
     /// never make a file bigger, and re-encoding an already-tight one can.

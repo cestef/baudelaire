@@ -15,12 +15,12 @@
 mod css;
 #[cfg(feature = "images")]
 mod exif;
-mod handler;
+pub(in crate::engine) mod handler;
 #[cfg(feature = "images")]
 pub(in crate::engine) mod image;
 #[cfg(feature = "js")]
 mod js;
-mod memo;
+pub(in crate::engine) mod memo;
 #[cfg(feature = "js")]
 mod module;
 

@@ -8,6 +8,7 @@
 //! follows the asset pipeline: fingerprinted (`photo.<hash>.png`) when
 //! `assets { fingerprint }` is on, else the plain filename.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -15,17 +16,25 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 use crate::graph::AssetName;
+use crate::render::Candidate;
 
 use super::{Cx, DocumentExt, ElementExt, Transform};
 use crate::world::image_rule::MARKER;
 
 /// A typst-embedded image lifted out to a file: the filename it is served under
-/// (relative to the asset directory) and the source file to copy from. Recorded
-/// per page so a cache hit can re-copy the file without recompiling.
+/// (relative to the asset directory), the source file to copy from, and the
+/// widths the page's `srcset` promised. Recorded per page so a cache hit can
+/// re-copy the file, and re-cut its variants, without recompiling.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageRef {
     pub name: String,
     pub source: PathBuf,
+    /// Downscaled widths to write beside it, ascending, empty when the site
+    /// asks for no variants or the source is too small to have any. The names
+    /// are not carried: they are this one's, spliced per width, and a second
+    /// list of them is a second chance to disagree with the page.
+    #[serde(default)]
+    pub widths: Vec<u32>,
 }
 
 /// The [`Transform`] that turns image markers into served asset references.
@@ -42,6 +51,7 @@ impl Transform for Externalize {
         // Gather markers while walking, then record: the walk borrows the DOM
         // mutably, so the `cx` accumulator is written after it finishes.
         let mut refs = Vec::new();
+        let mut variants = BTreeMap::new();
         doc.walk(|element| {
             if element.tag != tag::img {
                 return;
@@ -58,11 +68,19 @@ impl Transform for Externalize {
                 }
                 let image = ImageRef::of(vpath, root, config);
                 let url = format!("/{}/{}", config.asset_name(), image.name);
+                // The variants this image is about to be given, named before
+                // they exist: the copy pass cuts exactly these widths, and the
+                // `srcset` writer reads them from here as it reads the
+                // pipeline's manifest for an image in the asset tree.
+                if !image.widths.is_empty() {
+                    variants.insert(url.clone(), image.candidates(&url, config));
+                }
                 refs.push(image);
                 Some(url)
             });
         });
         cx.found.images.extend(refs);
+        cx.extracted.extend(variants);
     }
 }
 
@@ -100,7 +118,87 @@ impl ImageRef {
             .map(|bytes| AssetName::digest(&bytes));
         Self {
             name: AssetName::new(Path::new(vpath), digest).file(),
+            widths: Self::widths(&source, config),
             source,
         }
+    }
+
+    /// The widths a `srcset` for this image can offer: the configured ones
+    /// below the source's own, read from the file's header rather than by
+    /// decoding it. Empty when the site asks for no variants, when the flavor
+    /// has no encoder to cut them with, or when the file is not a raster this
+    /// build can read.
+    #[cfg(feature = "images")]
+    fn widths(source: &Path, config: &Config) -> Vec<u32> {
+        let responsive = &config.assets.images.responsive;
+        if !responsive.enabled {
+            return Vec::new();
+        }
+        // Header only: the copy pass decodes, and this runs for every image on
+        // every page that shows one.
+        let Ok((width, _)) = image::image_dimensions(source) else {
+            return Vec::new();
+        };
+        responsive.applicable(width)
+    }
+
+    /// No encoder, no variants: a slim build copies rasters through, and a
+    /// `srcset` naming files it will not cut is a page of dead candidates.
+    #[cfg(not(feature = "images"))]
+    fn widths(_source: &Path, _config: &Config) -> Vec<u32> {
+        Vec::new()
+    }
+
+    /// This image's `srcset` candidates: one per width, named by splicing the
+    /// width into the served name the way the pipeline splices it into an
+    /// asset's, plus the source itself as the largest.
+    ///
+    /// The names are derived here and again where the files are written, from
+    /// this one rule ([`Self::variant`]), because the page is served before the
+    /// bytes are cut.
+    fn candidates(&self, url: &str, config: &Config) -> Vec<Candidate> {
+        let dir = url.rsplit_once('/').map_or("", |(dir, _)| dir);
+        self.widths
+            .iter()
+            .map(|&width| Candidate {
+                url: format!("{dir}/{}", Self::variant(&self.name, width)),
+                width,
+            })
+            .chain(self.source_candidate(url, config))
+            .collect()
+    }
+
+    /// The source itself, the largest candidate, with the intrinsic width a
+    /// browser needs to choose between it and the downscales.
+    #[cfg(feature = "images")]
+    fn source_candidate(&self, url: &str, _config: &Config) -> Option<Candidate> {
+        let (width, _) = image::image_dimensions(&self.source).ok()?;
+        Some(Candidate {
+            url: url.to_owned(),
+            width,
+        })
+    }
+
+    /// The signature mirrors the `images`-on one, which is why it takes a
+    /// `self` it has nothing to read: with no encoder there are no variants to
+    /// be the largest of.
+    #[cfg(not(feature = "images"))]
+    #[allow(clippy::unused_self)]
+    fn source_candidate(&self, _url: &str, _config: &Config) -> Option<Candidate> {
+        None
+    }
+
+    /// The served name of one width variant: `photo-480.png`, or
+    /// `photo-480.<digest>.png` where the name it is cut from is fingerprinted.
+    ///
+    /// The digest is the *source's*, carried over from the primary rather than
+    /// taken over the variant's own bytes: the two change together, and the
+    /// page names the file before those bytes exist.
+    pub fn variant(name: &str, width: u32) -> String {
+        let (stem, digest) = match name.split_once('.') {
+            Some((stem, rest)) => (stem, format!(".{rest}")),
+            None => (name, String::new()),
+        };
+        format!("{stem}-{width}{digest}")
     }
 }

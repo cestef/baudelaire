@@ -300,3 +300,64 @@ fn a_colocated_image_is_optimized_on_the_way_out() {
         source.len()
     );
 }
+
+/// An image lifted out of a page gets the variants a page in the asset tree
+/// gets: the `srcset` names them from the source's own width, and the copy that
+/// materializes the image cuts exactly those widths.
+#[test]
+#[cfg(feature = "images")]
+fn an_extracted_image_carries_its_own_srcset() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nassets {\n  images {\n    extract #true\n    responsive { widths 32 64 128 }\n  }\n}\n",
+    );
+    site.write_bytes("content/photo.png", &png(96, 72));
+    site.write("content/index.typ", "#image(\"photo.png\")\n");
+    site.stats();
+
+    let html = site.output("index.html");
+    // 128 is at or above the source width, so it is not offered; the source
+    // itself is the largest candidate.
+    assert!(
+        html.contains(
+            "srcset=\"/assets/photo-32.png 32w, /assets/photo-64.png 64w, /assets/photo.png 96w\""
+        ),
+        "{html}"
+    );
+    assert!(site.exists("public/assets/photo-32.png"));
+    assert!(site.exists("public/assets/photo-64.png"));
+    assert!(
+        !site.exists("public/assets/photo-128.png"),
+        "never upscaled"
+    );
+}
+
+/// The names the page promised and the files the copy writes are spliced the
+/// same way, fingerprint included: a variant carries the source's digest, since
+/// the page names it before those bytes exist.
+#[test]
+#[cfg(all(feature = "images", feature = "css"))]
+fn a_fingerprinted_extracted_variant_is_named_as_the_page_promised() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nassets {\n  fingerprint #true\n  images {\n    extract #true\n    responsive { widths 32 }\n  }\n}\n",
+    );
+    site.write_bytes("content/photo.png", &png(96, 72));
+    site.write("content/index.typ", "#image(\"photo.png\")\n");
+    site.stats();
+
+    let html = site.output("index.html");
+    let named: Vec<&str> = html
+        .split('"')
+        .flat_map(|chunk| chunk.split(", "))
+        .filter(|c| c.contains("photo-32."))
+        .collect();
+    let url = named
+        .first()
+        .expect("a variant candidate")
+        .trim_end_matches(" 32w");
+    let file = url.trim_start_matches("/assets/");
+    assert!(file.starts_with("photo-32."), "{url}");
+    assert!(
+        site.exists(&format!("public/assets/{file}")),
+        "the page names a file that was written: {url}"
+    );
+}

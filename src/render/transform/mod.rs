@@ -82,6 +82,15 @@ pub(super) struct Cx<'a> {
     /// What the pipeline has found so far. This is the value the caller gets
     /// back, accumulated in place rather than copied out field by field.
     pub found: super::Rewrite,
+    /// The width variants this page's *extracted* images will be given, keyed
+    /// by the URL each is served at.
+    ///
+    /// Page-local scratch rather than part of [`SrcSets`]: the pipeline's
+    /// manifest is built before any page renders, and an image lifted out of a
+    /// page is not known to exist until that page has rendered. Written by
+    /// [`Externalize`] and read by [`Sources`], which run in that order, so the
+    /// two kinds of responsive image reach the `srcset` writer the same way.
+    pub extracted: std::collections::BTreeMap<String, Vec<super::Candidate>>,
 }
 
 /// The attributes that carry a URL to an asset this site owns.

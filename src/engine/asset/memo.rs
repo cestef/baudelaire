@@ -27,7 +27,7 @@ use super::Variant;
 
 /// What one source file rendered to: its primary output and any variants.
 #[derive(Debug, Serialize, Deserialize)]
-pub(super) struct Rendered {
+pub(in crate::engine) struct Rendered {
     /// The handler's primary output, absent for a file it emits nothing for.
     primary: Option<Hash>,
     variants: Vec<Derived>,
@@ -43,7 +43,7 @@ struct Derived {
 }
 
 /// The processed-asset memo.
-pub(super) struct Memo {
+pub(in crate::engine) struct Memo {
     dir: PathBuf,
     /// Everything besides the source bytes that changes an asset's output.
     salt: Hash,
@@ -51,7 +51,7 @@ pub(super) struct Memo {
 }
 
 impl Memo {
-    pub(super) fn new(config: &Config) -> Self {
+    pub(in crate::engine) fn new(config: &Config) -> Self {
         Self {
             dir: config.cache.dir.join("assets"),
             salt: Hash::of(&(&config.assets, config.asset_name(), Renderer::current())),
@@ -61,12 +61,12 @@ impl Memo {
 
     /// The key for `source`'s bytes at `rel`. `rel` is part of it because a
     /// handler may name its output after the path, not just the content.
-    pub(super) fn key(&self, bytes: &[u8], rel: &Path) -> Hash {
+    pub(in crate::engine) fn key(&self, bytes: &[u8], rel: &Path) -> Hash {
         Hash::of(&(Hash::of_bytes(bytes), rel, self.salt))
     }
 
     /// The stored outputs for `key`, when every blob it names is still present.
-    pub(super) fn get(&self, key: &Hash) -> Option<(Option<Vec<u8>>, Vec<Variant>)> {
+    pub(in crate::engine) fn get(&self, key: &Hash) -> Option<(Option<Vec<u8>>, Vec<Variant>)> {
         if !self.enabled {
             return None;
         }
@@ -96,7 +96,7 @@ impl Memo {
 
     /// Record what `key` rendered to. Best-effort: a cache that cannot be
     /// written costs the next build the same work, nothing worse.
-    pub(super) fn put(&self, key: &Hash, primary: Option<&[u8]>, variants: &[Variant]) {
+    pub(in crate::engine) fn put(&self, key: &Hash, primary: Option<&[u8]>, variants: &[Variant]) {
         if !self.enabled {
             return;
         }

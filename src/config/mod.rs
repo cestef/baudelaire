@@ -1663,6 +1663,28 @@ pub struct ResponsiveConfig {
     pub sizes: Option<String>,
 }
 
+impl ResponsiveConfig {
+    /// The widths worth emitting for a source that is `source` pixels wide:
+    /// the configured ones below it, deduped and ascending. A width at or above
+    /// the source is skipped rather than upscaled, and the source itself is the
+    /// largest candidate, so it is not in this list.
+    ///
+    /// One rule, because two layers apply it and must agree on the answer: the
+    /// asset pipeline generates the files, and the render pass names them in a
+    /// `srcset` before an extracted image has any.
+    pub fn applicable(&self, source: u32) -> Vec<u32> {
+        let mut widths: Vec<u32> = self
+            .widths
+            .iter()
+            .copied()
+            .filter(|&w| w < source)
+            .collect();
+        widths.sort_unstable();
+        widths.dedup();
+        widths
+    }
+}
+
 /// Build-time image optimization, per format. A format is enabled by naming it
 /// in the `optimize { .. }` block (`png`, `jpeg`); an absent format is left
 /// untouched. Each format carries its own tuning.
