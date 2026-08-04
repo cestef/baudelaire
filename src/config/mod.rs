@@ -881,7 +881,7 @@ pub struct LinkConfig {
     ///
     /// Opt-in because it is the one page value that cannot be known before the
     /// site has rendered: a page whose backlinks turn out wrong is compiled a
-    /// second time (see `Engine::backlinks`), which a site that shows none
+    /// second time (see `engine::links::Graph`), which a site that shows none
     /// should not pay for.
     pub backlinks: bool,
     /// Report the pages nothing links to, and what counts as a link. `None`

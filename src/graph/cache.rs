@@ -365,7 +365,7 @@ impl Cache {
     /// What this build's backlinks are predicted from before it has rendered
     /// anything: never trusted, since what a page is actually compiled with is
     /// checked against the graph this build produces and the pages that disagree
-    /// are compiled again (see `Engine::backlinks`). Being one build behind is
+    /// are compiled again (see `engine::links::Graph`). Being one build behind is
     /// the point, because an edit that changes no links leaves it exact, which
     /// is nearly every edit.
     pub fn recorded(&self, page: &Page) -> Option<&Outbound> {

@@ -152,7 +152,7 @@ impl Outbound {
     ///
     /// Only ever a guess, and only used as one: it is what a cold build predicts
     /// each page's backlinks from, before there is a rendered site to invert
-    /// (see `Engine::backlinks`). Both kinds of wrong are harmless, because the
+    /// (see `engine::links::Graph`). Both kinds of wrong are harmless, because the
     /// graph the build actually produces is what every page is checked against
     /// and a page guessed wrongly is simply compiled again. A link built in a
     /// loop is missed; a `.typ` path written for some other reason is counted.
@@ -189,7 +189,7 @@ impl Outbound {
 /// adds up to, and what a template renders as "linked from". It exists only
 /// after every page has rendered, which is why a page compiles against a
 /// *predicted* one and is recompiled when the prediction turns out wrong (see
-/// `Engine::backlinks`).
+/// `engine::links::Graph`).
 pub enum Backlinks {
     /// `links { backlinks }` is off. A page compiles with an empty set and
     /// records no digest, so nothing about the graph can ever invalidate it.

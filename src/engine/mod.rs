@@ -6,6 +6,7 @@ mod compile;
 mod emit;
 mod hook;
 mod layers;
+mod links;
 mod prune;
 mod statics;
 mod summary;
@@ -34,6 +35,7 @@ use crate::engine::compile::prepare::{Prepare, Prepared};
 use crate::engine::compile::sidecar::{Artifact, Sidecars, Tally};
 use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::hook::Hooks;
+use crate::engine::links::Graph;
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::warning::{BacklinksUnstable, FeatureMissing, SettingInert};
@@ -46,8 +48,7 @@ use crate::graph::{
     Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
 };
 use crate::render::{
-    AssetDeps, AssetMap, Backlinks, Emitted, Fragments, LinkDeps, Outbound, Renderer, SrcSetDeps,
-    SrcSets,
+    AssetDeps, AssetMap, Emitted, Fragments, LinkDeps, Renderer, SrcSetDeps, SrcSets,
 };
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
@@ -393,12 +394,6 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// How many times [`Engine::backlinks`] may recompile before it stops and
-    /// warns. Two: the first repair settles every site whose content does not
-    /// branch on its own backlinks, and the second exists to notice that it did
-    /// not rather than to keep trying.
-    const REPAIRS: usize = 2;
-
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
         // Ahead of everything, including the gates: this is the one check whose
         // failure destroys the project rather than the build. Checked here and
@@ -505,11 +500,16 @@ impl Engine {
         // rendered. `backlinks` below replaces them with the truth and
         // recompiles whatever the guess got wrong.
         if self.config.links.backlinks {
-            pass.prepare
-                .assume(self.predicted(&pass, &cache, &planned.pages));
+            pass.prepare.assume(Graph::predicted(
+                &self.project,
+                pass.renderer.maps().links,
+                &cache,
+                &planned.pages,
+                self.config.multilingual(),
+            ));
         }
         let (mut rendered, mut cached) = self.incremental(&pass, &mut cache, ui)?;
-        self.backlinks(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
+        self.relink(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
         // Ahead of validation, which weighs each page against what this build
         // actually wrote: a typst-embedded image is the usual way a picture
         // reaches a page, and a budget blind to those would count almost
@@ -671,58 +671,14 @@ impl Engine {
         Ok((rendered, cached))
     }
 
-    /// What each page's backlinks are guessed to be before anything has
-    /// rendered: the graph the last build recorded, and for a page it never saw,
-    /// the one that page's source looks like it has.
+    /// Make every page's backlinks true, compiling again the ones the site
+    /// disagreed with, and warn if the graph never settles.
     ///
-    /// The second half is what makes a *cold* build cheap. With the manifest
-    /// alone the guess on a first build was that nothing linked anywhere, so
-    /// every page with an inbound link was compiled twice; scanning the sources
-    /// gets the ordinary site (whose links are written out literally) right on
-    /// the first pass. Neither half is trusted: [`Engine::backlinks`] checks
-    /// both against the site the build actually renders.
-    fn predicted(&self, pass: &Pass<'_>, cache: &Cache, pages: &[Page]) -> Backlinks {
-        let links = pass.renderer.maps().links;
-        let edges: Vec<(&Page, Outbound)> = pages
-            .par_iter()
-            .filter_map(|page| match cache.recorded(page) {
-                Some(recorded) => Some((page, recorded.clone())),
-                // A generated listing contributes no edges at all, so there is
-                // nothing to scan it for; see the render transform.
-                None if matches!(page.data, Data::Generated { .. }) => None,
-                None => Some((
-                    page,
-                    Outbound::scanned(
-                        &self.project.source(&page.source).ok()?,
-                        &page.source,
-                        &page.permalink,
-                        links,
-                        self.config.multilingual().then_some(page.lang.as_str()),
-                    ),
-                )),
-            })
-            .collect();
-        Backlinks::new(edges.iter().map(|(page, outbound)| (*page, outbound)))
-    }
-
-    /// Make every page's backlinks true, compiling again the ones whose
-    /// prediction the site disagreed with.
-    ///
-    /// The pages linking to a page are known only once every page has rendered,
-    /// so pass one compiles against a guess (the graph the last build recorded)
-    /// and this checks it: each page's recorded digest against the graph this
-    /// build actually produced. Correctness comes from the check, speed from the
-    /// guess being right, which it is whenever an edit changed no links.
-    ///
-    /// A repaired page keeps the sidecars pass one drew for it: those are not
-    /// redrawn (see [`Sidecars::none`]) and the build still has to write them.
-    ///
-    /// Repairing changes what a page's *own* content links to only if that
-    /// content branches on its backlinks, so the graph re-settles at once in
-    /// every ordinary site. [`Engine::REPAIRS`] bounds the pathological case,
-    /// which warns rather than looping: an unstable graph is a site to fix, not
-    /// a build to hang.
-    fn backlinks<'a>(
+    /// The convergence itself is [`Graph::settle`]'s; what is here is the one
+    /// part of it that is this engine's, recompiling a page. A repaired page
+    /// keeps the sidecars pass one drew for it: those are not redrawn (see
+    /// [`Sidecars::none`]) and the build still has to write them.
+    fn relink<'a>(
         &self,
         pass: &mut Pass<'a>,
         cache: &mut Cache,
@@ -735,26 +691,11 @@ impl Engine {
         }
         // A repair is the page's markup again and nothing beside it.
         pass.sidecars = Sidecars::none();
-        for _ in 0..Self::REPAIRS {
-            // The graph this build produced becomes what pages are compiled
-            // against *before* anything is checked against it, so the question
-            // asked here is the one the compile answers: what would this page be
-            // compiled with now, and is that what it was compiled with? Asking
-            // the graph directly instead put pages that cannot carry backlinks
-            // at all (a listing with no template of its own) permanently at odds
-            // with a value they never see.
-            pass.prepare
-                .assume(Backlinks::new(Self::edges(rendered, cached)));
-            let stale: Vec<&'a Page> = Self::stale(&pass.prepare, rendered, cached).collect();
-            if stale.is_empty() {
-                return Ok(());
-            }
-            debug!(pages = stale.len(), "backlinks repaired");
-            let inputs: Vec<(&'a Page, Result<Prepared>)> = {
-                let prepare = &pass.prepare;
-                stale.into_iter().map(|p| (p, prepare.input(p))).collect()
-            };
-            let pass = &*pass;
+        let unstable = Graph::settle(pass, rendered, cached, |pass, stale| {
+            let inputs: Vec<(&'a Page, Result<Prepared>)> = stale
+                .into_iter()
+                .map(|page| (page, pass.prepare.input(page)))
+                .collect();
             let repaired = self.render_pages("relinking", inputs, ui, |(page, prepared)| {
                 (
                     page,
@@ -763,66 +704,19 @@ impl Engine {
                         .map(Rendered::silenced),
                 )
             })?;
-            for mut page in repaired {
+            for page in &repaired {
                 // The entry keeps the dependencies the *full* compile recorded:
-                // this one drew no sidecars, so it never saw the files they read.
-                cache.relink((&page).into());
-                if let Some(at) = rendered
-                    .iter()
-                    .position(|r| std::ptr::eq(r.page, page.page))
-                {
-                    // The sidecars pass one drew for it, which this compile did
-                    // not redraw and the build still has to write.
-                    page.artifacts = std::mem::take(&mut rendered[at].artifacts);
-                    rendered[at] = page;
-                } else {
-                    // A cache hit that had to be recompiled stops being one. Its
-                    // sidecars are already on disk, which is what let it be a hit.
-                    cached.retain(|(cached, ..)| !std::ptr::eq(*cached, page.page));
-                    rendered.push(page);
-                }
+                // a repair draws no sidecars, so it never saw the files they read.
+                cache.relink(page.into());
             }
-        }
-        // Only what is *still* wrong: the last round may have settled the site,
-        // in which case there is nothing to say. Warning regardless read "0
-        // still disagree" and, under `--strict`, failed a build that converged.
-        pass.prepare
-            .assume(Backlinks::new(Self::edges(rendered, cached)));
-        let unstable: Vec<String> = Self::stale(&pass.prepare, rendered, cached)
-            .map(|page| self.relative(page))
-            .collect();
+            Ok(repaired)
+        })?;
         if !unstable.is_empty() {
-            ui.warn(BacklinksUnstable { pages: unstable });
+            ui.warn(BacklinksUnstable {
+                pages: unstable.iter().map(|page| self.relative(page)).collect(),
+            });
         }
         Ok(())
-    }
-
-    /// Every page's own outbound links, freshly compiled and cache-served alike:
-    /// this build's link graph, which [`Backlinks`] inverts.
-    fn edges<'a, 'r>(
-        rendered: &'r [Rendered<'a>],
-        cached: &'r [Reused<'a>],
-    ) -> impl Iterator<Item = (&'a Page, &'r Outbound)> {
-        rendered
-            .iter()
-            .map(|r| (r.page, &r.outputs.outbound))
-            .chain(cached.iter().map(|(page, _, out)| (*page, &out.outbound)))
-    }
-
-    /// The pages whose backlinks are not what compiling them now would give
-    /// them: what each was compiled against (this build or an earlier one) put
-    /// against what `prepare` would hand it today.
-    fn stale<'a, 'r>(
-        prepare: &'r Prepare<'a>,
-        rendered: &'r [Rendered<'a>],
-        cached: &'r [Reused<'a>],
-    ) -> impl Iterator<Item = &'a Page> + 'r {
-        rendered
-            .iter()
-            .map(|r| (r.page, r.outputs.backlinks))
-            .chain(cached.iter().map(|(page, _, out)| (*page, out.backlinks)))
-            .filter(|&(page, was)| was != prepare.digest(page))
-            .map(|(page, _)| page)
     }
 
     /// Copy every page's externalized images into the (freshly regenerated)
