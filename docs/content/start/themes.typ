@@ -37,7 +37,7 @@ look is the part you can change in an afternoon.
     case study per project.],
 )
 
-Each name links a live demo. The #link("/themes/")[themes page] has all four.
+Each name links a live demo.
 
 == Get one
 

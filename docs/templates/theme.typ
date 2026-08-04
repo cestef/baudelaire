@@ -61,17 +61,12 @@
   #h("nav", class: "top-nav", aria-label: "Primary")[
     #link-to("/start/install/", "Docs")
     #link-to("/configure/reference/", "Reference")
-    #link-to("/themes/", "Themes")
+    #link-to("/start/themes/", "Themes")
     #link-to("/blog/", "Blog")
   ]
   #search-trigger
   #theme-toggle
   #nav-toggle
-]
-
-#let nav-group(title, items) = h("div", class: "nav-group")[
-  #h("p", class: "nav-title", title)
-  #h("ul", for (href, label) in items { h("li", link-to(href, label)) })
 ]
 
 // Title-case a directory name for display: `storage` -> `Storage`.
@@ -135,14 +130,6 @@
         nav-section(title, section)
       }
     }
-    // Root-level pages sit in no section, so `page.sections` never carries
-    // them: anything at `content/*.typ` that belongs in the sidebar is named
-    // here.
-    nav-group("More", (
-      ("/themes/", "Themes"),
-      ("/blog/", "Blog"),
-      ("/tags/", "Tags"),
-    ))
   })
 }
 
