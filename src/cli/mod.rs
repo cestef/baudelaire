@@ -536,9 +536,9 @@ pub struct CleanArgs {
     /// Remove everything: the output directory and all local build state.
     #[arg(long, help_heading = group::TARGETS)]
     pub all: bool,
-    /// Remove the build output directory. Named for what it removes, not for
-    /// the config key that locates it, which for this repo's own docs site is
-    /// `docs/public`; `--dist` still works.
+    /// Remove the build output directory, wherever `paths { dist }` puts it.
+    /// Named for what it removes rather than for the key that locates it;
+    /// `--dist` still works.
     #[arg(long, alias = "dist", help_heading = group::TARGETS)]
     pub output: bool,
     /// Remove the incremental build cache.
