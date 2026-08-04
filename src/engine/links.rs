@@ -17,7 +17,7 @@ use crate::graph::Cache;
 use crate::render::{Backlinks, LinkMap, Outbound};
 use crate::world::Project;
 
-use super::{Pass, Rendered, Reused};
+use super::pass::{Pass, Rendered, Reused};
 
 /// The site's link graph as a build settles it.
 ///

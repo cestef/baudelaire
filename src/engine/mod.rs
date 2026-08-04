@@ -8,6 +8,7 @@ mod gate;
 mod hook;
 mod layers;
 mod links;
+mod pass;
 mod prune;
 mod statics;
 mod summary;
@@ -38,6 +39,7 @@ use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::gate::{Gate, Inert};
 use crate::engine::hook::Hooks;
 use crate::engine::links::Graph;
+use crate::engine::pass::{Pass, Rendered, Reused};
 use crate::engine::statics::{Copied, Static};
 use crate::engine::summary::Summary;
 use crate::error::warning::{BacklinksUnstable, FeatureMissing, SettingInert};
@@ -46,12 +48,8 @@ use crate::fs;
 // The trait only: this module has a `Generated` of its own, naming the
 // post-build outputs rather than the files a build writes for tooling.
 use crate::generated::Generated as _;
-use crate::graph::{
-    Analyzer, Cache, Deps, Hash, Outputs, Reads, Recorded, RenderInputs, Root, Roots,
-};
-use crate::render::{
-    AssetDeps, AssetMap, Emitted, Fragments, LinkDeps, Renderer, SrcSetDeps, SrcSets,
-};
+use crate::graph::{Cache, Hash, Outputs, RenderInputs};
+use crate::render::{AssetMap, Emitted, Fragments, SrcSets};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
@@ -913,118 +911,6 @@ struct Planned {
     tracked: Vec<(String, Value)>,
 }
 
-/// A page served from the cache: the HTML the build that compiled it produced,
-/// and the render-pass outputs recorded alongside.
-type Reused<'a> = (&'a Page, String, Outputs);
-
-/// Everything a compile pass over the site shares: the pages it covers, their
-/// compile inputs, the render layer they are rewritten through, and the analyzer
-/// that records which injected values each one read.
-///
-/// Built once and consumed by both [`Engine::run`] and [`Engine::check`], which
-/// otherwise derived the same four values side by side and had to be kept in
-/// step by hand.
-struct Pass<'a> {
-    config: &'a Config,
-    pages: &'a [Page],
-    prepare: Prepare<'a>,
-    renderer: Renderer,
-    analyzer: Analyzer<'a>,
-    /// The artifacts drawn beside each page's HTML, registered once for the
-    /// pass rather than rebuilt per page inside the pool.
-    sidecars: Sidecars,
-}
-
-impl<'a> Pass<'a> {
-    /// Wire a pass over `planned`, rendering against `assets`, `srcsets` and
-    /// `emitted`: what the asset pipeline produced for a build, empty for a
-    /// check, which rewrites nothing it will not write.
-    fn new(
-        engine: &'a Engine,
-        planned: &'a Planned,
-        prepare: Prepare<'a>,
-        assets: AssetMap,
-        srcsets: SrcSets,
-        emitted: Emitted,
-    ) -> Self {
-        Self {
-            config: &engine.config,
-            pages: &planned.pages,
-            prepare,
-            renderer: Renderer::new(
-                &planned.pages,
-                assets,
-                srcsets,
-                emitted,
-                engine.project.root(),
-                // Resolved here, once: it costs a canonicalization and every
-                // page's links are tested against the same answer.
-                engine.config.paths.under(engine.project.root()).content,
-            ),
-            analyzer: Analyzer::new(
-                planned.tracked.iter().map(Root::from).collect::<Roots>(),
-                &engine.project,
-            ),
-            sidecars: Sidecars::builtin(),
-        }
-    }
-
-    /// Split the pages into cache hits and stale ones.
-    ///
-    /// [`Prepare`] produces each page's text and fingerprint without parsing it;
-    /// the parse into a typst `Source` is deferred to the compile, so a hit
-    /// never pays to parse a page it won't render. A page whose input could not
-    /// be built is stale, so its error is reported by the compile pass with
-    /// every other page's.
-    fn split(&self, cache: &mut Cache) -> (Vec<Reused<'a>>, Vec<(&'a Page, Result<Prepared>)>) {
-        // Built across the pool first, because a page's input is pure and
-        // independent of every other: it canonicalizes the page's path and
-        // formats its wrapper text, which on a large site is the whole of a
-        // serial prologue nothing else was waiting on. The probe below stays
-        // ordered, since it mutates the cache and stages what it reuses.
-        let prepared: Vec<(&'a Page, Result<Prepared>)> = self
-            .pages
-            .par_iter()
-            .map(|page| (page, self.prepare.input(page)))
-            .collect();
-        let mut cached = Vec::new();
-        let mut stale = Vec::new();
-        for (page, input) in prepared {
-            match input {
-                Ok((id, text, fingerprint)) => {
-                    // The existence check comes first so a page that has to be
-                    // recompiled anyway leaves no reuse bookkeeping behind.
-                    match self
-                        .drawn(page)
-                        .then(|| cache.reuse(page, &fingerprint))
-                        .flatten()
-                    {
-                        Some((html, outputs)) => cached.push((page, html, outputs)),
-                        None => stale.push((page, Ok((id, text, fingerprint)))),
-                    }
-                }
-                Err(e) => stale.push((page, Err(e))),
-            }
-        }
-        (cached, stale)
-    }
-
-    /// Whether every file this page's sidecars own is still on disk.
-    ///
-    /// A page's HTML is rewritten on every build, hit or miss, because the cache
-    /// holds the markup itself. A sidecar is not: only the build that compiles a
-    /// page draws one, so once the file is gone (a deleted `dist`, a hand-removed
-    /// card, a half-finished copy) nothing would ever draw it again and the cache
-    /// would keep reporting the page as built. Missing one makes the page stale,
-    /// which is the only thing that redraws it.
-    fn drawn(&self, page: &Page) -> bool {
-        self.sidecars
-            .planned(self.config, page)
-            .iter()
-            .all(|path| path.exists())
-    }
-}
-
 /// The site values the `baudelaire:*` virtual JS modules serve, built from the
 /// same wrapper inputs the templates get rather than recomputed from scratch.
 ///
@@ -1062,67 +948,6 @@ impl Modules {
             pages,
             context: &self.context,
             sections: &self.sections,
-        }
-    }
-}
-
-/// A compiled page ready to write, with the files its compilation depended on,
-/// the raw targets of any broken internal links it contained, and the warnings
-/// typst raised while compiling it.
-struct Rendered<'a> {
-    page: &'a Page,
-    fingerprint: Hash,
-    html: String,
-    deps: Deps,
-    reads: Reads,
-    /// The permalinks this page's links resolved against: a render-side
-    /// dependency the compile itself never sees, since typst does not read a
-    /// link target's source.
-    links: LinkDeps,
-    /// The responsive variants this page's images matched: generated by the
-    /// asset pipeline and matched render-side, so the compile never sees them.
-    srcsets: SrcSetDeps,
-    /// The asset-map entries this page's references resolved through.
-    assets: AssetDeps,
-    /// The render pass's own results (externalized images, broken links), the
-    /// same shape the cache stores and replays for a hit.
-    outputs: Outputs,
-    /// Outbound `http(s)` links the page carries, for `check --external`. Not
-    /// cached: only a fresh compile collects them, and only `check` reads them.
-    external: Vec<String>,
-    /// The files this page produces beside its HTML (a social card..), each
-    /// with the destination it was drawn for.
-    artifacts: Vec<Artifact>,
-    warnings: Vec<TypstSourceDiagnostic>,
-}
-
-impl Rendered<'_> {
-    /// The same page with its compile warnings dropped.
-    ///
-    /// A backlink repair compiles the very same source a second time, so typst
-    /// raises the very same warnings: reported again they would print twice and
-    /// count twice in the build summary, telling an author there are more
-    /// problems than there are.
-    fn silenced(mut self) -> Self {
-        self.warnings.clear();
-        self
-    }
-}
-
-/// The cache stores the subset of a compile that survives it. The rest
-/// (outbound links, the sidecar files, warnings) is consumed by this build alone.
-impl<'a> From<&'a Rendered<'a>> for Recorded<'a> {
-    fn from(rendered: &'a Rendered<'a>) -> Self {
-        Self {
-            page: rendered.page,
-            fingerprint: rendered.fingerprint,
-            html: &rendered.html,
-            deps: &rendered.deps,
-            reads: &rendered.reads,
-            links: &rendered.links,
-            srcsets: &rendered.srcsets,
-            assets: &rendered.assets,
-            outputs: &rendered.outputs,
         }
     }
 }
