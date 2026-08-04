@@ -664,6 +664,12 @@ impl Config {
         if url == "/" {
             return self.paths.dist.join("index.html");
         }
+        // A URL that already names a file is one: a page whose frontmatter
+        // `path` spells the old `/2019/post.html` a migration is preserving
+        // must not be given a directory and an `index.html` inside it.
+        if Self::names_a_file(url) {
+            return self.file(url);
+        }
         if let Some(path) = self.not_found(url) {
             return path;
         }
@@ -677,6 +683,18 @@ impl Config {
                 .dist
                 .join(self.links.style.url(&trimmed).trim_start_matches('/')),
         }
+    }
+
+    /// Whether `url`'s last segment carries an extension, i.e. names a file
+    /// rather than a directory-style page URL.
+    ///
+    /// Only a frontmatter `path` can produce one under clean URLs: every
+    /// generated permalink is directory-shaped, and a flat one ends in `.html`,
+    /// which this reads the same way.
+    pub(crate) fn names_a_file(url: &str) -> bool {
+        url.rsplit('/')
+            .next()
+            .is_some_and(|last| last.contains('.') && !last.starts_with('.'))
     }
 
     /// Whether the site declares languages beyond the default.

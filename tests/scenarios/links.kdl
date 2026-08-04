@@ -286,3 +286,72 @@ scenario "a hand-written rule file brings the stubs back rather than dropping th
     file "old/index.html" { contains "/posts/new/" }
   }
 }
+
+// The migration escape hatch: a page names the URL it answers at, whatever its
+// collection's pattern would have produced. Every generator this project is
+// migrated from has one (Hugo `url`, Zola `path`, Jekyll and Eleventy
+// `permalink`), and without it an old URL set could only be approximated by
+// reverse-engineering one pattern per shape.
+scenario "a page publishes at the path its frontmatter names" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      lang "en"
+      languages {
+        fr { name "Français" }
+      }
+      generate { sitemap #true }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", path: "/2019/legacy.html",)
+      body
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "A", path: "/2019/heritage.html",)
+      corps
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", path: "about-us",)
+      See #link("a.typ")[the old one].
+      """#
+  }
+  expect {
+    ok
+    // A path naming a file publishes as that file, not as a directory holding
+    // an index.html: `/2019/post.html` is the shape a Jekyll site is preserving.
+    file "2019/legacy.html" { contains "body" }
+    absent "2019/legacy.html/index.html"
+    // One naming a directory is normalized like any other permalink, leading
+    // and trailing slashes optional.
+    file "about-us/index.html"
+    // A link to the page resolves to the path it claimed...
+    file "about-us/index.html" { contains #"href="/2019/legacy.html""# }
+    // ...and so does the sitemap.
+    file "sitemap.xml" { contains "<loc>https://example.com/2019/legacy.html</loc>" }
+    // Each edition takes its own, under its own language prefix. They stay one
+    // page in two languages: pairing is on the slug, which `path` does not touch.
+    file "fr/2019/heritage.html" { contains "corps" }
+    file "2019/legacy.html" { contains #"hreflang="fr" href="https://example.com/fr/2019/heritage.html""# }
+  }
+}
+
+// Two pages cannot answer at one URL, whichever way each asked for it.
+scenario "two pages claiming one path is an error" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", path: "/same/",)
+      body
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", path: "/same/",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::collision" }
+  }
+}

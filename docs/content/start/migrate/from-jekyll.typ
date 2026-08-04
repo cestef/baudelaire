@@ -43,6 +43,7 @@ below.
   table.header([`_config.yml`], [`config.kdl`]),
   [`url` + `baseurl`], [`url`, path included],
   [`title`], [`site`],
+  [`description`], [`description`],
   [`permalink: /:year/:month/:title/`], [`permalink "/{year}/{month}/{slug}/"` on the collection],
   [`paginate`, `paginate_path`], [`paginate { size }`, `paginate { prefix }`],
   [`collections`], [`content { collections { } }`],
@@ -103,7 +104,7 @@ becomes
   [`excerpt`], [`description`, written rather than extracted],
   [`redirect_from`], [`redirect`],
   [`categories`, `tags`], [top-level lists, one per declared taxonomy],
-  [`permalink`], [none per page; use `slug` and the collection's `permalink`],
+  [`permalink`], [`path`, taking a literal URL rather than a pattern. `/2019/post.html` publishes as that file.],
 )
 
 Jekyll can put categories in a URL (`/:categories/:year/:month/:title/`), and a
@@ -126,9 +127,9 @@ category and a home-page listing that filters across them
 (`pages(page.lang).filter(p => p.collection in ("travel", "history"))`). Keep
 `categories` in frontmatter as well if you want the term listings.
 
-A post in two categories has no such trick, since it can only live in one
-directory. Drop the category from the permalink and declare the old paths with
-`redirect`.
+A post in two categories cannot use it, since a file lives in one directory. Give
+those posts a frontmatter `path` naming the URL they had, which beats the
+collection's pattern outright.
 
 == Eleventy: the tree
 
@@ -152,9 +153,9 @@ collection defaults for `template`, `sort` and `permalink`, `client { }` or
 `typst { inputs }` for constants, and an ordinary `yaml("/data/x.yaml")` read for
 data. What a template reads is visible in the template.
 
-Two more with no counterpart: a computed `permalink` per page (use `slug` plus
-the collection's pattern), and `pagination` over arbitrary data (pagination here
-is over a collection).
+One more with no counterpart: `pagination` over arbitrary data, which here is
+always over a collection. A per-page `permalink` does carry over, as `path`,
+though it takes a literal URL rather than a pattern.
 
 == Liquid and Nunjucks, in Typst
 

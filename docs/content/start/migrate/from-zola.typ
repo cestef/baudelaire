@@ -34,6 +34,7 @@ functions.
   table.header([`config.toml`], [`config.kdl`]),
   [`base_url`], [`url`],
   [`title`], [`site`],
+  [`description`], [`description`],
   [`default_language`], [`lang`],
   [`[languages.fr]`], [`languages { fr { .. } }`],
   [`theme`], [`theme`],
@@ -79,8 +80,8 @@ content {
   [`redirect_to`], [a `redirect` on the destination page],
 )
 
-There is no site-level `description`. A page carries its own, and
-`generate { llms { summary } }` describes the site as a whole.
+`description` carries over under its own name, and fills the feed channel the
+same way Zola's does.
 
 == Frontmatter
 
@@ -119,7 +120,7 @@ becomes
   [`aliases`], [`redirect`],
   [`[taxonomies]` tables], [top-level lists, one per declared taxonomy],
   [`[extra]` tables], [top-level keys, read as `page.frontmatter.<key>`],
-  [`path`], [none; use `slug` and the collection's `permalink`],
+  [`path`], [the same name, and the same meaning: the exact URL this page publishes at.],
   [`in_search_index`], [none],
 )
 

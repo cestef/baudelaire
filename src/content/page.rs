@@ -538,6 +538,22 @@ impl Page {
         source: &Path,
         config: &Config,
     ) -> String {
+        // A page may name its own URL outright, which beats both the
+        // collection's pattern and the slug. Normalized through `Permalink::join`
+        // like every generated one, so `about-us`, `/about-us` and `/about-us/`
+        // are the same URL and `links { style }` still decides the file it maps
+        // to. It is localized like any other permalink: a French edition that
+        // states no path of its own publishes under `/fr/`.
+        if let Some(named) = fm.path.as_deref() {
+            let segments: Vec<&str> = named.split('/').filter(|s| !s.is_empty()).collect();
+            // A path naming a file keeps its name; one naming a directory gets
+            // the trailing slash every other permalink carries.
+            let url = match Config::names_a_file(named) {
+                true => format!("/{}", segments.join("/")),
+                false => Permalink::join(&segments),
+            };
+            return config.localize(lang, &url);
+        }
         let path = if collection == ROOT {
             // The root collection maps straight onto the site root: the bundle
             // index becomes `/`, every other page a top-level `/{slug}/`.
@@ -583,6 +599,47 @@ mod tests {
         );
 
         let default = Config::parse("").expect("config");
+        // A frontmatter `path` beats the pattern and the slug both, and is
+        // normalized like any other permalink: the two spellings are one URL.
+        let mut named = Frontmatter {
+            path: Some("about-us".into()),
+            ..Frontmatter::default()
+        };
+        assert_eq!(
+            Page::permalink_of(
+                None,
+                &named,
+                "ignored",
+                Path::new("content/x.typ"),
+                &default
+            ),
+            "/about-us/"
+        );
+        named.path = Some("/about-us/".into());
+        assert_eq!(
+            Page::permalink_of(
+                None,
+                &named,
+                "ignored",
+                Path::new("content/x.typ"),
+                &default
+            ),
+            "/about-us/"
+        );
+        // One naming a file stays a file: `/2019/post.html` is what a Jekyll
+        // site is preserving, and a trailing slash would make it a directory.
+        named.path = Some("/2019/post.html".into());
+        assert_eq!(
+            Page::permalink_of(
+                None,
+                &named,
+                "ignored",
+                Path::new("content/x.typ"),
+                &default
+            ),
+            "/2019/post.html"
+        );
+
         assert_eq!(
             Page::permalink_of(None, &fm, "index", Path::new("content/x.typ"), &default),
             "/"

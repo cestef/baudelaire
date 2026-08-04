@@ -36,6 +36,7 @@ scope.
   [`expiry`], [datetime], [The last day it is published. After that it is left out of the build entirely, and `prune` removes what an earlier build wrote.],
   [`draft`], [bool], [Skip the page unless `--drafts` is passed.],
   [`slug`], [str], [Override the URL slug, otherwise derived from the filename.],
+  [`path`], [str], [Publish at exactly this URL, replacing the collection's permalink and the slug both.],
   [`lang`], [str], [Override the page's language, beating the filename suffix and the site default.],
   [`translation`], [str], [The key pairing this page with its editions in other languages.],
   [`template`], [str], [The template that wraps this page, overriding the collection's default.],
@@ -48,6 +49,39 @@ naming the file and the field, never a silent drop. `lang` and `translation`
 only matter once a `languages` block exists; see
 #link("i18n.typ")[multiple languages]. `redirect` is covered on
 #link("collections/redirects.typ")[redirects].
+
+== Naming a URL outright
+
+`path` publishes a page where you say, whatever its collection's
+#link("collections/defining.typ")[permalink] pattern would have produced:
+
+```typ
+#let frontmatter = (
+  title: "About",
+  path: "/about-us/",
+)
+```
+
+Leading and trailing slashes are optional, so `about-us` is the same URL. A path
+whose last segment carries an extension names a *file* and publishes as one,
+which is what a site arriving from Jekyll needs:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([`path`], [Writes]),
+  [`/about-us/`], [`about-us/index.html`, served at `/about-us/`],
+  [`/2019/post.html`], [`2019/post.html`, served at that URL],
+)
+
+It is the migration escape hatch: copy each old URL onto the page that answers
+it and the URL set matches by construction, with no permalink archaeology. Two
+pages claiming one path is an error naming both files, not a race.
+
+`path` does not touch the page's identity. Translations still pair on
+`collection/slug`, so each edition may state its own path and stay the same page
+in another language; an edition that states none publishes under its language
+prefix as usual.
 
 == Taxonomy keys
 

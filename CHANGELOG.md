@@ -28,6 +28,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **frontmatter**: `path`, the URL a page publishes at, replacing its
+  collection's permalink pattern and its slug both.
+
+  ```typ
+  #let frontmatter = (
+    title: "The night train",
+    path: "/2019/03/night-train.html",
+  )
+  ```
+
+  Leading and trailing slashes are optional; a path whose last segment carries an
+  extension names a file and publishes as one, rather than as a directory with an
+  `index.html` in it. It is the escape hatch a migration needs: a site arriving
+  from Hugo (`url`), Zola (`path`), Jekyll or Eleventy (`permalink`) can copy each
+  old URL onto the page that answers it and match the old URL set exactly, rather
+  than reverse-engineering one pattern per shape. Two pages claiming one path is
+  an error naming both files. Identity is untouched, so translations still pair on
+  `collection/slug` and each edition may state its own path.
+
 - **templates**: a page knows itself. `page.url` is where it publishes,
   `page.collection` which collection it belongs to, and `page.assets` maps the
   files beside a page bundle to the URLs they are served from, so a frontmatter

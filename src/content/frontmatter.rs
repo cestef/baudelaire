@@ -79,6 +79,14 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         },
     ),
     (
+        "path",
+        || FieldType::Str,
+        |fm, v, p, k| {
+            fm.path = Some(v.string(p, k)?);
+            Ok(())
+        },
+    ),
+    (
         "lang",
         || FieldType::Str,
         |fm, v, p, k| {
@@ -237,6 +245,18 @@ pub struct Frontmatter {
     pub expiry: Option<time::Date>,
     pub draft: bool,
     pub slug: Option<String>,
+    /// The exact URL this page publishes at, replacing its collection's
+    /// permalink pattern and its slug both.
+    ///
+    /// The escape hatch a migration needs: a site arriving from elsewhere can
+    /// copy each old URL onto the page that answers it and match the old URL set
+    /// by construction, instead of reverse-engineering one pattern per shape and
+    /// declaring `redirect` for whatever the pattern missed. Hugo (`url`), Zola
+    /// (`path`), Jekyll and Eleventy (`permalink`) all have it.
+    ///
+    /// It does not touch the page's identity: `slug` still pairs translations,
+    /// so an edition may take its own path without becoming a separate page.
+    pub path: Option<String>,
     /// Explicit language override; beats the filename suffix and the default
     /// `lang`. Only meaningful on a multi-language site.
     pub lang: Option<String>,

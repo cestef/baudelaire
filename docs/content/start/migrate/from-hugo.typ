@@ -123,7 +123,7 @@ becomes
   [`layout`, `type`], [`template`],
   [`tags`, `categories`], [top-level lists, one per declared taxonomy],
   [`params:` nested keys], [top-level keys, read as `page.frontmatter.<key>`],
-  [`url`], [none; use `slug` and the collection's `permalink`],
+  [`url`], [`path`: the exact URL this page publishes at.],
   [`headless`], [none],
 )
 

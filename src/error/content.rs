@@ -96,7 +96,7 @@ pub enum ContentError {
     #[diagnostic(
         code(baudelaire::content::collision),
         help(
-            "two outputs cannot share a file: rename one, set a distinct `slug`/`permalink`, or drop the clashing `redirect`"
+            "two outputs cannot share a file: rename one, set a distinct `slug`/`path`, or drop the clashing `redirect`"
         )
     )]
     Collision {

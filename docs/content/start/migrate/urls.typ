@@ -7,6 +7,27 @@
 A migration that changes paths loses inbound links, search rankings and every
 bookmark. Most old shapes are one `permalink` line; the rest are redirects.
 
+== Say it outright
+
+The blunt instrument, and the one that cannot be got wrong: a page names the URL
+it answers at.
+
+```typ
+#let frontmatter = (
+  title: "The night train to Vienna",
+  path: "/2019/03/night-train.html",
+)
+```
+
+Whatever the old site's permalink rules were, a converter can copy each old URL
+onto the page that answers it and the URL set matches by construction. A path
+ending in a file name publishes as that file, which is the shape a Jekyll site
+carries. See #link("../../write/frontmatter.typ")[frontmatter].
+
+The patterns below are what you want when the old URLs follow a *rule*: one line
+per collection beats one line per page, and new pages then land in the same shape
+without being told.
+
 == The default
 
 `/{path}/{slug}/`: the directories a page sits under, then its slug. A collection
