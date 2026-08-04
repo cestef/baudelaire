@@ -1,7 +1,6 @@
 mod common;
 
-use baudelaire::content::{DiscoveryCache, Frontmatter, Page};
-use baudelaire::world::{Mode, Project};
+use baudelaire::content::{Frontmatter, Page};
 use common::Site;
 
 /// Load `text` as a page in a site declaring the `tags` and `series`
@@ -20,14 +19,7 @@ fn try_load_with(text: &str, config: &str) -> baudelaire::error::Result<Page> {
     site.write("config.kdl", config);
     site.write("content/posts/page.typ", text);
     let cfg = site.config();
-    let project = Project::new(&cfg, Mode::Build)?;
-    Page::load(
-        "posts",
-        &site.root.join("content/posts/page.typ"),
-        &cfg,
-        &project,
-        &DiscoveryCache::load(&cfg),
-    )
+    common::load_page("posts", &site.root.join("content/posts/page.typ"), &cfg)
 }
 
 fn extract(text: &str) -> Frontmatter {

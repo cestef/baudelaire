@@ -228,6 +228,23 @@ pub fn project(cfg: &Config) -> Project {
     Project::new(cfg, baudelaire::world::Mode::Build).expect("project")
 }
 
+/// Load one page the way discovery does, against a cold cache.
+///
+/// The project and its tracked value trees are owned here because the cache
+/// borrows them, which is the whole reason this is a helper rather than five
+/// lines at each call site.
+pub fn load_page(
+    collection: &str,
+    path: &std::path::Path,
+    cfg: &Config,
+) -> baudelaire::error::Result<baudelaire::content::Page> {
+    use baudelaire::content::{DiscoveryCache, Page};
+    let project = project(cfg);
+    let tracked = project.tracked();
+    let cache = DiscoveryCache::load(cfg, &project, &tracked);
+    Page::load(collection, path, cfg, &project, &cache)
+}
+
 /// A spawned child process, killed and reaped on drop so an early panic never
 /// leaks a child holding its port.
 pub struct Child(std::process::Child);

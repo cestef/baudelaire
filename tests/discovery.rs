@@ -2,9 +2,9 @@ mod common;
 
 use std::fs;
 
-use baudelaire::content::{DiscoveryCache, Page, discover};
+use baudelaire::content::discover;
 
-use common::{Site, project};
+use common::{Site, load_page, project};
 
 fn frontmatter_post(title: &str, slug: &str, date: &str, tags: &[&str]) -> String {
     let tags_str = tags
@@ -164,14 +164,7 @@ fn page_loads_frontmatter_and_body() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/hello.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert_eq!(page.frontmatter.title.as_deref(), Some("Hello"));
     assert_eq!(page.frontmatter.slug.as_deref(), Some("hello"));
     assert!(page.body.contains("Body of Hello"));
@@ -187,14 +180,7 @@ fn page_without_frontmatter_loads() {
     site.write("content/notes/plain.typ", "just body text");
     let cfg = site.config();
     let path = site.root.join("content/notes/plain.typ");
-    let page = Page::load(
-        "notes",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("notes", &path, &cfg).unwrap();
     assert!(page.frontmatter.title.is_none());
     assert_eq!(page.body, "just body text");
     assert_eq!(page.id.0, "notes/plain");
@@ -210,14 +196,7 @@ fn clean_urls_output_path() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/hello.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert_eq!(page.output, site.root.join("public/posts/hello/index.html"));
 }
 
@@ -234,14 +213,7 @@ fn flat_urls_output_path() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/hello.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert_eq!(page.output, site.root.join("public/posts/hello.html"));
 }
 
@@ -268,14 +240,7 @@ fn custom_permalink_template() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/hello.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert_eq!(page.permalink, "/posts/2024/hello/");
     assert_eq!(
         page.output,
@@ -293,14 +258,7 @@ fn slug_falls_back_to_filename() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/my-post.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert_eq!(page.id.0, "posts/my-post");
     assert_eq!(page.permalink, "/posts/my-post/");
 }
@@ -315,14 +273,7 @@ fn draft_page_skipped_unless_flag() {
     );
     let cfg = site.config();
     let path = site.root.join("content/posts/d.typ");
-    let page = Page::load(
-        "posts",
-        &path,
-        &cfg,
-        &project(&cfg),
-        &DiscoveryCache::load(&cfg),
-    )
-    .unwrap();
+    let page = load_page("posts", &path, &cfg).unwrap();
     assert!(page.skipped(false, false));
     assert!(!page.skipped(true, false));
 }
@@ -359,12 +310,10 @@ fn expired_page_is_skipped_and_todays_expiry_still_builds() {
     );
     let cfg = site.config();
     let load = |name: &str| {
-        Page::load(
+        load_page(
             "posts",
             &site.root.join(format!("content/posts/{name}.typ")),
             &cfg,
-            &project(&cfg),
-            &DiscoveryCache::load(&cfg),
         )
         .unwrap()
     };

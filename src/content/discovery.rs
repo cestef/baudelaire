@@ -75,7 +75,10 @@ pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
     if !config.paths.content.exists() {
         return Ok(Vec::new());
     }
-    let cache = DiscoveryCache::load(config);
+    // Owned here because the analyzer's roots borrow them, and it lives as long
+    // as the cache does.
+    let tracked = project.tracked();
+    let cache = DiscoveryCache::load(config, project, &tracked);
     let collections = Discovery::new(config, project).run(&cache)?;
     cache.save()?;
     Ok(collections)

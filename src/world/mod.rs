@@ -267,12 +267,14 @@ impl Project {
         })
     }
 
-    /// Evaluate a source as a typst module and capture the files the evaluation
-    /// read: the frontmatter's exact dependency set, so discovery can cache the
-    /// extracted frontmatter and re-evaluate only when a dependency changes.
-    /// Like [`Project::module`] but through a [`Tracked`] world; the page's own
-    /// source is excluded from the deps (it is fingerprinted separately).
-    pub fn module_tracked(&self, source: &Source) -> Result<(Module, Deps)> {
+    /// Evaluate a source as a typst module and capture what the evaluation read:
+    /// the files (the frontmatter's exact dependency set, so discovery can cache
+    /// the extracted frontmatter and re-evaluate only when a dependency changes)
+    /// and whether it read the build clock, which goes through the `World` and
+    /// leaves no file behind. Like [`Project::module`] but through a [`Tracked`]
+    /// world; the page's own source is excluded from the deps (it is
+    /// fingerprinted separately).
+    pub fn module_tracked(&self, source: &Source) -> Result<(Module, Deps, bool)> {
         let world = Tracked::new(self.world_for(source));
         let mut sink = Sink::new();
         let traced = Traced::default();
@@ -287,7 +289,7 @@ impl Project {
         match result {
             Ok(module) => {
                 let deps = self.dependencies(&world);
-                Ok((module, deps))
+                Ok((module, deps, world.reads_clock()))
             }
             Err(errs) => {
                 let name = source.id().vpath().get_without_slash().to_owned();

@@ -316,6 +316,14 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// The roots this analyzer resolves against, for a caller that has to digest
+    /// what [`reads`](Analyzer::reads) reported. Borrowed rather than rebuilt,
+    /// so the keys a cache records and the digests it checks them against come
+    /// from one set.
+    pub fn roots(&self) -> Roots<'_> {
+        Roots(self.roots.0.clone())
+    }
+
     /// The value paths a page reads: its own compiled source (which carries any
     /// inline generated body) unioned with every `.typ` file it depends on
     /// (templates, imported modules, its `#include`d body).

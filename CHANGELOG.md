@@ -322,6 +322,14 @@ chores are visible in the git history and change nothing for a site.
   appears. It stayed a cache hit instead, and the self-contained export kept
   pointing at a file it does not carry.
 
+- **frontmatter**: frontmatter derived from a build input the file tracker
+  cannot see (a git hash, `datetime.today()`) re-derives when that input
+  changes. Discovery cached the extracted value against the files the evaluation
+  read and nothing else, so the value was frozen at the build that first
+  extracted it: a title naming the current commit named the first one for ever.
+  The page's compile invalidated correctly and re-emitted the stale value it was
+  handed, which is what made it look like tracking was working.
+
 - **frontmatter**: a page whose frontmatter reads `@baudelaire/pages` or
   `@baudelaire/sections` re-derives it once the table exists. Discovery runs
   before the build has written the table, so a cold build legitimately sees the

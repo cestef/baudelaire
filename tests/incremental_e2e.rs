@@ -601,6 +601,41 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
     assert!(outbound("b").is_empty(), "{manifest}");
 }
 
+/// Frontmatter derived from a build input the file tracker cannot see (a git
+/// hash, the clock) re-derives when that input changes.
+///
+/// Discovery stored the extracted frontmatter against the files the evaluation
+/// read and nothing else, so a title built from the commit hash was extracted
+/// once and frozen. The page's *compile* invalidated correctly and dutifully
+/// re-emitted the stale title it had been handed, which is what made this look
+/// like it was working: the page rebuilt, and still said the old thing.
+#[test]
+fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
+    let site = Site::with(CONFIG);
+    git(&site, &["init", "-q"]);
+    git(&site, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    site.write(
+        "content/reader.typ",
+        "#let commit = sys.inputs.baudelaire.at(\"git\", default: (:)).at(\"hash\", default: \"none\")\n\
+         #let frontmatter = (title: \"At \" + commit,)\nbody",
+    );
+    site.stats();
+
+    // The body is fixed, so every difference below is the derived title.
+    let before = site.output("reader/index.html");
+    assert!(!before.contains("At none"), "no commit hash: {before}");
+
+    // The value the frontmatter is derived from changes, and no file does.
+    git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    site.stats();
+
+    assert_ne!(
+        site.output("reader/index.html"),
+        before,
+        "the page still names the first commit"
+    );
+}
+
 /// An asset the inliner could not read is still something the page consulted.
 /// The path was recorded only when the read succeeded, so a page referencing an
 /// asset that was not there stayed a cache hit once the file appeared: the

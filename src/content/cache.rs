@@ -19,10 +19,11 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use typst::foundations::Module;
 
+use crate::codegen::Value;
 use crate::config::Config;
 use crate::content::{Frontmatter, Origin};
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::{FileDigests, Hash, Renderer};
+use crate::graph::{Analyzer, FileDigests, Hash, Renderer, Root, Roots};
 use crate::world::Project;
 
 /// The on-disk discovery manifest, beside the compile cache's `manifest.json`.
@@ -45,6 +46,17 @@ struct Entry {
     /// build carried that entry forward. The count it printed was the empty
     /// table's, for ever.
     deps: BTreeMap<PathBuf, Option<Hash>>,
+    /// The injected values the evaluation read (`sys.inputs.baudelaire.git.hash`,
+    /// the build clock), and their digests then. `None` records a read of an
+    /// absent value, so its later appearance re-evaluates too.
+    ///
+    /// A file dependency cannot stand in for these: they go through the `World`
+    /// and leave no path behind. Without them, frontmatter derived from build
+    /// metadata (`title: "Docs @ " + git.hash`, a date from `datetime.today()`)
+    /// was extracted once and frozen for ever, while the *compile* dutifully
+    /// re-ran and re-emitted the stale value it was handed.
+    #[serde(default)]
+    meta: BTreeMap<String, Option<Hash>>,
     /// The extracted frontmatter.
     frontmatter: Frontmatter,
     /// Whether the module exported a `frontmatter` binding (vs. defaulted).
@@ -65,11 +77,15 @@ struct Manifest {
 
 /// Persisted extracted frontmatter, so discovery skips the typst module
 /// evaluation for pages whose source and dependencies are unchanged.
-pub struct DiscoveryCache {
+pub struct DiscoveryCache<'a> {
     dir: PathBuf,
     enabled: bool,
     salt: Hash,
     prev: Manifest,
+    /// The tracked value trees and a per-file memo, for resolving which injected
+    /// values a page's frontmatter read. The same analysis the compile cache
+    /// runs, over the same roots.
+    analyzer: Analyzer<'a>,
     /// The manifest being accumulated this build. Filled during the parallel
     /// page load, hence the lock; contention is negligible (a map insert).
     next: Mutex<Manifest>,
@@ -78,10 +94,13 @@ pub struct DiscoveryCache {
     digests: FileDigests,
 }
 
-impl DiscoveryCache {
+impl<'a> DiscoveryCache<'a> {
     /// Load the cache for a build. When incremental builds are disabled it never
     /// reports a hit and never persists: every page evaluates live.
-    pub fn load(config: &Config) -> Self {
+    /// `tracked` is the build's injected value trees, owned by the caller
+    /// because [`Roots`] borrows them, exactly as the compile side's
+    /// [`Pass`](crate::engine) holds them for its own analyzer.
+    pub fn load(config: &Config, project: &'a Project, tracked: &'a [(String, Value)]) -> Self {
         let salt = Self::salt(config);
         let dir = config.cache.dir.clone();
         let prev = std::fs::read(dir.join(MANIFEST))
@@ -97,6 +116,7 @@ impl DiscoveryCache {
             prev,
             next: Mutex::new(Manifest::default()),
             digests: FileDigests::default(),
+            analyzer: Analyzer::new(tracked.iter().map(Root::from).collect::<Roots>(), project),
         }
     }
 
@@ -134,8 +154,17 @@ impl DiscoveryCache {
         let origin = Origin::new(&source, path, collection);
         let hash = Hash::of_bytes(source.text().as_bytes());
         let (frontmatter, export) = if self.enabled {
-            let (module, deps) = project.module_tracked(&source)?;
+            let (module, deps, clock) = project.module_tracked(&source)?;
             let extracted = Self::interpret(&module, &origin, config)?;
+            // Which injected values the evaluation read, across the page's own
+            // source and every `.typ` it imported. The clock goes through the
+            // `World` and leaves no file behind, so it is recorded under the key
+            // it shares with `sys.inputs.baudelaire.date`, as the compile does.
+            let mut reads = self.analyzer.reads(&source, &deps);
+            if clock {
+                reads.insert(Project::clock());
+            }
+            let meta = self.roots().digests(&reads);
             let deps = deps
                 .files()
                 .iter()
@@ -146,6 +175,7 @@ impl DiscoveryCache {
                 Entry {
                     source: hash,
                     deps,
+                    meta,
                     frontmatter: extracted.0.clone(),
                     export: extracted.1,
                 },
@@ -168,11 +198,27 @@ impl DiscoveryCache {
         if !entry.deps.iter().all(|(p, h)| self.digests.of(p) == *h) {
             return None;
         }
+        // ...and every injected value it read must still digest to the same
+        // thing, so a new commit or a rolled-over day re-derives the frontmatter
+        // that displays it and leaves every other page alone.
+        let roots = self.roots();
+        if !entry
+            .meta
+            .iter()
+            .all(|(key, hash)| roots.digest(key) == *hash)
+        {
+            return None;
+        }
         self.next
             .lock()
             .pages
             .insert(path.to_owned(), entry.clone());
         Some(entry.clone())
+    }
+
+    /// Borrow the tracked roots for a value-digest resolution.
+    fn roots(&self) -> Roots<'_> {
+        self.analyzer.roots()
     }
 
     /// Decode file bytes to text exactly as typst does when it builds a
