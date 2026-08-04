@@ -218,6 +218,42 @@ fn the_catalogue_a_content_page_reads_tracks_the_page_set() {
     assert!(html.contains("Pages: 2"), "{html}");
 }
 
+/// ...and a page whose *frontmatter* reads the catalogue tracks it too.
+///
+/// The table is read during discovery, before the build has written it, so a
+/// cold build legitimately sees the empty one. The discovery cache dropped that
+/// read instead of recording it (there was no file to hash), so the entry
+/// depended on nothing: the frontmatter it derived on the first build was
+/// carried forward for ever, and the page's own title said zero.
+#[test]
+fn frontmatter_derived_from_the_catalogue_re_evaluates_once_it_exists() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write(
+        "content/index.typ",
+        r#"
+        #import "@baudelaire/pages:0.1.0": pages
+        #let frontmatter = (title: "Home: " + str(pages("en").len()),)
+        body
+        "#,
+    );
+    site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx\n");
+    site.stats();
+
+    // Nothing was written when discovery ran, so the empty table is the honest
+    // answer for this build.
+    assert!(
+        site.output("index.html").contains("Home: 0"),
+        "{}",
+        site.output("index.html")
+    );
+
+    // The table now exists, and the page that read it must see it.
+    site.stats();
+    let html = site.output("index.html");
+    assert!(html.contains("Home: 2"), "{html}");
+    assert!(!html.contains("Home: 0"), "{html}");
+}
+
 /// A misspelled module suggests the real one rather than sending the reader off
 /// to install a package that was never meant to exist.
 #[test]

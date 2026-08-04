@@ -35,7 +35,16 @@ struct Entry {
     source: Hash,
     /// Files the frontmatter evaluation read (transitive imports, data loaders),
     /// with their hashes at evaluation time. A change to any re-evaluates.
-    deps: BTreeMap<PathBuf, Hash>,
+    ///
+    /// `None` records a file that was not there to hash, so its later
+    /// appearance re-evaluates too, exactly as the compile cache's `deps` does.
+    /// An unhashable read used to be dropped from the entry entirely, and the
+    /// generated typst tables are read *during* discovery, before the build has
+    /// written them: on a cold build a page whose frontmatter reads
+    /// `@baudelaire/pages` recorded no dependency on it at all, and every later
+    /// build carried that entry forward. The count it printed was the empty
+    /// table's, for ever.
+    deps: BTreeMap<PathBuf, Option<Hash>>,
     /// The extracted frontmatter.
     frontmatter: Frontmatter,
     /// Whether the module exported a `frontmatter` binding (vs. defaulted).
@@ -130,7 +139,7 @@ impl DiscoveryCache {
             let deps = deps
                 .files()
                 .iter()
-                .filter_map(|p| Some((p.clone(), self.digests.of(p)?)))
+                .map(|p| (p.clone(), self.digests.of(p)))
                 .collect();
             self.next.lock().pages.insert(
                 path.to_owned(),
@@ -156,11 +165,7 @@ impl DiscoveryCache {
         if entry.source != hash {
             return None;
         }
-        if !entry
-            .deps
-            .iter()
-            .all(|(p, h)| self.digests.of(p).as_ref() == Some(h))
-        {
+        if !entry.deps.iter().all(|(p, h)| self.digests.of(p) == *h) {
             return None;
         }
         self.next

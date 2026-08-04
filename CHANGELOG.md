@@ -313,6 +313,13 @@ chores are visible in the git history and change nothing for a site.
   appears. It stayed a cache hit instead, and the self-contained export kept
   pointing at a file it does not carry.
 
+- **frontmatter**: a page whose frontmatter reads `@baudelaire/pages` or
+  `@baudelaire/sections` re-derives it once the table exists. Discovery runs
+  before the build has written the table, so a cold build legitimately sees the
+  empty one; the read was then dropped from the page's cache entry rather than
+  recorded as an absence, so that first answer was carried forward for every
+  later build. A title counting the site's pages said zero for ever.
+
 - **meta**: a base path prefixes the meta tags that carry a URL, and leaves the
   rest alone. `content` counted as a URL on every `<meta>` in the page, so a
   site hosted under a subpath prefixed its own prose: a page titled
