@@ -16,6 +16,11 @@ paths {
 // `list` names the template for that generated index.
 content {
   collections {
+    // `_root` is the collection a page directly under `content/` lands in, the
+    // home page among them. Binding a layout here is how it gets one without
+    // naming it in its own frontmatter.
+    _root { template "page.typ" }
+
     guide {
       sort "order"
       template "page.typ"

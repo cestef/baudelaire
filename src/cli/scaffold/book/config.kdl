@@ -16,6 +16,10 @@ paths {
 // the two move together, because neither is written down anywhere else.
 content {
   collections {
+    // `_root` is the collection a page directly under `content/` lands in: the
+    // front matter page here, and anything else you add beside it.
+    _root { template "chapter.typ" }
+
     chapters { sort "order"; template "chapter.typ" }
   }
 }

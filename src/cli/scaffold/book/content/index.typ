@@ -1,6 +1,5 @@
 #let frontmatter = (
   title: "Front matter",
-  template: "chapter.typ",
 )
 
 This is a book: an ordered run of chapters under `content/chapters/`, a contents

@@ -18,15 +18,16 @@ A template is a Typst file in `templates/` exporting one function, named after t
 
 `body` is the compiled page. `page` is everything the build knows about it. The function name has to match the file stem: `page.typ` exports `page`, `post-card.typ` exports `post-card`.
 
-A page with no template bound is written out as Typst renders it, with no wrapper at all.
+A page with no template bound anywhere is written out as Typst renders it, with no wrapper at all.
 
 == Bind it
 
-Per collection, in `config.kdl`, which is how most pages get one:
+Per collection, in `config.kdl`, which is how most pages get one. `_root` is the collection a page directly under `content/` lands in, so binding it there covers the home page and its neighbours:
 
 ```kdl
 content {
   collections {
+    _root { template "page.typ" }
     posts "posts/**/*.typ" {
       template "page.typ"
       paginate {
@@ -38,11 +39,13 @@ content {
 }
 ```
 
-Per page, in frontmatter, which wins over the collection:
+Per page, in frontmatter, which wins over both:
 
 ```typ
 #let frontmatter = (title: "Home", template: "home.typ")
 ```
+
+The nearer binding wins: a page's own frontmatter, else its collection's. A #link("../start/themes.typ")[theme] states the collection half in its own `theme.kdl`, which is what makes a themed page render without naming anything.
 
 Paths are file names inside `paths { templates }` (`templates/` by default). #link("collections/taxonomies.typ")[Taxonomy] listings take a `template` of their own, and so do #link("../build/generate/cards.typ")[social cards] and #link("../build/generate/pdf.typ")[PDFs], though those two are paged documents rather than HTML.
 

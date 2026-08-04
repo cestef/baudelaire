@@ -16,6 +16,11 @@ content {
   // `paginate` splits that index once it outgrows one page, adding
   // /posts/page/2/ and on, each with previous/next links.
   collections {
+    // `_root` is the collection a page directly under `content/` lands in, the
+    // home page among them. Binding a layout here is how such a page gets one
+    // without naming it in its own frontmatter.
+    _root { template "layout.typ" }
+
     posts "posts/**/*.typ" {
       sort "date"
       reverse #true

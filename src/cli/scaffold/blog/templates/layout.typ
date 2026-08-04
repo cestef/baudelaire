@@ -1,6 +1,6 @@
 // The shared page layout. A template file exports a function named after the
-// file, so `layout.typ` exports `layout`; bind it to a page through `template`
-// in its frontmatter, or to a whole collection in config.kdl.
+// file, so `layout.typ` exports `layout`. `content { template }` in config.kdl
+// binds it site-wide; a collection or a page's own frontmatter can name another.
 //
 // It receives the page and its compiled `body`, and returns the markup for the
 // document. typst-html supplies html/head/body around it, which is why nothing

@@ -95,12 +95,17 @@ impl Config {
         self.content.index.as_deref().unwrap_or("index")
     }
 
-    /// Resolve the template file for a collection, defaulting to `layout.typ`.
-    fn template_for(&self, collection: Option<&str>) -> String {
-        collection
-            .and_then(|c| self.collection(c))
-            .and_then(|c| c.template.clone())
-            .unwrap_or_else(|| "layout.typ".into())
+    /// The template a scaffolded page names: whatever the build would resolve
+    /// for it ([`Config::template_for`]), so `new` writes the binding the build
+    /// will later pick rather than a second opinion about it. `None` when the
+    /// config binds none, in which case the page is written without the key
+    /// rather than against a filename this module made up.
+    ///
+    /// A root page resolves under [`ROOT`], the collection discovery puts it in,
+    /// so `_root { template }` reaches a scaffolded page as it reaches a built
+    /// one.
+    fn scaffold_template(&self, collection: Option<&str>) -> Option<String> {
+        self.template_for(collection.unwrap_or(crate::content::ROOT), None)
     }
 }
 
@@ -319,7 +324,9 @@ pub(crate) struct Draft {
     /// The file to write; a bundle resolves to `<dir>/index.typ`.
     path: PathBuf,
     title: String,
-    template: String,
+    /// The layout to bind, absent when the config resolves none: the page then
+    /// carries no `template` key rather than one naming a file nothing wrote.
+    template: Option<String>,
     date: Option<time::Date>,
     order: Option<i64>,
     draft: bool,
@@ -343,7 +350,7 @@ impl Draft {
             return Err(crate::error::ScaffoldError::already_exists(&path).into());
         }
         let collection = config.collection_for(&path);
-        let template = config.template_for(collection.as_deref());
+        let template = config.scaffold_template(collection.as_deref());
         // The display name behind the slug: a bundle takes its directory's name.
         let raw = Self::raw_name(&path, config);
         let slug = Slug::parse(&raw).map_or_else(|| raw.clone(), Slug::into_string);
@@ -512,7 +519,9 @@ impl Draft {
             fields.push(("order", Value::Int(order)));
         }
         fields.push(("draft", Value::Bool(self.draft)));
-        fields.push(("template", Value::str(&self.template)));
+        if let Some(template) = &self.template {
+            fields.push(("template", Value::str(template)));
+        }
 
         let mut out = String::from("#let frontmatter = (\n");
         for (key, value) in &fields {
@@ -846,10 +855,7 @@ pub(super) mod templates {
                 .filter(|extra| {
                     let present = (extra.present)(&config);
                     if present {
-                        ui.detail(format_args!(
-                            "{} is already part of this shape",
-                            extra.name
-                        ));
+                        ui.detail(format_args!("{} is already part of this shape", extra.name));
                     }
                     !present
                 })

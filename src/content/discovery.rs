@@ -19,7 +19,11 @@ use crate::error::{ContentError, Result};
 use crate::world::Project;
 
 /// Special collection id for root-level pages (directly under `content/`).
-pub(super) const ROOT: &str = "_root";
+///
+/// A real id, not an internal marker: it is what a `content { collections {
+/// _root { .. } } }` block configures, and how a site (or a theme) binds a
+/// layout to the pages no other collection claims.
+pub const ROOT: &str = "_root";
 
 /// A collection of pages.
 #[derive(Debug, Clone)]

@@ -1,6 +1,5 @@
 #let frontmatter = (
   title: "Home",
-  template: "layout.typ",
 )
 
 Welcome to your new Baudelaire site. Every page here is Typst, compiled to HTML

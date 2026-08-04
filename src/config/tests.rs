@@ -1063,3 +1063,29 @@ fn schema_refuses_a_type_a_builtin_key_cannot_hold() {
         FieldType::Any
     );
 }
+
+/// The two places a layout can be named, nearer first, and the root pages that
+/// reach the second through the collection they are discovered into: a theme
+/// binds `_root` and a page that names nothing still renders through it.
+#[test]
+fn a_template_binding_resolves_nearest_first() {
+    let config = parse(
+        "content { collections { _root { template \"site.typ\" }; posts { template \"post.typ\" } } }",
+    );
+    assert_eq!(
+        config
+            .template_for("posts", Some("own.typ".into()))
+            .as_deref(),
+        Some("own.typ")
+    );
+    assert_eq!(
+        config.template_for("posts", None).as_deref(),
+        Some("post.typ")
+    );
+    assert_eq!(
+        config.template_for(crate::content::ROOT, None).as_deref(),
+        Some("site.typ")
+    );
+    // A collection nothing configures binds nothing: the page renders unwrapped.
+    assert_eq!(config.template_for("notes", None), None);
+}

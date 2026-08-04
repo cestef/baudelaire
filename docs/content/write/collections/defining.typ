@@ -60,9 +60,22 @@ content {
 ```
 
 Glob-configured collections claim their files first; whatever is left falls back
-to the convention. A file directly under `content/` that no glob claims belongs
-to no collection at all: it publishes at `/{slug}/`, or at `/` if it is the
-`index`.
+to the convention. A file directly under `content/` that no glob claims joins
+`_root`: it publishes at `/{slug}/`, or at `/` if it is the `index`.
+
+`_root` is a collection like any other, so configuring it is how the home page
+and its neighbours get a layout without each naming one:
+
+```kdl
+content {
+  collections {
+    _root { template "page.typ" }
+  }
+}
+```
+
+A #link("../../start/themes.typ")[theme] states that in its own `theme.kdl`,
+which is what lets a themed page render with nothing bound to it by hand.
 
 == Order
 
@@ -121,5 +134,6 @@ template, `content/ship/deploy/s3.typ` publishes at `/ship/deploy/s3/`, while
 
 `template` names the layout every member renders through, relative to
 `paths { templates }`. A page overrides it with `template` in its own
-#link("../frontmatter.typ")[frontmatter]. What the layout receives is on
+#link("../frontmatter.typ")[frontmatter], and a page whose collection names none
+is written out unwrapped. What the layout receives is on
 #link("../templates.typ")[templates].

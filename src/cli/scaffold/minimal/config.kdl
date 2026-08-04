@@ -10,3 +10,11 @@ site "{{site}}"
 url "{{url}}"
 author "{{author}}"
 lang "{{lang}}"
+
+content {
+  collections {
+    // Every page here sits directly under `content/`, which is the collection
+    // `_root`, so binding the layout once here binds it for all of them.
+    _root { template "layout.typ" }
+  }
+}

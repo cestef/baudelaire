@@ -502,6 +502,22 @@ impl Config {
             .map(|(_, c)| c)
     }
 
+    /// The layout a page renders through: what its own frontmatter names, else
+    /// its collection's `template`. `None` means no layout at all, and the
+    /// page's own markup is the document.
+    ///
+    /// Root pages resolve through this like any other, under the [`ROOT`]
+    /// collection they are discovered into, which is what lets a config (or a
+    /// theme's) bind them without every one of them naming a file by hand.
+    ///
+    /// The one place the order is written, so `new` scaffolds the template the
+    /// build will later pick rather than a second opinion about it.
+    ///
+    /// [`ROOT`]: crate::content::ROOT
+    pub fn template_for(&self, collection: &str, own: Option<String>) -> Option<String> {
+        own.or_else(|| self.collection(collection).and_then(|c| c.template.clone()))
+    }
+
     /// The frontmatter schema a collection's pages must satisfy, empty when it
     /// declares none (and for a collection with no config block at all).
     pub fn schema(&self, collection: &str) -> &[(String, FieldSchema)] {

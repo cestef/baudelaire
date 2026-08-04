@@ -138,11 +138,7 @@ impl Page {
             .unwrap_or_else(|| Self::bundle_slug(path, collection, &stem, config));
         let slug = Slug::require(&raw)?.into_string();
         let permalink = Self::permalink(collection, &frontmatter, &slug, &lang, path, config);
-        let template = frontmatter.template.clone().or_else(|| {
-            config
-                .collection(collection)
-                .and_then(|c| c.template.clone())
-        });
+        let template = config.template_for(collection, frontmatter.template.clone());
         Ok(Self::assemble(
             PageId::new(collection, &slug),
             path.to_owned(),

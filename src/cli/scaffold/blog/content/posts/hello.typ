@@ -8,7 +8,6 @@
   // Frontmatter keys Baudelaire does not claim are yours to use. This one shows
   // up in listings as `entry.extra.summary`.
   summary: "What you get when a post is a Typst document rather than markdown.",
-  template: "layout.typ",
 )
 
 This is a post. It is also a Typst document, which is a larger claim than it

@@ -1,8 +1,5 @@
 #let frontmatter = (
   title: "Documentation",
-  // The home page is not part of a collection, so it names its template here
-  // instead of inheriting one from `content { collections { .. } }`.
-  template: "page.typ",
   summary: "Everything you need to run and extend this site.",
 )
 #import "/templates/theme.typ": callout
