@@ -354,6 +354,43 @@ struct Route {
 }
 
 impl Route {
+    /// Resolve a URL path to a file under [`dist`](Route::dist), honoring clean
+    /// URLs. Every candidate is checked to stay within it (see
+    /// [`within`](Route::within)), so a `..`-laden or symlinked request can
+    /// never escape the served root.
+    ///
+    /// On the route rather than on the handler because it is a question about
+    /// the served tree and nothing else: no request, no server, no lock. It used
+    /// to clone the whole route and then re-lock it once per candidate, which
+    /// meant the path it resolved and the root it was checked against could come
+    /// from two different configs across a reload, and it left the traversal
+    /// check reachable only by making an HTTP request.
+    fn resolve(&self, url: &str) -> Option<PathBuf> {
+        let path = url.split('?').next().unwrap_or(url);
+        let rel = path
+            .strip_prefix(&self.base)
+            .unwrap_or(path)
+            .trim_start_matches('/');
+        // Browsers percent-encode every non-ASCII byte, so a page whose slug
+        // carries one (`/posts/café/`) arrives as `%C3%A9` and matches no file
+        // on disk. `within` still canonicalizes and containment-checks whatever
+        // this produces, so decoding cannot open a traversal.
+        let rel = Percent::decode(rel);
+        let base = self.dist.join(&rel);
+        self.within(&base)
+            .or_else(|| self.within(&base.join("index.html")))
+            .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
+    }
+
+    /// The canonical path of `candidate` when it is an existing file inside
+    /// `dist`, else `None`. The single guard against path traversal: both the
+    /// root and the candidate are canonical, so `..` segments and symlinks that
+    /// would leave the served tree are rejected before any read.
+    fn within(&self, candidate: &Path) -> Option<PathBuf> {
+        let canon = crate::fs::canonicalize(candidate).ok()?;
+        (canon.starts_with(&self.dist) && canon.is_file()).then_some(canon)
+    }
+
     fn new(config: &Config) -> Self {
         let dist = config.paths.dist.clone();
         Self {
@@ -422,7 +459,7 @@ impl Handler {
         }
         // Bound before the match, not in it: the guard would otherwise live to
         // the end of the arm, and `respond_404` locks the route again.
-        let file = Self::resolve(&self.route.lock(), &url);
+        let file = self.route.lock().resolve(&url);
         match file {
             Some(file) => self.serve_file(req, &file, 200),
             None => self.respond_404(req, &url),
@@ -471,7 +508,7 @@ impl Handler {
             scoped
                 .into_iter()
                 .chain([route.dist.join(crate::config::Config::NOT_FOUND)])
-                .find_map(|candidate| Self::within(&route, &candidate))
+                .find_map(|candidate| route.within(&candidate))
         };
         match found {
             Some(page) => self.serve_file(req, &page, 404),
@@ -479,31 +516,6 @@ impl Handler {
                 let _ = req.respond(Response::empty(404));
             }
         }
-    }
-
-    /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every
-    /// candidate is checked to stay within `dist` (see [`Handler::within`]), so
-    /// a `..`-laden or symlinked request can never escape the served root.
-    ///
-    /// One route for the whole resolution. It used to clone the route and then
-    /// re-lock once per candidate, so the path a request resolved to and the
-    /// root it was checked against could come from two different configs when a
-    /// reload landed between them.
-    fn resolve(route: &Route, url: &str) -> Option<PathBuf> {
-        let path = url.split('?').next().unwrap_or(url);
-        let rel = path
-            .strip_prefix(&route.base)
-            .unwrap_or(path)
-            .trim_start_matches('/');
-        // Browsers percent-encode every non-ASCII byte, so a page whose slug
-        // carries one (`/posts/café/`) arrives as `%C3%A9` and matches no file
-        // on disk. `within` still canonicalizes and containment-checks whatever
-        // this produces, so decoding cannot open a traversal.
-        let rel = Percent::decode(rel);
-        let base = route.dist.join(&rel);
-        Self::within(route, &base)
-            .or_else(|| Self::within(route, &base.join("index.html")))
-            .or_else(|| Self::within(route, &route.dist.join(format!("{rel}.html"))))
     }
 
     /// Hand a stamped source location to the configured editor.
@@ -554,15 +566,6 @@ impl Handler {
             .split('&')
             .filter_map(|pair| pair.split_once('='))
             .find_map(|(k, value)| (k == key).then_some(value))
-    }
-
-    /// The canonical path of `candidate` when it is an existing file inside
-    /// `dist`, else `None`. The single guard against path traversal: both the
-    /// root and the candidate are canonical, so `..` segments and symlinks that
-    /// would leave the served tree are rejected before any read.
-    fn within(route: &Route, candidate: &Path) -> Option<PathBuf> {
-        let canon = crate::fs::canonicalize(candidate).ok()?;
-        (canon.starts_with(&route.dist) && canon.is_file()).then_some(canon)
     }
 }
 
@@ -1080,6 +1083,103 @@ impl Filter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A served tree with a page, a clean-URL directory, a flat `.html`, and a
+    /// secret sitting *outside* it.
+    fn served() -> (tempfile::TempDir, Route) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dist = tmp.path().join("public");
+        std::fs::create_dir_all(dist.join("posts/a")).expect("mkdir");
+        std::fs::write(dist.join("index.html"), "home").expect("write");
+        std::fs::write(dist.join("posts/a/index.html"), "a").expect("write");
+        std::fs::write(dist.join("posts/flat.html"), "flat").expect("write");
+        std::fs::write(tmp.path().join("secret.txt"), "not yours").expect("write");
+        let route = Route {
+            dist: crate::fs::canonicalize(&dist).expect("canonical"),
+            base: String::new(),
+            open: None,
+            langs: Vec::new(),
+        };
+        (tmp, route)
+    }
+
+    /// The three shapes a URL can name a file by.
+    #[test]
+    fn a_url_resolves_to_the_file_under_dist() {
+        let (_tmp, route) = served();
+        for (url, expected) in [
+            ("/", "index.html"),
+            ("/index.html", "index.html"),
+            ("/posts/a/", "posts/a/index.html"),
+            ("/posts/a", "posts/a/index.html"),
+            ("/posts/flat", "posts/flat.html"),
+            ("/posts/a/?x=1", "posts/a/index.html"),
+        ] {
+            assert_eq!(route.resolve(url), Some(route.dist.join(expected)), "{url}");
+        }
+        assert_eq!(route.resolve("/nowhere/"), None);
+    }
+
+    /// The traversal check, asked directly rather than through a spawned server
+    /// and `curl`. A `..` is refused however it is spelled, and a percent-encoded
+    /// one is refused *after* decoding, which is the case decoding could have
+    /// opened.
+    #[test]
+    fn a_request_cannot_escape_the_served_root() {
+        let (tmp, route) = served();
+        std::fs::write(tmp.path().join("secret.txt"), "not yours").expect("write");
+        for url in [
+            "/../secret.txt",
+            "/posts/../../secret.txt",
+            "/%2e%2e/secret.txt",
+            "/%2E%2E%2Fsecret.txt",
+            "/....//secret.txt",
+            "/posts/a/../../../secret.txt",
+        ] {
+            assert_eq!(route.resolve(url), None, "{url} escaped the served root");
+        }
+    }
+
+    /// A symlink is followed to where it actually points, so one aimed out of
+    /// the tree is refused even though every path segment looks innocent. The
+    /// reason the check canonicalizes rather than comparing strings.
+    #[test]
+    #[cfg(unix)]
+    fn a_symlink_out_of_the_served_root_is_refused() {
+        let (tmp, route) = served();
+        std::os::unix::fs::symlink(tmp.path().join("secret.txt"), route.dist.join("leak.txt"))
+            .expect("symlink");
+        assert_eq!(route.resolve("/leak.txt"), None);
+
+        // ...and one pointing back inside is served, so the check is
+        // containment and not a blanket refusal of symlinks.
+        std::os::unix::fs::symlink(route.dist.join("index.html"), route.dist.join("alias.html"))
+            .expect("symlink");
+        assert_eq!(
+            route.resolve("/alias.html"),
+            Some(route.dist.join("index.html"))
+        );
+    }
+
+    /// A directory is not a file: the check answers for what would be read, so
+    /// a request naming one falls through rather than serving a listing.
+    #[test]
+    fn a_directory_is_not_served_as_a_file() {
+        let (_tmp, route) = served();
+        assert_eq!(route.resolve("/posts"), None);
+    }
+
+    /// The base path is stripped before resolution, so a subdirectory-hosted
+    /// site previews at the URLs it will really be served at.
+    #[test]
+    fn a_base_path_is_stripped_before_the_lookup() {
+        let (_tmp, mut route) = served();
+        route.base = "/docs".to_owned();
+        assert_eq!(
+            route.resolve("/docs/posts/a/"),
+            Some(route.dist.join("posts/a/index.html"))
+        );
+    }
 
     /// Watcher failures are reported as warnings and do not stop the watch
     /// loop (previously the `Err` arm was silently discarded).
