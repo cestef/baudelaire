@@ -30,7 +30,7 @@ use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
     AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
-    Weight,
+    Target, Weight,
 };
 use crate::ui::Ui;
 
@@ -115,8 +115,8 @@ pub struct Outputs {
     /// `links { strict #true }` *passed*: a gate that silently weakened on
     /// rebuild.
     pub broken: Vec<String>,
-    /// The heading ids this page exposes, and the `"/url/#fragment"` links it
-    /// carries into other pages.
+    /// The heading ids this page exposes, and the links it carries into a
+    /// section of another page.
     ///
     /// Stored for the same reason as `broken`: the deep-link check has to see a
     /// cached page too, or a second build reports nothing and the gate silently
@@ -127,7 +127,7 @@ pub struct Outputs {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub anchors: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub deep: Vec<String>,
+    pub deep: Vec<Target>,
     /// The pages this page's own content links to.
     ///
     /// Stored for the same reason as `anchors` and `deep`: the link graph is

@@ -59,15 +59,16 @@ impl Transform for Links {
                 // changes underneath it.
                 found.links.extend(resolution.probed);
                 match resolution.link {
-                    Link::Resolved(url) => {
+                    Link::Resolved(target) => {
+                        let url = target.to_string();
                         // A link naming a fragment of another page is checked
                         // site-wide once every page's anchors are known: the
                         // target's headings are not resolvable from here.
-                        if url.contains('#') {
-                            found.deep.push(url.clone());
+                        if target.fragment().is_some() {
+                            found.deep.push(target.clone());
                         }
                         if authored() {
-                            found.outbound.record(&url, &page.permalink);
+                            found.outbound.record(target, &page.permalink);
                         }
                         Some(url)
                     }
@@ -80,8 +81,10 @@ impl Transform for Links {
                         // an author writing `/guide/`, and every generated index,
                         // which links its members by permalink because it has no
                         // source path to name them by.
-                        if authored() && links.served(value).is_some() {
-                            found.outbound.record(value, &page.permalink);
+                        if authored()
+                            && let Some(target) = links.served(value)
+                        {
+                            found.outbound.record(target, &page.permalink);
                         }
                         None
                     }

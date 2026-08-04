@@ -11,14 +11,100 @@ use crate::codegen::Value;
 use crate::content::{Data, Page};
 use crate::graph::Hash;
 
+/// A link that names a page of this site: which page, and what the author wrote
+/// after it.
+///
+/// The one parsed form of an internal link. A raw `href` is split exactly once,
+/// where it is resolved, and travels as this afterwards: the render pass, the
+/// link graph, the deep-link check and the build manifest all read one value
+/// rather than each splitting the string again on a rule of its own. They did,
+/// and disagreed: the graph read `#install?x` as a section named `install?x`
+/// while the anchor check read it as `install`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct Target {
+    /// The page's permalink, `#fragment` and `?query` stripped: what identifies
+    /// the page at the other end.
+    page: String,
+    /// The `#fragment` / `?query` the link carried, empty when it carried
+    /// neither. Kept verbatim, because it is what the rewritten `href` has to
+    /// say; read through [`Target::fragment`], never matched on again.
+    tail: String,
+}
+
+impl Target {
+    /// The link `raw` wrote, aimed at the page served at `page`.
+    ///
+    /// The two halves come from different places on purpose: resolution has
+    /// just mapped a `.typ` source path to the permalink it is served at, and
+    /// only the tail survives from what the author typed.
+    fn new(page: &str, raw: &str) -> Self {
+        Self {
+            page: page.to_owned(),
+            tail: super::Tail::of(raw).tail.to_owned(),
+        }
+    }
+
+    /// The page this link names.
+    pub fn page(&self) -> &str {
+        &self.page
+    }
+
+    /// The heading id the link aimed at, without the `#`.
+    ///
+    /// `None` when it named the page rather than a section within it: a
+    /// `?query` is not a section, and neither is a bare `#`. A `?query` written
+    /// *after* the fragment is not part of it either, which is the rule the
+    /// deep-link check had of its own and the link graph did not.
+    pub fn fragment(&self) -> Option<&str> {
+        let anchor = self.tail.strip_prefix('#')?;
+        let anchor = anchor.split('?').next().unwrap_or(anchor);
+        (!anchor.is_empty()).then_some(anchor)
+    }
+}
+
+/// The URL this link is served at: the permalink it resolved to, carrying
+/// whatever the author wrote after it. What goes back into the `href`, and the
+/// spelling the build manifest stores.
+impl std::fmt::Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.page, self.tail)
+    }
+}
+
+/// A link already whole, split back into its parts: how a target comes out of
+/// the build manifest, and how a page written as a URL rather than as a source
+/// path is read.
+impl From<&str> for Target {
+    fn from(url: &str) -> Self {
+        let split = super::Tail::of(url);
+        Self {
+            page: split.path.to_owned(),
+            tail: split.tail.to_owned(),
+        }
+    }
+}
+
+impl From<String> for Target {
+    fn from(url: String) -> Self {
+        Self::from(url.as_str())
+    }
+}
+
+impl From<Target> for String {
+    fn from(target: Target) -> Self {
+        target.to_string()
+    }
+}
+
 /// The links one page's own content carries: this page's contribution to the
-/// site's link graph, as the resolved URLs it points at.
+/// site's link graph, as the [`Target`]s it points at.
 ///
 /// A set, so the order is the same on every build and the same link written
-/// twice is one edge. Each target is kept whole, `#fragment` and all, because a
-/// link into a page's section says more than a link to the page: it is what lets
-/// the page at the other end group who linked to *what*. Which paragraph they
-/// add up to one edge from is [`Backlinks`]'s business, not this type's.
+/// twice is one edge. A target keeps the section it aimed at, because a link
+/// into a page's section says more than a link to the page: it is what lets the
+/// page at the other end group who linked to *what*. Which paragraph they add up
+/// to one edge from is [`Backlinks`]'s business, not this type's.
 ///
 /// Only links written in the content tree are collected. A layout's nav, a
 /// sidebar, and the prev/next pair are links every page carries by virtue of its
@@ -26,7 +112,7 @@ use crate::graph::Hash;
 /// See [`crate::render::transform::rewrite`] for where that line is drawn.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Outbound(BTreeSet<String>);
+pub struct Outbound(BTreeSet<Target>);
 
 impl Outbound {
     /// The links of a page that has none: what a check reads for a build that
@@ -36,23 +122,23 @@ impl Outbound {
     /// Record a resolved link written on the page permalinked `from`. A page
     /// linking to itself is not an edge, whichever of its own sections it names:
     /// it says nothing a reader already on that page does not know.
-    pub fn record(&mut self, url: &str, from: &str) {
-        if super::Tail::of(url).path != from {
-            self.0.insert(url.to_owned());
+    pub fn record(&mut self, target: Target, from: &str) {
+        if target.page() != from {
+            self.0.insert(target);
         }
     }
 
-    /// The URLs this page links to, in a stable order.
-    pub fn targets(&self) -> impl Iterator<Item = &str> {
-        self.0.iter().map(String::as_str)
+    /// The links this page carries, in a stable order.
+    pub fn targets(&self) -> impl Iterator<Item = &Target> {
+        self.0.iter()
     }
 
-    /// The same links as the *pages* they name, `#fragment` dropped: what asking
-    /// "is anything pointing at this page?" reads. A page named both plainly and
-    /// by section appears twice, which no caller cares about and every caller
-    /// would otherwise dedup for itself.
+    /// The same links as the *pages* they name: what asking "is anything
+    /// pointing at this page?" reads. A page named both plainly and by section
+    /// appears twice, which no caller cares about and every caller would
+    /// otherwise dedup for itself.
     pub fn pages(&self) -> impl Iterator<Item = &str> {
-        self.targets().map(|target| super::Tail::of(target).path)
+        self.targets().map(Target::page)
     }
 
     /// Whether the page links to nothing, so a manifest entry can leave the
@@ -88,8 +174,8 @@ impl Outbound {
             let Some(raw) = node.cast::<ast::Str>() else {
                 continue;
             };
-            if let Link::Resolved(url) = links.classify(&raw.get(), page, lang).link {
-                out.record(&url, permalink);
+            if let Link::Resolved(target) = links.classify(&raw.get(), page, lang).link {
+                out.record(target, permalink);
             }
         }
         out
@@ -144,14 +230,12 @@ impl Backlinks {
         let mut inverted: BTreeMap<String, BTreeMap<String, Backlink>> = BTreeMap::new();
         for (page, outbound) in edges {
             for target in outbound.targets() {
-                let split = super::Tail::of(target);
                 let source = inverted
-                    .entry(split.path.to_owned())
+                    .entry(target.page().to_owned())
                     .or_default()
                     .entry(page.permalink.clone())
                     .or_insert_with(|| Backlink::from(page));
-                // A `?query` is not a section, and neither is a bare `#`.
-                if let Some(anchor) = split.tail.strip_prefix('#').filter(|a| !a.is_empty()) {
+                if let Some(anchor) = target.fragment() {
                     source.fragments.push(anchor.to_owned());
                 }
             }
@@ -221,8 +305,8 @@ impl From<&Page> for Backlink {
 pub enum Link {
     /// Not a managed page link (external, fragment, or non-`.typ`); leave as authored.
     Passthrough,
-    /// An internal `.typ` link resolved to this URL (permalink + any `#frag`/`?query`).
-    Resolved(String),
+    /// An internal `.typ` link resolved to the page it names.
+    Resolved(Target),
     /// An internal `.typ` link whose target page does not exist.
     Broken,
 }
@@ -321,9 +405,9 @@ impl LinkMap {
     /// its members by permalink because it has no source path to name them by.
     /// Both are edges of the link graph, and neither goes through
     /// [`LinkMap::classify`], which exists to rewrite what has to be rewritten.
-    pub fn served(&self, raw: &str) -> Option<&str> {
-        let path = super::Tail::of(raw).path;
-        self.urls.get(path).map(String::as_str)
+    pub fn served(&self, raw: &str) -> Option<Target> {
+        let target = Target::from(raw);
+        self.urls.contains(target.page()).then_some(target)
     }
 
     /// Classify a raw link written in `from`'s body: passthrough, resolved to a
@@ -364,7 +448,7 @@ impl LinkMap {
             permalink
         });
         let link = match resolved {
-            Some(permalink) => Link::Resolved(format!("{permalink}{}", split.tail)),
+            Some(permalink) => Link::Resolved(Target::new(&permalink, raw)),
             None => Link::Broken,
         };
         Resolution { link, probed }
@@ -407,9 +491,51 @@ impl LinkMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backlinks, LinkMap, Outbound, Source};
+    use super::{Backlinks, LinkMap, Outbound, Source, Target};
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use std::path::PathBuf;
+
+    /// One rule for what a link aimed at, read once. The graph and the anchor
+    /// check each had their own and disagreed about `#install?x`; a link is also
+    /// served back exactly as it was written, query and all.
+    #[test]
+    fn a_target_names_one_page_and_at_most_one_section() {
+        for (raw, page, fragment) in [
+            ("/b/", "/b/", None),
+            ("/b/#install", "/b/", Some("install")),
+            ("/b/?x=1", "/b/", None),
+            ("/b/#", "/b/", None),
+            ("/b/#install?x=1", "/b/", Some("install")),
+        ] {
+            let target = Target::from(raw);
+            assert_eq!(
+                (target.page(), target.fragment()),
+                (page, fragment),
+                "{raw}"
+            );
+            assert_eq!(target.to_string(), raw);
+        }
+    }
+
+    /// A target is stored as the URL it names and nothing else, which is what
+    /// lets it be parsed without a [`crate::graph::Renderer::SCHEMA`] bump: a
+    /// manifest written when these were plain strings reads back identically,
+    /// and one written now is still readable by a build that has not upgraded.
+    #[test]
+    fn a_target_is_stored_as_the_url_it_names() {
+        let mut outbound = Outbound::default();
+        outbound.record(Target::from("/b/#install"), "/a/");
+        outbound.record(Target::from("/c/"), "/a/");
+
+        let json = serde_json::to_string(&outbound).unwrap();
+
+        assert_eq!(json, r#"["/b/#install","/c/"]"#);
+        assert_eq!(
+            serde_json::from_str::<Outbound>(&json).unwrap(),
+            outbound,
+            "a stored target round-trips"
+        );
+    }
 
     /// A link is kept whole, so the page at the other end can tell which of its
     /// sections was aimed at. The same link written twice is still one edge, and
@@ -417,14 +543,15 @@ mod tests {
     #[test]
     fn an_edge_keeps_what_the_link_aimed_at() {
         let mut outbound = Outbound::default();
-        outbound.record("/posts/b/#install", "/posts/a/");
-        outbound.record("/posts/b/#install", "/posts/a/");
-        outbound.record("/posts/b/", "/posts/a/");
-        outbound.record("/posts/a/#top", "/posts/a/");
-        assert_eq!(
-            outbound.targets().collect::<Vec<_>>(),
-            ["/posts/b/", "/posts/b/#install"]
-        );
+        for target in [
+            "/posts/b/#install",
+            "/posts/b/#install",
+            "/posts/b/",
+            "/posts/a/#top",
+        ] {
+            outbound.record(Target::from(target), "/posts/a/");
+        }
+        assert_eq!(urls(&outbound), ["/posts/b/", "/posts/b/#install"]);
     }
 
     /// Inverting names each source once per page it links to, however many links
@@ -434,7 +561,7 @@ mod tests {
     fn a_source_is_named_once_and_carries_the_sections_it_aimed_at() {
         let mut outbound = Outbound::default();
         for target in ["/posts/b/", "/posts/b/#install", "/posts/b/#usage"] {
-            outbound.record(target, "/posts/a/");
+            outbound.record(Target::from(target), "/posts/a/");
         }
         let (source, target) = (page("A", "/posts/a/"), page("B", "/posts/b/"));
         let backlinks = Backlinks::new(std::iter::once((&source, &outbound)));
@@ -446,6 +573,12 @@ mod tests {
         assert_eq!(sources[0].fragments, ["install", "usage"]);
         // A page nothing points at is linked from nowhere, not from everywhere.
         assert!(backlinks.of(&source).is_empty());
+    }
+
+    /// The links a page carries, as the URLs they are served at: what an
+    /// assertion about a page's edges reads.
+    fn urls(outbound: &Outbound) -> Vec<String> {
+        outbound.targets().map(Target::to_string).collect()
     }
 
     /// The pages a backlink test links between: a title and a permalink are all
@@ -549,12 +682,13 @@ mod tests {
         let pages = [page("A", "/a/"), page("B", "/b/")];
         let map = LinkMap::new(&pages, std::path::Path::new("."));
 
-        assert_eq!(map.served("/b/"), Some("/b/"));
+        let page = |raw| map.served(raw).map(|t| t.page().to_owned());
+        assert_eq!(page("/b/").as_deref(), Some("/b/"));
         // The section is not part of the page's identity, and a page this site
         // does not serve is not one of ours.
-        assert_eq!(map.served("/b/#install"), Some("/b/"));
-        assert_eq!(map.served("/nowhere/"), None);
-        assert_eq!(map.served("https://example.com/b/"), None);
+        assert_eq!(page("/b/#install").as_deref(), Some("/b/"));
+        assert_eq!(page("/nowhere/"), None);
+        assert_eq!(page("https://example.com/b/"), None);
     }
 
     /// The cold-build guess: what a page's source looks like it links to,
@@ -577,7 +711,7 @@ mod tests {
 
         // The link to b, once, however many strings named it; the self-link and
         // the non-page reference are not edges.
-        assert_eq!(scanned.targets().collect::<Vec<_>>(), ["/b/"]);
+        assert_eq!(urls(&scanned), ["/b/"]);
     }
 
     #[test]

@@ -24,7 +24,7 @@ use std::path::Path;
 
 use crate::config::Config;
 use crate::error::{Broken, BrokenLinks, Orphan, OrphanPages, Result};
-use crate::render::{Emitted, Finding, Outbound, Weight};
+use crate::render::{Emitted, Finding, Outbound, Target, Weight};
 use crate::ui::Ui;
 
 /// Read-only view of the freshly compiled pages handed to every check. Cached
@@ -54,8 +54,8 @@ pub(super) struct CheckedPage<'a> {
     pub external: &'a [String],
     /// The heading ids this page exposes.
     pub anchors: &'a [String],
-    /// Resolved `"/url/#fragment"` links this page carries into others.
-    pub deep: &'a [String],
+    /// Resolved links this page carries into a section of another.
+    pub deep: &'a [Target],
     /// What the lint pass found while this page rendered.
     pub lints: &'a [Finding],
     /// What this page ships: its inline bytes and the files it loads.
@@ -103,19 +103,18 @@ impl Links {
             .iter()
             .flat_map(|page| {
                 page.deep.iter().filter_map(|target| {
-                    let (url, fragment) = target.split_once('#')?;
+                    let fragment = target.fragment()?;
                     // Only a URL this build produced can be judged. Anything
                     // else is a link out of the site, or into a static file, and
                     // saying "no such heading" about a page baudelaire never
                     // rendered would be a false positive.
-                    let ids = anchors.get(url)?;
-                    let fragment = fragment.split('?').next().unwrap_or(fragment);
-                    if fragment.is_empty() || ids.iter().any(|id| id == fragment) {
+                    let ids = anchors.get(target.page())?;
+                    if ids.iter().any(|id| id == fragment) {
                         return None;
                     }
                     Some(Broken::anchor(
                         page.label.clone(),
-                        target.clone(),
+                        target.to_string(),
                         page.source,
                         fragment.to_owned(),
                     ))
@@ -236,7 +235,7 @@ mod tests {
     fn deep_page<'a>(
         permalink: &'a str,
         anchors: &'a [String],
-        deep: &'a [String],
+        deep: &'a [Target],
     ) -> CheckedPage<'a> {
         CheckedPage {
             permalink,
@@ -253,7 +252,7 @@ mod tests {
     fn a_fragment_with_no_matching_heading_is_reported() {
         let config = Config::default();
         let anchors = ["installing".to_owned()];
-        let deep = ["/guide/#instaling".to_owned()];
+        let deep = [Target::from("/guide/#instaling")];
         let pages = [
             deep_page("/guide/", &anchors, &[]),
             deep_page("/", &[], &deep),
@@ -278,9 +277,9 @@ mod tests {
         let config = Config::default();
         let anchors = ["installing".to_owned()];
         let deep = [
-            "/guide/#installing".to_owned(),
-            "/guide/".to_owned(),
-            "/not-a-page-of-ours/#whatever".to_owned(),
+            Target::from("/guide/#installing"),
+            Target::from("/guide/"),
+            Target::from("/not-a-page-of-ours/#whatever"),
         ];
         let pages = [
             deep_page("/guide/", &anchors, &[]),

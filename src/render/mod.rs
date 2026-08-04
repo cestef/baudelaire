@@ -23,7 +23,7 @@ pub use asset::{AssetDeps, AssetMap};
 pub use emitted::{Emission, Emitted};
 pub use fragment::Fragments;
 pub use inline::Inline;
-pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound};
+pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
 pub use srcset::{SrcSetDeps, SrcSets};
@@ -109,14 +109,13 @@ pub struct Rewrite {
     /// The heading ids this page exposes, so a link elsewhere can be checked
     /// against them.
     pub anchors: Vec<String>,
-    /// Resolved links this page carries that name a fragment of *another* page,
-    /// as full `"/url/#fragment"` targets.
+    /// Resolved links this page carries that name a fragment of *another* page.
     ///
     /// Collected rather than checked on the spot: the target page's anchors are
     /// not known while this one renders (pages render in parallel, and the
     /// anchor pass runs after link resolution within each), so the check is a
     /// site-wide pass once every page has produced its set.
-    pub deep: Vec<String>,
+    pub deep: Vec<Target>,
     /// Files the render pass read on this page's behalf, to add to its
     /// dependencies: baudelaire reads them, not typst, so nothing else would
     /// notice an edit. Inlined SVG icons and embedded assets both land here,
