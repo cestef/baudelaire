@@ -33,6 +33,8 @@ mod bundled;
 #[cfg(feature = "themes")]
 mod install;
 #[cfg(feature = "themes")]
+mod local;
+#[cfg(feature = "themes")]
 mod source;
 
 #[cfg(feature = "themes")]

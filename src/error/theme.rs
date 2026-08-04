@@ -63,6 +63,22 @@ pub enum ThemeError {
     )]
     Lock { path: String, why: String },
 
+    #[error("{} holds no files, so it is not a theme", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::theme::empty),
+        help(
+            "a theme is `templates {{ }}`, `assets {{ }}`, `static {{ }}` and a `theme.kdl`,              in a directory of its own"
+        )
+    )]
+    Empty { path: String },
+
+    #[error("{} does not name a directory a theme could be called after", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::theme::unnamed),
+        help("a copy is known by its directory's name, so name the directory, or pass `--dir`")
+    )]
+    Unnamed { path: String },
+
     #[error("nothing knows how to fetch {}", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unsupported),
@@ -87,6 +103,18 @@ impl ThemeError {
     /// either way, because both mean this binary cannot go and get it.
     pub fn unsupported(spec: String) -> Self {
         Self::Unsupported { spec }
+    }
+
+    pub fn empty(path: &str) -> Self {
+        Self::Empty {
+            path: path.to_owned(),
+        }
+    }
+
+    pub fn unnamed(path: &str) -> Self {
+        Self::Unnamed {
+            path: path.to_owned(),
+        }
     }
 
     pub fn not_installed(path: &str) -> Self {

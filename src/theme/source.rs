@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::bundled::Shelf;
+use super::local::Local;
 use crate::error::{Result, ThemeError};
 
 /// One place a theme can be fetched from.
@@ -48,7 +49,7 @@ pub trait Source {
 /// the source that wrote a copy through it, so a source cannot install a theme
 /// it could not later bring forward.
 pub fn builtin() -> Vec<Box<dyn Source>> {
-    vec![Box::new(Shelf)]
+    vec![Box::new(Shelf), Box::new(Local)]
 }
 
 /// Where an installed theme came from, and everything `update` needs to go back
@@ -62,6 +63,9 @@ pub fn builtin() -> Vec<Box<dyn Source>> {
 pub enum Origin {
     /// A theme this binary carries.
     Bundled { name: String },
+    /// A directory on this machine. Absolute, because the record naming it is
+    /// read from wherever the next run happens to be.
+    Path { path: PathBuf },
 }
 
 impl Origin {
@@ -80,6 +84,7 @@ impl Origin {
     pub fn label(&self) -> String {
         match self {
             Self::Bundled { name } => name.clone(),
+            Self::Path { path } => path.display().to_string(),
         }
     }
 

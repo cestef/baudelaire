@@ -340,3 +340,31 @@ fn a_package_theme_supplies_its_layouts_assets_and_defaults() {
         "its assets publish"
     );
 }
+
+/// A theme from a directory on disk: copied in, recorded, and brought forward
+/// from the same directory on the next update.
+#[test]
+#[cfg(feature = "themes")]
+fn a_theme_is_installed_from_a_directory_and_updated_from_it() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write("elsewhere/plume/templates/page.typ", "#let page = 1\n");
+    site.write("elsewhere/plume/theme.kdl", "lang \"fr\"\n");
+
+    let out = site.run(&["theme", "add", "./elsewhere/plume"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(site.read("themes/plume/theme.kdl"), "lang \"fr\"\n");
+    // The source's own directory is not touched, and the copy is the project's.
+    assert!(site.exists("themes/plume/.baudelaire-lock.json"));
+
+    // The record says where it came from, so `update` needs no second telling.
+    site.write("elsewhere/plume/templates/page.typ", "#let page = 2\n");
+    assert!(site.run(&["theme", "update", "plume"]).status.success());
+    assert_eq!(
+        site.read("themes/plume/templates/page.typ"),
+        "#let page = 2\n"
+    );
+}

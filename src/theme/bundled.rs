@@ -151,7 +151,9 @@ impl Source for Shelf {
     }
 
     fn fetch(&self, origin: &Origin) -> Result<Fetched> {
-        let Origin::Bundled { name } = origin;
+        let Origin::Bundled { name } = origin else {
+            return Err(ThemeError::unsupported(origin.label()).into());
+        };
         Ok(Bundled::find(name)?.fetched())
     }
 }
