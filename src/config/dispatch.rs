@@ -70,13 +70,30 @@ pub enum Kind {
     Texts,
     /// Any number of whole numbers on one line: `widths 480 960 1440`.
     Numbers,
-    /// A block of free `key=value` pairs, the keys chosen by the author.
+    /// A block of free entries, the keys chosen by the author, one node each:
+    /// `strings { next "Next"; prev "Previous" }`.
+    ///
+    /// Read by [`NodeExt::pairs`](super::node::NodeExt::pairs), which walks
+    /// *child nodes*. Written `next="Next"` it is a KDL parse error rather than
+    /// a table entry, and the label said `key=value` for a while: the one
+    /// spelling this shape does not take.
     Table,
     /// A nested block, whose own keys are these.
     Block(Rows),
     /// A block of repeated child nodes, each named by the author and each
     /// accepting these keys.
     Items(Rows),
+    /// One node carrying these keys as `key=value` attributes on its own line,
+    /// not as a block: `png level=6 strip="all"`.
+    ///
+    /// Distinct from [`Kind::Block`] because the two are read by different
+    /// halves of this module ([`Attrs`] against [`Block`]), and a reference that
+    /// called this one a block would be documenting a spelling that parses and
+    /// configures nothing.
+    Line(Rows),
+    /// Repeated nodes, each named by the author and each carrying these keys as
+    /// `key=value` attributes: one line per taxonomy, per icon.
+    Lines(Rows),
     /// A block of repeated child nodes, each named by the author and each
     /// accepting *any top-level key*.
     ///
@@ -226,8 +243,25 @@ pub(super) trait Attributed: Sized + 'static {
     /// collection's glob); any other positional is an error.
     const LEADING: usize = 0;
 
+    /// Whether the caller reads the node's `{ .. }` block itself, as a schema
+    /// field does for the fields of a dictionary. Otherwise a block on one of
+    /// these nodes is refused: [`Attrs::apply`] reads only entries, so anything
+    /// written inside braces would parse and configure nothing, which is the
+    /// failure this whole dispatch layer exists to prevent.
+    const NESTS: bool = false;
+
     /// Apply the node's named attributes onto `self`.
     fn read(&mut self, node: &KdlNode, text: &str) -> Result<()> {
+        if !Self::NESTS && node.children().is_some() {
+            let name = node.name().value();
+            return Err(ConfigError::unexpected_block(
+                text,
+                name,
+                &Self::ATTRS.example(name),
+                NodeExt::span(node),
+            )
+            .into());
+        }
         Self::ATTRS.apply(self, node, text, Self::LEADING)
     }
 }
@@ -275,6 +309,16 @@ impl<T> Attrs<T> {
     /// This scope's attributes, as the reference renders them.
     fn rows(&self) -> Vec<Row> {
         Row::of(self.0)
+    }
+
+    /// The node written the way it parses, for the diagnostic that refuses a
+    /// block. Read out of the same table, so the spelling it shows is one that
+    /// works and cannot drift from the keys.
+    fn example(&self, node: &str) -> String {
+        match self.0.first() {
+            Some(&(key, kind, ..)) => format!("{node} {key}={}", kind.label()),
+            None => node.to_owned(),
+        }
     }
 }
 

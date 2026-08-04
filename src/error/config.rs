@@ -245,6 +245,20 @@ impl ConfigError {
         )
     }
 
+    /// A `{ .. }` block on a node whose settings are `key=value` attributes.
+    /// `example` is that node written the way it parses, built from its own key
+    /// table, so the help shows the spelling rather than describing it.
+    pub fn unexpected_block(source: &str, node: &str, example: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnexpectedBlock {
+                node: node.to_owned(),
+                example: example.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A `profiles` block nested inside another profile.
     pub fn nested_profiles(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::NestedProfiles, span)
@@ -492,6 +506,13 @@ pub enum ConfigErrorKind {
     #[error("unexpected argument {}; {} takes `key=value` attributes", Text(.value), Code(.node))]
     #[diagnostic(code(baudelaire::config::unexpected_argument))]
     UnexpectedArgument { value: String, node: String },
+
+    #[error("{} takes no block; its settings are `key=value` on the line", Code(.node))]
+    #[diagnostic(
+        code(baudelaire::config::unexpected_block),
+        help("write them as attributes: {}", Code(.example))
+    )]
+    UnexpectedBlock { node: String, example: String },
 
     #[error("`profiles` cannot be nested inside a profile")]
     #[diagnostic(code(baudelaire::config::nested_profiles))]

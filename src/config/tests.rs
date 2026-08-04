@@ -291,6 +291,49 @@ fn images_optimize_names_each_format_once() {
     assert_eq!(opt.format("jpg"), Some(ImageFormat::Jpeg));
 }
 
+/// A scope whose settings are `key=value` on one line refuses a `{ }` block.
+///
+/// It used to accept one and read nothing out of it: the block parsed, the
+/// build went green, and the setting inside was simply not applied. The
+/// generated reference called these "block" at the time, so it documented the
+/// spelling that did nothing.
+#[test]
+fn err_a_block_on_an_attribute_scope_is_refused() {
+    for (config, node) in [
+        ("assets { images { optimize { png { level 6 } } } }", "png"),
+        (
+            "assets { images { optimize { jpeg { quality 70 } } } }",
+            "jpeg",
+        ),
+        ("content { taxonomies { tags { listing #true } } }", "tags"),
+        (
+            r#"generate { manifest { icons { "/i.png" { size 512 } } } }"#,
+            "/i.png",
+        ),
+    ] {
+        let err = Config::parse(config).unwrap_err();
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains(&format!("`{node}` takes no block")),
+            "{rendered}"
+        );
+        assert!(rendered.contains("write them as attributes"), "{rendered}");
+    }
+}
+
+/// The one attribute scope that does take a block: a `dict` field's own fields.
+#[test]
+fn a_schema_dict_still_declares_its_fields_in_a_block() {
+    let cfg =
+        parse(r#"content { collections { posts { schema { author "dict" { name "str" } } } } }"#);
+    let (key, field) = &cfg.content.collections[0].1.schema[0];
+    assert_eq!(key, "author");
+    let FieldType::Dict(fields) = &field.ty else {
+        panic!("the dict's own fields were not read from its block");
+    };
+    assert_eq!(fields[0].0, "name");
+}
+
 /// An unrecognized format reads like every other unknown key, suggestions
 /// included, because the same table drives parsing and the error.
 #[test]

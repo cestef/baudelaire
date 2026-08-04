@@ -98,7 +98,9 @@ impl Reference {
                 false => format!("{prefix}.{}", row.key),
             };
             let nested = match row.kind {
-                Kind::Block(rows) | Kind::Items(rows) => Some(rows),
+                Kind::Block(rows) | Kind::Items(rows) | Kind::Line(rows) | Kind::Lines(rows) => {
+                    Some(rows)
+                }
                 _ => None,
             };
             out.push(Entry {
@@ -214,7 +216,10 @@ impl Kind {
     /// Whether this key opens a block of its own keys, rather than holding a
     /// value: what a renderer turns into a heading instead of a table row.
     pub fn section(self) -> bool {
-        matches!(self, Self::Block(_) | Self::Items(_) | Self::Overlay)
+        matches!(
+            self,
+            Self::Block(_) | Self::Items(_) | Self::Line(_) | Self::Lines(_) | Self::Overlay
+        )
     }
 
     /// How this shape is named to a reader, in both renderings.
@@ -232,10 +237,12 @@ impl Kind {
             Self::Template => "template".to_owned(),
             Self::Texts => "text ..".to_owned(),
             Self::Numbers => "number ..".to_owned(),
-            Self::Table => "key=value ..".to_owned(),
+            Self::Table => "key value ..".to_owned(),
             Self::Choice(names) => names().join(" | "),
             Self::Block(_) => "block".to_owned(),
             Self::Items(_) => "named blocks".to_owned(),
+            Self::Line(_) => "key=value ..".to_owned(),
+            Self::Lines(_) => "named lines".to_owned(),
             Self::Overlay => "named overlays".to_owned(),
         }
     }

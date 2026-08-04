@@ -20,6 +20,20 @@ chores are visible in the git history and change nothing for a site.
   If you link an extracted image's URL by hand anywhere (a feed, an external
   page), it now carries the directories the image sits in under `content/`.
 
+- A `{ }` block written on a setting that takes `key=value` attributes is now an
+  error instead of being ignored. It never configured anything, so a build that
+  goes red here was already not doing what its config said:
+
+  ```kdl
+  assets { images { optimize { png { level 6 } } } }   // was silently level 2
+  assets { images { optimize { png level=6 } } }       // what it has to say
+  ```
+
+  The four scopes are `assets.images.optimize.png`, `.jpeg`,
+  `content.taxonomies` and `generate.manifest.icons`. The generated reference
+  called them blocks, so it documented the spelling that did nothing; it now
+  names them `key=value ..` and `named lines`.
+
 - A site whose `assets/` holds preprocessor sources, `_partial` files or
   unbundled `.ts` will stop publishing them. That is the point, but if you were
   linking one of those URLs deliberately, move the file to `static/`, which
@@ -291,6 +305,12 @@ chores are visible in the git history and change nothing for a site.
   not only the runs that set up a repository with `--vcs`.
 
 ### Fixed
+
+- **config**: the generated reference names the spelling that parses. A
+  free-entry table (`languages.strings`, `client`, `redirect`, `typst.inputs`,
+  `html.highlight`) reads child nodes and was labelled `key=value ..`, which is
+  a KDL parse error; it is `key value ..`. The four `key=value` scopes were
+  labelled `block`, which is the spelling they discard.
 
 - **images**: an image extracted from a page keeps the directories it was
   authored under, so `posts/a/cover.png` and `posts/b/cover.png` are two files

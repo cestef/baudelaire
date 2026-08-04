@@ -10,8 +10,8 @@ use kdl::{KdlDocument, KdlNode};
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::{
-    Block as Nested, Choice, Flag, Items, Number, Numbers, Overlay, Path, Size, Table, Template,
-    Text, Texts, Url,
+    Block as Nested, Choice, Flag, Items, Line, Lines, Number, Numbers, Overlay, Path, Size, Table,
+    Template, Text, Texts, Url,
 };
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
@@ -214,7 +214,7 @@ impl Section for Config {
         (
             "client",
             Table,
-            "Constants exposed to client-side JavaScript, as free `key=value` pairs.",
+            "Constants exposed to client-side JavaScript, one `key value` line per entry.",
             |c, n, t| {
                 c.client = n.table(t)?;
                 Ok(())
@@ -365,7 +365,7 @@ impl Section for ContentConfig {
         ),
         (
             "taxonomies",
-            Items(TaxonomyConfig::rows),
+            Lines(TaxonomyConfig::rows),
             "One line per taxonomy, each named by its id.",
             |c, n, t| {
                 c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
@@ -558,6 +558,10 @@ impl FieldSchema {
 impl Attributed for FieldSchema {
     /// The type, written as the leading positional.
     const LEADING: usize = 1;
+
+    /// The one attribute scope with a block of its own: `item` reads it as the
+    /// fields of the dictionary the type ends in.
+    const NESTS: bool = true;
 
     const ATTRS: Attrs<Self> = Attrs(&[
         (
@@ -764,7 +768,7 @@ impl Section for LanguageConfig {
         (
             "strings",
             Table,
-            "This language's UI string table, as free `key=value` pairs.",
+            "This language's UI string table, one `key value` line per entry.",
             |c, n, t| {
                 c.strings = n.table(t)?;
                 Ok(())
@@ -905,13 +909,13 @@ impl Section for OptimizeConfig {
     const RULES: Block<Self> = Block(&[
         (
             "png",
-            Nested(PngConfig::rows),
+            Line(PngConfig::rows),
             "Optimize PNGs. Its presence turns them on; the attributes tune it.",
             |c, n, t| c.png.get_or_insert_default().read(n, t),
         ),
         (
             "jpeg",
-            Nested(JpegConfig::rows),
+            Line(JpegConfig::rows),
             "Optimize JPEGs. Its presence turns them on; the attributes tune it.",
             |c, n, t| c.jpeg.get_or_insert_default().read(n, t),
         ),
@@ -1515,7 +1519,7 @@ impl Section for ManifestConfig {
         ),
         (
             "icons",
-            Items(IconConfig::rows),
+            Lines(IconConfig::rows),
             "One line per icon, each named by the path it is served from.",
             |c, n, t| {
                 c.icons = n
@@ -1934,7 +1938,7 @@ impl Section for TypstConfig {
         (
             "inputs",
             Table,
-            "Values passed to every compile as `sys.inputs`, as free `key=value` pairs.",
+            "Values passed to every compile as `sys.inputs`, one `key value` line per entry.",
             |c, n, t| {
                 c.inputs = n.pairs(t)?;
                 Ok(())
