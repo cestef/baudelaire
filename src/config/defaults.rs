@@ -323,6 +323,11 @@ impl Default for SearchConfig {
             // opt-in: no index until a format is configured
             formats: Vec::new(),
             fields: vec![SearchField::Title, SearchField::Body, SearchField::Tags],
+            // The landmark a page's own prose lives in. Indexing the whole
+            // document instead puts every page's navigation in every document,
+            // which is the fastest way to make a small site's search useless.
+            region: "main".into(),
+            ignore: Vec::new(),
             stopwords: Vec::new(),
             min_length: 2,
             ui: false,

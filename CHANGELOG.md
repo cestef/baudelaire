@@ -50,6 +50,27 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **search**: the indexed region of a page is the site's to name, rather than
+  always the `<main>` landmark:
+
+  ```kdl
+  generate {
+    search {
+      region "article"      // the element whose contents are indexed
+      ignore "nav" "aside"  // dropped wherever they appear inside it
+    }
+  }
+  ```
+
+  Both are tag names, matched whole and case-insensitively, with nesting counted.
+  `region ""` indexes the whole page. The default is unchanged (`main`, nothing
+  ignored), and a page without the named element is still indexed whole.
+
+  Nesting is counted, which the old `<main>`-only scan did not do: it ended at
+  the first closing tag it saw. That was invisible while the region was always
+  `main`, which does not nest, and would have truncated every page with an
+  `<article>` inside an `<article>`.
+
 - **theme**: `theme add` takes a spec rather than one of four names, and fetches
   from wherever it points: a directory on this machine (`./plume`), the Typst
   package store (`@preview/plume:1.0.0`), a repository on a forge

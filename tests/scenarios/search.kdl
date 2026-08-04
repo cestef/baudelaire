@@ -110,3 +110,51 @@ scenario "no search index without configured formats" {
     absent "search-index.json"
   }
 }
+
+// The indexed region: which element a page's prose lives in, and what to drop
+// from inside it. A layout that is not the default one has to be able to say so,
+// or its search matches every page's chrome.
+scenario "the indexed region and the elements dropped from it are the site's to name" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      generate {
+        search {
+          formats "json"
+          region "article"
+          ignore "nav"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(data, body) = {
+        html.elem("header")[site chrome]
+        html.elem("article", {
+          html.elem("nav")[on this page]
+          body
+        })
+        html.elem("footer")[footer chrome]
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "Alpha", template: "page.typ",)
+      real prose
+      """#
+  }
+  expect {
+    ok
+    file "search.json" {
+      contains "real prose"
+      // Outside the named region.
+      missing "site chrome"
+      missing "footer chrome"
+      // Inside it, and named as chrome anyway.
+      missing "on this page"
+    }
+  }
+}

@@ -1667,6 +1667,25 @@ impl Section for SearchConfig {
             },
         ),
         (
+            "region",
+            Text,
+            "The element whose contents are indexed, by tag name. \
+             A page without one is indexed whole.",
+            |c, n, t| {
+                c.region = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "ignore",
+            Texts,
+            "Elements to leave out of the indexed region, by tag name, one word each.",
+            |c, n, t| {
+                c.ignore = n.words(t)?;
+                Ok(())
+            },
+        ),
+        (
             "stopwords",
             Texts,
             "Words to leave out of the index, one word each.",

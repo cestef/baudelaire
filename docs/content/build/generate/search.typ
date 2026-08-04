@@ -19,9 +19,27 @@ generate {
 That writes `search.json` beside the pages. One index per language, so a visitor
 on `/fr/` searches `/fr/search.json` and never gets English hits.
 
-Only the page's `<main>` region is indexed. Site chrome (header, sidebar,
-footer) is skipped, so a search for "install" doesn't match every page's
-navigation.
+By default only the page's `<main>` region is indexed. Site chrome (header,
+sidebar, footer) is skipped, so a search for "install" doesn't match every
+page's navigation.
+
+A layout that binds its prose to something else names it, and one that keeps
+chrome *inside* that region lists what to drop:
+
+```kdl
+generate {
+  search {
+    formats "json"
+    region "article"      // the element whose contents are indexed
+    ignore "nav" "aside"  // dropped wherever they appear inside it
+  }
+}
+```
+
+Both are tag names, matched whole and case-insensitively; nesting is counted, so
+an `<article>` inside an `<article>` does not end the region early. A page with
+no such element is indexed whole, which is what a 404 or a landing page wants.
+`region ""` indexes every page whole.
 
 == Keys
 
@@ -31,6 +49,8 @@ navigation.
   table.header([Key], [Type], [Default], [Does]),
   [`formats`], [`json` | `inverted`], [--], [Which index files to write. Naming none turns search off.],
   [`fields`], [`title` | `body` | `tags`], [all three], [What of each page goes into its document.],
+  [`region`], [str], [`main`], [The element whose contents are indexed. Empty indexes the whole page.],
+  [`ignore`], [str ..], [--], [Elements dropped from the region wherever they occur in it.],
   [`stopwords`], [str ..], [--], [Words left out of the `inverted` index.],
   [`minimum`], [int], [`2`], [The shortest word the `inverted` index keeps.],
   [`ui`], [bool], [`#false`], [Also emit the self-mounting palette script.],

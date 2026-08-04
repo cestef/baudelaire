@@ -142,6 +142,8 @@
   (path: "generate.search", key: "search", shape: "block", doc: "Write a client-side search index.", depth: 1, section: true),
   (path: "generate.search.formats", key: "formats", shape: "json | inverted", doc: "Which index formats to write, one word each.", depth: 2, section: false),
   (path: "generate.search.fields", key: "fields", shape: "title | body | tags", doc: "Which parts of a page go into the index, one word each.", depth: 2, section: false),
+  (path: "generate.search.region", key: "region", shape: "text", doc: "The element whose contents are indexed, by tag name. A page without one is indexed whole.", depth: 2, section: false),
+  (path: "generate.search.ignore", key: "ignore", shape: "text ..", doc: "Elements to leave out of the indexed region, by tag name, one word each.", depth: 2, section: false),
   (path: "generate.search.stopwords", key: "stopwords", shape: "text ..", doc: "Words to leave out of the index, one word each.", depth: 2, section: false),
   (path: "generate.search.minimum", key: "minimum", shape: "number", doc: "The shortest word the index keeps.", depth: 2, section: false),
   (path: "generate.search.ui", key: "ui", shape: "flag", doc: "Ship the bundled search box as well as the index.", depth: 2, section: false),

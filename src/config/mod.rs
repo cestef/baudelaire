@@ -1315,6 +1315,12 @@ pub struct SearchConfig {
     pub formats: Vec<SearchFormat>,
     /// Page fields included in each indexed document.
     pub fields: Vec<SearchField>,
+    /// The element whose contents are indexed, by tag name. A page without one
+    /// is indexed whole.
+    pub region: String,
+    /// Elements dropped from the indexed region wherever they occur in it, by
+    /// tag name: the chrome a layout puts *inside* its content region.
+    pub ignore: Vec<String>,
     /// Tokens excluded from the inverted index.
     pub stopwords: Vec<String>,
     /// Minimum token length kept in the inverted index.

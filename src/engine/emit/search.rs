@@ -30,7 +30,7 @@ use super::script::Script;
 use super::{Emit, Processor, Site};
 use crate::config::Permalink;
 use crate::config::{Config, SearchConfig, SearchField, SearchFormat};
-use crate::engine::text::Text;
+use crate::engine::text::{Region, Text};
 use crate::error::{Artifact, Result};
 
 /// Emits every configured search index format from one shared corpus.
@@ -47,7 +47,7 @@ impl Processor for SearchIndex {
         // global index served English hits to a visitor searching from `/fr/`.
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
-            let corpus = Corpus::build(site, &cfg.fields, lang);
+            let corpus = Corpus::build(site, cfg, lang);
             for &format in &cfg.formats {
                 out.file(
                     &site.dist(&[&scope, format.file()]),
@@ -78,8 +78,8 @@ struct Corpus {
 }
 
 impl Corpus {
-    /// Build a document per page, including only the configured `fields`,
-    /// ordered by URL.
+    /// Build a document per page, including only the configured fields and only
+    /// the configured region of each page, ordered by URL.
     ///
     /// The order is load-bearing: the inverted index keys postings by document
     /// *position*, and `site.outputs` is ordered by which pages hit the cache.
@@ -87,8 +87,9 @@ impl Corpus {
     /// what lets them be built across the pool: stripping the markup off a page
     /// reads only that page, and on a large site it is the slowest thing a build
     /// does after compiling.
-    fn build(site: &Site, fields: &[SearchField], lang: &str) -> Self {
-        let has = |field| fields.contains(&field);
+    fn build(site: &Site, config: &SearchConfig, lang: &str) -> Self {
+        let has = |field| config.fields.contains(&field);
+        let region = Region::from(config);
         let mut documents: Vec<Document> = site
             .outputs
             .par_iter()
@@ -113,7 +114,7 @@ impl Corpus {
                     Vec::new()
                 },
                 body: if has(SearchField::Body) {
-                    Text::extract(out.html)
+                    Text::extract(out.html, region)
                 } else {
                     String::new()
                 },
@@ -451,7 +452,11 @@ mod tests {
                 pages: &[],
                 outputs,
             };
-            Corpus::build(&site, &[SearchField::Title], "en")
+            let config = SearchConfig {
+                fields: vec![SearchField::Title],
+                ..SearchConfig::default()
+            };
+            Corpus::build(&site, &config, "en")
                 .documents
                 .iter()
                 .map(|d| d.url.clone())
