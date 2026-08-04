@@ -61,8 +61,8 @@ page that answers it in full is on the right.
   align: (left, left, left),
   table.header([Block], [Answers], [See]),
 
-  [`site`, `url`, `lang`, `author`],
-  [The site's name, canonical base URL, default language and author.],
+  [`site`, `url`, `lang`, `author`, `description`],
+  [The site's name, canonical base URL, default language, author, and what it is in one line.],
   [#link("reference.typ")[reference]],
 
   [`theme`],

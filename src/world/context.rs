@@ -75,6 +75,10 @@ struct SiteInfo {
     url: Option<String>,
     lang: String,
     author: Option<String>,
+    /// What the site is, in the *default* language. A page's own language
+    /// override reaches a feed through `Config::description`; a template that
+    /// needs the localized one reads it from its own frontmatter or strings.
+    description: Option<String>,
     /// Declared languages as `(code, display name)`, default first. Empty on a
     /// single-language site, so `site.languages` only appears when i18n is on.
     languages: Vec<(String, Option<String>)>,
@@ -113,6 +117,7 @@ impl BuildContext {
                 url: config.url.clone(),
                 lang: config.lang.clone(),
                 author: config.author.clone(),
+                description: config.description(&config.lang).map(str::to_owned),
                 languages: if config.multilingual() {
                     config
                         .langs()
@@ -254,6 +259,7 @@ impl From<&SiteInfo> for codegen::Value {
             ("url", Self::opt(site.url.clone())),
             ("lang", Self::str(&site.lang)),
             ("author", Self::opt(site.author.clone())),
+            ("description", Self::opt(site.description.clone())),
             ("languages", Self::array(langs)),
         ])
     }

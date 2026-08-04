@@ -406,3 +406,84 @@ scenario "a site without feeds advertises none" {
     file "index.html" { missing "application/rss+xml" }
   }
 }
+
+// A feed channel has to say what the site is. RSS makes the element mandatory,
+// so before there was a key for it every feed repeated its own title.
+scenario "the site description fills every feed's channel blurb" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      description "Notes from the road."
+      url "https://example.com"
+      generate {
+        feed { formats "rss" "atom" "json" }
+        llms
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" { contains "<description>Notes from the road.</description>" }
+    file "atom.xml" { contains "<subtitle>Notes from the road.</subtitle>" }
+    file "feed.json" { contains #""description":"Notes from the road.""# }
+    // `llms { summary }` answers the same question, so an unset one reads the
+    // site's description rather than leaving the blockquote out.
+    file "llms.txt" { contains "> Notes from the road." }
+  }
+}
+
+// Unset, a channel still needs the element: it falls back to the feed's title,
+// which is what every feed carried before the key existed.
+scenario "a feed with no description falls back to its title" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate { feed { formats "rss" "atom" } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" { contains "<description>T</description>" }
+    // Atom's subtitle is optional, so nothing stands in for an absent one.
+    file "atom.xml" { missing "<subtitle>" }
+  }
+}
+
+// Per language, beside `site` and `author`: a French feed carrying an English
+// blurb is the bug this override exists to prevent.
+scenario "a language describes the site in its own words" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      description "Notes from the road."
+      url "https://example.com"
+      lang "en"
+      languages {
+        fr { site "T"; description "Notes de voyage." }
+      }
+      generate { feed { formats "rss" } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      corps
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" { contains "<description>Notes from the road.</description>" }
+    file "fr/rss.xml" { contains "<description>Notes de voyage.</description>" }
+  }
+}

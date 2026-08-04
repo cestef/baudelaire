@@ -54,7 +54,13 @@ impl Processor for Feeds {
                 site.config.generate.feed.limit,
             );
             let scope = site.config.scope(lang, "");
-            let feed = Feed::new(&base, site.config.title(lang), &dated, &scope);
+            let feed = Feed::new(
+                &base,
+                site.config.title(lang),
+                site.config.description(lang),
+                &dated,
+                &scope,
+            );
             Self::emit(site, out, &feed)?;
         }
         if site.config.generate.feed.terms {
@@ -83,7 +89,11 @@ impl Feeds {
                 // URL's path: `/fr/tags/rust/` -> `fr/tags/rust`.
                 let scope = term.url.trim_matches('/');
                 let title = format!("{} - {}", site.config.title(lang), group.title(&term));
-                Self::emit(site, out, &Feed::new(base, &title, &dated, scope))?;
+                Self::emit(
+                    site,
+                    out,
+                    &Feed::new(base, &title, site.config.description(lang), &dated, scope),
+                )?;
             }
         }
         Ok(())
@@ -110,6 +120,10 @@ impl Feeds {
 struct Feed<'a> {
     base: &'a BaseUrl,
     title: &'a str,
+    /// What the site is, from `description` in the feed's own language. RSS
+    /// makes the channel element mandatory, so unset it falls back to the
+    /// title, which is what every feed said before there was a key for it.
+    description: Option<&'a str>,
     items: &'a [&'a Page],
     /// This feed's language path segment (empty for the default language).
     ///
@@ -120,13 +134,25 @@ struct Feed<'a> {
 }
 
 impl<'a> Feed<'a> {
-    fn new(base: &'a BaseUrl, title: &'a str, items: &'a [&'a Page], scope: &'a str) -> Self {
+    fn new(
+        base: &'a BaseUrl,
+        title: &'a str,
+        description: Option<&'a str>,
+        items: &'a [&'a Page],
+        scope: &'a str,
+    ) -> Self {
         Self {
             base,
             title,
+            description,
             items,
             scope,
         }
+    }
+
+    /// The feed's own blurb: the configured description, else its title.
+    fn blurb(&self) -> &str {
+        self.description.unwrap_or(self.title)
     }
 
     /// Whether this feed has nothing to syndicate.
@@ -174,7 +200,7 @@ impl<'a> Feed<'a> {
             xml.nest("channel", &[], |xml| {
                 xml.leaf("title", self.title);
                 xml.leaf("link", &self.home());
-                xml.leaf("description", self.title);
+                xml.leaf("description", self.blurb());
                 for (page, stamp) in self.items.iter().zip(stamps) {
                     xml.nest("item", &[], |xml| {
                         let link = self.link(page);
@@ -206,6 +232,9 @@ impl<'a> Feed<'a> {
         let updated = stamps.iter().find_map(Stamps::latest);
         xml.nest("feed", &[("xmlns", "http://www.w3.org/2005/Atom")], |xml| {
             xml.leaf("title", self.title);
+            if let Some(description) = self.description {
+                xml.leaf("subtitle", description);
+            }
             xml.leaf("id", &self.url(FeedKind::Atom));
             xml.empty("link", &[("href", &self.home())]);
             if let Some(updated) = updated {
@@ -253,6 +282,7 @@ impl<'a> Feed<'a> {
         let feed = JsonFeed {
             version: "https://jsonfeed.org/version/1.1",
             title: self.title,
+            description: self.description,
             home_page_url: self.home(),
             feed_url: self.url(FeedKind::Json),
             items: self
@@ -326,6 +356,8 @@ impl Stamps {
 struct JsonFeed<'a> {
     version: &'static str,
     title: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
     home_page_url: String,
     feed_url: String,
     items: Vec<JsonItem<'a>>,

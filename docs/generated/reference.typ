@@ -4,6 +4,7 @@
 
 #let entries = (
   (path: "site", key: "site", shape: "text", doc: "The site's name, used in titles, feeds and metadata.", depth: 0, section: false),
+  (path: "description", key: "description", shape: "text", doc: "What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.", depth: 0, section: false),
   (path: "url", key: "url", shape: "url", doc: "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.", depth: 0, section: false),
   (path: "lang", key: "lang", shape: "text", doc: "The default language code, e.g. `en`.", depth: 0, section: false),
   (path: "author", key: "author", shape: "text", doc: "The default author, used by any page naming none.", depth: 0, section: false),
@@ -45,6 +46,7 @@
   (path: "languages.dir", key: "dir", shape: "text", doc: "Writing direction, `ltr` or `rtl`.", depth: 1, section: false),
   (path: "languages.site", key: "site", shape: "text", doc: "The site name in this language.", depth: 1, section: false),
   (path: "languages.author", key: "author", shape: "text", doc: "The default author in this language.", depth: 1, section: false),
+  (path: "languages.description", key: "description", shape: "text", doc: "What the site is, in this language.", depth: 1, section: false),
   (path: "languages.strings", key: "strings", shape: "key=value ..", doc: "This language's UI string table, as free `key=value` pairs.", depth: 1, section: false),
   (path: "assets", key: "assets", shape: "block", doc: "The pipeline applied to the asset tree.", depth: 0, section: true),
   (path: "assets.minify", key: "minify", shape: "flag", doc: "Minify CSS and JavaScript.", depth: 1, section: false),

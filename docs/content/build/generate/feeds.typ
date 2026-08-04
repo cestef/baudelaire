@@ -41,6 +41,28 @@ Every page advertises the feeds in its `<head>`, one
 `<link rel="alternate">` per configured format. That is how a reader or a
 browser extension finds them without being told a URL.
 
+=== What the channel says
+
+A feed states what the whole site is, next to its title. That is the top-level
+`description`:
+
+```kdl
+site "Fernweh"
+description "Notes from the road."
+```
+
+It fills RSS's mandatory `<description>`, Atom's optional `<subtitle>`, and JSON
+Feed's `description`, and a language states its own beside its `site` (see
+#link("../../write/i18n.typ")[multiple languages]). Unset, RSS repeats the feed's
+title, because the element cannot be omitted.
+
+#callout(kind: "note")[
+  It is not a fallback for a page's own `<meta name="description">`. One
+  sentence stamped on every page is duplicate metadata, which is worse than a
+  page having none. `generate { llms { summary } }` does fall back to it: both
+  answer the same question about the site.
+]
+
 === What an item carries
 
 ```typ

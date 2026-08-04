@@ -14,6 +14,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **config**: `description`, what the site is in one line, with a per-language
+  override beside `site` and `author`.
+
+  ```kdl
+  site "Fernweh"
+  description "Notes from the road."
+
+  languages {
+    fr { description "Notes de voyage." }
+  }
+  ```
+
+  It fills RSS's mandatory channel `<description>`, Atom's `<subtitle>` and JSON
+  Feed's `description`, and `generate { llms { summary } }` falls back to it.
+  Every feed used to repeat its own title there, which readers show twice and
+  validators flag. It is deliberately *not* a fallback for a page's
+  `<meta name="description">`: one sentence on every page is duplicate metadata.
+  Templates read it as `description` from `@baudelaire/site`.
+
 - **generate**: `manifest.webmanifest`, the web app manifest a browser reads to
   install the site to a home screen. The block's presence writes it, one per
   language, and every page gains a `<link rel="manifest">` pointing at its own

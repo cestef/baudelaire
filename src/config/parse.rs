@@ -68,6 +68,15 @@ impl Section for Config {
             },
         ),
         (
+            "description",
+            Text,
+            "What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.",
+            |c, n, t| {
+                c.description = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
             "url",
             Url,
             "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
@@ -722,6 +731,15 @@ impl Section for LanguageConfig {
             "The default author in this language.",
             |c, n, t| {
                 c.author = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "description",
+            Text,
+            "What the site is, in this language.",
+            |c, n, t| {
+                c.description = Some(n.string(t, 0)?);
                 Ok(())
             },
         ),

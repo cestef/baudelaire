@@ -27,6 +27,7 @@ Without a `languages` block the site is single-language and nothing below applie
   [`name`], [str], [The language's name in its own language, for a switcher.],
   [`dir`], [str], [Writing direction, `ltr` or `rtl`.],
   [`site`], [str], [The site name in this language.],
+  [`description`], [str], [What the site is, in this language.],
   [`author`], [str], [The default author in this language.],
   [`strings`], [key=value], [This language's UI string table.],
 )

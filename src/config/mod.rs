@@ -40,6 +40,13 @@ pub struct Config {
     pub lang: String,
     /// Default author.
     pub author: Option<String>,
+    /// What the site is, in one line. A feed channel needs one, and RSS makes
+    /// it mandatory, so without this a reader shows the site title twice.
+    ///
+    /// Deliberately not a fallback for a page's `<meta name="description">`:
+    /// the same sentence stamped on every page is what search engines read as
+    /// duplicate metadata. A page describes itself, or says nothing.
+    pub description: Option<String>,
     /// The project root: what every other path is relative to, and what typst
     /// resolves `/`-absolute imports against. Explicit rather than inferred from
     /// `content`'s parent, which is only the root when `content` sits directly
@@ -377,6 +384,15 @@ impl Config {
             .unwrap_or_else(|| self.label())
     }
 
+    /// What the site is, in a given language: the language's `description`
+    /// override if it has one, else the site-wide one. `None` when neither is
+    /// set, which is what makes a feed fall back to its title.
+    pub fn description(&self, code: &str) -> Option<&str> {
+        self.language(code)
+            .and_then(|lang| lang.description.as_deref())
+            .or(self.description.as_deref())
+    }
+
     /// The author in a given language: the language's `author` override if it
     /// has one, else the site-wide author.
     pub fn author(&self, code: &str) -> Option<&str> {
@@ -711,6 +727,7 @@ impl std::hash::Hash for Config {
             url,
             lang,
             author,
+            description,
             paths,
             theme,
             content,
@@ -752,7 +769,18 @@ impl std::hash::Hash for Config {
             // raw config text, kept only for error spans; a comment-only edit must not bust the cache
             source: _,
         } = self;
-        (site, url, lang, author, paths, theme, content, languages).hash(state);
+        (
+            site,
+            url,
+            lang,
+            author,
+            description,
+            paths,
+            theme,
+            content,
+            languages,
+        )
+            .hash(state);
         (
             assets, html, links, lint, security, generate, navigation, prune,
         )
@@ -860,6 +888,9 @@ pub struct LanguageConfig {
     pub dir: Option<String>,
     /// Per-language site title override (else the site-wide `site`).
     pub site: Option<String>,
+    /// Per-language description override (else the site-wide `description`), so
+    /// a French feed does not carry an English blurb.
+    pub description: Option<String>,
     /// Per-language author override (else the site-wide `author`).
     pub author: Option<String>,
     /// UI-string table for this language, exposed to templates as

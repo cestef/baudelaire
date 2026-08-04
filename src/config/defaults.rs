@@ -23,6 +23,7 @@ impl Default for Config {
             url: None,
             lang: "en".into(),
             author: None,
+            description: None,
             // The process cwd, which `Root::enter` has already moved to the
             // project directory.
             root: PathBuf::from("."),

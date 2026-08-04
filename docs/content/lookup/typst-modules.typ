@@ -189,7 +189,7 @@ Site identity as plain bindings, rather than a chain of guarded `.at` reads into
 `sys.inputs`:
 
 ```typ
-#import "@baudelaire/site:0.1.0": version, title, url, lang, author, languages
+#import "@baudelaire/site:0.1.0": version, title, url, lang, author, description, languages
 ```
 
 #table(
@@ -201,6 +201,7 @@ Site identity as plain bindings, rather than a chain of guarded `.at` reads into
   [`url`], [str or none], [The canonical base URL.],
   [`lang`], [str], [The default language code.],
   [`author`], [str or none], [`author` from the config.],
+  [`description`], [str or none], [`description` from the config, in the default language.],
   [`languages`], [array], [`(code, name)` dicts, default first. Empty unless #link("../write/i18n.typ")[i18n] is on.],
 )
 

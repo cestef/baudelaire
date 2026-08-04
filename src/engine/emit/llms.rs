@@ -44,7 +44,17 @@ impl Processor for Llms {
                 continue;
             }
             let mut md = format!("# {}\n", site.config.title(lang));
-            if let Some(summary) = &site.config.generate.llms.summary {
+            // Its own `summary` first, then the site's `description`: the two
+            // answer the same question, and a site that stated one should not
+            // have to state it twice to fill this line.
+            if let Some(summary) = site
+                .config
+                .generate
+                .llms
+                .summary
+                .as_deref()
+                .or_else(|| site.config.description(lang))
+            {
                 let _ = write!(md, "\n> {summary}\n");
             }
             for (collection, pages) in Self::sections(&pages, lang) {
