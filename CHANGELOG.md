@@ -314,6 +314,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **serve**: the watcher is registered before the banner says it is. It came up
+  after the banner and after the browser launch, so an edit saved in that window
+  reached nobody; a file event is edge-triggered, so nothing later made up for
+  it and the session ignored that save for good. The window is invisible on a
+  small site and seconds long on one whose first build is slow.
+
 - **deploy**: a bucket that refuses a request says why. The S3 agent surfaced a
   non-2xx as a transport error, so the branch that reads the bucket's own
   `<Error><Code>` body never ran and a wrong secret, a missing bucket and a rate

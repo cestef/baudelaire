@@ -96,6 +96,23 @@ impl Dev<'_> {
                 self.ui.flush();
             }
         }
+
+        // Registered before anything is announced, and before a browser is
+        // launched at it: the banner below promises the sources are watched,
+        // and an edit saved between that promise and the registration would
+        // have reached nobody. After the build, because the set of directories
+        // to watch includes the ones the build turned out to read.
+
+        // Registered before anything is announced, and before a browser is
+        // launched at it: the banner below promises the sources are watched,
+        // and an edit saved between that promise and the registration would
+        // have reached nobody. After the build, because the set of directories
+        // to watch includes the ones the build turned out to read.
+        let watching = match self.config.serve.watch {
+            true => Some(self.establish()?),
+            false => None,
+        };
+
         self.ui.blank();
         self.ui.arrow(
             "local",
@@ -134,14 +151,13 @@ impl Dev<'_> {
 
         let level = self.ui.level();
         let route = Arc::new(Mutex::new(Route::new(&self.config)));
-        if self.config.serve.watch {
+        if let Some(watching) = watching {
             let live = Live::default();
             Handler::new(Arc::clone(&route), Some(live.clone()), level).spawn(server);
-            self.watch(&live, &route)
-        } else {
-            Handler::new(route, None, level).serve(&server);
-            Ok(())
+            return self.watch(watching, &live, &route);
         }
+        Handler::new(route, None, level).serve(&server);
+        Ok(())
     }
 
     /// Build the site once.
@@ -170,22 +186,42 @@ impl Dev<'_> {
         parts
     }
 
-    /// Watch content, templates, assets, and any `include` globs, rebuilding on
-    /// every relevant change.
-    fn watch(mut self, live: &Live, route: &Mutex<Route>) -> Result<()> {
-        // Rebuild the watcher whenever `config.kdl` is reloaded, so changes to
-        // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
-        // change still needs a restart: the HTTP server is already bound.)
+    /// Register the watcher and open the channel its events arrive on.
+    ///
+    /// Separate from [`Dev::watch`] so the caller can establish it *before*
+    /// announcing the session. The banner says `watching content · templates ·
+    /// ...`, and it used to say so while nothing was watching yet: the watcher
+    /// came up after the banner, after the browser launch, and an edit saved in
+    /// that window reached nobody. A file event is edge-triggered, so nothing
+    /// later made up for it and the session simply ignored that save.
+    ///
+    /// Events arriving before the loop starts consuming are not lost: the
+    /// channel is unbounded, and they are read as soon as it does.
+    fn establish(&self) -> Result<Watching> {
+        let filter =
+            Filter::new(&self.config, self.root, &self.config_path)?.watching(&self.tracked);
+        let (tx, rx) = flume::unbounded::<DebounceEventResult>();
+        let watcher = Watcher::new(filter.watches(), tx)?;
+        tracing::debug!(watches = ?filter.watches(), "watcher established");
+        Ok(Watching {
+            filter,
+            rx,
+            _watcher: watcher,
+        })
+    }
+
+    /// Rebuild on every relevant change, until the watch channel closes.
+    ///
+    /// `watching` is the already-registered watcher. It is re-established
+    /// whenever `config.kdl` is reloaded, so changes to watched roots
+    /// (`serve.include`, paths) take effect. (A `bind`/`port` change still needs
+    /// a restart: the HTTP server is already bound.)
+    fn watch(mut self, mut watching: Watching, live: &Live, route: &Mutex<Route>) -> Result<()> {
         loop {
-            let filter =
-                Filter::new(&self.config, self.root, &self.config_path)?.watching(&self.tracked);
             self.rewatch = false;
-            let (tx, rx) = flume::unbounded::<DebounceEventResult>();
-            let _watcher = Watcher::new(filter.watches(), tx)?;
-            tracing::debug!(watches = ?filter.watches(), "watcher established");
             let mut reloaded = false;
-            for result in rx {
-                let outcome = self.on_event(result, live, &filter);
+            for result in &watching.rx {
+                let outcome = self.on_event(result, live, &watching.filter);
                 // Render whatever the iteration warned about (watcher trouble,
                 // a failed rebuild) right away; the server runs indefinitely,
                 // so there is no end-of-run flush to wait for.
@@ -200,6 +236,7 @@ impl Dev<'_> {
             }
             // The reloaded config may have moved `dist` or changed `url`.
             *route.lock() = Route::new(&self.config);
+            watching = self.establish()?;
         }
     }
 
@@ -898,6 +935,16 @@ impl Signal {
 /// Debounced file watcher over the session's watch roots.
 struct Watcher {
     _debouncer: Debouncer<notify::RecommendedWatcher, RecommendedCache>,
+}
+
+/// A live registration: the watcher, what it decided to watch, and the channel
+/// its debounced events arrive on. The three travel together because they are
+/// only meaningful together, and because dropping the [`Watcher`] is what
+/// unregisters it.
+struct Watching {
+    filter: Filter,
+    rx: flume::Receiver<DebounceEventResult>,
+    _watcher: Watcher,
 }
 
 impl Watcher {
