@@ -1,7 +1,7 @@
 {
- "badge": "92e64dfe5a549afb",
- "commit": "e54e5c2898019579d8520ad8d5ab53776fc9cf60",
- "covered": 9056,
+ "badge": "6bbe7792c7e900e3",
+ "commit": "6223035d0c35487d7c437edfa847cc7b3b5e86d5",
+ "covered": 9866,
  "files": {
   "src/announce/mod.rs": [
    43,
@@ -23,9 +23,13 @@
    36,
    36
   ],
+  "src/cli/help.rs": [
+   27,
+   27
+  ],
   "src/cli/mod.rs": [
-   266,
-   375
+   254,
+   341
   ],
   "src/cli/prompt.rs": [
    2,
@@ -36,7 +40,7 @@
    8
   ],
   "src/cli/scaffold.rs": [
-   272,
+   270,
    351
   ],
   "src/cli/serve.rs": [
@@ -44,8 +48,8 @@
    341
   ],
   "src/codegen.rs": [
-   97,
-   107
+   134,
+   142
   ],
   "src/config/defaults.rs": [
    97,
@@ -56,16 +60,16 @@
    82
   ],
   "src/config/mod.rs": [
-   258,
-   279
+   273,
+   286
   ],
   "src/config/node.rs": [
    114,
    120
   ],
   "src/config/parse.rs": [
-   521,
-   622
+   577,
+   687
   ],
   "src/config/permalink.rs": [
    74,
@@ -79,13 +83,17 @@
    71,
    89
   ],
+  "src/config/schema.rs": [
+   81,
+   93
+  ],
   "src/config/url.rs": [
    54,
    55
   ],
   "src/config/value.rs": [
-   54,
-   62
+   57,
+   65
   ],
   "src/content/cache.rs": [
    75,
@@ -100,16 +108,16 @@
    78
   ],
   "src/content/frontmatter.rs": [
-   146,
-   153
+   197,
+   204
   ],
   "src/content/generate.rs": [
    7,
    7
   ],
   "src/content/listing.rs": [
-   121,
-   121
+   122,
+   122
   ],
   "src/content/mod.rs": [
    44,
@@ -124,8 +132,8 @@
    83
   ],
   "src/content/section.rs": [
-   29,
-   29
+   31,
+   31
   ],
   "src/content/slug.rs": [
    17,
@@ -196,8 +204,8 @@
    81
   ],
   "src/engine/asset/js.rs": [
-   48,
-   55
+   64,
+   71
   ],
   "src/engine/asset/memo.rs": [
    47,
@@ -207,9 +215,21 @@
    107,
    108
   ],
-  "src/engine/asset/module.rs": [
-   125,
-   126
+  "src/engine/asset/module/client.rs": [
+   23,
+   24
+  ],
+  "src/engine/asset/module/data.rs": [
+   82,
+   82
+  ],
+  "src/engine/asset/module/declare.rs": [
+   21,
+   21
+  ],
+  "src/engine/asset/module/mod.rs": [
+   57,
+   57
   ],
   "src/engine/check/external.rs": [
    76,
@@ -220,8 +240,8 @@
    67
   ],
   "src/engine/check/mod.rs": [
-   31,
-   31
+   55,
+   55
   ],
   "src/engine/compile/bundle.rs": [
    89,
@@ -236,8 +256,8 @@
    47
   ],
   "src/engine/compile/layout.rs": [
-   34,
-   34
+   35,
+   35
   ],
   "src/engine/compile/paged.rs": [
    24,
@@ -248,16 +268,20 @@
    13
   ],
   "src/engine/compile/prepare.rs": [
-   109,
-   111
+   117,
+   119
   ],
   "src/engine/compile/sidecar.rs": [
-   40,
-   40
+   42,
+   42
   ],
   "src/engine/emit/csp.rs": [
    66,
    70
+  ],
+  "src/engine/emit/dts.rs": [
+   30,
+   30
   ],
   "src/engine/emit/feed.rs": [
    116,
@@ -271,9 +295,13 @@
    38,
    39
   ],
+  "src/engine/emit/manifest.rs": [
+   32,
+   32
+  ],
   "src/engine/emit/mod.rs": [
-   54,
-   57
+   57,
+   58
   ],
   "src/engine/emit/redirect.rs": [
    45,
@@ -288,8 +316,8 @@
    16
   ],
   "src/engine/emit/search.rs": [
-   94,
-   94
+   110,
+   110
   ],
   "src/engine/emit/sitemap.rs": [
    32,
@@ -320,8 +348,8 @@
    15
   ],
   "src/engine/mod.rs": [
-   374,
-   388
+   446,
+   470
   ],
   "src/engine/prune.rs": [
    19,
@@ -348,8 +376,8 @@
    7
   ],
   "src/error/asset.rs": [
-   0,
-   10
+   2,
+   12
   ],
   "src/error/card.rs": [
    0,
@@ -380,32 +408,32 @@
    8
   ],
   "src/error/link.rs": [
-   58,
-   78
+   59,
+   79
   ],
   "src/error/lint.rs": [
    61,
    111
   ],
+  "src/error/mirror.rs": [
+   0,
+   2
+  ],
   "src/error/mod.rs": [
    6,
    10
-  ],
-  "src/error/packages.rs": [
-   0,
-   2
   ],
   "src/error/scaffold.rs": [
    10,
    12
   ],
   "src/error/schema.rs": [
-   31,
-   44
+   43,
+   56
   ],
   "src/error/serialize.rs": [
    0,
-   8
+   9
   ],
   "src/error/serve.rs": [
    0,
@@ -431,13 +459,17 @@
    86,
    86
   ],
+  "src/generated.rs": [
+   9,
+   9
+  ],
   "src/graph/access.rs": [
    122,
    130
   ],
   "src/graph/cache.rs": [
-   148,
-   150
+   161,
+   163
   ],
   "src/graph/deps.rs": [
    5,
@@ -460,8 +492,20 @@
    7
   ],
   "src/mime.rs": [
-   40,
-   40
+   41,
+   41
+  ],
+  "src/mirror/mod.rs": [
+   63,
+   77
+  ],
+  "src/mirror/packages.rs": [
+   32,
+   34
+  ],
+  "src/mirror/types.rs": [
+   17,
+   17
   ],
   "src/remote.rs": [
    34,
@@ -484,8 +528,8 @@
    14
   ],
   "src/render/links.rs": [
-   41,
-   41
+   102,
+   102
   ],
   "src/render/lint/alt.rs": [
    5,
@@ -512,12 +556,12 @@
    27
   ],
   "src/render/mod.rs": [
-   26,
-   26
+   27,
+   27
   ],
   "src/render/origin.rs": [
-   26,
-   27
+   31,
+   31
   ],
   "src/render/scope.rs": [
    110,
@@ -568,8 +612,8 @@
    7
   ],
   "src/render/transform/meta.rs": [
-   193,
-   199
+   206,
+   212
   ],
   "src/render/transform/mod.rs": [
    114,
@@ -580,8 +624,8 @@
    12
   ],
   "src/render/transform/rewrite.rs": [
-   21,
-   21
+   33,
+   34
   ],
   "src/render/transform/sources.rs": [
    19,
@@ -608,11 +652,11 @@
    39
   ],
   "src/ui/fmt.rs": [
-   83,
-   87
+   91,
+   96
   ],
   "src/ui/marker.rs": [
-   15,
+   18,
    26
   ],
   "src/ui/markup.rs": [
@@ -620,7 +664,7 @@
    103
   ],
   "src/ui/mod.rs": [
-   129,
+   139,
    196
   ],
   "src/ui/progress.rs": [
@@ -636,8 +680,8 @@
    37
   ],
   "src/world/context.rs": [
-   68,
-   70
+   73,
+   75
   ],
   "src/world/generated.rs": [
    19,
@@ -648,20 +692,28 @@
    16
   ],
   "src/world/mod.rs": [
-   154,
-   175
+   158,
+   179
   ],
-  "src/world/module.rs": [
-   110,
-   112
+  "src/world/module/builtin.rs": [
+   12,
+   12
+  ],
+  "src/world/module/mod.rs": [
+   81,
+   83
+  ],
+  "src/world/module/package.rs": [
+   34,
+   37
   ],
   "src/world/packages.rs": [
    7,
    7
   ]
  },
- "percent": 86.76,
+ "percent": 87.66,
  "schema": 2,
- "total": 10438,
- "updated": "2026-08-03T06:46:13+00:00"
+ "total": 11255,
+ "updated": "2026-08-04T06:16:11+00:00"
 }
