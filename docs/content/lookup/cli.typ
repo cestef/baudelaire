@@ -350,7 +350,7 @@ baudelaire theme remove albatros  # take it back off
   align: (left, left, left),
   table.header([Command], [Alias], [Does]),
   [`list`], [`ls`], [The shipped themes, each marked with where it is installed and how many files you have edited.],
-  [`add <name>`], [--], [Write it into the project and name the `config.kdl` line. Files already there are kept.],
+  [`add <name>`], [--], [Write it into the project and print the `config.kdl` line to add. Files already there are kept.],
   [`info <name>`], [--], [Its templates, the collections and taxonomies its `theme.kdl` declares, and the state of your copy.],
   [`update <name>`], [`up`], [Rewrite the files you have not touched from this binary.],
   [`remove <name>`], [`rm`, `uninstall`], [Delete the files still baudelaire's.],
@@ -389,8 +389,12 @@ baudelaire changes nothing about the files that binary left: they are still its,
 and still what `update` brings forward.
 
 A `remove` that kept something keeps the record with it, so the same command
-with `--force` can still finish. A theme you wrote or copied in by hand has no
-record, so it is entirely yours and `update` will not touch it without `--force`.
+with `--force` can still finish.
+
+Every verb names one of the four shipped themes, so a theme of your own is
+outside all of this: there is nothing to update it from. A copy of a shipped one
+made by hand has no record either, so it is entirely yours, and `update` writes
+over it only with `--force`.
 
 #callout(kind: "note")[
   There is no lockfile for anything else, and nothing to resolve: a directory
