@@ -176,7 +176,7 @@ impl Diagnostic for BrokenLinks {
         Some(Box::new(match self.severity {
             Severity::Error => {
                 "every `.typ` link must resolve to an existing page; \
-                 pass `--strict-links false` to downgrade these to warnings"
+                 pass `--no-strict-links` to downgrade these to warnings"
             }
             _ => {
                 "fix each target, or leave `--strict-links` on to make these \
