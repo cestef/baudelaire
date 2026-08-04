@@ -62,6 +62,15 @@ pub enum ThemeError {
         help("it records which files are baudelaire's, so `theme update` can keep yours")
     )]
     Lock { path: String, why: String },
+
+    #[error("nothing knows how to fetch {}", Code(.spec))]
+    #[diagnostic(
+        code(baudelaire::theme::unsupported),
+        help(
+            "a theme comes from a name `baudelaire theme list` prints, or from a spelling              this build recognises; a copy whose record names a source this baudelaire              does not have was written by a newer one"
+        )
+    )]
+    Unsupported { spec: String },
 }
 
 impl ThemeError {
@@ -72,6 +81,12 @@ impl ThemeError {
             name: name.to_owned(),
             help,
         }
+    }
+
+    /// A spec no source claims, or an origin no source owns: the same answer
+    /// either way, because both mean this binary cannot go and get it.
+    pub fn unsupported(spec: String) -> Self {
+        Self::Unsupported { spec }
     }
 
     pub fn not_installed(path: &str) -> Self {

@@ -230,7 +230,7 @@ impl<'a> Placement<'a> {
             Self::Resolved => {}
             #[cfg(feature = "themes")]
             Self::Shipped(spec, theme) => {
-                let written = theme.install(&target.join(spec))?;
+                let written = theme.fetched().install(&target.join(spec))?;
                 ui.section("theme");
                 ui.arrow(
                     theme.name,

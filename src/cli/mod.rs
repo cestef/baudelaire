@@ -1334,7 +1334,7 @@ impl ThemeArgs {
             };
             let at = rel.display().to_string();
             let edited = lock
-                .state(&dir, &theme.shipped())
+                .state(&dir)
                 .iter()
                 .filter(|file| file.state == State::Edited)
                 .count();
@@ -1359,7 +1359,9 @@ impl ThemeArgs {
 /// a directory another one reports.
 #[cfg(feature = "themes")]
 struct Vendored {
-    theme: &'static crate::theme::Bundled,
+    /// What the copy is known by: its directory's name, and the word every
+    /// message uses for it.
+    name: String,
     /// Relative to the project, as every message spells it.
     rel: PathBuf,
     /// The same directory, absolute: what the file operations take.
@@ -1390,19 +1392,18 @@ impl Vendored {
 
 #[cfg(feature = "themes")]
 impl ThemeArgsFor {
-    /// The theme this run names, and where this project keeps it: `--dir` when
-    /// the run says so, otherwise what the config's `theme` line names, so the
-    /// two halves of adopting a theme agree without the reader holding a path
-    /// in mind.
+    /// Where this project keeps the theme called `name`: `--dir` when the run
+    /// says so, otherwise what the config's `theme` line names, so the two
+    /// halves of adopting a theme agree without the reader holding a path in
+    /// mind.
     /// `--dir` is checked here, and here only: it is the one path in this
     /// command a project did not resolve for itself, and it addresses a
     /// directory the verbs write to and delete from. The build refuses a theme
     /// outside the root anyway (a Typst import cannot reach one), so a `--dir`
     /// that climbs out could only ever write files nothing would read.
-    fn vendored(&self, cx: &Cx, configured: Option<&str>) -> Result<Vendored> {
-        let theme = crate::theme::Bundled::find(&self.name)?;
+    fn vendored(&self, cx: &Cx, configured: Option<&str>, name: &str) -> Result<Vendored> {
         let rel = match &self.dir {
-            None => theme.dir(configured),
+            None => crate::theme::Bundled::directory(name, configured),
             Some(dir) => crate::fs::Contained::new(dir)
                 .ok_or_else(|| crate::error::ThemeError::outside(&dir.display().to_string()))?
                 .path()
@@ -1410,20 +1411,29 @@ impl ThemeArgsFor {
         };
         Ok(Vendored {
             dir: cx.root.join(&rel),
-            theme,
+            name: name.to_owned(),
             rel,
         })
     }
 
     fn add(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
-        let this = self.vendored(cx, configured)?;
-        let written = this.theme.install(&this.dir)?;
+        use crate::theme::Origin;
+
+        // Fetched before the directory is known, because the theme names
+        // itself: a spec is a repository, an archive or a path as often as it
+        // is one of the four words this binary answers to.
+        let origin = Origin::parse(&self.name)?;
+        let fetched = origin.source()?.fetch(&origin)?;
+        let this = self.vendored(cx, configured, &fetched.name)?;
+        let written = fetched.install(&this.dir)?;
         let at = this.at();
         cx.ui.done(match written.len() {
             0 => markup!("`{}` is already there", &at),
             n => markup!("wrote {} to `{}`", Count::files(n).to_string(), &at),
         });
-        cx.ui.detail(this.theme.about);
+        if let Some(about) = &fetched.about {
+            cx.ui.detail(about);
+        }
         cx.ui.section("next");
         cx.ui.arrow("config.kdl", markup!("`theme \"{}\"`", &at));
         cx.ui.item(markup!(
@@ -1434,65 +1444,45 @@ impl ThemeArgsFor {
     }
 
     /// What the theme is, and what this project's copy of it has become: the
-    /// layouts it ships, the config it declares, and the files you have changed.
+    /// layouts it declares, the config it carries, and the files you have
+    /// changed.
+    ///
+    /// Read from the copy in the project whenever there is one, never by
+    /// fetching: a report on what is already on disk must not put a clone or a
+    /// download in front of itself. A theme this binary ships can still be
+    /// described before it is installed, because describing it costs nothing.
     fn info(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
-        use crate::theme::{Lock, State};
+        use crate::theme::{Bundled, Lock, State};
 
-        let this = self.vendored(cx, configured)?;
-        let theme = this.theme;
-        let shipped = theme.shipped();
-        cx.ui.done_plain(markup!("`{}`", theme.name));
-        cx.ui.detail(theme.about);
-
-        cx.ui.section("ships");
-        let templates: Vec<String> = shipped
-            .iter()
-            .filter_map(|file| file.path().strip_prefix("templates").ok())
-            .map(|rel| rel.display().to_string())
-            .collect();
-        cx.ui.arrow("templates", templates.join(", "));
-        cx.ui.arrow("files", shipped.len().to_string());
-        // What the theme declares is read from the theme's own `theme.kdl`,
-        // parsed as the build parses it, so this cannot describe a theme the
-        // build would read differently.
-        let defaults = shipped
-            .iter()
-            .find(|file| file.path() == std::path::Path::new("theme.kdl"))
-            .and_then(|file| file.contents_utf8())
-            .and_then(|text| Config::parse(text).ok());
-        if let Some(config) = defaults {
-            let collections: Vec<&str> = config
-                .content
-                .collections
-                .iter()
-                .map(|(id, _)| id.as_str())
-                .collect();
-            if !collections.is_empty() {
-                cx.ui.arrow("collections", collections.join(", "));
-            }
-            let taxonomies: Vec<&str> = config
-                .content
-                .taxonomies
-                .iter()
-                .map(|(id, _)| id.as_str())
-                .collect();
-            if !taxonomies.is_empty() {
-                cx.ui.arrow("taxonomies", taxonomies.join(", "));
-            }
+        let this = self.vendored(cx, configured, &self.name)?;
+        let carried = Bundled::find(&self.name).ok();
+        cx.ui.done_plain(markup!("`{}`", &this.name));
+        if let Some(theme) = carried {
+            cx.ui.detail(theme.about);
         }
 
-        cx.ui.section("installed");
         let Some(lock) = Lock::read(&this.dir) else {
+            // Not here. The shelf can still say what it would write; anything
+            // else would have to be fetched to be described, and `add` is the
+            // command that fetches.
+            if let Some(theme) = carried {
+                Ships::of(&theme.fetched()).print(cx);
+            }
+            cx.ui.section("installed");
             cx.ui.detail(markup!(
                 "not here; `{}` writes it",
-                format!("baudelaire theme add {}", theme.name)
+                format!("baudelaire theme add {}", &this.name)
             ));
             return Ok(());
         };
+
+        Ships::at(&this.dir).print(cx);
+        cx.ui.section("installed");
         cx.ui.arrow("at", markup!("`{}`", this.at()));
+        cx.ui.arrow("from", markup!("`{}`", lock.origin().label()));
         cx.ui
             .arrow("written by", markup!("baudelaire `{}`", &lock.baudelaire));
-        for file in lock.state(&this.dir, &shipped) {
+        for file in lock.state(&this.dir) {
             let state = match file.state {
                 State::Pristine => continue,
                 State::Edited => "edited",
@@ -1507,13 +1497,100 @@ impl ThemeArgsFor {
     }
 }
 
+/// What a theme declares, however it is being read: out of the binary, or off
+/// the copy in the project. One reader, so the two cannot describe the same
+/// theme differently.
+#[cfg(feature = "themes")]
+struct Ships {
+    templates: Vec<String>,
+    files: usize,
+    /// The theme's own `theme.kdl`, parsed as the build parses it, so this
+    /// cannot describe a theme the build would read differently.
+    defaults: Option<Config>,
+}
+
+#[cfg(feature = "themes")]
+impl Ships {
+    /// A theme in hand.
+    fn of(fetched: &crate::theme::Fetched) -> Self {
+        let paths: Vec<PathBuf> = fetched.paths().map(Path::to_path_buf).collect();
+        Self::new(&paths, fetched.text(Path::new(crate::theme::Theme::CONFIG)))
+    }
+
+    /// A theme installed in the project, read off the disk.
+    fn at(dir: &Path) -> Self {
+        let files: Vec<PathBuf> = crate::theme::present(dir).into_iter().collect();
+        let defaults = std::fs::read_to_string(dir.join(crate::theme::Theme::CONFIG)).ok();
+        Self::new(&files, defaults)
+    }
+
+    fn new(paths: &[PathBuf], defaults: Option<String>) -> Self {
+        Self {
+            templates: paths
+                .iter()
+                .filter_map(|rel| rel.strip_prefix(crate::theme::Theme::TEMPLATES).ok())
+                .map(|rel| rel.display().to_string())
+                .collect(),
+            files: paths.len(),
+            defaults: defaults.and_then(|text| Config::parse(&text).ok()),
+        }
+    }
+
+    fn print(&self, cx: &Cx) {
+        cx.ui.section("ships");
+        cx.ui.arrow("templates", self.templates.join(", "));
+        cx.ui.arrow("files", self.files.to_string());
+        let Some(config) = &self.defaults else {
+            return;
+        };
+        // Each is a list of `(id, settings)`, and only the ids are wanted; the
+        // "say nothing about what it declares none of" rule is written once.
+        let say = |label: &str, names: Vec<&str>| {
+            if !names.is_empty() {
+                cx.ui.arrow(label, names.join(", "));
+            }
+        };
+        say(
+            "collections",
+            config
+                .content
+                .collections
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect(),
+        );
+        say(
+            "taxonomies",
+            config
+                .content
+                .taxonomies
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect(),
+        );
+    }
+}
+
 #[cfg(feature = "themes")]
 impl ThemeUpdateArgs {
+    /// Bring a copy up to what its source has now.
+    ///
+    /// The copy's own record says where it came from, so a theme fetched from
+    /// anywhere updates from the same anywhere without being told again. A copy
+    /// with no record has never said, so the name on the command line is read as
+    /// a spec, which is what it was when `add` ran.
     fn update(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
-        use crate::theme::State;
+        use crate::theme::{Lock, Origin, State};
 
-        let this = self.theme.vendored(cx, configured)?;
-        let tracked = this.theme.update(&this.dir, self.force)?;
+        let this = self.theme.vendored(cx, configured, &self.theme.name)?;
+        let origin = match Lock::read(&this.dir) {
+            Some(lock) => lock.origin(),
+            None => Origin::parse(&self.theme.name)?,
+        };
+        let tracked = origin
+            .source()?
+            .fetch(&origin)?
+            .update(&this.dir, self.force)?;
         cx.ui.done(markup!(
             "`{}` is at baudelaire `{}`",
             this.at(),
@@ -1540,15 +1617,12 @@ impl ThemeUpdateArgs {
     }
 
     fn remove(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
-        use crate::theme::{Bundled, State};
+        use crate::theme::{State, uninstall};
 
-        let this = self.theme.vendored(cx, configured)?;
-        let tracked = Bundled::uninstall(&this.dir, self.force)?;
-        cx.ui.done(markup!(
-            "removed `{}` from `{}`",
-            this.theme.name,
-            this.at()
-        ));
+        let this = self.theme.vendored(cx, configured, &self.theme.name)?;
+        let tracked = uninstall(&this.dir, self.force)?;
+        cx.ui
+            .done(markup!("removed `{}` from `{}`", &this.name, this.at()));
         // What `remove` refuses to delete: an edit, unless forced, and a file it
         // never wrote, at any force.
         let kept: Vec<_> = tracked
