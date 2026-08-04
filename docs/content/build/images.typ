@@ -120,8 +120,9 @@ assets {
 
 A variant is named `photo-480.jpg`, the same splice a fingerprint uses. Variants
 stay in the source format, so a JPEG source yields smaller JPEGs and a PNG stays
-lossless. A width at or above the source width is skipped, never upscaled, and
-the source itself is always the largest candidate.
+lossless, and each one goes through `optimize` like the file it was cut from. A
+width at or above the source width is skipped, never upscaled, and the source
+itself is always the largest candidate.
 
 `sizes` has no default. A `w`-descriptor `srcset` already implies `100vw` to the
 browser, so emitting it would cost bytes for nothing. Set it to your real content

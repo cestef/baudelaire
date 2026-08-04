@@ -44,18 +44,7 @@ impl Handler for Raster {
         _map: &super::AssetMap,
         ctx: &Ctx,
     ) -> Result<Option<Vec<u8>>> {
-        let bytes = fs::read(file)?;
-        // Optimize when configured for this format; otherwise (claimed only for
-        // responsive variants) the original is the fallback, copied verbatim.
-        let Some(format) = ctx.config.assets.images.optimize.format(file.ext()) else {
-            return Ok(Some(bytes));
-        };
-        let optimized = Self::encoder(format, ctx.config).optimize(&bytes, file)?;
-        Ok(Some(if optimized.len() < bytes.len() {
-            optimized
-        } else {
-            bytes
-        }))
+        Ok(Some(Self::tightened(fs::read(file)?, file, ctx)?))
     }
 
     fn variants(&self, file: &Path, rel: &Path, ctx: &Ctx) -> Result<Vec<Variant>> {
@@ -85,7 +74,15 @@ impl Handler for Raster {
         let mut variants = Vec::with_capacity(widths.len() + 1);
         for width in widths {
             let scaled = source.resize(width, u32::MAX, FilterType::Lanczos3);
-            let encoded = Self::encode(&scaled, format, responsive.quality, file)?;
+            // Through the optimizer, like the source: an encoder writing a
+            // downscale straight out is not competitive with one recompressing
+            // it, and a 960px variant heavier than the optimized full-size
+            // image made the `srcset` a page offered cost the reader bytes.
+            let encoded = Self::tightened(
+                Self::encode(&scaled, format, responsive.quality, file)?,
+                file,
+                ctx,
+            )?;
             variants.push(Variant {
                 // `photo.jpg` -> `photo-480.jpg`, the same splice a fingerprint
                 // uses, so a variant is named like every other asset.
@@ -106,6 +103,24 @@ impl Handler for Raster {
 }
 
 impl Raster {
+    /// `bytes` through the format's optimizer, keeping whichever of the input
+    /// and the result is smaller. The single rule for it: an optimizer must
+    /// never make a file bigger, and re-encoding an already-tight one can.
+    ///
+    /// Unconfigured for the format (the handler is claimed for responsive
+    /// variants alone), the bytes pass through as they are.
+    fn tightened(bytes: Vec<u8>, file: &Path, ctx: &Ctx) -> Result<Vec<u8>> {
+        let Some(format) = ctx.config.assets.images.optimize.format(file.ext()) else {
+            return Ok(bytes);
+        };
+        let optimized = Self::encoder(format, ctx.config).optimize(&bytes, file)?;
+        Ok(if optimized.len() < bytes.len() {
+            optimized
+        } else {
+            bytes
+        })
+    }
+
     /// The codec for a format, bound to its config. Adding a format is a new
     /// [`Encoder`] impl and an arm here.
     fn encoder(format: ImageFormat, config: &Config) -> Box<dyn Encoder + '_> {

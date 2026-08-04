@@ -248,3 +248,34 @@ fn an_image_from_the_asset_tree_is_not_extracted_a_second_time() {
     files.sort();
     assert_eq!(files, vec!["photo.png".to_owned()], "one copy only");
 }
+
+/// A responsive variant is optimized like the source it was cut from. Encoding
+/// a downscale and shipping it as written left a `srcset` whose middle
+/// candidate was heavier than the optimized full-size image beside it.
+#[test]
+#[cfg(feature = "images")]
+fn responsive_variants_are_optimized_like_their_source() {
+    let config = |optimize: &str| {
+        format!(
+            "site \"T\"\npaths {{\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}}\nassets {{\n  images {{\n    responsive {{ widths 64 }}\n{optimize}  }}\n}}\n"
+        )
+    };
+    let variant = |config: String| {
+        let site = Site::with(&config);
+        site.write_bytes("assets/photo.png", &png(128, 96));
+        site.write(
+            "content/index.typ",
+            "#let frontmatter = (title: \"Home\",)\n#image(\"/assets/photo.png\")\n",
+        );
+        site.stats();
+        std::fs::metadata(site.path("public/assets/photo-64.png"))
+            .expect("the variant")
+            .len()
+    };
+    let plain = variant(config(""));
+    let optimized = variant(config("    optimize { png level=4 }\n"));
+    assert!(
+        optimized < plain,
+        "variant was not optimized: {optimized} vs {plain}"
+    );
+}
