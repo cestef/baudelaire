@@ -1,0 +1,45 @@
+// This site takes its templates, its assets and its config defaults from a
+// theme, so what is left here is what a theme cannot decide for you: who the
+// site is, where its files live, and how you preview it.
+//
+// Everything the theme states is a floor. State a key yourself and yours wins,
+// nested blocks included. Lists are the exception: declaring
+// `content { collections { .. } }` of your own replaces the theme's whole set
+// rather than adding to it, so copy the theme's block first if you only meant
+// to add a collection.
+
+site "{{site}}"
+url "{{url}}"
+author "{{author}}"
+lang "{{lang}}"
+
+paths {
+  content "content"
+  dist "public"
+  assets "assets"
+  templates "templates"
+}
+
+// Anything you put in `templates/` or `assets/` shadows the theme's file of the
+// same name, one file at a time. Nothing else has to move.
+
+serve {
+  port 1821
+  bind "127.0.0.1"
+  open #true
+  watch #true
+}
+
+profiles {
+  dev {
+    url "http://localhost:1821"
+    content {
+      future #true
+    }
+  }
+  prod {
+    html {
+      pretty #false
+    }
+  }
+}

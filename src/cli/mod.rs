@@ -768,14 +768,18 @@ pub struct InitArgs {
 
     /// Starter shape. The accepted values and the default both come from the
     /// template registry, so the help cannot name a shape that is not there.
+    ///
+    /// Left `None` rather than defaulted by clap, because `--theme` scaffolds a
+    /// shape of its own and a defaulted value could not be told from a chosen
+    /// one: the two together used to write a blog's config over a theme that
+    /// declares its own collections.
     #[arg(
         short = 't',
         long,
-        default_value = scaffold::templates::Template::DEFAULT,
         help = scaffold::templates::Template::help(),
         help_heading = group::PROJECT,
     )]
-    pub template: String,
+    pub template: Option<String>,
 
     /// Site title (default: prompted, or the directory name).
     #[arg(long, help_heading = group::PROJECT)]

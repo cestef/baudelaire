@@ -39,9 +39,23 @@ look is the part you can change in an afternoon.
 
 Each name links a live demo. The #link("/themes/")[themes page] has all four.
 
+== Get one
+
+The four above live in the
+#link("https://github.com/cestef/baudelaire/tree/main/themes")[repository], one
+directory each. Take the one you want:
+
+```sh
+git clone --depth 1 https://github.com/cestef/baudelaire /tmp/baudelaire
+mkdir -p themes && cp -r /tmp/baudelaire/themes/albatros themes/
+```
+
+Nothing downloads a theme for you: a theme is files, and which files they are is
+a thing to read before you build against them.
+
 == Adopt it
 
-Copy the theme's directory into your project, then name it:
+Name the directory you just copied:
 
 ```kdl
 theme "themes/albatros"
@@ -64,12 +78,26 @@ theme "@local/albatros:0.1.0"
 Only the `preview` namespace is ever downloaded. `@local` and any other
 namespace are read from disk and never hit the network.
 
-Scaffolding a new site straight onto a theme skips the `templates/` and
-`assets/` it would shadow:
+Scaffolding a new site straight onto a theme writes only what a theme cannot
+decide for you: the site's identity, its paths, and a preview. No templates, no
+assets, and no `collections` of its own, since a `collections` list of yours
+would replace the theme's rather than add to it.
 
 ```sh
 baudelaire init my-site --theme "themes/albatros"
 ```
+
+The theme is not fetched, so `init` closes on where to put it, and the first
+build is the step after that:
+
+```text
+◆ theme
+➜ missing   themes/albatros
+  ↳ put its directory there, then build
+```
+
+`--template` is not used with `--theme`: what a starter shape would contribute
+is the part the theme already declares.
 
 Then read the theme's README for what it wants from a page. All four want a
 `title`; most use `date`, `summary`, and a taxonomy.

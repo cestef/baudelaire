@@ -248,15 +248,16 @@ it diffs against the live repository over public reads. See
 
 Scaffold a whole project (config, templates, a starter page, a stylesheet) into
 `dir`, or the current directory. Prompts for the site name, author, and base URL,
-then offers to set up version control.
+then offers to set up version control. With `--theme`, the templates and the
+stylesheet come from the theme instead, and the run closes on where to put it.
 
 #table(
   columns: 3,
   align: (left, left, left),
   table.header([Flag], [Default], [Does]),
-  [`-t, --template <name>`], [`blog`], [Starter shape.],
-  [`--with <feature,..>`], [--], [Switch on optional features.],
-  [`--theme <spec>`], [--], [Take templates and assets from a #link("../start/themes.typ")[theme] instead.],
+  [`-t, --template <name>`], [`blog`], [Starter shape. Unused with `--theme`.],
+  [`--with <feature,..>`], [--], [Switch on optional features. One the shape already configures is skipped.],
+  [`--theme <spec>`], [--], [Scaffold against a #link("../start/themes.typ")[theme]: identity, paths and a preview, and nothing the theme declares.],
   [`--title <text>`], [prompted], [Site title.],
   [`--author <name>`], [prompted], [Site author, defaulted from git `user.name`.],
   [`--url <url>`], [prompted], [Canonical base URL.],
@@ -292,8 +293,9 @@ The four starter shapes:
 )
 
 Existing files are never overwritten: `init` in a populated directory skips what
-is there and reports it. `-y` on its own sets up no repository, so name
-`--vcs git` for the scripted spelling.
+is there and reports it. Every scaffold writes a `.gitignore` for `public/` and
+`.baudelaire/`, whether or not it sets up a repository; `-y` on its own sets one
+up for no VCS, so name `--vcs git` for the scripted spelling.
 
 #callout(kind: "warn")[
   `--config` names the file `init` *writes*, and it has to be a bare filename: a

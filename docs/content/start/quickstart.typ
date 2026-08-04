@@ -42,8 +42,9 @@ The default shape is a blog. Four ship:
 baudelaire init my-docs -t docs --with search,spa
 ```
 
-`--theme` names a theme in the config and skips scaffolding the `templates/` and
-`assets/` it would shadow. You still have to put the theme where the spec points:
+`--theme` scaffolds against a theme instead of a shape: the config states the
+site's identity and paths, and the theme brings the templates, the assets and the
+collections. Nothing fetches the theme, so `init` closes on where to put it:
 
 ```sh
 baudelaire init my-site --theme "themes/albatros"

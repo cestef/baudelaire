@@ -116,7 +116,7 @@ impl Config {
 pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
     // Every selection is resolved before anything is prompted for or written,
     // so a mistyped name fails on the spot rather than half a scaffold in.
-    let template = Template::find(&args.template)?;
+    let template = Template::select(args.template.as_deref(), args.theme.is_some(), ui)?;
     let extras = Extra::resolve(&args.with)?;
     let config = templates::File::config_at(config)?;
     let interactive = !args.yes && std::io::stdin().is_terminal();
@@ -134,7 +134,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
 
     let mut scaffold = Scaffold::new(&target).ignore();
     for file in files {
-        if (args.theme.is_some() && file.themed()) || (args.no_sample && file.sample()) {
+        if args.no_sample && file.sample() {
             continue;
         }
         let (rel, body) = match file.is_config() {
@@ -166,6 +166,12 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         "baudelaire build".cyan(),
         "baudelaire serve".cyan()
     ));
+    // Before the editor settings, because a build cannot succeed until the
+    // theme is where the config says it is, and `init` naming a directory
+    // nobody has put anything in yet is the ordinary case.
+    if let Some(spec) = &args.theme {
+        Placement::of(spec, &target).render(ui);
+    }
     // Last, because it is the one thing here that a reader has to act on: a
     // scaffold that mirrors the modules and never says they need pointing at
     // leaves every import in the templates it just wrote marked unresolved.
@@ -173,6 +179,46 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         settings.render(ui);
     }
     Ok(())
+}
+
+/// Where a `--theme` spec says the theme has to be, and whether it is there
+/// yet. A directory theme is a path inside the project, and `init` runs before
+/// anyone has put one there, so this is the one instruction a themed scaffold
+/// leaves its reader with.
+enum Placement<'a> {
+    /// A directory spec naming nothing yet: the usual case, and the only one
+    /// with something to say.
+    Missing(&'a str),
+    /// A package spec, or a directory already in place: the build will resolve
+    /// it, and there is nothing for the reader to do.
+    Resolved,
+}
+
+impl<'a> Placement<'a> {
+    /// Read the spec against what the freshly scaffolded project holds. A
+    /// package spec (`@local/name:1.0.0`) is resolved from a package directory
+    /// rather than the project, so it is nothing this can check.
+    fn of(spec: &'a str, target: &Path) -> Self {
+        match spec.starts_with('@') || target.join(spec).is_dir() {
+            true => Self::Resolved,
+            false => Self::Missing(spec),
+        }
+    }
+
+    fn render(&self, ui: &Ui) {
+        let Self::Missing(spec) = self else {
+            return;
+        };
+        ui.section("theme");
+        ui.arrow("missing", Paths(spec));
+        ui.item(
+            format_args!(
+                "put its directory there, then build; the four that ship with baudelaire are at {}/start/themes/",
+                env!("CARGO_PKG_HOMEPAGE")
+            )
+            .dimmed(),
+        );
+    }
 }
 
 /// Mirror the generated modules for editor tooling, so the imports the
@@ -770,10 +816,49 @@ pub(super) mod templates {
         },
     ];
 
+    /// The shape `--theme` scaffolds: identity, paths and a preview, and no
+    /// opinion about anything a theme declares. Deliberately not in
+    /// [`TEMPLATES`]: it is not a shape to choose, it is what choosing a theme
+    /// leaves for the project to say. A starter shape here instead would write
+    /// its own `collections` over the theme's (a list replaces rather than
+    /// merges) and bind layouts the theme does not ship.
+    pub const THEMED: Template = Template {
+        name: "themed",
+        about: "templates, assets and collections from the theme",
+        files: include_dir!("$CARGO_MANIFEST_DIR/src/cli/scaffold/themed"),
+    };
+
     impl Template {
         /// The shape `init` scaffolds when `--template` is not given: the first
         /// registered one, so the flag's default cannot name a missing table row.
         pub const DEFAULT: &'static str = TEMPLATES[0].name;
+
+        /// The shape a run scaffolds: [`THEMED`] whenever a theme was named,
+        /// else the chosen starter, else the default one.
+        ///
+        /// Naming both is not an error, since `--template` is how the four
+        /// shapes are usually reached, but the theme wins and says so: what a
+        /// starter shape would have contributed is exactly what the theme
+        /// already declares.
+        pub fn select(
+            chosen: Option<&str>,
+            themed: bool,
+            ui: &crate::ui::Ui,
+        ) -> crate::error::Result<&'static Self> {
+            if themed {
+                if let Some(name) = chosen {
+                    // Resolved first, so a typo is still an error rather than
+                    // something the theme silently excuses.
+                    let shape = Self::find(name)?;
+                    ui.detail(format_args!(
+                        "the theme supplies the shape; `{}` is not used",
+                        shape.name
+                    ));
+                }
+                return Ok(&THEMED);
+            }
+            Self::find(chosen.unwrap_or(Self::DEFAULT))
+        }
 
         /// The template `name` selects, or an error naming the valid ones.
         pub fn find(name: &str) -> crate::error::Result<&'static Self> {
@@ -902,8 +987,6 @@ pub(super) mod templates {
         const CONFIG: &'static str = "config.kdl";
         const HOME: &'static str = "content/index.typ";
         const CONTENT: &'static str = "content";
-        /// The directories a theme package supplies in the project's stead.
-        const THEMED: &'static [&'static str] = &["templates", "assets"];
 
         /// Whether this is the config `init` bolts its flags onto.
         pub fn is_config(&self) -> bool {
@@ -924,12 +1007,6 @@ pub(super) mod templates {
                 return Err(crate::error::ScaffoldError::config_path(path).into());
             }
             Ok(path.to_path_buf())
-        }
-
-        /// Whether a `--theme` package already supplies this file, in which case
-        /// scaffolding a copy would shadow it on the very first build.
-        pub fn themed(&self) -> bool {
-            Self::THEMED.iter().any(|dir| self.rel.starts_with(dir))
         }
 
         /// Whether this is a demo page `--no-sample` drops. The home page is not
@@ -997,7 +1074,7 @@ pub(super) mod templates {
 
     #[cfg(test)]
     mod tests {
-        use super::{EXTRAS, Extra, File, TEMPLATES, Template, Vars};
+        use super::{EXTRAS, Extra, File, TEMPLATES, THEMED, Template, Vars};
 
         fn vars() -> Vars<'static> {
             Vars::new([
@@ -1094,6 +1171,54 @@ pub(super) mod templates {
                     });
                 }
             }
+        }
+
+        /// The theme shape states nothing a theme declares. A `collections` list
+        /// of its own would replace the theme's whole set rather than merge
+        /// with it, and a `template` key would name a file the theme never
+        /// ships: between them, that was a scaffold whose first build failed.
+        #[test]
+        fn the_theme_shape_leaves_the_theme_its_own_declarations() {
+            let files = THEMED.files(&vars());
+            let config = crate::config::Config::parse(
+                &files.iter().find(|f| f.is_config()).expect("config").body,
+            )
+            .expect("the theme shape's config parses");
+            assert!(config.content.collections.is_empty());
+            assert!(config.content.taxonomies.is_empty());
+            assert!(
+                !files.iter().any(|f| f.rel.starts_with("templates")),
+                "the theme ships the templates"
+            );
+            for file in &files {
+                assert!(
+                    !file.body.contains("template:"),
+                    "`{}` binds a template the theme may not have",
+                    file.rel.display()
+                );
+            }
+        }
+
+        /// Naming a theme picks the theme shape whatever `--template` says,
+        /// since a starter shape's config is exactly what the theme declares.
+        /// A misspelled shape is still an error: the theme does not excuse it.
+        #[test]
+        fn a_theme_selects_the_theme_shape_over_any_starter() {
+            let ui = crate::ui::Ui::new(crate::ui::Level::Silent);
+            assert_eq!(Template::select(None, true, &ui).unwrap().name, "themed");
+            assert_eq!(
+                Template::select(Some("docs"), true, &ui).unwrap().name,
+                "themed"
+            );
+            assert_eq!(
+                Template::select(None, false, &ui).unwrap().name,
+                Template::DEFAULT
+            );
+            assert_eq!(
+                Template::select(Some("book"), false, &ui).unwrap().name,
+                "book"
+            );
+            assert!(Template::select(Some("blogg"), true, &ui).is_err());
         }
 
         /// A feature the shape already configures is dropped rather than
