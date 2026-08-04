@@ -61,6 +61,8 @@ chores are visible in the git history and change nothing for a site.
   The copy records where it came from, so `theme update` goes back to the same
   source without being told again, and keeps your edits exactly as before. A
   repository copy records the ref it follows and what the forge served for it.
+  `theme list` grew a second section for the copies this binary does not ship,
+  each with the source it came from.
 
   A repository is fetched as the forge's own source archive of one revision, not
   cloned: the same files in one request, and no git on the host or in the

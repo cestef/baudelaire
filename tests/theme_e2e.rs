@@ -431,3 +431,31 @@ fn a_theme_is_fetched_out_of_an_archive_at_a_url() {
     assert!(lock.contains("\"subdir\": \"themes/plume\""), "{lock}");
     assert!(lock.contains(&url), "{lock}");
 }
+
+/// The shelf is not the whole answer any more: a theme fetched from somewhere
+/// else is a theme this project has, and `list` says so and says where it came
+/// from.
+#[test]
+#[cfg(feature = "themes")]
+fn list_reports_a_theme_the_binary_does_not_carry() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write("elsewhere/plume/templates/page.typ", "#let page = 1\n");
+    assert!(
+        site.run(&["theme", "add", "./elsewhere/plume"])
+            .status
+            .success()
+    );
+
+    let out = site.run(&["theme", "list"]);
+    let listed = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{listed}");
+    assert!(listed.contains("plume"), "the copy is listed: {listed}");
+    assert!(
+        listed.contains("themes/plume"),
+        "with where it is: {listed}"
+    );
+    assert!(
+        listed.contains("elsewhere/plume"),
+        "and where it came from: {listed}"
+    );
+}

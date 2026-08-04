@@ -1356,34 +1356,80 @@ impl ThemeArgs {
     /// The shelf, with what this project has taken off it: a theme already
     /// installed says where, and whether the copy still matches the binary.
     fn list(cx: &Cx, says: &Says) {
-        use crate::theme::{BUNDLED, Lock, State};
+        use crate::theme::{BUNDLED, Bundled, Lock};
 
         for theme in BUNDLED {
             cx.ui.arrow(theme.name, theme.about);
             let rel = theme.dir(says.theme());
-            let dir = cx.root.join(&rel);
-            let Some(lock) = Lock::read(&dir) else {
-                continue;
-            };
-            let at = rel.display().to_string();
-            let edited = lock
-                .state(&dir)
-                .iter()
-                .filter(|file| file.state == State::Edited)
-                .count();
-            cx.ui.item(match edited {
-                0 => markup!("installed at `{}`", &at),
-                n => markup!(
-                    "installed at `{}`, {} edited",
-                    &at,
-                    Count::files(n).to_string()
-                ),
-            });
+            if let Some(lock) = Lock::read(&cx.root.join(&rel)) {
+                cx.ui.item(Self::installed(cx, &rel, &lock));
+            }
         }
+
+        // Themes this binary does not carry. Since a copy can come from
+        // anywhere, the shelf is no longer the whole answer, and a `list` that
+        // printed only it reported nothing about the theme a project actually
+        // uses.
+        let mut mine: Vec<(PathBuf, Lock)> = Self::vendored(cx, says)
+            .into_iter()
+            .filter(|(_, lock)| Bundled::find(&lock.theme).is_err())
+            .collect();
+        mine.sort_by(|a, b| a.1.theme.cmp(&b.1.theme));
+        if !mine.is_empty() {
+            cx.ui.section("yours");
+            for (rel, lock) in mine {
+                cx.ui.arrow(&lock.theme, lock.origin().label());
+                cx.ui.item(Self::installed(cx, &rel, &lock));
+            }
+        }
+
         cx.ui.detail(markup!(
             "`{}` writes one into the project",
-            "baudelaire theme add <name>"
+            "baudelaire theme add <spec>"
         ));
+    }
+
+    /// Every installed copy this project has: the directories under `themes/`,
+    /// plus wherever the config's own `theme` line points, which is the one
+    /// place a copy can be that nothing else would look.
+    fn vendored(cx: &Cx, says: &Says) -> Vec<(PathBuf, crate::theme::Lock)> {
+        use crate::theme::{Bundled, Lock};
+
+        let named = says.theme().map(PathBuf::from).into_iter();
+        let under = std::fs::read_dir(cx.root.join(Bundled::DIR))
+            .into_iter()
+            .flatten()
+            .filter_map(std::result::Result::ok)
+            .map(|entry| Path::new(Bundled::DIR).join(entry.file_name()));
+        let mut seen = std::collections::BTreeSet::new();
+        named
+            .chain(under)
+            .filter(|rel| seen.insert(rel.clone()))
+            .filter_map(|rel| {
+                let lock = Lock::read(&cx.root.join(&rel))?;
+                Some((rel, lock))
+            })
+            .collect()
+    }
+
+    /// One copy's line: where it is, and how much of it is yours now.
+    fn installed(cx: &Cx, rel: &Path, lock: &crate::theme::Lock) -> String {
+        use crate::theme::State;
+
+        let at = rel.display().to_string();
+        let edited = lock
+            .state(&cx.root.join(rel))
+            .iter()
+            .filter(|file| file.state == State::Edited)
+            .count();
+        match edited {
+            0 => markup!("installed at `{}`", &at),
+            n => markup!(
+                "installed at `{}`, {} edited",
+                &at,
+                Count::files(n).to_string()
+            ),
+        }
     }
 }
 

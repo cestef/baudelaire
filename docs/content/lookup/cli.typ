@@ -349,7 +349,7 @@ baudelaire theme remove albatros  # take it back off
   columns: 3,
   align: (left, left, left),
   table.header([Command], [Alias], [Does]),
-  [`list`], [`ls`], [The shipped themes, each marked with where it is installed and how many files you have edited.],
+  [`list`], [`ls`], [The shipped themes, then the ones you installed from anywhere else, each marked with where it is, where it came from, and how many files you have edited.],
   [`add <spec>`], [--], [Fetch a theme and write it into the project, then print the `config.kdl` line to add. Files already there are kept.],
   [`info <name>`], [--], [Its templates, the collections and taxonomies its `theme.kdl` declares, where it came from, and the state of your copy.],
   [`update <name>`], [`up`], [Fetch it again from the source its record names, and rewrite the files you have not touched.],
