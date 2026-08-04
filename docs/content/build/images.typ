@@ -68,9 +68,23 @@ bytes are written under the asset URL and the `<img>` points at them:
 ```
 
 becomes an `<img src="/assets/photo.png">` with the sizing preserved as inline
-CSS, so the output matches typst's own layout. The original filename is kept;
-with `assets { fingerprint }` on, the served name carries a content hash like any
-other asset.
+CSS, so the output matches typst's own layout. With `assets { fingerprint }` on,
+the served name carries a content hash like any other asset.
+
+The name keeps the directories the picture was authored under, relative to
+`content/`:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Authored], [Served]),
+  [`content/photo.png`], [`/assets/photo.png`],
+  [`content/posts/hello/cover.png`], [`/assets/posts/hello/cover.png`],
+)
+
+That is what lets every post in a #link("../write/pages.typ")[page bundle] tree
+call its picture `cover.png`. A template reaches the same URL through
+#link("../write/templates.typ")[`page.assets`].
 
 #callout(kind: "note")[
   Extraction needs a project file to point at. An image built from raw bytes, or

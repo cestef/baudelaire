@@ -14,6 +14,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+- `Renderer::SCHEMA` is bumped (14 -> 15), so the first build after upgrading is
+  a cold one. Extracted images are named differently, and a warm manifest would
+  replay the flat names into cached pages while fresh ones wrote the new paths.
+  If you link an extracted image's URL by hand anywhere (a feed, an external
+  page), it now carries the directories the image sits in under `content/`.
+
 - A site whose `assets/` holds preprocessor sources, `_partial` files or
   unbundled `.ts` will stop publishing them. That is the point, but if you were
   linking one of those URLs deliberately, move the file to `static/`, which
@@ -190,6 +196,15 @@ chores are visible in the git history and change nothing for a site.
   not only the runs that set up a repository with `--vcs`.
 
 ### Fixed
+
+- **images**: an image extracted from a page keeps the directories it was
+  authored under, so `posts/a/cover.png` and `posts/b/cover.png` are two files
+  (`/assets/posts/a/cover.png` and `/assets/posts/b/cover.png`). They were served
+  flat under the base name, which is one name for both: a page bundle tree, where
+  naming a picture for its role is the convention every Markdown generator
+  encourages, collided on every post and served one picture for all of them, with
+  a warning each. A width variant is also spliced on the file name rather than
+  the whole path, so a directory holding a dot no longer corrupts it.
 
 - **assets**: the pipeline publishes what it produced, not what it read. A
   default-config site copied its own TypeScript to `dist` (`app.ts`, which no

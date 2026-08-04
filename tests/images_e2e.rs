@@ -91,22 +91,51 @@ fn cached_rebuild_keeps_the_externalized_file() {
 }
 
 #[test]
-fn colliding_image_names_warn_and_keep_one() {
-    // Two different sources with the same base name map to one served name (no
-    // fingerprint to disambiguate). The build warns and keeps the first.
+fn same_named_images_in_different_directories_are_different_files() {
+    // Naming a picture for its role (`cover.png`, `hero.jpg`) is the page-bundle
+    // convention every Markdown generator encourages, so a tree of them is the
+    // normal case, not the odd one. Served flat under their base name, they were
+    // one file: N-1 pages showed the wrong picture, with a warning each.
     let site = Site::with(EXTRACT);
     site.write_bytes("content/one/pic.png", &png(2, 2));
     site.write_bytes("content/two/pic.png", &png(3, 3));
     site.write("content/a.typ", "#image(\"one/pic.png\")\n");
     site.write("content/b.typ", "#image(\"two/pic.png\")\n");
 
-    // Spawn the binary so the warning surfaces on stderr.
+    // Spawn the binary so any warning would surface on stderr.
+    let stderr = site.build();
+    assert!(
+        !stderr.contains("two images map to"),
+        "no collision to report: {stderr}"
+    );
+    assert!(site.exists("public/assets/one/pic.png"), "the first");
+    assert!(site.exists("public/assets/two/pic.png"), "the second");
+    assert!(
+        site.output("a/index.html").contains("/assets/one/pic.png"),
+        "each page points at its own image"
+    );
+    assert!(
+        site.output("b/index.html").contains("/assets/two/pic.png"),
+        "each page points at its own image"
+    );
+}
+
+#[test]
+fn an_extracted_image_never_overwrites_a_pipeline_asset() {
+    // The one collision left: the asset tree owns `/assets/..`, and a page whose
+    // image lands on a name the pipeline already wrote keeps the pipeline's.
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images {\n    extract #true\n  }\n}\n",
+    );
+    site.write_bytes("assets/one/pic.png", &png(2, 2));
+    site.write_bytes("content/one/pic.png", &png(5, 5));
+    site.write("content/a.typ", "#image(\"one/pic.png\")\n");
+
     let stderr = site.build();
     assert!(
         stderr.contains("two images map to") && stderr.contains("pic.png"),
         "collision warning surfaced: {stderr}"
     );
-    assert!(site.exists("public/assets/pic.png"), "one file kept");
 }
 
 /// Processed bytes are memoized across builds: the pipeline used to re-run

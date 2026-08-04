@@ -101,13 +101,15 @@ impl ImageRef {
     /// The reference for a marker's virtual path. The name is fingerprinted
     /// (content hash spliced in) when asset fingerprinting is on, so
     /// externalized images cache far-future like every other asset; otherwise
-    /// the plain filename is kept. A hash read that fails falls back to the
+    /// the authored name is kept. A hash read that fails falls back to the
     /// plain name; the engine's copy then surfaces the unreadable source.
     ///
-    /// [`AssetName::file`] rather than [`AssetName::path`]: the image keeps only
-    /// its base name, since it is served flat out of the asset root whatever
-    /// content subdirectory it was authored in. The splice itself is the asset
-    /// pipeline's, so the two cannot drift.
+    /// The name keeps the directories the image was authored under, relative to
+    /// the content root, so `posts/a/cover.png` and `posts/b/cover.png` are two
+    /// files. They used to be served flat out of the asset root under their bare
+    /// base name, which is one name for both: a page bundle tree, where naming
+    /// an image for its role is the convention Hugo and Jekyll both encourage,
+    /// collided on every post and served one picture for all of them.
     fn of(vpath: &str, root: &Path, config: &Config) -> Self {
         let source = root.join(vpath);
         let digest = config
@@ -116,8 +118,25 @@ impl ImageRef {
             .then(|| crate::fs::read(&source).ok())
             .flatten()
             .map(|bytes| AssetName::digest(&bytes));
+        // Under the content root the content-relative path, else the
+        // project-relative one: an image loaded from elsewhere in the project
+        // (a `data/` tree) still gets a name nothing else can claim.
+        // `vpath` is root-relative, so the content directory has to be read the
+        // same way: a resolved config carries it as an absolute path, and
+        // stripping that would never match.
+        let content = config
+            .paths
+            .content
+            .strip_prefix(root)
+            .unwrap_or(&config.paths.content);
+        let rel = Path::new(vpath)
+            .strip_prefix(content)
+            .unwrap_or_else(|_| Path::new(vpath));
         Self {
-            name: AssetName::new(Path::new(vpath), digest).file(),
+            name: AssetName::new(rel, digest)
+                .path()
+                .to_string_lossy()
+                .into_owned(),
             widths: Self::widths(&source, config),
             source,
         }
@@ -195,10 +214,18 @@ impl ImageRef {
     /// taken over the variant's own bytes: the two change together, and the
     /// page names the file before those bytes exist.
     pub fn variant(name: &str, width: u32) -> String {
-        let (stem, digest) = match name.split_once('.') {
-            Some((stem, rest)) => (stem, format!(".{rest}")),
-            None => (name, String::new()),
+        // Split the *file name*, not the whole name: it carries the directories
+        // the image was authored under, and one of those may hold a dot
+        // (`posts/my.site/cover.png`), which splitting the whole string would
+        // read as the start of the extension.
+        let (dir, file) = match name.rsplit_once('/') {
+            Some((dir, file)) => (format!("{dir}/"), file),
+            None => (String::new(), name),
         };
-        format!("{stem}-{width}{digest}")
+        let (stem, digest) = match file.split_once('.') {
+            Some((stem, rest)) => (stem, format!(".{rest}")),
+            None => (file, String::new()),
+        };
+        format!("{dir}{stem}-{width}{digest}")
     }
 }
