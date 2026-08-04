@@ -53,7 +53,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`-q, --quiet`], [--], [Less output. Conflicts with `-v`.],
   [`--strict`], [--], [Fail the run if anything warned.],
   [`--json`], [--], [Write one machine-readable summary object to stdout.],
-  [`-V`], [--], [Print one line: `baudelaire 0.0.10`.],
+  [`-V`], [--], [Print one line: `baudelaire 0.0.11`.],
   [`--version`], [--], [Print the full build report.],
   [`-h, --help`], [--], [Print help for the command.],
 )
@@ -84,7 +84,7 @@ changes meaning or type or goes away, never when one is added.
 `--version` reports what this binary can do:
 
 ```text
-baudelaire 0.0.10
+baudelaire 0.0.11
   commit    465556976431
   rustc     1.97.1 (8bab26f4f 2026-07-14) (release)
   target    x86_64-unknown-linux-gnu
