@@ -7,6 +7,11 @@
 
 content {
   collections {
+    // Pages directly under `content/` (the home page, an about page) land in
+    // `_root`, and this is what gives them a layout without each naming one.
+    // `home.typ` is the other choice here: bind it per page, in frontmatter.
+    _root { template "page.typ" }
+
     posts "posts/**/*.typ" {
       sort "date"
       reverse #true
