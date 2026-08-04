@@ -109,7 +109,77 @@ chores are visible in the git history and change nothing for a site.
   A report, never a failure. Either switch turns the link graph on, so a site
   that wants only the report pays for the edges and none of the second compiles.
 
+- **cli**: `baudelaire theme`. The four shipped themes are carried in the binary,
+  so adopting one is a command rather than a clone of this repository:
+
+  ```sh
+  baudelaire theme list          # the four, one line each
+  baudelaire theme add albatros  # writes themes/albatros/, then names the config line
+  ```
+
+  `add` never overwrites a file already there, so a second run over a theme you
+  have edited changes nothing. `--dir` writes it elsewhere inside the project
+  root. `init --theme "themes/albatros"` writes it for you as part of the
+  scaffold. The `themes` cargo feature carries them (~230 KiB); a `slim` binary
+  has neither the themes nor the command.
+
+- **build**: a template nothing supplies is one typed diagnostic
+  (`baudelaire::template::missing`) naming the file, what asked for it (a config
+  key, or the page whose frontmatter named it) and where to write it, raised
+  before the first compile. It used to be typst's own `file not found`, once per
+  page, pointing at the generated wrapper.
+
+- **init**: every scaffold writes a `.gitignore` for `public/` and `.baudelaire/`,
+  not only the runs that set up a repository with `--vcs`.
+
+### Fixed
+
+- **init**: `--theme` scaffolds a project the theme can render. It wrote a
+  starter shape's whole config over the theme: a `collections` list (which
+  replaces a theme's rather than merging), and `template` keys naming layouts
+  the theme does not ship, so the documented flow failed its first build with a
+  typst `file not found` per page. The themed scaffold now states only what a
+  theme cannot decide: the site's identity, its paths, and a preview. `-t` is
+  not used with `--theme`, and says so.
+
+- **init**: `--with` skips a feature the starter shape already configures.
+  `init -t docs --with search` appended a second, barer `generate { search }`
+  block beneath the one the shape had written.
+
+- **images**: a picture that lives in the asset tree and is shown by a page
+  (`#image("/assets/photo.png")`) is referenced where the pipeline serves it
+  instead of being extracted a second time. The extra copy claimed the same
+  filename, warned that two images mapped to it, and could serve the
+  unprocessed source in place of the optimized file.
+
+- **themes**: `albatros` and `spleen` bind a layout for the pages directly under
+  `content/`, which `phares` and `paysage` already did. A home page under either
+  of them rendered as bare markup, with none of the theme's chrome.
+
+- **build**: `assets { minify }` no longer warns that it is inert without
+  `assets { bundle }`. It minifies stylesheets on its own, which is all a site
+  with no JavaScript asked for; the warning fired on every such site, the `docs`
+  starter included, and `--strict` failed it.
+
+- **links**: the broken-link diagnostic suggests `--no-strict-links`, which
+  exists, rather than `--strict-links false`, which the CLI refuses.
+
+- **cli**: `clean --help` describes `--output` without a digression about this
+  repository's own docs site.
+
 ### Performance
+
+- **images**: responsive variants go through `optimize` like the file they were
+  cut from. A downscaled PNG was written as the encoder produced it, so a
+  `srcset` could offer a 960px candidate several times the weight of the
+  optimized full-size image beside it.
+
+- **images**: an image extracted from a page (the page-bundle layout, a photo
+  beside the `.typ` that shows it) is optimized like one in the asset tree. It
+  was copied byte for byte, which made it the one unrecompressed file on the
+  site. `responsive` still covers the asset tree only: a `srcset` names files
+  that must exist when the page naming them renders, and an extracted image is
+  known only after it has.
 
 - **links**: a cold build guesses each page's backlinks by reading the `.typ`
   links its source writes out, rather than assuming nothing links anywhere. On
@@ -133,6 +203,24 @@ chores are visible in the git history and change nothing for a site.
   content carries, and the digest of the backlinks it was compiled with. A
   manifest written before this records neither, so the cache schema is bumped
   and the first build after upgrading is a cold one. Nothing to change.
+
+- A template a config or a page names and nothing supplies now fails the build
+  with `baudelaire::template::missing`. Such a build already failed, in typst's
+  words rather than baudelaire's, so nothing that built before this fails now.
+
+- `baudelaire new` writes no `template` key when the config binds no layout for
+  the page's collection, where it used to write `template: "layout.typ"` on
+  faith. The four starter shapes bind theirs under `_root`, the collection a
+  page directly under `content/` lands in; a project that relied on the old
+  default can state the same:
+
+  ```kdl
+  content {
+    collections {
+      _root { template "layout.typ" }
+    }
+  }
+  ```
 
 ## [0.0.10] - 2026-08-03
 
