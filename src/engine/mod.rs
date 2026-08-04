@@ -170,6 +170,10 @@ impl Engine {
         // the section trees it holds, and after it in [`Pass`], which renders
         // against what the pipeline produced.
         let prepare = self.prepare(&planned.pages)?;
+        // Before any compile: a template nothing supplies is one diagnostic
+        // naming what asked for it, rather than the compiler's own missing-file
+        // report against a generated wrapper, once per page.
+        prepare.verify()?;
         #[cfg(feature = "js")]
         let modules = Modules::new(self, &prepare);
         // the asset URL map feeds render-side fingerprint rewriting and folds

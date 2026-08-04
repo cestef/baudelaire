@@ -496,3 +496,49 @@ fn broken_links_are_still_reported_on_a_cached_rebuild() {
         "the broken-link check went quiet on a cached rebuild: {logs}"
     );
 }
+
+/// A template nothing supplies is one diagnostic naming what asked for it,
+/// raised before the first compile. The compiler's own report was one
+/// `file not found` per page, against the generated wrapper that imports the
+/// template rather than against the line that named it.
+#[test]
+fn a_missing_template_names_what_asked_for_it() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            paths {
+                content "content"
+                dist "public"
+                templates "templates"
+            }
+            content {
+                collections {
+                    _root { template "layout.typ" }
+                }
+            }
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\",)\nhi",
+    );
+    let out = site.run(&["build"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("baudelaire::template::missing"),
+        "stderr: {stderr}"
+    );
+    assert!(stderr.contains("layout.typ"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("content/index.typ"),
+        "names the page that asked: {stderr}"
+    );
+    // One diagnostic, not the compiler's per-page report of the same thing.
+    assert!(
+        !stderr.contains("file not found"),
+        "raw typst report leaked: {stderr}"
+    );
+}

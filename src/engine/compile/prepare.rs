@@ -22,10 +22,11 @@ use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
 use crate::codegen::{Typst, Value};
 use crate::config::Config;
 use crate::content::{Data, Iso, Localized, Page, Section, Sibling, Siblings, Strings};
-use crate::error::Result;
+use crate::error::{Result, TemplateMissing};
 use crate::graph::Hash;
 use crate::render::Backlinks;
 use crate::theme::Theme;
+use crate::ui::markup;
 use crate::world::Project;
 use crate::world::module;
 
@@ -274,6 +275,74 @@ impl<'a> Prepare<'a> {
                 .iter()
                 .map(Section::value),
         )
+    }
+
+    /// Every template this build will import, and what named it: each page's
+    /// resolved layout, then the paged templates the config asks for. Deduped
+    /// by filename, so one missing layout is reported once however many pages
+    /// bind it, and named by the first page that did, since that is the one to
+    /// open.
+    fn asked(&self) -> Vec<(String, String)> {
+        let mut asked: Vec<(String, String)> = Vec::new();
+        let mut push = |file: &str, by: String| {
+            if !asked.iter().any(|(f, _)| f == file) {
+                asked.push((file.to_owned(), by));
+            }
+        };
+        for page in self.pages {
+            if let Some(template) = &page.template {
+                push(template, markup!("`{}`", page.source.display().to_string()));
+            }
+        }
+        let cards = &self.config.generate.cards;
+        if cfg!(feature = "cards") && cards.enabled {
+            push(&cards.template, "`generate { cards }`".to_owned());
+        }
+        let pdf = &self.config.generate.pdf;
+        if cfg!(feature = "pdf") {
+            if pdf.pages.enabled {
+                push(
+                    &pdf.pages.template,
+                    "`generate { pdf { pages } }`".to_owned(),
+                );
+            }
+            if pdf.bundle.enabled() {
+                push(
+                    &pdf.bundle.template,
+                    "`generate { pdf { bundle } }`".to_owned(),
+                );
+            }
+        }
+        asked
+    }
+
+    /// Fail on a template nothing supplies, before the first compile.
+    ///
+    /// Without this the compiler reports it: once per page, as `file not found`
+    /// against the generated wrapper that imports it, naming neither the config
+    /// key nor the frontmatter that asked. A missing `card.typ` (the default
+    /// name, which no starter shape writes) was a screenful of that.
+    pub(in crate::engine) fn verify(&self) -> Result<()> {
+        let searched: Vec<String> = self
+            .theme
+            .map(|theme| theme.templates().trim_start_matches('/').to_owned())
+            .into_iter()
+            .chain([self.config.paths.templates.display().to_string()])
+            .collect();
+        for (file, asked) in self.asked() {
+            if !self.supplied(&file) {
+                return Err(TemplateMissing::new(&file, &asked, &searched).into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether any layer carries `template`: the project's directory, else the
+    /// theme's. The same order [`Self::dir`] resolves in, so what this accepts
+    /// is exactly what that will import.
+    fn supplied(&self, template: &str) -> bool {
+        self.config.paths.templates.join(template).is_file()
+            || self.theme.is_some_and(|theme| theme.has_template(template))
     }
 
     /// The import root a template is loaded from, layout or paged alike.

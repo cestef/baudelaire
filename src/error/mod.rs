@@ -36,6 +36,7 @@ pub mod schema;
 pub mod serialize;
 pub mod serve;
 pub mod svg;
+pub mod template;
 pub mod theme;
 pub mod typ;
 pub mod warning;
@@ -60,6 +61,7 @@ pub use schema::SchemaError;
 pub use serialize::{Artifact, SerializeError};
 pub use serve::ServeError;
 pub use svg::SvgError;
+pub use template::TemplateMissing;
 pub use theme::ThemeError;
 pub use typ::TypstSourceDiagnostic;
 
@@ -119,6 +121,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Card(#[from] crate::error::card::CardError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Template(#[from] crate::error::template::TemplateMissing),
 
     #[error(transparent)]
     #[diagnostic(transparent)]
