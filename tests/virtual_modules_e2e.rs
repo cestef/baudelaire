@@ -111,6 +111,38 @@ fn pages_module_lists_authored_content() {
     assert!(js.contains("rust"), "taxonomy inlined: {js}");
 }
 
+/// A frontmatter field the page set carries is whatever the author wrote, not
+/// its Typst `repr`. Everything but a string used to reach `Raw`, which is
+/// Typst-only and renders as `null` here: `weight: 3` and `featured: true`
+/// arrived in the browser as `null` against a declared `Record<string,
+/// unknown>`, while the identically-typed `client { retries 3 }` arrived as `3`.
+#[test]
+fn pages_module_carries_non_string_frontmatter_as_itself() {
+    let site = Site::new();
+    site.write("config.kdl", &config("assets { bundle #true }"));
+    site.write(
+        "assets/main.js",
+        "import pages from \"baudelaire:pages\";\nglobalThis.P = pages;\n",
+    );
+    site.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"H\", weight: 3, featured: true, \
+         ratio: 0.5, authors: (\"ada\", \"bob\"), meta: (kind: \"note\"))\nx",
+    );
+    let js = bundle(&site);
+    // The bundler is free to renormalize a literal (`0.5` prints as `.5`), so
+    // each is matched by its key and the shape of its value.
+    for expected in [
+        r#""weight": 3"#,
+        r#""featured": true"#,
+        r#""ratio": .5"#,
+        r#""authors": ["ada", "bob"]"#,
+        r#""kind": "note""#,
+    ] {
+        assert!(js.contains(expected), "{expected} not in: {js}");
+    }
+}
+
 #[test]
 fn sections_module_groups_by_collection() {
     let site = Site::new();

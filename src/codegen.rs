@@ -163,13 +163,32 @@ impl Value {
     }
 }
 
-/// Read a Typst runtime value into a [`Value`], keeping a string's content
-/// readable (so it round-trips through [`as_str`](Value::as_str)) and carrying
-/// everything else as its `repr`.
+/// Read a Typst runtime value into a [`Value`], mapping every shape that has a
+/// counterpart here and carrying the rest as its `repr`.
+///
+/// [`Raw`](Value::Raw) is Typst-only by construction, so a value that reaches it
+/// renders as `null` in JavaScript and is opaque to
+/// [`as_str`](Value::as_str). Everything but `Str` used to land there, which
+/// made a frontmatter `weight: 3` arrive in the browser as `null` while a config
+/// `client { retries 3 }` arrived as `3`: one type, two behaviours, decided by
+/// which parser filled it. What is left for `Raw` is what genuinely has no
+/// counterpart -- content, a function, a length.
 impl From<&typst::foundations::Value> for Value {
     fn from(value: &typst::foundations::Value) -> Self {
+        use typst::foundations::Value as Typst;
         match value {
-            typst::foundations::Value::Str(s) => Self::Str(s.to_string()),
+            Typst::Str(s) => Self::Str(s.to_string()),
+            Typst::Int(n) => Self::Int(*n),
+            Typst::Float(n) => Self::Float(*n),
+            Typst::Bool(b) => Self::Bool(*b),
+            Typst::None => Self::None,
+            Typst::Array(items) => Self::Array(items.iter().map(Self::from).collect()),
+            Typst::Dict(pairs) => Self::Dict(
+                pairs
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), Self::from(value)))
+                    .collect(),
+            ),
             other => Self::Raw(other.repr().to_string()),
         }
     }

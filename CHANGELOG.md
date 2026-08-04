@@ -308,6 +308,15 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **templates**: a frontmatter value that is not a string reaches JavaScript as
+  itself. `weight: 3`, `featured: true`, `authors: ("ada", "bob")` and a nested
+  dict all arrived in `baudelaire:pages` as `null`, against the declared
+  `Record<string, unknown>`, because every non-string Typst value was carried as
+  a Typst-only expression. The same values written in `client { }` always
+  arrived intact, which is what made it look like a typing problem rather than a
+  conversion one. `wants_card` sees through them too, so a page whose `image:`
+  was not written as a plain string literal no longer has a card drawn over it.
+
 - **embed**: an asset the inliner could not read is recorded as a dependency all
   the same, so a page referencing a file that was not there inlines it once it
   appears. It stayed a cache hit instead, and the self-contained export kept
