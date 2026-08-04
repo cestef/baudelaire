@@ -78,6 +78,25 @@ other asset.
   `html { embed }` is on, which inlines processed assets on purpose.
 ]
 
+An extracted image is `optimize`d like any other, so a photo sitting beside its
+page (the #link("../write/pages.typ")[page bundle] layout) is not the one
+unrecompressed file on the site. `responsive` is the exception, and the one
+reason to keep a shared image under `assets/`:
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Where the file is], [`optimize`], [`responsive`]),
+  [Under `assets/`], [yes], [yes],
+  [Beside the page, extracted], [yes], [no],
+)
+
+A `srcset` names files that have to exist when the page naming them renders, and
+an extracted image is only known to exist once that page *has* rendered. An
+image in the asset tree is processed before any page compiles, so its variants
+are there to offer. Referencing one from a page (`#image("/assets/photo.png")`)
+gets the full pipeline and no second copy.
+
 Set `extract #false` to keep typst's inlining.
 
 == Responsive variants

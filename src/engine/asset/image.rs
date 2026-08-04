@@ -8,7 +8,7 @@ use std::path::Path;
 use image::{DynamicImage, imageops::FilterType};
 
 use super::exif::Orientation;
-use crate::config::{Config, JpegConfig, PngConfig, PngStrip};
+use crate::config::{Config, JpegConfig, OptimizeConfig, PngConfig, PngStrip};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::mime::ImageFormat;
@@ -19,7 +19,7 @@ use super::{Ctx, Handler, PathExt, Variant};
 /// and downscaled into responsive width variants. An optimizer must never make a
 /// file bigger, so the smaller of the input and output always wins: re-encoding
 /// an already-tight file can grow it.
-pub(super) struct Raster;
+pub(in crate::engine) struct Raster;
 
 impl Handler for Raster {
     /// Re-encoding an image depends on its own bytes and the `images` options
@@ -44,7 +44,11 @@ impl Handler for Raster {
         _map: &super::AssetMap,
         ctx: &Ctx,
     ) -> Result<Option<Vec<u8>>> {
-        Ok(Some(Self::tightened(fs::read(file)?, file, ctx)?))
+        Ok(Some(Self::tightened(
+            fs::read(file)?,
+            file,
+            &ctx.config.assets.images.optimize,
+        )?))
     }
 
     fn variants(&self, file: &Path, rel: &Path, ctx: &Ctx) -> Result<Vec<Variant>> {
@@ -81,7 +85,7 @@ impl Handler for Raster {
             let encoded = Self::tightened(
                 Self::encode(&scaled, format, responsive.quality, file)?,
                 file,
-                ctx,
+                &ctx.config.assets.images.optimize,
             )?;
             variants.push(Variant {
                 // `photo.jpg` -> `photo-480.jpg`, the same splice a fingerprint
@@ -109,11 +113,15 @@ impl Raster {
     ///
     /// Unconfigured for the format (the handler is claimed for responsive
     /// variants alone), the bytes pass through as they are.
-    fn tightened(bytes: Vec<u8>, file: &Path, ctx: &Ctx) -> Result<Vec<u8>> {
-        let Some(format) = ctx.config.assets.images.optimize.format(file.ext()) else {
+    pub(in crate::engine) fn tightened(
+        bytes: Vec<u8>,
+        file: &Path,
+        optimize: &OptimizeConfig,
+    ) -> Result<Vec<u8>> {
+        let Some(format) = optimize.format(file.ext()) else {
             return Ok(bytes);
         };
-        let optimized = Self::encoder(format, ctx.config).optimize(&bytes, file)?;
+        let optimized = Self::encoder(format, optimize).optimize(&bytes, file)?;
         Ok(if optimized.len() < bytes.len() {
             optimized
         } else {
@@ -123,8 +131,7 @@ impl Raster {
 
     /// The codec for a format, bound to its config. Adding a format is a new
     /// [`Encoder`] impl and an arm here.
-    fn encoder(format: ImageFormat, config: &Config) -> Box<dyn Encoder + '_> {
-        let optimize = &config.assets.images.optimize;
+    fn encoder(format: ImageFormat, optimize: &OptimizeConfig) -> Box<dyn Encoder + '_> {
         match format {
             ImageFormat::Png => Box::new(Png(optimize.png.as_ref().expect("png enabled"))),
             ImageFormat::Jpeg => Box::new(Jpeg(optimize.jpeg.as_ref().expect("jpeg enabled"))),

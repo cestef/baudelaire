@@ -24,6 +24,13 @@ use crate::ui::Ui;
 pub(in crate::engine) struct Images {
     /// The asset directory copies land in.
     dir: PathBuf,
+    /// The per-format optimizer settings, so a picture colocated with the page
+    /// that shows it is recompressed like one in the asset tree. Held as the
+    /// config's own value rather than re-read per image, and carried in both
+    /// flavors so the copy path has one shape: a build with no optimizer
+    /// compiled in reads it no more than it reads the settings themselves.
+    #[cfg_attr(not(feature = "images"), allow(dead_code))]
+    optimize: crate::config::OptimizeConfig,
     /// The URL prefix those copies are served under, so a copied image can be
     /// weighed by the same name the page that shows it references.
     prefix: String,
@@ -46,6 +53,7 @@ impl Images {
     pub fn new(config: &Config, root: &Path) -> Self {
         Self {
             dir: config.asset_staging(),
+            optimize: config.assets.images.optimize.clone(),
             prefix: config.asset_prefix(),
             root: crate::fs::canonical(root),
             seen: HashMap::new(),
@@ -74,8 +82,14 @@ impl Images {
     }
 
     /// Copy one image unless another source already claimed its name.
+    ///
+    /// The bytes go through the same optimizer the asset pipeline runs, so a
+    /// picture colocated with its page (the page-bundle layout) is not the one
+    /// unoptimized file on the site. What it does *not* get is a `srcset`: the
+    /// variants a page offers have to exist when that page renders, and this
+    /// copy runs after every page has.
     fn add(&mut self, image: &ImageRef, ui: &Ui) -> Result<()> {
-        let data = fs::read(&image.source)?;
+        let data = self.tightened(fs::read(&image.source)?, &image.source)?;
         let hash = Hash::of_bytes(&data);
         match self.seen.get(&image.name) {
             // identical bytes already written under this name: nothing to do.
@@ -115,6 +129,19 @@ impl Images {
         self.count += 1;
         self.bytes += data.len() as u64;
         Ok(())
+    }
+
+    /// `bytes` through the configured optimizer for their format, or unchanged
+    /// where the flavor has no optimizer to run.
+    #[cfg(feature = "images")]
+    fn tightened(&self, bytes: Vec<u8>, source: &Path) -> Result<Vec<u8>> {
+        crate::engine::asset::image::Raster::tightened(bytes, source, &self.optimize)
+    }
+
+    #[cfg(not(feature = "images"))]
+    #[allow(clippy::unnecessary_wraps, clippy::unused_self)]
+    fn tightened(&self, bytes: Vec<u8>, _source: &Path) -> Result<Vec<u8>> {
+        Ok(bytes)
     }
 
     /// A path as diagnostics spell it: relative to the project root when it

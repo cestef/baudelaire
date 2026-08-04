@@ -279,3 +279,24 @@ fn responsive_variants_are_optimized_like_their_source() {
         "variant was not optimized: {optimized} vs {plain}"
     );
 }
+
+/// An extracted image is recompressed like one in the asset tree: a picture
+/// beside its page used to be the one unoptimized file on the site.
+#[test]
+#[cfg(feature = "images")]
+fn a_colocated_image_is_optimized_on_the_way_out() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nassets {\n  images {\n    extract #true\n    optimize { png level=4 strip=\"all\" }\n  }\n}\n",
+    );
+    let source = png(64, 48);
+    site.write_bytes("content/photo.png", &source);
+    site.write("content/index.typ", "#image(\"photo.png\")\n");
+    site.stats();
+    let written = std::fs::read(site.path("public/assets/photo.png")).expect("the copy");
+    assert!(
+        written.len() < source.len(),
+        "copied unoptimized: {} vs {}",
+        written.len(),
+        source.len()
+    );
+}

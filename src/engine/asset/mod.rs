@@ -17,7 +17,7 @@ mod css;
 mod exif;
 mod handler;
 #[cfg(feature = "images")]
-mod image;
+pub(in crate::engine) mod image;
 #[cfg(feature = "js")]
 mod js;
 mod memo;
