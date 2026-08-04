@@ -393,6 +393,17 @@ impl Config {
             .or(self.description.as_deref())
     }
 
+    /// The file stem that makes a page a *bundle*: it takes its slug from its
+    /// parent directory, and the files beside it belong to it.
+    ///
+    /// THE fallback for an unset `content { index }`. It was spelled at three
+    /// call sites (the slug reader, `new --bundle`, the page assembler), each
+    /// with its own `"index"` literal, which is three places to change a default
+    /// that has to be one.
+    pub fn index(&self) -> &str {
+        self.content.index.as_deref().unwrap_or("index")
+    }
+
     /// The author in a given language: the language's `author` override if it
     /// has one, else the site-wide author.
     pub fn author(&self, code: &str) -> Option<&str> {

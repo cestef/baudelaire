@@ -524,11 +524,10 @@ impl Page {
     /// page at `/` like any other; hardcoding `index` here sent that page to
     /// `/_index/` and left the site without a home.
     ///
-    /// The `index` fallback is the one every call site applies when the key is
-    /// unset (`Stem::FALLBACK`, `Config::bundle_index`); it belongs on
-    /// `ContentConfig` with those, not spelled once more per caller.
+    /// The `index` fallback lives on [`Config::index`], with every other caller
+    /// that needs it.
     fn index(config: &Config) -> &str {
-        config.content.index.as_deref().unwrap_or("index")
+        config.index()
     }
 
     fn permalink(

@@ -64,6 +64,9 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
   [`reading`], [dict], [`(words, minutes)`, from the page's own source.],
   [`backlinks`], [array], [`(url, title, lang, fragments)` per page whose content links here. Empty unless `links { backlinks }` is on.],
   [`date`], [dict], [`(iso, display)`, or `none` when the page carries no date.],
+  [`url`], [str], [Where this page publishes, base path included.],
+  [`collection`], [str], [The collection it belongs to.],
+  [`assets`], [dict], [The files beside it in its own bundle, authored name to served URL. Empty unless the page is a bundle.],
 )
 
 Read optional frontmatter defensively, since a page may not declare it:
@@ -74,10 +77,28 @@ Read optional frontmatter defensively, since a page may not declare it:
 ```
 
 #callout(kind: "note")[
-  A page's URL and collection are not on `page`. Nothing else in the wrapper may name other pages either, or every page's cache identity would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
+  What a page knows is *itself*: its own URL, its own collection, its own directory. Nothing in the wrapper may name _other_ pages, or every page's cache identity would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
 ]
 
-`page.nav` and `page.backlinks` are the exceptions, and only because each names a page's neighbors rather than the site. See #link("collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
+`page.nav` and `page.backlinks` sit right on that line, and only because each names a page's neighbours rather than the site. See #link("collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
+
+== A bundle's own files
+
+A #link("pages.typ")[page bundle] (`content/posts/hello/index.typ`) owns its directory, so `page.assets` maps each file there to the URL it is served from:
+
+```typ
+#let frontmatter = (title: "Hello", hero: "cover.png")
+```
+
+```typ
+#let page(page, body) = {
+  let hero = page.frontmatter.at("hero", default: none)
+  if hero != none { h("img", src: page.assets.at(hero), alt: "") }
+  body
+}
+```
+
+A page that shares its directory with its neighbours has no directory of its own, and its `assets` is empty: a listing of the whole section would be a site-wide value in disguise. Only a file the page actually shows is written to `dist`, so name it in the body as well (`#image("cover.png")`) or it has a URL and no file. See #link("../build/images.typ")[images].
 
 == Listing templates
 

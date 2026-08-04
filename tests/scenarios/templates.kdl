@@ -321,3 +321,59 @@ scenario "a page and a listing carry a localized date" {
     file "posts/index.html" { contains "July 30, 2026" }
   }
 }
+
+// A page knows itself: where it publishes, which collection it belongs to, and
+// the files sitting beside it in its own bundle. None of that names another
+// page, so it widens only this page's own cache identity, which is why it can
+// be in the wrapper at all. Hugo, Zola, Jekyll and Eleventy all expose it, and a
+// theme port used to have to reconstruct the URL from the catalogue.
+scenario "a page carries its own url, collection and colocated files" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts { template "page.typ" }
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #let page(page, body) = h("main", {
+        h("p", "at:" + page.url)
+        h("p", "in:" + page.collection)
+        let hero = page.frontmatter.at("hero", default: none)
+        if hero != none { h("p", "hero:" + page.assets.at(hero, default: "none")) }
+        body
+      })
+      """#
+    "content/posts/hello/index.typ" #"""
+      #let frontmatter = (title: "Hello", hero: "cover.svg",)
+      #image("cover.svg")
+      body
+      """#
+    "content/posts/hello/cover.svg" #"""
+      <svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"></svg>
+      """#
+    "content/posts/plain.typ" #"""
+      #let frontmatter = (title: "Plain",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" {
+      contains "at:/posts/hello/"
+      contains "in:posts"
+      // The URL the extractor publishes it at, so a frontmatter name resolves.
+      contains "hero:/assets/posts/hello/cover.svg"
+    }
+    // A page that shares its directory with its neighbours owns no files: the
+    // map is empty rather than a listing of the section.
+    file "posts/plain/index.html" {
+      contains "at:/posts/plain/"
+      missing "hero:"
+    }
+  }
+}

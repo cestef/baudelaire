@@ -245,6 +245,10 @@ impl<'a> Prepare<'a> {
         // fingerprint is in [`Prepare::input`], not here.
         let backlinks = Typst(&backlinks.value(page)).to_string();
         let date = Typst(&self.date(page)).to_string();
+        // The page's own directory, listed only for a bundle. Part of the
+        // wrapper, so adding or renaming a file beside the page refingerprints
+        // that page and nothing else.
+        let assets = Typst(&self.colocated(page)).to_string();
         let bind = match &page.data {
             Data::Export => Bind::Import,
             Data::Empty => Bind::Literal("(:)"),
@@ -260,7 +264,63 @@ impl<'a> Prepare<'a> {
             reading: &reading,
             backlinks: &backlinks,
             date: &date,
+            url: &self.config.prefixed(&page.permalink),
+            collection: &page.collection,
+            assets: &assets,
         })
+    }
+
+    /// The files sitting beside a *page bundle*, as authored name to served URL.
+    ///
+    /// A bundle is a page that owns its directory (`posts/hello/index.typ`), so
+    /// the files there belong to it alone and naming them widens this page's
+    /// fingerprint and no other's. A page that shares its directory with its
+    /// neighbours (`posts/hello.typ`) gets an empty dict rather than a listing
+    /// of the whole section, which would be a site-wide value in disguise.
+    ///
+    /// The URL is where the image pipeline publishes an extracted file, which is
+    /// what makes a frontmatter `hero: "cover.png"` resolvable from a template.
+    /// Only what a page *shows* is written to `dist` (see
+    /// [`crate::render::transform::externalize`]), so an entry here is a name
+    /// the page must also use in its body for the file to exist.
+    fn colocated(&self, page: &Page) -> crate::codegen::Value {
+        use crate::codegen::Value;
+        let Some(dir) = page.source.parent() else {
+            return Value::dict::<&str>([]);
+        };
+        // Only a bundle: its stem is the configured index name.
+        let bundled = page
+            .source
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| stem == self.config.index());
+        if !bundled || matches!(page.data, Data::Generated { .. }) {
+            return Value::dict::<&str>([]);
+        }
+        let root = crate::fs::canonical(&self.config.root);
+        let content = crate::fs::canonical(&self.config.paths.content);
+        let mut entries: Vec<(String, Value)> = Vec::new();
+        let Ok(read) = std::fs::read_dir(dir) else {
+            return Value::dict::<&str>([]);
+        };
+        for file in read.flatten() {
+            let path = file.path();
+            if !path.is_file() || path.extension().is_some_and(|e| e == "typ") {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            // Named the way the extractor names it: relative to the content
+            // root, so the two cannot disagree about where the file lands.
+            let rel = crate::fs::canonical(&path);
+            let rel = rel
+                .strip_prefix(&content)
+                .unwrap_or_else(|_| rel.strip_prefix(&root).unwrap_or(&rel));
+            entries.push((name.to_owned(), Value::str(self.config.asset_url(rel))));
+        }
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        Value::dict(entries)
     }
 
     /// One language's [`Section`] tree as a value: written out by [`Generated`]

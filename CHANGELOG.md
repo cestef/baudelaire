@@ -28,6 +28,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **templates**: a page knows itself. `page.url` is where it publishes,
+  `page.collection` which collection it belongs to, and `page.assets` maps the
+  files beside a page bundle to the URLs they are served from, so a frontmatter
+  `hero: "cover.png"` finally resolves:
+
+  ```typ
+  #let page(page, body) = {
+    let hero = page.frontmatter.at("hero", default: none)
+    if hero != none { h("img", src: page.assets.at(hero), alt: "") }
+    body
+  }
+  ```
+
+  Each names only the page itself, never another page, so it widens that page's
+  own cache identity and no one else's; the rule that keeps the site tree out of
+  the wrapper is unchanged. `page.assets` is empty for a page that shares its
+  directory with its neighbours.
+
 - **serve**: the dev server watches what the build read. A page or template that
   loads a file outside `content/`, `templates/`, `assets/` and `static/` (a
   `data/authors.yaml`, a CSV a table is built from) is watched because the build

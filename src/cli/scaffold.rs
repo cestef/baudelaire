@@ -92,7 +92,7 @@ impl Config {
     /// [`crate::config::ContentConfig::index`], or the same `index` the build
     /// falls back to, in one place rather than at each of the two call sites.
     pub(super) fn bundle_index(&self) -> &str {
-        self.content.index.as_deref().unwrap_or("index")
+        self.index()
     }
 
     /// The template a scaffolded page names: whatever the build would resolve

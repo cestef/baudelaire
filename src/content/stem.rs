@@ -21,16 +21,11 @@ pub(super) struct Stem<'a> {
 }
 
 impl<'a> Stem<'a> {
-    /// The fallback stem for a path with no readable file name. It is the bundle
-    /// index name, so a caller that has not rejected a non-UTF-8 name first
-    /// would silently take the parent directory's slug.
-    const FALLBACK: &'static str = "index";
-
     pub(super) fn of(path: &'a Path, config: &'a Config) -> Self {
         let full = path
             .file_stem()
             .and_then(|s| s.to_str())
-            .unwrap_or(Self::FALLBACK);
+            .unwrap_or_else(|| config.index());
         let mut slug = full;
         let mut lang = None;
         let mut draft = false;

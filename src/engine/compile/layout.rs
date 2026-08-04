@@ -68,6 +68,25 @@ pub(in crate::engine) struct Context<'a> {
     /// page's cache fingerprint: the graph it comes from does not exist until
     /// every page has rendered. See [`crate::engine::compile::prepare`].
     pub backlinks: &'a str,
+    /// The page's own URL, exposed as `page.url`.
+    ///
+    /// Its own, and nothing else's: the rule the wrapper obeys is that nothing
+    /// *site-wide* may enter it, since that would tie every page's cache
+    /// identity to every other. A page's permalink is derived from its own
+    /// slug, collection and date, so it moves only when the page does, and it
+    /// refingerprints exactly the page that moved.
+    pub url: &'a str,
+    /// The collection the page belongs to, exposed as `page.collection`, so a
+    /// shared layout can tell a post from a note without reading the URL.
+    pub collection: &'a str,
+    /// The files sitting beside a page bundle, as a dict of authored name to
+    /// served URL: `(cover.png: "/assets/posts/hello/cover.png")`. Exposed as
+    /// `page.assets`, so a frontmatter `hero: "cover.png"` resolves.
+    ///
+    /// Only this page's own directory is listed, so it names nothing outside
+    /// the page, and only for a bundle (`posts/hello/index.typ`): a page that
+    /// shares its directory with its neighbours has no directory of its own.
+    pub assets: &'a str,
     /// The page's date in both forms as a dict literal,
     /// `(iso: "2026-07-30", display: "30 juillet 2026")`, or `none` when the
     /// page carries no date. Exposed as `page.date`: typst's own
@@ -95,10 +114,15 @@ impl Context<'_> {
             reading,
             backlinks,
             date,
+            url,
+            collection,
+            assets,
         } = self;
         format!(
-            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date})",
-            Str(lang)
+            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date}, url: {}, collection: {}, assets: {assets})",
+            Str(lang),
+            Str(url),
+            Str(collection)
         )
     }
 }
@@ -201,6 +225,9 @@ mod tests {
                 reading: "(words: 0, minutes: 0)",
                 backlinks: "()",
                 date: "none",
+                url: "/posts/a/",
+                collection: "posts",
+                assets: "(:)",
             },
             Body::Include,
         )
@@ -209,7 +236,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -230,6 +257,9 @@ mod tests {
                 reading: "(words: 0, minutes: 0)",
                 backlinks: "()",
                 date: "none",
+                url: "/posts/a/",
+                collection: "posts",
+                assets: "(:)",
             },
             Body::Inline("listing body"),
         )
@@ -237,7 +267,7 @@ mod tests {
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
              listing body"
         );
     }
@@ -258,6 +288,9 @@ mod tests {
                 reading: "(words: 0, minutes: 0)",
                 backlinks: "()",
                 date: "none",
+                url: "/posts/a/",
+                collection: "posts",
+                assets: "(:)",
             },
             Body::Include,
         )
@@ -283,6 +316,9 @@ mod tests {
                 reading: "(words: 0, minutes: 0)",
                 backlinks: "()",
                 date: "none",
+                url: "/posts/a/",
+                collection: "posts",
+                assets: "(:)",
             },
             Body::Inline("b"),
         )
@@ -290,7 +326,7 @@ mod tests {
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none), __body)"
+                "__layout((frontmatter: (t: 1), taxonomies: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)"
             ),
             "{out}"
         );
