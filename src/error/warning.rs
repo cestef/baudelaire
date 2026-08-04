@@ -446,6 +446,24 @@ pub struct Undated {
     pub count: usize,
 }
 
+/// `generate { redirects }` was asked for, but a file in the static tree already
+/// claims the rule file, and the static tree wins. Every declared old path would
+/// have vanished: the rules were dropped on the way out and the stubs were never
+/// written, because the two cannot coexist. Stubs are written instead, so the
+/// old URLs keep working, and the site is told which mechanism it actually got.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} is your own file, so redirects were written as stubs", Code(.path.display()))]
+#[diagnostic(
+    code(baudelaire::output::redirects_shadowed),
+    severity(warning),
+    help(
+        "merge the generated rules into it by hand, or drop `generate {{ redirects }}` and keep the stubs"
+    )
+)]
+pub struct RedirectsShadowed {
+    pub path: PathBuf,
+}
+
 /// The account's DID is not pinned in config; worth doing, not wrong.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("announce destination resolved to {}", Text(.did))]

@@ -42,6 +42,17 @@ Every declared old path becomes one rule, pointing at the page that claimed it:
 
 Leave it off for a host that reads no rule file. The stubs work anywhere, which is why they are the default. See #link("../../ship/deploy.typ")[deploying] for which host reads what.
 
+=== If you write your own `_redirects`
+
+A file in `static/` is published verbatim and wins the path, so a hand-written `_redirects` keeps the rules you wrote and the generated ones are not merged into it. Rather than dropping every declared `redirect` on the floor, the build writes the stubs instead and says so:
+
+```text
+⚠ `public/_redirects` is your own file, so redirects were written as stubs
+  help: merge the generated rules into it by hand, or drop `generate { redirects }` and keep the stubs
+```
+
+The old paths keep working either way. To get real 301s for them, paste the rules into your own file.
+
 == Collisions
 
 Two pages claiming the same old path is a warning, not a race. The first claim keeps the path and the second is dropped, with both source files named in the message.

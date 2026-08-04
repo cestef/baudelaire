@@ -137,6 +137,13 @@ impl Artifact {
 pub(super) trait Emit {
     /// Write `contents` to absolute `path`, creating parent directories.
     fn file(&mut self, path: &Path, contents: &str) -> Result<()>;
+    /// Whether a static file already claims `path`, so [`file`](Emit::file)
+    /// would keep that one and drop what a processor writes.
+    ///
+    /// Asked rather than discovered, because the drop is silent by design (the
+    /// static tree is the escape hatch, and it wins) and a processor whose
+    /// *only* output is shadowed has to do something else instead of nothing.
+    fn claimed(&self, path: &Path) -> bool;
     /// A progress note (e.g. `wrote sitemap.xml`): a debug log line in
     /// production, captured verbatim by test sinks.
     fn note(&mut self, msg: fmt::Arguments);
@@ -248,6 +255,10 @@ impl<'a> Emitter<'a> {
 }
 
 impl Emit for Emitter<'_> {
+    fn claimed(&self, path: &Path) -> bool {
+        self.reserved.contains(path)
+    }
+
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
         if self.reserved.contains(path) {
             tracing::debug!(path = %path.display(), "kept the static file over generated output");
@@ -281,6 +292,10 @@ pub(super) struct Recorder {
 
 #[cfg(test)]
 impl Emit for Recorder {
+    fn claimed(&self, _path: &Path) -> bool {
+        false
+    }
+
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
         self.files.push((path.to_path_buf(), contents.to_owned()));
         Ok(())

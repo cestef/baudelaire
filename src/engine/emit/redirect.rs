@@ -8,7 +8,7 @@ use super::xml::Xml;
 use super::{Emit, Processor, Site, Warn};
 use crate::content::Strings;
 use crate::error::Result;
-use crate::error::warning::RedirectCollision;
+use crate::error::warning::{RedirectCollision, RedirectsShadowed};
 use crate::ui::Count;
 
 /// Emits a redirect stub for every `redirect` old-path in a page's
@@ -18,6 +18,16 @@ pub(super) struct Redirects;
 impl Processor for Redirects {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let mut rules: Vec<(String, String)> = Vec::new();
+        // A rule file the site publishes itself wins over a generated one, and
+        // silently: `static/` is the escape hatch. Asking first is what keeps
+        // that from meaning "no redirects at all", since choosing rules turns
+        // the stubs off. Shadowed, the stubs come back and the build says so.
+        let path = site.dist(&[Self::RULES]);
+        let mut rules_wanted = site.config.generate.redirects;
+        if rules_wanted && out.claimed(&path) {
+            out.warn(RedirectsShadowed { path: path.clone() });
+            rules_wanted = false;
+        }
         // Two pages claiming one old path used to last-writer-win in silence,
         // and each write also pushed a duplicate path, so the summary counted a
         // file it had overwritten. Keep the first and say so, as the sibling
@@ -44,7 +54,7 @@ impl Processor for Redirects {
                 // one serve a static file in preference to a redirect rule, so
                 // the stub would win at the old path and the 301 would never
                 // fire.
-                if site.config.generate.redirects {
+                if rules_wanted {
                     rules.push((site.config.prefixed(&old), target));
                 } else {
                     let strings = Strings::new(site.config, &page.lang);
@@ -57,7 +67,7 @@ impl Processor for Redirects {
             }
         }
         if !rules.is_empty() {
-            out.file(&site.dist(&[Self::RULES]), &Self::rules(&rules))?;
+            out.file(&path, &Self::rules(&rules))?;
         }
         if !claimed.is_empty() {
             out.note(format_args!("wrote {}", Count::redirects(claimed.len())));

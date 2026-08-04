@@ -171,6 +171,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **redirects**: a site that publishes its own `static/_redirects` keeps its
+  declared redirects. `generate { redirects }` writes a rule file *instead of*
+  stubs, and a static file wins any path it claims, so both halves used to
+  disappear at once: the generated rules were dropped on the way out and the
+  stubs were never written, leaving every declared old path a 404 with nothing
+  said. The stubs are written instead, and the build reports which mechanism it
+  used (`baudelaire::output::redirects_shadowed`).
+
 - **redirects**: a translated page's `redirect` entries are checked under their
   own language, as they are already written. Translating a page by copying its
   frontmatter carries the list along, and each edition forwards the old path

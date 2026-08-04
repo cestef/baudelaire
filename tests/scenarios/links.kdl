@@ -253,3 +253,36 @@ scenario "each edition forwards its old path under its own language" {
     file "fr/old/a/index.html" { contains "/fr/posts/a/" }
   }
 }
+
+// `generate { redirects }` writes a rule file *instead of* stubs, and the static
+// tree wins any path it claims. A site publishing its own `_redirects` therefore
+// lost both halves at once: the generated rules were dropped on the way out and
+// the stubs were never written, so every declared old path 404'd in silence.
+scenario "a hand-written rule file brings the stubs back rather than dropping the redirects" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      generate {
+        redirects #true
+      }
+      """#
+    "static/_redirects" #"""
+      /hand/written/ /posts/new/ 301
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "New", slug: "new", redirect: ("/old/",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::output::redirects_shadowed"
+    // The site's own rule file is served untouched.
+    file "_redirects" {
+      contains "/hand/written/ /posts/new/ 301"
+      missing "/old/"
+    }
+    // and the old path still forwards, by the mechanism that works anywhere.
+    file "old/index.html" { contains "/posts/new/" }
+  }
+}
