@@ -368,3 +368,66 @@ fn a_theme_is_installed_from_a_directory_and_updated_from_it() {
         "#let page = 2\n"
     );
 }
+
+/// A theme from an archive, one directory down in a project that holds more
+/// than one.
+///
+/// Served in-process, so nothing here reaches the network: what is being tested
+/// is the download, the unwrapping, the narrowing and the record, none of which
+/// cares which host the URL names. A forge repository is the same path with the
+/// URL spelled by the forge's own table, which is unit-tested.
+#[test]
+#[cfg(all(feature = "themes", unix))]
+fn a_theme_is_fetched_out_of_an_archive_at_a_url() {
+    use std::process::Command;
+
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    // The shape a forge packs: everything inside one `<name>-<ref>/` directory.
+    site.write(
+        "packed/plume-1.0.0/themes/plume/templates/page.typ",
+        "#let page = 1\n",
+    );
+    site.write("packed/plume-1.0.0/themes/plume/theme.kdl", "lang \"fr\"\n");
+    site.write(
+        "packed/plume-1.0.0/README.md",
+        "a project with a theme in it\n",
+    );
+    let tarball = site.path("plume-1.0.0.tar.gz");
+    let tarred = Command::new("tar")
+        .args(["-czf", &tarball.display().to_string(), "plume-1.0.0"])
+        .current_dir(site.path("packed"))
+        .status()
+        .expect("run tar");
+    assert!(tarred.success());
+
+    let served = std::fs::read(&tarball).expect("read");
+    let host = tiny_http::Server::http("127.0.0.1:0").expect("serve");
+    let port = host.server_addr().to_ip().expect("ip").port();
+    let serving = std::thread::spawn(move || {
+        if let Ok(request) = host.recv() {
+            let _ = request.respond(tiny_http::Response::from_data(served));
+        }
+    });
+
+    let url = format!("http://127.0.0.1:{port}/plume-1.0.0.tar.gz");
+    let out = site.run(&["theme", "add", &url, "--subdir", "themes/plume"]);
+    let _ = serving.join();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // Named after the directory inside the archive, not after the download, and
+    // holding the theme rather than the project.
+    assert_eq!(site.read("themes/plume/theme.kdl"), "lang \"fr\"\n");
+    assert!(!site.exists("themes/plume/README.md"));
+    assert!(!site.exists("themes/plume/themes"));
+
+    // The record carries the URL and the directory inside it, which is what
+    // lets `update` fetch the same thing again.
+    let lock = site.read("themes/plume/.baudelaire-lock.json");
+    assert!(lock.contains("\"source\": \"archive\""), "{lock}");
+    assert!(lock.contains("\"subdir\": \"themes/plume\""), "{lock}");
+    assert!(lock.contains(&url), "{lock}");
+}

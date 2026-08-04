@@ -21,6 +21,10 @@ use crate::remote::{Http, Status};
 /// An archive fetched over http.
 pub struct Archive;
 
+/// What an archive holds: its files, and the one directory they were all
+/// inside if they shared one.
+pub(super) type Contents = (Option<String>, BTreeMap<PathBuf, Vec<u8>>);
+
 impl Archive {
     /// The suffixes this source answers for. A URL without one is not an
     /// archive as far as this is concerned, and falls through to the sources
@@ -34,6 +38,25 @@ impl Archive {
     /// to use. The shipped themes are ~60 KiB each, so this is three orders of
     /// magnitude of room.
     const LIMIT: u64 = 64 * 1024 * 1024;
+
+    /// The files an archive at `url` holds, and the wrapper directory they
+    /// were inside, if they shared one.
+    ///
+    /// The whole of what this source does, so the forge source can spell a URL
+    /// and reuse everything after it: download, unpack, drop the wrapper, and
+    /// leave behind whatever record the packed copy carried.
+    pub(super) fn contents(url: &str) -> Result<Contents> {
+        let (wrapper, files) = Self::unwrap(Self::unpack(url, Self::download(url)?)?);
+        // A lock inside an archive is whatever project it was packed from
+        // saying what baudelaire wrote *there*, which is no claim on this copy.
+        Ok((
+            wrapper,
+            files
+                .into_iter()
+                .filter(|(rel, _)| rel != Path::new(Lock::FILE))
+                .collect(),
+        ))
+    }
 
     /// Fetch the bytes at `url`.
     fn download(url: &str) -> Result<Vec<u8>> {
@@ -167,6 +190,7 @@ impl Source for Archive {
         let archive = Self::SUFFIXES.iter().any(|suffix| spec.ends_with(suffix));
         (http && archive).then(|| Origin::Archive {
             url: spec.to_owned(),
+            subdir: None,
         })
     }
 
@@ -175,16 +199,10 @@ impl Source for Archive {
     }
 
     fn fetch(&self, origin: &Origin, _cx: &Fetching) -> Result<Fetched> {
-        let Origin::Archive { url } = origin else {
+        let Origin::Archive { url, .. } = origin else {
             return Err(ThemeError::unsupported(origin.label()).into());
         };
-        let (wrapper, files) = Self::unwrap(Self::unpack(url, Self::download(url)?)?);
-        // A lock inside an archive is whatever project it was packed from
-        // saying what baudelaire wrote *there*, which is no claim on this copy.
-        let files: BTreeMap<PathBuf, Vec<u8>> = files
-            .into_iter()
-            .filter(|(rel, _)| rel != Path::new(Lock::FILE))
-            .collect();
+        let (wrapper, files) = Self::contents(url)?;
         if files.is_empty() {
             return Err(ThemeError::empty(url).into());
         }

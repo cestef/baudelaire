@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use super::archive::Archive;
 use super::bundled::Shelf;
+use super::forge::Repository;
 use super::local::Local;
 use super::package::Store;
 use crate::config::Config;
@@ -55,7 +56,11 @@ pub fn builtin() -> Vec<Box<dyn Source>> {
     vec![
         Box::new(Shelf),
         Box::new(Store),
+        // Before the forge source, whose URLs it would otherwise claim: the two
+        // are spelled alike and only the archive suffix separates them.
         Box::new(Archive),
+        Box::new(Repository),
+        // Last: it claims anything that exists on disk.
         Box::new(Local),
     ]
 }
@@ -97,7 +102,29 @@ pub enum Origin {
     Package { spec: String },
     /// An archive at a URL, taken as it is now on every update: what the URL
     /// points at is the URL's business.
-    Archive { url: String },
+    Archive {
+        url: String,
+        /// The directory inside it that holds the theme, when it holds more
+        /// than one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subdir: Option<PathBuf>,
+    },
+    /// A repository on a forge, fetched as that forge's source archive.
+    ///
+    /// The ref and what it resolved to are two different questions: the ref is
+    /// what an update goes back to (a branch moves, and following it is the
+    /// point of naming one), and `resolved` is what the forge actually served,
+    /// which is the commit for a tag or a commit and the branch's own name for
+    /// a branch.
+    Forge {
+        repo: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        r#ref: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resolved: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subdir: Option<PathBuf>,
+    },
 }
 
 impl Origin {
@@ -118,7 +145,55 @@ impl Origin {
             Self::Bundled { name } => name.clone(),
             Self::Path { path } => path.display().to_string(),
             Self::Package { spec } => spec.clone(),
-            Self::Archive { url } => url.clone(),
+            Self::Archive { url, .. } => url.clone(),
+            Self::Forge { repo, r#ref, .. } => match r#ref {
+                Some(name) => format!("{repo}#{name}"),
+                None => repo.clone(),
+            },
+        }
+    }
+
+    /// The theme this origin names: what its source fetches, narrowed to the
+    /// directory inside it that holds the theme when one was named.
+    ///
+    /// The narrowing is here rather than in each source because it is the same
+    /// question for all of them (a repository or an archive can hold a whole
+    /// project, with the theme one directory down), and because an update has
+    /// to apply exactly what the install did.
+    pub fn fetch(&self, cx: &Fetching) -> Result<Fetched> {
+        let fetched = self.source()?.fetch(self, cx)?;
+        match self.subdir() {
+            Some(subdir) => fetched.within(subdir),
+            None => Ok(fetched),
+        }
+    }
+
+    /// The directory inside the source that holds the theme, for the sources
+    /// that can carry more than one.
+    fn subdir(&self) -> Option<&Path> {
+        match self {
+            Self::Archive { subdir, .. } | Self::Forge { subdir, .. } => subdir.as_deref(),
+            Self::Bundled { .. } | Self::Path { .. } | Self::Package { .. } => None,
+        }
+    }
+
+    /// The same origin, with the theme's directory inside the source named.
+    #[must_use]
+    pub fn within(self, subdir: Option<PathBuf>) -> Self {
+        match self {
+            Self::Archive { url, .. } => Self::Archive { url, subdir },
+            Self::Forge {
+                repo,
+                r#ref,
+                resolved,
+                ..
+            } => Self::Forge {
+                repo,
+                r#ref,
+                resolved,
+                subdir,
+            },
+            other => other,
         }
     }
 
@@ -176,5 +251,30 @@ impl Fetched {
     /// `theme.kdl` a report reads without writing anything to disk first.
     pub fn text(&self, rel: &Path) -> Option<String> {
         String::from_utf8(self.files.get(rel)?.clone()).ok()
+    }
+
+    /// The theme inside a source that carries more than one: everything under
+    /// `subdir`, with that prefix dropped, so the copy is a theme rather than a
+    /// project with a theme in it.
+    ///
+    /// The copy is named after the directory, not after the repository: a
+    /// monorepo's `themes/plume` is `plume`, and calling it after the project
+    /// would put every theme it holds in the same place.
+    pub fn within(self, subdir: &Path) -> Result<Self> {
+        let files: BTreeMap<PathBuf, Vec<u8>> = self
+            .files
+            .into_iter()
+            .filter_map(|(rel, bytes)| Some((rel.strip_prefix(subdir).ok()?.to_path_buf(), bytes)))
+            .collect();
+        if files.is_empty() {
+            return Err(ThemeError::empty(&subdir.display().to_string()).into());
+        }
+        Ok(Self {
+            name: subdir
+                .file_name()
+                .map_or(self.name, |name| name.to_string_lossy().into_owned()),
+            files,
+            ..self
+        })
     }
 }

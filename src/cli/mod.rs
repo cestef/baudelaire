@@ -294,8 +294,8 @@ pub enum ThemeCommand {
     /// List the themes this binary ships, and what the project has installed.
     #[command(visible_alias = "ls")]
     List,
-    /// Copy a shipped theme into the project.
-    Add(ThemeArgsFor),
+    /// Copy a theme into the project, from wherever it is.
+    Add(ThemeAddArgs),
     /// Report what a theme declares, and what an installed copy has become.
     Info(ThemeArgsFor),
     /// Rewrite an installed copy from this binary, keeping your edits.
@@ -306,11 +306,28 @@ pub enum ThemeCommand {
     Remove(ThemeUpdateArgs),
 }
 
+/// Arguments for `baudelaire theme add`, which is the one verb that says where
+/// a theme comes from rather than which copy to act on.
+#[cfg(feature = "themes")]
+#[derive(Args, Debug, Clone)]
+pub struct ThemeAddArgs {
+    #[command(flatten)]
+    pub theme: ThemeArgsFor,
+
+    /// The directory *inside* the source that holds the theme, for a repository
+    /// or an archive that carries a whole project. Recorded, so `update` goes
+    /// back to the same place.
+    #[arg(long, value_name = "PATH")]
+    pub subdir: Option<PathBuf>,
+}
+
 /// Arguments for the `theme` verbs that name one theme.
 #[cfg(feature = "themes")]
 #[derive(Args, Debug, Clone)]
 pub struct ThemeArgsFor {
-    /// Which theme. `baudelaire theme list` names them.
+    /// Which theme: a name `baudelaire theme list` prints, or, for `add`, where
+    /// to get one (a directory, `@namespace/name:version`, `gh:owner/repo`, a
+    /// repository URL with an optional `#ref`, or an archive URL).
     pub name: String,
 
     /// Where it lives, if not `themes/<name>`. It has to stay inside the
@@ -1431,16 +1448,19 @@ impl ThemeArgsFor {
             rel,
         })
     }
+}
 
+#[cfg(feature = "themes")]
+impl ThemeAddArgs {
     fn add(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::Origin;
 
         // Fetched before the directory is known, because the theme names
         // itself: a spec is a repository, an archive or a path as often as it
         // is one of the four words this binary answers to.
-        let origin = Origin::parse(&self.name)?;
-        let fetched = origin.source()?.fetch(&origin, &says.fetching)?;
-        let this = self.vendored(cx, says.theme(), &fetched.name)?;
+        let origin = Origin::parse(&self.theme.name)?.within(self.subdir.clone());
+        let fetched = origin.fetch(&says.fetching)?;
+        let this = self.theme.vendored(cx, says.theme(), &fetched.name)?;
         let written = fetched.install(&this.dir)?;
         let at = this.at();
         cx.ui.done(match written.len() {
@@ -1458,7 +1478,10 @@ impl ThemeArgsFor {
         ));
         Ok(())
     }
+}
 
+#[cfg(feature = "themes")]
+impl ThemeArgsFor {
     /// What the theme is, and what this project's copy of it has become: the
     /// layouts it declares, the config it carries, and the files you have
     /// changed.
@@ -1604,8 +1627,7 @@ impl ThemeUpdateArgs {
             None => Origin::parse(&self.theme.name)?,
         };
         let tracked = origin
-            .source()?
-            .fetch(&origin, &says.fetching)?
+            .fetch(&says.fetching)?
             .update(&this.dir, self.force)?;
         cx.ui.done(markup!(
             "`{}` is at baudelaire `{}`",

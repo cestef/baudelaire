@@ -102,6 +102,26 @@ pub enum ThemeError {
     )]
     Escapes { url: String, entry: String },
 
+    #[error("{} could not be cloned: {}", Code(.url), Text(.why))]
+    #[diagnostic(
+        code(baudelaire::theme::clone),
+        help(
+            "check the URL and that this machine may reach it; a private repository needs              credentials this does not have, and a forge's `.tar.gz` needs none"
+        )
+    )]
+    Clone { url: String, why: String },
+
+    #[error("{} has no ref named {}: {}", Code(.url), Code(.name), Text(.why))]
+    #[diagnostic(
+        code(baudelaire::theme::reference),
+        help("a branch or a tag, written after `#`; a bare commit is not one this can clone")
+    )]
+    Reference {
+        url: String,
+        name: String,
+        why: String,
+    },
+
     #[error("nothing knows how to fetch {}", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unsupported),
@@ -149,6 +169,23 @@ impl ThemeError {
         Self::Escapes {
             url: url.to_owned(),
             entry: entry.to_owned(),
+        }
+    }
+
+    /// The client's own message: what it says about a host, a redirect or a
+    /// missing repository is the answer.
+    pub fn cloning(url: &str, why: impl std::fmt::Display) -> Self {
+        Self::Clone {
+            url: url.to_owned(),
+            why: why.to_string(),
+        }
+    }
+
+    pub fn reference(url: &str, name: &str, why: impl std::fmt::Display) -> Self {
+        Self::Reference {
+            url: url.to_owned(),
+            name: name.to_owned(),
+            why: why.to_string(),
         }
     }
 

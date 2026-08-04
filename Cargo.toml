@@ -68,11 +68,13 @@ embedded-fonts = ["typst-kit/embedded-fonts"]
 # `GATES` in `src/engine/mod.rs`; a new gated capability is one row there.
 
 # The `theme` command: the four themes carried inside the binary (~230 KiB of
-# Typst and CSS) and the sources it installs from. The archive source brings the
-# decompressors with it (flate2, tar, zip's deflate-only build: ~10 crates); the
-# shelf, a directory on disk and the Typst package store need nothing new. Off
-# means the command is not built at all, and a theme is a directory you put in
-# the project yourself.
+# Typst and CSS) and every source it installs from. The decompressors are the
+# whole cost (flate2, tar, zip's deflate-only build: ~10 crates), and they serve
+# both the archive source and the forge one, which fetches a repository as that
+# forge's own source archive rather than cloning it. A vendored git client was
+# the alternative, at ~150 crates and a second HTTP stack, for files a single
+# request already returns. Off means the command is not built at all, and a
+# theme is a directory you put in the project yourself.
 themes = ["dep:flate2", "dep:tar", "dep:zip"]
 
 # JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
@@ -262,6 +264,9 @@ russh = { version = "0.62.2", default-features = false, features = [
 russh-sftp = "2.3.0"
 rand = "0.10"
 tokio = { version = "1.52.3", features = ["rt", "net", "io-util"] }
+# Serve one archive to `theme add` over http, in-process. Already in the tree as
+# the dev server, so naming it here costs no new crate.
+tiny_http = "0.12"
 
 [[bench]]
 name = "text"
