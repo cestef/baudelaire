@@ -1117,18 +1117,6 @@ impl Cx<'_> {
         Ok(config)
     }
 
-    /// The `theme` line this project's config carries, if it has one.
-    ///
-    /// The config is the only place that says where a theme actually lives, so
-    /// the theme verbs read it before falling back to the directory `add`
-    /// writes to. A config that is missing or will not parse is not their
-    /// business: they operate on files, and answer as though nothing were
-    /// named.
-    #[cfg(feature = "themes")]
-    fn theme(&self) -> Option<String> {
-        self.cli.config().ok().and_then(|config| config.theme)
-    }
-
     /// [`Cx::announced`] plus the build-shaping overrides: the front matter of
     /// the build-shaped commands (`build`, `check`). Overrides never touch the
     /// site name, so applying them after the banner leaves its text unchanged.
@@ -1301,20 +1289,48 @@ impl Run for MirrorArgs {
 #[cfg(feature = "themes")]
 impl Run for ThemeArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        // The `theme` line the project carries, read once for the whole run:
-        // every verb resolves the same directory from it.
-        let configured = cx.theme();
-        let spec = configured.as_deref();
+        // Read once for the whole run, so every verb resolves the same
+        // directory and every fetch goes to the same registry.
+        let says = Says::of(cx);
         match &self.what {
             ThemeCommand::List => {
-                Self::list(cx, spec);
+                Self::list(cx, &says);
                 Ok(())
             }
-            ThemeCommand::Add(args) => args.add(cx, spec),
-            ThemeCommand::Info(args) => args.info(cx, spec),
-            ThemeCommand::Update(args) => args.update(cx, spec),
-            ThemeCommand::Remove(args) => args.remove(cx, spec),
+            ThemeCommand::Add(args) => args.add(cx, &says),
+            ThemeCommand::Info(args) => args.info(cx, &says),
+            ThemeCommand::Update(args) => args.update(cx, &says),
+            ThemeCommand::Remove(args) => args.remove(cx, &says),
         }
+    }
+}
+
+/// What the project's config says to a theme verb: where a theme lives, and
+/// where a fetch may go for one.
+///
+/// The verbs operate on files, so a config that is missing or will not parse is
+/// not their business: it simply says nothing, and every question falls back to
+/// its default.
+#[cfg(feature = "themes")]
+struct Says {
+    /// The `theme` line, if there is one.
+    theme: Option<String>,
+    fetching: crate::theme::Fetching,
+}
+
+#[cfg(feature = "themes")]
+impl Says {
+    fn of(cx: &Cx) -> Self {
+        let config = cx.cli.config().ok();
+        Self {
+            theme: config.as_ref().and_then(|config| config.theme.clone()),
+            fetching: config.as_ref().map(Into::into).unwrap_or_default(),
+        }
+    }
+
+    /// The `theme` line as the directory resolution reads it.
+    fn theme(&self) -> Option<&str> {
+        self.theme.as_deref()
     }
 }
 
@@ -1322,12 +1338,12 @@ impl Run for ThemeArgs {
 impl ThemeArgs {
     /// The shelf, with what this project has taken off it: a theme already
     /// installed says where, and whether the copy still matches the binary.
-    fn list(cx: &Cx, configured: Option<&str>) {
+    fn list(cx: &Cx, says: &Says) {
         use crate::theme::{BUNDLED, Lock, State};
 
         for theme in BUNDLED {
             cx.ui.arrow(theme.name, theme.about);
-            let rel = theme.dir(configured);
+            let rel = theme.dir(says.theme());
             let dir = cx.root.join(&rel);
             let Some(lock) = Lock::read(&dir) else {
                 continue;
@@ -1416,15 +1432,15 @@ impl ThemeArgsFor {
         })
     }
 
-    fn add(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
+    fn add(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::Origin;
 
         // Fetched before the directory is known, because the theme names
         // itself: a spec is a repository, an archive or a path as often as it
         // is one of the four words this binary answers to.
         let origin = Origin::parse(&self.name)?;
-        let fetched = origin.source()?.fetch(&origin)?;
-        let this = self.vendored(cx, configured, &fetched.name)?;
+        let fetched = origin.source()?.fetch(&origin, &says.fetching)?;
+        let this = self.vendored(cx, says.theme(), &fetched.name)?;
         let written = fetched.install(&this.dir)?;
         let at = this.at();
         cx.ui.done(match written.len() {
@@ -1451,10 +1467,10 @@ impl ThemeArgsFor {
     /// fetching: a report on what is already on disk must not put a clone or a
     /// download in front of itself. A theme this binary ships can still be
     /// described before it is installed, because describing it costs nothing.
-    fn info(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
+    fn info(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::{Bundled, Lock, State};
 
-        let this = self.vendored(cx, configured, &self.name)?;
+        let this = self.vendored(cx, says.theme(), &self.name)?;
         let carried = Bundled::find(&self.name).ok();
         cx.ui.done_plain(markup!("`{}`", &this.name));
         if let Some(theme) = carried {
@@ -1579,17 +1595,17 @@ impl ThemeUpdateArgs {
     /// anywhere updates from the same anywhere without being told again. A copy
     /// with no record has never said, so the name on the command line is read as
     /// a spec, which is what it was when `add` ran.
-    fn update(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
+    fn update(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::{Lock, Origin, State};
 
-        let this = self.theme.vendored(cx, configured, &self.theme.name)?;
+        let this = self.theme.vendored(cx, says.theme(), &self.theme.name)?;
         let origin = match Lock::read(&this.dir) {
             Some(lock) => lock.origin(),
             None => Origin::parse(&self.theme.name)?,
         };
         let tracked = origin
             .source()?
-            .fetch(&origin)?
+            .fetch(&origin, &says.fetching)?
             .update(&this.dir, self.force)?;
         cx.ui.done(markup!(
             "`{}` is at baudelaire `{}`",
@@ -1616,10 +1632,10 @@ impl ThemeUpdateArgs {
         Ok(())
     }
 
-    fn remove(&self, cx: &Cx, configured: Option<&str>) -> Result<()> {
+    fn remove(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::{State, uninstall};
 
-        let this = self.theme.vendored(cx, configured, &self.theme.name)?;
+        let this = self.theme.vendored(cx, says.theme(), &self.theme.name)?;
         let tracked = uninstall(&this.dir, self.force)?;
         cx.ui
             .done(markup!("removed `{}` from `{}`", &this.name, this.at()));

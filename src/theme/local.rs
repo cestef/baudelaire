@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::install::Lock;
-use super::source::{Fetched, Origin, Source};
+use super::source::{Fetched, Fetching, Origin, Source};
 use crate::error::{Result, ThemeError};
 
 /// A directory read as a theme.
@@ -97,7 +97,7 @@ impl Source for Local {
         matches!(origin, Origin::Path { .. })
     }
 
-    fn fetch(&self, origin: &Origin) -> Result<Fetched> {
+    fn fetch(&self, origin: &Origin, _cx: &Fetching) -> Result<Fetched> {
         let Origin::Path { path } = origin else {
             return Err(ThemeError::unsupported(origin.label()).into());
         };
@@ -136,7 +136,9 @@ mod tests {
         std::fs::write(dir.join("templates/page.typ"), "#let page = 1\n").expect("write");
         std::fs::write(dir.join("theme.kdl"), "lang \"fr\"\n").expect("write");
 
-        let fetched = Local.fetch(&Origin::Path { path: dir }).expect("read");
+        let fetched = Local
+            .fetch(&Origin::Path { path: dir }, &Fetching::default())
+            .expect("read");
         let paths: Vec<String> = fetched
             .paths()
             .map(|rel| rel.display().to_string())
@@ -152,6 +154,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let dir = tmp.path().join("hollow");
         std::fs::create_dir_all(&dir).expect("mkdir");
-        assert!(Local.fetch(&Origin::Path { path: dir }).is_err());
+        assert!(
+            Local
+                .fetch(&Origin::Path { path: dir }, &Fetching::default())
+                .is_err()
+        );
     }
 }

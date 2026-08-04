@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use super::bundled::Shelf;
 use super::local::Local;
+use super::package::Store;
+use crate::config::Config;
 use crate::error::{Result, ThemeError};
 
 /// One place a theme can be fetched from.
@@ -40,7 +42,7 @@ pub trait Source {
     /// The theme's files. Only called with an origin this source [`owns`].
     ///
     /// [`owns`]: Source::owns
-    fn fetch(&self, origin: &Origin) -> Result<Fetched>;
+    fn fetch(&self, origin: &Origin, cx: &Fetching) -> Result<Fetched>;
 }
 
 /// The registered sources, in the order a spec is offered to them.
@@ -49,7 +51,26 @@ pub trait Source {
 /// the source that wrote a copy through it, so a source cannot install a theme
 /// it could not later bring forward.
 pub fn builtin() -> Vec<Box<dyn Source>> {
-    vec![Box::new(Shelf), Box::new(Local)]
+    vec![Box::new(Shelf), Box::new(Store), Box::new(Local)]
+}
+
+/// What a fetch may need from the project it is fetching into.
+///
+/// Config the *site* set, never the source's own business: a mirror is where
+/// this machine gets packages from, and a source has no opinion about that. It
+/// travels as one value so a new setting reaches every source at once.
+#[derive(Debug, Default, Clone)]
+pub struct Fetching {
+    /// `typst { registry }`: the mirror package downloads are redirected to.
+    pub registry: Option<String>,
+}
+
+impl From<&Config> for Fetching {
+    fn from(config: &Config) -> Self {
+        Self {
+            registry: config.typst.registry.clone(),
+        }
+    }
 }
 
 /// Where an installed theme came from, and everything `update` needs to go back
@@ -66,6 +87,8 @@ pub enum Origin {
     /// A directory on this machine. Absolute, because the record naming it is
     /// read from wherever the next run happens to be.
     Path { path: PathBuf },
+    /// A Typst package, by the specifier the compiler would resolve.
+    Package { spec: String },
 }
 
 impl Origin {
@@ -85,6 +108,7 @@ impl Origin {
         match self {
             Self::Bundled { name } => name.clone(),
             Self::Path { path } => path.display().to_string(),
+            Self::Package { spec } => spec.clone(),
         }
     }
 

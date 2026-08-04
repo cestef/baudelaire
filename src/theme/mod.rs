@@ -35,6 +35,8 @@ mod install;
 #[cfg(feature = "themes")]
 mod local;
 #[cfg(feature = "themes")]
+mod package;
+#[cfg(feature = "themes")]
 mod source;
 
 #[cfg(feature = "themes")]
@@ -42,7 +44,7 @@ pub use bundled::{BUNDLED, Bundled};
 #[cfg(feature = "themes")]
 pub use install::{Lock, State, Tracked, present, uninstall};
 #[cfg(feature = "themes")]
-pub use source::{Fetched, Origin, Source};
+pub use source::{Fetched, Fetching, Origin, Source};
 
 use typst::syntax::package::PackageSpec;
 use typst_kit::packages::SystemPackages;
