@@ -80,7 +80,8 @@ The right pane is not a screenshot. It is the left pane, evaluated while this
 page compiled, by the same Typst that built every other page here. That is the
 whole argument: Markdown has no variables, no functions, no math, and no way to
 load a CSV and build a table from it, so the moment you want one you start
-stacking a template engine and plugins on top.
+stacking a template engine and plugins on top. What that trade costs, next to
+Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
 
 == One block, every artifact
 
