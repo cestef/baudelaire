@@ -79,6 +79,29 @@ pub enum ThemeError {
     )]
     Unnamed { path: String },
 
+    #[error("{} could not be fetched: {}", Code(.url), Text(.why))]
+    #[diagnostic(
+        code(baudelaire::theme::fetch),
+        help("this is the one theme command that needs the network; nothing else here does")
+    )]
+    Fetch { url: String, why: String },
+
+    #[error("the archive at {} could not be read: {}", Code(.url), Text(.why))]
+    #[diagnostic(
+        code(baudelaire::theme::unpack),
+        help("`.tar.gz`, `.tgz` and `.zip` are what this reads; a forge's source download is one")
+    )]
+    Unpack { url: String, why: String },
+
+    #[error("the archive at {} names a file outside itself: {}", Code(.url), Code(.entry))]
+    #[diagnostic(
+        code(baudelaire::theme::escapes),
+        help(
+            "nothing was written; an archive that climbs out of its own directory is not unpacked"
+        )
+    )]
+    Escapes { url: String, entry: String },
+
     #[error("nothing knows how to fetch {}", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unsupported),
@@ -103,6 +126,30 @@ impl ThemeError {
     /// either way, because both mean this binary cannot go and get it.
     pub fn unsupported(spec: String) -> Self {
         Self::Unsupported { spec }
+    }
+
+    /// The transport's own message, kept as text: it is a foreign string, and
+    /// what it says about a redirect or a TLS failure is the answer.
+    pub fn fetch(url: &str, why: impl std::fmt::Display) -> Self {
+        Self::Fetch {
+            url: url.to_owned(),
+            why: why.to_string(),
+        }
+    }
+
+    /// The decompressor's own message, for the same reason.
+    pub fn unpack(url: &str, why: impl std::fmt::Display) -> Self {
+        Self::Unpack {
+            url: url.to_owned(),
+            why: why.to_string(),
+        }
+    }
+
+    pub fn escapes(url: &str, entry: &str) -> Self {
+        Self::Escapes {
+            url: url.to_owned(),
+            entry: entry.to_owned(),
+        }
     }
 
     pub fn empty(path: &str) -> Self {

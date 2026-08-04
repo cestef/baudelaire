@@ -29,6 +29,8 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "themes")]
+mod archive;
+#[cfg(feature = "themes")]
 mod bundled;
 #[cfg(feature = "themes")]
 mod install;

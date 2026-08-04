@@ -67,11 +67,13 @@ embedded-fonts = ["typst-kit/embedded-fonts"]
 # feature, and what was emitted instead. The table driving those warnings is
 # `GATES` in `src/engine/mod.rs`; a new gated capability is one row there.
 
-# The four shipped themes, carried inside the binary so `baudelaire theme add`
-# writes one without a download: ~230 KiB of Typst and CSS. Off means the `theme`
-# command is not built, and a theme is a directory you put in the project
-# yourself.
-themes = []
+# The `theme` command: the four themes carried inside the binary (~230 KiB of
+# Typst and CSS) and the sources it installs from. The archive source brings the
+# decompressors with it (flate2, tar, zip's deflate-only build: ~10 crates); the
+# shelf, a directory on disk and the Typst package store need nothing new. Off
+# means the command is not built at all, and a theme is a directory you put in
+# the project yourself.
+themes = ["dep:flate2", "dep:tar", "dep:zip"]
 
 # JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
 # the `baudelaire:*` virtual modules): ~2.5 MiB of oxc/rolldown/tokio. Off means
@@ -130,7 +132,6 @@ announce = []
 # musl target, so the musl release builds turn this on. Needs a C compiler,
 # `perl`, and `make` at build time.
 vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
-
 [dependencies]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
@@ -230,6 +231,9 @@ hmac = "0.13.0"
 roxmltree = "0.21.1"
 md-5 = "0.11.0"
 include_dir = "0.7.4"
+flate2 = { version = "1.1.9", optional = true }
+tar = { version = "0.4.46", optional = true }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

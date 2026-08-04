@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::archive::Archive;
 use super::bundled::Shelf;
 use super::local::Local;
 use super::package::Store;
@@ -51,7 +52,12 @@ pub trait Source {
 /// the source that wrote a copy through it, so a source cannot install a theme
 /// it could not later bring forward.
 pub fn builtin() -> Vec<Box<dyn Source>> {
-    vec![Box::new(Shelf), Box::new(Store), Box::new(Local)]
+    vec![
+        Box::new(Shelf),
+        Box::new(Store),
+        Box::new(Archive),
+        Box::new(Local),
+    ]
 }
 
 /// What a fetch may need from the project it is fetching into.
@@ -89,6 +95,9 @@ pub enum Origin {
     Path { path: PathBuf },
     /// A Typst package, by the specifier the compiler would resolve.
     Package { spec: String },
+    /// An archive at a URL, taken as it is now on every update: what the URL
+    /// points at is the URL's business.
+    Archive { url: String },
 }
 
 impl Origin {
@@ -109,6 +118,7 @@ impl Origin {
             Self::Bundled { name } => name.clone(),
             Self::Path { path } => path.display().to_string(),
             Self::Package { spec } => spec.clone(),
+            Self::Archive { url } => url.clone(),
         }
     }
 
