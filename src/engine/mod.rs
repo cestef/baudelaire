@@ -835,6 +835,7 @@ impl Engine {
             deps,
             reads,
             links: rewrite.links,
+            urls: rewrite.urls,
             srcsets: rewrite.srcsets,
             assets: rewrite.assets,
             outputs: Outputs {

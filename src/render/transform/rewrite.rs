@@ -81,10 +81,15 @@ impl Transform for Links {
                         // an author writing `/guide/`, and every generated index,
                         // which links its members by permalink because it has no
                         // source path to name them by.
-                        if authored()
-                            && let Some(target) = links.served(value)
-                        {
-                            found.outbound.record(target, &page.permalink);
+                        if authored() {
+                            let serving = links.served(value);
+                            // Recorded whether or not it named a page, so a page
+                            // appearing at that URL later rebuilds the linker
+                            // and gains its backlink.
+                            found.urls.extend(serving.probed);
+                            if let Some(target) = serving.target {
+                                found.outbound.record(target, &page.permalink);
+                            }
                         }
                         None
                     }

@@ -325,6 +325,27 @@ pub enum Link {
 /// edition appears. Recording only the entry that matched would leave it stale.
 pub type LinkDeps = BTreeMap<PathBuf, Option<String>>;
 
+/// A page's dependency on *which URLs the site serves*, keyed by the URL a link
+/// named and holding whether a page sat there.
+///
+/// [`LinkDeps`] cannot express this: it is keyed by a target's source path, and
+/// a link already written as a URL never names one. A `false` is the load-
+/// bearing half, and the reason this exists at all: a link to a page that does
+/// not exist yet leaves no other trace on the linking page, so without the probe
+/// the page it will eventually reach can be added, and the linker stays a cache
+/// hit replaying an outbound edge it never recorded.
+pub type UrlDeps = BTreeMap<String, bool>;
+
+/// Whether a link spelled as a URL reaches a page of this site, and the probe
+/// that decided it. The [`Resolution`] of the URL-spelled path, and travelling
+/// together for the same reason.
+pub struct Serving {
+    /// The page it names, if the site serves one there.
+    pub target: Option<Target>,
+    /// The URL consulted, and the answer.
+    pub probed: UrlDeps,
+}
+
 /// How one raw link resolved, and the map entries the outcome depended on.
 ///
 /// The two travel together because they are computed together: deriving the
@@ -397,7 +418,7 @@ impl LinkMap {
     }
 
     /// The page a raw link already spelled as a URL names, if this site serves
-    /// one there.
+    /// one there, and the probe that decided it.
     ///
     /// A `.typ` link is the way to cross-reference a page and the only spelling
     /// that survives a rename, but it is not the only one that *reaches* a page:
@@ -405,9 +426,27 @@ impl LinkMap {
     /// its members by permalink because it has no source path to name them by.
     /// Both are edges of the link graph, and neither goes through
     /// [`LinkMap::classify`], which exists to rewrite what has to be rewritten.
-    pub fn served(&self, raw: &str) -> Option<Target> {
+    ///
+    /// The probe carries the negative answer too, for the same reason
+    /// [`LinkMap::classify`] does: a link to a URL no page serves yet is an edge
+    /// the site gains the moment that page exists, and nothing else about the
+    /// linking page changes when it does.
+    pub fn served(&self, raw: &str) -> Serving {
         let target = Target::from(raw);
-        self.urls.contains(target.page()).then_some(target)
+        let serves = self.urls.contains(target.page());
+        Serving {
+            probed: UrlDeps::from([(target.page().to_owned(), serves)]),
+            target: serves.then_some(target),
+        }
+    }
+
+    /// Every URL this site serves a page at.
+    ///
+    /// The build cache keeps its own copy, as it does for every other map it
+    /// revalidates against, so a page's recorded [`UrlDeps`] is checked against
+    /// the same set [`LinkMap::served`] answered from.
+    pub fn urls(&self) -> &HashSet<String> {
+        &self.urls
     }
 
     /// Classify a raw link written in `from`'s body: passthrough, resolved to a
@@ -491,7 +530,7 @@ impl LinkMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backlinks, LinkMap, Outbound, Source, Target};
+    use super::{Backlinks, LinkMap, Outbound, Source, Target, UrlDeps};
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use std::path::PathBuf;
 
@@ -682,13 +721,31 @@ mod tests {
         let pages = [page("A", "/a/"), page("B", "/b/")];
         let map = LinkMap::new(&pages, std::path::Path::new("."));
 
-        let page = |raw| map.served(raw).map(|t| t.page().to_owned());
+        let page = |raw| map.served(raw).target.map(|t| t.page().to_owned());
         assert_eq!(page("/b/").as_deref(), Some("/b/"));
         // The section is not part of the page's identity, and a page this site
         // does not serve is not one of ours.
         assert_eq!(page("/b/#install").as_deref(), Some("/b/"));
         assert_eq!(page("/nowhere/"), None);
         assert_eq!(page("https://example.com/b/"), None);
+    }
+
+    /// The probe carries the answer either way. A miss recorded as nothing at
+    /// all is a page that never learns the URL it linked to started existing.
+    #[test]
+    fn a_url_link_records_its_probe_whether_or_not_it_named_a_page() {
+        let pages = [page("A", "/a/"), page("B", "/b/")];
+        let map = LinkMap::new(&pages, std::path::Path::new("."));
+
+        assert_eq!(
+            map.served("/b/#install").probed,
+            UrlDeps::from([("/b/".to_owned(), true)]),
+            "the section is not part of what was probed"
+        );
+        assert_eq!(
+            map.served("/nowhere/").probed,
+            UrlDeps::from([("/nowhere/".to_owned(), false)])
+        );
     }
 
     /// The cold-build guess: what a page's source looks like it links to,

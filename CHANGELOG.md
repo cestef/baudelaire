@@ -14,11 +14,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
-- `Renderer::SCHEMA` is bumped (14 -> 15), so the first build after upgrading is
+- `Renderer::SCHEMA` is bumped (14 -> 16), so the first build after upgrading is
   a cold one. Extracted images are named differently, and a warm manifest would
   replay the flat names into cached pages while fresh ones wrote the new paths.
   If you link an extracted image's URL by hand anywhere (a feed, an external
-  page), it now carries the directories the image sits in under `content/`.
+  page), it now carries the directories the image sits in under `content/`. A
+  page also records the URLs it links to by name, which no earlier manifest
+  carries: see the link-graph fix below.
 
 - A `{ }` block written on a setting that takes `key=value` attributes is now an
   error instead of being ignored. It never configured anything, so a build that
@@ -305,6 +307,15 @@ chores are visible in the git history and change nothing for a site.
   not only the runs that set up a repository with `--vcs`.
 
 ### Fixed
+
+- **links**: a link an author wrote as a URL (`#link("/guide/")`) is an edge of
+  the link graph whether or not the page exists yet. The page writing it now
+  records that it asked, so adding a page at that URL rebuilds the linker and
+  the new page gains its backlink. It used to record only the links that
+  matched: with `links { backlinks }` or the orphan report on, the linker stayed
+  a cache hit, its recorded edges did not include the new page, and the report
+  called that page linked from nowhere out of a green build. Deleting the target
+  left the opposite: an edge to a page no longer there.
 
 - **config**: the generated reference names the spelling that parses. A
   free-entry table (`languages.strings`, `client`, `redirect`, `typst.inputs`,

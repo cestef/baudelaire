@@ -23,7 +23,7 @@ pub use asset::{AssetDeps, AssetMap};
 pub use emitted::{Emission, Emitted};
 pub use fragment::Fragments;
 pub use inline::Inline;
-pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target};
+pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target, UrlDeps};
 pub use lint::{Finding, Load, Reference, Weight};
 pub use origin::Site;
 pub use srcset::{Candidate, SrcSetDeps, SrcSets};
@@ -91,6 +91,10 @@ pub struct Rewrite {
     /// on the site's URL layout. Keyed by canonical source path; the cache
     /// stores them the way it stores every other path.
     pub links: LinkDeps,
+    /// The URLs this page's already-URL links named, and whether the site served
+    /// a page at each. Its dependency on the *page set* rather than on the URL
+    /// layout, which is what [`Rewrite::links`] records.
+    pub urls: UrlDeps,
     /// The variant-manifest entries this page's images consulted, its
     /// dependency on the responsive pipeline.
     pub srcsets: SrcSetDeps,

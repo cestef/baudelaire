@@ -151,6 +151,16 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 16: a page records the URLs its already-URL links named, and whether the
+    /// site served a page at each. An entry written before this records none, so
+    /// under the narrower rule it reads as valid however the page set changed:
+    /// a page added at a URL something already linked to would gain no backlink,
+    /// and the orphan report would call it linked from nowhere.
+    /// 15: an image extracted from a page is named by the directories it was
+    /// authored under, not by its base name alone, so two page bundles holding a
+    /// `cover.png` are two files. An entry written before this replays the flat
+    /// name from its `Outputs::images`, so a cached page would keep pointing at
+    /// `/assets/cover.png` while every fresh page wrote the namespaced one.
     /// 14: extraction and the asset pipeline agree about images. One that
     /// lives in the asset tree is referenced where the pipeline serves it
     /// rather than extracted a second time, and one lifted out of a page
@@ -158,11 +168,6 @@ impl Renderer {
     /// before this records the duplicate extraction and no widths, so a cached
     /// page would keep copying source bytes over processed ones and would show
     /// a `srcset`-less image beside a freshly rendered one that has it.
-    /// 15: an image extracted from a page is named by the directories it was
-    /// authored under, not by its base name alone, so two page bundles holding a
-    /// `cover.png` are two files. An entry written before this replays the flat
-    /// name from its `Outputs::images`, so a cached page would keep pointing at
-    /// `/assets/cover.png` while every fresh page wrote the namespaced one.
     /// 13: a generated listing records its links too, so the orphan report can
     /// see that a page is reachable from an index. An entry written before this
     /// has none for a listing, so every page reachable only from one would be
@@ -202,7 +207,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 15;
+    const SCHEMA: u32 = 16;
 
     pub fn current() -> Self {
         Self {

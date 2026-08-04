@@ -601,6 +601,54 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
     assert!(outbound("b").is_empty(), "{manifest}");
 }
 
+/// A link an author wrote as a URL is an edge of the link graph too, so the page
+/// writing it depends on whether the site serves anything there. Recording only
+/// the links that *matched* left the negative unrecorded: adding the page at
+/// that URL changed nothing the linker was validated against, so it stayed a
+/// cache hit, replayed an `outbound` without the edge, and the new page was
+/// reported as linked from nowhere out of a green build.
+#[test]
+fn a_url_link_to_a_page_that_does_not_exist_yet_invalidates_when_it_does() {
+    let site = Site::with(
+        "site \"T\"\nlinks {\n  backlinks #true\n}\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\n#link(\"/guide/\")[the guide]",
+    );
+    site.stats();
+
+    let probed = |manifest: &str| -> serde_json::Value {
+        let entries: serde_json::Value = serde_json::from_str(manifest).expect("manifest parses");
+        entries["pages"]["content/posts/a.typ"]["urls"]["/guide/"].clone()
+    };
+    let outbound = |manifest: &str| -> Vec<serde_json::Value> {
+        let entries: serde_json::Value = serde_json::from_str(manifest).expect("manifest parses");
+        entries["pages"]["content/posts/a.typ"]["outputs"]["outbound"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    // Nothing is served there yet, and that answer is what the page depends on.
+    let manifest = site.read(".baudelaire/cache/manifest.json");
+    assert_eq!(probed(&manifest), serde_json::json!(false), "{manifest}");
+    assert!(outbound(&manifest).is_empty(), "{manifest}");
+
+    // The page appears. `a.typ` is untouched, its own dependencies unchanged,
+    // and no other probe it recorded has moved.
+    site.write(
+        "content/guide.typ",
+        "#let frontmatter = (title: \"Guide\",)\nhere",
+    );
+    let stats = site.stats();
+    assert_eq!(stats.cached, 0, "the linker must not be a cache hit");
+
+    let manifest = site.read(".baudelaire/cache/manifest.json");
+    assert_eq!(probed(&manifest), serde_json::json!(true), "{manifest}");
+    assert_eq!(outbound(&manifest), ["/guide/"], "{manifest}");
+}
+
 /// `datetime.today()` is a build input the file-dependency tracker cannot see:
 /// it goes through the `World`, which records `source`/`file` only. Recording it
 /// as a read of `sys.inputs.baudelaire.date` is what makes a page printing the

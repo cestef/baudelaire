@@ -30,7 +30,7 @@ use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
     AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
-    Target, Weight,
+    Target, UrlDeps, Weight,
 };
 use crate::ui::Ui;
 
@@ -73,6 +73,16 @@ struct Entry {
     /// pre-tracking manifests, hence `default`.
     #[serde(default)]
     links: LinkDeps,
+    /// The URLs this page's already-URL links named, and whether a page sat
+    /// there, so a page appearing at a URL something already linked to rebuilds
+    /// the linker and gains its backlink.
+    ///
+    /// `false` is the load-bearing half: a link to a page that does not exist
+    /// yet leaves no other trace on the linking page, so without it the page can
+    /// be added and every linker stays a hit, replaying an outbound edge it
+    /// never recorded. Absent from pre-tracking manifests, hence `default`.
+    #[serde(default)]
+    urls: UrlDeps,
     /// The responsive variants this page's images matched, keyed by the source
     /// path each `<img>` named, so regenerating one image's variants rebuilds
     /// the pages showing it and leaves the rest cached.
@@ -248,6 +258,8 @@ pub struct Recorded<'a> {
     pub reads: &'a Reads,
     /// The permalinks the page's links resolved against.
     pub links: &'a LinkDeps,
+    /// The URLs the page's already-URL links named, and whether one was served.
+    pub urls: &'a UrlDeps,
     /// The responsive variants the page's images matched.
     pub srcsets: &'a SrcSetDeps,
     /// The processed-asset URLs the page's references resolved to.
@@ -285,6 +297,9 @@ pub struct Cache {
     /// This build's request-to-served asset URLs, to revalidate each page's
     /// recorded [`Entry::assets`].
     assets: BTreeMap<String, String>,
+    /// Every URL this build serves a page at, to revalidate each page's recorded
+    /// [`Entry::urls`].
+    urls: HashSet<String>,
     /// The content-addressed store holding every page's rendered markup.
     objects: Objects,
 }
@@ -351,6 +366,7 @@ impl Cache {
                 .collect(),
             srcsets: maps.srcsets.digests(),
             assets: maps.assets.served().clone(),
+            urls: maps.links.urls().clone(),
             root,
         })
     }
@@ -429,6 +445,16 @@ impl Cache {
             .links
             .iter()
             .all(|(path, permalink)| self.links.get(path) == permalink.as_ref())
+        {
+            return None;
+        }
+        // every URL this page linked to by name must still be served by a page,
+        // and every one that named nothing must still name nothing, so a page
+        // that appears at a linked-to URL rebuilds its linkers.
+        if !entry
+            .urls
+            .iter()
+            .all(|(url, served)| self.urls.contains(url) == *served)
         {
             return None;
         }
@@ -522,6 +548,7 @@ impl Cache {
             deps,
             reads,
             links,
+            urls,
             srcsets,
             assets,
             outputs,
@@ -540,6 +567,7 @@ impl Cache {
                 deps,
                 meta,
                 links,
+                urls: urls.clone(),
                 srcsets: srcsets.clone(),
                 assets: assets.clone(),
                 blob,
