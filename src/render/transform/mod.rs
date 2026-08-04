@@ -96,11 +96,35 @@ pub(super) struct Cx<'a> {
 /// The attributes that carry a URL to an asset this site owns.
 ///
 /// One list, because four hand-written copies had drifted into four different
-/// sets: `og:image` (a `content` attribute) was fingerprinted but never
-/// base-path-prefixed and never embedded, so a subpath-hosted site's social card
-/// pointed at a file that was not there. `srcset` is handled separately by
-/// [`ElementExt::assets`], which parses its candidate list.
-const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster, attr::content];
+/// sets: `og:image` was fingerprinted but never base-path-prefixed and never
+/// embedded, so a subpath-hosted site's social card pointed at a file that was
+/// not there. `srcset` is handled separately by [`ElementExt::assets`], which
+/// parses its candidate list, and `content` by [`URL_META`], which is not
+/// unconditional.
+const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster];
+
+/// OpenGraph names its tags with `property` where the HTML spec uses `name`.
+/// typst-html has no constant for it, since it is RDFa rather than HTML. Here
+/// rather than on the pass that writes the tags, because the pass that decides
+/// whether their `content` is a URL reads the same attribute.
+pub(super) const PROPERTY: HtmlAttr = HtmlAttr::constant("property");
+
+/// The `<meta>` keys whose `content` is a URL.
+///
+/// Every other one is prose: a title, a description, an author, a tag. `content`
+/// was in [`URL_ATTRS`] outright for a while, which made it a URL on every
+/// `<meta>` in the page. The asset passes were saved by their own prefix check
+/// (nothing that is not under `/assets/` can match), but the base path has none
+/// to make: it prefixes any value starting with `/`, so a site at `/docs` and a
+/// page titled `/etc/hosts, annotated` published
+/// `og:title` = `/docs/etc/hosts, annotated`.
+const URL_META: &[&str] = &[
+    "og:image",
+    "og:image:url",
+    "og:image:secure_url",
+    "og:url",
+    "twitter:image",
+];
 
 /// The elements a reader deep-links to and an outline is read from, in level
 /// order, so an index into this *is* the heading level. One list, because three
@@ -243,6 +267,14 @@ impl ElementExt for HtmlElement {
 
     fn assets(&mut self, mut f: impl FnMut(&str) -> Option<String>) {
         self.rewrite(URL_ATTRS, &mut f);
+        if self.tag == tag::meta
+            && [PROPERTY, attr::name]
+                .iter()
+                .filter_map(|&key| self.attrs.get(key))
+                .any(|key| URL_META.contains(&key.as_str()))
+        {
+            self.rewrite(&[attr::content], &mut f);
+        }
         let Some(value) = self.attrs.get_mut(attr::srcset) else {
             return;
         };

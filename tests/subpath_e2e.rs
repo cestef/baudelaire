@@ -198,3 +198,34 @@ fn og_image_carries_the_subpath() {
     assert!(html.contains("og:image"), "{html}");
     assert!(html.contains("/docs/assets/card.png"), "{html}");
 }
+
+/// ...and nothing else in a `content` attribute is a URL. Every `<meta>` the
+/// page carries has one, and prose that happens to start with `/` is prose: a
+/// title, a description, a tag. They were all prefixed, so a page titled
+/// `/etc/hosts, annotated` published `og:title` as `/docs/etc/hosts, annotated`.
+#[test]
+fn a_base_path_leaves_a_meta_tag_s_prose_alone() {
+    let site = Site::with(
+        r#"
+        site "T"
+        url "https://host.test/docs"
+        description "/usr/share, explained"
+        paths { content "content"; dist "public" }
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"/etc/hosts, annotated\",)\nhome\n",
+    );
+    site.stats();
+
+    let html = site.output("index.html");
+    assert!(
+        html.contains(r#"content="/etc/hosts, annotated""#),
+        "a title is not a URL: {html}"
+    );
+    assert!(
+        !html.contains("/docs/etc/hosts"),
+        "the base path was applied to prose: {html}"
+    );
+}

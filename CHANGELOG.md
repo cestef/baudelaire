@@ -308,6 +308,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **meta**: a base path prefixes the meta tags that carry a URL, and leaves the
+  rest alone. `content` counted as a URL on every `<meta>` in the page, so a
+  site hosted under a subpath prefixed its own prose: a page titled
+  `/etc/hosts, annotated` published `og:title` as `/docs/etc/hosts, annotated`,
+  and the same for `og:description`, `article:tag` and the `twitter:` pair.
+
 - **cards**: a card template a theme ships is the one the card draws with. The
   check that a template exists accepted either layer's, but the card built its
   import path out of the project's `templates/` alone, so a site relying on the

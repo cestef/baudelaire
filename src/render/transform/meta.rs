@@ -15,12 +15,8 @@ use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{BaseUrl, Config, ManifestConfig};
 use crate::content::{Iso, Page};
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, PROPERTY, Transform};
 use crate::render::{AssetDeps, AssetMap};
-
-/// OpenGraph names its tags with `property` where the HTML spec uses `name`.
-/// typst-html has no constant for it, since it is RDFa rather than HTML.
-const PROPERTY: HtmlAttr = HtmlAttr::constant("property");
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;
