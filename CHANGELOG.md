@@ -22,6 +22,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **serve**: the dev server watches what the build read. A page or template that
+  loads a file outside `content/`, `templates/`, `assets/` and `static/` (a
+  `data/authors.yaml`, a CSV a table is built from) is watched because the build
+  recorded reading it, so editing that file rebuilds the pages that read it.
+  `serve { include }` is unchanged and still names what no compile reads: a
+  `tsconfig.json`, a hook's input, a directory that is empty so far.
+
 - **init**: every starter shape writes a `content/404.typ`, and a build with no
   not-found page says so once (`baudelaire::content::not_found`, advice). A site
   without one hands unmatched URLs to whatever its host answers with, which was

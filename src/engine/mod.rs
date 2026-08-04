@@ -61,6 +61,14 @@ use crate::world::{PageWorld, Project, Tracked};
 pub struct Stats {
     pub pages: usize,
     pub cached: usize,
+    /// The directories holding files this build read from outside its own source
+    /// trees: a `data/` tree a page loaded, a config a template imported.
+    ///
+    /// The dev server watches these on top of the four it always watches, so a
+    /// file the build demonstrably depends on does not also have to be named in
+    /// `serve { include }`. Directories rather than files: a watcher registers
+    /// directories, and a file created next to a tracked one has to be seen too.
+    pub read: Vec<PathBuf>,
 }
 
 /// The bundled documents a build dealt with: the ones it exported, and every
@@ -276,7 +284,33 @@ impl Engine {
         Ok(Stats {
             pages: total,
             cached: cached.len(),
+            read: self.outside(cache.read()),
         })
+    }
+
+    /// The directories holding `files`, minus anything already inside a source
+    /// tree the dev server watches by default.
+    ///
+    /// Deduped and sorted so a rebuild that read the same files hands back the
+    /// same list, which is what lets the watcher tell "nothing new" from "watch
+    /// something else" without re-registering on every build.
+    fn outside(&self, files: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
+        let paths = &self.config.paths;
+        let watched = [
+            &paths.content,
+            &paths.templates,
+            &paths.assets,
+            &paths.r#static,
+        ]
+        .map(crate::fs::canonical);
+        let mut dirs: Vec<PathBuf> = files
+            .filter_map(|file| file.parent().map(std::path::Path::to_path_buf))
+            .map(|dir| crate::fs::canonicalize(&dir).unwrap_or(dir))
+            .filter(|dir| !watched.iter().any(|root| dir.starts_with(root)))
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+        dirs
     }
 
     /// Prepare `dist` and seed it with the static tree.
@@ -628,6 +662,7 @@ impl Engine {
         Ok(Stats {
             pages: rendered.len(),
             cached: 0,
+            read: Vec::new(),
         })
     }
 

@@ -230,6 +230,40 @@ fn sse_stream_pushes_reload_on_change() {
 }
 
 #[test]
+fn a_data_file_a_page_read_is_watched_without_being_configured() {
+    // The build records what each compile read, which is how a page whose data
+    // file changed recompiles. The watcher ignored that and watched four fixed
+    // trees, so editing `data/authors.yaml` did nothing until the site repeated
+    // itself in `serve { include }`.
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n  templates \"templates\"\n}\ncontent {\n  collections {\n    _root { template \"page.typ\" }\n  }\n}\nserve { open #false; }",
+    );
+    t.write("data/authors.yaml", "keeper: One person\n");
+    t.write(
+        "templates/page.typ",
+        "#import \"@baudelaire/html:0.1.0\": h\n#let authors = yaml(\"/data/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    let srv = Serve::start(&t, &[]);
+    let (_, body) = srv.get("/");
+    assert!(body.contains("One person"), "first build: {body}");
+
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write("data/authors.yaml", &format!("keeper: Soul {n}\n"));
+    });
+    assert!(pushed, "editing a tracked data file pushed no reload");
+    let (_, body) = srv.get("/");
+    assert!(body.contains("Soul "), "rebuilt page: {body}");
+}
+
+#[test]
 fn config_edit_reloads_and_pushes_reload() {
     let t = Site::new();
     t.write(

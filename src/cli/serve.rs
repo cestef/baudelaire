@@ -45,6 +45,8 @@ pub(crate) fn run<'a>(
         root,
         config_path,
         reload: Box::new(reload),
+        tracked: Vec::new(),
+        rewatch: false,
     }
     .run()
 }
@@ -62,10 +64,17 @@ struct Dev<'a> {
     /// Re-reads `config.kdl` with the same profile and CLI overrides, invoked
     /// when the config file changes so edits take effect live.
     reload: Box<dyn FnMut() -> Result<Config> + 'a>,
+    /// Directories the last build read outside the four source trees: a `data/`
+    /// tree a page loaded, wherever the site keeps it. Watched on top of the
+    /// defaults, so an input the build demonstrably depends on does not also
+    /// have to be named in `serve { include }`.
+    tracked: Vec<PathBuf>,
+    /// Whether that set changed, so the watch loop re-registers with it.
+    rewatch: bool,
 }
 
 impl Dev<'_> {
-    fn run(self) -> Result<()> {
+    fn run(mut self) -> Result<()> {
         let requested = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&requested).map_err(|e| ServeError::bind(&requested, e))?;
         // What was bound, not what was asked for: `port 0` means "any free
@@ -80,9 +89,12 @@ impl Dev<'_> {
         // every rebuild after it: the same typo killed the server or merely
         // warned depending only on when it was made. The server comes up and
         // fixing the file rebuilds.
-        if let Err(e) = self.rebuild() {
-            self.ui.warn(RebuildFailed { errors: vec![e] });
-            self.ui.flush();
+        match self.rebuild() {
+            Ok(stats) => self.tracked = stats.read,
+            Err(e) => {
+                self.ui.warn(RebuildFailed { errors: vec![e] });
+                self.ui.flush();
+            }
         }
         self.ui.blank();
         self.ui.arrow(
@@ -165,7 +177,9 @@ impl Dev<'_> {
         // watched roots (`serve.include`, paths) take effect. (A `bind`/`port`
         // change still needs a restart: the HTTP server is already bound.)
         loop {
-            let filter = Filter::new(&self.config, self.root, &self.config_path)?;
+            let filter =
+                Filter::new(&self.config, self.root, &self.config_path)?.watching(&self.tracked);
+            self.rewatch = false;
             let (tx, rx) = flume::unbounded::<DebounceEventResult>();
             let _watcher = Watcher::new(filter.watches(), tx)?;
             tracing::debug!(watches = ?filter.watches(), "watcher established");
@@ -176,7 +190,7 @@ impl Dev<'_> {
                 // a failed rebuild) right away; the server runs indefinitely,
                 // so there is no end-of-run flush to wait for.
                 self.ui.flush();
-                if outcome {
+                if outcome || self.rewatch {
                     reloaded = true;
                     break;
                 }
@@ -256,6 +270,12 @@ impl Dev<'_> {
                 self.ui
                     .event(label, stats.pages - stats.cached, timer.elapsed());
                 live.bump();
+                // A build that read a new directory (a data file a page just
+                // started loading) is watched from the next loop around.
+                if stats.read != self.tracked {
+                    self.tracked = stats.read;
+                    self.rewatch = true;
+                }
             }
             Err(e) => {
                 // The failure rides along as a related diagnostic (spans,
@@ -907,6 +927,9 @@ struct Filter {
     watches: Vec<(PathBuf, notify::RecursiveMode)>,
     include: Vec<Glob<'static>>,
     exclude: Vec<Glob<'static>>,
+    /// Directories the last build read outside the watched trees (see
+    /// [`Filter::watching`]), so an event in one is relevant without a glob.
+    tracked: Vec<PathBuf>,
 }
 
 impl Filter {
@@ -947,7 +970,24 @@ impl Filter {
             watches,
             include,
             exclude,
+            tracked: Vec::new(),
         })
+    }
+
+    /// Also watch `dirs`, the directories the last build read outside those
+    /// trees, and treat what they hold as relevant.
+    ///
+    /// Additive on purpose: `serve { include }` still covers what no compile
+    /// reads (a `tsconfig.json`, a hook's input) and what a *failed* first build
+    /// never got far enough to record. This only removes the need to repeat what
+    /// the build already proved it depends on.
+    fn watching(mut self, dirs: &[PathBuf]) -> Self {
+        for dir in dirs {
+            self.watches
+                .push((dir.clone(), notify::RecursiveMode::Recursive));
+        }
+        self.tracked = dirs.to_vec();
+        self
     }
 
     /// The source trees a session always watches, in the configured (relative)
@@ -1024,6 +1064,7 @@ impl Filter {
             || path.extension().is_some_and(|e| e == "typ")
             || path.starts_with(&self.assets)
             || path.starts_with(&self.statics)
+            || self.tracked.iter().any(|dir| path.starts_with(dir))
     }
 }
 
@@ -1046,6 +1087,8 @@ mod tests {
             root: &root,
             config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
+            tracked: Vec::new(),
+            rewatch: false,
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter);
         assert_eq!(ui.warnings(), 1);
@@ -1066,6 +1109,8 @@ mod tests {
             root: &root,
             config_path: PathBuf::from("config.kdl"),
             reload: Box::new(|| Ok(Config::default())),
+            tracked: Vec::new(),
+            rewatch: false,
         };
         dev.on_event(Ok(Vec::new()), &live, &filter);
         assert_eq!(ui.warnings(), 0);

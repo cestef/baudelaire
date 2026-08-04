@@ -80,6 +80,17 @@ The content, template, asset and static trees are watched by default, plus
 so a change to `paths` or `include` takes effect without a restart. A `port` or
 `bind` change does need one, since the server is already bound.
 
+A build records every file it read, so anything a page or template *loaded* from
+outside those trees is watched too, without being configured:
+
+```typ
+#let authors = yaml("/data/authors.yaml")
+```
+
+Editing that file rebuilds the pages that read it. `include` is still what names
+what no compile reads: a `tsconfig.json`, a hook's input, a directory that only
+matters once a file appears in it.
+
 Globs are #link("https://docs.rs/wax")[wax] patterns relative to the project
 root, and `exclude` wins over `include`.
 

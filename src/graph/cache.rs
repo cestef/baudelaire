@@ -355,6 +355,25 @@ impl Cache {
         })
     }
 
+    /// Every file this build recorded reading, as absolute paths under the
+    /// project root: sources, their transitive imports, and the data files a
+    /// page loaded.
+    ///
+    /// For the dev server, which otherwise watches four fixed trees and asks the
+    /// site to name anything else in `serve { include }`. The build already knows
+    /// (that is how a page whose data file changed recompiles), and repeating
+    /// the knowledge in config is how an edit to `data/authors.yaml` silently
+    /// does nothing. Paths recorded as absolute are left out: those are outside
+    /// the project (typst's package cache), and nothing there is edited by hand.
+    pub fn read(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        self.next
+            .pages
+            .values()
+            .flat_map(|entry| entry.deps.keys())
+            .filter(|dep| dep.is_relative())
+            .map(|dep| self.root.join(dep))
+    }
+
     /// Borrow the tracked roots for a value-digest resolution.
     fn roots(&self) -> Roots<'_> {
         self.roots.iter().map(Root::from).collect()
