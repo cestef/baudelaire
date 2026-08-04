@@ -26,11 +26,23 @@ struct Scaffold<'a> {
 }
 
 impl<'a> Scaffold<'a> {
+    /// The ignore file every scaffold writes, and its contents. Unconditional,
+    /// because the two directories it names (`public/`, `.baudelaire/`) are
+    /// build output either way: it used to ride along with `--vcs`, so a
+    /// scaffold that ran `git init` itself, afterwards, committed both.
+    const IGNORE: &'static str = ".gitignore";
+    const IGNORED: &'static str = include_str!("scaffold/gitignore");
+
     fn new(root: &'a Path) -> Self {
         Self {
             root,
             files: Vec::new(),
         }
+    }
+
+    /// Add the ignore file both supported version-control systems read.
+    fn ignore(self) -> Self {
+        self.file(Self::IGNORE, Self::IGNORED)
     }
 
     fn file(mut self, rel: impl Into<PathBuf>, contents: impl Into<String>) -> Self {
@@ -109,7 +121,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         ui.blank();
     }
 
-    let mut scaffold = Scaffold::new(&target);
+    let mut scaffold = Scaffold::new(&target).ignore();
     for file in template.files(&details.vars()) {
         if (args.theme.is_some() && file.themed()) || (args.no_sample && file.sample()) {
             continue;
@@ -126,7 +138,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
     scaffold.apply(ui)?;
 
     if let Some(vcs) = repo {
-        Repo::new(&target, vcs).setup(ui)?;
+        Repo::new(&target, vcs).setup(ui);
     }
 
     let settings = packages(ui, &target);
@@ -572,18 +584,16 @@ impl Vcs {
     }
 }
 
-/// Optional version-control setup for a freshly scaffolded project: a
-/// `.gitignore` plus a repository. Opt-in, because not every scaffold wants one.
+/// Optional version-control setup for a freshly scaffolded project. Opt-in,
+/// because not every scaffold wants a repository; the `.gitignore` both systems
+/// read is written unconditionally by [`Scaffold::ignore`], since it describes
+/// the build output rather than the repository.
 struct Repo<'a> {
     root: &'a Path,
     vcs: Vcs,
 }
 
 impl<'a> Repo<'a> {
-    /// The ignore file both systems read, and its contents.
-    const IGNORE: &'static str = ".gitignore";
-    const IGNORED: &'static str = include_str!("scaffold/gitignore");
-
     fn new(root: &'a Path, vcs: Vcs) -> Self {
         Self { root, vcs }
     }
@@ -614,18 +624,13 @@ impl<'a> Repo<'a> {
             .ask()
     }
 
-    /// Write `.gitignore` and initialize the repository, skipping either step if
-    /// it already exists. A missing or failing tool is a warning, not an error:
-    /// the project is scaffolded either way.
-    fn setup(&self, ui: &Ui) -> Result<()> {
-        let ignore = self.root.join(Self::IGNORE);
-        if !ignore.exists() {
-            fs::write(&ignore, Self::IGNORED)?;
-            ui.detail(format_args!("{} {}", "+".green(), Paths(Self::IGNORE)));
-        }
+    /// Initialize the repository, skipping the step if one already exists. A
+    /// missing or failing tool is a warning, not an error: the project is
+    /// scaffolded either way.
+    fn setup(&self, ui: &Ui) {
         let tool = self.vcs.tool();
         if self.root.join(tool.marker).exists() {
-            return Ok(());
+            return;
         }
         // Capture the tool's output rather than inherit it: jj in particular
         // prints an "Initialized repo" line and a hint that would clutter the
@@ -648,7 +653,6 @@ impl<'a> Repo<'a> {
             }
             Err(_) => ui.warn(VcsMissing { tool: tool.command }),
         }
-        Ok(())
     }
 }
 
