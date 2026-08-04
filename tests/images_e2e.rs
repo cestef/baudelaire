@@ -219,3 +219,32 @@ fn an_image_that_gains_variants_invalidates_the_page_showing_it() {
         "the new variant must reach the page: {html}"
     );
 }
+
+/// A page showing an image that lives in the asset tree points at the pipeline's
+/// copy: the file the pipeline optimized and named, written once. Extraction
+/// used to stage the source bytes under that same name, which warned that two
+/// images claimed it and shipped whichever won.
+#[test]
+fn an_image_from_the_asset_tree_is_not_extracted_a_second_time() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images { extract #true }\n}\n",
+    );
+    site.write_bytes("assets/photo.png", &png(4, 4));
+    site.write("content/index.typ", "#image(\"/assets/photo.png\")\n");
+
+    let out = site.run(&["build"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr: {stderr}");
+    assert!(
+        !stderr.contains("images::collision"),
+        "warned about its own asset: {stderr}"
+    );
+    let html = site.output("index.html");
+    assert!(html.contains("src=\"/assets/photo.png\""), "{html}");
+    let mut files: Vec<String> = std::fs::read_dir(site.path("public/assets"))
+        .expect("assets")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    files.sort();
+    assert_eq!(files, vec!["photo.png".to_owned()], "one copy only");
+}

@@ -48,6 +48,14 @@ impl Transform for Externalize {
             }
             element.rewrite(&[attr::src], |src| {
                 let vpath = src.strip_prefix(MARKER)?;
+                // A picture the asset pipeline already owns is referenced where
+                // the pipeline put it, not copied a second time: extracting it
+                // wrote the source bytes over (or beside) the processed ones,
+                // warned that two images claimed one name, and left the page
+                // pointing at whichever won.
+                if let Some(url) = ImageRef::pipelined(vpath, config) {
+                    return Some(url);
+                }
                 let image = ImageRef::of(vpath, root, config);
                 let url = format!("/{}/{}", config.asset_name(), image.name);
                 refs.push(image);
@@ -59,6 +67,19 @@ impl Transform for Externalize {
 }
 
 impl ImageRef {
+    /// The URL an image *inside the asset tree* is already served at, or `None`
+    /// for one anywhere else.
+    ///
+    /// The pipeline reads that tree, so such a file has been optimized, given
+    /// its responsive variants and (with `fingerprint`) renamed, and is on disk
+    /// under the URL its own relative path spells. The authored URL is what is
+    /// emitted, so the `srcset` and fingerprint transforms match it exactly as
+    /// they match a `src` written by hand.
+    fn pipelined(vpath: &str, config: &Config) -> Option<String> {
+        let rel = Path::new(vpath).strip_prefix(&config.paths.assets).ok()?;
+        Some(config.asset_url(rel))
+    }
+
     /// The reference for a marker's virtual path. The name is fingerprinted
     /// (content hash spliced in) when asset fingerprinting is on, so
     /// externalized images cache far-future like every other asset; otherwise

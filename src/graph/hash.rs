@@ -151,6 +151,11 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 14: an image that lives in the asset tree is referenced where the
+    /// pipeline serves it rather than extracted a second time. An entry written
+    /// before this records the extraction, so a cached page would keep copying
+    /// the source bytes over the processed ones, and one for a nested asset
+    /// holds the flattened URL that copy was served at.
     /// 13: a generated listing records its links too, so the orphan report can
     /// see that a page is reachable from an index. An entry written before this
     /// has none for a listing, so every page reachable only from one would be
@@ -190,7 +195,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 13;
+    const SCHEMA: u32 = 14;
 
     pub fn current() -> Self {
         Self {

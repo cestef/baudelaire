@@ -42,10 +42,10 @@ pub(super) enum Phase {
 /// [`Handler::render`] separately, so the pipeline can keep mutating it between
 /// calls.
 pub(super) struct Ctx<'a> {
-    /// The site config: read by the css and image handlers for their options.
-    #[cfg(any(feature = "css", feature = "images"))]
+    /// The site config: read by the css and image handlers for their options,
+    /// and by [`Ctx::url`], which is what keeps a served asset URL to one
+    /// derivation whatever flavor this is.
     pub config: &'a Config,
-    pub prefix: &'a str,
     #[cfg(feature = "js")]
     pub bundler: Option<&'a Js>,
 }
@@ -53,8 +53,7 @@ pub(super) struct Ctx<'a> {
 impl Ctx<'_> {
     /// The served URL for a relative asset path, e.g. `/assets/css/app.css`.
     pub fn url(&self, rel: &Path) -> String {
-        let rel = rel.to_string_lossy().replace('\\', "/");
-        format!("{}/{rel}", self.prefix)
+        self.config.asset_url(rel)
     }
 
     /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments

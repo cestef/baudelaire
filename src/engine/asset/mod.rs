@@ -236,9 +236,7 @@ impl<'a> Assets<'a> {
     /// (js feature) builds its own [`Ctx`] with the bundler attached.
     fn ctx(&self) -> Ctx<'_> {
         Ctx {
-            #[cfg(any(feature = "css", feature = "images"))]
             config: self.config,
-            prefix: &self.prefix,
             #[cfg(feature = "js")]
             bundler: None,
         }

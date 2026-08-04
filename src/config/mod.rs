@@ -543,6 +543,22 @@ impl Config {
         format!("/{}", self.asset_name())
     }
 
+    /// The URL a processed asset is served at, given its path relative to the
+    /// asset root. Separators become `/` whatever the host filesystem writes,
+    /// since this is a URL and not a path.
+    ///
+    /// One derivation, because two layers build these: the pipeline keys its
+    /// map with them, and the render pass points an `<img>` at one when the
+    /// picture it found is a file the pipeline already owns. A URL built two
+    /// ways is a `srcset` that silently stops matching its source.
+    pub fn asset_url(&self, rel: &Path) -> String {
+        format!(
+            "{}/{}",
+            self.asset_prefix(),
+            rel.to_string_lossy().replace('\\', "/")
+        )
+    }
+
     /// The processed assets directory under `dist`: the *published* location,
     /// read by the dev server and by whatever hosts `dist`.
     pub fn asset_dist(&self) -> PathBuf {
