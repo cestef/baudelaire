@@ -308,6 +308,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **embed**: an asset the inliner could not read is recorded as a dependency all
+  the same, so a page referencing a file that was not there inlines it once it
+  appears. It stayed a cache hit instead, and the self-contained export kept
+  pointing at a file it does not carry.
+
 - **meta**: a base path prefixes the meta tags that carry a URL, and leaves the
   rest alone. `content` counted as a URL on every `<meta>` in the page, so a
   site hosted under a subpath prefixed its own prose: a page titled

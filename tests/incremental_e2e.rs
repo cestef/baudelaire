@@ -601,6 +601,46 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
     assert!(outbound("b").is_empty(), "{manifest}");
 }
 
+/// An asset the inliner could not read is still something the page consulted.
+/// The path was recorded only when the read succeeded, so a page referencing an
+/// asset that was not there stayed a cache hit once the file appeared: the
+/// "self-contained" export kept pointing at a file it does not carry.
+///
+/// With `fingerprint` off, nothing else records the reference: the asset map is
+/// empty (it maps only the files whose name changed), so the page's asset probe
+/// has no key to notice.
+#[test]
+fn an_embedded_asset_that_was_missing_is_inlined_once_it_appears() {
+    let site = Site::with(
+        "site \"T\"\nhtml {\n  embed #true\n}\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n",
+    );
+    site.write("assets/keep.css", "body { color: red }\n");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n\
+         #html.elem(\"img\", attrs: (src: \"/assets/logo.svg\", alt: \"\"))",
+    );
+    site.stats();
+    assert!(
+        site.output("index.html").contains("/assets/logo.svg"),
+        "a missing asset stays a plain reference"
+    );
+
+    site.write(
+        "assets/logo.svg",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+    );
+    let stats = site.stats();
+
+    assert_eq!(stats.cached, 0, "the page must not be a cache hit");
+    assert!(
+        site.output("index.html")
+            .contains("data:image/svg+xml;base64,"),
+        "the asset appeared and was not inlined: {}",
+        site.output("index.html")
+    );
+}
+
 /// A link an author wrote as a URL is an edge of the link graph too, so the page
 /// writing it depends on whether the site serves anything there. Recording only
 /// the links that *matched* left the negative unrecorded: adding the page at

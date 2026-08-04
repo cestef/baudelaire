@@ -79,9 +79,15 @@ impl<'a> Inliner<'a> {
             return None;
         }
         let path = self.dst.join(rest);
+        // Recorded before the read, not after: a file that was not there is
+        // exactly the case the page has to rebuild for. `Rewrite::read` records
+        // an unhashable path as `None`, which its later appearance invalidates,
+        // and pushing only on success left a page that referenced a missing
+        // asset a cache hit for ever, still claiming to be self-contained while
+        // pointing at a file it does not carry.
+        self.inlined.push(path.clone());
         // best-effort: an unreadable asset stays a plain reference
         let bytes = crate::fs::read(&path).ok()?;
-        self.inlined.push(path.clone());
         Some(format!(
             "data:{};base64,{}",
             Mime::of(&path),
