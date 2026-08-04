@@ -191,7 +191,12 @@ pub struct BuildOverrides {
 #[derive(Args, Debug, Clone, Default)]
 pub struct CommonOverrides {
     /// Override the base URL.
-    #[arg(long, help_heading = group::OUTPUT)]
+    ///
+    /// Checked here rather than where it is applied: the overlay is infallible
+    /// by design, and the same value written in the config is refused by the
+    /// same rule, so a preview deploy cannot smuggle in a base the config
+    /// would have rejected.
+    #[arg(long, help_heading = group::OUTPUT, value_parser = absolute_url)]
     pub base_url: Option<String>,
 
     /// Build draft pages (`--no-drafts` excludes them, whatever the config says).
@@ -993,6 +998,17 @@ impl Toggle {
     }
 }
 
+/// A `--base-url` that is an absolute base, by the same rule the config's own
+/// `url` answers to.
+fn absolute_url(value: &str) -> std::result::Result<String, String> {
+    match crate::config::BaseUrl::absolute(value) {
+        true => Ok(value.to_owned()),
+        false => {
+            Err("not an absolute URL: write the scheme too, e.g. `https://example.com`".into())
+        }
+    }
+}
+
 /// A set of CLI flags that overlay the loaded config.
 trait Overrides {
     fn apply(&self, config: &mut Config);
@@ -1727,6 +1743,25 @@ mod tests {
         assert_eq!(config.url.as_deref(), Some("https://preview.example/"));
         assert!(config.content.draft.build);
         assert!(!config.cache.incremental);
+    }
+
+    /// The flag answers to the same rule the config's `url` does: a preview
+    /// deploy must not be able to set a base the config would have refused.
+    #[test]
+    fn a_base_url_override_must_be_absolute() {
+        use clap::Parser;
+        assert!(
+            Cli::try_parse_from(["baudelaire", "build", "--base-url", "preview.example"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "baudelaire",
+                "build",
+                "--base-url",
+                "https://preview.example"
+            ])
+            .is_ok()
+        );
     }
 
     /// A headless session: nobody to put the question to.

@@ -81,7 +81,7 @@ impl Section for Config {
             Url,
             "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
             |c, n, t| {
-                c.url = Some(n.string(t, 0)?);
+                c.url = Some(n.base_url(t, 0)?);
                 Ok(())
             },
         ),

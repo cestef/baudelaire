@@ -5,6 +5,7 @@
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
+use crate::config::url::BaseUrl;
 use crate::config::value::ValueExt;
 use crate::error::{ConfigError, Result};
 use crate::ui::Bytes;
@@ -47,6 +48,7 @@ pub(super) trait NodeExt {
     /// string carrying a unit (`html "50kB"`).
     fn size(&self, text: &str, idx: usize) -> Result<Bytes>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
+    fn base_url(&self, text: &str, idx: usize) -> Result<String>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
     /// duplicate id: the single dedup rule for collections, taxonomies, and
@@ -159,6 +161,20 @@ impl NodeExt for KdlNode {
             "https" => Ok(value),
             "http" if Loopback::at(rest) => Ok(value),
             _ => Err(bad()),
+        }
+    }
+
+    /// The site's own base URL: a scheme and a host, any scheme.
+    ///
+    /// Separate from [`url`](NodeExt::url) because the two answer different
+    /// questions. That one guards a host credentials are sent to and demands
+    /// https; this one guards the shape everything downstream joins onto, and a
+    /// site served over plain http is the author's business.
+    fn base_url(&self, text: &str, idx: usize) -> Result<String> {
+        let value = self.string(text, idx)?;
+        match BaseUrl::absolute(&value) {
+            true => Ok(value),
+            false => Err(ConfigError::not_absolute_url(text, &value, NodeExt::span(self)).into()),
         }
     }
 

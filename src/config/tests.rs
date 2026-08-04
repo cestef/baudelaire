@@ -170,6 +170,46 @@ fn registry_mirror_drops_its_trailing_slash() {
     assert_eq!(Config::default().typst.registry, None);
 }
 
+/// `url` is what every absolute URL the site emits is built by concatenation
+/// onto, so a value that is not one produced `<loc>example.com/a/</loc>` in the
+/// sitemap, the same in every feed `<id>` and canonical tag, out of a green
+/// build.
+#[test]
+fn err_a_site_url_without_a_scheme_is_refused() {
+    for bad in [
+        "example.com",
+        "//example.com",
+        "https://",
+        "https://a b.com",
+    ] {
+        let err = Config::parse(&format!("url {bad:?}")).unwrap_err();
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains("is not an absolute URL"),
+            "{bad}: {rendered}"
+        );
+    }
+}
+
+/// ...and any scheme is the author's business: `url` is served to readers, not
+/// a host credentials are sent to. That is `typst { registry }`'s rule, not
+/// this one's.
+#[test]
+fn a_site_url_may_name_any_scheme() {
+    for good in [
+        "https://example.com",
+        "http://example.com",
+        "http://localhost:8080/docs",
+        "https://example.com/docs/",
+    ] {
+        assert_eq!(
+            parse(&format!("url {good:?}")).url.as_deref(),
+            Some(good),
+            "{good} should parse"
+        );
+    }
+}
+
 /// Package tarballs are code the build executes, so a plaintext mirror is
 /// refused exactly like every other URL the config accepts.
 #[test]

@@ -259,6 +259,17 @@ impl ConfigError {
         )
     }
 
+    /// A `url` that is not an absolute base: no scheme, or no host.
+    pub fn not_absolute_url(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::NotAbsoluteUrl {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A `profiles` block nested inside another profile.
     pub fn nested_profiles(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::NestedProfiles, span)
@@ -401,6 +412,16 @@ pub enum ConfigErrorKind {
         help("a size is a number and an optional unit: `0`, `500`, `50kB`, `1.5 MB`")
     )]
     BadSize { got: String },
+
+    #[error("{} is not an absolute URL", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::not_absolute_url),
+        help(
+            "`url` is the site's own base, scheme and all: {}",
+            Code("https://example.com")
+        )
+    )]
+    NotAbsoluteUrl { got: String },
 
     #[error("{} is not https", Code(.got))]
     #[diagnostic(

@@ -22,6 +22,12 @@ chores are visible in the git history and change nothing for a site.
   page also records the URLs it links to by name, which no earlier manifest
   carries: see the link-graph fix below.
 
+- `url` must be an absolute URL, scheme and all. `url "example.com"` used to
+  build green and then publish `<loc>example.com/a/</loc>` in the sitemap, the
+  same in every feed `<id>`, canonical tag and `og:url`. Any scheme is accepted:
+  this is the site readers are served, not a host credentials are sent to.
+  `--base-url` answers to the same rule.
+
 - A `{ }` block written on a setting that takes `key=value` attributes is now an
   error instead of being ignored. It never configured anything, so a build that
   goes red here was already not doing what its config said:

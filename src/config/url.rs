@@ -19,6 +19,32 @@ impl BaseUrl {
         Self(url.trim_end_matches('/').to_owned())
     }
 
+    /// Whether `url` is an absolute base: a scheme, `://`, and a non-empty host.
+    ///
+    /// Everything downstream assumes it. [`join`](Self::join) concatenates, and
+    /// [`Config::base_path`](super::Config::base_path) reads the path component
+    /// by splitting on `://`, so `url "example.com"` produced
+    /// `<loc>example.com/a/</loc>` in the sitemap, the same in every feed `<id>`
+    /// and canonical tag: not a URI, and rejected by consumers. Here rather than
+    /// on the node reader because a `--base-url` flag sets the same field and
+    /// must answer to the same rule.
+    ///
+    /// Deliberately *not* [`NodeExt::url`](super::node::NodeExt::url)'s check:
+    /// that one demands https because credentials travel to those hosts. A site
+    /// is served to readers, and `http://` is theirs to choose.
+    pub fn absolute(url: &str) -> bool {
+        let Some((scheme, rest)) = url.split_once("://") else {
+            return false;
+        };
+        let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+        !scheme.is_empty()
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+            && !host.is_empty()
+            && !host.contains(char::is_whitespace)
+    }
+
     /// Absolute URL for a root-relative path (a permalink or `/file`),
     /// percent-encoded.
     ///
