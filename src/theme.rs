@@ -204,6 +204,11 @@ pub enum State {
     Gone,
     /// In the shipped theme and absent from this copy: a file this version adds.
     Added,
+    /// In the shipped theme, here, and never ours: an install found it and
+    /// skipped it. The author's whatever it holds, so `update` replaces it only
+    /// under `force` and `remove` never deletes it: taking our copy off is no
+    /// licence to delete a file we did not write.
+    Yours,
 }
 
 /// One file of an installed theme, with what became of it.
@@ -277,8 +282,10 @@ impl Lock {
                 },
             })
             .collect();
-        // A file the shipped theme has gained since this copy was written: not
-        // in the record, so nothing above saw it.
+        // A shipped file the record does not claim: one this version gained, or
+        // one that was already here when the install ran and was skipped. On
+        // disk tells the two apart, and they are not the same file at all: the
+        // first is ours to write, the second is the author's to keep.
         tracked.extend(
             shipped
                 .iter()
@@ -286,14 +293,18 @@ impl Lock {
                 .filter(|rel| !self.files.contains_key(&rel.to_string_lossy().into_owned()))
                 .map(|rel| Tracked {
                     rel: rel.to_path_buf(),
-                    state: State::Added,
+                    state: match dir.join(rel).exists() {
+                        true => State::Yours,
+                        false => State::Added,
+                    },
                 }),
         );
         tracked.sort_by(|a, b| a.rel.cmp(&b.rel));
         tracked
     }
 
-    /// Write the record for `files`, digesting the bytes this binary carries.
+    /// Record the files a run just wrote as ours, on top of what an earlier one
+    /// left, digesting the bytes this binary carries.
     ///
     /// Never what is on disk. Digesting the disk would record a file kept
     /// *because* it was edited as though baudelaire had written it, and the
@@ -301,19 +312,43 @@ impl Lock {
     /// our own bytes says only what this copy of the theme is, which is the one
     /// claim the record is entitled to make: a file that differs from it is the
     /// author's, whether they changed it after an install or had it before one.
-    fn write(dir: &Path, theme: &str, files: &[&'static include_dir::File<'static>]) -> Result<()> {
+    ///
+    /// And only what was *written*. A file already there was skipped, so this
+    /// run learned nothing about it: an entry an earlier install left stands, at
+    /// the digest that install wrote, and a file that was never ours gains no
+    /// entry at all. Re-recording the whole shipped set was how a second `add`
+    /// broke `update`: every file an older baudelaire had written came back with
+    /// *this* binary's digest, so an untouched file read as `Edited` and update
+    /// kept it, release after release.
+    fn claim(
+        dir: &Path,
+        theme: &str,
+        written: &[&'static include_dir::File<'static>],
+    ) -> Result<()> {
+        let previous = Self::read(dir).filter(|lock| lock.theme == theme);
+        // Nothing of ours here and nothing written: a directory that is entirely
+        // the author's stays that way rather than gaining a record of no files.
+        if written.is_empty() && previous.is_none() {
+            return Ok(());
+        }
+        let mut files = previous
+            .as_ref()
+            .map_or_else(std::collections::BTreeMap::new, |lock| lock.files.clone());
+        files.extend(written.iter().map(|file| {
+            (
+                file.path().to_string_lossy().into_owned(),
+                crate::graph::Hash::of_bytes(file.contents()).hex(),
+            )
+        }));
         let lock = Self {
             theme: theme.to_owned(),
-            baudelaire: crate::VERSION.to_owned(),
-            files: files
-                .iter()
-                .map(|file| {
-                    (
-                        file.path().to_string_lossy().into_owned(),
-                        crate::graph::Hash::of_bytes(file.contents()).hex(),
-                    )
-                })
-                .collect(),
+            // What wrote the files that are here. A run that wrote none leaves
+            // the record describing the baudelaire that did.
+            baudelaire: match written.is_empty() {
+                true => previous.map_or_else(|| crate::VERSION.to_owned(), |lock| lock.baudelaire),
+                false => crate::VERSION.to_owned(),
+            },
+            files,
         };
         let json = serde_json::to_vec_pretty(&lock)
             .map_err(|why| ThemeError::lock(dir.join(Self::FILE).display(), why))?;
@@ -350,19 +385,22 @@ impl Bundled {
     /// The copy is recorded in a [`Lock`] beside the files, which is what later
     /// tells your edits from ours.
     pub fn install(&self, dir: &Path) -> Result<Vec<PathBuf>> {
-        let shipped = self.shipped();
         let mut written = Vec::new();
-        for file in &shipped {
+        for file in self.shipped() {
             let dst = dir.join(file.path());
             if dst.exists() {
                 continue;
             }
             Self::place(&dst, file.contents())?;
-            written.push(file.path().to_path_buf());
+            written.push(file);
         }
-        written.sort();
-        Lock::write(dir, self.name, &shipped)?;
-        Ok(written)
+        Lock::claim(dir, self.name, &written)?;
+        let mut paths: Vec<PathBuf> = written
+            .iter()
+            .map(|file| file.path().to_path_buf())
+            .collect();
+        paths.sort();
+        Ok(paths)
     }
 
     /// Bring an installed copy up to this binary's version, file by file.
@@ -389,6 +427,7 @@ impl Bundled {
                 })
                 .collect(),
         };
+        let mut written = Vec::new();
         for file in &shipped {
             let rel = file.path();
             let state = tracked
@@ -397,16 +436,17 @@ impl Bundled {
                 .map_or(State::Added, |t| t.state);
             let replace = match state {
                 State::Pristine | State::Added => true,
-                State::Edited => force,
+                State::Edited | State::Yours => force,
                 // Deleted on purpose: an update that puts a file back is an
                 // update that undoes a decision.
                 State::Gone => false,
             };
             if replace {
                 Self::place(&dir.join(rel), file.contents())?;
+                written.push(*file);
             }
         }
-        Lock::write(dir, self.name, &shipped)?;
+        Lock::claim(dir, self.name, &written)?;
         Ok(tracked)
     }
 
@@ -432,7 +472,9 @@ impl Bundled {
             let remove = match file.state {
                 State::Pristine => true,
                 State::Edited => force,
-                State::Gone | State::Added => false,
+                // `Yours` with them, at any force: taking our copy off is no
+                // licence to delete a file we never wrote.
+                State::Gone | State::Added | State::Yours => false,
             };
             match remove {
                 true => crate::fs::remove_file(dir.join(&file.rel))?,
@@ -549,7 +591,7 @@ mod tests {
 
 #[cfg(all(test, feature = "themes"))]
 mod bundled_tests {
-    use super::{BUNDLED, Bundled};
+    use super::{BUNDLED, Bundled, State};
 
     /// Every shipped theme is complete enough to be a theme: its defaults and
     /// at least one layout, so `theme add` cannot write a directory that fails
@@ -603,8 +645,9 @@ mod bundled_tests {
     }
 
     /// A file already there when `theme add` ran was never ours, so the record
-    /// must not claim it: an install skips it, and an update has to leave it
-    /// alone for the same reason it leaves an edit alone.
+    /// must not claim it: an install skips it, an update leaves it alone, and a
+    /// remove does not delete it even under `--force`, which is the difference
+    /// between a file baudelaire wrote and one it merely found.
     #[test]
     fn an_install_does_not_claim_a_file_it_found() {
         const MINE: &[u8] = b"/* mine */\n";
@@ -616,8 +659,58 @@ mod bundled_tests {
 
         let theme = Bundled::find("albatros").expect("shipped");
         theme.install(&dir).expect("install");
-        theme.update(&dir, false).expect("update");
+        let tracked = theme.update(&dir, false).expect("update");
         assert_eq!(std::fs::read(&style).expect("read"), MINE);
+        assert!(
+            tracked
+                .iter()
+                .any(|file| file.rel == *"assets/style.css" && file.state == State::Yours),
+            "a found file is the author's, not a file this version adds"
+        );
+
+        Bundled::uninstall(&dir, true).expect("remove");
+        assert_eq!(std::fs::read(&style).expect("read"), MINE);
+    }
+
+    /// The bug a second `add` used to leave behind: it writes no file, so it
+    /// must record no file either. Claiming the whole shipped set re-digested
+    /// every file an older baudelaire had written, turning an untouched one into
+    /// an `Edited` one that `update` then kept for good.
+    #[test]
+    fn a_stray_add_does_not_disown_an_older_install() {
+        const OLD: &[u8] = b"/* the 0.0.9 stylesheet */\n";
+        let rel = "assets/style.css";
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path().join("albatros");
+        let theme = Bundled::find("albatros").expect("shipped");
+        theme.install(&dir).expect("install");
+
+        // An older baudelaire's copy: an older file, and a record that says so.
+        std::fs::write(dir.join(rel), OLD).expect("age");
+        let mut lock = super::Lock::read(&dir).expect("lock");
+        lock.files
+            .insert(rel.to_owned(), crate::graph::Hash::of_bytes(OLD).hex());
+        lock.baudelaire = "0.0.9".to_owned();
+        std::fs::write(
+            dir.join(super::Lock::FILE),
+            serde_json::to_vec(&lock).expect("json"),
+        )
+        .expect("record");
+
+        assert!(theme.install(&dir).expect("second add").is_empty());
+        let lock = super::Lock::read(&dir).expect("lock");
+        assert_eq!(
+            lock.baudelaire, "0.0.9",
+            "a run that wrote nothing restamped"
+        );
+        assert!(
+            lock.state(&dir, &theme.shipped())
+                .iter()
+                .any(|file| file.rel == *rel && file.state == State::Pristine),
+            "an untouched older file read as the author's"
+        );
+        theme.update(&dir, false).expect("update");
+        assert_ne!(std::fs::read(dir.join(rel)).expect("read"), OLD);
     }
 
     /// The other half: what the record *does* claim is replaced. An older

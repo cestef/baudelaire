@@ -1439,6 +1439,7 @@ impl ThemeArgsFor {
                 State::Edited => "edited",
                 State::Gone => "deleted",
                 State::Added => "new in this version",
+                State::Yours => "yours, not the theme's",
             };
             cx.ui
                 .item(markup!("{} `{}`", state, file.rel.display().to_string()));
@@ -1455,16 +1456,19 @@ impl ThemeUpdateArgs {
         let theme = Bundled::find(&self.theme.name)?;
         let rel = self.theme.rel(theme);
         let tracked = theme.update(&cx.root.join(&rel), self.force)?;
-        let count = |state: State| tracked.iter().filter(|f| f.state == state).count();
         cx.ui.done(markup!(
             "`{}` is at baudelaire `{}`",
             rel.display().to_string(),
             crate::VERSION
         ));
-        let kept = count(State::Edited);
-        if kept > 0 && !self.force {
+        // A file baudelaire wrote and you changed, and one that was here before
+        // it ever ran, are kept for the same reason and reported together.
+        let mine =
+            |file: &&crate::theme::Tracked| matches!(file.state, State::Edited | State::Yours);
+        let kept: Vec<_> = tracked.iter().filter(mine).collect();
+        if !kept.is_empty() && !self.force {
             cx.ui.section("kept");
-            for file in tracked.iter().filter(|f| f.state == State::Edited) {
+            for file in kept {
                 cx.ui.item(markup!("`{}`", file.rel.display().to_string()));
             }
             cx.ui.detail(markup!(

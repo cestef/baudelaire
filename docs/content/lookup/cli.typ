@@ -376,8 +376,12 @@ exists to answer one question: which of these files are still ours?
   [Untouched since it was written], [Rewrites it / deletes it.],
   [Edited], [Leaves it and says so. `--force` overrides.],
   [Deleted], [Leaves it deleted: an update that puts a file back undoes a decision.],
-  [Yours, not the theme's], [Never touches it.],
+  [Already there when `add` ran], [Never recorded, so `update` leaves it (`--force` overrides) and `remove` never deletes it, at any force.],
 )
+
+A run records only the files it wrote, so `add` over an install from an earlier
+baudelaire changes nothing about the files that binary left: they are still its,
+and still what `update` brings forward.
 
 A `remove` that kept something keeps the record with it, so the same command
 with `--force` can still finish. A theme you wrote or copied in by hand has no

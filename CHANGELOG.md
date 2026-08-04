@@ -314,6 +314,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **theme**: `theme add` records only the files it wrote. It re-recorded the
+  whole shipped set, digested from the running binary, so a second `add` over an
+  install from an earlier baudelaire disowned every file that binary had written:
+  each untouched one then read as edited, and `theme update` kept it, release
+  after release. A file that was already there when `add` ran is now never
+  claimed at all, so `theme remove --force` no longer deletes a file baudelaire
+  did not write.
+
 - **serve**: the watcher is registered before the banner says it is. It came up
   after the banner and after the browser launch, so an edit saved in that window
   reached nobody; a file event is edge-triggered, so nothing later made up for
