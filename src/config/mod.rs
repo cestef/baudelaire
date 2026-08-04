@@ -1110,6 +1110,49 @@ pub struct FeedConfig {
     /// whole site. Follows the term pages, so it needs `listing` on the
     /// taxonomy.
     pub terms: bool,
+    /// What each format's file is called, when the conventional name is not the
+    /// one a site already publishes under. A moved feed is the one move a
+    /// redirect stub cannot rescue, since a reader fetches the file and never
+    /// renders the meta refresh.
+    pub names: FeedNames,
+}
+
+/// Per-format file name overrides for [`FeedConfig`].
+#[derive(Debug, Clone, Default, Hash)]
+pub struct FeedNames {
+    pub rss: Option<String>,
+    pub atom: Option<String>,
+    pub json: Option<String>,
+}
+
+impl FeedConfig {
+    /// This format's file name: the configured override, else the conventional
+    /// one.
+    ///
+    /// The single answer, because a feed names its own file in three places and
+    /// an aggregator would notice them disagreeing: the file the build writes,
+    /// the `<id>`/`feed_url` inside it, and every page's autodiscovery tag.
+    pub fn file(&self, kind: FeedKind) -> &str {
+        let named = match kind {
+            FeedKind::Rss => &self.names.rss,
+            FeedKind::Atom => &self.names.atom,
+            FeedKind::Json => &self.names.json,
+        };
+        named.as_deref().unwrap_or_else(|| kind.file())
+    }
+
+    /// This feed's absolute URL under `base`, for a language `scope` (empty for
+    /// the default language).
+    ///
+    /// The file name is appended to the scope's directory URL rather than
+    /// joined as a path segment, which would give it a trailing slash.
+    pub fn url(&self, kind: FeedKind, base: &BaseUrl, scope: &str) -> String {
+        format!(
+            "{}{}",
+            base.join(Permalink::join(&[scope])),
+            self.file(kind)
+        )
+    }
 }
 
 /// A syndication feed format.
@@ -1129,7 +1172,8 @@ impl Named for FeedKind {
 }
 
 impl FeedKind {
-    /// The conventional output file name for this format.
+    /// The conventional output file name for this format, which
+    /// [`FeedConfig::file`] overrides.
     pub fn file(self) -> &'static str {
         match self {
             Self::Rss => "rss.xml",
@@ -1148,18 +1192,6 @@ impl FeedKind {
             Self::Atom => "application/atom+xml",
             Self::Json => "application/feed+json",
         }
-    }
-
-    /// This feed's absolute URL under `base`, for a language `scope` (empty for
-    /// the default language).
-    ///
-    /// One derivation, because two places name the same file and a reader would
-    /// notice if they disagreed: the feed writes this into its own `<id>` and
-    /// `feed_url`, and every page's `<head>` advertises it. Note the file name
-    /// is appended to the scope's directory URL rather than joined as a path
-    /// segment, which would give it a trailing slash.
-    pub fn url(self, base: &BaseUrl, scope: &str) -> String {
-        format!("{}{}", base.join(Permalink::join(&[scope])), self.file())
     }
 }
 

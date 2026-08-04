@@ -35,7 +35,27 @@ posts.
   [`formats`], [`rss` | `atom` | `json`], [--], [Which feed files to write. Naming none turns feeds off.],
   [`limit`], [int], [`20`], [How many of the newest dated pages a feed carries.],
   [`terms`], [bool], [`#false`], [Also write a feed beside every taxonomy term listing.],
+  [`names`], [block], [--], [What each format's file is called, one key per format.],
 )
+
+=== Keeping an old feed URL
+
+A feed is the one artifact a redirect cannot save: a reader fetches the file and
+never renders the stub's meta refresh. Coming from a generator that named it
+differently, keep the name:
+
+```kdl
+generate {
+  feed {
+    formats "rss"
+    names { rss "index.xml" }   // Hugo's name; Jekyll's is feed.xml
+  }
+}
+```
+
+The build writes that file, the feed's own `<id>` claims it, and every page's
+autodiscovery tag points at it. A format with no override keeps the conventional
+name.
 
 Every page advertises the feeds in its `<head>`, one
 `<link rel="alternate">` per configured format. That is how a reader or a

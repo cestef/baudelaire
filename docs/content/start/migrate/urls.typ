@@ -107,14 +107,20 @@ why the two cannot be served at once.
 
 Feed files are named by format: `rss.xml`, `atom.xml`, `feed.json`. Zola's
 default `atom.xml` matches; Hugo's `index.xml` and Jekyll's `feed.xml` do not,
-and a subscriber's reader will not follow a meta refresh. Leave a copy at the old
-path:
+and a subscriber's reader fetches the file rather than following a meta refresh.
+Say what yours is called:
 
 ```kdl
-hooks {
-  after "cp public/rss.xml public/index.xml"
+generate {
+  feed {
+    formats "rss"
+    names { rss "index.xml" }
+  }
 }
 ```
+
+The file, the feed's own `<id>` and every page's autodiscovery tag follow the
+name together.
 
 == Check the result
 

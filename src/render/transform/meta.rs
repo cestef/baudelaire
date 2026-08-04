@@ -192,7 +192,7 @@ impl Card<'_> {
         let scope = self.config.scope(&self.page.lang, "");
         let title = self.config.title(&self.page.lang);
         for kind in &self.config.generate.feed.formats {
-            let href = kind.url(&base, &scope);
+            let href = self.config.generate.feed.url(*kind, &base, &scope);
             tags.push(
                 HtmlElement::new(tag::link)
                     .with_attr(attr::rel, "alternate")

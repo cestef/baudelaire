@@ -23,9 +23,9 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
     CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DisplayMode, DraftConfig,
-    Eagerness, FeedConfig, FeedKind, FieldSchema, FieldType, GenerateConfig, HooksConfig,
-    HtmlConfig, IconConfig, IconPurpose, ImagesConfig, JpegConfig, LanguageConfig, LinkConfig,
-    Linked, LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig,
+    Eagerness, FeedConfig, FeedKind, FeedNames, FieldSchema, FieldType, GenerateConfig,
+    HooksConfig, HtmlConfig, IconConfig, IconPurpose, ImagesConfig, JpegConfig, LanguageConfig,
+    LinkConfig, Linked, LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig,
     PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch,
     ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
     SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
@@ -1576,6 +1576,48 @@ impl Section for FeedConfig {
             "Also write a feed per taxonomy term.",
             |c, n, t| {
                 c.terms = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "names",
+            Nested(FeedNames::rows),
+            "What each format's file is called, if not the conventional name.",
+            |c, n, t| c.names.fill(n, t),
+        ),
+    ]);
+}
+
+/// The `feed { names { .. } }` section: one key per format, each naming the
+/// file that format is written to and advertised under. A site arriving from a
+/// generator that named them differently keeps its subscribers by stating the
+/// old names here.
+impl Section for FeedNames {
+    const RULES: Block<Self> = Block(&[
+        (
+            "rss",
+            Text,
+            "The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.",
+            |c, n, t| {
+                c.rss = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "atom",
+            Text,
+            "The Atom file's name. Defaults to `atom.xml`.",
+            |c, n, t| {
+                c.atom = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "json",
+            Text,
+            "The JSON Feed file's name. Defaults to `feed.json`.",
+            |c, n, t| {
+                c.json = Some(n.string(t, 0)?);
                 Ok(())
             },
         ),

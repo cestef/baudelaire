@@ -14,6 +14,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **generate**: `feed { names }`, what each format's file is called.
+
+  ```kdl
+  generate {
+    feed {
+      formats "rss"
+      names { rss "index.xml" }   // Hugo's name; Jekyll's is feed.xml
+    }
+  }
+  ```
+
+  The file the build writes, the `<id>` the feed claims for itself, and every
+  page's autodiscovery tag follow the name together. It exists for a site moving
+  here from a generator that named the file differently: a feed is the one URL a
+  redirect stub cannot rescue, because a reader fetches the file rather than
+  rendering its meta refresh. A format with no override keeps the conventional
+  name.
+
 - **config**: `description`, what the site is in one line, with a per-language
   override beside `site` and `author`.
 

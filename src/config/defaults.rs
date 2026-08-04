@@ -310,6 +310,8 @@ impl Default for FeedConfig {
             // off by default: one more file per term per format multiplies the
             // output of a heavily tagged site
             terms: false,
+            // each format's conventional file name until a site says otherwise
+            names: crate::config::FeedNames::default(),
         }
     }
 }

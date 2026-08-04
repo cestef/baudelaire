@@ -6,7 +6,7 @@ use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
-use crate::config::{BaseUrl, Config, FeedKind, Permalink};
+use crate::config::{BaseUrl, Config, FeedConfig, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
 use crate::error::{Artifact, FeedDateError, Result};
 
@@ -60,6 +60,7 @@ impl Processor for Feeds {
                 site.config.description(lang),
                 &dated,
                 &scope,
+                &site.config.generate.feed,
             );
             Self::emit(site, out, &feed)?;
         }
@@ -92,7 +93,14 @@ impl Feeds {
                 Self::emit(
                     site,
                     out,
-                    &Feed::new(base, &title, site.config.description(lang), &dated, scope),
+                    &Feed::new(
+                        base,
+                        &title,
+                        site.config.description(lang),
+                        &dated,
+                        scope,
+                        &site.config.generate.feed,
+                    ),
                 )?;
             }
         }
@@ -107,7 +115,7 @@ impl Feeds {
             return Ok(());
         }
         for kind in &site.config.generate.feed.formats {
-            let path = site.dist(&[feed.scope, kind.file()]);
+            let path = site.dist(&[feed.scope, site.config.generate.feed.file(*kind)]);
             out.file(&path, &feed.render(*kind)?)?;
             out.note(format_args!("wrote {}", path.display()));
         }
@@ -131,6 +139,9 @@ struct Feed<'a> {
     /// Atom requires a unique feed id, so to an aggregator `/rss.xml` and
     /// `/fr/rss.xml` were one feed with two sets of entries.
     scope: &'a str,
+    /// The `feed { }` config, for what each format's file is called: the id a
+    /// feed writes about itself has to be the file it is served from.
+    names: &'a FeedConfig,
 }
 
 impl<'a> Feed<'a> {
@@ -140,6 +151,7 @@ impl<'a> Feed<'a> {
         description: Option<&'a str>,
         items: &'a [&'a Page],
         scope: &'a str,
+        names: &'a FeedConfig,
     ) -> Self {
         Self {
             base,
@@ -147,6 +159,7 @@ impl<'a> Feed<'a> {
             description,
             items,
             scope,
+            names,
         }
     }
 
@@ -188,7 +201,7 @@ impl<'a> Feed<'a> {
 
     /// This feed's own absolute URL, its stable identity.
     fn url(&self, kind: FeedKind) -> String {
-        kind.url(self.base, self.scope)
+        self.names.url(kind, self.base, self.scope)
     }
 
     fn link(&self, page: &Page) -> String {

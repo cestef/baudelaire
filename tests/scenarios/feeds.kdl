@@ -487,3 +487,36 @@ scenario "a language describes the site in its own words" {
     file "fr/rss.xml" { contains "<description>Notes de voyage.</description>" }
   }
 }
+
+// A site arriving from Hugo (`index.xml`) or Jekyll (`feed.xml`) keeps its
+// subscribers only if the file keeps its name: a reader fetches the file and
+// never renders a redirect stub.
+scenario "a feed is written, advertised and identified under its configured name" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      generate {
+        feed {
+          formats "rss" "atom"
+          names { rss "index.xml" }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2024, month: 1, day: 2),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "index.xml" { contains "<item>" }
+    absent "rss.xml"
+    // The head tag points at the same file the build wrote.
+    file "posts/a/index.html" {
+      contains #"type="application/rss+xml" title="T" href="https://example.com/index.xml""#
+    }
+    // A format with no override keeps its conventional name.
+    file "atom.xml" { contains "<id>https://example.com/atom.xml</id>" }
+  }
+}
