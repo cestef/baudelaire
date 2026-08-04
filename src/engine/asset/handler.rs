@@ -25,6 +25,60 @@ use super::image::Raster;
 #[cfg(feature = "js")]
 use super::js::{Js, Script};
 
+/// What the pipeline reads but never publishes: the sources a build step
+/// consumes, and the files a convention marks import-only.
+///
+/// The asset tree is both an input tree and an output tree, and nothing in a
+/// file's extension says which. A `.scss` is a source, a `.ts` is a source
+/// unless something bundles it, and `_partial.css` is a fragment its neighbour
+/// imports. All three used to be copied verbatim to `dist`, so a site shipped
+/// its own TypeScript (unrunnable in a browser, and carrying whatever the
+/// comments said) beside the CSS its Sass produced.
+///
+/// One rule for the whole tree rather than a `claims` arm per handler: an
+/// exclusion is not a kind, and the JS handler's own `_name` convention only
+/// applied while bundling, which is exactly when the leak did not happen.
+/// `static/` is untouched by this: that tree is the verbatim escape hatch, and a
+/// host's `_redirects` has to publish under its own name.
+pub(super) struct Private;
+
+impl Private {
+    /// Extensions no browser can use, whatever the config says: a preprocessor
+    /// reads them and writes something else.
+    const SOURCES: &'static [&'static str] = &["scss", "sass", "less", "styl"];
+
+    /// Script sources that need a build step to run at all, so publishing one
+    /// serves a file the browser rejects.
+    const UNBUNDLED: &'static [&'static str] = &["ts", "mts", "cts", "tsx", "jsx"];
+
+    /// Whether `rel` is an input rather than an artifact.
+    pub(super) fn covers(rel: &Path, config: &Config) -> bool {
+        let ext = rel.ext().to_ascii_lowercase();
+        Self::partial(rel)
+            || Self::declaration(rel)
+            || Self::SOURCES.contains(&ext.as_str())
+            || (!config.assets.bundle && Self::UNBUNDLED.contains(&ext.as_str()))
+    }
+
+    /// A file whose name starts with `_` is imported by a neighbour, never
+    /// served: Sass has spelled partials this way for a decade, and the script
+    /// handler already read it the same way.
+    fn partial(rel: &Path) -> bool {
+        rel.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('_'))
+    }
+
+    /// A type declaration (`globals.d.ts`), read off the stem's own extension so
+    /// `.d.mts` and `.d.cts` are the same rule rather than two more cases.
+    fn declaration(rel: &Path) -> bool {
+        rel.file_stem()
+            .map(Path::new)
+            .and_then(Path::extension)
+            .is_some_and(|e| e.eq_ignore_ascii_case("d"))
+    }
+}
+
 /// When a handler runs, in order. `Early` assets (images, copies) provide the
 /// fingerprinted names others reference; `Late` assets (stylesheets) rewrite
 /// their references against them; `Bundle` assets (scripts) run last, so a
@@ -80,10 +134,9 @@ impl Ctx<'_> {
 /// Path knowledge the pipeline and its handlers share: how a file's kind is
 /// read off its name, and how a suffix is spliced into that name.
 pub(super) trait PathExt {
-    /// The lowercase-comparable extension, or `""` when there is none. Only the
-    /// css/js/image handlers claim by extension, so it is absent from a
-    /// copy-only (all-features-off) build.
-    #[cfg(any(feature = "css", feature = "js", feature = "images"))]
+    /// The lowercase-comparable extension, or `""` when there is none. Read by
+    /// the css/js/image handlers to claim a file, and by [`Private`] to tell a
+    /// build input from an artifact, which every flavor does.
     fn ext(&self) -> &str;
 
     /// The same path with `suffix` appended to the file stem, the extension
@@ -94,7 +147,6 @@ pub(super) trait PathExt {
 }
 
 impl PathExt for Path {
-    #[cfg(any(feature = "css", feature = "js", feature = "images"))]
     fn ext(&self) -> &str {
         self.extension()
             .and_then(|e| e.to_str())

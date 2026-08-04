@@ -288,3 +288,82 @@ scenario "a type declaration is read, not emitted" {
     absent "assets/globals.d.ts"
   }
 }
+
+// The asset tree is an input tree as well as an output tree, and nothing in an
+// extension says which. A default-config site published its own TypeScript
+// (which no browser runs), its Sass sources, and the `_partial` files the
+// bundler's own convention already called import-only, because that convention
+// applied only while bundling.
+scenario "the pipeline publishes artifacts, never the sources it read" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      """#
+    "assets/app.ts" #"""
+      const secret: string = "internal";
+      export function go(): void { console.log(secret); }
+      """#
+    "assets/_partial.ts" #"""
+      export const helper = 1;
+      """#
+    "assets/globals.d.ts" #"""
+      declare const VERSION: string;
+      """#
+    "assets/style.scss" #"""
+      $ink: #222;
+      body { color: $ink; }
+      """#
+    "assets/_brand.css" #"""
+      :root { --brand: #c00; }
+      """#
+    "assets/site.css" #"""
+      body { margin: 0; }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    // The one file that is an artifact.
+    file "assets/site.css"
+    absent "assets/app.ts"
+    absent "assets/_partial.ts"
+    absent "assets/globals.d.ts"
+    absent "assets/style.scss"
+    absent "assets/_brand.css"
+  }
+}
+
+// Bundling turns a script source into an artifact, and only that: the partial
+// it imports and the declarations beside it stay out.
+scenario "bundling publishes the bundle and none of its inputs" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      assets { bundle #true }
+      """#
+    "assets/app.ts" #"""
+      import { helper } from "./_partial";
+      export function go(): number { return helper; }
+      """#
+    "assets/_partial.ts" #"""
+      export const helper = 1;
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      home
+      """#
+  }
+  expect {
+    ok
+    // Tree-shaken and inlined: the partial's value survives, its module does not.
+    file "assets/app.js" { contains "return 1" }
+    absent "assets/app.ts"
+    absent "assets/_partial.js"
+    absent "assets/_partial.ts"
+  }
+}

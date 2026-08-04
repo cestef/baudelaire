@@ -41,7 +41,7 @@ use memo::Memo;
 
 // Re-exported for the handler modules (and [`memo`]), which name these as
 // `super::*`; the protocol itself lives in [`handler`].
-use handler::{Ctx, Handler, PathExt, Phase, Variant, builtin};
+use handler::{Ctx, Handler, PathExt, Phase, Private, Variant, builtin};
 
 #[cfg(feature = "js")]
 use js::Js;
@@ -163,7 +163,13 @@ impl<'a> Assets<'a> {
             emitted: Emitted::new(self.config.base_path().to_owned()),
             ..Processed::default()
         };
-        let sources = self.sources.files()?;
+        // What the tree holds for the build's own use never reaches `dist`.
+        let sources: Vec<Layered> = self
+            .sources
+            .files()?
+            .into_iter()
+            .filter(|file| !Private::covers(&file.rel, self.config))
+            .collect();
         if sources.is_empty() {
             return Ok(out);
         }

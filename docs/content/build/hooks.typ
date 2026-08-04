@@ -9,7 +9,7 @@ optimizer, a deploy script.
 
 ```kdl
 hooks {
-  before "tailwindcss -i assets/app.css -o assets/style.css --minify"
+  before "tailwindcss -i assets/_app.css -o assets/style.css --minify"
   after "pagefind --site public"
 }
 ```
@@ -45,7 +45,7 @@ minified, bundled and fingerprinted like a file you checked in.
 
 ```kdl
 hooks {
-  before "tailwindcss -i assets/app.css -o assets/style.css --minify"
+  before "tailwindcss -i assets/_app.css -o assets/style.css --minify"
 }
 assets {
   minify #true

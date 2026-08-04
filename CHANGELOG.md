@@ -12,6 +12,14 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Upgrading
+
+- A site whose `assets/` holds preprocessor sources, `_partial` files or
+  unbundled `.ts` will stop publishing them. That is the point, but if you were
+  linking one of those URLs deliberately, move the file to `static/`, which
+  publishes verbatim. The documented Tailwind recipe now names its input
+  `assets/_app.css` so the input stays out of the output.
+
 ### Added
 
 - **init**: every starter shape writes a `content/404.typ`, and a build with no
@@ -175,6 +183,16 @@ chores are visible in the git history and change nothing for a site.
   not only the runs that set up a repository with `--vcs`.
 
 ### Fixed
+
+- **assets**: the pipeline publishes what it produced, not what it read. A
+  default-config site copied its own TypeScript to `dist` (`app.ts`, which no
+  browser runs, comments and all), its Sass and Less sources, and the
+  `_partial` files the bundler's own convention already treats as import-only,
+  because that convention applied only while bundling. One rule now covers the
+  whole asset tree: a leading `_`, a `.d.ts` declaration, a preprocessor source
+  (`.scss`, `.sass`, `.less`, `.styl`), and an unbundled script source
+  (`.ts`, `.tsx`, `.jsx`) are inputs and stay out of the output. `static/` is
+  untouched, being the verbatim escape hatch.
 
 - **serve**: an unmatched URL under a language's own subtree is answered with
   that language's not-found page. The build writes one per language and a host

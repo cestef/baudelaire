@@ -128,16 +128,38 @@ there. JSX defaults to the automatic runtime, so `jsxImportSource` (or a plain
   changes.
 ]
 
-== Partials
+== What is an input, not an output
 
-A script whose name starts with `_` is import-only. It is pulled into
-whatever imports it and never emitted on its own:
+The asset tree holds both what the site serves and what the build reads to make
+it. Nothing in a file's extension says which, so three rules mark the inputs, and
+none of them reaches `dist`:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([In `assets/`], [Why it is not published]),
+  [`_search.js`, `_app.css`, `_type.scss`], [A leading `_` means import-only: something else pulls it in.],
+  [`globals.d.ts`], [A type declaration carries no runtime code.],
+  [`style.scss`, `x.sass`, `x.less`, `x.styl`], [A preprocessor source. No browser reads one.],
+  [`app.ts`, `app.tsx`, `app.jsx` with `bundle` off], [A script no browser can run, and nothing is bundling it.],
+)
 
 ```text
 assets/
   main.js       -> /assets/main.js
   _search.js    -> nothing, inlined into main.js
+  app.ts        -> /assets/app.js, bundled (nothing, with `bundle` off)
+  _brand.scss   -> nothing; your Sass step reads it
 ```
+
+Name a preprocessor's input with a leading `_` and it stays out of the output
+whatever its extension: that is how a `tailwindcss -i assets/_app.css` recipe
+publishes only what it produced.
+
+#callout(kind: "note")[
+  This applies to `paths { assets }` only. `static/` is the verbatim escape
+  hatch, and a file there publishes under its own name whatever it is called.
+]
 
 == Bypassing the pipeline
 

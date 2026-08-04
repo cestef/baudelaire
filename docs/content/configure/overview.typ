@@ -42,7 +42,7 @@ prune #true                 // booleans are #true and #false
 serve { port 1821 }         // a block groups keys under a name
 links { style clean }       // a simple word needs no quotes
 hooks {
-  before #"tailwindcss -i "assets/app.css" -o "assets/style.css""#
+  before #"tailwindcss -i "assets/_app.css" -o "assets/style.css""#
 }
 ```
 
