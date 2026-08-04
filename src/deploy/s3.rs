@@ -164,10 +164,11 @@ impl Bucket {
             (format!("https://{host}"), host, String::new())
         };
         Self {
-            agent: ureq::Agent::config_builder()
-                .tls_config(crate::remote::tls())
-                .build()
-                .into(),
+            // `Status::Read`, because `check` below reads the bucket's own
+            // error body: that is where `SignatureDoesNotMatch` and
+            // `NoSuchBucket` are written, and the status alone cannot tell them
+            // apart.
+            agent: crate::remote::Http::agent("deploy", crate::remote::Status::Read),
             name: config.bucket.clone(),
             access_key,
             secret_key,
@@ -185,9 +186,14 @@ impl Bucket {
     /// Every object currently under the prefix, keyed by object key with its
     /// ETag, following continuation tokens to the end.
     fn objects(&self) -> Result<Digests> {
+        // A host that keeps answering with the same continuation token (buggy
+        // or hostile) fails loudly instead of looping for ever with `out`
+        // growing. The same ceiling reasoning as `atproto::Repo`'s page limit;
+        // at 1000 keys/page this admits ten million objects.
+        const MAX_PAGES: usize = 10_000;
         let mut out = Digests::new();
         let mut token: Option<String> = None;
-        loop {
+        for _ in 0..MAX_PAGES {
             let mut query = vec![("list-type", "2".to_owned())];
             if !self.prefix.is_empty() {
                 query.push(("prefix", format!("{}/", self.prefix)));
@@ -210,10 +216,13 @@ impl Bucket {
             );
             match listing.next {
                 Some(next) => token = Some(next),
-                None => break,
+                None => return Ok(out),
             }
         }
-        Ok(out)
+        // Fell off the ceiling with a token still pending: the listing never
+        // reached the end, and a short one here would read as a bucket missing
+        // the objects it never mentioned, which the sweep would then delete.
+        Err(DeployError::Pagination { pages: MAX_PAGES }.into())
     }
 
     /// The signing URI for an object at relative `key`: the root, the prefix, and

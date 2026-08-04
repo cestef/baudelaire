@@ -21,11 +21,7 @@ pub struct Blob(Value);
 /// An agent that surfaces 4xx/5xx as ordinary responses, not transport errors,
 /// so an XRPC error body can be read and surfaced instead of swallowed.
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .tls_config(crate::remote::tls())
-        .build()
-        .into()
+    crate::remote::Http::agent("announce", crate::remote::Status::Read)
 }
 
 /// A read-only handle to a repository on a PDS: its host and DID, plus a shared

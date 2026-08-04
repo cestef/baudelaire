@@ -29,10 +29,6 @@ use crate::ui::Ui;
 /// both slow and rude.
 const FRESH: Duration = Duration::from_hours(7 * 24);
 
-/// Per-request ceiling. Generous enough for a slow host, short enough that one
-/// black hole does not hold up the run.
-const TIMEOUT: Duration = Duration::from_secs(10);
-
 /// The external link check.
 pub(in crate::engine) struct External;
 
@@ -109,16 +105,10 @@ impl External {
     /// The agent every probe shares: one connection pool, a bounded wait, and a
     /// user agent that tells an administrator who is knocking.
     ///
-    /// `http_status_as_error(false)` because a 404 *is* the answer here, not a
-    /// transport failure to be unwrapped out of an error type.
+    /// [`Status::Read`] because a 404 *is* the answer here, not a transport
+    /// failure to be unwrapped out of an error type.
     fn agent() -> ureq::Agent {
-        ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_global(Some(TIMEOUT))
-            .user_agent(format!("baudelaire/{} (link checker)", crate::VERSION))
-            .tls_config(crate::remote::tls())
-            .build()
-            .into()
+        crate::remote::Http::agent("link checker", crate::remote::Status::Read)
     }
 }
 

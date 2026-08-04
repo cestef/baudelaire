@@ -76,17 +76,24 @@ fn s3_config(site: &Site, port: u16) -> Config {
 
 /// Minimal S3-compatible mock: ListObjectsV2, PUT, DELETE. Returns its port.
 fn spawn_s3(store: Store, log: Log) -> u16 {
+    spawn_s3_answering(store, log, None)
+}
+
+/// `refusing` makes every write answer with that S3 error code, in the XML
+/// shape a real bucket uses, so a test can assert on what the *host* said
+/// rather than on the status alone.
+fn spawn_s3_answering(store: Store, log: Log, refusing: Option<&'static str>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
-            serve_s3(stream, &store, &log);
+            serve_s3(stream, &store, &log, refusing);
         }
     });
     port
 }
 
-fn serve_s3(mut stream: TcpStream, store: &Store, log: &Log) {
+fn serve_s3(mut stream: TcpStream, store: &Store, log: &Log, refusing: Option<&'static str>) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request = String::new();
     reader.read_line(&mut request).unwrap();
@@ -117,6 +124,19 @@ fn serve_s3(mut stream: TcpStream, store: &Store, log: &Log) {
         None => format!("{method} {path}"),
     });
 
+    if let Some(code) = refusing.filter(|_| method != "GET") {
+        let body = format!(
+            "<?xml version=\"1.0\"?><Error><Code>{code}</Code>\
+             <Message>The request signature we calculated does not match</Message></Error>"
+        );
+        let response = format!(
+            "HTTP/1.1 403 Forbidden\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+        return;
+    }
     let body = if path.contains("list-type") {
         listing(&store.lock().unwrap())
     } else {
@@ -232,6 +252,38 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
         "a hashed asset should be cached forever: {:?}",
         line("app.abc123def456.css")
     );
+}
+
+/// A bucket that refuses a write says why, and the deploy says what it said.
+///
+/// The agent used to surface a non-2xx as a transport error, so the branch that
+/// reads the bucket's own `<Error><Code>` body was unreachable and every refusal
+/// reported a bare status: a wrong secret, a missing bucket and a rate limit
+/// were indistinguishable.
+#[test]
+fn s3_deploy_reports_the_reason_the_bucket_gave() {
+    let site = Site::new();
+    dist(&site);
+
+    let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
+    let log: Log = Arc::new(Mutex::new(Vec::new()));
+    let port = spawn_s3_answering(
+        Arc::clone(&store),
+        Arc::clone(&log),
+        Some("SignatureDoesNotMatch"),
+    );
+
+    set_aws_creds();
+    let opts = Options {
+        dry_run: false,
+        yes: true,
+        secret: None,
+        interaction: &Headless,
+    };
+    let err = deploy::run(&s3_config(&site, port), &opts, &silent()).expect_err("refused");
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(rendered.contains("SignatureDoesNotMatch"), "{rendered}");
+    assert!(rendered.contains("403"), "{rendered}");
 }
 
 #[test]

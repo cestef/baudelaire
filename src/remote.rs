@@ -8,18 +8,63 @@ use ureq::tls::{TlsConfig, TlsProvider};
 use crate::error::{RemoteError, Result, Unattended};
 use crate::ui::Ui;
 
-/// The TLS configuration every `ureq` agent baudelaire builds must use.
+/// Whether a 4xx/5xx is a failure or an answer.
 ///
-/// ureq 3 defaults its provider to rustls, but we compile it with only the
-/// `native-tls` backend (so the musl release can statically link a vendored
-/// OpenSSL). Left at the default, any `https://` request panics at connect time
-/// with "provider is Rustls but feature is not enabled". Pinning the provider to
-/// native-tls is what makes HTTPS actually work; verification stays on (ureq's
-/// default), so this only selects the backend, it does not weaken trust.
-pub fn tls() -> TlsConfig {
-    TlsConfig::builder()
-        .provider(TlsProvider::NativeTls)
-        .build()
+/// ureq surfaces a non-2xx as a transport error by default, which is right for
+/// a caller with nothing to say about the body and wrong for one whose whole
+/// job is to read it. Spelled as a choice at each call rather than left to the
+/// default, because the default is the surprising one: S3's agent took it, so
+/// the branch that reads the bucket's own `<Error><Code>` body was unreachable
+/// and every refused request reported a bare status instead of the reason.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    /// A non-2xx is the answer, delivered as an ordinary response.
+    Read,
+    /// A non-2xx is a failure, and the caller wants it as an error.
+    Fatal,
+}
+
+/// The one `ureq::Agent` constructor: one TLS policy, one deadline, one user
+/// agent naming the tool and what it is doing.
+///
+/// It was three builders with three policies, and the drift went the wrong way
+/// round: the link checker, which only reads other people's sites, had a
+/// deadline, while deploy and announce, which push credentials and mutate
+/// remote state, had none at all. A PUT to a black-holed endpoint blocked the
+/// process for ever with nothing to cancel it.
+pub struct Http;
+
+impl Http {
+    /// Per-request ceiling. Generous enough for a slow host, short enough that
+    /// one black hole does not hold up the run.
+    const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+    /// An agent for the work `doing` describes, which is what an administrator
+    /// reading their logs sees knocking.
+    pub fn agent(doing: &str, status: Status) -> ureq::Agent {
+        ureq::Agent::config_builder()
+            .http_status_as_error(status == Status::Fatal)
+            .timeout_global(Some(Self::TIMEOUT))
+            .user_agent(format!("baudelaire/{} ({doing})", crate::VERSION))
+            .tls_config(Self::tls())
+            .build()
+            .into()
+    }
+
+    /// The TLS configuration every agent must use.
+    ///
+    /// ureq 3 defaults its provider to rustls, but we compile it with only the
+    /// `native-tls` backend (so the musl release can statically link a vendored
+    /// OpenSSL). Left at the default, any `https://` request panics at connect
+    /// time with "provider is Rustls but feature is not enabled". Pinning the
+    /// provider to native-tls is what makes HTTPS actually work; verification
+    /// stays on (ureq's default), so this only selects the backend, it does not
+    /// weaken trust.
+    fn tls() -> TlsConfig {
+        TlsConfig::builder()
+            .provider(TlsProvider::NativeTls)
+            .build()
+    }
 }
 
 /// What asking permission for a destructive action came back with.

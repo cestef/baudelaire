@@ -124,6 +124,19 @@ pub enum DeployError {
         message: String,
     },
 
+    /// The bucket kept handing back a continuation token past the page ceiling.
+    /// The same shape and the same reasoning as `atproto`'s: a walk that never
+    /// reaches the end must fail loudly rather than return a short list, which
+    /// here would mean deleting remote files the listing never mentioned.
+    #[error("the bucket listing did not end after {pages} pages")]
+    #[diagnostic(
+        code(baudelaire::deploy::pagination),
+        help(
+            "the host keeps returning a continuation token; check that `endpoint` points at a real S3 service"
+        )
+    )]
+    Pagination { pages: usize },
+
     /// A bucket listing response was not the XML a `ListObjectsV2` answer must
     /// be. The parser's own error is kept as the source: it names the offending
     /// position, which a flattened message would drop.

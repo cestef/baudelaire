@@ -314,6 +314,17 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **deploy**: a bucket that refuses a request says why. The S3 agent surfaced a
+  non-2xx as a transport error, so the branch that reads the bucket's own
+  `<Error><Code>` body never ran and a wrong secret, a missing bucket and a rate
+  limit all reported the same bare failure.
+
+- **deploy**, **announce**: every outbound request has a deadline. Only the link
+  checker had one, so a `deploy` or `announce` against a black-holed endpoint
+  blocked for ever with nothing to cancel. A bucket listing also stops after
+  10,000 pages instead of following continuation tokens indefinitely, matching
+  the ceiling the announce record walk already had.
+
 - **templates**: a frontmatter value that is not a string reaches JavaScript as
   itself. `weight: 3`, `featured: true`, `authors: ("ada", "bob")` and a nested
   dict all arrived in `baudelaire:pages` as `null`, against the declared
