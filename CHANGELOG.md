@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **init**: every starter shape writes a `content/404.typ`, and a build with no
+  not-found page says so once (`baudelaire::content::not_found`, advice). A site
+  without one hands unmatched URLs to whatever its host answers with, which was
+  easy to not notice until a visitor found it.
+
 - **generate**: `feed { names }`, what each format's file is called.
 
   ```kdl
@@ -170,6 +175,16 @@ chores are visible in the git history and change nothing for a site.
   not only the runs that set up a repository with `--vcs`.
 
 ### Fixed
+
+- **serve**: an unmatched URL under a language's own subtree is answered with
+  that language's not-found page. The build writes one per language and a host
+  picks by directory; the dev server always served the default language's, so a
+  French page's broken link previewed in English.
+
+- **build**: adding a file to a starter shape or a bundled theme rebuilds the
+  binary that carries it. Both trees are embedded with `include_dir!`, which
+  records no dependency on what it walked, so a *new* file silently stayed out of
+  the next build and `init` wrote the shape as it was two builds ago.
 
 - **redirects**: a site that publishes its own `static/_redirects` keeps its
   declared redirects. `generate { redirects }` writes a rule file *instead of*

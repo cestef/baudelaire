@@ -462,13 +462,18 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
     assert_eq!(report["pages"], 2);
     assert_eq!(report["warnings"], 1);
     // The broken link is reachable as data, codes and all: this is what `check`
-    // being "a fast CI gate" was missing.
-    let first = &report["diagnostics"][0];
-    assert_eq!(first["code"], "baudelaire::links::broken");
-    assert_eq!(first["severity"], "warning");
+    // being "a fast CI gate" was missing. Found by code rather than by position,
+    // since a build may also report advice this test is not about.
+    let broken = report["diagnostics"]
+        .as_array()
+        .expect("diagnostics array")
+        .iter()
+        .find(|d| d["code"] == "baudelaire::links::broken")
+        .unwrap_or_else(|| panic!("no broken-link diagnostic in {report}"));
+    assert_eq!(broken["severity"], "warning");
     assert!(
-        first["message"].as_str().is_some_and(|m| !m.is_empty()),
-        "{first}"
+        broken["message"].as_str().is_some_and(|m| !m.is_empty()),
+        "{broken}"
     );
 }
 

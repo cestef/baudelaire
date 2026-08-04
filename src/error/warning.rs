@@ -464,6 +464,25 @@ pub struct RedirectsShadowed {
     pub path: PathBuf,
 }
 
+/// The site emits no not-found page. A static host answers an unmatched URL
+/// with whatever it has, which is its own generic page, not the site's.
+///
+/// Advice rather than a warning: a host can supply one, and a site that means to
+/// let it is not doing anything wrong. It is said once per build because the
+/// alternative is finding out from a visitor.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("no not-found page: an unmatched URL gets the host's, not yours")]
+#[diagnostic(
+    code(baudelaire::content::not_found),
+    severity(advice),
+    help(
+        "write {}, which publishes as {}",
+        Code("content/404.typ"),
+        Code("404.html")
+    )
+)]
+pub struct NotFoundMissing;
+
 /// The account's DID is not pinned in config; worth doing, not wrong.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("announce destination resolved to {}", Text(.did))]

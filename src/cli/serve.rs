@@ -327,6 +327,10 @@ struct Route {
     /// The editor a source-mapped preview hands a location to, absent until
     /// `serve { editor .. }` names one.
     open: Option<Open>,
+    /// The declared language codes, so an unmatched URL under `/fr/` is answered
+    /// with the French not-found page the build wrote there rather than the
+    /// default language's. Empty on a single-language site.
+    langs: Vec<String>,
 }
 
 impl Route {
@@ -336,7 +340,24 @@ impl Route {
             dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
             base: config.base_path().to_owned(),
             open: Open::new(config),
+            langs: match config.multilingual() {
+                true => config.langs().iter().map(|c| (*c).to_owned()).collect(),
+                false => Vec::new(),
+            },
         }
+    }
+}
+
+impl Route {
+    /// The declared language a request URL sits under, if any: the first path
+    /// segment, when it names one.
+    fn scope(&self, url: &str) -> Option<&str> {
+        let path = url.strip_prefix(&self.base).unwrap_or(url);
+        let head = path.trim_start_matches('/').split('/').next()?;
+        self.langs
+            .iter()
+            .find(|code| *code == head)
+            .map(String::as_str)
     }
 }
 
@@ -415,13 +436,24 @@ impl Handler {
         // these too. (It may still interleave with a concurrent rebuild
         // status line; acceptable for now.)
         self.ui.request(404, url);
-        let dist = self.route.lock().dist.clone();
-        match self.within(&dist.join(crate::config::Config::NOT_FOUND)) {
-            Some(page) => self.serve_file(req, &page, 404),
-            None => {
-                let _ = req.respond(Response::empty(404));
+        let (dist, scope) = {
+            let route = self.route.lock();
+            (route.dist.clone(), route.scope(url).map(str::to_owned))
+        };
+        // The build writes one not-found page per language; a request inside a
+        // language's own subtree gets that language's, and everything else the
+        // default one.
+        let candidates = scope
+            .map(|code| dist.join(code).join(crate::config::Config::NOT_FOUND))
+            .into_iter()
+            .chain([dist.join(crate::config::Config::NOT_FOUND)]);
+        for candidate in candidates {
+            if let Some(page) = self.within(&candidate) {
+                self.serve_file(req, &page, 404);
+                return;
             }
         }
+        let _ = req.respond(Response::empty(404));
     }
 
     /// Resolve a URL path to a file under `dist`, honoring clean URLs. Every

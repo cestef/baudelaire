@@ -106,6 +106,53 @@ fn serve_falls_back_to_the_site_404_page() {
 }
 
 #[test]
+fn serve_answers_inside_a_language_with_that_language_s_404() {
+    // The build writes one not-found page per language, and a static host picks
+    // by directory. The dev server used to answer every unmatched URL with the
+    // default language's, so a French page's broken link previewed in English.
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        r#"site "S"
+        lang "en"
+        languages {
+            fr { name "Français" }
+        }
+        paths {
+            content "content"
+            dist "public"
+        }
+        serve { open #false; }"#,
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    t.write(
+        "content/index.fr.typ",
+        "#let frontmatter = (title: \"H\",)\naccueil",
+    );
+    t.write(
+        "content/404.typ",
+        "#let frontmatter = (title: \"Nope\",)\nnothing here, friend",
+    );
+    t.write(
+        "content/404.fr.typ",
+        "#let frontmatter = (title: \"Non\",)\nrien ici, mon ami",
+    );
+    let srv = Serve::start(&t, &["--no-watch"]);
+    let (code, body) = srv.get("/fr/nonexistent");
+    assert_eq!(code, 404);
+    assert!(body.contains("rien ici"), "french 404 expected: {body}");
+    let (code, body) = srv.get("/nonexistent");
+    assert_eq!(code, 404);
+    assert!(
+        body.contains("nothing here"),
+        "default 404 expected: {body}"
+    );
+}
+
+#[test]
 fn serve_resolves_without_trailing_slash() {
     let t = Site::new();
     t.write(

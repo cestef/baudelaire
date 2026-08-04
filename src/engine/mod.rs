@@ -160,6 +160,12 @@ impl Engine {
         for inert in &self.inert {
             ui.warn(*inert);
         }
+        // A site with no not-found page hands unmatched URLs to whatever its
+        // host answers with. `Page::listed` is false for exactly that page, so
+        // the whole check is asking whether the page set holds one.
+        if !planned.pages.iter().any(|page| !page.listed(&self.config)) {
+            ui.warn(crate::error::warning::NotFoundMissing);
+        }
         // `before` hooks run after the plan (a hook's output is this build's
         // assets, not this build's content) and ahead of the asset pipeline, so
         // anything they emit into `assets/` (e.g. Tailwind output) is

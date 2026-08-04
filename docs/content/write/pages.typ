@@ -136,3 +136,24 @@ the URL. Move it and they break loudly at build time.
 future is skipped unless you pass `--future` or set `content { future #true }`.
 An `expiry` date drops the page for good. All three are
 #link("frontmatter.typ")[frontmatter keys].
+
+== The not-found page
+
+`content/404.typ` is the page a host serves for a URL that matches nothing. It
+publishes as a flat `404.html` whatever `links { style }` says, because that is
+the file a static host looks for, and it is the one page left out of listings,
+feeds, the sitemap and the prev/next pager: it is what an unmatched URL lands on,
+not a destination.
+
+Every #link("../start/quickstart.typ")[starter shape] writes one. A site without
+one builds fine and the visitor gets the host's generic page instead, so the
+build says so once:
+
+```text
+☞ no not-found page: an unmatched URL gets the host's, not yours
+  help: write `content/404.typ`, which publishes as `404.html`
+```
+
+With #link("i18n.typ")[languages] declared, `404.fr.typ` publishes at
+`/fr/404.html`, and both the dev server and a host that maps directories answer a
+French URL with it.

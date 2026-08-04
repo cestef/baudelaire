@@ -78,4 +78,10 @@ fn main() {
     // reported, and this is provenance, not correctness.
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=build.rs");
+    // The starter shapes and the bundled themes are embedded with `include_dir!`,
+    // which records no dependency on the directories it walks. Without these, a
+    // scaffold file *added* to one of those trees is not in the next binary, and
+    // nothing says so: `init` writes the shape as it was two builds ago.
+    println!("cargo:rerun-if-changed=src/cli/scaffold");
+    println!("cargo:rerun-if-changed=themes");
 }
