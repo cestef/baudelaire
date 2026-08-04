@@ -123,9 +123,19 @@ impl Claim {
             output: page.output.clone(),
             origin: page.source.display().to_string(),
         };
-        let stubs = page.frontmatter.redirect.iter().map(|old| Self {
-            output: config.destination(old),
-            origin: markup!("`redirect \"{}\"` in {}", old, page.source.display()),
+        // Localized exactly as the emitter localizes it, or this check answers a
+        // question the build never asks. Translating a page by copying its
+        // frontmatter carries the `redirect` list along, and each edition
+        // forwards an old path under its own language prefix: `/old/a/` and
+        // `/fr/old/a/` are two files. Compared unlocalized they looked like one,
+        // and the documented workflow failed the build on a collision that does
+        // not exist.
+        let stubs = page.frontmatter.redirect.iter().map(|old| {
+            let old = config.localize(&page.lang, old);
+            Self {
+                output: config.destination(&old),
+                origin: markup!("`redirect \"{}\"` in {}", old, page.source.display()),
+            }
         });
         std::iter::once(own).chain(stubs)
     }

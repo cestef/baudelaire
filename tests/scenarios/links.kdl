@@ -224,3 +224,32 @@ scenario "a dangling anchor is a warning when links are not strict" {
     file "index.html"
   }
 }
+
+// Translating a page by copying its frontmatter carries the `redirect` list
+// along, and each edition forwards its old path under its own language prefix.
+// The collision check compared those paths *unlocalized*, so the documented
+// translation workflow failed the build over a clash that never existed on disk.
+scenario "each edition forwards its old path under its own language" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lang "en"
+      languages {
+        fr { name "Français" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", redirect: ("/old/a/",),)
+      body
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "A", redirect: ("/old/a/",),)
+      corps
+      """#
+  }
+  expect {
+    ok
+    file "old/a/index.html" { contains "/posts/a/" }
+    file "fr/old/a/index.html" { contains "/fr/posts/a/" }
+  }
+}

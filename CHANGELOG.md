@@ -171,6 +171,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **redirects**: a translated page's `redirect` entries are checked under their
+  own language, as they are already written. Translating a page by copying its
+  frontmatter carries the list along, and each edition forwards the old path
+  under its own prefix (`/old/a/` and `/fr/old/a/`, two files). The collision
+  check compared them unlocalized, so the documented translation workflow failed
+  the build over a clash that never existed on disk.
+
 - **listings**: a row carries `description`, resolved from a page's
   `description` or its `summary` alias, and every shipped template reads it. A
   listing used to reach into `entry.extra.summary` itself, so a site that wrote
