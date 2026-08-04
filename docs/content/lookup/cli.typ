@@ -356,8 +356,13 @@ baudelaire theme remove albatros  # take it back off
   [`remove <name>`], [`rm`, `uninstall`], [Delete the files still baudelaire's.],
 )
 
-`--dir <path>` puts the theme somewhere other than `themes/<name>`, as long as it
-stays inside the project root, which is as far as a Typst import can reach.
+Every verb looks where your `config.kdl` says the theme is: a `theme
+"vendor/albatros"` line is where `list`, `info`, `update` and `remove` find that
+theme. Without a line naming it, they use `themes/<name>`, which is where `add`
+writes one.
+
+`--dir <path>` overrides both, as long as it stays inside the project root,
+which is as far as a Typst import can reach.
 
 Everything is carried in the binary, so no command here touches the network.
 

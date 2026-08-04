@@ -314,6 +314,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **theme**: every verb looks where the config's `theme` line says the theme is,
+  not only in `themes/<name>`. A theme installed anywhere else was invisible to
+  `theme list`, and `info`, `update` and `remove` reported it as not installed
+  unless you repeated the `--dir` you had used to add it.
+
 - **theme**: `theme add` records only the files it wrote. It re-recorded the
   whole shipped set, digested from the running binary, so a second `add` over an
   install from an earlier baudelaire disowned every file that binary had written:

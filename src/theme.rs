@@ -378,6 +378,24 @@ impl Bundled {
         BUNDLED.iter().find(|t| t.name == name)
     }
 
+    /// The directory a project keeps this theme in, given the `theme` line its
+    /// config carries.
+    ///
+    /// The config is the one place that says where a theme actually is, so a
+    /// line naming this theme decides, and `themes/<name>` is only the default
+    /// `theme add` writes to. The single answer every verb reads: without it
+    /// the shelf reported nothing for a theme installed anywhere else, while
+    /// `info` and `update`, which take `--dir`, were looking straight at it.
+    pub fn dir(&self, configured: Option<&str>) -> PathBuf {
+        configured
+            .filter(|spec| Self::named_by(spec).is_some_and(|named| named.name == self.name))
+            .map_or_else(|| Path::new(Self::DIR).join(self.name), PathBuf::from)
+    }
+
+    /// Where `theme add` writes a copy, and the directory a `theme` line names
+    /// when nothing says otherwise.
+    pub const DIR: &'static str = "themes";
+
     /// Write the theme's files under `dir`, skipping any that are already
     /// there, and report what was written. An existing file is the author's:
     /// a second `theme add` over an edited copy must not silently undo it.
@@ -737,6 +755,26 @@ mod bundled_tests {
 
         theme.update(&dir, false).expect("update");
         assert_ne!(std::fs::read(dir.join(rel)).expect("read"), OLD);
+    }
+
+    /// The config is what says where a theme is; `themes/<name>` is only the
+    /// default `add` writes to. A `list` that read the default alone reported
+    /// nothing for a theme kept anywhere else.
+    #[test]
+    fn a_theme_is_looked_for_where_the_config_names_it() {
+        use std::path::PathBuf;
+
+        let theme = Bundled::find("albatros").expect("shipped");
+        let default = PathBuf::from("themes/albatros");
+        assert_eq!(theme.dir(None), default);
+        assert_eq!(
+            theme.dir(Some("vendor/albatros")),
+            PathBuf::from("vendor/albatros")
+        );
+        // A line naming another theme, or a package rather than a directory,
+        // says nothing about where this one would be.
+        assert_eq!(theme.dir(Some("vendor/spleen")), default);
+        assert_eq!(theme.dir(Some("@local/albatros:0.1.0")), default);
     }
 
     /// The spec a config carries is a path; its last segment is the name.
