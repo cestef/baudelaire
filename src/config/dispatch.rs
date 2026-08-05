@@ -18,6 +18,7 @@ use crate::error::{BaudelaireErrorKind, ConfigError, Result};
 use crate::ui::{Code, markup};
 
 use super::node::{EntryExt, NodeExt};
+use super::value::Kdl;
 
 /// A `(key, kind, doc, handler)` rule for a node-keyed [`Block`] scope.
 ///
@@ -98,6 +99,11 @@ pub enum Kind {
     /// *child nodes*. Written `next="Next"` it is a KDL parse error rather than
     /// a table entry, and the label said `key=value` for a while: the one
     /// spelling this shape does not take.
+    ///
+    /// The line before the block may carry the flag that turns its section on
+    /// (`html { highlight #false }`), which is what `Kind::takes` allows for it.
+    /// The keys that read no flag demand a block, so a stray value there is
+    /// already a missing-children error.
     Table,
     /// A nested block, whose own keys are these.
     Block(Rows),
@@ -123,6 +129,155 @@ pub enum Kind {
     /// walker into an infinite recursion, since a profile can hold a `profiles`
     /// block of its own.
     Overlay,
+}
+
+impl Kind {
+    /// What a key of this shape reads from the entries written on its own line.
+    ///
+    /// Read out of the very column the reference is generated from, so a key
+    /// cannot document one shape and quietly accept another. It is not
+    /// derivable from the handler, for the same reason [`Kind`] itself is not:
+    /// `n.string(t, 0)` says what the handler *reads*, never what the node may
+    /// carry.
+    fn takes(self) -> Arity {
+        match self {
+            // Every scalar: one value, and a second one is nobody's. `Table` is
+            // here too, since its free-form block may be preceded by the flag
+            // that turns a section on (see [`Kind::Table`]).
+            Self::Text
+            | Self::Flag
+            | Self::Number
+            | Self::Size
+            | Self::Path
+            | Self::Url
+            | Self::Template
+            | Self::Table => Arity::Args(1),
+            // A list written on one line, however long. `Choice` names *one*
+            // name and belongs above, except that three keys spell a list with
+            // it (`generate { feed { formats "rss" "atom" } }`): what that
+            // variant documents and what it parses already disagree, and the
+            // strict reading here would refuse a documented spelling.
+            Self::Choice(_) | Self::Choices(..) | Self::Toggles | Self::Texts | Self::Numbers => {
+                Arity::Every
+            }
+            // A block of author-named children -- blocks, attribute lines, or a
+            // profile overlay -- so the line opening it says nothing at all.
+            // `Lines` is here and not below with `Line`: the entries
+            // [`Attrs::apply`] reads belong to the *children*, and the parent
+            // node's own were read by nobody.
+            Self::Items(_) | Self::Lines(_) | Self::Overlay => Arity::Args(0),
+            // Somebody else's line. A section owns its own -- [`Section::fill`]
+            // refuses arguments and [`Section::shorthand`] hands them to the key
+            // it stands for -- and a single attribute line is read entry by
+            // entry by [`Attrs::apply`], which refuses the ones it does not
+            // know.
+            Self::Block(_) | Self::Line(_) => Arity::Elsewhere,
+        }
+    }
+}
+
+/// What a key reads from the entries written on its own line: the question
+/// [`Block`] has to answer before it can refuse the ones nothing reads.
+///
+/// Derived from [`Kind`] rather than declared beside it, so a key states its
+/// shape once and this follows.
+#[derive(Clone, Copy)]
+pub(super) enum Arity {
+    /// At most this many positional arguments, and never a `key=value`.
+    /// `Args(1)` is every scalar key; `Args(0)` a line whose settings all live
+    /// in the block beneath it.
+    Args(usize),
+    /// Any number of positional arguments, and never a `key=value`.
+    Every,
+    /// Not checked here: the entries belong to a reader that checks them itself
+    /// ([`Attrs::apply`] for an attribute scope, [`Section::fill`] or
+    /// [`Section::shorthand`] for a section).
+    Elsewhere,
+}
+
+impl Arity {
+    /// Refuse every entry on `node`'s own line that a key of this shape does
+    /// not read.
+    ///
+    /// The [`Block`] counterpart of the check [`Attrs::apply`] has always run,
+    /// and the reason it had to exist: a node-keyed rule dispatched on the name
+    /// alone and never looked at the line, so every value written there was
+    /// accepted and discarded. `lint #false` turned linting *on*,
+    /// `serve { port 1 2 }` dropped the `2`, and `content { drafts suffix=".x" }`
+    /// configured nothing while reporting nothing.
+    pub(super) fn check(self, node: &KdlNode, text: &str) -> Result<()> {
+        if matches!(self, Self::Elsewhere) {
+            return Ok(());
+        }
+        let name = node.name().value();
+        // A list key is the one shape that cannot be told to move the pair one
+        // nesting level in: it has no block to move it into, and `extensions {
+        // tables #false }` is not a line this config language has. Its own
+        // reader already refuses a `key=value` with a message shaped like the
+        // values it does take (`NodeExt::toggled`), so it is left to speak.
+        // Everything else here either opens a block or stands in front of one.
+        if !matches!(self, Self::Every) {
+            for entry in node.entries() {
+                let Some(key) = entry.name().map(KdlIdentifier::value) else {
+                    continue;
+                };
+                // The help writes the line the author meant, which is the same
+                // pair one nesting level in -- and through `Kdl`, so it is a
+                // line that parses.
+                return Err(ConfigError::unexpected_attribute(
+                    text,
+                    key,
+                    name,
+                    &format!("{name} {{ {key} {} }}", Kdl(entry.value())),
+                    EntryExt::span(entry),
+                )
+                .into());
+            }
+        }
+        // Positionals are counted among themselves: a named entry left for
+        // someone else to refuse must not shift the index of the ones after it.
+        let positional = node.entries().iter().filter(|e| e.name().is_none());
+        for (read, entry) in positional.enumerate() {
+            if !self.reads(read) {
+                return Err(self.refuse(text, name, entry.value(), EntryExt::span(entry)));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the positional argument at `index` is read by anything.
+    fn reads(self, index: usize) -> bool {
+        match self {
+            Self::Args(takes) => index < takes,
+            Self::Every | Self::Elsewhere => true,
+        }
+    }
+
+    /// The diagnostic for a positional nothing reads. The two cases differ in
+    /// what they advise: a section takes no value at all and is configured from
+    /// its block, while a scalar key has simply been handed a second value.
+    fn refuse(
+        self,
+        text: &str,
+        node: &str,
+        value: &KdlValue,
+        span: SourceSpan,
+    ) -> BaudelaireErrorKind {
+        // Echoed as the author wrote it, quotes and all: a value the message
+        // spells differently from the line above it reads as a second value.
+        let written = Kdl(value).to_string();
+        match self {
+            Self::Args(0) => ConfigError::unexpected_section_argument(
+                text,
+                &written,
+                node,
+                &format!("{node} {{ .. }}"),
+                span,
+            )
+            .into(),
+            _ => ConfigError::extra_argument(text, &written, node, span).into(),
+        }
+    }
 }
 
 /// A scope's documented rows, as a function rather than a slice so a section can
@@ -171,7 +326,13 @@ impl<T> Block<T> {
     /// it stands in for, so the two spellings run the very same handler.
     fn one(&self, value: &mut T, key: &str, node: &KdlNode, text: &str) -> Result<()> {
         match self.0.iter().find(|(k, ..)| *k == key) {
-            Some((.., handler)) => handler(value, node, text),
+            // The line is checked before the handler runs: a handler reads the
+            // arguments it wants by index and cannot see the ones it does not,
+            // so nothing but the table knows what the key accepts.
+            Some((_, kind, _, handler)) => {
+                kind.takes().check(node, text)?;
+                handler(value, node, text)
+            }
             None => Err(Keys::unknown_key(self.0, text, key, NodeExt::span(node))),
         }
     }
@@ -201,6 +362,24 @@ pub(super) trait Section: Sized + 'static {
         Self::RULES.rows()
     }
 
+    /// How many leading positional arguments the *caller* reads itself before
+    /// the block is dispatched: a collection's glob, and nothing else so far.
+    /// Every other entry on the line is read by nobody, so [`Section::line`]
+    /// refuses it. The [`Attributed::LEADING`] counterpart, and for the same
+    /// reason.
+    const LEADING: usize = 0;
+
+    /// Refuse whatever a section's own line carries past the
+    /// [`LEADING`](Section::LEADING) arguments its caller reads.
+    ///
+    /// Called by [`Section::fill`], and by a caller that reads the line itself
+    /// before deciding whether there is a block to fill from at all
+    /// (`CollectionConfig::item`, where `posts sort="date"` has no block and so
+    /// never reached `fill`).
+    fn line(node: &KdlNode, text: &str) -> Result<()> {
+        Arity::Args(Self::LEADING).check(node, text)
+    }
+
     /// Run before a block's keys are applied. A section that is turned on by the
     /// mere presence of its block flips its `enabled` flag here and returns
     /// `true`, so that rule lives with the section rather than at every parent
@@ -224,6 +403,10 @@ pub(super) trait Section: Sized + 'static {
     /// merely holds settings, a bare `paths` configures nothing and is far more
     /// likely a forgotten block than an intent, so it still errors.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
+        // A section is configured from its block, so a value on its line is read
+        // by nobody: `lint #false` used to turn linting *on*, and
+        // `generate { robots "junk" }` to generate a robots.txt.
+        Self::line(node, text)?;
         let switch = self.enable();
         match node.children() {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),
@@ -235,7 +418,10 @@ pub(super) trait Section: Sized + 'static {
     /// Fill a section that also answers to a bare value, which is read as the
     /// key `stands_for`: `drafts #true` is `drafts { build #true }`. The
     /// argument reaches that key's own handler untouched, so the shorthand
-    /// cannot accept a value the long spelling would refuse.
+    /// cannot accept a value the long spelling would refuse -- including what
+    /// it refuses: the line is checked against `stands_for`'s own row, which is
+    /// what makes `content { drafts suffix=".x" }` an error rather than a line
+    /// that parses and configures nothing.
     ///
     /// A block may still follow the argument, and either alone is enough: the
     /// whole point is that the common case (one boolean) does not have to open
@@ -350,7 +536,7 @@ impl<T> Attrs<T> {
                 if position >= leading {
                     return Err(ConfigError::unexpected_argument(
                         text,
-                        &entry.value().to_string(),
+                        &Kdl(entry.value()).to_string(),
                         node.name().value(),
                         EntryExt::span(entry),
                     )

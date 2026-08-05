@@ -245,6 +245,59 @@ impl ConfigError {
         )
     }
 
+    /// A `key=value` written on a node-keyed line, whose keys are child nodes.
+    /// `example` is the line the author meant, built from the very key and value
+    /// they wrote, so the help shows the spelling rather than describing it.
+    pub fn unexpected_attribute(
+        source: &str,
+        key: &str,
+        node: &str,
+        example: &str,
+        span: SourceSpan,
+    ) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnexpectedAttribute {
+                key: key.to_owned(),
+                node: node.to_owned(),
+                example: example.to_owned(),
+            },
+            span,
+        )
+    }
+
+    /// A value on a section's own line, where everything the section configures
+    /// is inside its block.
+    pub fn unexpected_section_argument(
+        source: &str,
+        value: &str,
+        node: &str,
+        example: &str,
+        span: SourceSpan,
+    ) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UnexpectedSectionArgument {
+                value: value.to_owned(),
+                node: node.to_owned(),
+                example: example.to_owned(),
+            },
+            span,
+        )
+    }
+
+    /// A positional argument past the ones a key reads.
+    pub fn extra_argument(source: &str, value: &str, node: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::ExtraArgument {
+                value: value.to_owned(),
+                node: node.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A `{ .. }` block on a node whose settings are `key=value` attributes.
     /// `example` is that node written the way it parses, built from its own key
     /// table, so the help shows the spelling rather than describing it.
@@ -527,6 +580,46 @@ pub enum ConfigErrorKind {
     #[error("unexpected argument {}; {} takes `key=value` attributes", Text(.value), Code(.node))]
     #[diagnostic(code(baudelaire::config::unexpected_argument))]
     UnexpectedArgument { value: String, node: String },
+
+    /// A `key=value` on a line whose scope spells its keys as child nodes.
+    /// Distinct from [`UnknownKey`](Self::UnknownKey): the key is often a real
+    /// one (`content { drafts suffix=".x" }`), written in the one spelling its
+    /// scope does not take, and it used to be discarded in silence.
+    #[error("unexpected attribute {} on {}", Code(.key), Code(.node))]
+    #[diagnostic(
+        code(baudelaire::config::unexpected_attribute),
+        help("a `{{ }}` block's keys are child nodes: write {}", Code(.example))
+    )]
+    UnexpectedAttribute {
+        key: String,
+        node: String,
+        example: String,
+    },
+
+    /// A value on a section's own line. The rule dispatched the section's block
+    /// and never looked at the line, so `lint #false` *enabled* linting.
+    #[error("unexpected argument {} for {}", Text(.value), Code(.node))]
+    #[diagnostic(
+        code(baudelaire::config::unexpected_section_argument),
+        help("{} is configured from its block: write {}", Code(.node), Code(.example))
+    )]
+    UnexpectedSectionArgument {
+        value: String,
+        node: String,
+        example: String,
+    },
+
+    /// A positional past the ones a key reads, which nothing would ever look at:
+    /// `serve { port 1 2 }` dropped the `2`. The attribute scope's counterpart is
+    /// [`UnexpectedArgument`](Self::UnexpectedArgument), which differs in what it
+    /// advises: there the settings are `key=value`, here they are keys of their
+    /// own.
+    #[error("unexpected argument {} for {}", Text(.value), Code(.node))]
+    #[diagnostic(
+        code(baudelaire::config::extra_argument),
+        help("{} reads a single value; give anything further a key of its own", Code(.node))
+    )]
+    ExtraArgument { value: String, node: String },
 
     #[error("{} takes no block; its settings are `key=value` on the line", Code(.node))]
     #[diagnostic(

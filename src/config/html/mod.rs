@@ -193,7 +193,13 @@ impl Section for HtmlConfig {
             Table,
             "Rewrite syntax-highlight colours to classes. Bare, it uses hex classes; a block names the scopes.",
             |c, n, t| {
-                c.highlight.enabled = true;
+                // The flag `Section::shorthand` would dispatch, spelled out
+                // here because the block is a free-form scope table and not a
+                // key set: a bare `highlight` turns it on, and `highlight
+                // #false` turns it off again. Off has to be sayable, because
+                // every shipped theme turns it on and a `theme.kdl` is a floor
+                // the site is meant to be able to override.
+                c.highlight.enabled = n.boolean(t, 0)?;
                 // A bare `highlight` rewrites every colour to its hex class; a block
                 // names the scopes the theme paints, so the classes read as meaning
                 // rather than as colours.

@@ -393,7 +393,8 @@ fn bundle_index_takes_slug_from_its_directory() {
         r#"
             site "T"
             paths {
-              content "content" dist "public"
+              content "content"
+              dist "public"
             }
             content {
               collections { posts "posts/**/*.typ" { permalink "/posts/{slug}/" } }

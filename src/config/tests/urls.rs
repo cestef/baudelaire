@@ -95,6 +95,56 @@ fn err_permalink_parent_dir_segment() {
     assert!(err.to_string().contains("must not contain `..`"), "{err}");
 }
 
+/// `mount` and `prefix` are pieces of the index's permalink, so the rule
+/// `permalink` is held to is theirs too. `Config::segments` drops a `..` before
+/// anything is written, so what these produced was never an escaped file: it was
+/// an index published at a URL nobody asked for, out of a green build.
+#[test]
+fn err_a_paginate_path_climbing_out_is_refused() {
+    for config in [
+        "content {\n  collections {\n    posts { paginate { mount \"/../elsewhere/\" } }\n  }\n}\n",
+        "content {\n  collections {\n    posts { paginate { prefix \"../..\" } }\n  }\n}\n",
+    ] {
+        let err = Config::parse(config).unwrap_err();
+        assert!(err.to_string().contains("must not contain `..`"), "{err}");
+    }
+    // The shapes they are actually written in still parse.
+    let cfg = parse(
+        "content {\n  collections {\n    posts { paginate { mount \"/\"; prefix \"\" } }\n  }\n}\n",
+    );
+    let posts = &cfg.content.collections[0].1;
+    assert_eq!(posts.paginate.mount.as_deref(), Some("/"));
+    assert_eq!(posts.paginate.prefix, "");
+}
+
+/// A feed's file name is joined onto `dist` by the emitter, so it is held to the
+/// containment rule every other generated file name is: `rss "../../pwned.xml"`
+/// wrote two directories above the project root and reported success.
+#[test]
+fn err_a_feed_name_leaving_dist_is_refused() {
+    for name in ["../../pwned.xml", "/etc/passwd", "a/../../b.xml", ""] {
+        let config = format!("generate {{\n  feed {{\n    names {{ rss {name:?} }}\n  }}\n}}\n");
+        let err = Config::parse(&config).unwrap_err();
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains("would be written outside the output directory"),
+            "{name}: {rendered}"
+        );
+    }
+    // A name, or a name in a subdirectory, is what the key is for.
+    let cfg = parse(
+        "generate {\n  feed {\n    names { rss \"index.xml\"; atom \"feeds/atom.xml\" }\n  }\n}\n",
+    );
+    assert_eq!(
+        cfg.generate.feed.file(crate::config::FeedKind::Rss),
+        "index.xml"
+    );
+    assert_eq!(
+        cfg.generate.feed.file(crate::config::FeedKind::Atom),
+        "feeds/atom.xml"
+    );
+}
+
 #[test]
 fn destination_never_escapes_dist() {
     let cfg = parse("");

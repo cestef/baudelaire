@@ -4,6 +4,7 @@ use miette::SourceSpan;
 use crate::config::Config;
 use crate::config::dispatch::Keys;
 use crate::config::node::NodeExt;
+use crate::config::value::Structural;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
@@ -39,7 +40,15 @@ impl Config {
     /// finally passed. The check is the real overlay rather than a separate
     /// walk of the tables, so what it accepts and what selection accepts cannot
     /// drift.
+    ///
+    /// What it does *not* check is values: the check runs as a
+    /// [`Structural`] pass, so an unset `${VAR}` with no `:-default` stands in
+    /// as a placeholder here and is a hard error only where the profile is
+    /// really selected. A `prod` profile naming `${S3_BUCKET}` is the
+    /// documented shape, and demanding it of every local `build` failed every
+    /// build on a machine that has no production secrets.
     pub(super) fn check(&self) -> Result<()> {
+        let _shape = Structural::begin();
         for (name, _) in &self.profiles {
             self.clone().with_profile(name)?;
         }
@@ -270,6 +279,41 @@ mod tests {
             rendered.contains("unknown config key `draft`"),
             "{rendered}"
         );
+        assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
+    }
+
+    /// The check reads a profile for its *structure*, so a `${VAR}` naming a
+    /// secret the selecting build will supply is nobody's problem until then.
+    /// It used to be everyone's: a `prod` profile with `${S3_BUCKET}` in it
+    /// failed every `build` on every machine that had no production secrets,
+    /// including the one the docs recommend writing.
+    #[test]
+    fn an_unset_variable_in_an_unselected_profile_is_not_a_build_failure() {
+        let text = "site \"T\"\nprofiles {\n  prod {\n    url \"${BAUDELAIRE_TEST_UNSET_URL}\"\n    deploy { s3 { bucket \"${BAUDELAIRE_TEST_UNSET_BUCKET}\"; endpoint \"${BAUDELAIRE_TEST_UNSET_ENDPOINT}\" } }\n  }\n}\n";
+        let cfg = parse(text);
+        assert_eq!(cfg.site.as_deref(), Some("T"), "the base is untouched");
+        assert_eq!(cfg.url, None, "and no placeholder leaked into it");
+
+        // Selecting it is the other path, and there the value is about to be
+        // used: it still errors, naming the variable.
+        let err = cfg.with_profile("prod").expect_err("unset at selection");
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains("environment variable `BAUDELAIRE_TEST_UNSET_URL` is not set"),
+            "{rendered}"
+        );
+    }
+
+    /// Structure is still structure: the placeholder answers what a value *is*,
+    /// never which keys are written, so a typo inside a profile that also names
+    /// an unset variable is still caught at parse.
+    #[test]
+    fn a_typo_beside_an_unset_variable_is_still_caught() {
+        let err = Config::parse(
+            "profiles {\n  prod {\n    url \"${BAUDELAIRE_TEST_UNSET_URL}\"\n    content { draft #true }\n  }\n}\n",
+        )
+        .expect_err("unknown key");
+        let rendered = format!("{:?}", miette::Report::from(err));
         assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
     }
 

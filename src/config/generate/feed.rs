@@ -1,6 +1,6 @@
 //! `generate { feed { } }`: syndication feeds and their file names.
 
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Number, Text};
+use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Number, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{BaseUrl, Named, Permalink};
@@ -159,32 +159,38 @@ impl Section for FeedConfig {
 /// file that format is written to and advertised under. A site arriving from a
 /// generator that named them differently keeps its subscribers by stating the
 /// old names here.
+///
+/// Each name is a *path*, and the emitter extends `dist` with it, so each is
+/// read through [`NodeExt::contained`] like every other generated file name
+/// (`navigation { standalone { file } }` is the same rule): `rss
+/// "../../pwned.xml"` used to write two directories above the project root and
+/// report a green build.
 impl Section for FeedNames {
     const RULES: Block<Self> = Block(&[
         (
             "rss",
-            Text,
+            Path,
             "The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.",
             |c, n, t| {
-                c.rss = Some(n.string(t, 0)?);
+                c.rss = Some(n.contained(t)?);
                 Ok(())
             },
         ),
         (
             "atom",
-            Text,
+            Path,
             "The Atom file's name. Defaults to `atom.xml`.",
             |c, n, t| {
-                c.atom = Some(n.string(t, 0)?);
+                c.atom = Some(n.contained(t)?);
                 Ok(())
             },
         ),
         (
             "json",
-            Text,
+            Path,
             "The JSON Feed file's name. Defaults to `feed.json`.",
             |c, n, t| {
-                c.json = Some(n.string(t, 0)?);
+                c.json = Some(n.contained(t)?);
                 Ok(())
             },
         ),

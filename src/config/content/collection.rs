@@ -144,22 +144,13 @@ impl CollectionConfig {
     /// `posts "posts/**/*.typ"` shorthand still reads.
     pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let mut cfg = Self::default();
-        // At most the glob. Anything after it would be silently discarded, and
-        // a setting that looks accepted and does nothing is the failure this
-        // whole dispatch layer exists to prevent.
-        for (position, entry) in node.entries().iter().enumerate() {
-            match position {
-                0 => cfg.glob = Some(entry.value().as_str(text, NodeExt::span(node))?),
-                _ => {
-                    return Err(ConfigError::unexpected_argument(
-                        text,
-                        &entry.value().to_string(),
-                        node.name().value(),
-                        crate::config::node::EntryExt::span(entry),
-                    )
-                    .into());
-                }
-            }
+        // At most the glob, and never a `key=value`: a collection's keys are
+        // child nodes, so `posts sort="date"` used to be read as the *glob*,
+        // silently, with the sort it asked for dropped. Checked here rather
+        // than in `fill` alone, because a line with no block never reaches it.
+        Self::line(node, text)?;
+        if let Some(glob) = node.get(0_usize) {
+            cfg.glob = Some(glob.as_str(text, NodeExt::span(node))?);
         }
         // A bare `posts` or `posts "glob"` is a collection that only declares
         // its members; everything else it could say lives in the block.
@@ -201,12 +192,9 @@ impl Section for CollectionConfig {
             Template,
             "The URL pattern its pages publish at, e.g. `/{slug}/`.",
             |c, n, t| {
-                let raw = n.string(t, 0)?;
-                // validate here so a template typo is a spanned config error,
+                // validated here so a template typo is a spanned config error,
                 // not a silent fallback to convention at page load
-                Permalink::parse(&raw)
-                    .map_err(|e| ConfigError::at(t, e.into(), NodeExt::span(n)))?;
-                c.permalink = Some(raw);
+                c.permalink = Some(n.template(t, 0)?);
                 Ok(())
             },
         ),
@@ -244,6 +232,10 @@ impl Section for CollectionConfig {
             },
         ),
     ]);
+
+    /// The glob, which [`CollectionConfig::item`] reads off the line before the
+    /// block is dispatched.
+    const LEADING: usize = 1;
 }
 
 /// The `paginate { .. }` block inside a collection: its presence generates the
@@ -279,7 +271,13 @@ impl Section for PaginateConfig {
             Text,
             "Where the index publishes, if not at the collection's own path.",
             |c, n, t| {
-                c.mount = Some(n.string(t, 0)?);
+                // Both of these are pieces of the index's permalink, so both go
+                // through the template parser for its `..` rule, exactly as
+                // `permalink` does. `Config::segments` drops a `..` before
+                // anything is written, so the damage was never an escaped file:
+                // it was an index published at a URL nobody asked for, out of a
+                // green build.
+                c.mount = Some(n.template(t, 0)?);
                 Ok(())
             },
         ),
@@ -288,7 +286,7 @@ impl Section for PaginateConfig {
             Text,
             "The path segment before a page number, as in `/posts/page/2/`.",
             |c, n, t| {
-                c.prefix = n.string(t, 0)?;
+                c.prefix = n.template(t, 0)?;
                 Ok(())
             },
         ),

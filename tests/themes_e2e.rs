@@ -41,7 +41,7 @@ fn copy(from: &Path, to: &Path) {
 fn wearing(theme: &str, extra: &str) -> Site {
     let site = Site::with(&format!(
         "site \"T\"\nurl \"https://example.net\"\nauthor \"A\"\ntheme \"themes/{theme}\"\n\
-         paths {{ content \"content\" dist \"public\" assets \"assets\" templates \"templates\" }}\n\
+         paths {{ content \"content\"; dist \"public\"; assets \"assets\"; templates \"templates\" }}\n\
          {extra}"
     ));
     copy(
@@ -162,7 +162,7 @@ fn the_blog_theme_switches_languages() {
     site.write(
         "config.kdl",
         "site \"T\"\nurl \"https://example.net\"\ntheme \"themes/albatros\"\n\
-         paths { content \"content\" dist \"public\" assets \"assets\" templates \"templates\" }\n\
+         paths { content \"content\"; dist \"public\"; assets \"assets\"; templates \"templates\" }\n\
          lang \"en\"\nlanguages {\n  en { name \"English\" }\n  fr { name \"Français\"\n    strings {\n      reading \"min de lecture\"\n      date \"{day} {month} {year}\"\n      months \"janvier\" \"février\" \"mars\" \"avril\" \"mai\" \"juin\" \"juillet\" \"août\" \"septembre\" \"octobre\" \"novembre\" \"décembre\"\n    }\n  }\n}\n",
     );
     site.write(

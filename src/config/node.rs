@@ -6,7 +6,7 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::url::BaseUrl;
-use crate::config::value::ValueExt;
+use crate::config::value::{Kdl, ValueExt};
 use crate::error::{ConfigError, Result};
 use crate::ui::Bytes;
 
@@ -49,6 +49,18 @@ pub(super) trait NodeExt {
     fn size(&self, text: &str, idx: usize) -> Result<Bytes>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn base_url(&self, text: &str, idx: usize) -> Result<String>;
+    /// A permalink template, or a piece of one, checked by [`Permalink::parse`]:
+    /// an unknown placeholder, an unterminated `{`, and any `..` segment are
+    /// errors at the span the author wrote.
+    ///
+    /// The single owner of that rule for the config surface, so the keys that
+    /// are *parts* of an index's permalink (`paginate { mount }`, `prefix`) are
+    /// held to it too. A `..` there escapes no file -- `Config::segments` drops
+    /// one before anything is written -- but it does publish a page at a URL
+    /// nobody asked for, out of a build that reported success.
+    ///
+    /// [`Permalink::parse`]: crate::config::Permalink::parse
+    fn template(&self, text: &str, idx: usize) -> Result<String>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
     /// duplicate id: the single dedup rule for collections, taxonomies, and
@@ -211,6 +223,14 @@ impl NodeExt for KdlNode {
         }
     }
 
+    fn template(&self, text: &str, idx: usize) -> Result<String> {
+        let raw = self.string(text, idx)?;
+        if let Err(why) = crate::config::permalink::Permalink::parse(&raw) {
+            return Err(ConfigError::at(text, why.into(), NodeExt::span(self)).into());
+        }
+        Ok(raw)
+    }
+
     fn block(&self, text: &str) -> Result<&KdlDocument> {
         self.children()
             .ok_or_else(|| ConfigError::missing_children(text, NodeExt::span(self)).into())
@@ -359,7 +379,9 @@ impl NodeExt for KdlNode {
             if let Some(key) = entry.name() {
                 return Err(ConfigError::unexpected_argument(
                     text,
-                    &format!("{}={}", key.value(), entry.value()),
+                    // Through `Kdl`, so the pair the message quotes back is the
+                    // pair the author wrote rather than an unquoted lookalike.
+                    &format!("{}={}", key.value(), Kdl(entry.value())),
                     self.name().value(),
                     span,
                 )

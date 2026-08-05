@@ -1,3 +1,4 @@
+mod arguments;
 mod content;
 mod images;
 mod languages;

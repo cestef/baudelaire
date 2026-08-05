@@ -7,7 +7,8 @@ scenario "a configured did emits the wellknown file and links dated pages" {
     "config.kdl" #"""
       site "Test"
       paths {
-        content "content" dist "public"
+        content "content"
+        dist "public"
       }
       announce {
           standard {
@@ -44,7 +45,8 @@ scenario "without a did, nothing standard.site-related touches the output" {
     "config.kdl" #"""
       site "Test"
       paths {
-        content "content" dist "public"
+        content "content"
+        dist "public"
       }
       announce { standard { handle "me.example" } }
       """#
@@ -66,7 +68,8 @@ scenario "the wellknown toggle drops the file and keeps the per-page link" {
     "config.kdl" #"""
       site "Test"
       paths {
-        content "content" dist "public"
+        content "content"
+        dist "public"
       }
       announce {
           standard {
