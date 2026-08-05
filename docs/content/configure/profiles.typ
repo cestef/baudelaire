@@ -86,6 +86,10 @@ alone.
   else.
 ]
 
+Every profile is checked when `config.kdl` is read, whether or not it is the
+one selected: a key no scope has is an error on the next build, not a silent
+no-op on the day someone passes `--profile` for it.
+
 == Environment variables
 
 Any string value can read the environment with `${VAR}`, with an optional

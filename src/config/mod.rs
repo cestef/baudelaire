@@ -345,6 +345,7 @@ impl Config {
             ..base
         };
         config.apply(doc.nodes(), text)?;
+        config.check()?;
         Ok(config)
     }
 

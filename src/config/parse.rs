@@ -44,6 +44,7 @@ impl Config {
             ..Self::default()
         };
         cfg.apply(doc.nodes(), text)?;
+        cfg.check()?;
         Ok(cfg)
     }
 

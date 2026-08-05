@@ -28,6 +28,23 @@ impl Config {
         self.profile = Some(name.to_owned());
         Ok(self)
     }
+
+    /// Apply every configured profile once and throw the result away, so a
+    /// profile is checked by the parse that read it.
+    ///
+    /// A profile block is retained as raw KDL and dispatched only when
+    /// selected, which left an unselected one entirely unchecked: a typo in
+    /// `profiles { dev { content { draft #true } } }` parsed green, reloaded
+    /// green under `serve`, and set nothing whenever `--profile dev` was
+    /// finally passed. The check is the real overlay rather than a separate
+    /// walk of the tables, so what it accepts and what selection accepts cannot
+    /// drift.
+    pub(super) fn check(&self) -> Result<()> {
+        for (name, _) in &self.profiles {
+            self.clone().with_profile(name)?;
+        }
+        Ok(())
+    }
 }
 
 impl ConfigError {
@@ -217,8 +234,9 @@ mod tests {
 
     #[test]
     fn profile_rejects_nested_profiles() {
-        let cfg = parse("profiles {\n  dev {\n    profiles { inner { prune #true } }\n  }\n}\n");
-        let err = cfg.with_profile("dev").expect_err("nested profiles");
+        let err =
+            Config::parse("profiles {\n  dev {\n    profiles { inner { prune #true } }\n  }\n}\n")
+                .expect_err("nested profiles");
         assert!(
             err.to_string()
                 .contains("`profiles` cannot be nested inside a profile"),
@@ -229,7 +247,7 @@ mod tests {
     #[test]
     fn profile_overlay_error_points_at_original_config_text() {
         let text = "site \"x\"\nprofiles {\n  dev {\n    prune \"yes\"\n  }\n}\n";
-        let err = parse(text).with_profile("dev").expect_err("bad boolean");
+        let err = Config::parse(text).expect_err("bad boolean");
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(
             rendered.contains("expected boolean, got string"),
@@ -238,6 +256,32 @@ mod tests {
         // The label must excerpt the original config.kdl, not a re-serialized
         // profile subtree with mismatched offsets.
         assert!(rendered.contains("prune \"yes\""), "{rendered}");
+    }
+
+    /// A profile nobody selected is still config, and used to be dispatched
+    /// only on selection: a key no scope has parsed green, survived a `serve`
+    /// reload, and then quietly configured nothing.
+    #[test]
+    fn an_unselected_profile_is_checked_at_parse() {
+        let err = Config::parse("profiles {\n  dev {\n    content { draft #true }\n  }\n}\n")
+            .expect_err("unknown key inside an unselected profile");
+        let rendered = format!("{:?}", miette::Report::from(err));
+        assert!(
+            rendered.contains("unknown config key `draft`"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
+    }
+
+    /// The check applies each profile to a *copy*: parsing a config must not
+    /// leave the base narrowed by the last profile that happened to be checked.
+    #[test]
+    fn checking_a_profile_does_not_narrow_the_base_config() {
+        let cfg =
+            parse("content { future #false }\nprofiles {\n  dev { content { future #true } }\n}\n");
+        assert!(!cfg.content.future, "base untouched by the check");
+        assert_eq!(cfg.profile, None);
+        assert_eq!(cfg.profiles.len(), 1);
     }
 
     #[test]

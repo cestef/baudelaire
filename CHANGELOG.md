@@ -27,6 +27,19 @@ chores are visible in the git history and change nothing for a site.
   draft page. `drafts` with no value at all also enables them, like any other
   flag; `drafts #true { suffix ".wip" }` sets both.
 
+- Every `profiles { .. }` entry is now checked when `config.kdl` is read, so a
+  config that only ever built green because nobody passed `--profile` to the
+  profile holding the typo will go red. The error is the one selecting it would
+  have raised, at the same span.
+
+### Fixed
+
+- **config**: a profile is checked when the config is parsed, not when it is
+  selected. A profile block was retained as raw KDL and dispatched only on
+  selection, so a key no scope has (`content { drafts #true }` written as
+  `content { draft #true }`) parsed green, reloaded green under `serve`, and
+  configured nothing at all whenever the profile was finally used.
+
 ## [0.0.11] - 2026-08-05
 
 ### Upgrading
