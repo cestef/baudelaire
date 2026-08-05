@@ -1,33 +1,95 @@
 //! Baudelaire site configuration.
 //!
 //! Parsed from `config.kdl`. See [`Config::parse`] and [`Config::default`].
-//! Conventional defaults live in [`defaults`]. Profile overlay in [`profile`].
+//!
+//! One module per config block, nested as the blocks are: a section's struct,
+//! its conventional defaults and its `Section` key table sit together, so
+//! adding a key is one edit in one file rather than three in three. Every type
+//! is re-exported here, so the rest of the crate names them flatly.
 
-pub mod defaults;
+pub mod announce;
+pub mod assets;
+pub mod cache;
+pub mod caching;
+pub mod content;
+pub mod deploy;
 pub(crate) mod dispatch;
+pub mod generate;
+pub mod hooks;
+pub mod html;
+pub mod lang;
+pub mod links;
+pub mod lint;
+pub mod named;
+pub mod navigation;
 mod node;
-pub mod parse;
+pub mod paths;
 pub mod permalink;
 pub mod profile;
 pub mod reference;
 pub mod schema;
+pub mod security;
+pub mod serve;
 #[cfg(test)]
 mod tests;
+pub mod typst;
 mod url;
 mod value;
 
 use std::path::{Path, PathBuf};
 
-use kdl::KdlDocument;
+use kdl::{KdlDocument, KdlNode};
 
-use crate::config::dispatch::Section;
+use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Overlay, Table, Text, Url};
+use crate::config::dispatch::{Block, Section};
+use crate::config::lang::Rtl;
+use crate::config::node::NodeExt;
 use crate::content::listing::Titlecase;
 use crate::error::{ConfigError, Result};
-use crate::mime::ImageFormat;
-use crate::ui::Bytes;
 
+pub use announce::AnnounceConfig;
+pub use announce::standard::{StandardConfig, VerifyConfig};
+pub use assets::AssetConfig;
+pub use assets::images::ImagesConfig;
+pub use assets::images::optimize::{JpegConfig, OptimizeConfig, PngConfig, PngStrip};
+pub use assets::images::responsive::ResponsiveConfig;
+pub use cache::CacheConfig;
+pub use caching::CacheControl;
+pub use content::ContentConfig;
+pub use content::collection::{CollectionConfig, PaginateConfig, SortKey};
+pub use content::drafts::DraftConfig;
+pub use content::markdown::{Extension, MarkdownConfig, RawHtml};
+pub use content::taxonomy::TaxonomyConfig;
+pub use deploy::DeployConfig;
+pub use deploy::s3::S3Config;
+pub use deploy::ssh::SshConfig;
+pub use generate::GenerateConfig;
+pub use generate::cards::CardsConfig;
+pub use generate::feed::{FeedConfig, FeedKind, FeedNames};
+pub use generate::llms::LlmsConfig;
+pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
+pub use generate::pdf::{PdfBundle, PdfConfig, PdfPages};
+pub use generate::robots::RobotsConfig;
+pub use generate::search::{SearchConfig, SearchField, SearchFormat};
+pub use hooks::HooksConfig;
+pub use html::highlight::HighlightConfig;
+pub use html::{Footnotes, HtmlConfig};
+pub use lang::LanguageConfig;
+pub use links::{LinkConfig, Linked};
+pub use lint::LintConfig;
+pub use lint::budget::BudgetConfig;
+pub use named::Named;
+pub use navigation::NavigationConfig;
+pub use navigation::spa::{Prefetch, SpaConfig};
+pub use navigation::speculation::{Eagerness, SpeculationConfig};
+pub use navigation::standalone::{Router, StandaloneConfig};
+pub use paths::{Paths, Rooted};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use schema::{FieldSchema, FieldType, TypeError};
+pub use security::SecurityConfig;
+pub use security::csp::CspConfig;
+pub use serve::ServeConfig;
+pub use typst::TypstConfig;
 pub use url::{BaseUrl, Basename, Percent, UrlStyle};
 
 /// Top-level site configuration.
@@ -129,296 +191,6 @@ pub struct Config {
     /// errors are reported against it: the retained profile nodes carry spans
     /// into this exact string.
     pub(crate) source: String,
-}
-
-/// Directory layout, every entry relative to [`Config::root`].
-#[derive(Debug, Clone, Hash)]
-pub struct Paths {
-    /// Content source directory.
-    pub content: PathBuf,
-    /// Output (distribution) directory.
-    pub dist: PathBuf,
-    /// Asset pipeline source directory (minified, bundled, fingerprinted).
-    pub assets: PathBuf,
-    /// Static passthrough directory: copied verbatim to the `dist` root, with no
-    /// processing, no fingerprint, no URL prefix.
-    pub r#static: PathBuf,
-    /// Layout / template directory.
-    pub templates: PathBuf,
-}
-
-impl Paths {
-    /// Every configured directory the build *reads*, paired with the key that
-    /// names it. The single list of what [`dist`](Paths::dist) must stay clear
-    /// of, walked by both the containment guard ([`swallowed`]) and the prune
-    /// sweep, so a new `paths` entry is covered by adding it here alone.
-    ///
-    /// [`swallowed`]: Paths::swallowed
-    pub fn sources(&self) -> [(&'static str, &Path); 4] {
-        [
-            ("content", &self.content),
-            ("assets", &self.assets),
-            ("static", &self.r#static),
-            ("templates", &self.templates),
-        ]
-    }
-
-    /// The first source directory `dist` would contain, if any.
-    ///
-    /// The prune sweep deletes everything under `dist` the build did not write,
-    /// so a `dist` holding the sources deletes the sources: `paths { dist "." }`
-    /// took `config.kdl` and the whole content tree with it, and reported a
-    /// successful build. Refusing the config is the only place this can be
-    /// caught, since by the time the sweep runs every path looks alike.
-    ///
-    /// Entries resolve against `root` rather than the process cwd, so a caller
-    /// that has not changed into the project still gets the right answer.
-    pub fn swallowed(&self, root: &Path) -> Option<(&'static str, &Path)> {
-        let dist = crate::fs::resolved(root.join(&self.dist));
-        self.sources()
-            .into_iter()
-            .find(|(_, path)| crate::fs::resolved(root.join(path)).starts_with(&dist))
-    }
-
-    /// The directories typst sees, as *it* spells them: relative to the project
-    /// root, which is how a span, a dependency path and an import all name a
-    /// file.
-    ///
-    /// Both sides go through [`crate::fs::resolved`], the spelling the link map
-    /// and the dependency tracker already key on, because either can be reached
-    /// through a symlink: comparing them lexically leaves a configured directory
-    /// looking like it sits outside the very root it is under.
-    pub fn under(&self, root: &Path) -> Rooted {
-        let root = crate::fs::resolved(root);
-        let relative = |dir: &Path| {
-            let dir = crate::fs::resolved(dir);
-            dir.strip_prefix(&root)
-                .map_or_else(|_| dir.clone(), Path::to_path_buf)
-        };
-        Rooted {
-            content: relative(&self.content),
-            templates: relative(&self.templates),
-        }
-    }
-}
-
-/// The configured source directories in the compiler's spelling, from
-/// [`Paths::under`]. Only the two typst reads: `dist`, `assets` and `static` are
-/// walked by the build itself and never named in a span or an import.
-///
-/// A directory outside the root keeps its absolute path: there is no
-/// root-relative spelling of it, and inventing one would name a different place.
-pub struct Rooted {
-    /// Where pages are authored: what a link's origin is tested against to tell
-    /// an author's own reference from a layout's chrome.
-    pub content: PathBuf,
-    /// Where layouts live: what a wrapper's root-absolute `#import` resolves
-    /// against.
-    pub templates: PathBuf,
-}
-
-/// What the content tree holds and how it is read. The directory itself is
-/// [`Paths::content`]; everything here is about the pages inside it.
-#[derive(Debug, Clone, Hash)]
-pub struct ContentConfig {
-    /// Bundle index basename. A content file with this stem takes its slug from
-    /// its parent directory instead of its filename, so `posts/hello/index.typ`
-    /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
-    /// resources). `None` disables it: every page is keyed by its filename.
-    pub index: Option<String>,
-    /// Build future-dated posts.
-    pub future: bool,
-    /// Draft handling.
-    pub drafts: DraftConfig,
-    /// Collection overrides keyed by id.
-    pub collections: Vec<(String, CollectionConfig)>,
-    /// Taxonomy definitions.
-    pub taxonomies: Vec<(String, TaxonomyConfig)>,
-    /// How markdown pages are read.
-    pub markdown: MarkdownConfig,
-}
-
-/// What a markdown page's raw HTML does.
-///
-/// Refusing is the default because the DOM a build produces is typed: a string
-/// of markup has nowhere to be spliced into it, and silently dropping it
-/// publishes a page missing something the author wrote. A site importing
-/// content it did not write may prefer the quieter answer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum RawHtml {
-    /// Fail the build, naming the file and underlining the markup.
-    #[default]
-    Refuse,
-    /// Leave it out and carry on.
-    Drop,
-}
-
-impl Named for RawHtml {
-    const NAMES: &'static [(&'static str, Self)] =
-        &[("refuse", Self::Refuse), ("drop", Self::Drop)];
-}
-
-/// A markdown parser extension, by the name a site enables it under.
-///
-/// The set is closed and every variant is listed once, in [`Named::NAMES`], so
-/// the parser, the config reference and the error that suggests a near miss all
-/// read one table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Extension {
-    /// GFM pipe tables.
-    Tables,
-    /// GFM footnotes: `[^a]` and its definition.
-    Footnotes,
-    /// GFM `~~strikethrough~~`.
-    Strikethrough,
-    /// GFM `- [x]` task lists.
-    Tasklists,
-    /// Typographic quotes, dashes and ellipses.
-    Smart,
-    // Math, superscript/subscript and definition lists are deliberately absent.
-    // `pulldown-cmark` parses all three, but the lowering has no Typst mapping
-    // for their events yet, so enabling one produced text with its structure
-    // silently flattened out -- concatenated definition terms, `$x^2$` set as
-    // prose rather than as an equation. A key that parses and then produces
-    // wrong output is worse than one that does not exist, so they arrive with
-    // their `Tag` arms or not at all.
-}
-
-impl Named for Extension {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("tables", Self::Tables),
-        ("footnotes", Self::Footnotes),
-        ("strikethrough", Self::Strikethrough),
-        ("tasklists", Self::Tasklists),
-        ("smart", Self::Smart),
-    ];
-}
-
-impl Extension {
-    /// The set a site gets without saying anything: CommonMark plus GFM, which
-    /// is what "markdown" means to most people writing it.
-    pub const DEFAULT: &'static [Self] = &[
-        Self::Tables,
-        Self::Footnotes,
-        Self::Strikethrough,
-        Self::Tasklists,
-    ];
-
-    /// [`DEFAULT`](Self::DEFAULT) by name, for the reference to mark which of
-    /// the accepted spellings a site already has. Derived, so the documented
-    /// default set cannot drift from the one that is applied.
-    pub fn defaults() -> Vec<&'static str> {
-        Self::DEFAULT.iter().map(|value| value.name()).collect()
-    }
-}
-
-/// How markdown pages are read.
-///
-/// Every field is a capability of the *site*, not of the binary: the `markdown`
-/// cargo feature decides whether `.md` is a page at all, and this decides what
-/// one may contain once it is.
-#[derive(Debug, Clone, Hash)]
-pub struct MarkdownConfig {
-    /// Whether a `.md` file under `content/` is a page.
-    ///
-    /// On when the binary has the feature, so a site says nothing to get
-    /// markdown pages. Turning it *off* is the useful direction: a site with
-    /// `.md` files it does not publish -- a README, notes beside the pages --
-    /// says `markdown #false` and they go back to being ignored.
-    pub enabled: bool,
-    /// Whether the site wrote a `markdown` node at all.
-    ///
-    /// Distinct from `enabled`, and only the feature gate reads it: it is how a
-    /// binary built *without* the feature can say that a block asking for
-    /// something is doing nothing, rather than ignoring it in silence. A site
-    /// that never mentions markdown is not warned about a capability it never
-    /// asked for.
-    pub present: bool,
-    /// The parser extensions in force.
-    pub extensions: Vec<Extension>,
-    /// What raw HTML in a page does.
-    pub html: RawHtml,
-    /// Whether a fence marked `eval` runs as Typst.
-    ///
-    /// On by default, and worth turning off deliberately: an `eval` fence runs
-    /// arbitrary Typst at build time, so a site building contributed or
-    /// imported markdown should refuse it rather than trust every author.
-    pub eval: bool,
-}
-
-impl Default for MarkdownConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            present: false,
-            extensions: Extension::DEFAULT.to_vec(),
-            html: RawHtml::default(),
-            eval: true,
-        }
-    }
-}
-
-/// The files a build emits beside the pages themselves. Each one is opt-in:
-/// either a flag or a block whose presence turns it on.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct GenerateConfig {
-    /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
-    pub sitemap: bool,
-    /// Emit a `_headers` rule file stating the `caching` policy to the host.
-    pub headers: bool,
-    /// Emit a `_redirects` rule file instead of the per-path HTML stubs.
-    ///
-    /// Netlify and Cloudflare Pages read it from the publish directory and
-    /// answer with a real 301, where a stub is a client-side round trip that
-    /// passes link equity worse. It *replaces* the stubs rather than joining
-    /// them: both hosts serve a static file in preference to a redirect rule,
-    /// so a stub sitting at the old path would win and the 301 would never
-    /// fire.
-    pub redirects: bool,
-    /// `robots.txt` generation.
-    pub robots: RobotsConfig,
-    /// `llms.txt` generation.
-    pub llms: LlmsConfig,
-    /// `manifest.webmanifest` generation.
-    pub manifest: ManifestConfig,
-    /// Syndication feeds.
-    pub feed: FeedConfig,
-    /// Client-side search indexes.
-    pub search: SearchConfig,
-    /// Generated social cards.
-    pub cards: CardsConfig,
-    /// A PDF of every page, beside its HTML.
-    pub pdf: PdfConfig,
-}
-
-/// How a visitor moves between the built pages. Three independent strategies,
-/// each enabled by the presence of its block.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct NavigationConfig {
-    /// Client-side navigation between the built pages.
-    pub spa: SpaConfig,
-    /// Single-file (standalone) HTML export.
-    pub standalone: StandaloneConfig,
-    /// Browser-native prefetch/prerender hints.
-    pub speculation: SpeculationConfig,
-}
-
-/// Typst engine knobs.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct TypstConfig {
-    /// Extra experimental Typst features to enable (e.g. `a11y-extras`). `html`
-    /// is always forced on in `world.rs`, so this list is purely additive and
-    /// never needs to include it.
-    pub features: Vec<String>,
-    /// Typst `sys.inputs` entries.
-    pub inputs: Vec<(String, String)>,
-    /// A mirror of Typst Universe to download the `preview` namespace from,
-    /// without the trailing slash. `None` is the official registry.
-    ///
-    /// It covers a page's own `#import` and the site's theme alike, since both
-    /// resolve through the same store. Only `preview` is affected: every other
-    /// namespace is served from the local package directories and never fetched.
-    pub registry: Option<String>,
 }
 
 impl Config {
@@ -1022,1475 +794,265 @@ pub struct Channel {
     pub title: String,
 }
 
-/// Per-collection override.
-#[derive(Debug, Clone, Hash)]
-pub struct CollectionConfig {
-    /// Glob selecting members. `None` = convention (top-level dir under `content/`).
-    pub glob: Option<String>,
-    /// Sort key.
-    pub sort: SortKey,
-    /// Reverse sort order.
-    pub reverse: bool,
-    /// Permalink template, e.g. `/posts/{slug}/`.
-    pub permalink: Option<String>,
-    /// Default template file for pages in this collection.
-    pub template: Option<String>,
-    /// The generated index over this collection's members.
-    pub paginate: PaginateConfig,
-    /// Also write a feed of this collection's members, beside its index, in
-    /// every configured format.
-    ///
-    /// The site feed carries everything dated, which is the wrong granularity
-    /// for a site that publishes more than one kind of thing: a reader who
-    /// wants the essays has to take the release notes too. Per collection
-    /// rather than a blanket flag, because on any site with a `docs` or a
-    /// `pages` collection most of them want no feed at all.
-    pub feed: bool,
-    /// What every member's frontmatter must declare, in declaration order.
-    /// Empty is the default: nothing required, nothing typed.
-    pub schema: Vec<(String, FieldSchema)>,
-}
-
-impl CollectionConfig {
-    /// Where this collection's index sits, before localization: the
-    /// `paginate { mount }` if one moves it, else `/{id}/`, always rooted.
-    ///
-    /// The rooting is not cosmetic: an unrooted `mount "blog"` localizes to
-    /// `/frblog` rather than `/fr/blog`, and this now names an output file as
-    /// well as a permalink.
-    ///
-    /// The single answer, so the index page, the feed written beside it and the
-    /// autodiscovery tag pointing at that feed cannot disagree about where the
-    /// collection lives. [`crate::content::Pagination`] takes it as page 1's
-    /// permalink rather than deriving the same rule again.
-    pub fn home(&self, id: &str) -> String {
-        match self.paginate.mount.as_deref() {
-            Some(mount) if mount.starts_with('/') => mount.to_owned(),
-            Some(mount) => format!("/{mount}"),
-            None => Permalink::join(&[id]),
-        }
-    }
-}
-
-/// A collection's generated index: whether there is one, how it is chunked, and
-/// where it is served.
-///
-/// One block, because it is one concept. It used to be four flat attributes
-/// sitting beside the ones that shape *member* pages, and three of the four
-/// names did not say what they meant: `list` was a template rather than a list,
-/// `mount` the permalink of page 1, `prefix` the segment before a page number.
-/// Reading `template` next to `list` gave no clue that the first wrapped a post
-/// and the second the index over them.
-#[derive(Debug, Clone, Hash)]
-pub struct PaginateConfig {
-    /// Whether an index is generated at all: the block's presence.
-    pub enabled: bool,
-    /// Members per page. `None` puts every member on one page, which is what a
-    /// listing with no size is.
-    pub size: Option<usize>,
-    /// Template for the generated index pages, as distinct from the collection's
-    /// `template`, which wraps its members.
-    pub template: Option<String>,
-    /// Where page 1 is served. `None` = `/{id}/`; set to `/` to mount a blog at
-    /// the site root.
-    pub mount: Option<String>,
-    /// Path segment before a page number: `/{id}/{prefix}/{n}/`. Defaults to
-    /// `page` (`/blog/page/2/`); empty drops the segment (`/blog/2/`).
-    pub prefix: String,
-}
-
-/// Ordering key for a collection's pages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum SortKey {
-    /// Frontmatter `order` field, ascending.
-    #[default]
-    Order,
-    /// Frontmatter `date` field, ascending.
-    Date,
-    /// Frontmatter `title` field, alphabetical.
-    Title,
-}
-
-impl Named for SortKey {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("order", Self::Order),
-        ("date", Self::Date),
-        ("title", Self::Title),
-    ];
-}
-
-/// Languages written right to left, so `dir="rtl"` is right without the site
-/// having to say so. A monolingual `lang "ar"` site has no `languages` block to
-/// declare `dir` in, and so could never get it.
-struct Rtl;
-
-impl Rtl {
-    /// Primary subtags, and the script subtags that imply the direction
-    /// whatever the language (`az-Arab`).
-    const LANGS: &'static [&'static str] = &[
-        "ar", "arc", "ckb", "dv", "fa", "he", "khw", "ks", "ps", "sd", "ug", "ur", "yi",
-    ];
-    const SCRIPTS: &'static [&'static str] = &["adlm", "arab", "hebr", "nkoo", "thaa"];
-
-    fn of(code: &str) -> Option<&'static str> {
-        let mut parts = code.split(['-', '_']).map(str::to_ascii_lowercase);
-        let primary = parts.next()?;
-        let rtl = Self::LANGS.contains(&primary.as_str())
-            || parts.any(|part| Self::SCRIPTS.contains(&part.as_str()));
-        rtl.then_some("rtl")
-    }
-}
-
-/// One declared language in a multi-language site.
-#[derive(Debug, Clone, Default, Hash, serde::Serialize)]
-pub struct LanguageConfig {
-    /// Display name for a language switcher, e.g. `Français`. Falls back to the
-    /// code when unset.
-    pub name: Option<String>,
-    /// Writing direction, `ltr` (default) or `rtl`, surfaced as `<html dir>`.
-    pub dir: Option<String>,
-    /// Per-language site title override (else the site-wide `site`).
-    pub site: Option<String>,
-    /// Per-language description override (else the site-wide `description`), so
-    /// a French feed does not carry an English blurb.
-    pub description: Option<String>,
-    /// Per-language author override (else the site-wide `author`).
-    pub author: Option<String>,
-    /// UI-string table for this language, exposed to templates as
-    /// `page.strings` and to client JS via `baudelaire:i18n`.
-    pub strings: Vec<(String, crate::codegen::Value)>,
-}
-
-/// Taxonomy definition.
-#[derive(Debug, Clone, Hash)]
-pub struct TaxonomyConfig {
-    /// Frontmatter key to read terms from.
-    pub key: String,
-    /// Generate a page per term, plus one listing every term appears on.
-    pub listing: bool,
-    /// Template for the generated taxonomy index + term pages.
-    pub template: Option<String>,
-    /// Members per term page. `None` puts every member on one page, which is
-    /// what a term listing used to do unconditionally, beside a collection
-    /// index that paginated the same pages.
-    pub paginate: Option<usize>,
-    /// Path segment before a term page's number (`/tags/rust/page/2/`); empty
-    /// drops it. Spelled like a collection's, since it is the same thing.
-    pub prefix: String,
-}
-
-/// Draft handling: whether drafts build, and the file-stem suffix marking one.
-#[derive(Debug, Clone, Hash)]
-pub struct DraftConfig {
-    /// Build draft pages. Runtime flag, set by `--drafts` or a profile.
-    pub build: bool,
-    /// Suffix marking draft sources, e.g. `post.draft.typ`.
-    pub suffix: String,
-}
-
-/// Link shape and link checking: what a page's URL looks like, and how hard the
-/// build tries to prove every reference to one resolves.
-#[derive(Debug, Clone, Hash)]
-pub struct LinkConfig {
-    /// How permalinks map onto output files: clean (directory-per-page) or flat
-    /// (`.html`). Set under `links { style "clean" | "flat" }`.
-    pub style: UrlStyle,
-    /// Treat unresolved internal `.typ` links as errors (else warnings).
-    pub strict: bool,
-    /// Also verify outbound `http(s)` links over the network.
-    ///
-    /// Read by `check` alone: a build stays offline and deterministic, so a
-    /// flaky host or an airplane can never change what it produces. `check
-    /// --external` turns it on for one run.
-    pub external: bool,
-    /// Hand each page the pages whose content links to it, as `page.backlinks`.
-    ///
-    /// Opt-in because it is the one page value that cannot be known before the
-    /// site has rendered: a page whose backlinks turn out wrong is compiled a
-    /// second time (see `engine::links::Graph`), which a site that shows none
-    /// should not pay for.
-    pub backlinks: bool,
-    /// Report the pages nothing links to, and what counts as a link. `None`
-    /// leaves the report off.
-    pub orphans: Option<Linked>,
-}
-
-/// What counts as pointing at a page, for the orphan report.
-///
-/// A layout never does under either: a sidebar links every page from every page,
-/// so counting one would mean no page is ever an orphan. The difference is
-/// whether a page the *build* generated counts as a reader's way in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Linked {
-    /// Any page's link. A post reached from its paginated index or from a term
-    /// page is reached, so the report names only what a reader cannot get to at
-    /// all.
-    #[default]
-    Any,
-    /// Only a link on a page an author wrote. A post reached from its index and
-    /// from nowhere else is named, which is the question a documentation site
-    /// asks: did anyone write about this page?
-    Authored,
-}
-
-impl Named for Linked {
-    const NAMES: &'static [(&'static str, Self)] =
-        &[("any", Self::Any), ("authored", Self::Authored)];
-}
-
-impl Linked {
-    /// Whether a link on this page counts. `generated` is whether the build
-    /// wrote the page rather than an author.
-    pub fn counts(self, generated: bool) -> bool {
-        !generated || self == Self::Any
-    }
-}
-
-impl LinkConfig {
-    /// Whether this build needs the site's link graph at all.
-    ///
-    /// The one gate the render pass records edges behind, and the one both
-    /// readers of them share: a page's backlinks and the orphan report are the
-    /// same graph asked two questions. Without it nothing walks a link's origin
-    /// and no page carries the edges in its cache entry.
-    pub fn graph(&self) -> bool {
-        self.backlinks || self.orphans.is_some()
-    }
-}
-
-/// What the built pages tell a browser to trust: the integrity of the files
-/// they load, and the policy they are served under.
-///
-/// Both are derived from the pages themselves rather than written by hand,
-/// which is the only way either stays true: a hand-kept `script-src` goes stale
-/// the moment a template gains an inline script, and a hand-kept `integrity`
-/// the moment the file it names is rebuilt.
-#[derive(Debug, Clone, Default, Hash)]
-pub struct SecurityConfig {
-    /// Stamp `integrity` onto every script and stylesheet this build emitted,
-    /// so a browser refuses one that arrives altered.
-    ///
-    /// Needs `assets { fingerprint }`: an attribute pinning a digest to a URL
-    /// whose contents can change under it is how a site serves a page that
-    /// blocks its own stylesheet.
-    pub sri: bool,
-    /// The `Content-Security-Policy` written into the generated `_headers`.
-    pub csp: CspConfig,
-}
-
-/// A generated `Content-Security-Policy`.
-///
-/// Each directive is the value it is given, verbatim: a CSP source list is its
-/// own small language (`'self'`, `https:`, a host, `'unsafe-inline'`), and
-/// inventing a second spelling for it would help nobody. What this adds is the
-/// half no author can write down, the digest of every inline script and style
-/// the build produced.
-#[derive(Debug, Clone, Hash)]
-pub struct CspConfig {
-    /// Whether a policy is emitted at all; flipped by the block's presence.
-    pub enabled: bool,
-    /// Enforce it. Off emits `Content-Security-Policy-Report-Only`, which
-    /// reports violations and blocks nothing: how a policy is rolled out.
-    pub enforce: bool,
-    /// Add the digest of every inline `<script>` and `<style>` the build
-    /// produced to the script and style directives, which is what lets a strict
-    /// policy coexist with the inline blocks a page needs.
-    pub hashes: bool,
-    /// `default-src`, the fallback every unstated fetch directive inherits.
-    pub default: Option<String>,
-    /// `script-src`, `style-src`, and the rest, each stated only if set.
-    pub script: Option<String>,
-    pub style: Option<String>,
-    pub img: Option<String>,
-    pub font: Option<String>,
-    pub connect: Option<String>,
-    pub frame: Option<String>,
-    pub object: Option<String>,
-    /// `base-uri`: what a `<base>` may point the page's relative URLs at.
-    pub base: Option<String>,
-    /// `form-action`: where a form may submit.
-    pub form: Option<String>,
-    /// `report-uri`: where a violation report is posted.
-    pub report: Option<String>,
-}
-
-/// Linting of the built pages: which rules run over the typed DOM, how loud a
-/// finding is, and how many bytes a page may weigh.
-///
-/// Off until a `lint { }` block says otherwise. A lint is a claim about what the
-/// site *should* look like, and inventing one for a site that never asked is the
-/// same opinionated-default problem as a generated page nobody wanted.
-#[derive(Debug, Clone, Hash)]
-pub struct LintConfig {
-    /// Whether the DOM lint pass runs at all; flipped by the block's presence.
-    pub enabled: bool,
-    /// Fail the build on a finding instead of warning, exactly as
-    /// [`LinkConfig::strict`] does for a broken link.
-    pub strict: bool,
-    /// Report a heading that skips a level (`h2` straight to `h4`).
-    pub headings: bool,
-    /// Report an `<img>` carrying no `alt` (an empty one is a decorative image,
-    /// and is fine).
-    pub alt: bool,
-    /// Report an `id` used more than once on one page.
-    pub ids: bool,
-    /// Report an unknown ARIA role or `aria-*` attribute, and one whose id
-    /// reference names nothing on the page.
-    pub aria: bool,
-    /// How many bytes a single page may ship.
-    pub budget: BudgetConfig,
-}
-
-/// Per-page weight limits, in bytes. Each is the ceiling for one class of what
-/// a page ships; `None` is no limit.
-///
-/// Unlike the rules above, a budget always fails the build: it is an assertion
-/// the author wrote down, not an opinion this tool holds.
-#[derive(Debug, Clone, Default, Hash)]
-pub struct BudgetConfig {
-    /// The page's own markup, as written to `dist`.
-    pub html: Option<Bytes>,
-    /// Every script the page loads, plus its inline `<script>` bodies.
-    pub js: Option<Bytes>,
-    /// Every stylesheet it loads, plus its inline `<style>` bodies.
-    pub css: Option<Bytes>,
-    /// Every image it references, responsive candidates excluded: a `srcset`
-    /// offers alternatives, and a visitor is served one of them.
-    pub images: Option<Bytes>,
-    /// All of the above at once, the page's total transfer weight.
-    pub total: Option<Bytes>,
-}
-
-/// Syndication feeds.
-#[derive(Debug, Clone, Hash)]
-pub struct FeedConfig {
-    /// Formats to emit (requires `url`).
-    pub formats: Vec<FeedKind>,
-    /// Maximum items in a feed.
-    pub limit: usize,
-    /// Also emit a feed per taxonomy term, beside that term's listing page
-    /// (`/tags/rust/rss.xml`), so a reader can follow one tag rather than the
-    /// whole site. Follows the term pages, so it needs `listing` on the
-    /// taxonomy.
-    pub terms: bool,
-    /// What each format's file is called, when the conventional name is not the
-    /// one a site already publishes under. A moved feed is the one move a
-    /// redirect stub cannot rescue, since a reader fetches the file and never
-    /// renders the meta refresh.
-    pub names: FeedNames,
-}
-
-/// Per-format file name overrides for [`FeedConfig`].
-#[derive(Debug, Clone, Default, Hash)]
-pub struct FeedNames {
-    pub rss: Option<String>,
-    pub atom: Option<String>,
-    pub json: Option<String>,
-}
-
-impl FeedConfig {
-    /// This format's file name: the configured override, else the conventional
-    /// one.
-    ///
-    /// The single answer, because a feed names its own file in three places and
-    /// an aggregator would notice them disagreeing: the file the build writes,
-    /// the `<id>`/`feed_url` inside it, and every page's autodiscovery tag.
-    pub fn file(&self, kind: FeedKind) -> &str {
-        let named = match kind {
-            FeedKind::Rss => &self.names.rss,
-            FeedKind::Atom => &self.names.atom,
-            FeedKind::Json => &self.names.json,
-        };
-        named.as_deref().unwrap_or_else(|| kind.file())
-    }
-
-    /// This feed's absolute URL under `base`, for a language `scope` (empty for
-    /// the default language).
-    ///
-    /// The file name is appended to the scope's directory URL rather than
-    /// joined as a path segment, which would give it a trailing slash.
-    pub fn url(&self, kind: FeedKind, base: &BaseUrl, scope: &str) -> String {
-        format!(
-            "{}{}",
-            base.join(Permalink::join(&[scope])),
-            self.file(kind)
-        )
-    }
-}
-
-/// A syndication feed format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FeedKind {
-    Rss,
-    Atom,
-    Json,
-}
-
-impl Named for FeedKind {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("rss", Self::Rss),
-        ("atom", Self::Atom),
-        ("json", Self::Json),
-    ];
-}
-
-impl FeedKind {
-    /// The conventional output file name for this format, which
-    /// [`FeedConfig::file`] overrides.
-    pub fn file(self) -> &'static str {
-        match self {
-            Self::Rss => "rss.xml",
-            Self::Atom => "atom.xml",
-            Self::Json => "feed.json",
-        }
-    }
-
-    /// The media type a `<link rel="alternate">` announces this format under,
-    /// and how a reader tells the three apart when a page advertises several.
-    /// Beside [`file`](Self::file) because a format's name and its type are the
-    /// same fact, and an autodiscovery tag needs both.
-    pub fn mime(self) -> &'static str {
-        match self {
-            Self::Rss => "application/rss+xml",
-            Self::Atom => "application/atom+xml",
-            Self::Json => "application/feed+json",
-        }
-    }
-}
-
-/// Client-side search index generation. Empty `formats` disables search.
-#[derive(Debug, Clone, Hash)]
-pub struct SearchConfig {
-    /// Index formats to emit. Empty = disabled.
-    pub formats: Vec<SearchFormat>,
-    /// Page fields included in each indexed document.
-    pub fields: Vec<SearchField>,
-    /// The element whose contents are indexed, by tag name. A page without one
-    /// is indexed whole.
-    pub region: String,
-    /// Elements dropped from the indexed region wherever they occur in it, by
-    /// tag name: the chrome a layout puts *inside* its content region.
-    pub ignore: Vec<String>,
-    /// Tokens excluded from the inverted index.
-    pub stopwords: Vec<String>,
-    /// Minimum token length kept in the inverted index.
-    pub min_length: usize,
-    /// Also emit the shipped search UI (a Ctrl-K palette) next to each index.
-    /// Spelled `ui` in config: the top-level `client { }` block is build-time
-    /// constants for client JS, and one name could not mean both.
-    pub ui: bool,
-}
-
-impl SearchConfig {
-    /// Whether the prebuilt inverted index is among the formats emitted. It is
-    /// the only one `stopwords` and `minimum` reach, so it is also what decides
-    /// whether either of them does anything.
-    pub fn inverted(&self) -> bool {
-        self.formats.contains(&SearchFormat::Inverted)
-    }
-}
-
-/// A client-side search index format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SearchFormat {
-    /// A flat document list (`search.json`): pair with any client library
-    /// (Fuse.js, MiniSearch, ..), which builds its own index at runtime.
-    Json,
-    /// A prebuilt inverted index (`search.inverted.json`): server-side tokenized
-    /// so the client looks up terms directly instead of scanning every doc.
-    Inverted,
-}
-
-impl Named for SearchFormat {
-    const NAMES: &'static [(&'static str, Self)] =
-        &[("json", Self::Json), ("inverted", Self::Inverted)];
-}
-
-impl SearchFormat {
-    /// The conventional output file name for this format's index.
-    pub fn file(self) -> &'static str {
-        match self {
-            Self::Json => "search.json",
-            Self::Inverted => "search.inverted.json",
-        }
-    }
-
-    /// The file name for this format's generated JavaScript client.
-    pub fn client_file(self) -> &'static str {
-        match self {
-            Self::Json => "search.js",
-            Self::Inverted => "search.inverted.js",
-        }
-    }
-}
-
-/// A page field selectable for indexing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SearchField {
-    Title,
-    Body,
-    Tags,
-}
-
-impl Named for SearchField {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("title", Self::Title),
-        ("body", Self::Body),
-        ("tags", Self::Tags),
-    ];
-}
-
-/// HTML output options.
-#[derive(Debug, Clone, Hash)]
-pub struct HtmlConfig {
-    /// Pretty-print HTML.
-    pub pretty: bool,
-    /// Inline local assets (`/assets/..` refs) as `data:` URIs.
-    pub embed: bool,
-    /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
-    /// into each page's `<head>` from frontmatter and config.
-    pub meta: bool,
-    /// Give every heading a slug `id` (when it lacks one), so sections are
-    /// deep-linkable and a table of contents can target them.
-    pub anchors: bool,
-    /// Rewrite syntax-highlight colours as CSS classes.
-    pub highlight: HighlightConfig,
-    /// Emit a schema.org JSON-LD island in each page's `<head>`.
-    ///
-    /// Opt-in, unlike the meta tags beside it: those restate facts the page
-    /// already states, while structured data is a claim made *to* a search
-    /// engine about what the page is, and that is the author's claim to make.
-    pub jsonld: bool,
-    /// Where a page's footnotes are moved to.
-    pub footnotes: Footnotes,
-    /// Stamp every element with the `file:line:column` it was authored at, as
-    /// `data-typst`. What a source-mapped preview reads to jump from a rendered
-    /// element back to the Typst that produced it.
-    ///
-    /// Opt-in, and off in a published build: the attributes are for the author,
-    /// not the reader. `serve --spans` turns them on for a preview session.
-    /// Deliberately a config field rather than a `serve`-only flag: `serve`
-    /// settings are excluded from the cache fingerprint, so a mode-derived
-    /// stamp would leave a `build` reusing a served page's markup, attributes
-    /// and all.
-    pub spans: bool,
-}
-
-/// The elements a page's footnote list is moved into, most specific first.
-///
-/// Typst appends the list to the end of the document, which is right for a page
-/// with no template and wrong for one with a layout: everything the layout emits
-/// is already in the body, so the notes land after the site footer, outside the
-/// element that sets the content width.
-///
-/// This is a list rather than one name because a site's layouts rarely agree: a
-/// post wraps its body in `<article>`, a generated index has only `<main>`, and
-/// a bespoke page may have neither. Each name is tried in order and the first
-/// element found wins, so `footnotes "article" "main"` covers all three without
-/// a rule per template. An empty list moves nothing, which is how a site keeps
-/// Typst's own placement.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Footnotes(Vec<String>);
-
-impl Default for Footnotes {
-    /// An article, else the main region: the two elements a layout is most
-    /// likely to have, in the order that puts the notes closest to the text
-    /// they annotate.
+impl Default for Config {
     fn default() -> Self {
-        Self(vec!["article".to_owned(), "main".to_owned()])
-    }
-}
-
-impl Footnotes {
-    /// The element names to try, in order.
-    pub fn targets(&self) -> &[String] {
-        &self.0
-    }
-
-    /// Whether the notes stay where Typst put them.
-    pub fn disabled(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-/// Built from the configured names, which the parser has already checked are
-/// element names the DOM can hold.
-impl From<Vec<String>> for Footnotes {
-    fn from(names: Vec<String>) -> Self {
-        Self(names)
-    }
-}
-
-/// Turn typst's inline highlight colours into CSS classes, so a stylesheet owns
-/// the palette and can follow a light/dark toggle.
-///
-/// typst-html bakes a highlight theme's colours into a `style="color: .."` on
-/// every span, with no option to emit classes. A fixed colour cannot follow a
-/// runtime theme switch, so the documented workaround was to author a `.tmTheme`
-/// of *meaningless sentinel hex values* and remap each one with
-/// `pre code [style*="e5d004"] { color: var(--kw) !important }`. That is what
-/// this replaces.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct HighlightConfig {
-    /// Whether to rewrite at all; the block's presence turns it on.
-    pub enabled: bool,
-    /// Scope name to the colour the theme paints it, `keyword "#e5d004"`,
-    /// mirroring the `.tmTheme`. A colour named here becomes `sx-<name>`;
-    /// anything unnamed falls back to `sx-<hex>`, which still beats an
-    /// attribute-substring selector.
-    pub scopes: Vec<(String, String)>,
-}
-
-impl HighlightConfig {
-    /// The class a highlight `colour` is rewritten to. The single naming rule,
-    /// so the emitted markup and any generated stylesheet agree by construction.
-    pub fn class(&self, colour: &str) -> String {
-        let named = self
-            .scopes
-            .iter()
-            .find(|(_, hex)| hex.eq_ignore_ascii_case(colour))
-            .map(|(name, _)| name.as_str());
-        format!(
-            "sx-{}",
-            named.unwrap_or_else(|| colour.trim_start_matches('#'))
-        )
-    }
-}
-
-/// Single-file export: the whole site inlined into one HTML document, each
-/// page a route the bundled router swaps in. Enabled by the presence of a
-/// `navigation { standalone { .. } }` block.
-#[derive(Debug, Clone, Hash)]
-pub struct StandaloneConfig {
-    /// Whether to emit the single-file export.
-    pub enabled: bool,
-    /// Output file name, relative to `dist`.
-    pub file: String,
-    /// Permalink of the page whose `<head>` and body seed the shell: the route
-    /// shown before any navigation, and the only one that renders without
-    /// JavaScript. `None` means the site home (`/`, localized to `lang`).
-    pub entry: Option<String>,
-    /// How the router encodes the current route in the address bar.
-    pub router: Router,
-}
-
-/// Generated social cards: the image a link to this site unfurls into, rendered
-/// per page from a Typst template. Enabled by the presence of a
-/// `generate { cards { .. } }` block.
-///
-/// The template is compiled to a *paged* document, not an HTML one, so it is
-/// ordinary Typst: `html.elem` does not exist there, and page layout does.
-#[derive(Debug, Clone, Hash)]
-pub struct CardsConfig {
-    /// Whether to render cards.
-    pub enabled: bool,
-    /// The template file under the templates directory.
-    pub template: String,
-    /// Card size in pixels. The card is one page rendered at one pixel per
-    /// point, so these are also the page's dimensions in points.
-    pub width: u32,
-    pub height: u32,
-}
-
-impl CardsConfig {
-    /// The directory cards are written to under `dist`, and the leading segment
-    /// of every card URL.
-    pub const DIR: &'static str = "cards";
-
-    /// The widest and tallest a card may be. Unfurlers cap well below this; the
-    /// limit exists so a typo cannot ask for a gigapixel rasterization.
-    pub(crate) const MAX: u32 = 4096;
-
-    /// The served URL of a page's card, whether or not it has been rendered
-    /// yet: the meta transform names it while the file is still being made, the
-    /// renderer writes it, and the prune keeps it, so all three have to derive
-    /// it the same way.
-    pub fn url(&self, permalink: &str) -> String {
-        format!("/{}/{}.png", Self::DIR, Basename(permalink))
-    }
-
-    /// Whether cards are actually produced: configured *and* compiled in. A
-    /// build without the `cards` feature has no rasterizer, so pointing pages at
-    /// images it cannot make would be worse than making none.
-    pub fn active(&self) -> bool {
-        self.enabled && cfg!(feature = "cards")
-    }
-}
-
-/// What the typesetter writes on paper: `generate { pdf { .. } }`.
-///
-/// The other half of what it can do with the same source: the HTML compile
-/// targets a DOM, these target pages. Two artifacts, switched on separately by
-/// the presence of their own block, because wanting one says nothing about
-/// wanting the other: a manual is bundled and rarely per-page, a blog is the
-/// reverse.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct PdfConfig {
-    /// One PDF per page, beside its HTML.
-    pub pages: PdfPages,
-    /// Many pages as one document.
-    pub bundle: PdfBundle,
-}
-
-impl PdfConfig {
-    /// Whether the site asked for either artifact, for the feature gate: a
-    /// binary without the exporter has to say so whichever one was asked for.
-    pub fn enabled(&self) -> bool {
-        self.pages.enabled || self.bundle.enabled()
-    }
-}
-
-/// One PDF per page, from a paged template. Enabled by the presence of a
-/// `generate { pdf { pages { .. } } }` block.
-///
-/// Like a card it needs its own template, because a layout that emits
-/// `html.elem` produces nothing on the paged target.
-#[derive(Debug, Clone, Hash)]
-pub struct PdfPages {
-    /// Whether to write a PDF per page.
-    pub enabled: bool,
-    /// The paged template file under the templates directory.
-    pub template: String,
-}
-
-impl PdfPages {
-    /// The served URL of a page's PDF: a sibling of the page rather than a file
-    /// inside it, so `/posts/hello/` yields `/posts/hello.pdf` and a browser
-    /// saves it under a name that means something. `/posts/hello/index.pdf`
-    /// would download as `index.pdf`.
-    pub fn url(&self, permalink: &str) -> String {
-        format!("/{}.pdf", Basename(permalink))
-    }
-
-    /// Whether per-page PDFs are actually produced: configured *and* compiled
-    /// in. A build without the `pdf` feature has no exporter, so linking pages
-    /// to a file it cannot make would be worse than making none.
-    pub fn active(&self) -> bool {
-        self.enabled && cfg!(feature = "pdf")
-    }
-}
-
-/// Many pages as one document: a collection bound end to end, the whole site,
-/// or both. Enabled by the presence of a `generate { pdf { bundle { .. } } }`
-/// block naming at least one target.
-///
-/// The paged sibling of `navigation { standalone }`, which does the same thing
-/// for HTML.
-#[derive(Debug, Clone, Hash)]
-pub struct PdfBundle {
-    /// Whether the site wrote a `bundle { }` block at all, as distinct from
-    /// having named a target in one. An empty block asks for nothing, and the
-    /// difference is what lets the build say so instead of writing no file in
-    /// silence.
-    pub present: bool,
-    /// The paged template file under the templates directory. Distinct from the
-    /// per-page one: it is handed every page at once, and what it does with a
-    /// run of documents (a title page, a contents list, running heads) is not
-    /// what a single page's template does.
-    pub template: String,
-    /// Collections to bundle, each written to `/<collection>.pdf`.
-    pub collections: Vec<String>,
-    /// Whether to bundle the whole site, written to `/site.pdf`. Named by the
-    /// same rule its neighbours are: a bundle is `/<target>.pdf`, and inventing
-    /// a second rule so this one could carry a filename bought nothing.
-    pub site: bool,
-}
-
-impl PdfBundle {
-    /// Whether any target was named. A `bundle { }` block that names none asks
-    /// for nothing, which [`crate::engine`]'s inert-setting table reports
-    /// rather than letting the build write nothing in silence.
-    pub fn enabled(&self) -> bool {
-        !self.collections.is_empty() || self.site
-    }
-
-    /// Whether bundles are actually produced: asked for *and* compiled in.
-    pub fn active(&self) -> bool {
-        self.enabled() && cfg!(feature = "pdf")
-    }
-}
-
-/// Browser-native navigation hints: a `<script type="speculationrules">` telling
-/// the browser to fetch, or fully render, an internal link's target before it is
-/// clicked. Enabled by the presence of a `navigation { speculation { .. } }`
-/// block.
-///
-/// The zero-JavaScript neighbour of [`SpaConfig`]: the browser does the work, so
-/// nothing has to be shipped, mounted, or maintained. Unsupported browsers
-/// ignore the script.
-#[derive(Debug, Clone, Hash)]
-pub struct SpeculationConfig {
-    /// Whether to emit the rules.
-    pub enabled: bool,
-    /// How eagerly to fetch a link's target (cheap: bytes only).
-    pub prefetch: Eagerness,
-    /// How eagerly to render it in full (expensive: a hidden page, its scripts
-    /// running), so the click paints instantly.
-    pub prerender: Eagerness,
-}
-
-/// How eagerly the browser should act on a speculation rule, from the API's own
-/// scale, plus a [`Eagerness::None`] that emits no rule at all for that action.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Eagerness {
-    /// Emit no rule: this action is off.
-    #[default]
-    None,
-    /// On pointer-down: the last moment before a navigation.
-    Conservative,
-    /// On hover, roughly, once intent looks real.
-    Moderate,
-    /// As soon as a link looks like a plausible next step.
-    Eager,
-    /// At once, for every matching link on the page.
-    Immediate,
-}
-
-impl Named for Eagerness {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("none", Self::None),
-        ("conservative", Self::Conservative),
-        ("moderate", Self::Moderate),
-        ("eager", Self::Eager),
-        ("immediate", Self::Immediate),
-    ];
-}
-
-/// Client-side navigation over the ordinary multi-file output: a runtime
-/// intercepts internal link clicks, fetches the target page, and swaps one
-/// container instead of reloading. Enabled by the presence of a
-/// `navigation { spa { .. } }` block.
-#[derive(Debug, Clone, Hash)]
-pub struct SpaConfig {
-    /// Whether to emit the navigation runtime.
-    pub enabled: bool,
-    /// CSS selector of the element swapped on navigation. Everything outside it
-    /// (a header, a sidebar) survives untouched, so it must be the one element
-    /// whose contents differ between pages.
-    pub root: String,
-    /// When to warm a link's target before it is clicked.
-    pub prefetch: Prefetch,
-}
-
-/// How a router represents the active route in the URL.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Router {
-    /// `#/blog/post/`: the only mode that survives `file://`, where a single
-    /// file is normally opened, since it never asks the browser for a path the
-    /// filesystem has to have.
-    #[default]
-    Hash,
-    /// `/blog/post/`, through the History API. Needs the file served by a host
-    /// that answers every route with it.
-    History,
-}
-
-/// When the router warms a link's target.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Prefetch {
-    /// Never: every navigation pays its own fetch.
-    None,
-    /// On pointer-over or keyboard focus, the moment intent is visible.
-    #[default]
-    Hover,
-    /// As soon as the link scrolls into view. Warms far more than is clicked.
-    Visible,
-}
-
-/// An enum spelled out in config as one of a fixed set of names.
-///
-/// [`Named::NAMES`] is that set: config parsing maps through it, its
-/// unknown-value suggestions are derived from it, and [`Named::name`] reads
-/// back out of it. One table, so a variant can never parse under one spelling
-/// and be generated under another.
-pub trait Named: Copy + PartialEq + Sized + 'static {
-    const NAMES: &'static [(&'static str, Self)];
-
-    /// The name this variant is configured as, and the one generated code sees.
-    fn name(self) -> &'static str {
-        Self::NAMES
-            .iter()
-            .find(|(_, variant)| *variant == self)
-            .map(|(name, _)| *name)
-            .expect("NAMES lists every variant")
-    }
-
-    /// The variant a config name spells, if any: the read direction of
-    /// [`NAMES`](Named::NAMES), and the only way a name becomes a variant.
-    fn of(name: &str) -> Option<Self> {
-        Self::NAMES
-            .iter()
-            .find(|(known, _)| *known == name)
-            .map(|(_, variant)| *variant)
-    }
-
-    /// Every spelling this enum accepts, in declaration order: what the
-    /// generated reference lists for a `Kind::Choice` key, read out of the same
-    /// table that parses them.
-    fn names() -> Vec<&'static str> {
-        Self::NAMES.iter().map(|(name, _)| *name).collect()
-    }
-}
-
-impl Named for Router {
-    const NAMES: &'static [(&'static str, Self)] =
-        &[("hash", Self::Hash), ("history", Self::History)];
-}
-
-impl Named for Prefetch {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("none", Self::None),
-        ("hover", Self::Hover),
-        ("visible", Self::Visible),
-    ];
-}
-
-/// Image handling: markup annotations and build-time optimization. Grouped so
-/// every image setting lives in one `assets { images { .. } }` block.
-#[derive(Debug, Clone, Hash)]
-pub struct ImagesConfig {
-    /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
-    pub lazy: bool,
-    /// Externalize typst-embedded images: write each `image()` to a file under
-    /// the asset URL and reference it, instead of typst's default inline
-    /// base64 `data:` URI. Forced off while `html.embed` is on (which re-inlines
-    /// asset references), so the two never fight.
-    pub extract: bool,
-    /// Per-format build-time optimization.
-    pub optimize: OptimizeConfig,
-    /// Responsive width variants (`srcset`).
-    pub responsive: ResponsiveConfig,
-}
-
-impl ImagesConfig {
-    /// Whether to externalize typst-embedded images: the `extract` switch, unless
-    /// `html.embed` is inlining everything (in which case externalizing would be
-    /// undone immediately).
-    pub fn externalize(&self, html: &HtmlConfig) -> bool {
-        self.extract && !html.embed
-    }
-}
-
-/// Responsive images: pre-generate downscaled copies of each raster and let the
-/// browser pick the smallest that fits via `srcset`. Enabled by the presence of
-/// a `responsive` block. Variants stay in the source format (a jpeg source
-/// yields smaller jpegs); a width wider than the source is skipped, never
-/// upscaled.
-#[derive(Debug, Clone, Hash)]
-pub struct ResponsiveConfig {
-    /// Whether to emit width variants.
-    pub enabled: bool,
-    /// Target widths in CSS pixels. The source's own width is always the largest
-    /// candidate, so these only add smaller sizes.
-    pub widths: Vec<u32>,
-    /// JPEG re-encode quality (`1`–`100`) for downscaled variants. PNG variants
-    /// are re-encoded losslessly and ignore this.
-    pub quality: u8,
-    /// The `sizes` attribute for images the author left unsized: a media-query
-    /// list describing the image's displayed width so the browser picks the
-    /// smallest variant that fits (`(min-width: 60rem) 640px, 100vw`). `None`
-    /// emits no attribute, which the spec treats as `100vw`; set it to the
-    /// theme's real content width to stop wide viewports over-fetching. An
-    /// authored `sizes` on the image always wins.
-    pub sizes: Option<String>,
-}
-
-impl ResponsiveConfig {
-    /// The widths worth emitting for a source that is `source` pixels wide:
-    /// the configured ones below it, deduped and ascending. A width at or above
-    /// the source is skipped rather than upscaled, and the source itself is the
-    /// largest candidate, so it is not in this list.
-    ///
-    /// One rule, because two layers apply it and must agree on the answer: the
-    /// asset pipeline generates the files, and the render pass names them in a
-    /// `srcset` before an extracted image has any.
-    pub fn applicable(&self, source: u32) -> Vec<u32> {
-        let mut widths: Vec<u32> = self
-            .widths
-            .iter()
-            .copied()
-            .filter(|&w| w < source)
-            .collect();
-        widths.sort_unstable();
-        widths.dedup();
-        widths
-    }
-}
-
-/// Build-time image optimization, per format. A format is enabled by naming it
-/// in the `optimize { .. }` block (`png`, `jpeg`); an absent format is left
-/// untouched. Each format carries its own tuning.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct OptimizeConfig {
-    /// PNG optimization (oxipng), when enabled.
-    pub png: Option<PngConfig>,
-    /// JPEG optimization (re-encode), when enabled.
-    pub jpeg: Option<JpegConfig>,
-}
-
-impl OptimizeConfig {
-    /// Whether any format is enabled.
-    pub fn any(&self) -> bool {
-        self.png.is_some() || self.jpeg.is_some()
-    }
-
-    /// The enabled format for a file extension. `None` when unrecognized or that
-    /// format's optimization is off.
-    pub fn format(&self, ext: &str) -> Option<ImageFormat> {
-        let matched = ImageFormat::from_ext(ext)?;
-        let on = match matched {
-            ImageFormat::Png => self.png.is_some(),
-            ImageFormat::Jpeg => self.jpeg.is_some(),
-        };
-        on.then_some(matched)
-    }
-}
-
-/// PNG optimization tuning (oxipng).
-#[derive(Debug, Clone, Hash)]
-pub struct PngConfig {
-    /// Optimization preset, `0` (fast) – `6` (exhaustive).
-    pub level: u8,
-    /// Which ancillary chunks to strip.
-    pub strip: PngStrip,
-}
-
-/// PNG ancillary-chunk stripping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PngStrip {
-    /// Keep every chunk.
-    None,
-    /// Strip everything but display-affecting chunks (the default).
-    Safe,
-    /// Strip all non-critical chunks.
-    All,
-}
-
-impl Named for PngStrip {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("none", Self::None),
-        ("safe", Self::Safe),
-        ("all", Self::All),
-    ];
-}
-
-/// JPEG optimization tuning (re-encode).
-#[derive(Debug, Clone, Hash)]
-pub struct JpegConfig {
-    /// Re-encode quality, `1`–`100`.
-    pub quality: u8,
-}
-
-/// `robots.txt` generation. Enabled by the presence of a `generate { robots }`
-/// block.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct RobotsConfig {
-    /// Whether to emit `robots.txt`.
-    pub enabled: bool,
-    /// Paths disallowed for all crawlers. Empty = allow everything.
-    pub disallow: Vec<String>,
-}
-
-/// `llms.txt` generation ([llmstxt.org]): a Markdown index of the site's pages
-/// for LLM consumption. Enabled by the presence of a `generate { llms }` block.
-///
-/// [llmstxt.org]: https://llmstxt.org
-#[derive(Debug, Clone, Hash, Default)]
-pub struct LlmsConfig {
-    /// Whether to emit `llms.txt`.
-    pub enabled: bool,
-    /// Optional one-line summary rendered as the blockquote under the title.
-    pub summary: Option<String>,
-}
-
-/// `manifest.webmanifest` generation ([the web app manifest][spec]): what a
-/// browser reads when a visitor installs the site to a home screen. Enabled by
-/// the presence of a `generate { manifest }` block.
-///
-/// Everything here is what only the author knows. What the build already knows
-/// (the site title, the language's root URL) is filled in from the config it is
-/// written for, so a bare `manifest { }` beside an icon is a valid manifest.
-///
-/// [spec]: https://www.w3.org/TR/appmanifest/
-#[derive(Debug, Clone, Hash, Default)]
-pub struct ManifestConfig {
-    /// Whether to emit `manifest.webmanifest`.
-    pub enabled: bool,
-    /// The installed app's name. Defaults to the site title in the language the
-    /// manifest is written for.
-    pub name: Option<String>,
-    /// The name a launcher falls back to when the full one does not fit.
-    pub short: Option<String>,
-    /// One line about the app, shown by an install prompt.
-    pub description: Option<String>,
-    /// How the installed app is presented.
-    pub display: DisplayMode,
-    /// CSS colour of the browser UI around the app, also written to every
-    /// page's `<meta name="theme-color">` so a tab is tinted before any install.
-    pub theme: Option<String>,
-    /// CSS colour painted before the first page has rendered.
-    pub background: Option<String>,
-    /// Where launching the installed app lands, as a root-relative path.
-    /// Localized per language, like the default it replaces: `/home/` launches
-    /// the French app into `/fr/home/`. Defaults to the language's root.
-    pub start: Option<String>,
-    /// The URLs the installed app covers; navigating outside it leaves the app.
-    /// Localized the same way, since a `start_url` outside its `scope` is a
-    /// manifest a browser refuses. Defaults to the language's root.
-    pub scope: Option<String>,
-    /// The icons a launcher picks from. A manifest with none cannot be
-    /// installed, so a build that emits one warns.
-    pub icons: Vec<IconConfig>,
-}
-
-impl ManifestConfig {
-    /// The output file name, at the root of each language's scope. The
-    /// `.webmanifest` extension is the one the spec registers; `manifest.json`
-    /// is the older spelling, and browsers accept both.
-    pub const FILE: &'static str = "manifest.webmanifest";
-
-    /// The manifest of a language, root-relative and under the site's base
-    /// path: what that language's pages point `<link rel="manifest">` at.
-    ///
-    /// Beside [`FILE`](Self::FILE) for the reason [`FeedKind::url`] sits beside
-    /// its file name: the processor that writes the file and the tag that names
-    /// it derive the path once, so they cannot drift. Root-relative rather than
-    /// absolute, so a manifest is reachable without a configured site `url`.
-    pub fn url(config: &Config, lang: &str) -> String {
-        let scope = config.scope(lang, "");
-        let path = match scope.is_empty() {
-            true => format!("/{}", Self::FILE),
-            false => format!("/{scope}/{}", Self::FILE),
-        };
-        config.prefixed(&path)
-    }
-}
-
-/// One entry of a manifest's `icons` array.
-#[derive(Debug, Clone, Hash)]
-pub struct IconConfig {
-    /// Where the image is served from, root-relative, exactly as a browser will
-    /// request it. Written as the node's name: `"/icon-512.png" size=512`.
-    pub src: String,
-    /// The square edge in pixels. Absent means the image scales to any size,
-    /// which is what a vector icon does.
-    pub size: Option<u32>,
-    /// What a launcher may do with the image.
-    pub purpose: IconPurpose,
-}
-
-/// An icon is written as a path with its dimensions attached, so the path is
-/// what one is built from and the rest is filled in from the line's attributes.
-impl From<String> for IconConfig {
-    fn from(src: String) -> Self {
         Self {
-            src,
-            size: None,
-            purpose: IconPurpose::default(),
+            site: None,
+            url: None,
+            lang: "en".into(),
+            author: None,
+            description: None,
+            // The process cwd, which `Root::enter` has already moved to the
+            // project directory.
+            root: PathBuf::from("."),
+            paths: Paths::default(),
+            theme: None,
+            content: ContentConfig::default(),
+            languages: Vec::default(),
+            assets: AssetConfig::default(),
+            html: HtmlConfig::default(),
+            links: LinkConfig::default(),
+            redirect: Vec::default(),
+            lint: LintConfig::default(),
+            security: SecurityConfig::default(),
+            generate: GenerateConfig::default(),
+            navigation: NavigationConfig::default(),
+            prune: true,
+            typst: TypstConfig::default(),
+            client: Vec::default(),
+            cache: CacheConfig::default(),
+            caching: CacheControl::default(),
+            hooks: HooksConfig::default(),
+            announce: AnnounceConfig::default(),
+            deploy: DeployConfig::default(),
+            serve: ServeConfig::default(),
+            profile: None,
+            profiles: Vec::default(),
+            source: String::new(),
         }
     }
 }
 
-/// How an installed app is presented, [as the manifest spells it][spec].
-///
-/// [spec]: https://www.w3.org/TR/appmanifest/#display-member
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum DisplayMode {
-    /// Its own window, with no browser UI. Why a site ships a manifest at all,
-    /// hence the default.
-    #[default]
-    Standalone,
-    /// Its own window, and the whole screen.
-    Fullscreen,
-    /// Its own window, keeping the minimum navigation UI the browser insists on.
-    Minimal,
-    /// An ordinary browser tab.
-    Browser,
-}
+impl Config {
+    pub fn parse(text: &str) -> Result<Self> {
+        let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
+        // keep the raw text: profile overlay reports errors against it, its nodes carry spans into it
+        let mut cfg = Self {
+            source: text.to_owned(),
+            ..Self::default()
+        };
+        cfg.apply(doc.nodes(), text)?;
+        cfg.check()?;
+        Ok(cfg)
+    }
 
-impl Named for DisplayMode {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("standalone", Self::Standalone),
-        ("fullscreen", Self::Fullscreen),
-        ("minimal", Self::Minimal),
-        ("browser", Self::Browser),
-    ];
-}
-
-impl DisplayMode {
-    /// The spelling the manifest takes, which is the config spelling bar
-    /// `minimal`: the member is `minimal-ui`, and a config key or value is one
-    /// word.
-    pub fn member(self) -> &'static str {
-        match self {
-            Self::Minimal => "minimal-ui",
-            other => other.name(),
-        }
+    /// Apply a single config node over `self`, used to overlay profile nodes
+    /// (see [`Config::with_profile`]).
+    pub(crate) fn overlay(&mut self, text: &str, node: &KdlNode) -> Result<()> {
+        self.apply(std::slice::from_ref(node), text)
     }
 }
 
-/// What a launcher may do with an icon, [as the manifest spells it][spec].
-///
-/// [spec]: https://www.w3.org/TR/appmanifest/#purpose-member
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum IconPurpose {
-    /// Shown as drawn, whatever the platform's icon shape is.
-    #[default]
-    Any,
-    /// Safe to crop to the platform's shape: the image keeps its subject inside
-    /// the safe zone and fills the rest with its own background.
-    Maskable,
-    /// A single-colour glyph the platform recolours, for a notification badge.
-    Monochrome,
-}
-
-impl Named for IconPurpose {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("any", Self::Any),
-        ("maskable", Self::Maskable),
-        ("monochrome", Self::Monochrome),
-    ];
-}
-
-/// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
-///
-/// CSS is minified with lightningcss, independently of bundling. JavaScript is
-/// only processed (bundled *and* minified, via rolldown) when
-/// [`AssetConfig::bundle`] is set: the bundler owns the whole JS step.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct AssetConfig {
-    /// Minify CSS (lightningcss) and, when bundling, JavaScript (rolldown).
-    pub minify: bool,
-    /// Bundle JavaScript entry points through rolldown (resolves imports and
-    /// tree-shakes). Required for any JavaScript processing.
-    pub bundle: bool,
-    /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
-    /// rewrite references, for far-future caching.
-    pub fingerprint: bool,
-    /// The `tsconfig.json` the bundler transforms TypeScript and JSX against,
-    /// relative to the project root. `None` means the bundler discovers one per
-    /// module, walking up from the file as `tsc` does; a path pins the whole
-    /// site to one file, wherever the scripts live.
-    pub tsconfig: Option<PathBuf>,
-    /// Image handling (lazy loading, extraction, optimization, responsive
-    /// variants), for both pipeline assets and typst-embedded rasters.
-    pub images: ImagesConfig,
-}
-
-/// Cache options.
-#[derive(Debug, Clone)]
-pub struct CacheConfig {
-    /// Cache directory.
-    pub dir: PathBuf,
-    /// Enable incremental builds.
-    pub incremental: bool,
-}
-
-/// Hand-written so `incremental` stays *out* of the fingerprint, for the same
-/// reason [`Mode`] does: a `--no-cache` run still writes the next manifest, and
-/// keying it on "caching was off" makes the following normal build a whole-site
-/// miss. Destructured, so a new field fails to compile until it is placed.
-impl std::hash::Hash for CacheConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let Self {
-            dir,
-            incremental: _,
-        } = self;
-        dir.hash(state);
-    }
-}
-
-/// External command hooks. Each command runs through the system shell in the
-/// project root: the escape hatch for tools baudelaire does not embed
-/// (Tailwind, PostCSS, Pagefind, image optimizers, deploy scripts).
-#[derive(Debug, Clone, Hash, Default)]
-pub struct HooksConfig {
-    /// Commands run before the build (before the asset pipeline), so any files
-    /// they generate into `assets/` are picked up and fingerprinted.
-    pub before: Vec<String>,
-    /// Commands run after the site is written to `dist`.
-    pub after: Vec<String>,
-}
-
-/// Announce destinations for the built site. Each backend is an optional
-/// block under `announce { .. }`; adding a destination is one field here plus one
-/// backend in [`crate::announce`]. Secrets are never stored here; a backend
-/// reads its credentials from the environment at announce time.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct AnnounceConfig {
-    /// standard.site (AT Protocol) target.
-    pub standard: Option<StandardConfig>,
-}
-
-/// The standard.site (AT Protocol) target.
-#[derive(Debug, Clone, Hash)]
-pub struct StandardConfig {
-    /// Account handle or DID to authenticate as, e.g. `you.bsky.social`.
-    pub handle: String,
-    /// Repository DID (a stable public identifier, not a secret). When set, the
-    /// build emits the standard.site verification artifacts (the `.well-known`
-    /// file and per-page `<link>` tags) offline; the announce run checks it against
-    /// the authenticated session.
-    pub did: Option<String>,
-    /// PDS/entryway host to authenticate and write records against.
-    pub pds: String,
-    /// Opt the publication into discovery surfaces.
-    pub discover: bool,
-    /// Publication icon, a path (under the project root) uploaded as a blob.
-    pub icon: Option<PathBuf>,
-    /// Which build-time verification artifacts to emit (requires `did`).
-    pub verify: VerifyConfig,
-}
-
-/// Deploy destinations for the built files. Each backend is an optional block
-/// under `deploy { .. }`; adding one is a field here plus a backend in
-/// [`crate::deploy`]. Credentials are never stored here; a backend reads them
-/// from the environment at deploy time.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct DeployConfig {
-    /// An S3-compatible bucket (AWS S3, Cloudflare R2, ..).
-    pub s3: Option<S3Config>,
-    /// A host reachable over SSH, files transferred with SFTP.
-    pub ssh: Option<SshConfig>,
-}
-
-/// An S3-compatible bucket target. Works against AWS S3 by default; set
-/// `endpoint` for R2 or any S3-compatible host.
-#[derive(Debug, Clone, Hash)]
-pub struct S3Config {
-    /// Bucket name.
-    pub bucket: String,
-    /// S3 endpoint host, e.g. `https://ACCOUNT.r2.cloudflarestorage.com`. `None`
-    /// targets AWS at the region's default host.
-    pub endpoint: Option<String>,
-    /// Region code, resolved by [`S3Config::region`] when unset.
-    pub region: Option<String>,
-    /// Key prefix every uploaded object is placed under (a subdirectory in the
-    /// bucket). Empty by default.
-    pub prefix: String,
-    /// Delete remote objects under `prefix` that the build no longer produces.
-    pub delete: bool,
-}
-
-impl S3Config {
-    /// The region code the request is signed under.
-    ///
-    /// A stated `region` always wins. Otherwise it follows the target: AWS is
-    /// signed as `us-east-1`, its own default, and a custom `endpoint` is not
-    /// AWS, so it is signed as `auto`, which is what R2 and most S3-compatible
-    /// hosts want. Defaulting the second case to `us-east-1` meant an R2 user
-    /// who set `endpoint` and left `region` alone got a 403 with nothing in it
-    /// naming the region.
-    pub fn region(&self) -> &str {
-        match (&self.region, &self.endpoint) {
-            (Some(region), _) => region,
-            (None, Some(_)) => "auto",
-            (None, None) => "us-east-1",
-        }
-    }
-}
-
-/// The `Cache-Control` an uploaded object is served with, and the reason
-/// `assets { fingerprint }` is worth turning on.
-///
-/// Fingerprinting renames a file after its own content, which makes it safe to
-/// cache forever: a change produces a different name, so a stale copy is never
-/// the one asked for. A raw bucket sets no `Cache-Control` at all, though, and
-/// Netlify/Vercel/Cloudflare Pages only guess. Without this the whole point of
-/// hashing a filename is thrown away at the last step.
-///
-/// Enabled by the presence of a `caching { }` block; both values have defaults, so
-/// a bare `cache` is the sensible policy.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct CacheControl {
-    /// Whether to send `Cache-Control` at all.
-    pub enabled: bool,
-    /// For content-addressed files: everything under the asset prefix, once
-    /// `assets { fingerprint }` is on. Cached indefinitely.
-    pub immutable: String,
-    /// For everything else: pages, feeds, `robots.txt`, and any asset whose name
-    /// is not a hash. Revalidated, because these keep their names across builds.
-    pub default: String,
-}
-
-impl CacheControl {
-    /// The header value for `key`, or `None` when no policy is configured.
-    ///
-    /// `hashed` says whether this build content-addresses its assets; without
-    /// it, a file under the asset prefix keeps its authored name across builds
-    /// and is exactly as mutable as a page.
-    pub fn header(&self, key: &str, prefix: &str, hashed: bool) -> Option<&str> {
-        if !self.enabled {
-            return None;
-        }
-        let immutable = hashed && key.trim_start_matches('/').starts_with(prefix);
-        Some(match immutable {
-            true => &self.immutable,
-            false => &self.default,
-        })
-    }
-}
-
-/// A host reachable over SSH. Files are reconciled with the remote directory
-/// over SFTP; change detection runs `sha256sum` on the host so an unchanged file
-/// is never re-sent. Works against any OpenSSH-compatible server.
-#[derive(Debug, Clone, Hash)]
-pub struct SshConfig {
-    /// Hostname or IP of the server.
-    pub host: String,
-    /// Absolute path to the remote directory the build is mirrored into.
-    pub path: String,
-    /// Port the SSH server listens on.
-    pub port: u16,
-    /// User to authenticate as. Defaults to `$USER`.
-    pub user: Option<String>,
-    /// Path to a private key (absolute, `~`-relative, or under the project
-    /// root). When unset, authentication tries the ssh-agent, then a password
-    /// from the environment/prompt.
-    pub key: Option<PathBuf>,
-    /// Verify the server's host key against `~/.ssh/known_hosts`, learning an
-    /// unseen host on first connect and refusing a changed key (MITM guard).
-    /// Turn off to accept any key (`StrictHostKeyChecking=no`).
-    pub strict: bool,
-    /// Delete remote files under `path` that the build no longer produces.
-    pub delete: bool,
-}
-
-/// The standard.site domain-verification artifacts the build emits, each
-/// toggleable. Both require a configured `did`; either alone proves the site and
-/// the records belong together, so a site may emit one, the other, or both.
-#[derive(Debug, Clone, Hash)]
-pub struct VerifyConfig {
-    /// Emit `/.well-known/site.standard.publication` (the publication `at://` URI).
-    pub wellknown: bool,
-    /// Inject a per-page `<link rel="site.standard.document">` into dated pages.
-    pub links: bool,
-}
-
-/// Dev server options.
-#[derive(Debug, Clone, Hash)]
-pub struct ServeConfig {
-    /// Port to listen on.
-    pub port: u16,
-    /// Address to bind.
-    pub bind: String,
-    /// Open browser on start.
-    pub open: bool,
-    /// Watch for changes and rebuild.
-    pub watch: bool,
-    /// Extra paths to watch, beyond content, templates, and assets (e.g. a data
-    /// directory or a Tailwind input outside `assets/`).
-    pub include: Vec<String>,
-    /// Paths the watcher ignores (e.g. hook-generated files), so a `before`
-    /// hook writing into a watched directory does not trigger a rebuild loop.
-    /// Checked first, so it overrides both the defaults and `include`.
-    pub exclude: Vec<String>,
-    /// The command that opens a source location, run when a preview alt-click
-    /// asks for one. The program first, then each argument as its own word,
-    /// with `{file}`, `{line}` and `{column}` substituted per argument: no
-    /// shell, so a path is never re-parsed as a command line.
-    ///
-    /// Empty means no editor, and the preview says so rather than guessing at
-    /// one.
-    pub editor: Vec<String>,
+/// The top-level config schema. This table is the *single source of truth* for
+/// what keys are valid: dispatch and "unknown key" suggestions both read it.
+impl Section for Config {
+    const RULES: Block<Self> = Block(&[
+        (
+            "site",
+            Text,
+            "The site's name, used in titles, feeds and metadata.",
+            |c, n, t| {
+                c.site = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "description",
+            Text,
+            "What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.",
+            |c, n, t| {
+                c.description = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "url",
+            Url,
+            "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
+            |c, n, t| {
+                c.url = Some(n.base_url(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "lang",
+            Text,
+            "The default language code, e.g. `en`.",
+            |c, n, t| {
+                c.lang = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "author",
+            Text,
+            "The default author, used by any page naming none.",
+            |c, n, t| {
+                c.author = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "theme",
+            Text,
+            "A theme directory whose templates and assets this site layers over.",
+            |c, n, t| {
+                c.theme = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "paths",
+            Nested(Paths::rows),
+            "Where the content, output and asset trees live.",
+            |c, n, t| c.paths.fill(n, t),
+        ),
+        (
+            "content",
+            Nested(ContentConfig::rows),
+            "What the content tree holds and how it is read.",
+            |c, n, t| c.content.fill(n, t),
+        ),
+        (
+            "languages",
+            Items(LanguageConfig::rows),
+            "One block per language, each named by its code.",
+            |c, n, t| {
+                c.languages = n.unique(t, "language", LanguageConfig::item)?;
+                Ok(())
+            },
+        ),
+        (
+            "assets",
+            Nested(AssetConfig::rows),
+            "The pipeline applied to the asset tree.",
+            |c, n, t| c.assets.fill(n, t),
+        ),
+        (
+            "html",
+            Nested(HtmlConfig::rows),
+            "Post-processing of typst's HTML output.",
+            |c, n, t| c.html.fill(n, t),
+        ),
+        (
+            "links",
+            Nested(LinkConfig::rows),
+            "The shape of generated URLs, and how strictly links are checked.",
+            |c, n, t| c.links.fill(n, t),
+        ),
+        (
+            "redirect",
+            Table,
+            "Old paths no page owns, each forwarded to where its content moved.",
+            |c, n, t| {
+                c.redirect = n.pairs(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "lint",
+            Nested(LintConfig::rows),
+            "Checks run over the built pages. Its presence turns them on.",
+            |c, n, t| c.lint.fill(n, t),
+        ),
+        (
+            "security",
+            Nested(SecurityConfig::rows),
+            "What the built pages tell a browser to trust.",
+            |c, n, t| c.security.fill(n, t),
+        ),
+        (
+            "generate",
+            Nested(GenerateConfig::rows),
+            "The files a build emits beside the pages.",
+            |c, n, t| c.generate.fill(n, t),
+        ),
+        (
+            "navigation",
+            Nested(NavigationConfig::rows),
+            "How a visitor moves between the built pages.",
+            |c, n, t| c.navigation.fill(n, t),
+        ),
+        (
+            "prune",
+            Flag,
+            "Delete anything under the output directory that this build did not produce.",
+            |c, n, t| {
+                c.prune = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "cache",
+            Nested(CacheConfig::rows),
+            "Where incremental build state lives, and whether to use it.",
+            |c, n, t| c.cache.fill(n, t),
+        ),
+        (
+            "caching",
+            Nested(CacheControl::rows),
+            "The `Cache-Control` policy uploaded files are given.",
+            |c, n, t| c.caching.fill(n, t),
+        ),
+        (
+            "typst",
+            Nested(TypstConfig::rows),
+            "Typst engine knobs: language features, inputs, package registry.",
+            |c, n, t| c.typst.fill(n, t),
+        ),
+        (
+            "client",
+            Table,
+            "Constants exposed to client-side JavaScript, one `key value` line per entry.",
+            |c, n, t| {
+                c.client = n.table(t)?;
+                Ok(())
+            },
+        ),
+        (
+            "hooks",
+            Nested(HooksConfig::rows),
+            "External commands run before and after the build.",
+            |c, n, t| c.hooks.fill(n, t),
+        ),
+        (
+            "announce",
+            Nested(AnnounceConfig::rows),
+            "Where to announce the site's metadata.",
+            |c, n, t| c.announce.fill(n, t),
+        ),
+        (
+            "deploy",
+            Nested(DeployConfig::rows),
+            "Where `baudelaire deploy` uploads the built site.",
+            |c, n, t| c.deploy.fill(n, t),
+        ),
+        (
+            "serve",
+            Nested(ServeConfig::rows),
+            "The development server.",
+            |c, n, t| c.serve.fill(n, t),
+        ),
+        (
+            Self::PROFILES,
+            Overlay,
+            "Named overlays, each selected with `--profile` and each accepting any key on this page.",
+            |c, n, t| {
+                c.profiles = n.unique(t, "profile", |child, t| {
+                    Ok((child.name().value().to_owned(), child.block(t)?.clone()))
+                })?;
+                Ok(())
+            },
+        ),
+    ]);
 }

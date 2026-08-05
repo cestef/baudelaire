@@ -8,10 +8,16 @@
 //! way [`Permalink`](crate::config::Permalink) is, because it is the same kind
 //! of thing: a mini-language inside a config string.
 
-use crate::config::dispatch::Keys;
-use crate::error::{BaudelaireErrorKind, ConfigError, ConfigErrorKind};
-use crate::ui::markup;
+use kdl::KdlNode;
 use miette::SourceSpan;
+
+use crate::config::dispatch::Kind::{Choice, Flag};
+use crate::config::dispatch::{Attributed, Attrs, Keys};
+use crate::config::node::NodeExt;
+use crate::config::value::ValueExt;
+use crate::content::Frontmatter;
+use crate::error::{BaudelaireErrorKind, ConfigError, ConfigErrorKind, Result};
+use crate::ui::markup;
 
 /// One field a collection's frontmatter schema declares.
 ///
@@ -232,6 +238,90 @@ impl TypeError {
             .into(),
         }
     }
+}
+
+impl FieldSchema {
+    /// One `title "str" optional=#true` line: the node name is the frontmatter
+    /// key it constrains, and an optional leading positional its type, so both
+    /// the bare `title` (present, any shape) and the terse `tags "list"` read.
+    ///
+    /// A `{ .. }` block declares the fields of the dictionary the type ends in,
+    /// through however many `list<..>` wrap it, and recurses through this same
+    /// reader: `authors "list<dict>" { name "str" }`.
+    pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
+        let key = node.name().value().to_owned();
+        let span = NodeExt::span(node);
+        let mut field = Self::default();
+        if let Some(value) = node.get(0) {
+            field.ty = value.ty(text, span)?;
+        }
+        field.read(node, text)?;
+        if node.children().is_some() {
+            let fields = node.unique(text, "schema field", Self::item)?;
+            let declared = field.ty.article();
+            let Some(dict) = field.ty.fields_mut() else {
+                return Err(ConfigError::at(
+                    text,
+                    ConfigErrorKind::FieldNotDict { key, declared },
+                    span,
+                )
+                .into());
+            };
+            *dict = fields;
+        }
+        // A built-in key's type is fixed by the frontmatter reader, and that
+        // reader runs first: it would reject the value before the schema ever
+        // saw it. A contradiction is therefore unsatisfiable, and fails at the
+        // line that wrote it rather than on every page of the collection.
+        if let Some(builtin) = Frontmatter::builtin(&key)
+            && field.ty != FieldType::Any
+            && field.ty != builtin
+        {
+            return Err(ConfigError::at(
+                text,
+                ConfigErrorKind::FieldConflict {
+                    key,
+                    declared: field.ty.article(),
+                    builtin: builtin.article(),
+                },
+                span,
+            )
+            .into());
+        }
+        Ok((key, field))
+    }
+}
+
+/// One schema field: the shape a frontmatter value must have, and whether the
+/// page may leave it out.
+impl Attributed for FieldSchema {
+    /// The type, written as the leading positional.
+    const LEADING: usize = 1;
+
+    /// The one attribute scope with a block of its own: `item` reads it as the
+    /// fields of the dictionary the type ends in.
+    const NESTS: bool = true;
+
+    const ATTRS: Attrs<Self> = Attrs(&[
+        (
+            "type",
+            Choice(FieldType::names),
+            "The shape the value must have, also writable as the leading positional: `title \"str\"`. A list names what it holds: `list<int>`, `list<dict>`.",
+            |c, v, t, s| {
+                c.ty = v.ty(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "optional",
+            Flag,
+            "Let the field be absent. Declaring a field otherwise requires it.",
+            |c, v, t, s| {
+                c.optional = v.boolean(t, s)?;
+                Ok(())
+            },
+        ),
+    ]);
 }
 
 #[cfg(test)]
