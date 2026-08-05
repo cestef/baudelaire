@@ -178,6 +178,18 @@ fn legacy_call_form_is_a_migration_error() {
     assert!(rendered.contains("#let frontmatter = "), "{rendered}");
 }
 
+/// KDL has no date literal, so a markdown page writes its date as an ISO
+/// string; a typst page may write the same rather than spelling out the call.
+/// One reader serves both, which is why the string form is not a type error.
+#[test]
+fn an_iso_string_reads_as_a_date() {
+    let page = try_load("#let frontmatter = (date: \"2024-01-01\")").expect("a valid date");
+    assert_eq!(
+        page.frontmatter.date.map(|d| d.to_string()),
+        Some("2024-01-01".to_owned())
+    );
+}
+
 #[test]
 fn wrong_typed_known_keys_error() {
     // A known key with a wrong-typed value is a precise error, never silently
@@ -185,7 +197,10 @@ fn wrong_typed_known_keys_error() {
     for bad in [
         "#let frontmatter = (title: 3)",
         "#let frontmatter = (draft: \"yes\")",
-        "#let frontmatter = (date: \"2024-01-01\")",
+        // A string date is read as an ISO day, so what is wrong here is the
+        // day, not the type.
+        "#let frontmatter = (date: \"the first of January\")",
+        "#let frontmatter = (date: \"2024-1-1\")",
         "#let frontmatter = (order: \"first\")",
         "#let frontmatter = (tags: \"solo\")",
     ] {

@@ -21,6 +21,33 @@ impl fmt::Display for Iso {
     }
 }
 
+/// The inverse, so the rendering and the reading of a day are one type. A
+/// markdown page writes `date "2026-07-15"` in KDL, which has no date literal;
+/// a typst page may write the same string rather than `datetime(..)`.
+///
+/// Strict on purpose: exactly `YYYY-MM-DD`, the form [`Iso`] emits. Anything
+/// looser would make a plain string that merely resembles a date silently
+/// become one.
+impl std::str::FromStr for Iso {
+    type Err = ();
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let [year, month, day] =
+            <[&str; 3]>::try_from(text.split('-').collect::<Vec<_>>()).map_err(|_| ())?;
+        if (year.len(), month.len(), day.len()) != (4, 2, 2) {
+            return Err(());
+        }
+        let month = month.parse::<u8>().map_err(|_| ())?;
+        time::Date::from_calendar_date(
+            year.parse().map_err(|_| ())?,
+            time::Month::try_from(month).map_err(|_| ())?,
+            day.parse().map_err(|_| ())?,
+        )
+        .map(Self)
+        .map_err(|_| ())
+    }
+}
+
 /// A date written the way its language writes one: `30 juillet 2026` beside
 /// `July 30, 2026`.
 ///

@@ -655,12 +655,31 @@ impl ValueExt for Value {
         match self {
             Self::Datetime(Datetime::Date(d)) => Ok(*d),
             Self::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
+            // A date written as the ISO day it renders as, rather than as the
+            // call. One reader, so every dialect a page may be written in reads
+            // a date the same way.
+            Self::Str(text) => text
+                .as_str()
+                .parse::<crate::content::date::Iso>()
+                .map(|iso| iso.0)
+                .map_err(|()| {
+                    ContentError::frontmatter_field(
+                        path,
+                        key,
+                        "a date",
+                        "a string that is not an ISO day",
+                        Some(
+                            "write it as `\"2024-01-01\"`, or as `datetime(year: 2024, month: 1, day: 1)`",
+                        ),
+                    )
+                    .into()
+                }),
             _ => Err(ContentError::frontmatter_field(
                 path,
                 key,
                 "a date",
                 self.kind(),
-                Some("write dates as `datetime(year: 2024, month: 1, day: 1)`"),
+                Some("write dates as `\"2024-01-01\"` or `datetime(year: 2024, month: 1, day: 1)`"),
             )
             .into()),
         }

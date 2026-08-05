@@ -32,6 +32,12 @@ chores are visible in the git history and change nothing for a site.
   profile holding the typo will go red. The error is the one selecting it would
   have raised, at the same span.
 
+### Added
+
+- A frontmatter `date` may be written as an ISO day (`date: "2024-01-01"`), not
+  only as `datetime(year: .., month: .., day: ..)`. Exactly `YYYY-MM-DD` is
+  accepted, so a string that merely resembles a date cannot silently become one.
+
 ### Fixed
 
 - **config**: a profile is checked when the config is parsed, not when it is
