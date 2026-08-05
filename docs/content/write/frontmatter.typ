@@ -19,6 +19,10 @@ module. Because Typst evaluates it, the value is an ordinary dict: it can be
 computed from `sys.inputs`, from a loaded data file, or from anything else in
 scope.
 
+A #link("markdown.typ")[markdown page] declares the same keys in a fenced block
+instead, in YAML, TOML or KDL. Every key on this page behaves identically there:
+the block is read into the same dict, and everything below is the same walk.
+
 #callout(kind: "warn")[
   Single-element arrays need the trailing comma. `("intro")` is a string;
   `("intro",)` is a list.

@@ -5,20 +5,22 @@
 #import "/templates/theme.typ": callout
 
 A `.md` file under `content/` is a page, exactly like a `.typ` one. Its
-frontmatter is a `---` block of #link("../configure/overview.typ")[KDL], the
-same language `config.kdl` is written in.
+frontmatter is a fenced block at the top of the file, in YAML, TOML or KDL.
 
 ```md
 ---
-title "Install"
-order 1
-tags "cli" "setup"
+title: Install
+order: 1
+tags: [cli, setup]
 ---
 
 # Install
 
 One binary, **no runtime**.
 ```
+
+A post copied out of another generator therefore needs no rewriting: `---` is
+YAML and `+++` is TOML, exactly as they are everywhere else.
 
 Markdown is a source dialect, not a second pipeline: a page lowers to Typst
 before it compiles. Permalinks, collections, taxonomies, link checking,
@@ -28,36 +30,60 @@ markdown-shaped left.
 
 == Frontmatter
 
-KDL has no `key: value` line. A node's *shape* is its type, and the four shapes
-are the ones KDL itself distinguishes:
+The fence says which language the block is in. There is nothing to configure and
+nothing to name after it: a block is never read as a language it is not.
 
 #table(
-  columns: 2,
-  align: (left, left),
-  table.header([Written], [Means]),
-  [`draft`], [`true`. A bare node is a flag.],
-  [`title "A"`], [The string `"A"`.],
-  [`tags "rust" "typst"`], [A list of two.],
-  [`author { name "cstef" }`], [A dict. `key=value` entries join it.],
+  columns: 3,
+  align: (left, left, left),
+  table.header([Fence], [Dialect], [Why that one]),
+  [`---`], [YAML], [What every other generator puts between `---`.],
+  [`+++`], [TOML], [Zola's and Hugo's.],
+  [`;;;`], [KDL], [The language `config.kdl` uses. `;` is KDL's own terminator.],
 )
 
-There is no way to write a one-element list, because one argument is always the
-scalar. That is the counterpart of Typst's trailing comma in `("rust",)`.
-
-Every #link("frontmatter.typ")[frontmatter key] behaves as it does on a Typst
-page: the same built-ins, the same collection schema, the same typo suggester.
-Pasted YAML is caught by that last one, since `title:` is a valid KDL node name
-and simply is not a key any page has.
-
-Dates are the one place the shapes are not enough, since KDL has no date
-literal. Write the ISO day:
+The same page, three ways:
 
 ```md
 ---
-title "The night train"
-date "2026-08-05"
+title: The night train
+date: 2026-08-05
+tags: [rail]
 ---
 ```
+
+```md
++++
+title = "The night train"
+date = 2026-08-05
+tags = ["rail"]
++++
+```
+
+```md
+;;;
+title "The night train"
+date "2026-08-05"
+tags "rail" "night"
+;;;
+```
+
+Every #link("frontmatter.typ")[frontmatter key] behaves as it does on a Typst
+page whichever fence you used: the same built-ins, the same collection schema,
+the same typo suggester. The block is read into the same dict a `.typ` page
+exports, and nothing downstream knows which language it came from.
+
+#callout(kind: "note")[
+  *KDL cannot spell a one-element list.* One argument is always the scalar, so
+  `tags "rail"` is the string, not a list of one. That is the counterpart of
+  Typst's trailing comma in `("rail",)`, and it is why the KDL example above
+  carries two tags. YAML (`tags: [rail]`) and TOML (`tags = ["rail"]`) both
+  write one without trouble.
+]
+
+Dates are the one place the dialects differ in what they can hold. TOML has a
+real date literal; YAML and KDL do not, so write the ISO day as a string
+(`date: "2026-08-05"`). Either reaches the same reader.
 
 == What is accepted
 
@@ -109,10 +135,16 @@ helper, a chart, or an element markdown has no syntax for:
 ```
 ````
 
-#callout(kind: "warning")[
-  An error inside an `eval` fence is reported against the Typst the page lowered
-  to, not against the line you wrote. Keep what runs short.
-]
+An error inside a fence is reported against the line you wrote, not against the
+Typst the page lowered to:
+
+`````
+x unclosed delimiter
+  ,-[content/broken.md:9:10]
+8 | ```typ eval
+9 | #let x = [
+  :          -
+`````
 
 == A worked example
 
@@ -167,7 +199,7 @@ content {
   [`eval`], [Whether a fence marked `eval` runs at all.],
 )
 
-#callout(kind: "warning")[
+#callout(kind: "warn")[
   `eval #false` is worth setting deliberately for content you did not write. An
   `eval` fence runs arbitrary Typst at build time, and a site accepting
   contributed or imported markdown should not extend that trust to every author.

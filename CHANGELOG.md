@@ -34,9 +34,9 @@ chores are visible in the git history and change nothing for a site.
 
 - **A `.md` file under `content/` is now a page.** It used to be ignored, so a
   `README.md` or a note left beside your pages was invisible; it now builds, and
-  a build that passed can go red -- on frontmatter it never had to declare, or
-  on raw HTML, which a README often carries. To keep such a file where it is and
-  publish nothing for it:
+  a build that passed can go red -- on frontmatter it never had to declare, on
+  a `---` block that is not valid YAML, or on raw HTML, which a README often
+  carries. To keep such a file where it is and publish nothing for it:
 
   ```kdl
   content { markdown #false }
@@ -48,18 +48,28 @@ chores are visible in the git history and change nothing for a site.
 ### Added
 
 - **markdown**: `.md` content pages, behind the default-on `markdown` feature.
-  CommonMark plus the GFM set,
-  with frontmatter as a `---` fenced KDL block, so a site has one configuration
-  language rather than three:
+  CommonMark plus the GFM set, with frontmatter in a fenced block at the top of
+  the file:
 
   ```md
   ---
-  title "Hello"
-  tags "rust" "typst"
+  title: Hello
+  tags: [rust, typst]
   ---
 
   Ordinary **prose**.
   ```
+
+  The fence says which language the block is in, so a post copied out of another
+  generator needs no rewriting: `---` is YAML, `+++` is TOML, and `;;;` is KDL,
+  the language `config.kdl` uses. Nothing after the fence names it, and no
+  dialect has a second spelling, so a block is never read as a language it is
+  not. All three are read into the same dict a `.typ` page exports, and nothing
+  downstream knows which one it came from.
+
+  KDL is the one that cannot spell a one-element list (a single argument is
+  always the scalar, the counterpart of Typst's `("rust",)`); YAML and TOML
+  both can, so a post with exactly one tag has a spelling now.
 
   It is a source dialect, not a second pipeline: a markdown page lowers to Typst
   before it compiles, so permalinks, taxonomies, link resolution, highlighting,

@@ -135,7 +135,7 @@ announce = []
 # time the engine sees a markdown page it *is* Typst, so highlighting, math,
 # link resolution, sidecars, the transform chain and the cache all apply
 # unchanged. Off means a `.md` file under `content/` is not a page at all.
-markdown = ["dep:pulldown-cmark"]
+markdown = ["dep:pulldown-cmark", "dep:saphyr", "dep:toml_edit"]
 
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
@@ -246,6 +246,20 @@ flate2 = { version = "1.1.9", optional = true }
 tar = { version = "0.4.46", optional = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"], optional = true }
 pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
+# The other two frontmatter dialects. Both are parsed as *documents* rather than
+# deserialized, because a diagnostic has to underline the value the author wrote:
+# serde hands back a value with no idea where it came from.
+#
+# `toml_edit` is pinned to the 0.22 typst already resolves, so it costs no new
+# crate; 0.25 would fork a second copy of the whole stack. Note `ImDocument`, not
+# `DocumentMut`: the mutable form despans on conversion and every `span()` is
+# then `None`.
+toml_edit = { version = "0.22", default-features = false, features = [
+  "parse",
+], optional = true }
+# The maintained yaml-rust2 successor, and the only one exposing both ends of a
+# node's span. `serde_yaml` is deprecated and span-free.
+saphyr = { version = "0.0.11", default-features = false, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

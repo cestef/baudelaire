@@ -150,14 +150,14 @@ pub struct Origin<'a> {
 enum Dialect<'a> {
     /// `#let frontmatter = (..)` in a typst page: walk the AST.
     Typst(&'a Source),
-    /// The `---` KDL block at the top of a markdown page. Its spans are
-    /// relative to the block, so `offset` puts them back in the file the
-    /// snippet is rendered from.
+    /// The fenced block at the top of a markdown page, in any of the dialects
+    /// one may be written in. One arm rather than three: each dialect resolved
+    /// its own document into file-relative spans as it parsed, so by here they
+    /// are indistinguishable.
     #[cfg(feature = "markdown")]
-    Kdl {
+    Block {
         text: &'a str,
-        doc: &'a kdl::KdlDocument,
-        offset: usize,
+        spans: &'a crate::content::markdown::Spans,
     },
 }
 
@@ -170,18 +170,18 @@ impl<'a> Origin<'a> {
         }
     }
 
-    /// A markdown page's KDL block. `text` is the whole file, not the block, so
-    /// an offset span underlines the right line of the snippet.
+    /// A markdown page's frontmatter block, whichever dialect it was written
+    /// in. `text` is the whole file, not the block, so the recorded spans
+    /// underline the right line of the snippet.
     #[cfg(feature = "markdown")]
-    pub fn kdl(
+    pub fn block(
         text: &'a str,
-        doc: &'a kdl::KdlDocument,
-        offset: usize,
+        spans: &'a crate::content::markdown::Spans,
         path: &'a Path,
         collection: &'a str,
     ) -> Self {
         Self {
-            dialect: Dialect::Kdl { text, doc, offset },
+            dialect: Dialect::Block { text, spans },
             path,
             collection,
         }
@@ -192,7 +192,7 @@ impl<'a> Origin<'a> {
         match &self.dialect {
             Dialect::Typst(source) => source.text(),
             #[cfg(feature = "markdown")]
-            Dialect::Kdl { text, .. } => text,
+            Dialect::Block { text, .. } => text,
         }
     }
 
@@ -212,7 +212,7 @@ impl<'a> Origin<'a> {
         match &self.dialect {
             Dialect::Typst(source) => Self::in_typst(source, path),
             #[cfg(feature = "markdown")]
-            Dialect::Kdl { doc, offset, .. } => Self::in_kdl(doc, path, *offset),
+            Dialect::Block { spans, .. } => Self::in_block(spans, path),
         }
     }
 
@@ -241,48 +241,17 @@ impl<'a> Origin<'a> {
         Some(SourceSpan::new(range.start.into(), range.len()))
     }
 
-    /// Walk a KDL block, the same way and to the same rule: as far down `path`
-    /// as the author literally wrote, underlining the deepest thing reached. A
-    /// scalar is a node's argument, a list is its arguments, and a nested dict
-    /// is its children block, so a `Step` maps onto exactly one of those.
+    /// Look a block's span up, by the dotted path that names the value.
+    ///
+    /// Every dialect resolved its own document into a
+    /// [`Spans`](crate::content::markdown::Spans) as it parsed, so there is one
+    /// of these rather than one walk per language, and the rule is
+    /// [`Spans::of`]'s: the deepest prefix of `path` the author actually wrote.
     #[cfg(feature = "markdown")]
-    fn in_kdl(doc: &kdl::KdlDocument, path: &[Step], offset: usize) -> Option<SourceSpan> {
-        let shift =
-            |span: miette::SourceSpan| SourceSpan::new((span.offset() + offset).into(), span.len());
-        // An empty path is a field with nowhere of its own to point at; the
-        // block that should have held it is where a reader would go to add it.
-        if path.is_empty() {
-            return Some(shift(doc.span()));
-        }
-        let mut children = Some(doc);
-        let mut node: Option<&kdl::KdlNode> = None;
-        let mut span = None;
-        for step in path {
-            match step {
-                Step::Key(key) => {
-                    let found = children?
-                        .nodes()
-                        .iter()
-                        .find(|n| n.name().value() == key.as_str())?;
-                    span = Some(found.span());
-                    children = found.children();
-                    node = Some(found);
-                }
-                Step::Index(i) => {
-                    // Positional arguments only: a `key=value` entry is a named
-                    // property, not an element of the list.
-                    let entry = node?
-                        .entries()
-                        .iter()
-                        .filter(|e| e.name().is_none())
-                        .nth(*i)?;
-                    span = Some(entry.span());
-                    children = None;
-                    node = None;
-                }
-            }
-        }
-        span.map(shift)
+    fn in_block(spans: &crate::content::markdown::Spans, path: &[Step]) -> Option<SourceSpan> {
+        let steps: Vec<String> = path.iter().map(ToString::to_string).collect();
+        let span = spans.of(&steps)?;
+        Some(SourceSpan::new(span.start.into(), span.len()))
     }
 
     /// One step into a literal: a named dict item, or a positional array

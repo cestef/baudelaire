@@ -13,14 +13,19 @@
 const PATH: &str = "docs/content/lookup/changelog.md";
 const SOURCE: &str = "CHANGELOG.md";
 
-/// The frontmatter the docs site needs, in the KDL a markdown page declares.
+/// The fence this page's frontmatter is written between, and so the dialect it
+/// is written in: `;;;` is KDL, which is what `config.kdl` uses and therefore
+/// the one language this repository already reads everywhere else.
+const FENCE: &str = ";;;";
+
+/// The frontmatter the docs site needs, in the KDL a `;;;` block declares.
 /// `order` puts it last in the `lookup` group, after the four reference pages.
-const FRONTMATTER: &str = "---\n\
+const FRONTMATTER: &str = ";;;\n\
     title \"Changelog\"\n\
     order 5\n\
     template \"changelog.typ\"\n\
     description \"Every released version of baudelaire, and what changed in it.\"\n\
-    ---\n";
+    ;;;\n";
 
 /// The page as it should read: the frontmatter, then the changelog without its
 /// top heading, which the page template already draws from the title.
@@ -57,9 +62,9 @@ fn the_checked_in_changelog_page_matches_the_changelog() {
 fn the_generated_page_opens_with_a_frontmatter_block() {
     let page = expected();
     let mut lines = page.lines();
-    assert_eq!(lines.next(), Some("---"), "the block has to open the file");
+    assert_eq!(lines.next(), Some(FENCE), "the block has to open the file");
     assert!(
-        lines.any(|line| line == "---"),
+        lines.any(|line| line == FENCE),
         "the block has to close again"
     );
     assert!(

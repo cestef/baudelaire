@@ -23,10 +23,10 @@ scenario "a markdown page builds like any other" {
       })
       """#
     "content/hello.md" #"""
-      ---
+      ;;;
       title "Hello"
       template "page.typ"
-      ---
+      ;;;
 
       Ordinary **prose** with `code` and a [link](/other/).
 
@@ -71,10 +71,10 @@ scenario "typst syntax in markdown prose stays text" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/raw.md" #"""
-      ---
+      ;;;
       title "Raw"
       template "page.typ"
-      ---
+      ;;;
 
       A #heading(level: 1)[fake] call, a [ bracket, and a $sum$ dollar.
       """#
@@ -107,10 +107,10 @@ scenario "a fence marked eval runs and a plain one is shown" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/fence.md" #"""
-      ---
+      ;;;
       title "Fence"
       template "page.typ"
-      ---
+      ;;;
 
       ```typ eval
       #html.elem("aside", "from typst")
@@ -158,13 +158,13 @@ scenario "kdl frontmatter drives the built-in fields" {
       })
       """#
     "content/post.md" #"""
-      ---
+      ;;;
       title "Post"
       template "page.typ"
       slug "renamed"
       date "2026-08-05"
       tags "rust" "typst"
-      ---
+      ;;;
 
       Body.
       """#
@@ -231,10 +231,10 @@ scenario "raw html in markdown is an error" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/html.md" #"""
-      ---
+      ;;;
       title "Html"
       template "page.typ"
-      ---
+      ;;;
 
       <div>spliced</div>
       """#
@@ -246,11 +246,157 @@ scenario "raw html in markdown is an error" {
   }
 }
 
-// Pasted YAML frontmatter parses as KDL -- `title:` is a perfectly good node
-// name -- so it is not a syntax error. It is caught one step later, by the same
-// typo suggester a typst page's frontmatter gets, which is the more useful
-// answer anyway: it names the key you meant.
-scenario "yaml frontmatter is caught by the typo suggester" {
+// YAML pasted out of another generator is simply a page. This used to be the
+// trap the whole dialect design exists to remove: `---` opened a KDL block, and
+// `title:` is a valid KDL node name, so a pasted post parsed green and then
+// failed one step later on a dozen keys nobody has.
+scenario "yaml pasted from another generator is just a page" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        taxonomies { tags listing=#true }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        html.elem("time", page.date.iso)
+        body
+      })
+      """#
+    "content/hello.md" #"""
+      ---
+      title: The night train
+      template: page.typ
+      date: "2026-08-05"
+      slug: renamed
+      draft: false
+      tags:
+        - rail
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "renamed/index.html" {
+      contains ">The night train</h1>"
+      contains "2026-08-05"
+    }
+    // A one-element list, which is the thing KDL cannot spell at all.
+    file "tags/rail/index.html"
+  }
+}
+
+// TOML, behind the fence Zola and Hugo made the convention. Its date literal is
+// real, unlike YAML's and KDL's, and reaches the same reader as the ISO string.
+scenario "a toml block is read behind its own fence" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        taxonomies { tags listing=#true }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        html.elem("time", page.date.iso)
+        body
+      })
+      """#
+    "content/hello.md" #"""
+      +++
+      title = "The night train"
+      template = "page.typ"
+      date = 2026-08-05
+      order = 2
+      tags = ["rail"]
+      +++
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "hello/index.html" {
+      contains ">The night train</h1>"
+      contains "2026-08-05"
+    }
+    file "tags/rail/index.html"
+  }
+}
+
+// The three fences are the whole of the declaration, so the same fields written
+// three ways produce the same page. This is the property everything downstream
+// rests on: by the time the engine looks, there is no dialect left.
+scenario "the three dialects declare the same page" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    "content/y.md" #"""
+      ---
+      title: Same
+      template: page.typ
+      ---
+
+      Body.
+      """#
+    "content/t.md" #"""
+      +++
+      title = "Same"
+      template = "page.typ"
+      +++
+
+      Body.
+      """#
+    "content/k.md" #"""
+      ;;;
+      title "Same"
+      template "page.typ"
+      ;;;
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "y/index.html" { contains ">Same</h1>" }
+    file "t/index.html" { contains ">Same</h1>" }
+    file "k/index.html" { contains ">Same</h1>" }
+  }
+}
+
+// A block that does not parse names the language it failed to be, so a YAML
+// error never tells the reader their KDL is wrong.
+scenario "a broken yaml block reports yaml" {
   requires "markdown"
   files {
     "config.kdl" #"""
@@ -266,16 +412,42 @@ scenario "yaml frontmatter is caught by the typo suggester" {
       """#
     "content/bad.md" #"""
       ---
-      title: "yaml, not kdl"
+      title: "unclosed
+        bad: [1, 2
       ---
 
       Body.
       """#
   }
   expect {
-    fails {
-      code "baudelaire::content::unknown_frontmatter_key"
-    }
+    fails { code "baudelaire::markdown::frontmatter" }
+  }
+}
+
+scenario "a broken toml block reports toml" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/bad.md" #"""
+      +++
+      title = = "twice"
+      +++
+
+      Body.
+      """#
+  }
+  expect {
+    fails { code "baudelaire::markdown::frontmatter" }
   }
 }
 
@@ -296,9 +468,9 @@ scenario "unparseable frontmatter is a precise error" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/bad.md" #"""
-      ---
+      ;;;
       title "never closed
-      ---
+      ;;;
 
       Body.
       """#
@@ -332,10 +504,10 @@ scenario "a site can drop raw html instead of refusing it" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/html.md" #"""
-      ---
+      ;;;
       title "Html"
       template "page.typ"
-      ---
+      ;;;
 
       Before <div>spliced</div> after.
       """#
@@ -375,10 +547,10 @@ scenario "a site can forbid eval fences" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/fence.md" #"""
-      ---
+      ;;;
       title "Fence"
       template "page.typ"
-      ---
+      ;;;
 
       ```typ eval
       #html.elem("aside", "should not run")
@@ -417,10 +589,10 @@ scenario "extensions toggle against the defaults" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/off.md" #"""
-      ---
+      ;;;
       title "Off"
       template "page.typ"
-      ---
+      ;;;
 
       | a | b |
       | --- | --- |
@@ -486,10 +658,10 @@ scenario "dropping a raw html block drops what is inside it" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/block.md" #"""
-      ---
+      ;;;
       title "Block"
       template "page.typ"
-      ---
+      ;;;
 
       Kept prose.
 
@@ -593,10 +765,10 @@ scenario "a profile resolves extensions against the defaults" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/t.md" #"""
-      ---
+      ;;;
       title "T"
       template "page.typ"
-      ---
+      ;;;
 
       | a | b |
       | --- | --- |
@@ -677,9 +849,9 @@ scenario "the enabled key is the shorthand written out" {
       Kept.
       """#
     "content/skipped.md" #"""
-      ---
+      ;;;
       title "Skipped"
-      ---
+      ;;;
 
       Body.
       """#
@@ -713,10 +885,10 @@ scenario "configuring markdown leaves it enabled" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/on.md" #"""
-      ---
+      ;;;
       title "On"
       template "page.typ"
-      ---
+      ;;;
 
       Still a page.
       """#
@@ -748,18 +920,18 @@ scenario "a link naming a markdown page resolves to its permalink" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/notes.md" #"""
-      ---
+      ;;;
       title "Notes"
       template "page.typ"
-      ---
+      ;;;
 
       The target.
       """#
     "content/index.md" #"""
-      ---
+      ;;;
       title "Home"
       template "page.typ"
-      ---
+      ;;;
 
       Read [the notes](notes.md).
       """#
@@ -795,10 +967,10 @@ scenario "a link naming a markdown page that is not there is reported" {
       #let page(page, body) = html.elem("main", body)
       """#
     "content/index.md" #"""
-      ---
+      ;;;
       title "Home"
       template "page.typ"
-      ---
+      ;;;
 
       Read [the notes](notes.md).
       """#

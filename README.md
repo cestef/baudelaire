@@ -41,6 +41,22 @@ Drop that in `content/posts/hello.typ` and it publishes at `/posts/hello/`,
 joins the feeds and the sitemap, shows up under `/tags/typst/`, and gets
 prev/next links from its neighbors. None of it is configuration.
 
+Markdown works too, and its frontmatter is whatever its fence opens: `---` is
+YAML, `+++` is TOML, `;;;` is KDL. A post copied out of another generator needs
+no rewriting.
+
+```md
+---
+title: Hello
+tags: [typst]
+---
+
+Ordinary **prose**, and a [link](https://typst.app).
+```
+
+A `.md` page lowers to Typst before it compiles, so permalinks, taxonomies,
+feeds, link checking and the incremental cache are the ones above, unchanged.
+
 The layout that wraps it is Typst too, and builds real DOM instead of splicing
 strings:
 
@@ -111,7 +127,14 @@ like any Typst dependency. Four come with the repository:
 | [`phares`](https://github.com/cestef/baudelaire/tree/main/themes/phares) | A manual. Sidebar from your content tree, search palette, on-page outline. |
 | [`paysage`](https://github.com/cestef/baudelaire/tree/main/themes/paysage) | A portfolio. Landing page, project grid, one case study per project. |
 
-Copy one into your project and name it:
+They are inside the binary, so nothing is fetched. `baudelaire init` offers them
+alongside the starter shapes, and an existing project adds one with:
+
+```sh
+baudelaire theme add albatros
+```
+
+Either way the files land in `themes/albatros/` and the config names them:
 
 ```kdl
 theme "themes/albatros"

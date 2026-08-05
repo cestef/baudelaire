@@ -20,7 +20,7 @@ pub struct SchemaError {
     /// The page source, named by its path, so the snippet says which file.
     page: NamedSource<String>,
     /// Where in that source to point. `None` when the frontmatter is not a
-    /// literal `#let frontmatter = (..)` this can locate (it may be computed,
+    /// literal a dialect can locate (a typst page's may be computed,
     /// or imported), which suppresses the snippet rather than pointing at an
     /// arbitrary offset.
     span: Option<SourceSpan>,
@@ -48,14 +48,14 @@ impl SchemaError {
         // with its own delimiters written out as text.
         let help = match parent {
             Some(parent) => markup!(
-                "add `{}: {}` to `{}` in `#let frontmatter`, or declare it `optional=#true` in the `{}` collection's schema",
+                "add `{}: {}` to `{}` in this page's frontmatter, or declare it `optional=#true` in the `{}` collection's schema",
                 leaf,
                 ty.example(),
                 parent,
                 collection
             ),
             None => markup!(
-                "add `{}: {}` to `#let frontmatter`, or declare it `optional=#true` in the `{}` collection's schema",
+                "add `{}: {}` to this page's frontmatter, or declare it `optional=#true` in the `{}` collection's schema",
                 leaf,
                 ty.example(),
                 collection

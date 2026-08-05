@@ -198,41 +198,27 @@ impl<'a> DiscoveryCache<'a> {
         Ok((frontmatter, Data::of(export), source.text().to_owned()))
     }
 
-    /// Read a markdown page: its KDL frontmatter as the dict every page's
-    /// template receives, and its body as the Typst it compiles as.
+    /// Read a markdown page: its frontmatter block, in whichever dialect its
+    /// fence opened, as the dict every page's template receives, and its body as
+    /// the Typst it compiles as.
     #[cfg(feature = "markdown")]
     fn load_markdown(
         collection: &str,
         path: &Path,
         config: &Config,
     ) -> Result<(Frontmatter, Data, String)> {
-        use crate::content::markdown::{Document, Fields, Markdown};
+        use crate::content::markdown::{Document, Markdown};
 
         let text = Self::decode(&crate::fs::read(path)?)
             .ok_or_else(|| crate::error::ContentError::non_utf8_source(path))?;
         let named = path.display().to_string();
         let document = Document::split(&text, &named)?;
 
-        let block = match document.frontmatter {
-            Some(block) => block.parse::<kdl::KdlDocument>().map_err(|error| {
-                use crate::error::markdown::{FrontmatterFault, MarkdownError};
-                MarkdownError::Frontmatter {
-                    path: named.clone(),
-                    src: miette::NamedSource::new(&named, text.clone()),
-                    faults: error
-                        .diagnostics
-                        .iter()
-                        .map(|fault| FrontmatterFault::rebased(fault, document.offset))
-                        .collect(),
-                }
-            })?,
-            // A page may declare nothing, but a collection that requires fields
-            // is not satisfied by that: the emptiest page is the one a schema
-            // exists to catch, so the empty block is still walked.
-            None => kdl::KdlDocument::new(),
-        };
-        let dict = typst::foundations::Dict::from(Fields(&block));
-        let origin = Origin::kdl(&text, &block, document.offset, path, collection);
+        // Whichever dialect the fence opened, read into the dict and the spans
+        // every reader below this line already takes.
+        let block = document.block(&named, &text)?;
+        let dict = block.dict;
+        let origin = Origin::block(&text, &block.spans, path, collection);
         let frontmatter = Frontmatter::from_dict(&dict, &origin, config)?;
 
         let value = crate::codegen::Value::from(&typst::foundations::Value::Dict(dict));
