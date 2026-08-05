@@ -53,8 +53,10 @@ pub use progress::Progress;
 const CLEAR_LINE: &str = "\r\x1b[2K";
 
 /// The width `➜` labels are padded to, so consecutive arrows line their values
-/// up. Sized to the longest label in use (`watching`).
-const ARROW_LABEL: usize = 9;
+/// up. Sized to the longest label in use, which is `collections` in `theme
+/// info`; it read 9 (`watching`) while that block printed two labels wider than
+/// itself, so those two rows alone were pushed out of the column.
+const ARROW_LABEL: usize = 11;
 
 /// The column an arrow's value starts at: the two-space indent, the glyph, a
 /// space, the padded label, a space. A caller laying out a multi-line value

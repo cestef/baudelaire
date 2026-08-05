@@ -67,7 +67,11 @@ pub enum AnnounceError {
     )]
     #[diagnostic(
         code(baudelaire::announce::did),
-        help("update `announce.standard.did` to the authenticated did, or remove it")
+        // The nested block, not `announce.standard.did`: the parser refuses a
+        // dotted key with `unknown config key`, so this named a spelling
+        // config.kdl has never accepted. Braces doubled, the literal being a
+        // format string first.
+        help("update `announce {{ standard {{ did }} }}` to the authenticated did, or remove it")
     )]
     DidMismatch { configured: String, actual: String },
 

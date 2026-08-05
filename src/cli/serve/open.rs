@@ -91,6 +91,14 @@ pub(super) enum Unopenable {
     Foreign,
     #[error("no editor configured")]
     Unconfigured,
+    /// The request named no location at all.
+    ///
+    /// Its own arm, not a [`Malformed`](Self::Malformed) carrying the endpoint
+    /// path: that message reads "not a source location: /__baudelaire/open",
+    /// which claims the endpoint's own URL is a badly written `file:line:column`
+    /// and sends the reader looking at the wrong string entirely.
+    #[error("no source location: this endpoint takes `?at=file:line:column`")]
+    Unaddressed,
     #[error("not a source location: {0}")]
     Malformed(String),
     #[error("{0} is not a file in this project")]
@@ -109,7 +117,7 @@ impl Unopenable {
         match self {
             Self::Foreign => 403,
             Self::Unconfigured => 501,
-            Self::Malformed(_) => 400,
+            Self::Unaddressed | Self::Malformed(_) => 400,
             Self::Outside(_) => 404,
             Self::Spawn { .. } => 500,
         }
@@ -124,6 +132,9 @@ impl Unopenable {
             Self::Foreign => None,
             Self::Unconfigured => Some(
                 "add `serve { editor \"code\" \"--goto\" \"{file}:{line}:{column}\" }` to config.kdl",
+            ),
+            Self::Unaddressed => Some(
+                "the alt-click handler sends it; nothing else has a reason to call this endpoint",
             ),
             Self::Malformed(_) => Some("a stamped element reads `file:line:column`"),
             Self::Outside(_) => Some("only files under the project root can be opened"),

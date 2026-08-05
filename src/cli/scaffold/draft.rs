@@ -12,7 +12,7 @@ use crate::codegen::Value;
 use crate::config::{Config, SortKey};
 use crate::content::{Collection, Frontmatter, Page, Slug};
 use crate::error::Result;
-use crate::error::warning::PermalinkTaken;
+use crate::error::warning::{PermalinkTaken, Uninferred};
 use crate::ui::{Paths, Ui};
 use crate::world::Project;
 
@@ -51,7 +51,12 @@ impl Draft {
     /// `project` is what makes the existing content readable, and is `None`
     /// when it could not be opened at all: the ordering and collision hints go
     /// with it, the page is still written.
-    pub(crate) fn plan(args: &NewArgs, config: &Config, project: Option<&Project>) -> Result<Self> {
+    pub(crate) fn plan(
+        args: &NewArgs,
+        config: &Config,
+        project: Option<&Project>,
+        ui: &Ui,
+    ) -> Result<Self> {
         let path = args.target(config);
         if path.exists() {
             return Err(crate::error::ScaffoldError::already_exists(&path).into());
@@ -70,10 +75,22 @@ impl Draft {
             .as_deref()
             .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
         // Discover once, reused for the next order and the collision check.
-        // A discovery failure (e.g. a broken sibling page) must not block `new`.
-        let discovered = project
-            .and_then(|project| crate::content::discover(config, project).ok())
-            .unwrap_or_default();
+        // A discovery failure (e.g. a broken sibling page) must not block `new`
+        // -- but it must not pass unmentioned either: the failure used to be
+        // dropped with `.ok()`, so one unparseable page anywhere in the project
+        // silently cost both the next `order` and the collision check. That is
+        // the same loss `Uninferred` already describes for a project that could
+        // not be opened at all, so it is the same warning.
+        let discovered = match project.map(|p| crate::content::discover(config, p)) {
+            Some(Ok(collections)) => collections,
+            Some(Err(error)) => {
+                ui.warn(Uninferred {
+                    errors: vec![error],
+                });
+                Vec::new()
+            }
+            None => Vec::new(),
+        };
 
         let date = match &args.date {
             Some(input) => Some(Self::parse_date(input)?),

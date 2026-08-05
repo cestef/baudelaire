@@ -62,7 +62,7 @@ impl Run for NewArgs {
                 None
             }
         };
-        scaffold::draft::Draft::plan(self, &config, project.as_ref())?.create(cx.ui)
+        scaffold::draft::Draft::plan(self, &config, project.as_ref(), cx.ui)?.create(cx.ui)
     }
 }
 

@@ -263,6 +263,119 @@ fn a_data_file_a_page_read_is_watched_without_being_configured() {
     assert!(body.contains("Soul "), "rebuilt page: {body}");
 }
 
+/// Editing a `.md` page reaches the dev server.
+///
+/// The watcher accepted a path under `content/` only when it ended in `.typ`,
+/// so a markdown edit produced no rebuild line, no reload, and no change in
+/// `dist` -- until an unrelated `.typ` was touched, at which point the markdown
+/// edit landed too. The compile cache was right all along; the watcher was the
+/// whole bug, and it meant markdown did not work in `serve` at all.
+#[test]
+#[cfg(feature = "markdown")]
+fn a_markdown_page_edit_rebuilds_and_reloads() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write(
+        "content/posts/hello.md",
+        "---\ntitle: Hi\n---\n\nmarkdown v0\n",
+    );
+    let srv = Serve::start(&t, &[]);
+    let (code, body) = srv.get("/posts/hello/");
+    assert_eq!(code, 200, "markdown page not published: {body}");
+    assert!(body.contains("markdown v0"), "first build: {body}");
+
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write(
+            "content/posts/hello.md",
+            &format!("---\ntitle: Hi\n---\n\nmarkdown v{n}\n"),
+        );
+    });
+    assert!(pushed, "editing a `.md` page pushed no reload");
+    // ...and the edit reached `dist`, not just the stream.
+    let (_, body) = srv.get("/posts/hello/");
+    assert!(
+        !body.contains("markdown v0"),
+        "still the first build: {body}"
+    );
+}
+
+/// A non-`.typ` file a page reads from *inside* `content/` triggers a rebuild.
+///
+/// `Engine::outside` drops every directory lying inside the four watched trees
+/// from the tracked set, on the premise that those trees are watched wholesale.
+/// The watcher then narrowed `content/` and `templates/` to `.typ`, so a data
+/// file colocated with a page was watched by nobody: it was neither tracked
+/// (inside a watched tree) nor relevant (not a `.typ`). Same hole covered a
+/// bundle's colocated images.
+#[test]
+fn a_data_file_beside_a_page_is_watched() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nserve { open #false; }",
+    );
+    t.write("content/posts/data.json", "{ \"who\": \"first\" }");
+    t.write(
+        "content/posts/hello.typ",
+        "#let frontmatter = (title: \"Hi\",)\n#json(\"data.json\").who",
+    );
+    let srv = Serve::start(&t, &[]);
+    let (code, body) = srv.get("/posts/hello/");
+    assert_eq!(code, 200, "{body}");
+    assert!(body.contains("first"), "first build: {body}");
+
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write(
+            "content/posts/data.json",
+            &format!("{{ \"who\": \"later {n}\" }}"),
+        );
+    });
+    assert!(pushed, "editing a data file beside a page pushed no reload");
+    let (_, body) = srv.get("/posts/hello/");
+    assert!(body.contains("later "), "rebuilt page: {body}");
+}
+
+/// The same hole in `templates/`: a template's own data file.
+///
+/// Identical to the tracked-`data/` case above except for where the file sits,
+/// which is exactly what used to decide whether it was watched.
+#[test]
+fn a_data_file_a_template_reads_from_its_own_tree_is_watched() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n  templates \"templates\"\n}\ncontent {\n  collections {\n    _root { template \"page.typ\" }\n  }\n}\nserve { open #false; }",
+    );
+    t.write("templates/authors.yaml", "keeper: One person\n");
+    t.write(
+        "templates/page.typ",
+        "#import \"@baudelaire/html:0.1.0\": h\n#let authors = yaml(\"/templates/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    let srv = Serve::start(&t, &[]);
+    let (_, body) = srv.get("/");
+    assert!(body.contains("One person"), "first build: {body}");
+
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write("templates/authors.yaml", &format!("keeper: Soul {n}\n"));
+    });
+    assert!(pushed, "editing a template's data file pushed no reload");
+    let (_, body) = srv.get("/");
+    assert!(body.contains("Soul "), "rebuilt page: {body}");
+}
+
 #[test]
 fn config_edit_reloads_and_pushes_reload() {
     let t = Site::new();

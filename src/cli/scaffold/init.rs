@@ -321,6 +321,17 @@ impl Details {
     /// path ending in `..`).
     const UNNAMED: &'static str = "my-site";
 
+    /// The author a run falls back to when nothing names one: no `--author`,
+    /// and no `user.name` in git config.
+    ///
+    /// A placeholder, for the same reason `url` has always had one. The fallback
+    /// was the empty string, which a non-interactive `init --yes` took as its
+    /// answer and wrote as `author ""`, and from there into every page's
+    /// `<meta name="author">` and every feed entry: a value that is wrong
+    /// everywhere and looks like nothing anywhere. `Your Name` is visibly a
+    /// placeholder, so it gets edited.
+    const UNSIGNED: &'static str = "Your Name";
+
     /// Where to scaffold, and what to fill the placeholders with.
     ///
     /// A flag always wins. What a flag did not supply is prompted for when
@@ -331,7 +342,7 @@ impl Details {
     /// interactive run without one takes the site name for it, and a
     /// non-interactive run without one scaffolds into `.`.
     fn gather(args: &InitArgs, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
-        let git = Self::git_author().unwrap_or_default();
+        let git = Self::git_author().unwrap_or_else(|| Self::UNSIGNED.to_owned());
         // Only prompt for what was not given, and only when someone is there.
         let ask = |label: &str, default: &str, given: Option<&String>| -> Result<String> {
             match given {

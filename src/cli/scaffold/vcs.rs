@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 
 use crate::cli::prompt::Prompt;
 use crate::error::Result;
-use crate::error::warning::{VcsFailed, VcsMissing};
+use crate::error::warning::{VcsFailed, VcsMissing, VcsUnrunnable};
 use crate::ui::Ui;
 
 /// A version-control system baudelaire can initialize for a new project. Both
@@ -117,7 +117,17 @@ impl<'a> Repo<'a> {
                     detail: (!detail.is_empty()).then(|| detail.to_owned()),
                 });
             }
-            Err(_) => ui.warn(VcsMissing { tool: tool.command }),
+            // Only "no such program" advises installing one: every other spawn
+            // failure (a permission error, a broken exec bit) is a tool that is
+            // already there, and telling the reader to install it again is
+            // advice that cannot help.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                ui.warn(VcsMissing { tool: tool.command });
+            }
+            Err(source) => ui.warn(VcsUnrunnable {
+                tool: tool.command,
+                source,
+            }),
         }
     }
 }

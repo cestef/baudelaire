@@ -573,6 +573,58 @@ fn man_writes_a_roff_page_to_stdout() {
     assert!(page.contains(env!("CARGO_PKG_VERSION")), "{page}");
 }
 
+/// ...and `--json` never appends its object to a command whose own document is
+/// the stdout payload.
+///
+/// `--json` is global, so a wrapper that sets it once reaches these three too.
+/// `baudelaire completions bash --json > _bd` used to write a completion script
+/// with a summary object on the end of it, which a shell refuses to source; the
+/// same appended object corrupts a man page and the config reference.
+#[test]
+fn json_leaves_a_document_commands_stdout_alone() {
+    let sb = Site::new();
+    for argv in [
+        vec!["--json", "completions", "bash"],
+        vec!["--json", "man"],
+        vec!["--json", "reference"],
+    ] {
+        let out = sb.run(&argv);
+        assert!(
+            out.status.success(),
+            "{argv:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let stdout = String::from_utf8(out.stdout).expect("the document is utf-8");
+        assert!(!stdout.is_empty(), "{argv:?} wrote no document");
+        // The report is one compact object, so its opening bytes are exact.
+        assert!(
+            !stdout.contains("{\"schema\":"),
+            "{argv:?}: a run report landed in the document"
+        );
+        assert!(
+            !stdout.lines().last().unwrap_or_default().starts_with('{'),
+            "{argv:?}: the document ends in an object"
+        );
+    }
+
+    // ...and a command that does have a run to report still reports it, so the
+    // fix is a reservation and not a blanket suppression.
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
+    );
+    sb.write("content/index.typ", "#let frontmatter = (title: \"H\",)\nh");
+    let out = sb.run(&["--json", "build"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("build still reports on stdout");
+    assert_eq!(report["ok"], true);
+}
+
 /// Without the flag, stdout stays empty: that reservation is what makes the
 /// object above safe to pipe.
 #[test]

@@ -465,8 +465,9 @@ pub fn run(cli: Cli) -> Result<()> {
     });
     // Built while the diagnostics are still collected, and written before the
     // flush, so the JSON object lands on stdout uninterleaved with the prose on
-    // stderr.
-    if cli.global.json {
+    // stderr. Not at all for a command whose own document owns stdout: see
+    // [`Command::owns_stdout`].
+    if cli.global.json && !cli.command.as_ref().is_some_and(Command::owns_stdout) {
         emit_json(&ui.summary(outcome.is_ok()));
     }
     ui.flush();
@@ -541,6 +542,28 @@ trait Run {
 }
 
 impl Command {
+    /// Whether this command's own document *is* the stdout payload.
+    ///
+    /// THE list of them, read by [`run`] to decide whether a `--json` report may
+    /// be appended. `completions`, `man` and `reference` describe the CLI rather
+    /// than a site: they read no config, build nothing, and write one document
+    /// to stdout meant to be redirected into a completion directory, a `man1/`
+    /// or a file. A summary object printed after it corrupts that file, and
+    /// `baudelaire completions bash --json > _bd` produced a script the shell
+    /// chokes on.
+    ///
+    /// Skipped rather than refused as a usage error, because `--json` is global:
+    /// a wrapper that sets it once for every invocation would otherwise fail on
+    /// the three commands that have no summary to report in the first place.
+    /// The run still warns on stderr, and `--strict` still decides the exit
+    /// code, so nothing is swallowed but the report.
+    fn owns_stdout(&self) -> bool {
+        matches!(
+            self,
+            Self::Completions(_) | Self::Man(_) | Self::Reference(_)
+        )
+    }
+
     /// Delegate to the selected subcommand's [`Run`] impl.
     fn run(&self, cx: &Cx) -> Result<()> {
         match self {
@@ -634,6 +657,33 @@ mod tests {
             ])
             .is_ok()
         );
+    }
+
+    /// The three commands whose document *is* the stdout payload keep it to
+    /// themselves; everything else still reports.
+    ///
+    /// `baudelaire completions bash --json > _bd` used to write a completion
+    /// script with a JSON object on the end of it, which a shell refuses to
+    /// source. The same appended object would corrupt a man page and the
+    /// config reference.
+    #[test]
+    fn a_document_command_keeps_stdout_to_itself() {
+        use clap::Parser;
+        let owns = |argv: &[&str]| {
+            Cli::parse_from(argv.iter().copied())
+                .command
+                .expect("a command")
+                .owns_stdout()
+        };
+        assert!(owns(&["baudelaire", "completions", "bash"]));
+        assert!(owns(&["baudelaire", "man"]));
+        assert!(owns(&["baudelaire", "reference"]));
+        assert!(owns(&["baudelaire", "reference", "assets.images"]));
+
+        assert!(!owns(&["baudelaire", "build"]));
+        assert!(!owns(&["baudelaire", "check"]));
+        assert!(!owns(&["baudelaire", "clean"]));
+        assert!(!owns(&["baudelaire", "new", "posts/a"]));
     }
 
     /// A headless session: nobody to put the question to.

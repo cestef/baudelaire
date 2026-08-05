@@ -145,8 +145,9 @@ impl Dev<'_> {
     /// banner can wrap them to the terminal width.
     fn watched(&self) -> Vec<String> {
         // The same roots the watcher registers, so the banner cannot advertise
-        // a directory nothing watches.
-        let mut parts: Vec<String> = Filter::roots(&self.config)
+        // a directory nothing watches: one that is not on disk is skipped by
+        // both, through the same predicate.
+        let mut parts: Vec<String> = Filter::registered(&self.config, self.root)
             .iter()
             .map(|dir| dir.display().to_string())
             .collect();

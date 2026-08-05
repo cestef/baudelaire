@@ -37,7 +37,7 @@ impl Watcher {
         let mut debouncer = new_debouncer(Duration::from_millis(500), None, handler)
             .map_err(ServeError::watcher_init)?;
         for (dir, mode) in watches {
-            if dir.exists() {
+            if Filter::watchable(dir) {
                 debouncer
                     .watch(dir, *mode)
                     .map_err(|e| ServeError::watch(dir, e))?;
@@ -56,8 +56,18 @@ impl Watcher {
 /// config file itself).
 pub(super) struct Filter {
     root: PathBuf,
-    assets: PathBuf,
-    statics: PathBuf,
+    /// The source trees, resolved: [`Filter::roots`] in the one form
+    /// [`Filter::is_relevant`] compares in.
+    ///
+    /// Membership of these is what makes a change relevant, not the file's
+    /// extension. A page is `.typ` *or* `.md` (`Config::sources` is the one
+    /// table of that), and a compile reads plenty that is neither: a
+    /// `#json("data.json")` beside a page, a colocated image in a bundle, a
+    /// data file a template loads. `Engine::outside` already drops every
+    /// directory inside these trees from the tracked set, on the premise that
+    /// they are watched wholesale, so an extension test here left all of that
+    /// watched by nobody.
+    trees: [PathBuf; 4],
     /// The session's config file, absolute (canonical when it resolves), so a
     /// changed path can be tested for "is this *my* config": a sibling `.kdl`
     /// in the same directory must not reload the session.
@@ -76,41 +86,36 @@ pub(super) struct Filter {
 impl Filter {
     pub(super) fn new(config: &Config, root: &Root, config_path: &Path) -> Result<Self> {
         use notify::RecursiveMode::{NonRecursive, Recursive};
-        let root = root.path().to_path_buf();
-        let assets = Self::absolute(&root, &config.paths.assets);
+        let base = root.path().to_path_buf();
         // `Config::SCRATCH`, not `cache.dir`: the cache is one subdirectory of
         // the scratch tree, and the generated typst that caused the loop is a
         // sibling of it.
-        let cache = Self::absolute(&root, Path::new(crate::config::Config::SCRATCH));
-        let statics = Self::absolute(&root, &config.paths.r#static);
-        let mut watches: Vec<_> = Self::roots(config)
-            .iter()
-            .map(|dir| (Self::absolute(&root, dir), Recursive))
-            .collect();
+        let cache = Self::absolute(&base, Path::new(crate::config::Config::SCRATCH));
+        let trees = Self::roots(config).map(|dir| Self::absolute(&base, dir));
+        let mut watches: Vec<_> = trees.iter().map(|dir| (dir.clone(), Recursive)).collect();
         // Watch the config file via its parent directory, non-recursively:
         // editors commonly save by rename-over, which drops a watch pinned to
         // the file itself. A bare `config.kdl` has an empty parent, meaning
         // the project root.
         let config_dir = match config_path.parent() {
-            Some(dir) if !dir.as_os_str().is_empty() => Self::absolute(&root, dir),
-            _ => root.clone(),
+            Some(dir) if !dir.as_os_str().is_empty() => Self::absolute(&base, dir),
+            _ => base.clone(),
         };
         watches.push((config_dir, NonRecursive));
-        let config_file = Self::absolute(&root, config_path);
+        let config_file = Self::absolute(&base, config_path);
         let include = Self::compile(&config.serve.include)?;
         // Watch the literal prefix directory of each include glob (e.g. `data/`
         // in `data/**/*.json`) so its files are actually observed.
         for glob in &include {
             let (prefix, _) = glob.clone().partition();
             if !prefix.as_os_str().is_empty() {
-                watches.push((Self::absolute(&root, &prefix), Recursive));
+                watches.push((Self::absolute(&base, &prefix), Recursive));
             }
         }
         let exclude = Self::compile(&config.serve.exclude)?;
         Ok(Self {
-            root,
-            assets,
-            statics,
+            root: base,
+            trees,
             config: config_file,
             watches,
             include,
@@ -137,8 +142,8 @@ impl Filter {
     }
 
     /// The source trees a session always watches, in the configured (relative)
-    /// spelling. THE single list of them: both the watcher and the startup
-    /// banner read it, so the two can never disagree.
+    /// spelling. THE single list of them: the watcher, the relevance test and
+    /// the startup banner all read it, so no two of them can disagree.
     pub(super) fn roots(config: &Config) -> [&Path; 4] {
         let paths = &config.paths;
         [
@@ -147,6 +152,32 @@ impl Filter {
             &paths.assets,
             &paths.r#static,
         ]
+    }
+
+    /// Whether a directory can be watched at all: notify refuses one that is
+    /// not there.
+    ///
+    /// THE test, named rather than spelled inline, because two places ask it:
+    /// [`Watcher::new`], which has to skip such a directory or the session dies
+    /// on a project with no `static/`, and [`Filter::registered`], which is
+    /// what the startup banner may promise. The banner used to name all four
+    /// roots whatever was on disk, so it advertised trees nothing was watching.
+    fn watchable(dir: &Path) -> bool {
+        dir.exists()
+    }
+
+    /// The source trees actually registered, in the configured (relative)
+    /// spelling the banner prints: [`Filter::roots`] minus the ones that are
+    /// not on disk.
+    ///
+    /// Note a root created *later* is still not picked up until the session
+    /// re-establishes its watches, which is why saying nothing about it is
+    /// worse than leaving it off the list: the banner reads as a promise.
+    pub(super) fn registered<'a>(config: &'a Config, root: &Root) -> Vec<&'a Path> {
+        Self::roots(config)
+            .into_iter()
+            .filter(|dir| Self::watchable(&root.join(dir)))
+            .collect()
     }
 
     /// A path in the one form this filter compares in: absolute, canonical when
@@ -169,7 +200,10 @@ impl Filter {
         } else {
             root.join(path)
         };
-        crate::fs::canonicalize(&joined).unwrap_or(joined)
+        // `canonical`, not `canonicalize`: the unresolvable case is the ordinary
+        // one here (a root that is not there yet), and a typed diagnostic
+        // constructed only to be thrown away is a diagnostic nobody reads.
+        crate::fs::canonical(joined)
     }
 
     /// Compile a list of patterns into owned globs.
@@ -192,12 +226,24 @@ impl Filter {
     /// possible so a symlinked event path still matches; falls back to a raw
     /// compare when the file is mid-rename (deleted, about to reappear).
     pub(super) fn is_config(&self, path: &Path) -> bool {
-        crate::fs::canonicalize(path).map_or(path == self.config, |p| p == self.config)
+        crate::fs::canonical(path) == self.config
     }
 
-    /// Whether a changed path should trigger a rebuild. Of `.kdl` files only
-    /// the session's own config counts: baudelaire reads no other KDL, and
-    /// the config directory's non-recursive watch also surfaces its siblings.
+    /// Whether a changed path should trigger a rebuild: anything inside one of
+    /// the watched source trees, anything the last build read outside them, and
+    /// the session's own config file.
+    ///
+    /// Membership of a tree, never a file extension. This used to accept a path
+    /// under `content/` or `templates/` only when it ended in `.typ`, which
+    /// meant editing a `.md` page rebuilt nothing at all, and that a page's
+    /// `#json("data.json")`, a bundle's colocated image, and any non-`.typ` file
+    /// a template read were watched by nobody: `Engine::outside` drops
+    /// everything inside these trees from the tracked set precisely because
+    /// they are meant to be watched wholesale.
+    ///
+    /// Of `.kdl` files only the session's own config counts: baudelaire reads no
+    /// other KDL, and the config directory's non-recursive watch also surfaces
+    /// its siblings.
     pub(super) fn is_relevant(&self, path: &Path) -> bool {
         // Nothing the build writes for itself can trigger it. `.baudelaire/`
         // holds generated typst the templates genuinely *import*, so the build
@@ -219,9 +265,7 @@ impl Filter {
             return true;
         }
         self.is_config(path)
-            || path.extension().is_some_and(|e| e == "typ")
-            || path.starts_with(&self.assets)
-            || path.starts_with(&self.statics)
+            || self.trees.iter().any(|tree| path.starts_with(tree))
             || self.tracked.iter().any(|dir| path.starts_with(dir))
     }
 }
@@ -330,6 +374,55 @@ mod tests {
         );
         assert!(!filter.is_relevant(Path::new("/proj/elsewhere/style.css")));
     }
+    /// A change is relevant because of *where* it is, not what it is called.
+    ///
+    /// The filter used to accept a path under `content/` or `templates/` only
+    /// when it ended in `.typ`. So editing a `.md` page rebuilt nothing until
+    /// an unrelated `.typ` was touched, and every non-`.typ` input inside those
+    /// trees (a page's `#json("data.json")`, a bundle's colocated image, a data
+    /// file a template reads) was watched by nobody, since `Engine::outside`
+    /// drops what lies inside these trees from the tracked set on the premise
+    /// that they are watched whole.
+    #[test]
+    fn anything_inside_a_source_tree_is_relevant_whatever_it_is_called() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+        let content = Path::new("/proj").join(&config.paths.content);
+        let templates = Path::new("/proj").join(&config.paths.templates);
+        for path in [
+            content.join("posts/a.typ"),
+            content.join("posts/a.md"),
+            content.join("posts/a/index.md"),
+            content.join("posts/a/data.json"),
+            content.join("posts/a/photo.png"),
+            templates.join("layout.typ"),
+            templates.join("authors.yaml"),
+        ] {
+            assert!(filter.is_relevant(&path), "{} was ignored", path.display());
+        }
+        // ...and membership is the whole test: a `.typ` outside every tree is
+        // not relevant on the strength of its name.
+        assert!(!filter.is_relevant(Path::new("/proj/elsewhere/stray.typ")));
+    }
+
+    /// A root that is not on disk is registered by nobody, so the banner does
+    /// not name it either: notify refuses a directory that does not exist, and
+    /// advertising one reads as a promise that creating it later is picked up.
+    #[test]
+    fn the_banner_names_only_the_roots_that_are_there() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let config = Config::default();
+        let root = Root::at(tmp.path());
+        assert!(Filter::registered(&config, &root).is_empty());
+
+        std::fs::create_dir_all(tmp.path().join(&config.paths.content)).expect("mkdir");
+        assert_eq!(
+            Filter::registered(&config, &root),
+            vec![config.paths.content.as_path()]
+        );
+    }
+
     /// Nothing the build writes for itself may trigger it.
     ///
     /// The scratch tree holds generated typst that templates genuinely

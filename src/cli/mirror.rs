@@ -7,6 +7,7 @@ use clap::Args;
 use super::{Cx, Run, group, help};
 use crate::config::Config;
 use crate::error::Result;
+use crate::error::warning::MirrorDefaults;
 use crate::mirror::Mirror;
 
 /// Arguments for `baudelaire mirror`.
@@ -70,18 +71,33 @@ impl MirrorArgs {
     /// anywhere (after an upgrade, say, with no project in sight), and the two
     /// table modules mirror empty outside a project exactly as they do inside
     /// one that has never been built.
+    ///
+    /// A config that *exists* and does not parse is the case worth reporting,
+    /// exactly as `clean` reports it: the diagnostic used to be discarded
+    /// outright, so the `site` module an editor resolves against carried the
+    /// default title and url with no word to the reader, while `baudelaire
+    /// build` failed on the same project. No project at all stays silent, since
+    /// there is nothing there to have got wrong.
     fn config(&self, cx: &Cx) -> Config {
         let verb = match self.uninstall {
             true => "removing modules for",
             false => "mirroring modules for",
         };
-        cx.announced(verb).unwrap_or_else(|_| {
-            cx.ui.banner(verb.trim_end_matches(" for"));
-            Config {
-                root: cx.root.path().to_path_buf(),
-                ..Config::default()
+        match cx.announced(verb) {
+            Ok(config) => config,
+            Err(error) => {
+                cx.ui.banner(verb.trim_end_matches(" for"));
+                if cx.cli.global.config.exists() {
+                    cx.ui.warn(MirrorDefaults {
+                        errors: vec![error],
+                    });
+                }
+                Config {
+                    root: cx.root.path().to_path_buf(),
+                    ..Config::default()
+                }
             }
-        })
+        }
     }
 }
 

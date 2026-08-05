@@ -121,6 +121,10 @@ impl Shell {
 /// otherwise reserves. Nothing else is printed: the output is meant to be
 /// redirected into a completion directory or `man1/`, and a banner in front of
 /// it would corrupt the file.
+///
+/// `Command::owns_stdout` is what enforces the reservation. This paragraph used
+/// to describe it and nothing implemented it, so `completions bash --json`
+/// appended its summary object to the script.
 impl Run for CompletionsArgs {
     fn run(&self, _cx: &Cx) -> Result<()> {
         use clap::CommandFactory;

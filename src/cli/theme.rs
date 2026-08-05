@@ -3,11 +3,12 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
+use owo_colors::OwoColorize;
 
 use super::{Cx, Run};
 use crate::config::Config;
 use crate::error::Result;
-use crate::ui::{Count, markup};
+use crate::ui::{Count, Paths};
 
 /// Arguments for `baudelaire theme`.
 #[derive(Args, Debug, Clone)]
@@ -156,9 +157,9 @@ impl ThemeArgs {
             }
         }
 
-        cx.ui.detail(markup!(
-            "`{}` writes one into the project",
-            "baudelaire theme add <spec>"
+        cx.ui.detail(format_args!(
+            "{} writes one into the project",
+            "baudelaire theme add <spec>".cyan()
         ));
     }
 
@@ -186,6 +187,13 @@ impl ThemeArgs {
     }
 
     /// One copy's line: where it is, and how much of it is yours now.
+    ///
+    /// Styled for the terminal, not marked up. `markup!` is the grammar
+    /// *diagnostics* are written in, rendered by `Styled` just before miette
+    /// sees one; the reporting methods write an `impl Display` straight out, so
+    /// a marked-up string reached the reader with its backticks still on it, and
+    /// with every `\` in a Windows path doubled by the escaping `markup!`
+    /// applies to its arguments.
     fn installed(cx: &Cx, rel: &Path, lock: &crate::theme::Lock) -> String {
         use crate::theme::State;
 
@@ -196,12 +204,8 @@ impl ThemeArgs {
             .filter(|file| file.state == State::Edited)
             .count();
         match edited {
-            0 => markup!("installed at `{}`", &at),
-            n => markup!(
-                "installed at `{}`, {} edited",
-                &at,
-                Count::files(n).to_string()
-            ),
+            0 => format!("installed at {}", Paths(&at)),
+            n => format!("installed at {}, {} edited", Paths(&at), Count::files(n)),
         }
     }
 }
@@ -234,7 +238,7 @@ impl Vendored {
         }
         cx.ui.section("kept");
         for file in files {
-            cx.ui.item(markup!("`{}`", file.rel.display().to_string()));
+            cx.ui.item(Paths(&file.rel.display().to_string()));
         }
         cx.ui.detail(why);
     }
@@ -279,17 +283,17 @@ impl ThemeAddArgs {
         let written = fetched.install(&this.dir)?;
         let at = this.at();
         cx.ui.done(match written.len() {
-            0 => markup!("`{}` is already there", &at),
-            n => markup!("wrote {} to `{}`", Count::files(n).to_string(), &at),
+            0 => format!("{} is already there", Paths(&at)),
+            n => format!("wrote {} to {}", Count::files(n), Paths(&at)),
         });
         if let Some(about) = &fetched.about {
             cx.ui.detail(about);
         }
         cx.ui.section("next");
-        cx.ui.arrow("config.kdl", markup!("`theme \"{}\"`", &at));
-        cx.ui.item(markup!(
-            "then `{}`; the theme's README says what it reads from a page",
-            "baudelaire build"
+        cx.ui.arrow("config.kdl", format!("theme \"{at}\"").cyan());
+        cx.ui.item(format_args!(
+            "then {}; the theme's README says what it reads from a page",
+            "baudelaire build".cyan()
         ));
         Ok(())
     }
@@ -309,7 +313,7 @@ impl ThemeArgsFor {
 
         let this = self.vendored(cx, says.theme(), &self.name)?;
         let carried = Bundled::find(&self.name).ok();
-        cx.ui.done_plain(markup!("`{}`", &this.name));
+        cx.ui.done_plain(this.name.cyan());
         if let Some(theme) = carried {
             cx.ui.detail(theme.about);
         }
@@ -322,19 +326,21 @@ impl ThemeArgsFor {
                 Ships::of(&theme.fetched()).print(cx);
             }
             cx.ui.section("installed");
-            cx.ui.detail(markup!(
-                "not here; `{}` writes it",
-                format!("baudelaire theme add {}", &this.name)
+            cx.ui.detail(format_args!(
+                "not here; {} writes it",
+                format!("baudelaire theme add {}", this.name).cyan()
             ));
             return Ok(());
         };
 
         Ships::at(&this.dir).print(cx);
         cx.ui.section("installed");
-        cx.ui.arrow("at", markup!("`{}`", this.at()));
-        cx.ui.arrow("from", markup!("`{}`", lock.origin().label()));
-        cx.ui
-            .arrow("written by", markup!("baudelaire `{}`", &lock.baudelaire));
+        cx.ui.arrow("at", Paths(&this.at()));
+        cx.ui.arrow("from", lock.origin().label());
+        cx.ui.arrow(
+            "written by",
+            format_args!("baudelaire {}", lock.baudelaire.cyan()),
+        );
         for file in lock.state(&this.dir) {
             let state = match file.state {
                 State::Pristine => continue,
@@ -343,8 +349,10 @@ impl ThemeArgsFor {
                 State::Added => "new in this version",
                 State::Yours => "yours, not the theme's",
             };
-            cx.ui
-                .item(markup!("{} `{}`", state, file.rel.display().to_string()));
+            cx.ui.item(format_args!(
+                "{state} {}",
+                Paths(&file.rel.display().to_string())
+            ));
         }
         Ok(())
     }
@@ -440,10 +448,10 @@ impl ThemeUpdateArgs {
         let tracked = origin
             .fetch(&says.fetching)?
             .update(&this.dir, self.force)?;
-        cx.ui.done(markup!(
-            "`{}` is at baudelaire `{}`",
-            this.at(),
-            crate::VERSION
+        cx.ui.done(format_args!(
+            "{} is at baudelaire {}",
+            Paths(&this.at()),
+            crate::VERSION.cyan()
         ));
         // A file baudelaire wrote and you changed, and one that was here before
         // it ever ran, are kept for the same reason and reported together.
@@ -457,9 +465,9 @@ impl ThemeUpdateArgs {
         Vendored::kept(
             cx,
             &kept,
-            markup!(
-                "yours, so they were left alone; `{}` replaces them too",
-                "--force"
+            format!(
+                "yours, so they were left alone; {} replaces them too",
+                "--force".cyan()
             ),
         );
         Ok(())
@@ -470,8 +478,11 @@ impl ThemeUpdateArgs {
 
         let this = self.theme.vendored(cx, says.theme(), &self.theme.name)?;
         let tracked = uninstall(&this.dir, self.force)?;
-        cx.ui
-            .done(markup!("removed `{}` from `{}`", &this.name, this.at()));
+        cx.ui.done(format_args!(
+            "removed {} from {}",
+            this.name.cyan(),
+            Paths(&this.at())
+        ));
         // What `remove` refuses to delete: an edit, unless forced, and a file it
         // never wrote, at any force.
         let kept: Vec<_> = tracked
@@ -485,15 +496,18 @@ impl ThemeUpdateArgs {
         Vendored::kept(
             cx,
             &kept,
-            markup!(
-                "not baudelaire's to delete; `{}` takes the edited ones too",
-                "--force"
+            format!(
+                "not baudelaire's to delete; {} takes the edited ones too",
+                "--force".cyan()
             ),
         );
         cx.ui.section("next");
         cx.ui.arrow(
             "config.kdl",
-            markup!("drop the `{}` line", format!("theme \"{}\"", this.at())),
+            format_args!(
+                "drop the {} line",
+                format!("theme \"{}\"", this.at()).cyan()
+            ),
         );
         Ok(())
     }

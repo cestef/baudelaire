@@ -233,7 +233,7 @@ impl Handler {
         if !Self::same_origin(req) {
             return Err(Unopenable::Foreign);
         }
-        let raw = Self::query(url, "at").ok_or_else(|| Unopenable::Malformed(url.to_owned()))?;
+        let raw = Self::query(url, "at").ok_or(Unopenable::Unaddressed)?;
         let decoded = Percent::decode(raw);
         let at = At::parse(&decoded).ok_or_else(|| Unopenable::Malformed(decoded.clone()))?;
         let open = self.route.lock().open.clone();

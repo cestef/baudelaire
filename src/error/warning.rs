@@ -44,6 +44,25 @@ pub struct CleanDefaults {
     pub errors: Vec<BaudelaireErrorKind>,
 }
 
+/// The build produced no page, so `prune` swept nothing.
+///
+/// An empty keep-set is the one case where the prune's own premise fails:
+/// "every file in `dist` that this build did not write is orphaned" is only
+/// true of a build that wrote something. A mistyped `paths { content }`, a
+/// command run from the wrong directory, or a binary that cannot read the
+/// dialect the pages are written in each produce a green build with nothing in
+/// it, and answering that by deleting the published site is never what was
+/// meant. Said out loud rather than logged, because the surprising part is the
+/// zero, not the skip.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("the build produced no pages; nothing was pruned")]
+#[diagnostic(
+    code(baudelaire::prune::empty),
+    severity(warning),
+    help("`dist` is left as it was: a build with nothing in it cannot say what is orphaned")
+)]
+pub struct PruneEmpty;
+
 /// `new` could not read the existing content, and scaffolded without it.
 ///
 /// The inference is a convenience: the next `order` in an ordered collection
@@ -84,10 +103,35 @@ pub struct PermalinkTaken {
 #[diagnostic(
     code(baudelaire::vcs::missing),
     severity(warning),
-    help("install it, or re-run `init --vcs` once it is on PATH")
+    // `--vcs` takes a value, so the bare flag this used to suggest is a usage
+    // error: it told the reader to run something that cannot run. The tool's own
+    // name is the value that re-runs what they asked for (`jj` being an accepted
+    // spelling of `jujutsu`).
+    help("install it, or re-run `init --vcs {}` once it is on PATH", Text(.tool))
 )]
 pub struct VcsMissing {
     pub tool: &'static str,
+}
+
+/// The version-control tool is on `PATH` but could not be started: a permission
+/// error, an exec format error, anything that is not "no such program".
+///
+/// Distinct from [`VcsMissing`], which advises installing it. Every spawn
+/// failure used to map there, so a `git` the process was not allowed to execute
+/// was reported as a `git` to go and install. Distinct from [`VcsFailed`] too:
+/// that one is the tool running and refusing the repository, which is the
+/// tool's own message to pass on.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("could not run {}, repository setup skipped", Code(.tool))]
+#[diagnostic(
+    code(baudelaire::vcs::unrunnable),
+    severity(warning),
+    help("initialize the repository by hand; the project is scaffolded either way")
+)]
+pub struct VcsUnrunnable {
+    pub tool: &'static str,
+    #[source]
+    pub source: std::io::Error,
 }
 
 /// A table module was mirrored with no data in it, because the site has never
@@ -105,6 +149,28 @@ pub struct MirrorUnbuilt {
     /// span each, so a list of them reads as a list rather than as one name
     /// with commas in it.
     pub modules: String,
+}
+
+/// `mirror` could not load the config, and generated the modules from the
+/// built-in defaults.
+///
+/// The same recovery [`CleanDefaults`] makes, for the same reason: the command
+/// is worth running from anywhere, so a config it cannot read is not fatal. What
+/// *is* worth saying is which modules the reader ends up with. `site` carries
+/// the project's own title, url and language, so an editor resolving against a
+/// defaulted copy of it is being told the site is called `baudelaire site` while
+/// `baudelaire build` fails on the very same file. The error rides along, so the
+/// reader sees the parse failure in full rather than an unexplained fallback.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("could not load the config; mirroring the built-in defaults")]
+#[diagnostic(
+    code(baudelaire::mirror::defaults),
+    severity(warning),
+    help("fix the config and mirror again; `site` carries the defaults until you do")
+)]
+pub struct MirrorDefaults {
+    #[related]
+    pub errors: Vec<BaudelaireErrorKind>,
 }
 
 /// The editor-tooling mirror could not be written during `init`. Nothing about
@@ -510,8 +576,12 @@ pub struct NotFoundMissing;
     // Distinct from `announce::did`, the mismatch *error*.
     code(baudelaire::announce::did_unpinned),
     severity(advice),
+    // The nested block, not `announce.standard.did`: the parser refuses a dotted
+    // key with `unknown config key`, so the advice named a spelling config.kdl
+    // has never accepted. Braces are doubled because the literal is a format
+    // string first.
     help(
-        "pin it with `announce.standard.did \"{}\"` in config.kdl to emit verification artifacts at build time",
+        "pin it with `announce {{ standard {{ did \"{}\" }} }}` in config.kdl to emit verification artifacts at build time",
         Text(.did)
     )
 )]
