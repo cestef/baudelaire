@@ -21,6 +21,11 @@ on:
       - ".github/workflows/docs.yml"
   pull_request:
     paths: *paths
+  # A release is what makes a version publishable, and it lands after the commit
+  # that named it. Without this trigger the site would keep serving the previous
+  # version until some unrelated push happened to rebuild it.
+  release:
+    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -38,8 +43,12 @@ jobs:
     name: build & deploy
     runs-on: ubuntu-latest
     steps:
+      # Full history: every published version is built from its own tag, and a
+      # shallow clone has none of them.
       - name: checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: rust toolchain
         uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
@@ -60,9 +69,19 @@ jobs:
       - name: build baudelaire
         run: cargo build
 
-      - name: build docs site
+      # The working tree's docs, compiled and link-checked by the working tree's
+      # binary, writing nothing. Nothing deploys this: the site serves released
+      # versions only. It runs so a typst error or a broken link in an
+      # unreleased docs edit fails on the branch that wrote it rather than at
+      # the next release.
+      - name: check docs sources
         working-directory: docs
-        run: ../target/debug/baudelaire build
+        run: ../target/debug/baudelaire check
+
+      # What actually deploys: every published version, each built from its own
+      # tag by its own released binary, newest at the root.
+      - name: build published versions
+        run: docs/versions.sh
 
       # After the docs build, never before: that site sets `prune`, which
       # deletes everything under its `dist` that its own build did not produce.

@@ -176,6 +176,85 @@ button,
   text-decoration: none;
 }
 
+/* Version picker: which docs you are reading, and a jump to the same page in
+   another published version. A `<details>` so it opens with no script, and
+   plain links inside so a version that never had this page answers with its own
+   404 rather than appearing to work. */
+.version-picker {
+  position: relative;
+  flex: none;
+  font-family: var(--sans);
+}
+
+.version-current {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Both spellings: the marker is a pseudo-element in WebKit and a list marker
+   everywhere else, and neither selector reaches the other's engine. */
+.version-current::-webkit-details-marker {
+  display: none;
+}
+
+.version-current::marker {
+  content: "";
+}
+
+.version-current:hover {
+  color: var(--wine-ink);
+  border-color: var(--wine);
+}
+
+.version-current .icon {
+  transition: transform 0.15s ease;
+}
+
+.version-picker[open] .version-current .icon {
+  transform: rotate(90deg);
+}
+
+.version-list {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 30;
+  min-width: 9.5rem;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+
+.version-list a {
+  display: block;
+  padding: 0.35rem 0.5rem;
+  color: var(--ink);
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: calc(var(--radius) - 3px);
+}
+
+.version-list a:hover {
+  color: var(--wine-ink);
+  background: color-mix(in srgb, var(--wine) 10%, transparent);
+  text-decoration: none;
+}
+
 /* Icon buttons (theme toggle, mobile nav). */
 .icon-btn {
   display: inline-grid;

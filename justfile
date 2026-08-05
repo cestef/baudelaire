@@ -92,10 +92,29 @@ test features="":
 reference:
     BLESS=1 cargo nextest run --test reference the_checked_in
 
-# Build the docs site the way `.github/workflows/docs.yml` does.
+# Build the docs site from this checkout: the fast local loop, and what a docs
+# edit should be checked with.
 [working-directory('docs')]
-docs:
+docs: versions-list
     cargo run -q -- build
+
+# Refresh the version picker's list: every release `CHANGELOG.md` declares that
+# `git tag` confirms, newest first. Checked in so `baudelaire serve` works in
+# `docs/` on a fresh clone, and rewritten here so the local loop never shows a
+# version that has come or gone since.
+versions-list:
+    docs/versions.sh list > docs/generated/versions.csv
+
+# Build the docs site the way `.github/workflows/docs.yml` deploys it: every
+# published version, each rendered by its own released binary, the newest one at
+# the site root. `docs/data/versions.csv` says which.
+#
+# Needs the network (a binary per version) and the tags fetched (a worktree per
+# version), so it is slower than `just docs` by a lot. Follow it with
+# `themes/demo/build.sh` directly rather than with `just previews`, which would
+# rebuild the root and prune every versioned directory away.
+versions:
+    docs/versions.sh
 
 # Mirror the generated modules for the docs site, so an editor resolves the
 # `@baudelaire/*` imports its templates carry and the `baudelaire:*` imports its

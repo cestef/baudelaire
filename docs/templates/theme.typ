@@ -55,7 +55,47 @@
   lucide("menu"),
 )
 
-#let site-header = h("header", class: "site-header")[
+// The published documentation versions, newest first. Written by
+// `docs/versions.sh` into the tree it is about to build, from the releases
+// `CHANGELOG.md` declares and `git tag` confirms, so the picker offers exactly
+// the versions that were deployed alongside it. The newest is what the site
+// root serves, which is why it is the one labelled.
+#let versions = csv("/generated/versions.csv").map(row => row.first())
+
+// `page.url` arrives base-path prefixed, so a pinned build (`/v0.0.11/write/`)
+// carries its own tag on the front. The picker composes prefixes itself and so
+// needs the path without one.
+#let _unpinned(url) = {
+  let pinned = versions.find(tag => url == "/" + tag or url.starts-with("/" + tag + "/"))
+  if pinned == none {
+    url
+  } else if url.len() == pinned.len() + 1 {
+    "/"
+  } else {
+    url.slice(pinned.len() + 1)
+  }
+}
+
+// Jump to this same page in another version. Plain links, no script: a version
+// that never had this page answers with its own 404 rather than with a picker
+// that silently refused to move.
+#let version-picker(url) = {
+  let here = if url == none { "/" } else { _unpinned(url) }
+  h("details", class: "version-picker")[
+    #h("summary", class: "version-current", {
+      h("span", versions.first())
+      lucide("chevron-right", size: 13)
+    })
+    #h("ul", class: "version-list", for (i, tag) in versions.enumerate() {
+      h("li", link-to(
+        if i == 0 { here } else { "/" + tag + here },
+        if i == 0 { tag + " (latest)" } else { tag },
+      ))
+    })
+  ]
+}
+
+#let site-header(url) = h("header", class: "site-header")[
   #h("a", class: "skip-link", href: "#main", "Skip to content")
   #h("a", class: "brand", href: "/", "Baudelaire")
   #h("nav", class: "top-nav", aria-label: "Primary")[
@@ -64,6 +104,7 @@
     #link-to("/start/themes/", "Themes")
     #link-to("/blog/", "Blog")
   ]
+  #version-picker(url)
   #search-trigger
   #theme-toggle
   #nav-toggle
@@ -283,15 +324,17 @@
 
 // The one page chrome. `sections: none` drops the sidebar and lets the article
 // span the column; `heading: false` suppresses the generated `h1`, for a page
-// that titles itself. The landing page is the only caller of either.
-#let shell(title, main, tags: (), sections: (), heading: true, class: none) = {
+// that titles itself. The landing page is the only caller of either. `url` is
+// the page's own, which only the version picker reads: without it a version
+// jump lands on that version's home rather than on this page.
+#let shell(title, main, tags: (), sections: (), heading: true, class: none, url: none) = {
   set document(title: title)
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
 
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
-  site-header
+  site-header(url)
   h("div", class: classes("layout", ("layout-full", sections == none)))[
     #if sections != none { sidebar(sections) }
     #h("main", class: "content", id: "main")[

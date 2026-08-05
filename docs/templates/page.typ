@@ -25,4 +25,5 @@
   },
   tags: page.frontmatter.at("tags", default: ()),
   sections: sections(page.lang),
+  url: page.url,
 )

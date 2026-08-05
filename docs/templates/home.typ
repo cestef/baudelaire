@@ -8,4 +8,5 @@
   sections: none,
   heading: false,
   class: "home",
+  url: page.url,
 )

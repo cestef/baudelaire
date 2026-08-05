@@ -25,4 +25,4 @@
       if nav.next != none { link-to(nav.next, "Next") }
     })
   }
-}, sections: sections(page.lang))
+}, sections: sections(page.lang), url: page.url)

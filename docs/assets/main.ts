@@ -18,6 +18,7 @@ import { mountSearch } from "baudelaire:search";
 import { mountConfig, mountRecent } from "./_widgets";
 import { initCopyButtons } from "./_copy";
 import { initDemo, initEmit } from "./_home";
+import { initVersionPicker } from "./_versions";
 
 initTheme();
 markActiveNav();
@@ -26,6 +27,7 @@ initNavSections();
 // might sit inside already open.
 keepNavScroll();
 initMobileNav();
+initVersionPicker();
 mountSearch({ styles: false, placeholder: "Search the docs" });
 mountRecent();
 mountConfig();
