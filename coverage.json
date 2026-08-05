@@ -1,11 +1,11 @@
 {
- "badge": "6bbe7792c7e900e3",
- "commit": "6223035d0c35487d7c437edfa847cc7b3b5e86d5",
- "covered": 9866,
+ "badge": "04c0ae044d76e055",
+ "commit": "555b6146b5b9142b86d9cbfbf2e31f8517ee87a8",
+ "covered": 10949,
  "files": {
   "src/announce/mod.rs": [
-   43,
-   45
+   44,
+   46
   ],
   "src/announce/standard/mod.rs": [
    95,
@@ -16,8 +16,8 @@
    21
   ],
   "src/atproto/client.rs": [
-   87,
-   106
+   86,
+   105
   ],
   "src/atproto/id.rs": [
    36,
@@ -28,8 +28,8 @@
    27
   ],
   "src/cli/mod.rs": [
-   254,
-   341
+   374,
+   529
   ],
   "src/cli/prompt.rs": [
    2,
@@ -40,36 +40,36 @@
    8
   ],
   "src/cli/scaffold.rs": [
-   270,
-   351
+   290,
+   392
   ],
   "src/cli/serve.rs": [
-   73,
-   341
+   88,
+   380
   ],
   "src/codegen.rs": [
-   134,
-   142
+   144,
+   151
   ],
   "src/config/defaults.rs": [
-   97,
-   97
+   101,
+   101
   ],
   "src/config/dispatch.rs": [
-   81,
-   82
+   92,
+   94
   ],
   "src/config/mod.rs": [
-   273,
-   286
+   335,
+   347
   ],
   "src/config/node.rs": [
-   114,
-   120
+   119,
+   125
   ],
   "src/config/parse.rs": [
-   577,
-   687
+   602,
+   715
   ],
   "src/config/permalink.rs": [
    74,
@@ -80,32 +80,32 @@
    23
   ],
   "src/config/reference.rs": [
-   71,
-   89
+   75,
+   93
   ],
   "src/config/schema.rs": [
    81,
    93
   ],
   "src/config/url.rs": [
-   54,
-   55
+   64,
+   65
   ],
   "src/config/value.rs": [
    57,
    65
   ],
   "src/content/cache.rs": [
-   75,
-   75
+   86,
+   86
   ],
   "src/content/date.rs": [
    23,
    23
   ],
   "src/content/discovery.rs": [
-   78,
-   78
+   79,
+   79
   ],
   "src/content/frontmatter.rs": [
    197,
@@ -116,16 +116,16 @@
    7
   ],
   "src/content/listing.rs": [
-   122,
-   122
+   127,
+   127
   ],
   "src/content/mod.rs": [
-   44,
-   44
+   52,
+   52
   ],
   "src/content/page.rs": [
-   164,
-   169
+   174,
+   179
   ],
   "src/content/pagination.rs": [
    81,
@@ -160,8 +160,8 @@
    86
   ],
   "src/deploy/s3.rs": [
-   171,
-   182
+   173,
+   183
   ],
   "src/deploy/sigv4.rs": [
    55,
@@ -196,32 +196,32 @@
    70
   ],
   "src/engine/asset/handler.rs": [
-   36,
-   36
+   50,
+   50
   ],
   "src/engine/asset/image.rs": [
-   73,
-   81
+   79,
+   86
   ],
   "src/engine/asset/js.rs": [
-   64,
-   71
+   51,
+   58
   ],
   "src/engine/asset/memo.rs": [
    47,
    51
   ],
   "src/engine/asset/mod.rs": [
-   107,
-   108
+   108,
+   109
   ],
   "src/engine/asset/module/client.rs": [
    23,
    24
   ],
   "src/engine/asset/module/data.rs": [
-   82,
-   82
+   87,
+   87
   ],
   "src/engine/asset/module/declare.rs": [
    21,
@@ -232,16 +232,16 @@
    57
   ],
   "src/engine/check/external.rs": [
-   76,
-   83
+   73,
+   80
   ],
   "src/engine/check/lint.rs": [
    65,
    67
   ],
   "src/engine/check/mod.rs": [
-   55,
-   55
+   54,
+   54
   ],
   "src/engine/compile/bundle.rs": [
    89,
@@ -252,12 +252,12 @@
    51
   ],
   "src/engine/compile/image.rs": [
-   42,
-   47
+   71,
+   79
   ],
   "src/engine/compile/layout.rs": [
-   35,
-   35
+   40,
+   40
   ],
   "src/engine/compile/paged.rs": [
    24,
@@ -268,8 +268,8 @@
    13
   ],
   "src/engine/compile/prepare.rs": [
-   117,
-   119
+   176,
+   181
   ],
   "src/engine/compile/sidecar.rs": [
    42,
@@ -284,28 +284,28 @@
    30
   ],
   "src/engine/emit/feed.rs": [
-   116,
-   122
+   163,
+   169
   ],
   "src/engine/emit/headers.rs": [
    30,
    30
   ],
   "src/engine/emit/llms.rs": [
-   38,
-   39
+   39,
+   40
   ],
   "src/engine/emit/manifest.rs": [
    32,
    32
   ],
   "src/engine/emit/mod.rs": [
-   57,
-   58
+   59,
+   60
   ],
   "src/engine/emit/redirect.rs": [
-   45,
-   45
+   61,
+   61
   ],
   "src/engine/emit/robots.rs": [
    18,
@@ -316,8 +316,8 @@
    16
   ],
   "src/engine/emit/search.rs": [
-   110,
-   110
+   111,
+   111
   ],
   "src/engine/emit/sitemap.rs": [
    32,
@@ -339,6 +339,10 @@
    32,
    32
   ],
+  "src/engine/gate.rs": [
+   15,
+   20
+  ],
   "src/engine/hook.rs": [
    23,
    26
@@ -347,9 +351,17 @@
    15,
    15
   ],
+  "src/engine/links.rs": [
+   39,
+   42
+  ],
   "src/engine/mod.rs": [
-   446,
-   470
+   386,
+   397
+  ],
+  "src/engine/pass.rs": [
+   40,
+   41
   ],
   "src/engine/prune.rs": [
    19,
@@ -364,8 +376,8 @@
    25
   ],
   "src/engine/text.rs": [
-   74,
-   81
+   112,
+   120
   ],
   "src/error/annotated.rs": [
    14,
@@ -388,15 +400,15 @@
    20
   ],
   "src/error/config.rs": [
-   116,
-   125
+   127,
+   136
   ],
   "src/error/content.rs": [
    39,
    41
   ],
   "src/error/deploy.rs": [
-   7,
+   17,
    43
   ],
   "src/error/fs.rs": [
@@ -443,9 +455,13 @@
    18,
    20
   ],
+  "src/error/template.rs": [
+   6,
+   6
+  ],
   "src/error/theme.rs": [
-   7,
-   10
+   11,
+   38
   ],
   "src/error/typ.rs": [
    52,
@@ -464,12 +480,12 @@
    9
   ],
   "src/graph/access.rs": [
-   122,
-   130
+   129,
+   132
   ],
   "src/graph/cache.rs": [
-   161,
-   163
+   175,
+   177
   ],
   "src/graph/deps.rs": [
    5,
@@ -508,8 +524,8 @@
    17
   ],
   "src/remote.rs": [
-   34,
-   46
+   40,
+   52
   ],
   "src/render/asset.rs": [
    17,
@@ -528,8 +544,8 @@
    14
   ],
   "src/render/links.rs": [
-   102,
-   102
+   124,
+   124
   ],
   "src/render/lint/alt.rs": [
    5,
@@ -556,8 +572,8 @@
    27
   ],
   "src/render/mod.rs": [
-   27,
-   27
+   28,
+   28
   ],
   "src/render/origin.rs": [
    31,
@@ -584,8 +600,8 @@
    26
   ],
   "src/render/transform/externalize.rs": [
-   24,
-   24
+   67,
+   69
   ],
   "src/render/transform/fingerprint.rs": [
    8,
@@ -612,24 +628,24 @@
    7
   ],
   "src/render/transform/meta.rs": [
-   206,
-   212
+   210,
+   216
   ],
   "src/render/transform/mod.rs": [
-   114,
-   115
+   121,
+   121
   ],
   "src/render/transform/outbound.rs": [
    11,
    12
   ],
   "src/render/transform/rewrite.rs": [
-   33,
-   34
+   38,
+   38
   ],
   "src/render/transform/sources.rs": [
-   19,
-   23
+   22,
+   26
   ],
   "src/render/transform/spans.rs": [
    7,
@@ -647,9 +663,37 @@
    114,
    117
   ],
-  "src/theme.rs": [
-   32,
+  "src/theme/archive.rs": [
+   74,
+   99
+  ],
+  "src/theme/bundled.rs": [
+   36,
    39
+  ],
+  "src/theme/forge.rs": [
+   53,
+   75
+  ],
+  "src/theme/install.rs": [
+   95,
+   118
+  ],
+  "src/theme/local.rs": [
+   33,
+   40
+  ],
+  "src/theme/mod.rs": [
+   48,
+   48
+  ],
+  "src/theme/package.rs": [
+   6,
+   17
+  ],
+  "src/theme/source.rs": [
+   42,
+   61
   ],
   "src/ui/fmt.rs": [
    91,
@@ -680,8 +724,8 @@
    37
   ],
   "src/world/context.rs": [
-   73,
-   75
+   74,
+   76
   ],
   "src/world/generated.rs": [
    19,
@@ -692,16 +736,16 @@
    16
   ],
   "src/world/mod.rs": [
-   158,
-   179
+   164,
+   181
   ],
   "src/world/module/builtin.rs": [
    12,
    12
   ],
   "src/world/module/mod.rs": [
-   81,
-   83
+   95,
+   98
   ],
   "src/world/module/package.rs": [
    34,
@@ -712,8 +756,8 @@
    7
   ]
  },
- "percent": 87.66,
+ "percent": 87.15,
  "schema": 2,
- "total": 11255,
- "updated": "2026-08-04T06:16:11+00:00"
+ "total": 12563,
+ "updated": "2026-08-05T06:17:35+00:00"
 }
