@@ -100,7 +100,7 @@ impl Card<'_> {
     fn tags(&mut self) -> Vec<HtmlNode> {
         let facts = self.facts();
         let mut tags = Vec::new();
-        self.document(&facts, &mut tags);
+        Self::document(&facts, &mut tags);
         self.opengraph(&facts, &mut tags);
         Self::twitter(&facts, &mut tags);
         if let Some(url) = &facts.canonical {
@@ -276,23 +276,29 @@ impl Card<'_> {
             // Only when it actually moved: `modified` falls back to the publish
             // date, and restating that as a modification says nothing.
             modified: fm.updated.map(|d| Iso(d).to_string()),
-            author: fm.text("author").or_else(|| self.config.author.clone()),
+            // The site's answer for *this page's language*: a
+            // `languages { fr { author .. } }` site read the bare field here
+            // and the language-aware one where the document tag was written, so
+            // `<meta name="author">` and `article:author` named two different
+            // people on the same page.
+            author: fm
+                .text("author")
+                .or_else(|| self.config.author(&self.page.lang).map(str::to_owned)),
             terms: fm.taxonomies.values().flatten().cloned().collect(),
         }
     }
 
     /// The document-level tags, which predate every social vocabulary.
-    fn document(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+    ///
+    /// Reads [`Facts`] like every other vocabulary rather than resolving the
+    /// author a second time: two resolutions are two chances to disagree, and
+    /// these two did.
+    fn document(facts: &Facts, tags: &mut Vec<HtmlNode>) {
         if let Some(description) = &facts.description {
             tags.push(Self::named("description", description));
         }
-        let author = self
-            .page
-            .frontmatter
-            .text("author")
-            .or_else(|| self.config.author(&self.page.lang).map(str::to_owned));
-        if let Some(author) = author {
-            tags.push(Self::named("author", &author));
+        if let Some(author) = &facts.author {
+            tags.push(Self::named("author", author));
         }
     }
 
@@ -498,6 +504,50 @@ mod tests {
         assert_eq!(Card::locale("zh-Hant"), "zh");
         assert_eq!(Card::locale("zh-Hant-TW"), "zh_TW");
         assert_eq!(Card::locale("fr"), "fr");
+    }
+
+    /// Every vocabulary reads one resolved author. The document tag resolved
+    /// its own, language-aware, while [`super::Facts`] resolved the bare
+    /// site-wide field: on a site with `languages { fr { author .. } }` the two
+    /// named different people on the same page.
+    #[test]
+    fn the_document_author_is_the_one_the_facts_resolved() {
+        let facts = super::Facts {
+            title: "T".into(),
+            description: None,
+            image: None,
+            alt: None,
+            canonical: None,
+            kind: "article",
+            published: None,
+            modified: None,
+            author: Some("Camille".into()),
+            terms: Vec::new(),
+        };
+        let mut tags = Vec::new();
+
+        Card::document(&facts, &mut tags);
+
+        assert_eq!(
+            tags.len(),
+            1,
+            "a description-less page tags only its author"
+        );
+        let typst_html::HtmlNode::Element(el) = &tags[0] else {
+            panic!("expected an element")
+        };
+        assert_eq!(
+            el.attrs
+                .get(typst_html::attr::name)
+                .map(typst::ecow::EcoString::as_str),
+            Some("author")
+        );
+        assert_eq!(
+            el.attrs
+                .get(typst_html::attr::content)
+                .map(typst::ecow::EcoString::as_str),
+            Some("Camille")
+        );
     }
 
     /// A title carrying `</script>` would close the island early and spill the
