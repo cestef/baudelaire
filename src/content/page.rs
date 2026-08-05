@@ -29,6 +29,17 @@ pub enum Data {
         /// typst error and a `data-typst` stamp both name the `.md` line rather
         /// than a line of generated source under a virtual path.
         sourcemap: std::sync::Arc<crate::content::SourceMap>,
+        /// How long the page takes to read, measured on the markdown its author
+        /// wrote.
+        ///
+        /// Carried rather than derived later because the lowered body is the
+        /// only text a reader of this page has, and it is machinery to the last
+        /// line: every line of it opens with `#`, which
+        /// [`Reading::of`](crate::engine::text::Reading::of) reads as code, so
+        /// a page measured from it reported no words at all. Taken here, where
+        /// the authored body is in hand and has already been split from the
+        /// frontmatter block.
+        reading: crate::engine::text::Reading,
     },
     /// A generated listing with no file: the wrapper inlines `dict` (built by
     /// [`crate::codegen::Value`]) together with the generated body.

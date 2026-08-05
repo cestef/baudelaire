@@ -46,10 +46,15 @@ const GATES: &[Gate] = &[
         cargo: "markdown",
         compiled: cfg!(feature = "markdown"),
         setting: "content { markdown }",
-        // Wrote the node *and* left it on: a site that says `markdown #false`
-        // has decided against the capability, and warning that it is missing
-        // would answer a question it did not ask.
-        asked: |config| config.content.markdown.present && config.content.markdown.enabled,
+        // Asked by writing a `.md` page, not by writing the node: markdown is on
+        // by default and a `.md` file under `content/` is simply a page, so the
+        // documented way to want it is to say nothing at all. Reading the node
+        // instead, a slim binary on such a site discovered no markdown pages,
+        // warned about nothing, and let the prune delete the HTML a
+        // full-featured build had written for them. A site that says
+        // `markdown #false` has decided against the capability, and warning that
+        // it is missing would answer a question it did not ask.
+        asked: Gate::markdown,
         effect: "`.md` files under `content/` are not pages, and are left where they lie",
         rewrites: false,
     },
@@ -318,6 +323,24 @@ impl From<&Inert> for SettingInert {
 }
 
 impl Gate {
+    /// Whether this site has markdown pages to lose: the capability is on (it
+    /// is, unless the site turned it off) and at least one `.md` file sits under
+    /// the content tree.
+    ///
+    /// A filesystem probe rather than a config read, because a markdown page
+    /// asks for nothing: it is a file. It costs one walk of the content tree,
+    /// and only in a binary that cannot do markdown, since [`Gate::resolve`]
+    /// tests `compiled` first and never reaches this in the full-featured build.
+    /// An unreadable tree answers no: discovery reports that, with the path.
+    fn markdown(config: &Config) -> bool {
+        config.content.markdown.enabled
+            && crate::fs::Walk::new(&config.paths.content)
+                .files()
+                .unwrap_or_default()
+                .iter()
+                .any(|path| path.extension().is_some_and(|ext| ext == "md"))
+    }
+
     /// Walk the table once against a site's config: name every capability it
     /// asked for that this binary lacks, and turn `assets { fingerprint }` off
     /// when what would have kept it honest is missing.
@@ -390,6 +413,33 @@ mod tests {
         let (resolved, gaps) = Gate::resolve(config(""));
         assert!(!resolved.assets.fingerprint);
         assert!(gaps.is_empty());
+    }
+
+    /// Markdown is asked for by writing a page, not by writing a config node:
+    /// `.md` files are pages by default, so the documented way to want them is
+    /// to say nothing at all. Reading the node instead, a binary without the
+    /// feature discovered no markdown pages on such a site, said nothing, and
+    /// let the prune delete the HTML a full-featured build had written.
+    #[test]
+    fn markdown_is_asked_for_by_a_page_on_disk_not_by_a_config_node() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let content = tmp.path().join("content");
+        std::fs::create_dir_all(content.join("posts")).expect("content tree");
+        let site = |text: &str| {
+            let mut config = config(text);
+            config.paths.content.clone_from(&content);
+            config
+        };
+        // A site with no markdown, and no config about it, is asking for nothing.
+        assert!(!Gate::markdown(&site("")));
+        std::fs::write(content.join("posts/a.typ"), "= a\n").expect("typst page");
+        assert!(!Gate::markdown(&site("")));
+        // One `.md` file is the whole of the ask, config or no config.
+        std::fs::write(content.join("posts/b.md"), "# b\n").expect("markdown page");
+        assert!(Gate::markdown(&site("")));
+        // ...and a site that turned the capability off has decided against it,
+        // whatever is lying in its content tree.
+        assert!(!Gate::markdown(&site("content { markdown #false }")));
     }
 
     /// A gate names the config that asks for it, and codes read as identity, so

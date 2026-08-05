@@ -10,6 +10,7 @@
 //! the one part that is genuinely its own, recompiling a page.
 
 use rayon::prelude::*;
+use typst::syntax::Source;
 
 use crate::content::{Data, Page};
 use crate::error::Result;
@@ -61,7 +62,7 @@ impl Graph {
                 None => Some((
                     page,
                     Outbound::scanned(
-                        &project.source(&page.source).ok()?,
+                        &Self::scannable(project, page)?,
                         &page.source,
                         &page.permalink,
                         links,
@@ -71,6 +72,25 @@ impl Graph {
             })
             .collect();
         Backlinks::new(edges.iter().map(|(page, outbound)| (*page, outbound)))
+    }
+
+    /// The Typst a page's literal links are read out of: the file its author
+    /// wrote, or, for a page whose source is not Typst at all, the Typst it
+    /// lowered to, which the engine is already holding.
+    ///
+    /// The scan looks for string literals, and a markdown page has none where
+    /// its links are: `[B](b.typ)` is content followed by text, not an
+    /// `ast::Str`. Parsed as Typst, every `.md` page was predicted to link
+    /// nowhere, and every one of them cost a repair round on a cold build.
+    fn scannable(project: &Project, page: &Page) -> Option<Source> {
+        match &page.data {
+            #[cfg(feature = "markdown")]
+            Data::Lowered { .. } => Some(Source::new(
+                typst::syntax::FileId::new(project.virtualize(&page.source).ok()?),
+                page.body.clone(),
+            )),
+            _ => project.source(&page.source).ok(),
+        }
     }
 
     /// Make every page's backlinks true, compiling again the ones whose

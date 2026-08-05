@@ -223,7 +223,15 @@ impl<'a> DiscoveryCache<'a> {
 
         let value = crate::codegen::Value::from(&typst::foundations::Value::Dict(dict));
         let dict = crate::codegen::Typst(&value).to_string();
-        let data = |sourcemap| Data::Lowered { dict, sourcemap };
+        // Measured here, on the body the author wrote: what the lowering
+        // produces is Typst code line for line, and a reading estimate taken
+        // from *that* counts none of the prose. See [`Data::Lowered`].
+        let reading = crate::engine::text::Reading::markdown(document.body);
+        let data = |sourcemap| Data::Lowered {
+            dict,
+            sourcemap,
+            reading,
+        };
         let (body, sourcemap) =
             Markdown::new(&document, &text, &named, &config.content.markdown).lower()?;
         Ok((frontmatter, data(std::sync::Arc::new(sourcemap)), body))

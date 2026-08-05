@@ -286,6 +286,45 @@ fn a_new_page_joins_the_bundle() {
     assert_ne!(before, after, "the new page has to be in the document");
 }
 
+/// A markdown page joins a bundle as the Typst it lowered to, exactly as it
+/// reaches its own compile and its own sidecar.
+///
+/// Bound by `#include` instead, typst was handed raw markdown: a page carrying a
+/// heading line failed the build outright (`expected expression`, pointed into
+/// the `.md`), and one without built green and bound the file verbatim, fences
+/// and all, with no frontmatter -- so the document had no title for it. The
+/// template here refuses the second outcome, and the build refuses the first.
+#[test]
+#[cfg(feature = "markdown")]
+fn a_markdown_page_binds_as_the_typst_it_lowered_to() {
+    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts" } }"#);
+    site.write(
+        "templates/book.typ",
+        "#let book(doc, entries) = {\n\
+         heading(level: 1, doc.title)\n\
+         for e in entries {\n\
+         assert(\"title\" in e.page.frontmatter, message: repr(e.page.frontmatter))\n\
+         heading(level: 2, e.page.frontmatter.title)\n\
+         e.body\n\
+         }\n\
+         }\n",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\",)\nfirst",
+    );
+    site.write(
+        "content/posts/b.md",
+        ";;;\ntitle \"B\"\n;;;\n\n## A heading\n\nSecond, with **emphasis**.\n",
+    );
+    let stats = site.stats();
+
+    assert_eq!(stats.pages, 2, "both pages built");
+    assert!(is_pdf(
+        &std::fs::read(site.path("public/posts.pdf")).expect("bundle")
+    ));
+}
+
 /// The sidecar rule applies to bundles too: a file deleted from `dist` while the
 /// cache stays warm has to come back.
 #[test]

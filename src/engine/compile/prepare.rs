@@ -242,7 +242,7 @@ impl<'a> Prepare<'a> {
         let strings = Typst(&self.strings(&page.lang)).to_string();
         // Derived from this page's own body, so it names nothing outside the
         // page and cannot widen the fingerprint the way a site-wide value would.
-        let reading = Typst(&Self::reading(&page.body)).to_string();
+        let reading = Typst(&Self::reading(page)).to_string();
         // Names only the pages that link *here*, the same line `nav` sits on: a
         // page's neighbours, never the site. What keeps it out of the page's
         // fingerprint is in [`Prepare::input`], not here.
@@ -283,6 +283,12 @@ impl<'a> Prepare<'a> {
     /// neighbours (`posts/hello.typ`) gets an empty dict rather than a listing
     /// of the whole section, which would be a site-wide value in disguise.
     ///
+    /// A page is not an asset, whichever dialect it is written in, so every
+    /// extension [`Config::sources`] names is skipped. Spelled `typ` here, it
+    /// listed the page's own `index.md` and every sibling `.md` page as assets,
+    /// at URLs nothing publishes: a template iterating `page.assets` rendered
+    /// dead links.
+    ///
     /// The URL is where the image pipeline publishes an extracted file, which is
     /// what makes a frontmatter `hero: "cover.png"` resolvable from a template.
     /// Only what a page *shows* is written to `dist` (see
@@ -304,13 +310,20 @@ impl<'a> Prepare<'a> {
         }
         let root = crate::fs::canonical(&self.config.root);
         let content = crate::fs::canonical(&self.config.paths.content);
+        // A page is not an asset, whichever dialect it is written in.
+        let sources = self.config.sources();
+        let is_page = |path: &std::path::Path| {
+            path.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|ext| sources.contains(&ext))
+        };
         let mut entries: Vec<(String, Value)> = Vec::new();
         let Ok(read) = std::fs::read_dir(dir) else {
             return Value::dict::<&str>([]);
         };
         for file in read.flatten() {
             let path = file.path();
-            if !path.is_file() || path.extension().is_some_and(|e| e == "typ") {
+            if !path.is_file() || is_page(&path) {
                 continue;
             }
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -446,8 +459,19 @@ impl<'a> Prepare<'a> {
     /// A page's reading estimate as a typst dict value:
     /// `(words: 1200, minutes: 6)`, exposed to the template as `page.reading`
     /// for a "6 min read" badge.
-    fn reading(body: &str) -> Value {
-        let reading = crate::engine::text::Reading::of(body);
+    ///
+    /// Taken from the page's own source, whatever that source is. A page whose
+    /// body is *generated* Typst carries an estimate of its own, measured on the
+    /// text its author actually wrote and taken while that text was in hand:
+    /// reading the generated body counts machinery and not prose, since every
+    /// line of a lowered markdown page opens with `#`, and each one shipped
+    /// `0 min read`.
+    fn reading(page: &Page) -> Value {
+        let reading = match &page.data {
+            #[cfg(feature = "markdown")]
+            Data::Lowered { reading, .. } => *reading,
+            _ => crate::engine::text::Reading::of(&page.body),
+        };
         Value::dict([
             (
                 "words",

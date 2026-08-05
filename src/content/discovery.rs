@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use wax::Glob;
 use wax::prelude::*;
 
-use crate::config::{CollectionConfig, Config, SortKey};
+use crate::config::{CollectionConfig, Config, Paths, SortKey};
 use crate::content::Page;
 use crate::content::cache::DiscoveryCache;
 use crate::error::{ContentError, Result};
@@ -71,8 +71,18 @@ impl Collection {
 /// pattern matches, wherever it lives. Files no glob claims fall back to
 /// convention: one in a subdirectory joins a collection named after that top
 /// directory; one directly under `content/` joins `_root` (mapped to `/`).
+///
+/// A content directory that is not there is two different situations, and only
+/// one of them is a mistake. A site that never named one is either mid-scaffold
+/// or has no pages at all (a site of nothing but `static` files is a site too):
+/// it builds to nothing, quietly, and the prune declines to sweep a `dist` no
+/// page backs. A site that *named* one has made a claim about its own layout,
+/// and a name resolving to nothing is a typo -- `paths { content "conten" }`
+/// reported a successful build of zero pages, and with `prune` on, that swept
+/// the published site away. So the walk below is left to report it, naming the
+/// directory it could not read.
 pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
-    if !config.paths.content.exists() {
+    if !config.paths.content.exists() && !Discovery::named(config) {
         return Ok(Vec::new());
     }
     // Owned here because the analyzer's roots borrow them, and it lives as long
@@ -126,6 +136,26 @@ impl<'a> Discovery<'a> {
             .into_iter()
             .map(|(id, pages)| Collection::new(id, pages, self.config))
             .collect())
+    }
+
+    /// Whether the site named its content directory something other than the
+    /// default, which is what makes a missing one an error rather than an empty
+    /// site.
+    ///
+    /// Compared against [`Paths::default`], the one place that default is
+    /// written, rather than recorded as the key having been present: a site
+    /// spelling out the default spelling reads as not having named it, and the
+    /// only case that loses is a typo whose result is the default itself, which
+    /// is not a typo anyone makes.
+    ///
+    /// The comparison is on the final component alone, because a configured path
+    /// does not always reach here as it was written: a caller that resolves the
+    /// layout against a project root hands over an absolute path, and one
+    /// compared whole would then read as named on every site there is. What a
+    /// directory is *called* survives that.
+    fn named(config: &Config) -> bool {
+        let default = Paths::default().content;
+        config.paths.content.file_name() != default.file_name()
     }
 
     /// Every content file under `dir`, recursively, skipping dotfiles and

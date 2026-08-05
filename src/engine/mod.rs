@@ -254,7 +254,7 @@ impl Engine {
         assets.publish()?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
         let generated = self.generate(&planned.pages, &outputs, &statics, ui)?;
-        self.sweep(&outputs, &statics, &generated, &bundled)?;
+        self.sweep(ui, &outputs, &statics, &generated, &bundled)?;
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
 
@@ -592,14 +592,28 @@ impl Engine {
     /// passthrough, generated files. The asset tree is regenerated wholesale, so
     /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
     /// are not ours to prune.
+    ///
+    /// A build that produced no page at all sweeps nothing, whatever `prune`
+    /// says. That is the one case where "everything in `dist` is orphaned" is
+    /// almost certainly a mistake rather than a fact: a mistyped content path, a
+    /// command run from the wrong directory, a binary that cannot read the
+    /// dialect the pages are written in. Each of those is a green build whose
+    /// keep-set is empty, and the sweep would answer it by deleting the
+    /// published site. A site that genuinely has no pages loses nothing but a
+    /// tidy `dist`.
     fn sweep(
         &self,
+        ui: &Ui,
         outputs: &[Output],
         statics: &Copied,
         generated: &Generated,
         bundled: &Bundled,
     ) -> Result<()> {
         if !self.config.prune {
+            return Ok(());
+        }
+        if outputs.is_empty() {
+            ui.warn(crate::error::warning::PruneEmpty);
             return Ok(());
         }
         // A sidecar belongs to its page whether or not this build re-drew it,

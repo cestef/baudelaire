@@ -212,6 +212,142 @@ scenario "a site with no content builds without error" {
   }
 }
 
+// A content path naming a directory that is not there used to build zero pages
+// and report success. With `prune` on, the sweep then answered an empty
+// keep-set the only way it could, by deleting the published site: `built 0
+// pages`, exit 0, and an empty `dist`. A site that *named* a directory has made
+// a claim about its own layout, so the walk is left to report the one it could
+// not read.
+scenario "a content path naming nothing is an error, not an empty site" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "conten" }
+      prune #true
+      """#
+    "content/a.typ" #"""
+      = A
+      """#
+  }
+  expect {
+    fails { code "baudelaire::fs::read_directory" }
+  }
+}
+
+// The other half of the same defence, for every way of finding no pages that is
+// not a mistyped path: a build with an empty keep-set sweeps nothing, whatever
+// `prune` says. "everything in `dist` is orphaned" is a conclusion no build that
+// found nothing has earned.
+scenario "a build that produces no pages sweeps nothing" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      prune #true
+      """#
+    "content/a.typ" #"""
+      = A
+      """#
+  }
+  build {
+    expect {
+      ok
+      pages 1
+      file "a/index.html"
+    }
+  }
+  build {
+    remove "content/a.typ"
+    expect {
+      ok
+      pages 0
+      // The previous build's page is still served rather than swept.
+      file "a/index.html"
+    }
+  }
+}
+
+// `page.assets` is the files sitting beside a page bundle. A page is not one of
+// them, whichever dialect it is written in: the extension test was spelled
+// `typ`, so a bundle listed its own `index.md` and every sibling `.md` page as
+// an asset, at URLs nothing publishes.
+scenario "a bundle's assets list its files, never its sibling pages" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      content {
+        collections {
+          posts { template "post.typ" }
+        }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", page.assets.keys().sorted().join(","))
+      """#
+    "content/posts/hello/index.md" #"""
+      ;;;
+      title "Hello"
+      ;;;
+
+      A bundle.
+      """#
+    "content/posts/hello/note.md" #"""
+      ;;;
+      title "Note"
+      ;;;
+
+      A neighbour, which is a page and not an asset.
+      """#
+    "content/posts/hello/notes.txt" #"""
+      a real asset
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" {
+      contains "notes.txt"
+      missing "note.md"
+      missing "index.md"
+    }
+  }
+}
+
+// `page.reading` is measured on the markdown its author wrote, never on the
+// typst that markdown lowers to: every line of that opens with `#`, which the
+// estimate reads as code, so every markdown page shipped `0 min read`.
+scenario "a markdown page's reading estimate counts its prose" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", [words=#page.reading.words])
+      """#
+    "content/post.md" #"""
+      ;;;
+      title "Hello"
+      template "post.typ"
+      ;;;
+
+      Three plain words, plus **one** more.
+
+      ```rust
+      let a = 1;
+      let b = 2;
+      ```
+      """#
+  }
+  expect {
+    ok
+    // Six words of prose; the fence is machinery, and the frontmatter block is
+    // not prose either.
+    file "post/index.html" {
+      contains "words=6"
+    }
+  }
+}
+
 // typst bakes highlight colours inline and offers no class option, so a themed
 // site had to author sentinel hex values and win them back with
 // `pre code [style*="e5d004"] { ... !important }`. The block moves the palette

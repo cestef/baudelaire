@@ -156,21 +156,31 @@ impl<'a> Bundle<'a> {
                     .vpath()
                     .get_without_slash()
             );
-            // A page with no `frontmatter` export has nothing to import, and an
-            // empty dict is what its own compile passes too.
-            let frontmatter = match page.data {
+            // Where this page's frontmatter and body come from, exactly as
+            // `Prepare::bound` decides it for the page's own compile: the two
+            // must agree, or a page reads one way on screen and another on
+            // paper. A page with no `frontmatter` export has nothing to import,
+            // and an empty dict is what its own compile passes too.
+            let (frontmatter, body) = match &page.data {
                 Data::Export => {
                     let alias = format!("__fm{i}");
                     writeln!(imports, "#import {}: frontmatter as {alias}", Str(&vpath))
                         .expect("writing to a String cannot fail");
-                    alias
+                    (alias, format!("include {}", Str(&vpath)))
                 }
-                _ => "(:)".to_owned(),
+                // A markdown page has a file, but not one the compiler could
+                // `#include`: its frontmatter is the dict it lowered to and its
+                // body is the Typst it lowered to, inlined as a content block.
+                // Included instead, typst was handed raw markdown, and the
+                // document either failed on the first heading or bound the page
+                // verbatim -- fences, `#` and all, its title gone.
+                #[cfg(feature = "markdown")]
+                Data::Lowered { dict, .. } => (dict.clone(), format!("[{}]", page.body)),
+                _ => ("(:)".to_owned(), format!("include {}", Str(&vpath))),
             };
             entries.push(format!(
-                "(page: {}, body: include {})",
-                prepare.dict(page, &frontmatter),
-                Str(&vpath)
+                "(page: {}, body: {body})",
+                prepare.dict(page, &frontmatter)
             ));
         }
         Ok(Module {

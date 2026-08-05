@@ -271,10 +271,15 @@ impl Text {
 
 /// How long a page takes to read: its word count, and the minutes that implies.
 ///
-/// Counted from the page's *typst source*, not its rendered HTML, because that
-/// is the only version available when a template is handed its page: the render
-/// has not happened yet, and a listing entry is built earlier still. The cost is
-/// that it is an estimate, which a reading time is anyway.
+/// Counted from the page's *source*, not from its rendered HTML, because that is
+/// the only version available when a template is handed its page: the render has
+/// not happened yet, and a listing entry is built earlier still. The cost is that
+/// it is an estimate, which a reading time is anyway.
+///
+/// Source means the text the author wrote, in the dialect they wrote it: one
+/// constructor per dialect, because what counts as machinery is exactly what
+/// differs between them, and a page measured by the other one's rule reads as
+/// nothing at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub words: usize,
@@ -295,13 +300,77 @@ impl Reading {
     /// markup and all: an inline `#emph[word]` is one word, which is what it
     /// reads as.
     pub fn of(body: &str) -> Self {
-        let words = body
-            .lines()
-            .map(str::trim_start)
-            .filter(|line| !line.starts_with('#') && !line.starts_with("//"))
-            .flat_map(str::split_whitespace)
+        Self::counted(
+            body.lines()
+                .map(str::trim_start)
+                .filter(|line| !line.starts_with('#') && !line.starts_with("//"))
+                .map(Self::words)
+                .sum(),
+        )
+    }
+
+    /// Estimate `body`, the markdown an author wrote, rather than the typst it
+    /// lowers to.
+    ///
+    /// It has to be the authored text. Every line the lowering emits begins with
+    /// `#` (`#"prose"`, `#heading(level: 2)[`, `#list(`), which is the very
+    /// shape [`Reading::of`] reads as machinery, so a lowered page counted as
+    /// nothing at all and every markdown page shipped "0 min read".
+    ///
+    /// The rule is [`Reading::of`]'s, translated: a fenced code block is what a
+    /// `#`-line is there, machinery rather than prose, and everything else is
+    /// counted with its markup, an inline `**word**` reading as the one word it
+    /// is. A heading is prose here, unlike in typst, because `#` opens one
+    /// rather than opening code.
+    #[cfg(feature = "markdown")]
+    pub fn markdown(body: &str) -> Self {
+        let mut fence: Option<&str> = None;
+        let mut words = 0;
+        for line in body.lines() {
+            let line = line.trim_start();
+            // Inside a block, the only line that matters is the one closing it,
+            // and a closing fence is at least as long as the one it closes: the
+            // opening run is the needle rather than the whole line.
+            if let Some(open) = fence {
+                if line.starts_with(open) {
+                    fence = None;
+                }
+                continue;
+            }
+            match Self::opens(line) {
+                Some(open) => fence = Some(open),
+                None => words += Self::words(line),
+            }
+        }
+        Self::counted(words)
+    }
+
+    /// The fence a line opens a code block with: a run of three or more
+    /// backticks or tildes, without whatever info string follows it.
+    #[cfg(feature = "markdown")]
+    fn opens(line: &str) -> Option<&str> {
+        let marker = line.chars().next().filter(|c| *c == '`' || *c == '~')?;
+        // Both markers are one byte, so the trimmed difference is the run's
+        // length in characters as well as in bytes.
+        let run = line.len() - line.trim_start_matches(marker).len();
+        if run < 3 {
+            return None;
+        }
+        Some(&line[..run])
+    }
+
+    /// The prose words in one line: whitespace-separated runs carrying at least
+    /// one alphanumeric, so a bare `=` or `-` marker is punctuation rather than
+    /// a word.
+    fn words(line: &str) -> usize {
+        line.split_whitespace()
             .filter(|word| word.chars().any(char::is_alphanumeric))
-            .count();
+            .count()
+    }
+
+    /// The estimate a word count implies. The one place [`Reading::WPM`] is
+    /// applied, so the two dialects cannot round differently.
+    fn counted(words: usize) -> Self {
         Self {
             words,
             minutes: words.div_ceil(Self::WPM),
@@ -423,5 +492,51 @@ mod tests {
         assert_eq!(Reading::of("").minutes, 0, "nothing takes no time");
         let long = "word ".repeat(401);
         assert_eq!(Reading::of(&long).minutes, 3, "401 words rounds up to 3");
+    }
+
+    /// A markdown page is estimated from the markdown, never from the typst it
+    /// lowers to: every line of that starts with `#`, so reading the lowered
+    /// body counted nothing at all and every `.md` page shipped `0 min read`.
+    #[test]
+    #[cfg(feature = "markdown")]
+    fn reading_counts_markdown_prose_and_skips_its_code_fences() {
+        use super::Reading;
+        let body = "## A heading\n\
+                    \n\
+                    Three plain words, plus **one** more.\n\
+                    \n\
+                    ```rust\n\
+                    let a = 1;\n\
+                    let b = 2;\n\
+                    ```\n\
+                    \n\
+                    - a list item\n";
+        // The heading contributes `A heading` (the `##` is punctuation, not a
+        // word), the sentence six, the list item three, and the fence none.
+        assert_eq!(Reading::markdown(body).words, 11);
+        assert_eq!(Reading::markdown(body).minutes, 1);
+        // ...and the lowered typst of the very same page reads as nothing,
+        // which is what makes the authored text the only thing worth counting.
+        let lowered = "#heading(level: 2)[#\"A heading\"]\n\
+                       #\"Three plain words, plus \"#strong[#\"one\"]#\" more.\"\n";
+        assert_eq!(Reading::of(lowered).words, 0);
+        assert_eq!(Reading::markdown("").words, 0);
+    }
+
+    /// A fence closes on a run at least as long as the one that opened it, and
+    /// an unterminated one runs to the end of the page rather than counting the
+    /// rest of it as prose.
+    #[test]
+    #[cfg(feature = "markdown")]
+    fn a_longer_fence_closes_a_shorter_one_and_an_unclosed_fence_ends_the_page() {
+        use super::Reading;
+        assert_eq!(
+            Reading::markdown("```\ncode words here\n````\nprose words\n").words,
+            2
+        );
+        assert_eq!(Reading::markdown("~~~\ncode here\n~~~\nprose\n").words, 1);
+        assert_eq!(Reading::markdown("prose\n```\nnever closed\n").words, 1);
+        // Two backticks are inline code, not a fence: the line is prose.
+        assert_eq!(Reading::markdown("`` a b ``\n").words, 2);
     }
 }
