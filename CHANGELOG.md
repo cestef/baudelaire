@@ -115,6 +115,14 @@ chores are visible in the git history and change nothing for a site.
     :          -
   ```
 
+- **init**: an interactive run asks what to start from, offering the four
+  starter shapes and the four themes the binary carries, each with the line that
+  describes it. Naming one on the command line (`-t`, `--theme`) answers the
+  question and skips the prompt, and `-y` takes the default shape, as before.
+  Choosing a theme writes it into `themes/<name>` and names that directory in
+  the config, so the answer is a site that builds rather than one with a theme
+  still to find.
+
 - A frontmatter `date` may be written as an ISO day (`date: "2024-01-01"`), not
   only as `datetime(year: .., month: .., day: ..)`. KDL has no date literal, so
   a markdown page needs the string form; a typst page gets it too, since both

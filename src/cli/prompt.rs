@@ -15,10 +15,12 @@ use crate::error::Result;
 use crate::remote::Interaction;
 
 /// One selectable option: the words that choose it (the first is shown as the
-/// label, all are accepted as input) and the value it yields when picked.
+/// label, all are accepted as input), the value it yields when picked, and an
+/// optional line describing it, shown while it is highlighted.
 struct Opt<'a, T> {
-    keys: &'a [&'a str],
+    keys: Vec<&'a str>,
     value: T,
+    about: Option<&'a str>,
 }
 
 /// A styled single-choice prompt. Build it with [`Prompt::new`], add options with
@@ -39,14 +41,36 @@ impl<'a, T: Clone> Prompt<'a, T> {
     }
 
     /// Add an option. `keys[0]` is its label; every key matches typed input.
-    pub fn option(mut self, keys: &'a [&'a str], value: T) -> Self {
-        self.options.push(Opt { keys, value });
+    pub fn option(mut self, keys: &[&'a str], value: T) -> Self {
+        self.options.push(Opt {
+            keys: keys.to_vec(),
+            value,
+            about: None,
+        });
         self
+    }
+
+    /// Add an option chosen by one word, which is also its label. What a prompt
+    /// built from a table wants: each row is its own key, and a borrowed slice
+    /// per row would need somewhere to live for as long as the prompt does.
+    pub fn one(self, key: &'a str, value: T) -> Self {
+        self.option(std::slice::from_ref(&key), value)
     }
 
     /// Mark the most recently added option as the default (taken on empty input).
     pub fn default(mut self) -> Self {
         self.default = self.options.len().saturating_sub(1);
+        self
+    }
+
+    /// Describe the most recently added option, in the [`Prompt::default`]
+    /// style. The line shows under the chips while that option is highlighted,
+    /// which is what makes a prompt over a table of names readable: the names
+    /// alone (`albatros`, `spleen`) say nothing to someone choosing.
+    pub fn about(mut self, line: &'a str) -> Self {
+        if let Some(last) = self.options.last_mut() {
+            last.about = Some(line);
+        }
         self
     }
 
@@ -65,12 +89,16 @@ impl<'a, T: Clone> Prompt<'a, T> {
             .checked_sub(1)
             .expect("Prompt built with no options");
         let mut selected = self.default;
+        // How many lines the last draw left behind, so the next one can take
+        // them back: the chip row is one, and an option describing itself adds
+        // another.
+        let mut drawn = 0;
         loop {
-            self.render(&term, selected, false)?;
+            self.render(&term, selected, false, &mut drawn)?;
             // A read failure (EOF, closed terminal) falls back to the default,
             // as the module contract promises: it must never error out of init.
             let Ok(key) = term.read_key() else {
-                self.render(&term, self.default, true)?;
+                self.render(&term, self.default, true, &mut drawn)?;
                 return Ok(self.chosen(self.default));
             };
             match key {
@@ -91,11 +119,11 @@ impl<'a, T: Clone> Prompt<'a, T> {
                     }
                 }
                 Key::Enter => {
-                    self.render(&term, selected, true)?;
+                    self.render(&term, selected, true, &mut drawn)?;
                     return Ok(self.chosen(selected));
                 }
                 Key::Escape => {
-                    self.render(&term, self.default, true)?;
+                    self.render(&term, self.default, true, &mut drawn)?;
                     return Ok(self.chosen(self.default));
                 }
                 _ => {}
@@ -107,11 +135,21 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self.options[i].value.clone()
     }
 
-    /// Redraw the prompt line in place. While choosing, options render as a row of
-    /// chips with the selection highlighted; once `done`, collapse to `✓ question ›
-    /// choice`.
-    fn render(&self, term: &Term, selected: usize, done: bool) -> Result<()> {
-        term.clear_line()?;
+    /// Redraw the prompt in place. While choosing, options render as a row of
+    /// chips with the selection highlighted, and the highlighted one's
+    /// description (if it has one) below them; once `done`, collapse to
+    /// `✓ question › choice`.
+    ///
+    /// `drawn` carries how many lines the previous draw wrote, since that is
+    /// what this one has to erase: a prompt whose options describe themselves
+    /// is two lines tall, and a fixed `clear_line` would leave every hint it
+    /// scrolled past on the screen.
+    fn render(&self, term: &Term, selected: usize, done: bool, drawn: &mut usize) -> Result<()> {
+        if *drawn > 0 {
+            term.clear_last_lines(*drawn)?;
+        }
+        // The final line stays on screen, so it counts as nothing to erase.
+        *drawn = 0;
         if done {
             let label = self.options[selected].keys[0];
             let line = format!(
@@ -138,13 +176,18 @@ impl<'a, T: Clone> Prompt<'a, T> {
             })
             .collect::<String>();
         let hint = "(←/→, enter)".dimmed();
-        term.write_str(&format!(
+        term.write_line(&format!(
             "{} {} {} {}  {hint}",
             "?".cyan().bold(),
             self.question.bold(),
             "›".dimmed(),
             chips
         ))?;
+        *drawn += 1;
+        if let Some(about) = self.options[selected].about {
+            term.write_line(&format!("  {}", about.dimmed()))?;
+            *drawn += 1;
+        }
         Ok(())
     }
 }

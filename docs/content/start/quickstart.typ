@@ -18,10 +18,14 @@ on every save.
 
 == Scaffold
 
-`init` asks for a title, an author, a base URL and whether to set up version
-control, then writes a `config.kdl`, a `content/` tree with a couple of example
-pages, the `templates/` that render them, and an `assets/style.css`. Pass `-y`
-to take every default and skip the prompts.
+`init` asks what to start from, then for a title, an author, a base URL and
+whether to set up version control. It writes a `config.kdl`, a `content/` tree
+with a couple of example pages, the `templates/` that render them, and an
+`assets/style.css`. Pass `-y` to take every default and skip the prompts.
+
+The first question offers the four starter shapes and the four
+#link("themes.typ")[themes] the binary carries. Naming either on the command
+line (`-t`, `--theme`) answers it, and the prompt is skipped.
 
 The default shape is a blog. Four ship:
 
@@ -44,11 +48,15 @@ baudelaire init my-docs -t docs --with search,spa
 
 `--theme` scaffolds against a theme instead of a shape: the config states the
 site's identity and paths, and the theme brings the templates, the assets and the
-collections. Nothing fetches the theme, so `init` closes on where to put it:
+collections.
 
 ```sh
 baudelaire init my-site --theme "themes/albatros"
 ```
+
+A theme the binary carries is written into that directory on the spot, so this
+is a site that builds. A spec naming anything else is a directory `init` cannot
+fill, and it closes by saying so.
 
 See #link("themes.typ")[themes].
 

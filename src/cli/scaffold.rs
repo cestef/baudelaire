@@ -116,10 +116,13 @@ impl Config {
 pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
     // Every selection is resolved before anything is prompted for or written,
     // so a mistyped name fails on the spot rather than half a scaffold in.
-    let template = Template::select(args.template.as_deref(), args.theme.is_some(), ui)?;
+    // These two first, because they are settled by flags alone: a mistyped
+    // `--with` has to fail before the shape question, not after answering it.
     let extras = Extra::resolve(&args.with)?;
     let config = templates::File::config_at(config)?;
     let interactive = !args.yes && std::io::stdin().is_terminal();
+    let start = Start::gather(args, interactive)?;
+    let template = Template::select(start.template.as_deref(), start.theme.is_some(), ui)?;
     let (target, details) = Details::gather(args, root, interactive)?;
     let repo = Repo::wanted(interactive, args.vcs)?;
     if interactive {
@@ -140,7 +143,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         let (rel, body) = match file.is_config() {
             true => (
                 config.clone(),
-                Details::config(&file.body, args.theme.as_deref(), &extras),
+                Details::config(&file.body, start.theme.as_deref(), &extras),
             ),
             false => (file.rel, file.body),
         };
@@ -169,7 +172,7 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
     // Before the editor settings, because a build cannot succeed until the
     // theme is where the config says it is, and `init` naming a directory
     // nobody has put anything in yet is the ordinary case.
-    if let Some(spec) = &args.theme {
+    if let Some(spec) = &start.theme {
         Placement::of(spec, &target).settle(ui, &target)?;
     }
     // Last, because it is the one thing here that a reader has to act on: a
@@ -179,6 +182,124 @@ pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Resu
         settings.render(ui);
     }
     Ok(())
+}
+
+/// What a run scaffolds from, once the flags and the prompts have both had
+/// their say: the `--template` name and the `--theme` spec, either of which may
+/// still be absent.
+///
+/// The two are one question, not two, and the interactive form asks it once.
+/// That is not a shortcut: [`Template::select`] already lets a theme win over a
+/// starter shape, because what a shape would contribute to the config is
+/// exactly what a theme declares for itself.
+struct Start {
+    template: Option<String>,
+    theme: Option<String>,
+}
+
+/// One answer to that question. Ephemeral: it exists to carry a table row out
+/// of the prompt, and [`Start`] is what the rest of `init` reads.
+#[derive(Clone, Copy)]
+enum Chosen {
+    /// A starter shape, scaffolded in full.
+    Shape(&'static Template),
+    /// A theme this binary carries, which brings the shape with it.
+    #[cfg(feature = "themes")]
+    Themed(&'static crate::theme::Bundled),
+}
+
+impl Start {
+    /// The shape and theme for this run.
+    ///
+    /// A flag always wins, as everywhere else in `init`, and naming either one
+    /// settles the question: a run that said `--template docs` has chosen its
+    /// shape, and one that said `--theme` has chosen a theme's. Only a run that
+    /// named neither, with a terminal to ask at, is asked.
+    fn gather(args: &InitArgs, interactive: bool) -> Result<Self> {
+        if !interactive || args.template.is_some() || args.theme.is_some() {
+            return Ok(Self {
+                template: args.template.clone(),
+                theme: args.theme.clone(),
+            });
+        }
+        Ok(Self::from(Self::ask()?))
+    }
+
+    /// Ask, offering [`Chosen::all`] and letting each row describe itself.
+    fn ask() -> Result<Chosen> {
+        let mut prompt = Prompt::new("Start from");
+        for choice in Chosen::all() {
+            prompt = prompt.one(choice.name(), choice).about(choice.about());
+            if choice.preselected() {
+                prompt = prompt.default();
+            }
+        }
+        prompt.ask()
+    }
+}
+
+impl Chosen {
+    /// Every answer the question offers: the starter shapes, then the themes
+    /// this binary carries.
+    ///
+    /// Both tables are read where they live, so a new shape or a new theme is
+    /// offered by existing rather than by a second list here.
+    fn all() -> Vec<Self> {
+        let shapes = templates::TEMPLATES.iter().map(Self::Shape);
+        #[cfg(feature = "themes")]
+        let shapes = shapes.chain(crate::theme::BUNDLED.iter().map(Self::Themed));
+        shapes.collect()
+    }
+
+    /// The word that picks it, which is also its label.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Shape(template) => template.name,
+            #[cfg(feature = "themes")]
+            Self::Themed(theme) => theme.name,
+        }
+    }
+
+    /// The one line it describes itself with: the same one `--help` lists the
+    /// shapes by and `theme list` prints.
+    fn about(self) -> &'static str {
+        match self {
+            Self::Shape(template) => template.about,
+            #[cfg(feature = "themes")]
+            Self::Themed(theme) => theme.about,
+        }
+    }
+
+    /// Whether this is the answer an unanswered prompt takes. The shape a
+    /// non-interactive run scaffolds, so pressing enter and passing `--yes`
+    /// produce the same project.
+    fn preselected(self) -> bool {
+        match self {
+            Self::Shape(template) => template.name == Template::DEFAULT,
+            #[cfg(feature = "themes")]
+            Self::Themed(_) => false,
+        }
+    }
+}
+
+impl From<Chosen> for Start {
+    /// A chosen theme becomes the directory spec `--theme` documents
+    /// (`themes/<name>`), which is what makes the answer a project that builds:
+    /// the config names that directory and [`Placement`] writes the theme into
+    /// it.
+    fn from(chosen: Chosen) -> Self {
+        match chosen {
+            Chosen::Shape(template) => Self {
+                template: Some(template.name.to_owned()),
+                theme: None,
+            },
+            #[cfg(feature = "themes")]
+            Chosen::Themed(theme) => Self {
+                template: None,
+                theme: Some(format!("{}/{}", crate::theme::Bundled::DIR, theme.name)),
+            },
+        }
+    }
 }
 
 /// What a `--theme` spec asks of the scaffold: a directory theme is a path
@@ -1332,6 +1453,111 @@ pub(super) mod templates {
             assert_eq!(
                 Vars::new([("site", "S")]).render("dangling {{site"),
                 "dangling {{site"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod start_tests {
+    use super::{Chosen, Start, templates::Template};
+    use crate::cli::{Cli, Command, InitArgs};
+
+    /// The `init` flags a command line carries, parsed as the CLI parses them,
+    /// so a test cannot construct a combination clap would refuse.
+    fn args(flags: &[&str]) -> InitArgs {
+        use clap::Parser as _;
+        let cli = Cli::parse_from(["baudelaire", "init"].iter().chain(flags));
+        let Some(Command::Init(args)) = cli.command else {
+            panic!("expected init");
+        };
+        args
+    }
+
+    /// Naming either flag settles the question, so nothing is asked: a run that
+    /// said `--template docs` has chosen its shape, and `--theme` has chosen a
+    /// theme's. `interactive` is true here, which is what makes the assertion
+    /// mean something.
+    #[test]
+    fn a_named_shape_or_theme_is_never_asked_about() {
+        let named = Start::gather(&args(&["--template", "docs"]), true).unwrap();
+        assert_eq!(named.template.as_deref(), Some("docs"));
+        assert_eq!(named.theme, None);
+
+        let themed = Start::gather(&args(&["--theme", "themes/mine"]), true).unwrap();
+        assert_eq!(themed.template, None);
+        assert_eq!(themed.theme.as_deref(), Some("themes/mine"));
+
+        // Both is not an error: `Template::select` resolves the shape (so a
+        // typo still fails) and then lets the theme win.
+        let both = Start::gather(&args(&["--template", "docs", "--theme", "t/x"]), true).unwrap();
+        assert_eq!(both.template.as_deref(), Some("docs"));
+        assert_eq!(both.theme.as_deref(), Some("t/x"));
+    }
+
+    /// With nobody to ask, a run names neither and falls to the default shape,
+    /// which is the behaviour `--yes` and CI have always had.
+    #[test]
+    fn a_run_with_no_terminal_names_neither() {
+        let start = Start::gather(&args(&[]), false).unwrap();
+        assert_eq!(start.template, None);
+        assert_eq!(start.theme, None);
+    }
+
+    /// The question offers both tables in full. A shape or a theme that shipped
+    /// without being offered here would be one nobody choosing interactively
+    /// could reach.
+    #[test]
+    fn every_shape_and_every_theme_is_offered() {
+        let offered: Vec<&str> = Chosen::all().iter().map(|c| c.name()).collect();
+        let mut expected: Vec<&str> = super::templates::TEMPLATES.iter().map(|t| t.name).collect();
+        #[cfg(feature = "themes")]
+        expected.extend(crate::theme::BUNDLED.iter().map(|t| t.name));
+        assert_eq!(offered, expected);
+        assert!(
+            Chosen::all().iter().all(|c| !c.about().is_empty()),
+            "every row describes itself"
+        );
+    }
+
+    /// Pressing enter and passing `--yes` scaffold the same project.
+    #[test]
+    fn exactly_one_answer_is_preselected_and_it_is_the_default_shape() {
+        let preselected: Vec<&str> = Chosen::all()
+            .iter()
+            .filter(|c| c.preselected())
+            .map(|c| c.name())
+            .collect();
+        assert_eq!(preselected, vec![Template::DEFAULT]);
+    }
+
+    /// A chosen shape is named, and nothing else is.
+    #[test]
+    fn choosing_a_shape_names_it() {
+        let start = Start::from(Chosen::Shape(Template::find("book").unwrap()));
+        assert_eq!(start.template.as_deref(), Some("book"));
+        assert_eq!(start.theme, None);
+    }
+
+    /// A chosen theme becomes a spec the scaffold can act on: the config names
+    /// the directory, and the theme is written into it. A spec `Placement` read
+    /// as `Missing` would be an `init` that told the reader to go and find the
+    /// theme it had just offered them.
+    #[cfg(feature = "themes")]
+    #[test]
+    fn choosing_a_theme_installs_it_where_the_config_names_it() {
+        let target = tempfile::tempdir().expect("tempdir");
+        for theme in crate::theme::BUNDLED {
+            let start = Start::from(Chosen::Themed(theme));
+            assert_eq!(start.template, None);
+            let spec = start.theme.expect("a theme spec");
+            assert_eq!(spec, format!("themes/{}", theme.name));
+            assert!(
+                matches!(
+                    super::Placement::of(&spec, target.path()),
+                    super::Placement::Shipped(..)
+                ),
+                "`{spec}` has to be one this binary writes"
             );
         }
     }
