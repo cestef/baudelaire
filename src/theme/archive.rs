@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use super::install::Lock;
 use super::source::{Fetched, Fetching, Origin, Source};
 use crate::error::{Result, ThemeError};
+use crate::fs::Contained;
 use crate::remote::{Http, Status};
 
 /// An archive fetched over http.
@@ -83,6 +84,27 @@ impl Archive {
         }
     }
 
+    /// Where one entry lands, as a path that cannot leave the directory the
+    /// theme is unpacked into.
+    ///
+    /// THE containment decision, and deliberately not one per format. Every key
+    /// of a [`Fetched`]'s files is later joined to the theme's directory, where
+    /// `Path::join` on an absolute entry silently discards that directory and a
+    /// `..` climbs out of it; the escaped path is then recorded in the lock,
+    /// reads back as pristine, and so is overwritten by `theme update` and
+    /// deleted by `theme remove`. Deciding it per format is exactly how the zip
+    /// branch came to have a guard and the tar branch none.
+    ///
+    /// A leading `./` is dropped first: `tar -czf x.tgz .` spells every entry
+    /// that way, and it is the same relative path written differently rather
+    /// than a step out of anything.
+    fn inside(url: &str, entry: &Path) -> Result<PathBuf> {
+        let rel = entry.strip_prefix(".").unwrap_or(entry);
+        Contained::new(rel)
+            .map(|rel| rel.path().to_path_buf())
+            .ok_or_else(|| ThemeError::escapes(url, &entry.to_string_lossy()).into())
+    }
+
     fn tar(url: &str, bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
         let mut entries = BTreeMap::new();
         let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(bytes));
@@ -94,10 +116,11 @@ impl Archive {
             if !entry.header().entry_type().is_file() {
                 continue;
             }
-            let path = entry
+            let named = entry
                 .path()
                 .map_err(|why| ThemeError::unpack(url, why))?
                 .into_owned();
+            let path = Self::inside(url, &named)?;
             let mut bytes = Vec::new();
             entry
                 .read_to_end(&mut bytes)
@@ -118,12 +141,11 @@ impl Archive {
             if !entry.is_file() {
                 continue;
             }
-            // `enclosed_name` is the guarded reading: an entry naming `..` or an
-            // absolute path is refused rather than resolved, so an archive
-            // cannot write outside the directory it is unpacked into.
-            let Some(path) = entry.enclosed_name() else {
-                return Err(ThemeError::escapes(url, entry.name()).into());
-            };
+            // The name as the archive wrote it, judged by the same guard the
+            // tar branch uses: `enclosed_name` is the zip reader's own reading
+            // of the question, and two readings of one question is what left
+            // the other branch without an answer at all.
+            let path = Self::inside(url, Path::new(entry.name()))?;
             let mut bytes = Vec::new();
             entry
                 .read_to_end(&mut bytes)
@@ -162,6 +184,13 @@ impl Archive {
 
     /// The name a copy takes, from the archive's own wrapper directory when it
     /// had one, else from the URL's filename with its suffixes removed.
+    ///
+    /// One ordinary directory name and nothing else, because the name is joined
+    /// to `themes/` to make the directory the copy is written into and deleted
+    /// from: `.` would name that directory itself and `..` the project root. A
+    /// URL is enough to produce either (`.../...tar.gz` leaves `..`), and so was
+    /// an archive whose entries all began `../`, whose shared first component
+    /// `unwrap` read as the wrapper directory.
     fn names(url: &str, wrapper: Option<String>) -> Result<String> {
         let name = wrapper.unwrap_or_else(|| {
             let file = url.rsplit('/').next().unwrap_or_default();
@@ -171,9 +200,10 @@ impl Archive {
                 .unwrap_or(file)
                 .to_owned()
         });
-        match name.is_empty() {
-            true => Err(ThemeError::unnamed(url).into()),
-            false => Ok(name),
+        let names = Contained::new(&name).is_some_and(|rel| rel.path().components().count() == 1);
+        match names {
+            true => Ok(name),
+            false => Err(ThemeError::unnamed(url).into()),
         }
     }
 }
@@ -217,7 +247,115 @@ impl Source for Archive {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
+    use crate::error::BaudelaireErrorKind;
+
+    /// A gzipped tar of one entry, named exactly as asked.
+    ///
+    /// Hand-built, because nothing that writes a tar willingly writes this one:
+    /// the `tar` program refuses a `..` name and strips a leading `/`, and the
+    /// crate's builder does the same. The header is the 512-byte ustar block,
+    /// whose fields are at fixed offsets and whose checksum is taken with its
+    /// own field read as eight spaces.
+    fn tarball(name: &str, body: &[u8]) -> Vec<u8> {
+        fn field(header: &mut [u8; 512], at: usize, bytes: &[u8]) {
+            header[at..at + bytes.len()].copy_from_slice(bytes);
+        }
+        let mut header = [0u8; 512];
+        field(&mut header, 0, name.as_bytes());
+        field(&mut header, 100, b"0000644\0");
+        field(&mut header, 108, b"0000000\0");
+        field(&mut header, 116, b"0000000\0");
+        field(
+            &mut header,
+            124,
+            format!("{:011o}\0", body.len()).as_bytes(),
+        );
+        field(&mut header, 136, b"00000000000\0");
+        field(&mut header, 148, b"        ");
+        field(&mut header, 156, b"0");
+        field(&mut header, 257, b"ustar\0");
+        field(&mut header, 263, b"00");
+        let sum: u32 = header.iter().copied().map(u32::from).sum();
+        field(&mut header, 148, format!("{sum:06o}\0 ").as_bytes());
+
+        let mut out = header.to_vec();
+        out.extend_from_slice(body);
+        // Everything is a whole block, and two empty ones end the archive.
+        out.resize(out.len().div_ceil(512) * 512, 0);
+        out.extend_from_slice(&[0u8; 1024]);
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&out).expect("gzip");
+        gz.finish().expect("gzip")
+    }
+
+    /// A zip of one entry, named exactly as asked: the writer records the name
+    /// it is given, which is all this fixture needs.
+    fn zipped(name: &str, body: &[u8]) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .expect("entry");
+        writer.write_all(body).expect("write");
+        writer.finish().expect("finish").into_inner()
+    }
+
+    fn escapes<T>(read: &Result<T>) -> bool {
+        matches!(
+            read,
+            Err(BaudelaireErrorKind::Theme(ThemeError::Escapes { .. }))
+        )
+    }
+
+    /// An entry naming a file outside the archive is refused before a byte is
+    /// written, in both formats.
+    ///
+    /// The tar branch had no guard at all: it inserted `entry.path()` as it
+    /// came, and the install joined that to the theme directory, where an
+    /// absolute entry discards the directory outright and a `..` climbs above
+    /// it. The lock then claimed whatever it landed on, so `update` overwrote
+    /// and `remove` deleted a file outside the project.
+    #[test]
+    fn an_entry_outside_the_archive_is_refused() {
+        for name in ["../../evil", "/tmp/evil", "themes/../../evil"] {
+            let tar = Archive::tar("https://x.dev/t.tar.gz", &tarball(name, b"x"));
+            assert!(escapes(&tar), "tar took {name}: {tar:?}");
+            let zip = Archive::zip("https://x.dev/t.zip", zipped(name, b"x"));
+            assert!(escapes(&zip), "zip took {name}: {zip:?}");
+        }
+    }
+
+    /// ...and an ordinary entry still comes through, including the `./name`
+    /// spelling `tar -czf x.tgz .` writes, which is the same relative path and
+    /// not a step out of anything.
+    #[test]
+    fn an_ordinary_entry_is_read_by_either_format() {
+        const BODY: &[u8] = b"lang \"fr\"\n";
+        for name in ["theme.kdl", "./theme.kdl"] {
+            let tar = Archive::tar("https://x.dev/t.tar.gz", &tarball(name, BODY)).expect("tar");
+            let zip = Archive::zip("https://x.dev/t.zip", zipped(name, BODY)).expect("zip");
+            for read in [tar, zip] {
+                let held = read.get(Path::new("theme.kdl")).map(Vec::as_slice);
+                assert_eq!(held, Some(BODY), "{name}");
+            }
+        }
+    }
+
+    /// The name a copy is known by is joined to `themes/`, so anything but one
+    /// ordinary directory name would write and later delete somewhere else:
+    /// `..` is the project root itself, and both an archive's wrapper directory
+    /// and a URL's filename can spell it.
+    #[test]
+    fn a_copy_is_not_named_after_a_directory_above_it() {
+        assert!(Archive::names("https://x.dev/d.tar.gz", Some("..".to_owned())).is_err());
+        assert!(Archive::names("https://x.dev/d.tar.gz", Some(".".to_owned())).is_err());
+        assert!(Archive::names("https://x.dev/d.tar.gz", Some("a/b".to_owned())).is_err());
+        assert!(Archive::names("https://x.dev/d.tar.gz", Some("/etc".to_owned())).is_err());
+        assert!(Archive::names("https://x.dev/...tar.gz", None).is_err());
+        assert!(Archive::names("https://x.dev/.tar.gz", None).is_err());
+    }
 
     fn entries(paths: &[&str]) -> BTreeMap<PathBuf, Vec<u8>> {
         paths
