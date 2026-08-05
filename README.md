@@ -81,7 +81,7 @@ script, read it, run it:
 
 ```sh
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
-less install.sh          # read before you run
+less install.sh # read it
 sh install.sh
 ```
 
@@ -96,9 +96,13 @@ notepad install.ps1     # read before you run
 Or with Cargo:
 
 ```sh
-cargo binstall baudelaire     # prebuilt tarball, no compile
-cargo install baudelaire      # build from crates.io
-cargo install --git https://github.com/cestef/baudelaire   # build from git
+cargo binstall baudelaire # prebuilt tarball, no compile
+cargo install baudelaire  # build from crates.io
+
+If you're feeling fancy:
+
+```sh
+cargo install --git https://github.com/cestef/baudelaire --branch main # build from git
 ```
 
 Flags, slim builds, and what the installer does and does not verify:

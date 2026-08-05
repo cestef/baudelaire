@@ -8,9 +8,18 @@ Both sites are a content tree, a layout directory and a template language with
 filters. Both also lean on plugins for what baudelaire has as config switches, so
 the config usually gets shorter and the templates get rewritten.
 
-Start with #link("content.typ")[Markdown to Typst] for the posts themselves, and
-#link("urls.typ")[keeping your URLs] before you touch permalinks. The rest is
-below.
+#callout(kind: "note")[
+  *A post's frontmatter needs no conversion.* A `.md` file under `content/` is a
+  page (#link("../../write/markdown.typ")[Markdown pages]), and a `---` block is
+  read as YAML, exactly as Jekyll reads it. The file copies across as it stands.
+  What changes is the *key names* - `layout` is `template`, `published: false`
+  is `draft: true` - not the language they are written in. Converting a post to
+  Typst is a separate choice, made for what Typst gives you;
+  #link("content.typ")[Markdown to Typst] is where that lives.
+]
+
+What is left is the frontmatter keys, the Liquid, the config and the layouts.
+Read #link("urls.typ")[keeping your URLs] before you touch permalinks.
 
 == Jekyll: the tree
 
@@ -18,9 +27,9 @@ below.
   columns: 3,
   align: (left, left, left),
   table.header([Jekyll], [Baudelaire], [Note]),
-  [`_config.yml`], [`config.kdl`], [Every key is checked.],
-  [`_posts/2026-07-09-hello.md`], [`content/posts/hello.typ`], [The date moves into frontmatter.],
-  [`_drafts/`], [`draft: true`, or `hello.draft.typ`], [Built with `--drafts`.],
+  [`_config.yml`], [`config.kdl`], [KDL, and every key is checked. The config is the rewrite; the pages are not.],
+  [`_posts/2026-07-09-hello.md`], [`content/posts/hello.md`], [The same file, YAML frontmatter and all. Only the keys are renamed.],
+  [`_drafts/`], [`draft: true` in frontmatter, or `hello.draft.md`], [Built with `--drafts`.],
   [`_layouts/`], [`templates/`], [Liquid becomes Typst functions.],
   [`_includes/`], [any `.typ` file you import], [No magic directory.],
   [`_data/`], [any directory], [Read with `yaml()`, `json()`, `csv()`.],
@@ -30,9 +39,11 @@ below.
 )
 
 #callout(kind: "warn")[
-  Jekyll strips the date out of `2026-07-09-hello.md`. Baudelaire does not, so
-  that file would publish at `/posts/2026-07-09-hello/`. Rename the files, or set
-  `slug` in each one, before setting the collection's `permalink`.
+  Jekyll reads the date out of `2026-07-09-hello.md` and drops it from the slug.
+  Baudelaire reads neither: that file publishes at `/posts/2026-07-09-hello/`,
+  and `{year}` in a permalink fills from the frontmatter `date` or from nothing
+  at all. Rename the files, or set `slug` in each one, and make sure every post
+  carries a `date` before setting the collection's `permalink`.
 ]
 
 == Jekyll: the config
@@ -49,6 +60,8 @@ below.
   [`collections`], [`content { collections { } }`],
   [`defaults`], [collection keys: `template`, `sort`, `permalink`],
   [`exclude`], [collection globs, or keep the file out of `content/`],
+  [`markdown`, `kramdown`], [`content { markdown { extensions } }`. Kramdown's typographic quotes are `extensions "smart"`, which is off until asked for.],
+  [`highlighter`], [`html { highlight }`, which maps compiler colours to classes],
   [`sass`], [none; `hooks { before }`],
   [`theme`, `remote_theme`], [`theme`, pointing at a directory],
 )
@@ -69,6 +82,9 @@ Most of what a Jekyll site installs is already here:
 
 == Jekyll: frontmatter
 
+`---` is YAML here as well, so the block parses as written. Only the key names
+move:
+
 ```yaml
 ---
 layout: post
@@ -76,12 +92,54 @@ title: "Hello"
 date: 2026-07-09
 categories: [rust, cli]
 published: false
-redirect_from: ["/old/hello/"]
 excerpt: "A short summary."
 ---
 ```
 
-becomes
+becomes, in the same file and the same language:
+
+```yaml
+---
+template: post.typ
+title: "Hello"
+date: 2026-07-09
+categories: [rust, cli]
+draft: true
+description: "A short summary."
+---
+```
+
+`title`, `date` and `categories` did not have to move at all. An unquoted
+`2026-07-09` reaches the date reader as the ISO day it looks like, quoted or
+not, and `[rust, cli]` is a list of two - including a list of one, which YAML
+writes without ceremony.
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Jekyll], [Baudelaire]),
+  [`layout`], [`template`, naming a file (`post.typ`)],
+  [`published: false`], [`draft: true`],
+  [`excerpt`], [`description` (or `summary`), written rather than extracted],
+  [`redirect_from`], [`redirect`],
+  [`categories`, `tags`], [top-level lists, one per declared taxonomy],
+  [`permalink`], [`path`, taking a literal URL rather than a pattern. `/2019/post.html` publishes as that file.],
+)
+
+A key that is neither a built-in nor a declared taxonomy is kept as it is, and a
+template reads it back with `page.frontmatter.at("author", default: none)`. A
+key that is a *near-miss* of a real one fails the build naming what you probably
+meant, which is what catches a rename left half-done.
+
+#callout(kind: "note")[
+  The fence picks the language, so `+++` is TOML and `;;;` is KDL, the one
+  `config.kdl` is written in. Nothing else changes: the same keys, the same
+  schema, the same errors. See #link("../../write/markdown.typ")[Markdown pages],
+  and note that KDL cannot spell a one-element list.
+]
+
+On a `.typ` page the same keys are a Typst dict, and the types are the language's
+own:
 
 ```typ
 #let frontmatter = (
@@ -95,17 +153,50 @@ becomes
 )
 ```
 
+== Jekyll: Liquid in a post
+
+Liquid is not markup here. A `{% .. %}` tag in a `.md` page is text, and stays
+text: nothing strips it and nothing warns. Grep for `{%` and `{{` before you
+build.
+
 #table(
   columns: 2,
   align: (left, left),
-  table.header([Jekyll], [Baudelaire]),
-  [`layout`], [`template`, naming a file (`post.typ`)],
-  [`published: false`], [`draft: true`],
-  [`excerpt`], [`description`, written rather than extracted],
-  [`redirect_from`], [`redirect`],
-  [`categories`, `tags`], [top-level lists, one per declared taxonomy],
-  [`permalink`], [`path`, taking a literal URL rather than a pattern. `/2019/post.html` publishes as that file.],
+  table.header([In a post], [Here]),
+  [`{% post_url 2026-01-02-sleepers %}`], [an ordinary link, naming the file: `[..](sleepers.md)`.],
+  [`{% link about.md %}`], [the same, and the `.md` path it already names works as written.],
+  [`{% highlight ruby %} .. {% endhighlight %}`], [a fenced block, highlighted by the compiler.],
+  [`{% include note.html %}`], [a `typ eval` fence, or the page converted to Typst.],
+  [`{{ site.baseurl }}/x`], [`/x`: a path under a subdirectory `url` is rewritten for you.],
+  [`<!--more-->`], [nothing. Write a `description`, which fills the meta tag, the feed entry, the search index and the card at once.],
+  [raw HTML in a post], [refused: `content { markdown { html "drop" } }` drops it instead, or write the element in a `typ eval` fence.],
 )
+
+A `{% post_url %}` becomes an ordinary link, and which spelling you give it
+decides whether the build checks it. A source path - `.md` or `.typ`, whichever
+the target actually is - is rewritten to that page's permalink, and fails the
+build when no page sits there:
+
+```md
+See [the sleepers](sleepers.md).
+```
+
+A URL (`/blog/sleepers/`) is passed through untouched, so it is neither checked
+nor carried along by a later rename.
+
+An include, if the page stays markdown, is an `eval` fence:
+
+````md
+```typ eval
+#import "/templates/parts.typ": note
+#note[The include you used to register.]
+```
+````
+
+That fence runs arbitrary Typst at build time. A site building posts it did not
+write should set `content { markdown { eval #false } }`.
+
+== Jekyll: categories in the URL
 
 Jekyll can put categories in a URL (`/:categories/:year/:month/:title/`), and a
 permalink here has no taxonomy token. What reproduces those URLs exactly is a
@@ -121,7 +212,7 @@ content {
 }
 ```
 
-`content/travel/night-train.typ` then publishes at
+`content/travel/night-train.md` then publishes at
 `/travel/2026/03/night-train/`, as before. The cost is one collection per
 category and a home-page listing that filters across them
 (`pages(page.lang).filter(p => p.collection in ("travel", "history"))`). Keep
@@ -138,6 +229,8 @@ collection's pattern outright.
   align: (left, left, left),
   table.header([Eleventy], [Baudelaire], [Note]),
   [`eleventy.config.js`], [`config.kdl`], [Data, not code. Hooks run commands.],
+  [`*.md`], [`*.md`], [Stays markdown, and its `---` or `+++` block stays what it was.],
+  [`*.njk`, `*.liquid`, `*.11ty.js` as content], [none], [A page is `.typ` or `.md`. A template language is not a content format.],
   [`_includes/`], [`templates/`], [Layouts and partials both.],
   [`_data/`], [any directory], [No data cascade; a template reads what it needs.],
   [`addPassthroughCopy`], [`static/`], [Copied verbatim.],
@@ -157,7 +250,7 @@ One more with no counterpart: `pagination` over arbitrary data, which here is
 always over a collection. A per-page `permalink` does carry over, as `path`,
 though it takes a literal URL rather than a pattern.
 
-== Liquid and Nunjucks, in Typst
+== Layouts, in Typst
 
 ```html
 <!-- _layouts/post.html -->
@@ -196,7 +289,6 @@ though it takes a literal URL rather than a pattern.
   [`{{ site.title }}`], [`title` from `@baudelaire/site`],
   [`{{ site.data.authors }}`], [`yaml("/data/authors.yaml")`],
   [`{{ page.url }}`], [not available: a page does not know its own URL],
-  [`{% post_url 2026-01-02-sleepers %}`], [`#link("sleepers.typ")`. Pandoc leaves the Liquid tag as text, so the link is quietly lost in conversion.],
   [`relative_url`], [nothing: a path under a subdirectory `url` is rewritten for you],
   [a layout chain (`layout:` on a layout)], [a function calling another function],
 )
@@ -225,7 +317,12 @@ you now need a workflow that runs baudelaire; see
 == Order of work
 
 + `baudelaire init` beside the old site, then copy the asset tree across. Sass keeps working through `hooks { before "sass --load-path=sass assets/style.scss assets/style.css" }`, but move the `.scss` out of `paths { assets }` first: anything in that tree is published, sources included.
-+ Rename the dated post filenames, or give each a `slug`, then set the collection's `permalink` to the old shape.
-+ Convert one section with #link("content.typ")[pandoc] and rewrite the layouts it needs.
++ Copy `_posts/` into `content/posts/` unchanged - the YAML blocks parse as they are - then rename the keys from the table above. Rename the dated filenames, or give each a `slug`, then set the collection's `permalink` to the old shape.
++ Rewrite the layouts that section needs, starting with the shell.
 + Replace each plugin with its switch from the table above.
++ Grep the posts for `{%`, `{{` and `<`: Liquid is text now, and raw HTML is refused.
 + `baudelaire check`, then compare the old and new sitemaps.
+
+Converting the prose itself is optional, and separate. When you want Typst for a
+page - math, a figure, a template helper mid-page - #link("content.typ")[Markdown
+to Typst] has the pandoc pass and what it drops.

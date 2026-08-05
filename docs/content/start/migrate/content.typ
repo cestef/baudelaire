@@ -5,27 +5,19 @@
 #import "/templates/theme.typ": callout
 
 #callout(kind: "note")[
-  *You may not need this page.* `.md` files are pages
-  (#link("../../write/markdown.typ")[Markdown pages]), so the prose you already
-  have can stay exactly as it is. What has to change is the *frontmatter*: YAML
-  or TOML becomes a `---` block of KDL.
+  *This is not a migration step.* `.md` files are pages
+  (#link("../../write/markdown.typ")[Markdown pages]), frontmatter included: the
+  fence picks the dialect, so `---` is YAML and `+++` is TOML exactly as they
+  were wherever the post came from. Nothing on this page has to happen for a
+  markdown tree to build.
 
-  ```md
-  ---
-  title "The night train"
-  date "2019-03-02"
-  tags "rail" "night"
-  ---
-  ```
-
-  Convert to Typst when you want what Typst gives you -- math, a figure, a chart,
-  a template helper mid-page. A markdown page can reach some of that through an
-  `eval` fence without being converted at all.
+  Convert a page to Typst when you want what Typst gives you: math, a figure, a
+  chart, a template helper mid-page. A markdown page reaches some of that
+  through an `eval` fence without being converted at all.
 ]
 
-If you do convert: Typst markup is close enough to Markdown that most prose
-survives a mechanical pass, and different enough that the pass needs reading
-afterwards.
+Typst markup is close enough to Markdown that most prose survives a mechanical
+pass, and different enough that the pass needs reading afterwards.
 
 == The mapping
 
@@ -39,7 +31,7 @@ afterwards.
   [`*italic*`, `_italic_`], [`_italic_`], [Underscores, not stars.],
   [an inline code span], [an inline code span], [Backticks, unchanged.],
   [a fenced block], [a fenced block], [Unchanged, and highlighted by the compiler.],
-  [`[text](url)`], [`#link("url")[text]`], [A `.typ` target is rewritten to its permalink.],
+  [`[text](url)`], [`#link("url")[text]`], [A path naming a `.typ` or `.md` source is rewritten to its permalink.],
   [`![alt](cover.png)`], [`#image("cover.png", alt: "alt")`], [Resolves beside the page.],
   [`- item`], [`- item`], [Unchanged.],
   [`1. item`], [`+ item`], [Typst numbers it for you.],
@@ -49,7 +41,7 @@ afterwards.
   [`---`], [`#h("hr")`], [From `@baudelaire/html`. Typst's `line` is a paged-layout element.],
   [`<div class="x">`], [`#h("div", class: "x")[..]`], [Raw HTML has no meaning in a Typst page.],
   [`<!-- comment -->`], [`// comment`], [`/* .. */` spans lines.],
-  [`---` frontmatter], [`#let frontmatter = (..)`], [A Typst dict, so values are typed.],
+  [`---` frontmatter], [`#let frontmatter = (..)`], [The same keys; a Typst dict rather than a fenced block.],
 )
 
 Typst also has a term list, which Markdown never did:
@@ -82,13 +74,15 @@ pandoc -f gfm+yaml_metadata_block -t typst --wrap=preserve post.md -o post.typ
 ```
 
 Without `-s` the metadata block is consumed and dropped, leaving a body with no
-frontmatter. To keep it, hand pandoc a template that writes the binding:
+frontmatter. Since the block is the one part that did not need converting, the
+cheapest pass is to keep pandoc off it entirely and paste the keys back as a
+Typst dict. To have pandoc write the binding instead, hand it a template:
 
 ```text
 // page.typ.template
 #let frontmatter = (
   title: "$title$",
-  date: $date$,
+  date: "$date$",
 )
 
 $body$
@@ -96,14 +90,12 @@ $body$
 
 ```sh
 pandoc -f gfm+yaml_metadata_block -t typst -s \
-  --template page.typ.template \
-  --variable date="datetime(year: 2026, month: 7, day: 9)" \
-  post.md -o post.typ
+  --template page.typ.template post.md -o post.typ
 ```
 
-The date is the awkward one: `date` in a Markdown file is a string, and
-frontmatter wants a `datetime(..)`. Either pass it per file as above, or convert
-the strings in a second scripted pass.
+The date needs no conversion of its own: `date: "2026-07-09"` is read as the ISO
+day it looks like, on a Typst page as much as a markdown one, so the string the
+Markdown file already carried passes straight through.
 
 Over a tree:
 
@@ -113,8 +105,8 @@ find content -name '*.md' | while read -r f; do
 done
 ```
 
-TOML frontmatter, which is what Zola writes, is not a metadata block to pandoc
-and comes through as escaped text. Cut it first:
+A `+++` block is not a metadata block to pandoc and comes through as escaped
+text, even though baudelaire reads it as TOML. Cut it before converting:
 
 ```sh
 awk 'BEGIN{n=0} /^\+\+\+$/{n++; next} n>=2{print}' post.md | pandoc -f gfm -t typst -o post.typ
@@ -166,7 +158,8 @@ in one file and import it:
 ```
 
 A shortcode that only wrapped markup is often not worth a function at all: write
-the markup.
+the markup. A page that stayed markdown calls the same function from a `typ
+eval` fence, so a shortcode is not on its own a reason to convert.
 
 *Internal links.* Point at the source file, not the URL:
 
@@ -175,9 +168,11 @@ See #link("../start/quickstart.typ")[the quickstart].
 ```
 
 The build rewrites it to that page's permalink and fails if there is no page
-behind it, which is how a migration finds the links it broke. Old absolute URLs
-(`/blog/hello/`) are passed through untouched, so they will not be checked and
-will not follow a later rename. Convert them.
+behind it, which is how a migration finds the links it broke. Converting is not
+what buys that: `[the quickstart](../start/quickstart.md)` on a markdown page is
+resolved and checked the same way, and either extension may name either kind of
+page. What is never checked is an absolute URL (`/blog/hello/`), which passes
+through untouched and will not follow a later rename. Convert those.
 
 *Raw HTML.* Anything a Markdown file embedded verbatim is emitted with `h()`, and
 the result goes through the same typed DOM as everything else, so the asset
@@ -185,13 +180,10 @@ rewriter and the linter see it.
 
 *Images.* `#image("cover.png")` next to a page bundle
 (`content/blog/hello/index.typ`) is the direct translation of a Markdown post
-with its images beside it. It does not publish beside the page, though: the
-pipeline writes it to `/assets/cover.png`, one flat namespace for the whole site.
-A tree where every post directory holds its own `cover.png` therefore collides,
-which the build reports as a warning per clash and resolves by serving one file
-to every page. Turn on `assets { fingerprint }`, which names each by content, or
-rename the sources. See #link("../../build/images.typ")[images] for what
-the pipeline then does with it.
+with its images beside it. It publishes under the directory it sits in
+(`/assets/blog/hello/cover.png`), so a tree where every post directory holds its
+own `cover.png` does not collide. See #link("../../build/images.typ")[images]
+for what the pipeline then does with it.
 
 == Then
 
