@@ -245,6 +245,50 @@ impl<'a> Located<'a> {
         Some(text..(text + len).min(self.file.len()))
     }
 
+    /// The same block, paired a line at a time: `(range within `content`, range
+    /// in the file)` for each of its lines.
+    ///
+    /// A fence inside a list item or a blockquote is indented, and the parser
+    /// hands back its content with that indentation stripped, so the block is
+    /// *not* byte-for-byte with the file and one whole-block pair drifts by the
+    /// indent times the lines before it. A two-line fence indented two spaces
+    /// put its second line at column 31 of a line 30 characters long.
+    ///
+    /// Per line, the two do correspond: the authored line ends with the stripped
+    /// one. A line where that does not hold is skipped rather than guessed,
+    /// which costs that line its stamp and never misplaces it.
+    fn fenced_lines(&self, content: &str) -> Vec<(Range<usize>, Range<usize>)> {
+        let Some(block) = self.fenced(content.len()) else {
+            return Vec::new();
+        };
+        let mut pairs = Vec::new();
+        let mut cursor = block.start;
+        let mut at = 0;
+        for line in content.split_inclusive('\n') {
+            let stripped = line.trim_end_matches(['\n', '\r']);
+            let authored = self.file.get(cursor..).unwrap_or_default();
+            let width = authored.find('\n').unwrap_or(authored.len());
+            let Some(text) = authored.get(..width) else {
+                break;
+            };
+            // The indent the parser removed. `strip_suffix` rather than a
+            // length subtraction, so a line that does not correspond at all
+            // (a lazy continuation, a tab the parser expanded) is skipped.
+            if !stripped.is_empty()
+                && let Some(indent) = text
+                    .trim_end_matches('\r')
+                    .strip_suffix(stripped)
+                    .map(str::len)
+            {
+                let from = cursor + indent;
+                pairs.push((at..at + stripped.len(), from..from + stripped.len()));
+            }
+            cursor += width + 1;
+            at += line.len();
+        }
+        pairs
+    }
+
     /// The file, named, for a diagnostic to render its snippet from.
     fn source(&self, path: &str) -> miette::NamedSource<String> {
         miette::NamedSource::new(path, self.file.to_owned())
@@ -325,9 +369,19 @@ impl Buffer {
     /// empty pair out of the map: [`SourceMap`] resolves the first pair
     /// covering an offset, and an empty one covers none.
     fn record(&mut self, from: usize, source: Range<usize>, shape: Shape) {
-        let to = self.text.len();
-        if from < to {
-            self.spans.push(Mapping::new(from..to, source, shape));
+        self.record_range(from..self.text.len(), source, shape);
+    }
+
+    /// Record a pair whose lowered end is known rather than "wherever the
+    /// buffer has reached".
+    ///
+    /// What a construct emitting *several* pairs needs: [`Buffer::record`]
+    /// closes each at the buffer's current end, so the first of two mappings
+    /// swallowed the second and every offset inside it resolved against the
+    /// first one's source line.
+    fn record_range(&mut self, lowered: Range<usize>, source: Range<usize>, shape: Shape) {
+        if !lowered.is_empty() {
+            self.spans.push(Mapping::new(lowered, source, shape));
         }
     }
 }
@@ -731,14 +785,19 @@ impl<'a> Writer<'a> {
                 };
                 let at = self.out().text.len();
                 if fence.runs(self.config) {
-                    // Emitted verbatim, so the pair is byte-for-byte and an
-                    // error inside a multi-line fence lands on its own line.
-                    // `fenced` steps over the info line, which the block's own
-                    // span includes and its text does not.
-                    let source = self.at.fenced(text.len());
+                    // Emitted verbatim, so an error inside a multi-line fence
+                    // lands on its own line. Paired a line at a time rather than
+                    // as one block: an indented fence (inside a list item, a
+                    // blockquote) reaches here with its indentation already
+                    // stripped, so only the lines correspond byte for byte.
+                    let lines = self.at.fenced_lines(&text);
                     self.push(&text);
-                    if let Some(source) = source {
-                        self.out().record(at, source, Shape::Verbatim);
+                    for (lowered, source) in lines {
+                        self.out().record_range(
+                            at + lowered.start..at + lowered.end,
+                            source,
+                            Shape::Verbatim,
+                        );
                     }
                     self.push("\n\n");
                     return;
@@ -1069,6 +1128,34 @@ mod tests {
         let (lowered, map) = mapped(source);
         let at = back(&lowered, &map, "#emph");
         assert_eq!(&source[at.start..at.start + 5], "#emph");
+    }
+
+    /// An indented fence maps a line at a time, because the parser hands its
+    /// content back with the indentation stripped: the block is not byte-for-
+    /// byte with the file, and one whole-block pair drifted by the indent times
+    /// the lines before it. Both lines of this landed on the first one, the
+    /// second at a column past the end of it.
+    #[test]
+    fn an_indented_fence_maps_each_of_its_lines() {
+        let source = concat!(
+            ";;;\ntitle \"A\"\n;;;\n\n",
+            "- item\n\n",
+            "  ```typ eval\n",
+            "  #emph[one]\n",
+            "  #emph[two]\n",
+            "  ```\n",
+        );
+        let (lowered, map) = mapped(source);
+        let one = back(&lowered, &map, "#emph[one]");
+        let two = back(&lowered, &map, "#emph[two]");
+        assert_eq!(&source[one.start..one.start + 10], "#emph[one]");
+        assert_eq!(&source[two.start..two.start + 10], "#emph[two]");
+        // Different authored lines, which is the whole point: they used to
+        // resolve into the same one.
+        assert_ne!(
+            source[..one.start].lines().count(),
+            source[..two.start].lines().count()
+        );
     }
 
     /// The wrapper is not lowered from anything, so nothing in it maps.
