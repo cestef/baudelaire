@@ -424,6 +424,28 @@ impl fmt::Display for Let<'_> {
 pub struct Call<'a> {
     name: &'a str,
     args: Vec<(Option<&'static str>, Value)>,
+    mode: Mode,
+}
+
+/// Whether a generated call is entering Typst from markup or is already in
+/// code. The whole difference is the leading `#`, and getting it wrong is a
+/// syntax error in either direction.
+#[derive(Clone, Copy)]
+enum Mode {
+    /// `#name(..)`, the form that opens a call from markup.
+    Markup,
+    /// `name(..)`, for a call nested inside another one's arguments.
+    Code,
+}
+
+impl Mode {
+    /// What precedes the callee's name.
+    fn sigil(self) -> &'static str {
+        match self {
+            Self::Markup => "#",
+            Self::Code => "",
+        }
+    }
 }
 
 impl<'a> Call<'a> {
@@ -431,7 +453,20 @@ impl<'a> Call<'a> {
         Self {
             name,
             args: Vec::new(),
+            mode: Mode::Markup,
         }
+    }
+
+    /// The same call written in *code* position: inside another call's
+    /// arguments, in a `#let` initialiser, or anywhere else Typst is already
+    /// reading expressions rather than markup.
+    ///
+    /// Only the leading `#` differs, and it is not cosmetic: a `#` is what
+    /// enters markup from code, so writing one where Typst is already in code
+    /// is a syntax error rather than a redundancy.
+    pub fn bare(mut self) -> Self {
+        self.mode = Mode::Code;
+        self
     }
 
     /// A positional argument.
@@ -489,7 +524,7 @@ impl<'a> Call<'a> {
 
 impl fmt::Display for Call<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{}(", self.name)?;
+        write!(f, "{}{}(", self.mode.sigil(), self.name)?;
         self.arguments(f)?;
         f.write_char(')')
     }
@@ -512,7 +547,7 @@ pub struct Open<'a>(Call<'a>, Bracket);
 
 impl fmt::Display for Open<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{}", self.0.name)?;
+        write!(f, "{}{}", self.0.mode.sigil(), self.0.name)?;
         match self.1 {
             // `#emph[` rather than `#emph()[`: an empty argument list is legal
             // but reads as a call that forgot something.
@@ -692,6 +727,25 @@ mod tests {
             .pos(Value::Raw("__body".into()))
             .to_string();
         assert_eq!(positional, "#__layout(__data, __body)");
+    }
+
+    /// A call nested in another one's arguments is already in code, where the
+    /// `#` that enters markup would be a syntax error.
+    #[test]
+    fn a_bare_call_drops_the_sigil() {
+        assert_eq!(
+            Call::new("datetime")
+                .named("year", Value::Int(2024))
+                .bare()
+                .to_string(),
+            "datetime(year: 2024)"
+        );
+        assert_eq!(
+            Call::new("table.header").bare().items().to_string(),
+            "table.header("
+        );
+        // ...and the markup form is unchanged by its existence.
+        assert_eq!(Call::new("linebreak").to_string(), "#linebreak()");
     }
 
     /// A call whose content is already in hand closes itself, so a caller with

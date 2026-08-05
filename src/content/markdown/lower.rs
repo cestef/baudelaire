@@ -567,7 +567,10 @@ impl<'a> Writer<'a> {
                     .to_string();
                 self.push(&call);
             }
-            Tag::TableHead => self.push("table.header("),
+            // Bare: this sits inside the `#table(..` this writer just opened,
+            // where Typst is already reading arguments and a `#` would be a
+            // syntax error.
+            Tag::TableHead => self.push(&Call::new("table.header").bare().items().to_string()),
             // Nothing to open: a paragraph is separated by its end, a row by
             // its cells, and the rest have no Typst counterpart.
             Tag::Paragraph
