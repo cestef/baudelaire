@@ -67,13 +67,13 @@ impl Transform for Externalize {
                     return Some(url);
                 }
                 let image = ImageRef::of(vpath, root, config);
-                let url = format!("/{}/{}", config.asset_name(), image.name);
+                let url = image.url(config);
                 // The variants this image is about to be given, named before
                 // they exist: the copy pass cuts exactly these widths, and the
                 // `srcset` writer reads them from here as it reads the
                 // pipeline's manifest for an image in the asset tree.
                 if !image.widths.is_empty() {
-                    variants.insert(url.clone(), image.candidates(&url, config));
+                    variants.insert(url.clone(), image.candidates(config));
                 }
                 refs.push(image);
                 Some(url)
@@ -168,6 +168,18 @@ impl ImageRef {
         Vec::new()
     }
 
+    /// The URL this image is served at: the asset prefix and the name, the two
+    /// pieces every processed asset's URL is made of.
+    ///
+    /// Through [`Config::asset_url`] rather than spelled here, because the name
+    /// already carries the directories the image was authored under: taking a
+    /// directory off the finished URL and putting the whole name back after it
+    /// said `gallery/` twice, and every downscale in a subdirectory's `srcset`
+    /// 404'd while the `src` fallback quietly worked.
+    fn url(&self, config: &Config) -> String {
+        config.asset_url(Path::new(&self.name))
+    }
+
     /// This image's `srcset` candidates: one per width, named by splicing the
     /// width into the served name the way the pipeline splices it into an
     /// asset's, plus the source itself as the largest.
@@ -175,25 +187,24 @@ impl ImageRef {
     /// The names are derived here and again where the files are written, from
     /// this one rule ([`Self::variant`]), because the page is served before the
     /// bytes are cut.
-    fn candidates(&self, url: &str, config: &Config) -> Vec<Candidate> {
-        let dir = url.rsplit_once('/').map_or("", |(dir, _)| dir);
+    fn candidates(&self, config: &Config) -> Vec<Candidate> {
         self.widths
             .iter()
             .map(|&width| Candidate {
-                url: format!("{dir}/{}", Self::variant(&self.name, width)),
+                url: config.asset_url(Path::new(&Self::variant(&self.name, width))),
                 width,
             })
-            .chain(self.source_candidate(url, config))
+            .chain(self.source_candidate(config))
             .collect()
     }
 
     /// The source itself, the largest candidate, with the intrinsic width a
     /// browser needs to choose between it and the downscales.
     #[cfg(feature = "images")]
-    fn source_candidate(&self, url: &str, _config: &Config) -> Option<Candidate> {
+    fn source_candidate(&self, config: &Config) -> Option<Candidate> {
         let (width, _) = image::image_dimensions(&self.source).ok()?;
         Some(Candidate {
-            url: url.to_owned(),
+            url: self.url(config),
             width,
         })
     }
@@ -203,7 +214,7 @@ impl ImageRef {
     /// be the largest of.
     #[cfg(not(feature = "images"))]
     #[allow(clippy::unused_self)]
-    fn source_candidate(&self, _url: &str, _config: &Config) -> Option<Candidate> {
+    fn source_candidate(&self, _config: &Config) -> Option<Candidate> {
         None
     }
 
@@ -227,5 +238,63 @@ impl ImageRef {
             None => (file, String::new()),
         };
         format!("{dir}{stem}-{width}{digest}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImageRef;
+    use crate::config::Config;
+    use std::path::PathBuf;
+
+    /// A picture authored in a content subdirectory keeps that directory once,
+    /// not twice.
+    ///
+    /// The candidate used to be built from the primary URL's *directory* plus
+    /// the whole name, which already carried that directory: every downscale of
+    /// `content/gallery/cover.png` was published as
+    /// `/assets/gallery/gallery/cover-30.png` and 404'd, while the `src`
+    /// fallback kept working and hid it. Nothing caught it because every
+    /// scenario put its image at the content root, where the two spellings
+    /// coincide.
+    #[test]
+    fn a_content_subdirectory_appears_once_in_every_candidate() {
+        let config = Config::default();
+        let image = ImageRef {
+            name: "gallery/cover.png".to_owned(),
+            source: PathBuf::from("content/gallery/cover.png"),
+            widths: vec![30, 60],
+        };
+
+        assert_eq!(image.url(&config), "/assets/gallery/cover.png");
+        // The source candidate reads the file's header for its intrinsic width
+        // and there is no file here, so what is left is the downscales.
+        let urls: Vec<String> = image
+            .candidates(&config)
+            .into_iter()
+            .map(|candidate| candidate.url)
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                "/assets/gallery/cover-30.png",
+                "/assets/gallery/cover-60.png"
+            ]
+        );
+    }
+
+    /// An image at the content root is named by its file alone, and the URL is
+    /// the prefix and that name: the case that always worked, kept honest.
+    #[test]
+    fn an_image_at_the_content_root_gains_no_directory() {
+        let config = Config::default();
+        let image = ImageRef {
+            name: "pic.png".to_owned(),
+            source: PathBuf::from("content/pic.png"),
+            widths: vec![30],
+        };
+
+        assert_eq!(image.url(&config), "/assets/pic.png");
+        assert_eq!(image.candidates(&config)[0].url, "/assets/pic-30.png");
     }
 }

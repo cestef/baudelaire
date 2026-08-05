@@ -132,6 +132,47 @@ scenario "a responsive width smaller than the source becomes a srcset candidate"
   }
 }
 
+// An extracted image keeps the directories it was authored under, and the
+// `srcset` has to name them exactly once. Built by gluing the whole name onto
+// the primary URL's directory -- which already held it -- every downscale of a
+// picture in a content subdirectory was published as
+// `/assets/gallery/gallery/cover-30.png` and 404'd; only the `src` fallback
+// worked, so nothing looked broken. Every other scenario here puts its image at
+// `content/pic.png`, where the two spellings coincide, which is why it survived.
+scenario "an extracted image in a subdirectory names that directory once" {
+  requires "images"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images {
+            responsive { widths 30 }
+          }
+      }
+      """#
+    "content/gallery/cover.png" png="60x40"
+    "content/gallery/page.typ" #"""
+      #image("cover.png")
+      """#
+  }
+  expect {
+    ok
+    file "gallery/page/index.html" {
+      contains #"src="/assets/gallery/cover.png""#
+      contains "/assets/gallery/cover-30.png 30w"
+      // The directory doubled is the whole bug, and it is invisible in the
+      // `src`: only the candidates carried it twice.
+      missing "/assets/gallery/gallery/"
+    }
+    // ...and the candidate names the file the copy pass actually wrote.
+    file "assets/gallery/cover-30.png"
+  }
+}
+
 scenario "a responsive width at or above the source would upscale, so it is dropped" {
   files {
     "config.kdl" #"""
