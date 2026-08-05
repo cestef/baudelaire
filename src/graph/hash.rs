@@ -151,6 +151,15 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 17: a page records the `#fragment` links into its own body, which the
+    /// deep-link check now resolves rather than passing through. An entry
+    /// written before this names none of them, so under the narrower rule a
+    /// cached page reads as valid however its own headings changed. The same
+    /// bump covers three changes to rendered markup that a warm entry would
+    /// otherwise keep serving: heading ids are slugged in document order, a
+    /// `srcset` candidate no longer repeats the directory the image was
+    /// authored under, and every vocabulary names the same language-aware
+    /// author.
     /// 16: a page records the URLs its already-URL links named, and whether the
     /// site served a page at each. An entry written before this records none, so
     /// under the narrower rule it reads as valid however the page set changed:
@@ -207,7 +216,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 16;
+    const SCHEMA: u32 = 17;
 
     pub fn current() -> Self {
         Self {
