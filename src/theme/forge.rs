@@ -192,7 +192,13 @@ impl Repository {
     fn segments(rest: &str) -> Option<(&str, &str)> {
         let rest = rest.trim_end_matches('/').trim_end_matches(".git");
         let (owner, repo) = rest.split_once('/')?;
-        (!owner.is_empty() && !repo.is_empty() && !repo.contains('/')).then_some((owner, repo))
+        // `.` and `..` are refused rather than passed on: the repository name
+        // becomes the installed directory's name, and a forge that served a
+        // repository literally called `..` would otherwise name the project
+        // root. The archive reader checks this too, so this is the earlier of
+        // two answers to the same question, not the only one.
+        let named = |s: &str| !s.is_empty() && s != "." && s != "..";
+        (named(owner) && named(repo) && !repo.contains('/')).then_some((owner, repo))
     }
 }
 
