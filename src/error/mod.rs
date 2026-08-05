@@ -227,6 +227,48 @@ pub enum BaudelaireErrorKind {
 /// backend and exit 0 having published nothing.
 ///
 /// Not remote-specific, which is why it does not live on [`RemoteError`]:
+/// A page's source, ready for the snippet a diagnostic renders: named by its
+/// path, and tagged with the language it is actually written in.
+///
+/// The tag used to be the literal `"Typst"` at each of the three sites that
+/// render a page, which was true until a `.md` file became a page and then
+/// labelled every markdown snippet as Typst. Derived from the extension here,
+/// once, so a new source dialect is a row rather than three call sites nobody
+/// remembers to visit.
+/// Both halves owned: every caller here is on a failure path that already
+/// copies the page text to hand it to miette, so borrowing would buy a lifetime
+/// and nothing else.
+pub struct PageSource(pub String, pub String);
+
+impl PageSource {
+    /// What each content extension is written in, for a renderer that
+    /// highlights the snippet. Anything unrecognized is left untagged rather
+    /// than guessed: a wrong tag highlights the line as the wrong language,
+    /// which reads worse than no highlighting at all.
+    const LANGUAGES: &'static [(&'static str, &'static str)] =
+        &[("typ", "Typst"), ("md", "Markdown")];
+
+    /// The language `name` is written in, by its extension.
+    fn language(name: &str) -> Option<&'static str> {
+        let extension = std::path::Path::new(name).extension()?.to_str()?;
+        Self::LANGUAGES
+            .iter()
+            .find(|(known, _)| *known == extension)
+            .map(|(_, language)| *language)
+    }
+}
+
+impl From<PageSource> for miette::NamedSource<String> {
+    fn from(PageSource(name, text): PageSource) -> Self {
+        let language = PageSource::language(&name);
+        let named = Self::new(name, text);
+        match language {
+            Some(language) => named.with_language(language),
+            None => named,
+        }
+    }
+}
+
 /// `clean` sweeps the output directory and every scrap of local build state,
 /// and wants the same answer to the same question.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]

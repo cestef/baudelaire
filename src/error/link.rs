@@ -59,7 +59,7 @@ impl Broken {
         let span = text
             .find(&target)
             .map(|offset| SourceSpan::new(offset.into(), target.len()));
-        let src = NamedSource::new(&page, text).with_language("Typst");
+        let src = crate::error::PageSource(page.clone(), text).into();
         Self {
             page,
             target,

@@ -119,8 +119,7 @@ impl SchemaError {
         kind: SchemaErrorKind,
     ) -> Self {
         Self {
-            page: NamedSource::new(page.display().to_string(), source.to_owned())
-                .with_language("Typst"),
+            page: crate::error::PageSource(page.display().to_string(), source.to_owned()).into(),
             span,
             kind,
         }

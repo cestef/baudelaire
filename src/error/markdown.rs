@@ -113,15 +113,21 @@ impl FrontmatterFault {
 
     /// Rebase one of kdl's diagnostics by `offset`, the byte position the block
     /// starts at in the file.
+    ///
+    /// The message and the help are escaped on the way in, as the other two
+    /// dialects escape theirs: [`Styled`](crate::ui::Styled) wraps a `#[related]`
+    /// diagnostic recursively, so both are read as this crate's markup, and a
+    /// parser that quotes a KDL token in backticks would restyle the rest of the
+    /// line. The label is not: miette forwards it untouched.
     pub fn rebased(fault: &kdl::KdlDiagnostic, offset: usize) -> Self {
         Self {
             message: fault
                 .message
-                .clone()
-                .unwrap_or_else(|| "invalid KDL".to_owned()),
+                .as_ref()
+                .map_or_else(|| "invalid KDL".to_owned(), |m| Text(m).to_string()),
             span: SourceSpan::new((fault.span.offset() + offset).into(), fault.span.len()),
             label: fault.label.clone().unwrap_or_else(|| "here".to_owned()),
-            help: fault.help.clone(),
+            help: fault.help.as_ref().map(|help| Text(help).to_string()),
         }
     }
 }

@@ -155,7 +155,7 @@ impl Flaw {
         Self {
             page,
             lint,
-            src: NamedSource::new(name, text).with_language("Typst"),
+            src: crate::error::PageSource(name, text).into(),
             span,
             severity: Severity::Warning,
         }
