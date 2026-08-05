@@ -989,6 +989,9 @@ struct Filter {
     /// Directories the last build read outside the watched trees (see
     /// [`Filter::watching`]), so an event in one is relevant without a glob.
     tracked: Vec<PathBuf>,
+    /// The build's whole scratch tree, which is never an input however much it
+    /// looks like one. See [`Filter::is_relevant`].
+    scratch: PathBuf,
 }
 
 impl Filter {
@@ -996,6 +999,10 @@ impl Filter {
         use notify::RecursiveMode::{NonRecursive, Recursive};
         let root = root.path().to_path_buf();
         let assets = Self::absolute(&root, &config.paths.assets);
+        // `Config::SCRATCH`, not `cache.dir`: the cache is one subdirectory of
+        // the scratch tree, and the generated typst that caused the loop is a
+        // sibling of it.
+        let cache = Self::absolute(&root, Path::new(crate::config::Config::SCRATCH));
         let statics = Self::absolute(&root, &config.paths.r#static);
         let mut watches: Vec<_> = Self::roots(config)
             .iter()
@@ -1030,6 +1037,7 @@ impl Filter {
             include,
             exclude,
             tracked: Vec::new(),
+            scratch: cache,
         })
     }
 
@@ -1112,6 +1120,18 @@ impl Filter {
     /// the session's own config counts: baudelaire reads no other KDL, and
     /// the config directory's non-recursive watch also surfaces its siblings.
     fn is_relevant(&self, path: &Path) -> bool {
+        // Nothing the build writes for itself can trigger it. `.baudelaire/`
+        // holds generated typst the templates genuinely *import*, so the build
+        // records it as a file it read and the watcher dutifully watched it --
+        // and every build rewrites it, so every build queued the next one and
+        // the session span until it was killed.
+        //
+        // Nothing is lost by ignoring it: those files are derived from content
+        // and templates, which are watched, so the edit that changes one is
+        // already a rebuild on its own account.
+        if path.starts_with(&self.scratch) {
+            return false;
+        }
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
         if self.exclude.iter().any(|g| g.is_match(rel)) {
             return false;
@@ -1327,6 +1347,37 @@ mod tests {
             )
         );
         assert!(!filter.is_relevant(Path::new("/proj/elsewhere/style.css")));
+    }
+
+    /// Nothing the build writes for itself may trigger it.
+    ///
+    /// The scratch tree holds generated typst that templates genuinely
+    /// `#import`, so the build records it as a file it *read* and the watcher
+    /// dutifully watched it -- and every build rewrites it, so every build
+    /// queued the next one. A `serve` session span at ~140ms a lap, rebuilding
+    /// nothing, until it was killed.
+    ///
+    /// The whole tree, not just `cache.dir`: the cache is one subdirectory of
+    /// it, and the file that caused the loop is a sibling of the cache.
+    #[test]
+    fn the_builds_own_scratch_tree_never_triggers_a_rebuild() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+        let scratch = Path::new("/proj").join(Config::SCRATCH);
+
+        assert!(
+            !filter.is_relevant(&scratch.join("generated/sections.typ")),
+            "a generated import rebuilt the site that generates it"
+        );
+        assert!(!filter.is_relevant(&scratch.join("generated/baudelaire.d.ts")));
+        assert!(!filter.is_relevant(&config.cache.dir.join("manifest.json")));
+        // ...and the content it is derived from still does, which is what makes
+        // ignoring it lossless.
+        assert!(
+            filter.is_relevant(&Path::new("/proj").join(&config.paths.content).join("a.typ")),
+            "the edit that regenerates it has to rebuild on its own account"
+        );
     }
 
     /// A `--config` outside the root watches that file's own directory, and

@@ -123,6 +123,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **serve**: a session no longer rebuilds itself forever. Templates `#import`
+  the generated `sections.typ`, so the build recorded it as a file it read and
+  the watcher watched it -- and every build rewrites it, so every build queued
+  the next one. A session span at roughly one rebuild per 140ms, producing
+  nothing, until it was killed. Nothing under the scratch directory triggers a
+  rebuild now; those files are derived from content and templates, which are
+  watched, so the edit that changes one already rebuilds on its own account.
+
 - **config**: a profile is checked when the config is parsed, not when it is
   selected. A profile block was retained as raw KDL and dispatched only on
   selection, so a key no scope has (`content { drafts #true }` written as
