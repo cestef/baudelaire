@@ -53,6 +53,16 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 [package.metadata.binstall.overrides.aarch64-apple-darwin]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-x86_64.tar.gz"
+
+# Windows ships a zip, not a tarball, so the format and the binary name are
+# overridden with the URL rather than inherited from the default above.
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-windows-x86_64.zip"
+pkg-fmt = "zip"
+bin-dir = "baudelaire.exe"
+
 [features]
 default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
 
