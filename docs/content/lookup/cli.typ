@@ -89,7 +89,7 @@ baudelaire 0.0.11
   rustc     1.97.1 (8bab26f4f 2026-07-14) (release)
   target    x86_64-unknown-linux-gnu
   flavor    full
-  features  announce cards css embedded-fonts images js pdf ssh
+  features  announce cards css embedded-fonts images js markdown pdf ssh themes
 ```
 
 `flavor` is `full`, `slim`, or `custom` for a feature mix no release ships,
