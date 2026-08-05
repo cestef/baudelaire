@@ -170,9 +170,18 @@ pub(super) trait ElementExt {
     /// of every element it passes and would copy each shared list to hand one
     /// out.
     fn visit(&self, f: &mut impl FnMut(&HtmlElement));
-    /// The text this element and its descendants carry, markup dropped: what a
-    /// heading's anchor is slugged from, and the bytes an inline `<script>` or
-    /// `<style>` ships.
+    /// The text this element and its descendants carry, markup dropped, **in
+    /// document order**: what a heading's anchor is slugged from, and the bytes
+    /// an inline `<script>` or `<style>` ships.
+    ///
+    /// The order is the whole contract. Built on [`visit`](ElementExt::visit)
+    /// plus a scan of each element's own `Text` children, it was not document
+    /// order for mixed content: an element's direct text came out before
+    /// anything nested inside it, so `== The *fast* way` slugged to
+    /// `the-way-fast` and every heading carrying emphasis, a link, `raw`, math
+    /// or a footnote marker got a scrambled `id`. Ids are the site's deep-link
+    /// surface and the fragment check reads the same set, so a *correct*
+    /// `#link("page.typ#the-fast-way")` failed the build.
     fn text(&self) -> String;
     /// This element's heading level, `1`..`6`, or `None` for anything that is
     /// not a heading.
@@ -216,13 +225,19 @@ impl ElementExt for HtmlElement {
 
     fn text(&self) -> String {
         let mut out = String::new();
-        self.visit(&mut |element| {
-            for child in &element.children {
-                if let HtmlNode::Text(text, _) = child {
-                    out.push_str(text);
-                }
+        // One in-order walk over `children`, pushing each `Text` where it
+        // occurs and descending into an `Element` at that same point. An
+        // explicit stack rather than recursion, so a deeply nested document
+        // cannot overflow the one the compiler gave us; reversed on push, so
+        // popping yields the children back in the order they were written.
+        let mut stack: Vec<&HtmlNode> = self.children.iter().rev().collect();
+        while let Some(node) = stack.pop() {
+            match node {
+                HtmlNode::Text(text, _) => out.push_str(text),
+                HtmlNode::Element(child) => stack.extend(child.children.iter().rev()),
+                _ => {}
             }
-        });
+        }
         out
     }
 
@@ -444,10 +459,74 @@ impl Transforms {
 
 #[cfg(test)]
 mod tests {
-    use super::SrcSet;
+    use super::{ElementExt, HtmlElement, HtmlNode, HtmlTag, SrcSet, tag};
+    use typst::syntax::Span;
 
     fn candidates(srcset: &str) -> Vec<(&str, &str)> {
         SrcSet(srcset).candidates()
+    }
+
+    /// An element carrying `children`, in order: what mixed content looks like
+    /// once typst has emitted it.
+    fn element(name: HtmlTag, children: Vec<HtmlNode>) -> HtmlElement {
+        let mut el = HtmlElement::new(name);
+        for child in children {
+            el.children.push(child);
+        }
+        el
+    }
+
+    fn text(value: &str) -> HtmlNode {
+        HtmlNode::Text(value.into(), Span::detached())
+    }
+
+    /// `== The *fast* way to a #emph[slug]`, as typst emits it: text, an
+    /// element, text, an element. The anchor is slugged from this, so reading
+    /// an element's own text before its children's spelled the heading back in
+    /// an order nobody wrote and gave the section an id no correct deep link
+    /// could ever name.
+    #[test]
+    fn text_reads_mixed_content_in_document_order() {
+        let heading = element(
+            tag::h2,
+            vec![
+                text("The "),
+                element(tag::em, vec![text("fast")]).into(),
+                text(" way to a "),
+                element(tag::span, vec![text("slug")]).into(),
+            ],
+        );
+
+        assert_eq!(heading.text(), "The fast way to a slug");
+    }
+
+    /// Nesting is followed at the point it occurs, however deep, and an element
+    /// with no text of its own contributes nothing rather than reordering what
+    /// surrounds it.
+    #[test]
+    fn text_descends_where_the_nesting_is() {
+        let heading = element(
+            tag::h3,
+            vec![
+                element(
+                    tag::a,
+                    vec![text("a "), element(tag::code, vec![text("raw")]).into()],
+                )
+                .into(),
+                text(" tail"),
+            ],
+        );
+
+        assert_eq!(heading.text(), "a raw tail");
+    }
+
+    /// The flat case the inline `<script>`/`<style>` digests rely on: one
+    /// element, text children only, concatenated as written.
+    #[test]
+    fn text_concatenates_flat_children_as_written() {
+        let script = element(tag::script, vec![text("let a = 1;"), text("let b = 2;")]);
+
+        assert_eq!(script.text(), "let a = 1;let b = 2;");
     }
 
     #[test]
