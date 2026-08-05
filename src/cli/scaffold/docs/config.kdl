@@ -82,9 +82,7 @@ profiles {
   dev {
     url "http://localhost:1821"
     content {
-      draft {
-        build #true
-      }
+      drafts #true
     }
     assets {
       minify #false

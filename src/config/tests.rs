@@ -1172,3 +1172,48 @@ fn a_template_binding_resolves_nearest_first() {
     // A collection nothing configures binds nothing: the page renders unwrapped.
     assert_eq!(config.template_for("notes", None), None);
 }
+
+/// The whole point of the shorthand: the one-boolean case, which is what a
+/// `dev` profile writes, does not have to open a block to say it, and every
+/// sibling key of the section it stands in for is left alone.
+#[test]
+fn drafts_takes_a_bare_flag_for_its_build_key() {
+    assert!(!parse("").content.drafts.build, "off by default");
+    assert!(parse("content { drafts #true }").content.drafts.build);
+    assert!(parse("content { drafts }").content.drafts.build, "bare");
+    assert!(!parse("content { drafts #false }").content.drafts.build);
+    let cfg = parse("content { drafts #true }");
+    assert_eq!(cfg.content.drafts.suffix, ".draft", "sibling untouched");
+}
+
+/// The long spelling still reads, and an argument may carry a block: the
+/// shorthand is an extra spelling of one key, not a replacement for the block.
+#[test]
+fn drafts_still_takes_its_block_with_or_without_the_flag() {
+    let cfg = parse("content { drafts { build #true; suffix \".wip\" } }");
+    assert!(cfg.content.drafts.build);
+    assert_eq!(cfg.content.drafts.suffix, ".wip");
+    let cfg = parse("content { drafts #true { suffix \".wip\" } }");
+    assert!(cfg.content.drafts.build);
+    assert_eq!(cfg.content.drafts.suffix, ".wip");
+}
+
+/// The argument reaches the `build` handler untouched, so the shorthand cannot
+/// accept a value `drafts { build .. }` would refuse.
+#[test]
+fn a_non_boolean_draft_shorthand_is_a_type_error() {
+    let err = Config::parse("content { drafts \"yes\" }")
+        .expect_err("string is not a boolean")
+        .to_string();
+    assert!(err.contains("expected boolean"), "{err}");
+}
+
+/// The key was `draft` through 0.0.11, and the rename is a hard error rather
+/// than a silent no-op: an ignored `draft { build #true }` is a production
+/// build that quietly drops every draft page.
+#[test]
+fn the_old_draft_spelling_is_refused_with_a_suggestion() {
+    let err = Config::parse("content { draft { build #true } }").expect_err("renamed key");
+    let rendered = format!("{:?}", miette::Report::from(err));
+    assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
+}

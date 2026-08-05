@@ -40,7 +40,7 @@ impl<'a> Stem<'a> {
                 slug = head;
                 lang = Some(code);
             } else if let (false, Some(head)) =
-                (draft, Self::undraft(slug, &config.content.draft.suffix))
+                (draft, Self::undraft(slug, &config.content.drafts.suffix))
             {
                 slug = head;
                 draft = true;

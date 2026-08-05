@@ -990,7 +990,7 @@ impl Cli {
 ///   `baudelaire new --draft posts/foo` failed with "invalid value 'posts/foo'
 ///   for '--draft'", an error that never mentions the real cause.
 /// - A plain `bool` that could only push a setting on (`--drafts`, `--future`),
-///   so `draft { build #true }` in config had no CLI route back to a production
+///   so `drafts #true` in config had no CLI route back to a production
 ///   build, and `serve { watch #false }` no way to turn watching on.
 /// - One that accumulated with `|=` (`--external`), which is the same one-way
 ///   street with the reasoning buried in a code comment.
@@ -1050,7 +1050,7 @@ impl Overrides for CommonOverrides {
         if let Some(url) = &self.base_url {
             config.url = Some(url.clone());
         }
-        Toggle::of(self.drafts, self.no_drafts).apply(&mut config.content.draft.build);
+        Toggle::of(self.drafts, self.no_drafts).apply(&mut config.content.drafts.build);
         Toggle::of(self.future, self.no_future).apply(&mut config.content.future);
         Toggle::of(self.strict_links, self.no_strict_links).apply(&mut config.links.strict);
     }
@@ -1970,7 +1970,7 @@ mod tests {
         let mut config = Config::default();
         args.overrides.apply(&mut config);
         assert_eq!(config.url.as_deref(), Some("https://preview.example/"));
-        assert!(config.content.draft.build);
+        assert!(config.content.drafts.build);
         assert!(!config.cache.incremental);
     }
 

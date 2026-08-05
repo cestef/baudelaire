@@ -491,7 +491,7 @@ impl Page {
     /// Whether this page builds under the current draft/future config, the
     /// one eligibility predicate, shared by the engine and page generators.
     pub fn eligible(&self, config: &Config) -> bool {
-        !self.skipped(config.content.draft.build, config.content.future)
+        !self.skipped(config.content.drafts.build, config.content.future)
     }
 
     /// Whether this page should be skipped given draft/future flags.

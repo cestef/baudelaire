@@ -98,7 +98,7 @@ These are enforced, roughly in the order they get violated:
   `Js(&v)`). Not `to_x()`/`from_x()`, and never an overloaded `Display` on a
   data type.
 - **Config keys are one word.** A compound concept nests into a block:
-  `draft { suffix }`, never `draft-suffix`.
+  `drafts { suffix }`, never `draft-suffix`.
 - **Generated output goes through its emitter**, not `format!`: Typst through
   `codegen::Value`, XML through `engine/emit/xml.rs`, JS through
   `engine/emit/script.rs`, HTML through the typed DOM.

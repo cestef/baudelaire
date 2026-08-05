@@ -35,7 +35,7 @@ scenario "draft build turns drafts on" {
         dist "public"
       }
       content {
-        draft { build #true }
+        drafts #true
       }
       """#
     "content/posts/draft.typ" #"""
@@ -79,7 +79,7 @@ scenario "the draft suffix is stripped from the slug when drafts build" {
         dist "public"
       }
       content {
-        draft { build #true }
+        drafts #true
       }
       """#
     "content/posts/wip.draft.typ" #"""

@@ -229,7 +229,7 @@ pub struct ContentConfig {
     /// Build future-dated posts.
     pub future: bool,
     /// Draft handling.
-    pub draft: DraftConfig,
+    pub drafts: DraftConfig,
     /// Collection overrides keyed by id.
     pub collections: Vec<(String, CollectionConfig)>,
     /// Taxonomy definitions.

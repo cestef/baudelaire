@@ -10,6 +10,23 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Upgrading
+
+- `content { draft { .. } }` is now `content { drafts { .. } }`, and the key that
+  matters takes a bare flag:
+
+  ```kdl
+  content { draft { build #true } }   // was
+  content { drafts #true }            // is, and `drafts { build #true }` still reads
+  ```
+
+  The old spelling is an unknown key, not a silent no-op: a `draft` block that
+  parsed and configured nothing is a production build quietly dropping every
+  draft page. `drafts` with no value at all also enables them, like any other
+  flag; `drafts #true { suffix ".wip" }` sets both.
+
 ## [0.0.11] - 2026-08-05
 
 ### Upgrading

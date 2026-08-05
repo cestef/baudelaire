@@ -924,7 +924,7 @@ impl Knobs {
                 *target = value;
             }
         };
-        set(&mut config.content.draft.build, self.drafts);
+        set(&mut config.content.drafts.build, self.drafts);
         set(&mut config.content.future, self.future);
         set(&mut config.links.strict, self.strict);
         set(&mut config.cache.incremental, self.cache);

@@ -140,13 +140,19 @@ impl<T> Block<T> {
     /// unrecognized key (with a nearest-match suggestion).
     pub(super) fn apply(&self, value: &mut T, nodes: &[KdlNode], text: &str) -> Result<()> {
         for node in nodes {
-            let key = node.name().value();
-            match self.0.iter().find(|(k, ..)| *k == key) {
-                Some((.., handler)) => handler(value, node, text)?,
-                None => return Err(Keys::unknown_key(self.0, text, key, NodeExt::span(node))),
-            }
+            self.one(value, node.name().value(), node, text)?;
         }
         Ok(())
+    }
+
+    /// Apply the rule named `key` to `node`. Usually the node's own name, but a
+    /// shorthand ([`Section::shorthand`]) hands a node to the rule for the key
+    /// it stands in for, so the two spellings run the very same handler.
+    fn one(&self, value: &mut T, key: &str, node: &KdlNode, text: &str) -> Result<()> {
+        match self.0.iter().find(|(k, ..)| *k == key) {
+            Some((.., handler)) => handler(value, node, text),
+            None => Err(Keys::unknown_key(self.0, text, key, NodeExt::span(node))),
+        }
     }
 
     /// This scope's keys, as the reference renders them.
@@ -202,6 +208,28 @@ pub(super) trait Section: Sized + 'static {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),
             None if switch => Ok(()),
             None => Err(ConfigError::missing_children(text, NodeExt::span(node)).into()),
+        }
+    }
+
+    /// Fill a section that also answers to a bare value, which is read as the
+    /// key `stands_for`: `drafts #true` is `drafts { build #true }`. The
+    /// argument reaches that key's own handler untouched, so the shorthand
+    /// cannot accept a value the long spelling would refuse.
+    ///
+    /// A block may still follow the argument, and either alone is enough: the
+    /// whole point is that the common case (one boolean) does not have to open
+    /// braces to say it.
+    fn shorthand(&mut self, node: &KdlNode, text: &str, stands_for: &'static str) -> Result<()> {
+        match node.children() {
+            Some(block) => {
+                if !node.entries().is_empty() {
+                    Self::RULES.one(self, stands_for, node, text)?;
+                }
+                Self::RULES.apply(self, block.nodes(), text)
+            }
+            // No block: the node itself is the value, and a bare `drafts` is
+            // the "presence is the switch" spelling every flag already takes.
+            None => Self::RULES.one(self, stands_for, node, text),
         }
     }
 

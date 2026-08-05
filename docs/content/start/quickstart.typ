@@ -76,7 +76,7 @@ That writes `content/posts/first-post.typ`, with the title derived from the
 filename and today's date filled in (because the `posts` collection sorts by
 date). Without `--no-draft` the page is written as a draft, and drafts are
 excluded from the build until you pass `--drafts` or set
-`content { draft { build } }`.
+`content { drafts }`.
 
 It arrives with the standard fields filled in. Open it and write:
 

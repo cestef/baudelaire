@@ -72,7 +72,7 @@ impl Default for ContentConfig {
         Self {
             index: Some("index".into()),
             future: false,
-            draft: DraftConfig::default(),
+            drafts: DraftConfig::default(),
             collections: Vec::default(),
             taxonomies: Vec::default(),
         }

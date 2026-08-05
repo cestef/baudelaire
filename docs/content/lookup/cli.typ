@@ -117,7 +117,7 @@ Config overrides taken by every command that builds: `build`, `serve`, `check`,
 
 Every boolean here has a `--no-` counterpart: `--no-drafts`, `--no-future`,
 `--no-cache`, `--no-strict-links`. The pair exists because config can set either
-side, so `draft { build #true }` plus `--no-drafts` is a production build from a
+side, so `drafts #true` plus `--no-drafts` is a production build from a
 config that normally includes drafts. Pass both and the last one wins.
 
 `check` writes no file and loads no cache, so it takes neither `--out` nor

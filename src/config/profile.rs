@@ -135,7 +135,7 @@ mod tests {
 
     /// Fill-in-place has to hold all the way down, not just one level: the
     /// grouped tree makes `a { b { c .. } }` the common shape (a `dev` profile
-    /// flipping `content { draft { build } }`), and an override there must leave
+    /// flipping `content { drafts { build } }`), and an override there must leave
     /// every untouched sibling at *each* level alone.
     #[test]
     fn profile_overrides_three_levels_deep() {
@@ -143,7 +143,7 @@ mod tests {
             r#"
             content {
               index "_index"
-              draft { build #false; suffix ".wip" }
+              drafts { build #false; suffix ".wip" }
             }
             assets {
               minify #true
@@ -151,15 +151,15 @@ mod tests {
             }
             profiles {
               dev {
-                content { draft { build #true } }
+                content { drafts #true }
                 assets { images { responsive { quality 55 } } }
               }
             }
         "#,
         );
         let dev = cfg.with_profile("dev").expect("profile exists");
-        assert!(dev.content.draft.build, "overridden three levels down");
-        assert_eq!(dev.content.draft.suffix, ".wip", "sibling key inherited");
+        assert!(dev.content.drafts.build, "overridden three levels down");
+        assert_eq!(dev.content.drafts.suffix, ".wip", "sibling key inherited");
         assert_eq!(dev.content.index.as_deref(), Some("_index"), "uncle key");
         let responsive = &dev.assets.images.responsive;
         assert_eq!(responsive.quality, 55, "overridden four levels down");

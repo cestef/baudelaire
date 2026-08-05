@@ -349,10 +349,10 @@ impl Section for ContentConfig {
             },
         ),
         (
-            "draft",
+            "drafts",
             Nested(DraftConfig::rows),
-            "Whether drafts are built, and where they land.",
-            |c, n, t| c.draft.fill(n, t),
+            "Whether drafts are built, and how one is marked. `drafts #true` is `drafts { build #true }`.",
+            |c, n, t| c.drafts.shorthand(n, t, "build"),
         ),
         (
             "collections",

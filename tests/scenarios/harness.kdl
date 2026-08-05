@@ -227,7 +227,7 @@ scenario "the drafts knob overrides the config, in both directions" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public" }
-      content { draft { build #false } }
+      content { drafts #false }
       """#
     "content/posts/wip.typ" #"""
       #let frontmatter = (title: "W", draft: true,)
@@ -267,10 +267,10 @@ scenario "a profile overlays the config exactly as the CLI applies it" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public" }
-      content { draft { build #false } }
+      content { drafts #false }
       profiles {
         staging {
-          content { draft { build #true } }
+          content { drafts #true }
         }
       }
       """#

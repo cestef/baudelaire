@@ -128,9 +128,7 @@ client {
 profiles {
   dev {
     content {
-      draft {
-        build #true
-      }
+      drafts #true
     }
     assets {
       minify #false

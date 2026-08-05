@@ -10,7 +10,7 @@ Named overlays on top of `config.kdl`, and `${VAR}` in any string value.
 profiles {
   dev {
     content {
-      draft { build #true }
+      drafts #true
     }
     assets {
       minify #false
@@ -46,7 +46,7 @@ A profile accepts every key the top level accepts. Two things fail:
   columns: 2,
   align: (left, left),
   table.header([In the overlay], [What happens]),
-  [A block (`html`, `assets`, `content { draft }`)],
+  [A block (`html`, `assets`, `content { drafts }`)],
   [Filled in place. Keys the overlay does not name keep the values they had.],
 
   [A scalar (`url`, `prune`, `serve { port }`)],
@@ -77,7 +77,7 @@ profiles {
 
 Under `--profile preview`, minification is off and bundling and fingerprinting
 are still on. The same holds at any depth: a profile touching
-`content { draft { build } }` leaves `content { index }` and every collection
+`content { drafts }` leaves `content { index }` and every collection
 alone.
 
 #callout(kind: "warn")[

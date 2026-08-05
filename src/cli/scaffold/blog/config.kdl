@@ -84,6 +84,9 @@ profiles {
   dev {
     url "http://localhost:1821"
     content {
+      // Drafts (`post.draft.typ`, or `draft: true` in the frontmatter) and
+      // pages dated ahead of now build here and nowhere else.
+      drafts #true
       future #true
     }
   }
