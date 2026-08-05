@@ -25,7 +25,7 @@
 
   ```sh
   curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
-  less install.sh          # read it first
+  less install.sh # read it
   sh install.sh
   ```
 ]

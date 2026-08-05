@@ -28,9 +28,9 @@ sh install.sh
 <summary>Other ways to install</summary>
 
 ```bash
-VERSION=${VERSION} sh install.sh    # pin this release
-PREFIX=~/.local/bin sh install.sh   # choose the install directory
-FLAVOR=slim sh install.sh           # the smaller build, see below
+VERSION=${VERSION} sh install.sh  # pin this release
+PREFIX=~/.local/bin sh install.sh # choose the install directory
+FLAVOR=slim sh install.sh         # the smaller build, see below
 ```
 
 With Cargo, `cargo binstall baudelaire` fetches these same archives, and
@@ -40,7 +40,7 @@ On Windows, in PowerShell:
 
 ```powershell
 irm https://baudelaire.cstef.dev/install.ps1 -OutFile install.ps1
-notepad install.ps1     # read before you run
+notepad install.ps1 # read it (if you can bear with notepad)
 .\install.ps1
 ```
 
@@ -86,7 +86,13 @@ the same origin as the archive, so it proves the transfer was not corrupted; it
 is not a signature and does not prove authenticity.
 
 ```bash
-sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256   # shasum -a 256 -c on macOS
+sha256sum -c baudelaire-linux-x86_64.tar.gz.sha256 # shasum -a 256 -c on macOS
+```
+
+macOS fellas:
+
+```bash
+shasum -a 256 -c baudelaire-darwin-aarch64.tar.gz.sha256
 ```
 
 </details>
