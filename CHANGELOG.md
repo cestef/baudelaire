@@ -160,6 +160,27 @@ chores are visible in the git history and change nothing for a site.
   A typst page that computes its frontmatter has no literal to point at, and
   there the snippet is still suppressed rather than aimed at a guess.
 
+- A section reached by its shorthand is recorded as configured, so the feature
+  gate on it can fire. `content { markdown }` on a binary built without the
+  `markdown` feature dropped every `.md` page and said nothing at all: the
+  shorthand never marked the section present, and the gate reads present *and*
+  enabled. It now warns, as every other gated capability already did.
+
+- **markdown**: a typst error in a bound template is reported against the
+  template. It was translated through the *page's* source map whenever the
+  template was at least as long as the page's lowered body, so a typo in a
+  template underlined a line of prose in some short `.md` page and never named
+  the template at all.
+
+- **markdown**: a closing fence has to be alone on its line, as the opening one
+  already did. `--- and more` closed a block and left `" and more"` as the first
+  bytes of the body, silently. A file written with CRLF also labels its
+  unterminated block on the whole fence rather than one byte to the left of it.
+
+- A diagnostic snippet is tagged with the language the page is actually written
+  in. All three sites that render one said `Typst`, which was true until a `.md`
+  file became a page.
+
 - **markdown**: `html { spans }` stamps a markdown page with the line you wrote.
   It stamped the lowered Typst instead, under a virtual path
   (`content/a.md@layout:3:2` for prose on line 6), so the dev server's alt-click

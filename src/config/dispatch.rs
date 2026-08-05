@@ -241,6 +241,17 @@ pub(super) trait Section: Sized + 'static {
     /// whole point is that the common case (one boolean) does not have to open
     /// braces to say it.
     fn shorthand(&mut self, node: &KdlNode, text: &str, stands_for: &'static str) -> Result<()> {
+        // Unconditionally, exactly as [`Section::fill`] does, and for the same
+        // reason: naming a section at all is what [`Section::enable`] records,
+        // and a section reached through a shorthand is still named. The return
+        // value is what `fill` needs and this does not, since a bare node is
+        // always legal here.
+        //
+        // Without this, `content { markdown }` left `MarkdownConfig::present`
+        // false in *every* spelling, because `markdown` is only ever dispatched
+        // through here. The feature gate reads `present && enabled`, so a slim
+        // binary dropped every `.md` page and said nothing at all.
+        self.enable();
         match node.children() {
             Some(block) => {
                 if !node.entries().is_empty() {
