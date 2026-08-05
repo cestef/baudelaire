@@ -5,7 +5,7 @@
 //! URLs). An author-set `id` is always left untouched. A heading whose text has
 //! no URL-safe characters is skipped rather than given an empty anchor.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use typst_html::{HtmlDocument, attr};
 
@@ -32,7 +32,12 @@ impl Transform for Anchors {
         // Every authored id is collected up front (on any element, anywhere in
         // the document) so a derived id never collides with one, regardless of
         // which comes first in the walk.
-        let mut seen: HashSet<String> = HashSet::new();
+        //
+        // Ordered, and not merely a set, because it leaves this pass: it is
+        // drained into `found.anchors`, which is serialized into the build
+        // manifest, so a hashed one wrote a different manifest on every build
+        // of an unchanged site.
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         doc.walk(|element| {
             if let Some(id) = element.attrs.get(attr::id) {
                 seen.insert(id.to_string());
@@ -59,7 +64,7 @@ impl Transform for Anchors {
 impl Anchors {
     /// `base`, or the first `base-N` (N≥2) not already taken, reserving the
     /// result in `seen`.
-    fn unique(base: String, seen: &mut HashSet<String>) -> String {
+    fn unique(base: String, seen: &mut BTreeSet<String>) -> String {
         if seen.insert(base.clone()) {
             return base;
         }
@@ -71,5 +76,33 @@ impl Anchors {
             }
             n += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Anchors;
+    use std::collections::BTreeSet;
+
+    /// Like-slugged headings get `-2`, `-3`, .. and each is reserved as it is
+    /// handed out, so no later heading can be given an id an earlier one took.
+    ///
+    /// The order the set comes back in is the assertion that matters: it is
+    /// drained into the page's recorded anchors, which go into the build
+    /// manifest, and a hashed set wrote a different list on every build of an
+    /// unchanged page.
+    #[test]
+    fn ids_are_reserved_as_they_are_handed_out_and_come_back_ordered() {
+        let mut seen = BTreeSet::new();
+
+        assert_eq!(Anchors::unique("usage".to_owned(), &mut seen), "usage");
+        assert_eq!(Anchors::unique("usage".to_owned(), &mut seen), "usage-2");
+        assert_eq!(Anchors::unique("usage".to_owned(), &mut seen), "usage-3");
+        assert_eq!(Anchors::unique("api".to_owned(), &mut seen), "api");
+
+        assert_eq!(
+            seen.into_iter().collect::<Vec<_>>(),
+            ["api", "usage", "usage-2", "usage-3"]
+        );
     }
 }
