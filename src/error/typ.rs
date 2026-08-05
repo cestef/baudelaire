@@ -26,7 +26,7 @@ pub struct TypstSourceDiagnostic {
     /// authored file and every label is translated into it; a label that does
     /// not translate is dropped rather than drawn at an offset measured against
     /// a different text.
-    origins: Option<Rebased>,
+    rebased: Option<Rebased>,
 }
 
 impl TypstSourceDiagnostic {
@@ -35,14 +35,14 @@ impl TypstSourceDiagnostic {
         src: NamedSource<String>,
         file: Option<FileId>,
         world: Arc<dyn World + Send + Sync>,
-        origins: Option<Rebased>,
+        rebased: Option<Rebased>,
     ) -> Self {
         Self {
             inner,
             src,
             file,
             world,
-            origins,
+            rebased,
         }
     }
 
@@ -55,7 +55,7 @@ impl TypstSourceDiagnostic {
         errs: impl IntoIterator<Item = SourceDiagnostic>,
         fallback: (&str, &str),
         world: Arc<dyn World + Send + Sync>,
-        origins: Option<(&Arc<SourceMap>, &str)>,
+        sourcemap: Option<(&Arc<SourceMap>, &str)>,
     ) -> Vec<Self> {
         errs.into_iter()
             .map(move |e| {
@@ -73,8 +73,21 @@ impl TypstSourceDiagnostic {
                 // A span in generated code keeps the wrapper as its source, so
                 // a lowering bug still reports somewhere real instead of
                 // silently losing its position.
-                let mapped = origins.and_then(|(map, name)| {
-                    let wrapper = world.source(file?).ok()?;
+                let mapped = sourcemap.and_then(|(map, name)| {
+                    // The page's own file, and only it, lowered through this
+                    // map. A diagnostic in a bound template or a shared module
+                    // is a different file entirely, and `Rebased::new` cannot
+                    // tell: it only checks that the text is at least as long as
+                    // the lowered body, which any template of a similar size
+                    // passes. A typo in a 618-byte template was reported against
+                    // a short `.md` page, underlining a line of prose that had
+                    // nothing to do with it and never naming the template at
+                    // all. `Origins::locate` makes the same test in `render`.
+                    let id = file?;
+                    if id != world.main() {
+                        return None;
+                    }
+                    let wrapper = world.source(id).ok()?;
                     let rebased = Rebased::new(Arc::clone(map), wrapper.text())?;
                     let range = world.range(e.span)?;
                     rebased.locate(&range)?;
@@ -104,8 +117,8 @@ impl TypstSourceDiagnostic {
         // With a translation in force, `src` is the authored file: a label that
         // does not map into it has no place there, so it is dropped rather than
         // drawn at an offset that means something else.
-        let range = match &self.origins {
-            Some(origins) => origins.locate(&range)?,
+        let range = match &self.rebased {
+            Some(rebased) => rebased.locate(&range)?,
             None => range,
         };
         Some(miette::LabeledSpan::new(

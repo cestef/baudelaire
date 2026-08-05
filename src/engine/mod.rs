@@ -954,7 +954,7 @@ impl Engine {
                 mapped.map(|sourcemap| (sourcemap, named))
             }
             .as_ref()
-            .map(|(origins, name)| (*origins, name.as_str())),
+            .map(|(sourcemap, name)| (*sourcemap, name.as_str())),
         )
     }
 }
