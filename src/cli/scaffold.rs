@@ -1510,10 +1510,10 @@ mod start_tests {
     #[test]
     fn every_shape_and_every_theme_is_offered() {
         let offered: Vec<&str> = Chosen::all().iter().map(|c| c.name()).collect();
-        let mut expected: Vec<&str> = super::templates::TEMPLATES.iter().map(|t| t.name).collect();
+        let expected = super::templates::TEMPLATES.iter().map(|t| t.name);
         #[cfg(feature = "themes")]
-        expected.extend(crate::theme::BUNDLED.iter().map(|t| t.name));
-        assert_eq!(offered, expected);
+        let expected = expected.chain(crate::theme::BUNDLED.iter().map(|t| t.name));
+        assert_eq!(offered, expected.collect::<Vec<_>>());
         assert!(
             Chosen::all().iter().all(|c| !c.about().is_empty()),
             "every row describes itself"

@@ -726,3 +726,113 @@ scenario "configuring markdown leaves it enabled" {
     file "on/index.html" { contains "Still a page." }
   }
 }
+
+// A markdown page is reached by its source name, exactly as a typst one is.
+//
+// The extension test in `LinkMap::classify` was the literal `typ`, so a `.md`
+// target was classified as a URL and published as the relative path the author
+// wrote. Green build, dead link. Both directions are here because the rewrite
+// and the check are the same decision: what is not resolved is not verified.
+scenario "a link naming a markdown page resolves to its permalink" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/notes.md" #"""
+      ---
+      title "Notes"
+      template "page.typ"
+      ---
+
+      The target.
+      """#
+    "content/index.md" #"""
+      ---
+      title "Home"
+      template "page.typ"
+      ---
+
+      Read [the notes](notes.md).
+      """#
+    "content/from-typst.typ" #"""
+      #let frontmatter = (title: "Typst", template: "page.typ",)
+      #link("notes.md")[the notes]
+      """#
+  }
+  expect {
+    ok
+    // Rewritten to the permalink, from a markdown page ..
+    file "index.html" {
+      contains #"href="/notes/""#
+      missing "notes.md"
+    }
+    // .. and from a typst one, since neither knows what the other is written in.
+    file "from-typst/index.html" { contains #"href="/notes/""# }
+  }
+}
+
+scenario "a link naming a markdown page that is not there is reported" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/index.md" #"""
+      ---
+      title "Home"
+      template "page.typ"
+      ---
+
+      Read [the notes](notes.md).
+      """#
+  }
+  expect {
+    fails { code "baudelaire::links::broken" }
+  }
+}
+
+// Where markdown is not a source dialect, a `.md` file is a file: a link to one
+// is left as authored rather than becoming a broken page reference. Turning
+// markdown off must not turn a working file link red.
+scenario "a markdown link is a file link where markdown is off" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content { markdown #false }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home", template: "page.typ",)
+      #link("readme.md")[the readme]
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains #"href="readme.md""# }
+  }
+}

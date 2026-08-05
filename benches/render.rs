@@ -24,7 +24,7 @@ fn link_classify(c: &mut Criterion) {
         .into_iter()
         .flat_map(|col| col.pages)
         .collect();
-    let map = LinkMap::new(&pages, dir.path());
+    let map = LinkMap::new(&pages, dir.path(), cfg.sources());
     let from = pages[0].source.clone();
     // Many links, deliberately hitting the same targets repeatedly (nav/cross-refs).
     let links: Vec<String> = (0..200).map(|k| format!("p{}.typ", k % 50)).collect();

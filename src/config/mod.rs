@@ -536,6 +536,33 @@ impl Config {
         self.content.index.as_deref().unwrap_or("index")
     }
 
+    /// The extensions a content file may carry, for this site. One entry per
+    /// source dialect, so adding one is a line here and an arm in
+    /// [`DiscoveryCache::load_page`](crate::content::DiscoveryCache), not a new
+    /// pipeline.
+    ///
+    /// Two subsystems ask, and they have to agree: discovery, deciding what is
+    /// a page, and [`LinkMap::classify`](crate::render::LinkMap::classify),
+    /// deciding whether a link names one. When they disagreed, a `.md` page was
+    /// built and published and a link to it was left as authored, so the site
+    /// served a dead relative href out of a green build.
+    ///
+    /// Markdown answers to two things, and both have to say yes: the binary has
+    /// to have been built with it, and the site has to want it. A site that says
+    /// `content { markdown #false }` keeps its `.md` files as files, and a link
+    /// to one stays the file link it was written as.
+    pub fn sources(&self) -> Vec<&'static str> {
+        // Answered once, per flavor, so neither build carries a branch the
+        // other's `cfg` leaves dangling.
+        #[cfg(feature = "markdown")]
+        let markdown = self.content.markdown.enabled;
+        #[cfg(not(feature = "markdown"))]
+        let markdown = false;
+        std::iter::once("typ")
+            .chain(markdown.then_some("md"))
+            .collect()
+    }
+
     /// The author in a given language: the language's `author` override if it
     /// has one, else the site-wide author.
     pub fn author(&self, code: &str) -> Option<&str> {

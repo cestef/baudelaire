@@ -67,6 +67,7 @@ impl<'a> Pass<'a> {
                 // Resolved here, once: it costs a canonicalization and every
                 // page's links are tested against the same answer.
                 engine.config.paths.under(engine.project.root()).content,
+                engine.config.sources(),
             ),
             analyzer: Analyzer::new(
                 planned.tracked.iter().map(Root::from).collect::<Roots>(),

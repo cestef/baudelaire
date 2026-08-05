@@ -167,9 +167,10 @@ impl Renderer {
         emitted: Emitted,
         root: &std::path::Path,
         content: std::path::PathBuf,
+        sources: Vec<&'static str>,
     ) -> Self {
         Self {
-            links: LinkMap::new(pages, root),
+            links: LinkMap::new(pages, root, sources),
             content,
             assets,
             srcsets,

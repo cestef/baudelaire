@@ -368,11 +368,18 @@ impl Resolution {
 }
 
 /// Maps content source files to their resolved permalinks. Links written
-/// against `.typ` source paths (the typst-native way to cross-reference pages)
-/// resolve to the target page's clean URL, so links survive permalink changes.
-#[derive(Debug, Default)]
+/// against source paths (the typst-native way to cross-reference pages) resolve
+/// to the target page's clean URL, so links survive permalink changes.
+#[derive(Debug)]
 pub struct LinkMap {
     by_source: HashMap<PathBuf, String>,
+    /// The extensions that make a link a source-path link rather than a URL or
+    /// a file link, from [`Config::sources`](crate::config::Config::sources).
+    ///
+    /// The site's answer, not a constant: `.md` names a page only where markdown
+    /// is a source dialect, and where it is not, a link to a `.md` file has to
+    /// stay the file link it was written as.
+    sources: Vec<&'static str>,
     /// Every permalink this site serves, so a link written as a URL rather than
     /// as a source path can still be recognized as naming a page. Generated
     /// listings are in here even though they are not in `by_source`: a link to a
@@ -383,17 +390,34 @@ pub struct LinkMap {
     root: PathBuf,
 }
 
+/// An empty map for a default site: it indexes no page, and still knows what a
+/// source path looks like. Derived, `sources` would have been empty, and a map
+/// that recognizes no source path at all classifies every link as a URL.
+impl Default for LinkMap {
+    fn default() -> Self {
+        Self {
+            by_source: HashMap::new(),
+            sources: crate::config::Config::default().sources(),
+            urls: HashSet::new(),
+            root: PathBuf::new(),
+        }
+    }
+}
+
 impl LinkMap {
     /// Index every page by the resolved path of its source file, the spelling
     /// [`LinkMap::candidates`] probes with. `root` is the typst project root
     /// absolute references resolve against.
     ///
     /// Generated listings are excluded: their source path is fabricated and no
-    /// file sits there, so no author can write a `.typ` link against it. Said
+    /// file sits there, so no author can write a source link against it. Said
     /// outright rather than left to canonicalization failing on a path that is
     /// not there, because resolution has to give the same answer for a target
     /// that exists and one that does not.
-    pub fn new(pages: &[Page], root: &Path) -> Self {
+    ///
+    /// `sources` is the site's [`Config::sources`](crate::config::Config::sources),
+    /// which decides what counts as a source path at all.
+    pub fn new(pages: &[Page], root: &Path, sources: Vec<&'static str>) -> Self {
         let by_source = pages
             .iter()
             .filter(|p| !matches!(p.data, Data::Generated { .. }))
@@ -401,6 +425,7 @@ impl LinkMap {
             .collect();
         Self {
             by_source,
+            sources,
             urls: pages.iter().map(|p| p.permalink.clone()).collect(),
             root: root.to_path_buf(),
         }
@@ -465,7 +490,10 @@ impl LinkMap {
         let split = super::Tail::of(raw);
         // Case-sensitively, the way discovery matches content files: typst
         // resolves the path literally, so `b.TYP` is not a link to `b.typ`.
-        if Path::new(split.path).extension().is_none_or(|e| e != "typ") {
+        let Some(extension) = Path::new(split.path).extension() else {
+            return Resolution::passthrough();
+        };
+        if !self.sources.iter().any(|source| extension == *source) {
             return Resolution::passthrough();
         }
         // Typst path semantics: absolute paths are project-root-relative,
@@ -511,11 +539,16 @@ impl LinkMap {
             .map(crate::fs::resolved)
     }
 
-    /// The `{stem}.{lang}.typ` sibling of `target`: the reader's own edition of
-    /// the page a link points at.
+    /// The `{stem}.{lang}.{ext}` sibling of `target`: the reader's own edition
+    /// of the page a link points at.
+    ///
+    /// The extension is the target's own, not `typ`: a link to a markdown page
+    /// means its markdown edition, and a hardcoded `typ` here looked for a
+    /// translation nobody wrote and silently served the original.
     fn edition(target: &Path, lang: &str) -> Option<PathBuf> {
         let stem = target.file_stem()?.to_str()?;
-        Some(target.with_file_name(format!("{stem}.{lang}.typ")))
+        let extension = target.extension()?.to_str()?;
+        Some(target.with_file_name(format!("{stem}.{lang}.{extension}")))
     }
 
     /// Whether a link points outside the site (scheme, protocol-relative,
@@ -674,6 +707,73 @@ mod tests {
         }
     }
 
+    /// A markdown page is a page, so a link naming its source resolves and is
+    /// checked exactly as a `.typ` one is.
+    ///
+    /// It did not: the extension test was the literal `typ`, so a `.md` target
+    /// passed through as though it were a URL. The build stayed green, the link
+    /// was published as the relative `.md` path the author wrote, and the reader
+    /// got a 404 -- including on this project's own documentation, which linked
+    /// its markdown changelog that way.
+    #[test]
+    fn a_link_naming_a_markdown_page_resolves_like_any_other() {
+        use super::Link;
+        let mut markdown = page("Notes", "/notes/");
+        markdown.source = PathBuf::from("content/notes.md");
+        let pages = [page("A", "/a/"), markdown];
+        let map = LinkMap::new(&pages, std::path::Path::new("."), vec!["typ", "md"]);
+        let from = std::path::Path::new("content/a.typ");
+
+        assert_eq!(
+            map.classify("notes.md", from, None).link,
+            Link::Resolved(Target::from("/notes/")),
+        );
+        // And a name nothing sits at is reported, rather than published as
+        // written: that is the whole point of naming the source.
+        assert_eq!(map.classify("gone.md", from, None).link, Link::Broken);
+    }
+
+    /// Where markdown is not a source dialect, a `.md` file is a file, and a
+    /// link to one is left exactly as authored. The site's answer decides, so
+    /// `content { markdown #false }` cannot turn a working file link red.
+    #[test]
+    fn a_markdown_link_passes_through_where_markdown_is_not_a_source() {
+        use super::Link;
+        let pages = [page("A", "/a/")];
+        let map = LinkMap::new(&pages, std::path::Path::new("."), vec!["typ"]);
+        let from = std::path::Path::new("content/a.typ");
+
+        assert_eq!(map.classify("notes.md", from, None).link, Link::Passthrough);
+        assert!(map.classify("notes.md", from, None).probed.is_empty());
+    }
+
+    /// A link to a markdown page means the reader's own edition of it, and the
+    /// edition of a `.md` page is a `.md` file. The probe spelled it `.typ`
+    /// whatever the target was, so a translated markdown page was never found
+    /// and every reader silently got the original.
+    ///
+    /// Built with explicit sources rather than [`LinkMap::default`], whose set
+    /// is the default site's: with the `markdown` feature off that set is `typ`
+    /// alone, and the test silently stopped testing anything. What is asserted
+    /// here is the probe's spelling, which is the site's answer to ask, not the
+    /// binary's.
+    #[test]
+    fn the_edition_probed_keeps_the_targets_own_extension() {
+        let map = LinkMap::new(&[], std::path::Path::new("."), vec!["typ", "md"]);
+        let from = std::path::Path::new("content/a.md");
+
+        let probed = map.classify("b.md", from, Some("de")).probed;
+
+        let names: Vec<String> = probed
+            .keys()
+            .map(|path| path.display().to_string())
+            .collect();
+        assert!(
+            names.iter().any(|n| n.ends_with("b.de.md")),
+            "the german edition of a markdown page: {names:?}"
+        );
+    }
+
     #[test]
     fn unknown_typ_target_is_broken_external_is_passthrough() {
         use super::Link;
@@ -719,7 +819,7 @@ mod tests {
     #[test]
     fn a_link_spelled_as_a_url_still_names_a_page() {
         let pages = [page("A", "/a/"), page("B", "/b/")];
-        let map = LinkMap::new(&pages, std::path::Path::new("."));
+        let map = LinkMap::new(&pages, std::path::Path::new("."), vec!["typ", "md"]);
 
         let page = |raw| map.served(raw).target.map(|t| t.page().to_owned());
         assert_eq!(page("/b/").as_deref(), Some("/b/"));
@@ -735,7 +835,7 @@ mod tests {
     #[test]
     fn a_url_link_records_its_probe_whether_or_not_it_named_a_page() {
         let pages = [page("A", "/a/"), page("B", "/b/")];
-        let map = LinkMap::new(&pages, std::path::Path::new("."));
+        let map = LinkMap::new(&pages, std::path::Path::new("."), vec!["typ", "md"]);
 
         assert_eq!(
             map.served("/b/#install").probed,
@@ -760,7 +860,7 @@ mod tests {
             std::fs::write(root.join("content").join(name), "").unwrap();
         }
         let pages = [page("A", "/a/"), page("B", "/b/")];
-        let map = LinkMap::new(&pages, root);
+        let map = LinkMap::new(&pages, root, vec!["typ", "md"]);
         let text = r#"#link("b.typ")[to b] #link("a.typ")[self] #image("photo.png") "b.typ""#;
         let source = Source::detached(text);
 

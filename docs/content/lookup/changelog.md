@@ -120,6 +120,14 @@ chores are visible in the git history and change nothing for a site.
     :          -
   ```
 
+- **init**: an interactive run asks what to start from, offering the four
+  starter shapes and the four themes the binary carries, each with the line that
+  describes it. Naming one on the command line (`-t`, `--theme`) answers the
+  question and skips the prompt, and `-y` takes the default shape, as before.
+  Choosing a theme writes it into `themes/<name>` and names that directory in
+  the config, so the answer is a site that builds rather than one with a theme
+  still to find.
+
 - A frontmatter `date` may be written as an ISO day (`date: "2024-01-01"`), not
   only as `datetime(year: .., month: .., day: ..)`. KDL has no date literal, so
   a markdown page needs the string form; a typst page gets it too, since both
@@ -127,6 +135,18 @@ chores are visible in the git history and change nothing for a site.
   merely resembles a date cannot silently become one.
 
 ### Fixed
+
+- **markdown**: a link naming a markdown page resolves to its permalink, and is
+  checked. The test for "is this a source path" was the literal `typ`, so a
+  `.md` target was classified as a URL: it was published as the relative path
+  the author wrote and never verified, so a green build served a dead link. This
+  project's own documentation shipped one. The extensions that count as source
+  paths are now the site's, so where markdown is off (or absent from the binary)
+  a `.md` link is still the file link it was written as.
+
+  A translated markdown page is found too: the edition probed alongside the
+  target was spelled `{stem}.{lang}.typ` whatever the target's own extension
+  was, so `hello.fr.md` was never looked for and every reader got the original.
 
 - **serve**: a session no longer rebuilds itself forever. Templates `#import`
   the generated `sections.typ`, so the build recorded it as a file it read and
