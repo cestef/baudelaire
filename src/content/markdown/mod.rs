@@ -73,18 +73,32 @@ impl<'a> Document<'a> {
         };
 
         let start = source.len() - rest.len();
+        // The closing fence is held to the rule the opening one is: alone on its
+        // line. `--- and more` used to close a block and leave `" and more"` as
+        // the first bytes of the body, silently, which is not what any other
+        // generator does with it.
+        let closing = |rest: &str, i: usize| {
+            let before = &rest[..i];
+            let after = &rest[i + fence.len()..];
+            (before.is_empty() || before.ends_with('\n'))
+                && (after.is_empty() || after.starts_with('\n') || after.starts_with("\r\n"))
+        };
         let end = rest
             .match_indices(fence)
-            .find(|(i, _)| {
-                let before = &rest[..*i];
-                before.is_empty() || before.ends_with('\n')
-            })
+            .find(|(i, _)| closing(rest, *i))
             .map(|(i, _)| i)
             .ok_or_else(|| MarkdownError::UnterminatedFrontmatter {
                 path: path.to_owned(),
                 fence: fence.to_owned(),
                 src: miette::NamedSource::new(path, source.to_owned()),
-                span: (start - fence.len() - 1, fence.len()).into(),
+                // `start` is past the newline that ended the opening fence, so
+                // the fence itself is that newline's width further back. Fixed
+                // at one byte, the label landed on `--\r` under CRLF.
+                span: (
+                    start - fence.len() - Self::newline_before(source, start),
+                    fence.len(),
+                )
+                    .into(),
             })?;
 
         let after = &rest[end + fence.len()..];
@@ -99,6 +113,16 @@ impl<'a> Document<'a> {
             offset: start,
             body_offset: source.len() - body.len(),
         })
+    }
+
+    /// The width of the line ending immediately before `at`: 2 for CRLF, 1 for
+    /// LF. What stepping back over the opening fence's newline costs, which is
+    /// not a constant on a file written on Windows.
+    fn newline_before(source: &str, at: usize) -> usize {
+        match source[..at].ends_with("\r\n") {
+            true => 2,
+            false => 1,
+        }
     }
 
     /// The block this document declares, read in its own dialect. An absent
@@ -169,6 +193,38 @@ mod tests {
     #[test]
     fn only_its_own_fence_closes_a_block() {
         assert!(Document::split("+++\ntitle = 1\n---\nBody.\n", "a.md").is_err());
+    }
+
+    /// The closing fence is held to the rule the opening one is. `--- and more`
+    /// used to close the block and leave `" and more"` as the body's first
+    /// bytes, silently, which is not what any other generator does with it.
+    #[test]
+    fn a_closing_fence_has_to_be_alone_on_its_line() {
+        assert!(Document::split("---\ntitle: A\n--- and more\n\nBody\n", "a.md").is_err());
+        // Still closed by a bare one further down.
+        let doc = Document::split("---\ntitle: A\n--- and more\n---\nBody\n", "a.md")
+            .expect("the bare fence closes it");
+        assert_eq!(doc.body, "Body\n");
+    }
+
+    /// A file written on Windows splits the same way, and its diagnostic
+    /// underlines the fence rather than the byte before it: the label stepped
+    /// back a fixed one byte over the opening newline and landed on `--\r`.
+    #[test]
+    fn a_crlf_file_splits_and_labels_the_whole_fence() {
+        let doc = Document::split("---\r\ntitle: A\r\n---\r\nBody.\r\n", "a.md").expect("split");
+        assert_eq!(doc.frontmatter, Some("title: A\r\n"));
+        assert_eq!(doc.body, "Body.\r\n");
+
+        let source = "---\r\ntitle: A\r\n";
+        let Err(error) = Document::split(source, "a.md") else {
+            panic!("an unterminated block is an error");
+        };
+        let rendered = format!("{error:?}");
+        assert!(
+            !rendered.contains("--\r"),
+            "underlines the fence: {rendered}"
+        );
     }
 
     #[test]
