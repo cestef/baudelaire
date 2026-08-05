@@ -28,6 +28,8 @@ pub mod fs;
 pub mod hook;
 pub mod link;
 pub mod lint;
+#[cfg(feature = "markdown")]
+pub mod markdown;
 pub mod mirror;
 pub mod output;
 pub mod remote;
@@ -141,6 +143,11 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Content(Box<crate::error::ContentError>),
+
+    #[cfg(feature = "markdown")]
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Markdown(Box<crate::error::markdown::MarkdownError>),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

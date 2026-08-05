@@ -1,0 +1,311 @@
+// Markdown pages: a `.md` file under `content/` is a page like any other.
+//
+// The point of these is not that markdown renders -- it is that a markdown page
+// is indistinguishable from a typst one by the time anything downstream looks
+// at it. Its frontmatter reaches the template as the same dict, its permalink
+// is built the same way, and it takes part in the link graph.
+
+scenario "a markdown page builds like any other" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    "content/hello.md" #"""
+      ---
+      title "Hello"
+      template "page.typ"
+      ---
+
+      Ordinary **prose** with `code` and a [link](/other/).
+
+      - one
+      - two
+      """#
+    "content/other.typ" #"""
+      #let frontmatter = (title: "Other", template: "page.typ",)
+      Target.
+      """#
+  }
+  expect {
+    ok
+    file "hello/index.html" {
+      // The frontmatter reached the template.
+      contains ">Hello</h1>"
+      // Inline marks became real elements, not literal asterisks.
+      contains "<strong>prose</strong>"
+      contains "<code>code</code>"
+      contains "<li>one</li>"
+      // The link resolved through the same graph a typst page's does.
+      contains #"href="/other/""#
+    }
+  }
+}
+
+// The property the lowering rests on. Typst syntax written in markdown prose is
+// text, not code: a `#call()` renders literally and an unbalanced bracket does
+// not swallow the rest of the page.
+scenario "typst syntax in markdown prose stays text" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/raw.md" #"""
+      ---
+      title "Raw"
+      template "page.typ"
+      ---
+
+      A #heading(level: 1)[fake] call, a [ bracket, and a $sum$ dollar.
+      """#
+  }
+  expect {
+    ok
+    file "raw/index.html" {
+      contains "#heading(level: 1)"
+      contains "$sum$"
+      // If the call had evaluated there would be an h1 here.
+      missing "</h1>"
+    }
+  }
+}
+
+// The escape hatch. A fence marked `eval` is how a markdown page reaches Typst;
+// an unmarked one is a sample, so a page can document Typst without running it.
+scenario "a fence marked eval runs and a plain one is shown" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/fence.md" #"""
+      ---
+      title "Fence"
+      template "page.typ"
+      ---
+
+      ```typ eval
+      #html.elem("aside", "from typst")
+      ```
+
+      ```typ
+      #html.elem("aside", "not run")
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "fence/index.html" {
+      contains "<aside>from typst</aside>"
+      // The example is shown as source, so its markup is escaped text.
+      contains "not run"
+      missing "<aside>not run</aside>"
+    }
+  }
+}
+
+// Frontmatter is KDL, and it feeds the same field dispatch a typst page's
+// export does: built-in keys are typed, and taxonomy keys collect terms.
+scenario "kdl frontmatter drives the built-in fields" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        taxonomies {
+          tags listing=#true
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        html.elem("time", page.date.iso)
+        body
+      })
+      """#
+    "content/post.md" #"""
+      ---
+      title "Post"
+      template "page.typ"
+      slug "renamed"
+      date "2026-08-05"
+      tags "rust" "typst"
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    // `slug` was honoured, so the built-in key was read and not passed through.
+    file "renamed/index.html" {
+      contains ">Post</h1>"
+      contains "2026-08-05"
+    }
+    // The taxonomy key collected its terms.
+    file "tags/rust/index.html"
+    file "tags/typst/index.html"
+  }
+}
+
+// A markdown page may declare nothing at all; it is still a page.
+scenario "a markdown page without frontmatter is still a page" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        collections {
+          _root { template "page.typ" }
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/bare.md" #"""
+      Just a body.
+      """#
+  }
+  expect {
+    ok
+    file "bare/index.html" {
+      contains "Just a body."
+    }
+  }
+}
+
+// Raw HTML is refused rather than dropped: the DOM is typed, so there is
+// nowhere to splice a string of markup into.
+scenario "raw html in markdown is an error" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/html.md" #"""
+      ---
+      title "Html"
+      template "page.typ"
+      ---
+
+      <div>spliced</div>
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::markdown::raw_html"
+    }
+  }
+}
+
+// Pasted YAML frontmatter parses as KDL -- `title:` is a perfectly good node
+// name -- so it is not a syntax error. It is caught one step later, by the same
+// typo suggester a typst page's frontmatter gets, which is the more useful
+// answer anyway: it names the key you meant.
+scenario "yaml frontmatter is caught by the typo suggester" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/bad.md" #"""
+      ---
+      title: "yaml, not kdl"
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::content::unknown_frontmatter_key"
+    }
+  }
+}
+
+// Frontmatter that is genuinely not KDL names the file and says what the block
+// is written in.
+scenario "unparseable frontmatter is a precise error" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/bad.md" #"""
+      ---
+      title "never closed
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::markdown::frontmatter"
+    }
+  }
+}

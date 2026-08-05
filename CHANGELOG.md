@@ -32,11 +32,53 @@ chores are visible in the git history and change nothing for a site.
   profile holding the typo will go red. The error is the one selecting it would
   have raised, at the same span.
 
+- **A `.md` file under `content/` is now a page.** It used to be ignored, so a
+  `README.md` or a note left beside your pages was invisible; it now builds, and
+  a build that passed can go red -- on frontmatter it never had to declare, or
+  on raw HTML, which a README often carries. Move it out of `content/`, prefix
+  it with a dot (dotfiles are still skipped), or build without the `markdown`
+  feature to restore the old behaviour.
+
 ### Added
 
+- **markdown**: `.md` content pages, behind the default-on `markdown` feature.
+  CommonMark plus the GFM set (tables, task lists, strikethrough, footnotes),
+  with frontmatter as a `---` fenced KDL block, so a site has one configuration
+  language rather than three:
+
+  ```md
+  ---
+  title "Hello"
+  tags "rust" "typst"
+  ---
+
+  Ordinary **prose**.
+  ```
+
+  It is a source dialect, not a second pipeline: a markdown page lowers to Typst
+  before it compiles, so permalinks, taxonomies, link resolution, highlighting,
+  sidecars and the incremental cache are the ones that were already there.
+
+  A fence's info string carries `key` or `key=value` parameters after the
+  language, and `eval` is the one that means something today: it runs the block
+  as Typst rather than showing it, which is how a markdown page reaches a
+  template helper. A fence with no `eval` is always a sample, so a page can
+  document Typst without running it.
+
+  ````md
+  ```typ         a sample, shown
+  ```typ eval    run as Typst
+  ````
+
+  Raw HTML other than a comment is refused rather than dropped: the DOM is
+  typed, and a string of markup has nowhere to be spliced into it. Write it as
+  `html.elem("div")[..]` in an `eval` fence.
+
 - A frontmatter `date` may be written as an ISO day (`date: "2024-01-01"`), not
-  only as `datetime(year: .., month: .., day: ..)`. Exactly `YYYY-MM-DD` is
-  accepted, so a string that merely resembles a date cannot silently become one.
+  only as `datetime(year: .., month: .., day: ..)`. KDL has no date literal, so
+  a markdown page needs the string form; a typst page gets it too, since both
+  read through one reader. Exactly `YYYY-MM-DD` is accepted, so a string that
+  merely resembles a date cannot silently become one.
 
 ### Fixed
 

@@ -54,7 +54,7 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-aarch64-musl
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.gz"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce", "themes"]
+default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -127,6 +127,14 @@ ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 # which is why it is opt-out rather than unconditional. Off means an
 # `announce { }` block warns and no verification artifacts are emitted.
 announce = []
+
+# `.md` content pages, lowered to Typst source before they compile: CommonMark
+# plus the GFM set (tables, task lists, strikethrough, footnotes).
+# ~4k lines of parser. It is a source dialect, not a second pipeline: by the
+# time the engine sees a markdown page it *is* Typst, so highlighting, math,
+# link resolution, sidecars, the transform chain and the cache all apply
+# unchanged. Off means a `.md` file under `content/` is not a page at all.
+markdown = ["dep:pulldown-cmark"]
 
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
@@ -236,6 +244,7 @@ include_dir = "0.7.4"
 flate2 = { version = "1.1.9", optional = true }
 tar = { version = "0.4.46", optional = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"], optional = true }
+pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

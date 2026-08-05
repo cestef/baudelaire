@@ -12,6 +12,8 @@ pub mod discovery;
 pub mod frontmatter;
 mod generate;
 pub mod listing;
+#[cfg(feature = "markdown")]
+pub mod markdown;
 pub mod page;
 pub mod pagination;
 pub mod section;

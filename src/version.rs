@@ -46,6 +46,7 @@ impl Version {
         ("embedded-fonts", cfg!(feature = "embedded-fonts")),
         ("images", cfg!(feature = "images")),
         ("js", cfg!(feature = "js")),
+        ("markdown", cfg!(feature = "markdown")),
         ("pdf", cfg!(feature = "pdf")),
         ("ssh", cfg!(feature = "ssh")),
         ("themes", cfg!(feature = "themes")),

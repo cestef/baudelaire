@@ -128,24 +128,71 @@ const FIELDS: &[(&str, Shape, Field)] = &[
     ),
 ];
 
-/// Where a frontmatter dict came from: the page source its spans point into,
-/// the path errors name it by, and the collection whose schema constrains it.
+/// Where a frontmatter dict came from: the source its spans point into, the
+/// path errors name it by, and the collection whose schema constrains it.
 ///
 /// One value rather than three parameters threaded through extraction, because
 /// every one of them exists to make a diagnostic precise and they are always
 /// needed together.
 pub struct Origin<'a> {
-    source: &'a Source,
+    dialect: Dialect<'a>,
     path: &'a Path,
     collection: &'a str,
+}
+
+/// The dialect a page declared its fields in, and so how a [`Step`] path
+/// resolves to a span.
+///
+/// Both reach the same [`Frontmatter`] through the same [`FIELDS`] walk; they
+/// differ only in what the author actually wrote, and a diagnostic has to
+/// underline that rather than a reconstruction of it. A markdown page has no
+/// typst `Source` at all, which is why this is a dialect and not an `Option`.
+enum Dialect<'a> {
+    /// `#let frontmatter = (..)` in a typst page: walk the AST.
+    Typst(&'a Source),
+    /// The `---` KDL block at the top of a markdown page. Its spans are
+    /// relative to the block, so `offset` puts them back in the file the
+    /// snippet is rendered from.
+    #[cfg(feature = "markdown")]
+    Kdl {
+        text: &'a str,
+        doc: &'a kdl::KdlDocument,
+        offset: usize,
+    },
 }
 
 impl<'a> Origin<'a> {
     pub fn new(source: &'a Source, path: &'a Path, collection: &'a str) -> Self {
         Self {
-            source,
+            dialect: Dialect::Typst(source),
             path,
             collection,
+        }
+    }
+
+    /// A markdown page's KDL block. `text` is the whole file, not the block, so
+    /// an offset span underlines the right line of the snippet.
+    #[cfg(feature = "markdown")]
+    pub fn kdl(
+        text: &'a str,
+        doc: &'a kdl::KdlDocument,
+        offset: usize,
+        path: &'a Path,
+        collection: &'a str,
+    ) -> Self {
+        Self {
+            dialect: Dialect::Kdl { text, doc, offset },
+            path,
+            collection,
+        }
+    }
+
+    /// The text a diagnostic renders its snippet from.
+    fn text(&self) -> &str {
+        match &self.dialect {
+            Dialect::Typst(source) => source.text(),
+            #[cfg(feature = "markdown")]
+            Dialect::Kdl { text, .. } => text,
         }
     }
 
@@ -162,7 +209,16 @@ impl<'a> Origin<'a> {
     /// may be computed, or imported), which leaves the diagnostic snippet-less
     /// rather than underlining an arbitrary offset.
     fn span(&self, path: &[Step]) -> Option<SourceSpan> {
-        let binding = Self::binding(self.source.root())?;
+        match &self.dialect {
+            Dialect::Typst(source) => Self::in_typst(source, path),
+            #[cfg(feature = "markdown")]
+            Dialect::Kdl { doc, offset, .. } => Self::in_kdl(doc, path, *offset),
+        }
+    }
+
+    /// Walk a typst dict literal.
+    fn in_typst(source: &Source, path: &[Step]) -> Option<SourceSpan> {
+        let binding = Self::binding(source.root())?;
         let mut node = binding.to_untyped();
         let mut reached = 0;
         if let Some(mut expr) = binding.init() {
@@ -181,8 +237,52 @@ impl<'a> Origin<'a> {
         if !path.is_empty() && reached == 0 {
             return None;
         }
-        let range = self.source.find(node.span())?.range();
+        let range = source.find(node.span())?.range();
         Some(SourceSpan::new(range.start.into(), range.len()))
+    }
+
+    /// Walk a KDL block, the same way and to the same rule: as far down `path`
+    /// as the author literally wrote, underlining the deepest thing reached. A
+    /// scalar is a node's argument, a list is its arguments, and a nested dict
+    /// is its children block, so a `Step` maps onto exactly one of those.
+    #[cfg(feature = "markdown")]
+    fn in_kdl(doc: &kdl::KdlDocument, path: &[Step], offset: usize) -> Option<SourceSpan> {
+        let shift =
+            |span: miette::SourceSpan| SourceSpan::new((span.offset() + offset).into(), span.len());
+        // An empty path is a field with nowhere of its own to point at; the
+        // block that should have held it is where a reader would go to add it.
+        if path.is_empty() {
+            return Some(shift(doc.span()));
+        }
+        let mut children = Some(doc);
+        let mut node: Option<&kdl::KdlNode> = None;
+        let mut span = None;
+        for step in path {
+            match step {
+                Step::Key(key) => {
+                    let found = children?
+                        .nodes()
+                        .iter()
+                        .find(|n| n.name().value() == key.as_str())?;
+                    span = Some(found.span());
+                    children = found.children();
+                    node = Some(found);
+                }
+                Step::Index(i) => {
+                    // Positional arguments only: a `key=value` entry is a named
+                    // property, not an element of the list.
+                    let entry = node?
+                        .entries()
+                        .iter()
+                        .filter(|e| e.name().is_none())
+                        .nth(*i)?;
+                    span = Some(entry.span());
+                    children = None;
+                    node = None;
+                }
+            }
+        }
+        span.map(shift)
     }
 
     /// One step into a literal: a named dict item, or a positional array
@@ -382,7 +482,7 @@ impl Frontmatter {
     /// value is an error (never silently dropped); a configured taxonomy key
     /// collects its terms; a key that is a near-miss of a known one is a typo
     /// error; anything else passes through to `extra`.
-    fn from_dict(dict: &Dict, origin: &Origin, config: &Config) -> Result<Self> {
+    pub(crate) fn from_dict(dict: &Dict, origin: &Origin, config: &Config) -> Result<Self> {
         // Before reading, not after: a schema violation on a built-in key would
         // otherwise surface as whatever the built-in reader made of the value,
         // which says nothing about the collection that asked for it.
@@ -423,7 +523,7 @@ impl Frontmatter {
         let Some(fault) = Check::default().dict(config.schema(origin.collection), dict) else {
             return Ok(());
         };
-        let (source, key) = (origin.source.text(), fault.key());
+        let (source, key) = (origin.text(), fault.key());
         let error = match &fault {
             // What is missing has no place of its own, so the span points at
             // the innermost value that does exist: the dictionary that should
@@ -655,9 +755,8 @@ impl ValueExt for Value {
         match self {
             Self::Datetime(Datetime::Date(d)) => Ok(*d),
             Self::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
-            // A date written as the ISO day it renders as, rather than as the
-            // call. One reader, so every dialect a page may be written in reads
-            // a date the same way.
+            // KDL has no date literal, so a markdown page writes the ISO day as
+            // a string. A typst page may too, rather than spelling out the call.
             Self::Str(text) => text
                 .as_str()
                 .parse::<crate::content::date::Iso>()
@@ -668,9 +767,7 @@ impl ValueExt for Value {
                         key,
                         "a date",
                         "a string that is not an ISO day",
-                        Some(
-                            "write it as `\"2024-01-01\"`, or as `datetime(year: 2024, month: 1, day: 1)`",
-                        ),
+                        Some("write it as `\"2024-01-01\"`, or as `datetime(year: 2024, month: 1, day: 1)`"),
                     )
                     .into()
                 }),

@@ -412,6 +412,128 @@ impl fmt::Display for Let<'_> {
     }
 }
 
+/// A generated Typst call: `#name(a, key: b)`, optionally opening a content
+/// block or a sequence of them.
+///
+/// Every argument is a [`Value`], so it is escaped by the one renderer that
+/// knows how, and no caller assembles `#name(` and its commas by hand. That
+/// matters most where the generated source is built from user input: a call
+/// spelled with `format!` is escaped only as carefully as its least careful
+/// site, and there is no compiler check that says so.
+#[must_use]
+pub struct Call<'a> {
+    name: &'a str,
+    args: Vec<(Option<&'static str>, Value)>,
+}
+
+impl<'a> Call<'a> {
+    pub fn new(name: &'a str) -> Self {
+        Self {
+            name,
+            args: Vec::new(),
+        }
+    }
+
+    /// A positional argument.
+    pub fn pos(mut self, value: Value) -> Self {
+        self.args.push((None, value));
+        self
+    }
+
+    /// A named argument, `key: value`.
+    ///
+    /// The key is `&'static str` on purpose. A Typst named argument must be a
+    /// bare identifier -- `#raw("a b": 1)` is refused as firmly as
+    /// `#raw(a b: 1)` -- so unlike [`Format::key`], which can quote its way out,
+    /// there is no rendering that rescues a bad one. A literal is the only
+    /// thing that can be checked by reading the call, so it is the only thing
+    /// accepted.
+    pub fn named(mut self, key: &'static str, value: Value) -> Self {
+        self.args.push((Some(key), value));
+        self
+    }
+
+    /// The same call wrapping content that is already known: `#name(..)[body]`.
+    /// For content that has to stream, see [`Call::content`].
+    pub fn body(self, body: impl fmt::Display) -> String {
+        format!("{}{body}]", self.content())
+    }
+
+    /// The same call opening a content block: `#name(..)[`. The caller writes
+    /// the content and closes it, which is what lets content stream rather than
+    /// be buffered whole.
+    pub fn content(self) -> Open<'a> {
+        Open(self, Bracket::Body)
+    }
+
+    /// The same call opening a sequence of content arguments: `#name(..,`. The
+    /// caller writes `[..],` per element and closes with `)`.
+    pub fn items(self) -> Open<'a> {
+        Open(self, Bracket::Items)
+    }
+
+    /// The argument list, without the surrounding parentheses.
+    fn arguments(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, (key, value)) in self.args.iter().enumerate() {
+            if i > 0 {
+                f.write_str(", ")?;
+            }
+            if let Some(key) = key {
+                write!(f, "{key}: ")?;
+            }
+            write!(f, "{}", Typst(value))?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Call<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}(", self.name)?;
+        self.arguments(f)?;
+        f.write_char(')')
+    }
+}
+
+/// What an [`Open`] call is about to be handed. Not spelled `Content`: that
+/// name belongs to the display adapter below, and means something else.
+enum Bracket {
+    /// One content block: `[` follows, and the caller closes it with `]`.
+    Body,
+    /// A sequence of them: the argument list stays open and the caller closes
+    /// it with `)`.
+    Items,
+}
+
+/// A call whose content the caller writes itself. See [`Call::content`] and
+/// [`Call::items`].
+#[must_use]
+pub struct Open<'a>(Call<'a>, Bracket);
+
+impl fmt::Display for Open<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.0.name)?;
+        match self.1 {
+            // `#emph[` rather than `#emph()[`: an empty argument list is legal
+            // but reads as a call that forgot something.
+            Bracket::Body if self.0.args.is_empty() => f.write_char('['),
+            Bracket::Body => {
+                f.write_char('(')?;
+                self.0.arguments(f)?;
+                f.write_str(")[")
+            }
+            Bracket::Items => {
+                f.write_char('(')?;
+                self.0.arguments(f)?;
+                match self.0.args.is_empty() {
+                    true => Ok(()),
+                    false => f.write_str(", "),
+                }
+            }
+        }
+    }
+}
+
 /// Displays a string as Typst *content* that renders literally (`#"..."`), so
 /// user text can never inject markup.
 pub struct Content<'a>(pub &'a str);
@@ -424,7 +546,7 @@ impl fmt::Display for Content<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Js, Let, Str, Ts, Typst, Value};
+    use super::{Call, Content, Js, Let, Str, Ts, Typst, Value};
 
     #[test]
     fn escapes_quotes_and_backslashes() {
@@ -500,6 +622,86 @@ mod tests {
     fn an_array_types_as_the_union_of_its_members_once_each() {
         let v = Value::array([Value::Int(1), Value::Int(2), Value::str("x")]);
         assert_eq!(Ts(&v).to_string(), "Array<number | string>");
+    }
+
+    /// Every argument is escaped by the renderer, so a call can carry a value
+    /// that would otherwise close it and start writing Typst.
+    #[test]
+    fn call_arguments_cannot_break_out() {
+        let call = Call::new("link")
+            .pos(Value::str("/a\")[#sys.exit()]("))
+            .to_string();
+        assert_eq!(call, r#"#link("/a\")[#sys.exit()](")"#);
+    }
+
+    #[test]
+    fn a_call_renders_positional_and_named_arguments() {
+        let call = Call::new("raw")
+            .named("block", Value::Bool(true))
+            .named("lang", Value::str("kdl"))
+            .pos(Value::str("a b"))
+            .to_string();
+        assert_eq!(call, r#"#raw(block: true, lang: "kdl", "a b")"#);
+    }
+
+    /// `#emph[` rather than `#emph()[`: an argumentless call opening a content
+    /// block should read the way an author would write it.
+    #[test]
+    fn an_argumentless_content_call_omits_the_parentheses() {
+        assert_eq!(Call::new("emph").content().to_string(), "#emph[");
+        assert_eq!(
+            Call::new("heading")
+                .named("level", Value::Int(2))
+                .content()
+                .to_string(),
+            "#heading(level: 2)["
+        );
+    }
+
+    /// A sequence leaves the argument list open for the caller's `[..],`
+    /// elements, and closes the preceding arguments with a comma so the first
+    /// element does not fuse onto them.
+    #[test]
+    fn a_sequence_call_leaves_its_arguments_open() {
+        assert_eq!(Call::new("list").items().to_string(), "#list(");
+        assert_eq!(
+            Call::new("enum")
+                .named("start", Value::Int(3))
+                .items()
+                .to_string(),
+            "#enum(start: 3, "
+        );
+    }
+
+    /// `Value::Raw` is the one unescaped door, and it is the same one the rest
+    /// of this module uses: identifiers no string can spell reach a call
+    /// through it, positionally as well as by name.
+    #[test]
+    fn a_raw_argument_is_emitted_verbatim() {
+        let call = Call::new("table")
+            .named("columns", Value::Int(2))
+            .named(
+                "align",
+                Value::array([Value::Raw("left".into()), Value::Raw("right".into())]),
+            )
+            .to_string();
+        assert_eq!(call, "#table(columns: 2, align: (left, right, ))");
+
+        let positional = Call::new("__layout")
+            .pos(Value::Raw("__data".into()))
+            .pos(Value::Raw("__body".into()))
+            .to_string();
+        assert_eq!(positional, "#__layout(__data, __body)");
+    }
+
+    /// A call whose content is already in hand closes itself, so a caller with
+    /// nothing to stream does not assemble the brackets by hand.
+    #[test]
+    fn a_closed_body_wraps_content_it_is_given() {
+        let call = Call::new("link")
+            .pos(Value::str("/a"))
+            .body(Content("Read \"this\""));
+        assert_eq!(call, r#"#link("/a")[#"Read \"this\""]"#);
     }
 
     /// An empty array constrains nothing: `never[]` would refuse every element

@@ -21,6 +21,7 @@ use typst::foundations::Module;
 
 use crate::codegen::Value;
 use crate::config::Config;
+use crate::content::page::Data;
 use crate::content::{Frontmatter, Origin};
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::{Analyzer, FileDigests, Hash, Renderer, Root, Roots};
@@ -137,7 +138,17 @@ impl<'a> DiscoveryCache<'a> {
         path: &Path,
         config: &Config,
         project: &Project,
-    ) -> Result<(Frontmatter, bool, String)> {
+    ) -> Result<(Frontmatter, Data, String)> {
+        // A markdown page has no typst module to evaluate, so none of the
+        // machinery below applies: it is read, split, and lowered. It skips this
+        // cache deliberately rather than for want of wiring -- what the cache
+        // buys is skipping a typst *evaluation*, and there is not one. Parsing
+        // markdown is microseconds, and the compile cache still covers the page
+        // through its wrapper fingerprint.
+        #[cfg(feature = "markdown")]
+        if path.extension().is_some_and(|e| e == "md") {
+            return Self::load_markdown(collection, path, config);
+        }
         // Fast path: unchanged source and dependencies reuse the stored
         // frontmatter with no typst parse or evaluation at all.
         if self.enabled
@@ -145,7 +156,7 @@ impl<'a> DiscoveryCache<'a> {
         {
             let hash = Hash::of_bytes(body.as_bytes());
             if let Some(entry) = self.reuse(path, hash) {
-                return Ok((entry.frontmatter, entry.export, body));
+                return Ok((entry.frontmatter, Data::of(entry.export), body));
             }
         }
         // Miss (or caching disabled, or non-UTF-8): parse and evaluate the page.
@@ -184,7 +195,52 @@ impl<'a> DiscoveryCache<'a> {
         } else {
             Self::interpret(&project.module(&source)?, &origin, config)?
         };
-        Ok((frontmatter, export, source.text().to_owned()))
+        Ok((frontmatter, Data::of(export), source.text().to_owned()))
+    }
+
+    /// Read a markdown page: its KDL frontmatter as the dict every page's
+    /// template receives, and its body as the Typst it compiles as.
+    #[cfg(feature = "markdown")]
+    fn load_markdown(
+        collection: &str,
+        path: &Path,
+        config: &Config,
+    ) -> Result<(Frontmatter, Data, String)> {
+        use crate::content::markdown::{Document, Fields, Markdown};
+
+        let text = Self::decode(&crate::fs::read(path)?)
+            .ok_or_else(|| crate::error::ContentError::non_utf8_source(path))?;
+        let named = path.display().to_string();
+        let document = Document::split(&text, &named)?;
+
+        let block = match document.frontmatter {
+            Some(block) => block.parse::<kdl::KdlDocument>().map_err(|error| {
+                use crate::error::markdown::{FrontmatterFault, MarkdownError};
+                MarkdownError::Frontmatter {
+                    path: named.clone(),
+                    src: miette::NamedSource::new(&named, text.clone()),
+                    faults: error
+                        .diagnostics
+                        .iter()
+                        .map(|fault| FrontmatterFault::rebased(fault, document.offset))
+                        .collect(),
+                }
+            })?,
+            // A page may declare nothing, but a collection that requires fields
+            // is not satisfied by that: the emptiest page is the one a schema
+            // exists to catch, so the empty block is still walked.
+            None => kdl::KdlDocument::new(),
+        };
+        let dict = typst::foundations::Dict::from(Fields(&block));
+        let origin = Origin::kdl(&text, &block, document.offset, path, collection);
+        let frontmatter = Frontmatter::from_dict(&dict, &origin, config)?;
+
+        let value = crate::codegen::Value::from(&typst::foundations::Value::Dict(dict));
+        let data = Data::Lowered {
+            dict: crate::codegen::Typst(&value).to_string(),
+        };
+        let body = Markdown::new(&document, &text, &named).lower()?;
+        Ok((frontmatter, data, body))
     }
 
     /// The previous entry for `path` if it is still valid, its source and every

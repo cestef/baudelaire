@@ -18,6 +18,12 @@ pub enum Data {
     /// A real file with no export: the wrapper passes an empty dict and
     /// `#include`s the file.
     Empty,
+    /// A markdown file: the wrapper inlines the dict lowered from its KDL
+    /// frontmatter and the Typst its body lowered to. It has a real file, so
+    /// relative paths inside it still resolve against its own directory; what
+    /// it does not have is Typst the compiler could `#include`.
+    #[cfg(feature = "markdown")]
+    Lowered { dict: String },
     /// A generated listing with no file: the wrapper inlines `dict` (built by
     /// [`crate::codegen::Value`]) together with the generated body.
     Generated {
@@ -32,6 +38,17 @@ pub enum Data {
         /// to know a reader can reach a page from an index.
         lists: Vec<String>,
     },
+}
+
+impl Data {
+    /// Which of the two file-backed shapes a typst page has, by whether its
+    /// module exported a `frontmatter`.
+    pub(crate) fn of(export: bool) -> Self {
+        match export {
+            true => Self::Export,
+            false => Self::Empty,
+        }
+    }
 }
 
 /// A link to a neighbouring page: its URL and display title. Exposed to
@@ -116,8 +133,7 @@ impl Page {
         // Loading a page evaluates its typst module to read frontmatter; the
         // cache skips both the parse and the evaluation for a page whose source
         // and dependencies are unchanged, returning the body straight from disk.
-        let (mut frontmatter, export, body) = cache.load_page(collection, path, config, project)?;
-        let data = if export { Data::Export } else { Data::Empty };
+        let (mut frontmatter, data, body) = cache.load_page(collection, path, config, project)?;
         // Reject a name that is not text before decoding it. `Stem::of` falls
         // back to `index` for one, which is the *bundle index* name: the file
         // silently took its parent directory's slug and could overwrite the

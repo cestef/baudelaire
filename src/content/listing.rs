@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Write};
 
-use crate::codegen::{Content, Str, Value};
+use crate::codegen::{Call, Content, Value};
 use crate::config::Config;
 use crate::content::{Frontmatter, Page, PageId, Strings};
 
@@ -310,9 +310,18 @@ impl Listing {
 
     /// The generated typst markup: a heading, the link list, then any nav.
     fn body(&self, strings: &Strings) -> String {
-        let mut out = format!("#heading(level: 1)[{}]\n\n", Content(&self.title));
+        // Through `Call`, the same way `content::markdown` spells a generated
+        // call: a heading here and a heading there were two spellings of one
+        // construct, and only one of them was checked by its tests.
+        let heading = Call::new("heading")
+            .named("level", Value::Int(1))
+            .body(Content(&self.title));
+        let mut out = format!("{heading}\n\n");
         for item in &self.items {
-            let _ = write!(out, "- #link({})[{}]", Str(&item.url), Content(&item.label));
+            let link = Call::new("link")
+                .pos(Value::str(&item.url))
+                .body(Content(&item.label));
+            let _ = write!(out, "- {link}");
             if let Some(note) = &item.note {
                 let _ = write!(out, " ({})", Content(note));
             }
@@ -321,12 +330,16 @@ impl Listing {
         if !self.nav.is_empty() {
             out.push('\n');
             if let Some(prev) = &self.nav.prev {
-                let label = Content(strings.get("previous"));
-                let _ = write!(out, "#link({})[{label}] ", Str(prev));
+                let link = Call::new("link")
+                    .pos(Value::str(prev))
+                    .body(Content(strings.get("previous")));
+                let _ = write!(out, "{link} ");
             }
             if let Some(next) = &self.nav.next {
-                let label = Content(strings.get("next"));
-                let _ = write!(out, "#link({})[{label}]", Str(next));
+                let link = Call::new("link")
+                    .pos(Value::str(next))
+                    .body(Content(strings.get("next")));
+                let _ = write!(out, "{link}");
             }
             out.push('\n');
         }

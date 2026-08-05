@@ -128,7 +128,16 @@ impl<'a> Discovery<'a> {
             .collect())
     }
 
-    /// Every `.typ` file under `dir`, recursively, skipping dotfiles and
+    /// The extensions a content file may carry. One entry per source dialect,
+    /// so adding one is a line here and an arm in
+    /// [`DiscoveryCache::load_page`](crate::content::cache), not a new pipeline.
+    const SOURCES: &'static [&'static str] = &[
+        "typ",
+        #[cfg(feature = "markdown")]
+        "md",
+    ];
+
+    /// Every content file under `dir`, recursively, skipping dotfiles and
     /// dot-directories.
     fn gather(dir: &Path) -> Result<Vec<PathBuf>> {
         let hidden = |path: &Path| {
@@ -140,7 +149,13 @@ impl<'a> Discovery<'a> {
             .skipping(hidden)
             .files()?
             .into_iter()
-            .filter(|path| !hidden(path) && path.extension().is_some_and(|e| e == "typ"))
+            .filter(|path| {
+                !hidden(path)
+                    && path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| Self::SOURCES.contains(&e))
+            })
             .collect())
     }
 

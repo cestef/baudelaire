@@ -645,6 +645,9 @@ impl Cache {
         let path = Self::portable(&self.root, &page.source);
         match page.data {
             Data::Generated { .. } => Path::new(GENERATED).join(path),
+            // A markdown page has a real file, so it keys by it like any other.
+            #[cfg(feature = "markdown")]
+            Data::Lowered { .. } => path,
             Data::Export | Data::Empty => path,
         }
     }

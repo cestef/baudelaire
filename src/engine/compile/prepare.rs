@@ -208,6 +208,8 @@ impl<'a> Prepare<'a> {
     ) -> String {
         let vpath = Self::rooted_str(rooted);
         let body = match &page.data {
+            #[cfg(feature = "markdown")]
+            Data::Lowered { .. } => Body::Inline(&page.body),
             Data::Generated { .. } => Body::Inline(&page.body),
             _ => Body::Include,
         };
@@ -252,6 +254,8 @@ impl<'a> Prepare<'a> {
         let bind = match &page.data {
             Data::Export => Bind::Import,
             Data::Empty => Bind::Literal("(:)"),
+            #[cfg(feature = "markdown")]
+            Data::Lowered { dict } => Bind::Literal(dict),
             Data::Generated { dict, .. } => Bind::Literal(dict),
         };
         f(Context {
