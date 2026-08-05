@@ -19,6 +19,7 @@ import { mountConfig, mountRecent } from "./_widgets";
 import { initCopyButtons } from "./_copy";
 import { initDemo, initEmit } from "./_home";
 import { initVersionPicker } from "./_versions";
+import { initChangelog } from "./_changelog";
 
 initTheme();
 markActiveNav();
@@ -35,3 +36,5 @@ initCopyButtons();
 // Landing page only; both no-op elsewhere.
 initDemo();
 initEmit();
+// Changelog page only; no-ops elsewhere.
+initChangelog();

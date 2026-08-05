@@ -16,7 +16,7 @@ collapse into ordinary Typst functions.
   align: (left, left, left),
   table.header([Hugo], [Baudelaire], [Note]),
   [`hugo.toml`], [`config.kdl`], [One file, no `config/_default/` layering. Use `profiles { }` for per-environment overrides.],
-  [`content/**/*.md`], [`content/**/*.typ`], [See #link("content.typ")[Markdown to Typst].],
+  [`content/**/*.md`], [`content/**/*.md`], [Stays markdown; the frontmatter becomes KDL. See #link("content.typ")[Markdown to Typst].],
   [`content/posts/_index.md`], [a `posts` block in `config.kdl`], [No branch-bundle file.],
   [`content/posts/hello/index.md`], [`content/posts/hello/index.typ`], [Page bundles work the same way.],
   [`layouts/_default/baseof.html`], [a function every layout calls], [Composition, not inheritance.],

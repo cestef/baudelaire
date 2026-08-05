@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths: &paths
       - "docs/**"
+      # The changelog is a page of the site, generated from this file.
+      - "CHANGELOG.md"
       - "themes/**"
       - "src/**"
       - "install.sh"

@@ -15,6 +15,10 @@
   --code-bg: #f3efe8;
   --focus: #2f6f9f;
 
+  /* The sticky header's height: 0.7rem padding twice around a 2.15rem control.
+     Named because the changelog rail sticks below it and anchors have to clear
+     both, and three hand-tuned literals disagreed. */
+  --header-h: 3.55rem;
   --sidebar-w: 15.5rem;
   --content-w: 66ch;
   --radius: 8px;
@@ -1653,5 +1657,159 @@ ul.listing {
      that pinned them, so it is the width that decides, not the cascade. */
   td:first-child code {
     white-space: normal;
+  }
+}
+
+/* ---- Changelog ---------------------------------------------------------- */
+
+/* A release opens with a rule and its version set large: the page is read by
+   scanning for a version, so that is what the eye should land on. */
+article.changelog .release {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 3.5rem 0 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule);
+  /* Clear the header and the rail that sticks under it, or a jumped-to release
+     lands behind them. */
+  scroll-margin-top: calc(var(--header-h) + 3.2rem);
+}
+
+article.changelog .release:first-of-type {
+  margin-top: 1rem;
+  border-top: 0;
+  padding-top: 0;
+}
+
+article.changelog .release h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+article.changelog .release h3 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+article.changelog .release h3 a:hover {
+  color: var(--wine-ink);
+}
+
+/* The date, split out of the heading by `_changelog.ts` and pushed to the far
+   end: useful, but never the thing you are looking for. */
+article.changelog .release-date {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* What kind of change follows, as a chip rather than another heading: three of
+   these stack under one release, and three headings of the same weight make a
+   release look like three. */
+article.changelog .release-kind {
+  margin: 2rem 0 0.75rem;
+}
+
+article.changelog .release-kind h4 {
+  display: inline-block;
+  margin: 0;
+  padding: 0.15rem 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 100px;
+}
+
+/* Upgrading is the one that costs the reader something, so it is the one that
+   is coloured. Matched on the id the anchor pass derives from the text. */
+article.changelog .release-kind:has([id^="upgrading"]) h4 {
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  border-color: color-mix(in srgb, var(--wine) 35%, transparent);
+}
+
+/* ---- Changelog: the release rail ---------------------------------------- */
+
+/* Built by `_changelog.ts`. Sticky beside the prose on a wide screen, and a
+   plain scrolling row above it when there is no room. */
+.changelog-nav {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0;
+  font-family: var(--sans);
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.changelog-nav a {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 100px;
+}
+
+.changelog-nav a:hover {
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  text-decoration: none;
+}
+
+/* The release currently in view, tracked by an observer. */
+.changelog-nav a[aria-current="true"] {
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  border-color: color-mix(in srgb, var(--wine) 35%, transparent);
+}
+
+/* `Unreleased` is not a version and should not sit in the numeric run. */
+.changelog-nav a[data-unreleased] {
+  font-style: italic;
+}
+
+.changelog-nav .changelog-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* A release the "since" filter has ruled out. `hidden` would take it out of the
+   document and make the rail lie about what is on the page. */
+article.changelog [hidden] {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .changelog-nav {
+    position: static;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  article.changelog .release {
+    flex-wrap: wrap;
+  }
+
+  article.changelog .release-date {
+    margin-left: 0;
   }
 }

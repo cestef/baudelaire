@@ -95,7 +95,7 @@ reference:
 # Build the docs site from this checkout: the fast local loop, and what a docs
 # edit should be checked with.
 [working-directory('docs')]
-docs: versions-list
+docs: versions-list changelog-page
     cargo run -q -- build
 
 # Refresh the version picker's list: every release `CHANGELOG.md` declares that
@@ -104,6 +104,23 @@ docs: versions-list
 # version that has come or gone since.
 versions-list:
     docs/versions.sh list > docs/generated/versions.csv
+
+# The changelog, as a page of the docs site.
+#
+# `CHANGELOG.md` is the source and stays the only copy anyone edits: this
+# prepends the frontmatter a page needs and drops the top heading, which the
+# template already renders from the title. Checked in for the same reason the
+# version list is -- the docs site is a real baudelaire site, and `serve` in
+# `docs/` has to work on a fresh clone.
+#
+# It is a markdown page, which is the feature dogfooding itself: the changelog
+# is full of tables, links and fenced samples, and every one of them is a shape
+# a `.typ` page would have had to be rewritten by hand.
+#
+# The test it runs also fails when the committed page and `CHANGELOG.md` have
+# drifted, so a stale copy cannot ship.
+changelog-page:
+    BLESS=1 cargo nextest run --test changelog the_checked_in
 
 # Build the docs site the way `.github/workflows/docs.yml` deploys it: every
 # published version, each rendered by its own released binary, the newest one at

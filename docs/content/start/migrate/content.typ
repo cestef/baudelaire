@@ -4,9 +4,28 @@
 )
 #import "/templates/theme.typ": callout
 
-Whatever you are coming from, this is the part with real work in it: the posts
-themselves. Typst markup is close enough to Markdown that most prose survives a
-mechanical pass, and different enough that the pass needs reading afterwards.
+#callout(kind: "note")[
+  *You may not need this page.* `.md` files are pages
+  (#link("../../write/markdown.typ")[Markdown pages]), so the prose you already
+  have can stay exactly as it is. What has to change is the *frontmatter*: YAML
+  or TOML becomes a `---` block of KDL.
+
+  ```md
+  ---
+  title "The night train"
+  date "2019-03-02"
+  tags "rail" "night"
+  ---
+  ```
+
+  Convert to Typst when you want what Typst gives you -- math, a figure, a chart,
+  a template helper mid-page. A markdown page can reach some of that through an
+  `eval` fence without being converted at all.
+]
+
+If you do convert: Typst markup is close enough to Markdown that most prose
+survives a mechanical pass, and different enough that the pass needs reading
+afterwards.
 
 == The mapping
 
