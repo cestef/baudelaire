@@ -31,6 +31,7 @@ use crate::codegen::{Call, Content, Value};
 use crate::config::{Extension, MarkdownConfig, RawHtml};
 use crate::error::Result;
 use crate::error::markdown::MarkdownError;
+use crate::error::typ::Origins;
 
 /// A markdown body, without its frontmatter block.
 ///
@@ -83,8 +84,9 @@ impl<'a> Markdown<'a> {
             .fold(Options::empty(), |all, one| all | one)
     }
 
-    /// The Typst source this page compiles as.
-    pub fn lower(&self) -> Result<String> {
+    /// The Typst source this page compiles as, and where the authored parts of
+    /// it came from.
+    pub fn lower(&self) -> Result<(String, Origins)> {
         // `into_offset_iter` so every event knows the bytes it came from, which
         // is what lets a fault point at the markdown rather than at the Typst
         // this produces.
@@ -104,7 +106,10 @@ impl<'a> Markdown<'a> {
         writer.notes(&events)?;
         writer.notes(&events)?;
         writer.walk(&events)?;
-        Ok(writer.finish())
+        let spans = std::mem::take(&mut writer.origins);
+        let source = writer.finish();
+        let origins = Origins::new(self.file.to_owned(), source.len(), spans);
+        Ok((source, origins))
     }
 }
 
@@ -205,6 +210,18 @@ impl<'a> Located<'a> {
         miette::SourceSpan::new((range.start + self.offset).into(), range.len())
     }
 
+    /// The range of the current fenced block's *content* in the file: its span
+    /// less the info line, so an offset inside the block maps to the line the
+    /// author wrote rather than to the fence marker above it.
+    fn fenced(&self, len: usize) -> Option<Range<usize>> {
+        let span = self.spans.get(self.at)?;
+        let start = span.start + self.offset;
+        let end = (span.end + self.offset).min(self.file.len());
+        let newline = self.file.get(start..end)?.find('\n')?;
+        let text = start + newline + 1;
+        Some(text..(text + len).min(self.file.len()))
+    }
+
     /// The file, named, for a diagnostic to render its snippet from.
     fn source(&self, path: &str) -> miette::NamedSource<String> {
         miette::NamedSource::new(path, self.file.to_owned())
@@ -266,6 +283,8 @@ struct Writer<'a> {
     notes: Vec<(String, String)>,
     /// Column alignments of the table being written, from its `Start(Table)`.
     columns: Vec<Alignment>,
+    /// Spans of authored Typst, as `(range written, range it came from)`.
+    origins: Vec<(Range<usize>, Range<usize>)>,
 }
 
 impl<'a> Writer<'a> {
@@ -278,6 +297,7 @@ impl<'a> Writer<'a> {
             buffered: Vec::new(),
             notes: Vec::new(),
             columns: Vec::new(),
+            origins: Vec::new(),
         }
     }
 
@@ -596,6 +616,18 @@ impl<'a> Writer<'a> {
                     return;
                 };
                 if fence.runs(self.config) {
+                    // Only at the top level, where the offset taken here stays
+                    // valid: a fence inside a list item or a footnote is written
+                    // into a buffer that is spliced into its parent later, and
+                    // every offset taken before that move is wrong afterwards.
+                    // No entry means no translation, which is the honest answer
+                    // rather than a wrong underline.
+                    if self.stack.len() == 1
+                        && let Some(source) = self.at.fenced(text.len())
+                    {
+                        let at = self.out().len();
+                        self.origins.push((at..at + text.len(), source));
+                    }
                     self.push(&text);
                     self.push("\n\n");
                     return;
@@ -648,7 +680,9 @@ mod tests {
     /// skipped the split would not notice a body offset going wrong.
     fn under(source: &str, config: &MarkdownConfig) -> Result<String> {
         let document = super::super::Document::split(source, "a.md")?;
-        Markdown::new(&document, source, "a.md", config).lower()
+        Markdown::new(&document, source, "a.md", config)
+            .lower()
+            .map(|(source, _)| source)
     }
 
     fn try_lower(source: &str) -> Result<String> {
@@ -873,6 +907,42 @@ mod tests {
         let out = under("a -- b ...\n", &smart).expect("lower");
         assert!(out.contains('\u{2013}'), "en dash: {out}");
         assert!(out.contains('\u{2026}'), "ellipsis: {out}");
+    }
+
+    /// An `eval` fence is the only authored Typst on the page, so it is the
+    /// only thing a diagnostic can be pointed back at.
+    #[test]
+    fn an_eval_fence_records_where_it_came_from() {
+        let source = "---\ntitle \"A\"\n---\n\ntext\n\n```typ eval\n#emph[x]\n```\n";
+        let document = super::super::Document::split(source, "a.md").expect("split");
+        let (lowered, origins) =
+            Markdown::new(&document, source, "a.md", &MarkdownConfig::default())
+                .lower()
+                .expect("lower");
+
+        // A wrapper is the preamble plus the body; the body sits at its end.
+        let wrapper = 100 + lowered.len();
+        let authored = lowered.find("#emph").expect("the fence was emitted");
+        let at = origins
+            .locate(wrapper, &((100 + authored)..(100 + authored + 5)))
+            .expect("the fence maps back");
+        assert_eq!(&source[at.start..at.start + 5], "#emph");
+    }
+
+    /// Generated code has no place in the authored file, and saying otherwise
+    /// would underline something the author never wrote.
+    #[test]
+    fn generated_code_maps_to_nothing() {
+        let source = "---\ntitle \"A\"\n---\n\njust prose\n";
+        let document = super::super::Document::split(source, "a.md").expect("split");
+        let (lowered, origins) =
+            Markdown::new(&document, source, "a.md", &MarkdownConfig::default())
+                .lower()
+                .expect("lower");
+        let wrapper = 100 + lowered.len();
+        assert_eq!(origins.locate(wrapper, &(100..104)), None);
+        // ...and a span in the wrapper's own preamble, before the body starts.
+        assert_eq!(origins.locate(wrapper, &(4..8)), None);
     }
 
     /// A comment renders as nothing anywhere, so it is the one raw-HTML shape

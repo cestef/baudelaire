@@ -23,7 +23,13 @@ pub enum Data {
     /// relative paths inside it still resolve against its own directory; what
     /// it does not have is Typst the compiler could `#include`.
     #[cfg(feature = "markdown")]
-    Lowered { dict: String },
+    Lowered {
+        dict: String,
+        /// Where the authored parts of the lowered body came from, so a typst
+        /// error inside an `eval` fence is reported against the `.md` line
+        /// rather than against generated source.
+        origins: std::sync::Arc<crate::error::typ::Origins>,
+    },
     /// A generated listing with no file: the wrapper inlines `dict` (built by
     /// [`crate::codegen::Value`]) together with the generated body.
     Generated {

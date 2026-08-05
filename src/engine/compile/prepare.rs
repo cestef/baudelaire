@@ -255,7 +255,7 @@ impl<'a> Prepare<'a> {
             Data::Export => Bind::Import,
             Data::Empty => Bind::Literal("(:)"),
             #[cfg(feature = "markdown")]
-            Data::Lowered { dict } => Bind::Literal(dict),
+            Data::Lowered { dict, .. } => Bind::Literal(dict),
             Data::Generated { dict, .. } => Bind::Literal(dict),
         };
         f(Context {

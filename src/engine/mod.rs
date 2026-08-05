@@ -941,6 +941,20 @@ impl Engine {
             errs,
             (&page.source.display().to_string(), source.text()),
             Arc::new(world.clone()),
+            // A lowered page can say where its authored parts came from, so an
+            // error inside an `eval` fence reports the `.md` line rather than a
+            // line of the Typst the page was turned into.
+            {
+                let named = page.source.display().to_string();
+                let mapped: Option<&Arc<crate::error::typ::Origins>> = match &page.data {
+                    #[cfg(feature = "markdown")]
+                    crate::content::Data::Lowered { origins, .. } => Some(origins),
+                    _ => None,
+                };
+                mapped.map(|origins| (origins, named))
+            }
+            .as_ref()
+            .map(|(origins, name)| (*origins, name.as_str())),
         )
     }
 }

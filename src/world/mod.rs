@@ -271,6 +271,7 @@ impl Project {
                 errs,
                 (&name, source.text()),
                 Arc::new(world),
+                None,
             ))
         })
     }
@@ -306,6 +307,7 @@ impl Project {
                         errs,
                         (&name, source.text()),
                         Arc::new(world.into_inner()),
+                        None,
                     ),
                 ))
             }
