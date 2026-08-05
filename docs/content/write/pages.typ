@@ -4,8 +4,9 @@
 )
 #import "/templates/theme.typ": callout
 
-A page is a `.typ` file under `content/`. Where it sits decides its URL, and
-everything after the frontmatter binding is the body.
+A page is a `.typ` or `.md` file under `content/`. Where it sits decides its URL,
+and everything after the frontmatter binding is the body. This page describes
+`.typ`; #link("markdown.typ")[Markdown pages] covers what differs.
 
 ```typ
 #let frontmatter = (
@@ -118,11 +119,12 @@ Relative paths resolve against the linking file; a leading `/` resolves against
 the project root, the same way a Typst import does. Fragments come along:
 `#link("pages.typ#slugs")` lands on the heading.
 
-Only `.typ` targets are rewritten. Every other href passes through as authored,
-so a link to `/robots.txt` or an external URL is left alone.
+Only source targets are rewritten, which means `.typ` and, where markdown is on,
+`.md`. Every other href passes through as authored, so a link to `/robots.txt` or
+an external URL is left alone.
 
 #callout(kind: "warn")[
-  A `.typ` link with no page behind it fails the build. `links { strict #false }`
+  A source link with no page behind it fails the build. `links { strict #false }`
   downgrades that to a warning, and `baudelaire check` reports broken links
   without writing any output.
 ]

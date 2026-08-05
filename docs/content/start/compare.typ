@@ -14,7 +14,7 @@ to get.
   columns: 4,
   align: (left, left, left, left),
   table.header([Tool], [A page is], [A layout is], [Needs]),
-  [Baudelaire], [Typst], [a Typst function], [one binary],
+  [Baudelaire], [Typst or Markdown], [a Typst function], [one binary],
   [Zola], [Markdown + TOML frontmatter], [a Tera template], [one binary],
   [Hugo], [Markdown + YAML/TOML frontmatter], [a Go template], [one binary],
   [Eleventy], [Markdown, Nunjucks, Liquid, JS], [any of those], [Node],
@@ -105,8 +105,12 @@ wins.
 
 == What you give up
 
-*Markdown.* Content is `.typ` and only `.typ`. Existing posts have to be
-converted; see #link("migrate/content.typ")[Markdown to Typst].
+*Markdown as the primary format.* A `.md` file under `content/` is a page, with
+frontmatter in YAML, TOML or KDL, so an existing corpus builds as it stands. But
+Typst is the format the rest of the tool is shaped around: a `.md` page is
+lowered to Typst before it compiles, and anything Typst does that Markdown has no
+spelling for is reached through a fenced `typ` block rather than natively. See
+#link("migrate/content.typ")[Markdown to Typst].
 
 *Maturity of the target.* Typst's HTML export is the newest part of Typst, and
 baudelaire pins one Typst version at a time. A page that leans on paged layout
@@ -129,9 +133,8 @@ There is no component model, no framework integration, no server rendering.
 
 == Pick something else if
 
-- You have a large Markdown corpus and no appetite for converting it.
 - Your site is really an application: interactive UI, framework components, SSR.
-- Non-technical authors write the content and expect Markdown or a CMS.
+- Non-technical authors write the content and expect a CMS.
 - You need a theme you can install today rather than a layout you write.
 
 #callout(kind: "note")[
