@@ -113,12 +113,14 @@ pub struct Rewrite {
     /// The heading ids this page exposes, so a link elsewhere can be checked
     /// against them.
     pub anchors: Vec<String>,
-    /// Resolved links this page carries that name a fragment of *another* page.
+    /// The links this page carries that name a `#fragment`, whichever page's:
+    /// a resolved link into another page, and a bare `#section` into this one.
     ///
-    /// Collected rather than checked on the spot: the target page's anchors are
-    /// not known while this one renders (pages render in parallel, and the
-    /// anchor pass runs after link resolution within each), so the check is a
-    /// site-wide pass once every page has produced its set.
+    /// Collected rather than checked on the spot: even for a link into its own
+    /// body, a page's ids are not known while its links are being resolved (the
+    /// anchor pass runs after), and a target page's are not known at all (pages
+    /// render in parallel). So the check is a site-wide pass once every page
+    /// has produced its set.
     pub deep: Vec<Target>,
     /// Files the render pass read on this page's behalf, to add to its
     /// dependencies: baudelaire reads them, not typst, so nothing else would

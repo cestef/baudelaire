@@ -127,6 +127,72 @@ scenario "a backlink says which section it aimed at" {
   }
 }
 
+// A markdown page is a page, so what it links to is an edge like any other.
+//
+// It was not one. A lowered page's body is inlined into its synthetic wrapper,
+// so every element it emits carries a span in `content/posts/m.md@layout`, and
+// the test for "did an author write this" asked for the literal extension
+// `typ`. It never matched, so no markdown page ever recorded an outbound link:
+// `page.backlinks` could not name one, and the orphan report called a page
+// unlinked that a markdown page pointed straight at.
+scenario "a markdown page's links reach the page it points at" {
+  requires "markdown"
+  files {
+    "content/posts/m.md" #"""
+      ;;;
+      title "M"
+      ;;;
+
+      A link [to b](b.typ).
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  expect {
+    ok
+    // The link resolved, which always worked...
+    file "posts/m/index.html" {
+      contains #"href="/posts/b/""#
+    }
+    // ...and the page at the other end knows about it, which did not.
+    file "posts/b/index.html" {
+      contains #"href="/posts/m/""#
+      contains ">M<"
+    }
+  }
+}
+
+// The other shape a lowered page takes. With no template there is no wrapper
+// at all: the page compiles under its own `content/m.md` id, so the extension
+// the old test asked for was the literal `md` rather than `md@layout`. Both
+// spellings failed it, and both are the file being compiled, which is what the
+// test asks now.
+scenario "a markdown page with no template still carries its links" {
+  requires "markdown"
+  files {
+    "content/m.md" #"""
+      ;;;
+      title "M"
+      ;;;
+
+      A link [to b](posts/b.typ).
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B")
+      beta
+      """#
+  }
+  expect {
+    ok
+    file "posts/b/index.html" {
+      contains #"href="/m/""#
+      contains ">M<"
+    }
+  }
+}
+
 scenario "an unchanged site repairs nothing on a rebuild" {
   files {
     "content/posts/a.typ" #"""

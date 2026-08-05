@@ -551,13 +551,36 @@ impl LinkMap {
         Some(target.with_file_name(format!("{stem}.{lang}.{extension}")))
     }
 
-    /// Whether a link points outside the site (scheme, protocol-relative,
-    /// mailto, or a bare fragment) and must be left as authored.
+    /// Whether a link points outside the site (a scheme, or protocol-relative)
+    /// and must be left as authored.
+    ///
+    /// A bare `#fragment` is *not* external: it names a section of the page it
+    /// was written on, which is as internal as a link gets. It was listed here,
+    /// so it never reached the deep-link check and a link to a heading that had
+    /// been renamed away was published without a word. It still resolves to
+    /// nothing here (it names no source path), and is recorded by the render
+    /// pass instead, which is the only place that knows what page it was
+    /// written on.
     fn is_external(raw: &str) -> bool {
-        raw.starts_with("//")
-            || raw.starts_with('#')
-            || raw.starts_with("mailto:")
-            || raw.contains("://")
+        raw.starts_with("//") || Self::scheme(raw)
+    }
+
+    /// Whether `raw` opens with a URL scheme (`https:`, `mailto:`).
+    ///
+    /// Tested on the head alone - what precedes the first `/`, `?` or `#` -
+    /// because a scheme is the *start* of a URL and nothing else. Matched
+    /// anywhere in the string, `b.typ?redirect=https://x` read as a link off
+    /// the site: it was left exactly as authored and the reader was served the
+    /// literal `.typ` source path.
+    fn scheme(raw: &str) -> bool {
+        let head = raw.split(['/', '?', '#']).next().unwrap_or(raw);
+        let Some((scheme, _)) = head.split_once(':') else {
+            return false;
+        };
+        // RFC 3986: a letter, then letters, digits, `+`, `-` and `.`.
+        let mut chars = scheme.chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
     }
 }
 
@@ -677,13 +700,7 @@ mod tests {
 
     #[test]
     fn external_links_are_recognized() {
-        for raw in [
-            "https://example.com",
-            "http://x",
-            "//cdn",
-            "mailto:a@b.c",
-            "#anchor",
-        ] {
+        for raw in ["https://example.com", "http://x", "//cdn", "mailto:a@b.c"] {
             assert!(LinkMap::is_external(raw), "{raw} should be external");
         }
     }
@@ -693,6 +710,42 @@ mod tests {
         for raw in ["b.typ", "../notes/x.typ", "b.typ#section"] {
             assert!(!LinkMap::is_external(raw), "{raw} should be local");
         }
+    }
+
+    /// A scheme is the head of a URL, not a substring of one. Matched anywhere,
+    /// a query naming another URL made the link external, so the `.typ` source
+    /// path was published verbatim and the reader got a 404 - the one shape
+    /// where being wrong is invisible, since the link *looks* absolute.
+    #[test]
+    fn a_scheme_is_only_read_at_the_head_of_a_link() {
+        for raw in [
+            "b.typ?redirect=https://x",
+            "b.typ#see-https://x",
+            "../a/b.typ?to=mailto:a@b.c",
+        ] {
+            assert!(!LinkMap::is_external(raw), "{raw} should be local");
+        }
+        // ...and something that really does open with one still is.
+        for raw in ["data:text/plain,x", "git+ssh://host/repo", "HTTPS://x"] {
+            assert!(LinkMap::is_external(raw), "{raw} should be external");
+        }
+    }
+
+    /// A bare fragment names a section of the page it was written on, which is
+    /// as internal as a link gets. Called external, it never reached the
+    /// site-wide deep-link check, so a link to a heading since renamed away was
+    /// published in silence.
+    #[test]
+    fn a_bare_fragment_is_not_a_link_off_the_site() {
+        for raw in ["#install", "#", "#install?x=1"] {
+            assert!(!LinkMap::is_external(raw), "{raw} should be local");
+        }
+        // It still names no source path, so resolution leaves it as authored
+        // and depends on nothing.
+        let map = LinkMap::default();
+        let resolution = map.classify("#install", std::path::Path::new("a.typ"), None);
+        assert_eq!(resolution.link, super::Link::Passthrough);
+        assert!(resolution.probed.is_empty());
     }
 
     #[test]
