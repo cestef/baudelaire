@@ -191,11 +191,9 @@ impl<'a> Reader<'a> {
         self.trim(start..end)
     }
 
-    /// One character at a marker, as the span to underline. Empty at the end of
-    /// the block, where a scan error often lands and there is no character left
-    /// to point at.
+    /// One character at a marker, as the span to underline.
     fn point(&self, marker: &Marker) -> Range<usize> {
-        self.bytes.at(marker.index())..self.bytes.at(marker.index() + 1)
+        self.bytes.point(marker.index())
     }
 
     /// The same span with trailing whitespace dropped.
@@ -225,6 +223,9 @@ struct Bytes {
     /// Where the block ends, which is where a marker past its last character
     /// points: the end marker of a value that runs to the end of the block.
     end: usize,
+    /// The character index of the last thing the author actually wrote, which
+    /// is as far as a *label* may reach. See [`Bytes::point`].
+    last: usize,
 }
 
 impl Bytes {
@@ -232,12 +233,32 @@ impl Bytes {
         Self {
             offsets: text.char_indices().map(|(i, _)| i + offset).collect(),
             end: offset + text.len(),
+            last: text
+                .chars()
+                .enumerate()
+                .filter_map(|(i, c)| (!c.is_whitespace()).then_some(i))
+                .last()
+                .unwrap_or(0),
         }
     }
 
     /// The file offset of a character index, clamped to the end of the block.
     fn at(&self, chars: usize) -> usize {
         self.offsets.get(chars).copied().unwrap_or(self.end)
+    }
+
+    /// The one character at a character index, as the span to underline.
+    ///
+    /// Clamped to the block's last written character, which the end of a *span*
+    /// is not: a scan error's marker sits past everything the block holds, and
+    /// clamping both ends of it to the block's end produced an empty span that
+    /// miette draws at the first column of the line after -- the closing fence,
+    /// which the author did not write and cannot fix. Clamping to the closing
+    /// line break instead is the same fault, since a label covering one is
+    /// drawn onto the following line too.
+    fn point(&self, chars: usize) -> Range<usize> {
+        let at = chars.min(self.last);
+        self.at(at)..self.at(at + 1)
     }
 }
 
@@ -384,6 +405,26 @@ mod tests {
         };
         let rendered = format!("{err:?}");
         assert!(rendered.contains("YAML"), "{rendered}");
+    }
+
+    /// A scan error runs out of input, so its marker sits past every character
+    /// of the block. The label has to come back inside it: clamped to the
+    /// block's end it was an empty span, which miette draws at the first column
+    /// of the closing `---`, and clamped to the closing line break it would be
+    /// drawn onto that line too.
+    #[test]
+    fn a_marker_past_the_block_underlines_its_last_written_character() {
+        let source = "---\ntitle: Café\nbad: [unclosed\n---\n";
+        let text = "title: Café\nbad: [unclosed\n";
+        let bytes = Bytes::new(text, 4);
+        let span = bytes.point(text.chars().count() + 3);
+        assert_eq!(&source[span.clone()], "d");
+        // Inside the block, and so before the fence that closes it.
+        assert!(span.end <= 4 + text.trim_end().len(), "{span:?}");
+        // A marker that does name a character still names that one, accents
+        // included: the clamp is a ceiling, not a redirection.
+        let at = text.find("Café").expect("in the block") + "Caf".len();
+        assert_eq!(&source[bytes.point(text[..at].chars().count())], "é");
     }
 
     /// Valid YAML that is not a mapping declares no fields at all, which is

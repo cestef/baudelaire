@@ -546,5 +546,76 @@ mod tests {
         let inline = lower("text <!-- hidden --> more\n");
         assert!(!inline.contains("hidden"), "{inline}");
         assert!(inline.contains(r#"#"text ""#), "{inline}");
+        // `<!-->` and `<!--->` are empty comments. The guard that used to
+        // defeat the overlap between `<!--` and `-->` rejected both, so they
+        // reached the policy and failed a build over nothing.
+        assert!(try_lower("<!-->\n").is_ok());
+        assert!(try_lower("<!--->\n").is_ok());
+    }
+
+    /// ..but only a run that is *nothing but* comments. CommonMark ends an HTML
+    /// block on the line carrying `-->`, so this is one event that opens and
+    /// closes like a comment with an element hidden between: matching its two
+    /// ends dropped the whole thing, which lost the content and walked past the
+    /// `html` policy that exists to refuse exactly this.
+    #[test]
+    fn a_comment_cannot_smuggle_markup_past_the_html_policy() {
+        let source = "<!-- a --><div>SECRET</div><!-- b -->\n";
+        assert!(try_lower(source).is_err(), "{source}");
+        // A complete empty comment does not open one either.
+        assert!(try_lower("<!--><div>SECRET</div>-->\n").is_err());
+
+        // And where the site drops raw HTML it is dropped as the block it is,
+        // rather than silently mistaken for a comment.
+        let dropping = MarkdownConfig {
+            html: RawHtml::Drop,
+            ..MarkdownConfig::default()
+        };
+        let out = under(source, &dropping).expect("dropped, not refused");
+        assert!(!out.contains("SECRET"), "{out}");
+    }
+
+    /// An email autolink's destination is the bare address, and every renderer
+    /// puts the scheme back. Emitted as authored it is a relative path to a page
+    /// nobody has, and nothing downstream questions it: `mailto:` is left alone
+    /// by the link checker and a bare address is not, so the two spellings of
+    /// one link disagreed.
+    #[test]
+    fn an_email_autolink_keeps_its_scheme() {
+        let out = lower("<me@example.com>\n");
+        assert!(out.contains(r#"#link("mailto:me@example.com")["#), "{out}");
+        // The explicit spelling is already a scheme, and is not given a second.
+        let written = lower("[x](mailto:me@example.com)\n");
+        assert!(
+            written.contains(r#"#link("mailto:me@example.com")["#),
+            "{written}"
+        );
+        // A plain autolink is untouched.
+        assert!(lower("<https://x.com>\n").contains(r#"#link("https://x.com")["#));
+    }
+
+    /// A break inside an alt run is the space between the two lines it
+    /// separated. It used to be written into the lowered buffer that the image
+    /// then discards, so `alt` read `alphabeta`.
+    #[test]
+    fn a_multi_line_alt_keeps_the_space_between_its_lines() {
+        let soft = lower("![alpha\nbeta](/i.png)\n");
+        assert!(soft.contains(r#"alt: "alpha beta""#), "{soft}");
+        // A hard break is the same run, spelled with two trailing spaces.
+        let hard = lower("![alpha  \nbeta](/i.png)\n");
+        assert!(hard.contains(r#"alt: "alpha beta""#), "{hard}");
+        // Outside an alt run each break is still what it was.
+        assert!(lower("a\nb\n").contains(r#"#" ""#));
+        assert!(lower("a  \nb\n").contains("#linebreak()"));
+    }
+
+    /// Math is not an extension a site can enable, so a dollar run is prose and
+    /// stays prose. Pinned because the arms that used to handle the events could
+    /// never fire, and emitted a `math.equation` given a *string* if they had.
+    #[test]
+    fn math_is_never_parsed_so_a_dollar_run_is_text() {
+        let out = lower("an $x^2$ run\n");
+        assert!(out.contains("$x^2$"), "{out}");
+        assert!(!out.contains("math.equation"), "{out}");
     }
 }

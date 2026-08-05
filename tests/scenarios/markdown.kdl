@@ -679,6 +679,162 @@ scenario "dropping a raw html block drops what is inside it" {
   }
 }
 
+// A comment is dropped because it renders as nothing anywhere. A run that
+// merely *opens and closes* with one is not a comment: CommonMark ends an HTML
+// block on the line carrying `-->`, so this arrives as a single event with an
+// element hidden inside it. Testing the two ends dropped the whole run, which
+// lost the author's content and walked past the `html` policy in one go: a
+// green build, and `SECRET` published nowhere.
+scenario "an html block wrapped in comments is still refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/sneaky.md" #"""
+      ;;;
+      title "Sneaky"
+      template "page.typ"
+      ;;;
+
+      <!-- a --><div>SECRET</div><!-- b -->
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::markdown::raw_html"
+    }
+  }
+}
+
+// ..and the other direction, so the scan that fixed the above does not start
+// refusing the comments it is supposed to drop. `<!-->` is an empty comment,
+// and its terminator overlaps the `<!--` that opened it, which the guard the
+// old test was written around rejected outright.
+scenario "a run of nothing but comments is still dropped" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/notes.md" #"""
+      ;;;
+      title "Notes"
+      template "page.typ"
+      ;;;
+
+      <!-- a note to myself -->
+
+      Kept prose.
+
+      <!-->
+
+      Inline <!-- hidden --> text.
+      """#
+  }
+  expect {
+    ok
+    file "notes/index.html" {
+      contains "Kept prose."
+      contains "Inline"
+      missing "note to myself"
+      missing "hidden"
+    }
+  }
+}
+
+// An email autolink's destination is the bare address, and every renderer puts
+// the scheme back. Published as authored it was a *relative path* to a page
+// nobody has, and nothing downstream questioned it: a bare address names no
+// file either, so the link checker had nothing to say. The two spellings of one
+// link disagreed on the same page.
+scenario "an email autolink keeps its mailto scheme" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/contact.md" #"""
+      ;;;
+      title "Contact"
+      template "page.typ"
+      ;;;
+
+      Write to <me@example.com>, or to [me](mailto:me@example.com).
+      """#
+  }
+  expect {
+    ok
+    file "contact/index.html" {
+      contains #"href="mailto:me@example.com""#
+      // What the bug published, which is a path and not an address.
+      missing #"href="me@example.com""#
+    }
+  }
+}
+
+// A task list marker is a Typst symbol with the `#` that enters markup written
+// around it, so a marker lowered wrong is a syntax error in generated source
+// rather than a wrong element. Cheap to pin, and nothing else covers it.
+scenario "a task list renders its markers" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/tasks.md" #"""
+      ;;;
+      title "Tasks"
+      template "page.typ"
+      ;;;
+
+      - [x] done
+      - [ ] not
+      """#
+  }
+  expect {
+    ok
+    file "tasks/index.html" {
+      contains "done"
+      contains "not"
+      // The marker became a symbol, not the source that asked for one.
+      missing "[x]"
+    }
+  }
+}
+
 // A toggled list says one thing per name. Every shape that would quietly mean
 // nothing is refused instead, because a setting that looks accepted and does
 // nothing is the failure the config layer exists to prevent.

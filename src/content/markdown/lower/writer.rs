@@ -1,14 +1,14 @@
 //! Writing the Typst: the event walk, its output buffer, and the source map it records.
 
 use super::Numbered;
-use super::fence::{Buffered, Fence, is_comment};
+use super::fence::{Buffered, Fence, Html};
 use super::located::Located;
-use crate::codegen::{Call, Content, Value};
+use crate::codegen::{Call, Content, Typst, Value};
 use crate::config::{MarkdownConfig, RawHtml};
 use crate::content::sourcemap::{Mapping, Shape};
 use crate::error::Result;
 use crate::error::markdown::MarkdownError;
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 use std::ops::Range;
 /// A table column's alignment, as the Typst identifier that names it.
 ///
@@ -164,6 +164,43 @@ impl<'a> Writer<'a> {
         self.out().push(text);
     }
 
+    /// Write `text` into the alt run being collected, if one is open, and say
+    /// whether there was one.
+    ///
+    /// What every inline event has to ask before it lowers itself: an alt
+    /// attribute is a plain string, so a code span, a line break and a text run
+    /// inside one are each nothing but their characters. Asked in one place
+    /// because the events that forgot to ask are exactly the bug: a break wrote
+    /// into the lowered buffer that the image then discards, and the two lines
+    /// of a multi-line alt were joined without the space between them.
+    pub(super) fn alt(&mut self, text: &str) -> bool {
+        let Some(Buffered::Alt { alt, .. }) = self.buffered.last_mut() else {
+            return false;
+        };
+        alt.push_str(text);
+        true
+    }
+
+    /// A math run as the literal text it was written as, delimiters included.
+    pub(super) fn math(&mut self, delimiter: &str, text: &str) {
+        self.push(&Content(&[delimiter, text, delimiter].concat()).to_string());
+    }
+
+    /// A link's destination, with the scheme an autolink leaves implicit put
+    /// back.
+    ///
+    /// `<me@example.com>` is parsed as an email autolink whose destination is
+    /// the bare address, and every renderer prepends the scheme. Emitted as
+    /// authored it was a *relative path* to a page nobody has, which nothing
+    /// downstream could question: `mailto:` is left alone by the link checker
+    /// and a bare address is not, so the two spellings of one link disagreed.
+    pub(super) fn destination(link_type: LinkType, dest: &str) -> String {
+        match link_type {
+            LinkType::Email => ["mailto:", dest].concat(),
+            _ => dest.to_owned(),
+        }
+    }
+
     /// Where the writer stands, taken before an event so what it writes can be
     /// attributed afterwards.
     pub(super) fn mark(&mut self) -> Mark {
@@ -295,20 +332,27 @@ impl<'a> Writer<'a> {
             Event::Code(code) => {
                 // An alt attribute is plain text, so a code span inside one is
                 // its text: the marks around it have nowhere to go.
-                if let Some(Buffered::Alt { alt, .. }) = self.buffered.last_mut() {
-                    alt.push_str(code);
+                if self.alt(code) {
                     return Ok(());
                 }
                 let call = Call::new("raw").pos(Value::str(code.as_ref())).to_string();
                 self.push(&call);
                 Ok(())
             }
+            // A break inside an alt run is the space between the two lines it
+            // separated. Without it `![alpha\nbeta](/i.png)` set `alt: "alphabeta"`,
+            // because the break wrote into the lowered buffer the image then
+            // discards rather than into the attribute being collected.
             Event::SoftBreak => {
-                self.push("#\" \"");
+                if !self.alt(" ") {
+                    self.push(&Content(" ").to_string());
+                }
                 Ok(())
             }
             Event::HardBreak => {
-                self.push(&Call::new("linebreak").to_string());
+                if !self.alt(" ") {
+                    self.push(&Call::new("linebreak").to_string());
+                }
                 Ok(())
             }
             Event::Rule => {
@@ -321,11 +365,19 @@ impl<'a> Writer<'a> {
                 Ok(())
             }
             Event::TaskListMarker(done) => {
-                self.push(if *done {
-                    "#sym.ballot.check "
-                } else {
-                    "#sym.ballot "
-                });
+                let symbol = Value::Raw(
+                    match *done {
+                        true => "sym.ballot.check",
+                        false => "sym.ballot",
+                    }
+                    .to_owned(),
+                );
+                // The `#` enters markup and the space ends the identifier;
+                // between them the name goes through `Value::Raw`, the one door
+                // for an identifier no string literal can stand in for.
+                self.push("#");
+                self.push(&Typst(&symbol).to_string());
+                self.push(" ");
                 Ok(())
             }
             Event::FootnoteReference(name) => {
@@ -343,9 +395,11 @@ impl<'a> Writer<'a> {
                 self.push("]");
                 Ok(())
             }
-            // A comment is not content, and dropping it drops nothing: it is
-            // the one shape of raw HTML with no rendered counterpart to lose.
-            Event::Html(raw) | Event::InlineHtml(raw) if is_comment(raw) => Ok(()),
+            // A run that is nothing but comments is not content, and dropping it
+            // drops nothing: a comment is the one shape of raw HTML with no
+            // rendered counterpart to lose. A run that merely *begins and ends*
+            // with one is a different thing entirely, and goes below.
+            Event::Html(raw) | Event::InlineHtml(raw) if Html(raw).is_comment() => Ok(()),
             // The rest has no home here. The DOM this build produces is typed
             // and typst-html owns the document element, so a string of markup
             // cannot be spliced into it: it would have to be parsed, and a
@@ -370,19 +424,23 @@ impl<'a> Writer<'a> {
                 }
                 .into()),
             },
+            // Math is not among the extensions a site can enable:
+            // `Markdown::options` never sets `ENABLE_MATH`, deliberately, since
+            // Typst's math is not LaTeX and there is no mapping between them
+            // that is not a guess. These two arms are what exhaustiveness costs.
+            //
+            // They lower a run to the characters the author typed, delimiters
+            // included, which is exactly what the parser hands over with math
+            // off: turning the option on would change no page silently. What
+            // used to be here emitted `#math.equation("x^2")`, and `equation`
+            // takes *content*, so a string argument set the characters as prose
+            // -- the one thing the config comment says it is avoiding.
             Event::InlineMath(text) => {
-                let call = Call::new("math.equation")
-                    .pos(Value::str(text.as_ref()))
-                    .to_string();
-                self.push(&call);
+                self.math("$", text);
                 Ok(())
             }
             Event::DisplayMath(text) => {
-                let call = Call::new("math.equation")
-                    .named("block", Value::Bool(true))
-                    .pos(Value::str(text.as_ref()))
-                    .to_string();
-                self.push(&call);
+                self.math("$$", text);
                 Ok(())
             }
         }
@@ -426,9 +484,13 @@ impl<'a> Writer<'a> {
             Tag::Emphasis => self.push(&Call::new("emph").content().to_string()),
             Tag::Strong => self.push(&Call::new("strong").content().to_string()),
             Tag::Strikethrough => self.push(&Call::new("strike").content().to_string()),
-            Tag::Link { dest_url, .. } => {
+            Tag::Link {
+                link_type,
+                dest_url,
+                ..
+            } => {
                 let call = Call::new("link")
-                    .pos(Value::str(dest_url.as_ref()))
+                    .pos(Value::str(Self::destination(*link_type, dest_url)))
                     .content()
                     .to_string();
                 self.push(&call);
