@@ -61,11 +61,13 @@ clippy and the tests over **both** feature flavors. The second flavor matters:
 `--no-default-features` compiles a different set of modules, so a bare
 `cargo clippy` cannot see a feature-off break.
 
-Two things `just ci` does not cover, both their own CI job:
+Three things `just ci` does not cover, each its own CI job:
 
 - `just docs` builds the docs site, which is itself a real baudelaire site.
   Run it after touching `docs/`, `themes/` or anything that changes output.
 - `just msrv` compiles both flavors against the declared minimum Rust version.
+- `windows` compiles both flavors on a Windows runner. It is compile-only: the
+  e2e tests shell out to `base64`, which those runners do not have.
 
 There is also a coverage ratchet on pull requests: a change that lowers coverage
 fails. It instruments the test binary and not spawned subprocesses, so a
@@ -107,9 +109,13 @@ These are enforced, roughly in the order they get violated:
 
 Adding an emitter (`engine/emit/mod.rs`), a render transform
 (`render/transform/mod.rs`), an asset handler (`engine/asset/handler.rs`), a
-sidecar (`engine/compile/sidecar.rs`), a virtual module (`engine/asset/module.rs`
-for JS, `world/module.rs` for Typst) or a CLI subcommand is one `impl` plus one
-line in that file's `builtin()`.
+sidecar (`engine/compile/sidecar.rs`), a theme source (`theme/source.rs`) or a
+virtual module (`engine/asset/module.rs` for JS, `world/module.rs` for Typst) is
+one `impl` plus one line in that file's `builtin()`.
+
+A CLI subcommand is the same shape but a different spelling, since `src/cli/` is
+one module per subcommand: a module holding the clap args struct and its `Run`
+impl, a variant on the `Command` enum, and an arm in `dispatch`.
 
 ### Settled, and not worth re-proposing
 
