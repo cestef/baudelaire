@@ -35,9 +35,9 @@ the block is read into the same dict, and everything below is the same walk.
   align: (left, left, left),
   table.header([Key], [Type], [Does]),
   [`title`], [str], [The page title, used in `<title>`, listings, feeds and social tags.],
-  [`date`], [datetime], [When it was published. A page joins the feeds and sorts in a `sort "date"` collection only when it has one.],
-  [`updated`], [datetime], [When it last changed materially. Reported as the sitemap's `lastmod` and a feed entry's `updated`, while `date` stays put.],
-  [`expiry`], [datetime], [The last day it is published. After that it is left out of the build entirely, and `prune` removes what an earlier build wrote.],
+  [`date`], [datetime | str], [When it was published. A page joins the feeds and sorts in a `sort "date"` collection only when it has one.],
+  [`updated`], [datetime | str], [When it last changed materially. Reported as the sitemap's `lastmod` and a feed entry's `updated`, while `date` stays put.],
+  [`expiry`], [datetime | str], [The last day it is published. After that it is left out of the build entirely, and `prune` removes what an earlier build wrote.],
   [`draft`], [bool], [Skip the page unless `--drafts` is passed.],
   [`slug`], [str], [Override the URL slug, otherwise derived from the filename.],
   [`path`], [str], [Publish at exactly this URL, replacing the collection's permalink and the slug both.],
@@ -49,7 +49,15 @@ the block is read into the same dict, and everything below is the same walk.
 )
 
 Values are typed. A key with the wrong type stops the build with a diagnostic
-naming the file and the field, never a silent drop. `lang` and `translation`
+naming the file and the field, never a silent drop. The three dates take either a
+Typst `datetime` or a string spelled exactly `YYYY-MM-DD`, so a day needs no
+`datetime(..)` call:
+
+```typ
+date: "2026-08-05",
+```
+
+`lang` and `translation`
 only matter once a `languages` block exists; see
 #link("i18n.typ")[multiple languages]. `redirect` is covered on
 #link("collections/redirects.typ")[redirects].
