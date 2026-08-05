@@ -165,8 +165,8 @@ scope.
 
 == A block's presence is the switch
 
-There is no `enabled` key. Writing the block turns the feature on, and a block
-with nothing to configure can be written bare:
+Writing the block turns the feature on, and a block with nothing to configure can
+be written bare:
 
 ```kdl
 generate {
@@ -185,6 +185,22 @@ written.
   `html` on their own configure nothing, so they error rather than being read as
   intent.
 ]
+
+Two blocks answer a question presence cannot, because they have a setting that is
+already decided before you write anything. Those take a bare flag:
+
+```kdl
+content {
+  markdown #false   // `.md` files are pages by default; stop reading them
+  drafts #true      // drafts are skipped by default; build them
+}
+```
+
+Each is shorthand for the block's own flag key, and the two keys differ:
+`markdown #false` is `markdown { enabled #false }`, `drafts #true` is
+`drafts { build #true }`. Write the long form when the block configures something
+else too, or in a profile, where an overlay can set a key but cannot delete a
+node.
 
 == Commenting a block out
 
