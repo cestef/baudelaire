@@ -122,6 +122,28 @@ pub enum ThemeError {
         why: String,
     },
 
+    /// A theme's `theme.kdl` naming a section that is not a theme's to name.
+    ///
+    /// A theme supplies templates, assets, and defaults for what the *pages*
+    /// are. Where the project's files live, what its build runs and where it
+    /// publishes are the site's own, and a theme is fetched: a package theme is
+    /// downloaded at build time, so its `theme.kdl` need never appear in the
+    /// site's repository at all. A hook inherited from one would be a command
+    /// run through a shell that the site never wrote and cannot read.
+    ///
+    /// Refused rather than ignored, so a theme author learns their block does
+    /// nothing instead of shipping one that silently never applies.
+    #[error("theme defaults at {} set {}, which is the site's", Code(.path), Code(.section))]
+    #[diagnostic(
+        code(baudelaire::theme::governs),
+        help(
+            "a theme supplies templates, assets and their defaults; where a site's files live, \
+             what its build runs and where it publishes are the site's own. Drop the block from \
+             the theme, and write it in the project's own config"
+        )
+    )]
+    Governs { path: String, section: String },
+
     #[error("nothing knows how to fetch {}", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unsupported),
@@ -162,6 +184,16 @@ impl ThemeError {
         Self::Unpack {
             url: url.to_owned(),
             why: why.to_string(),
+        }
+    }
+
+    /// `section` is one of the config's own top-level key names, so it is this
+    /// binary's text rather than the theme author's; `path` is the theme's
+    /// `theme.kdl`, as the run spells it.
+    pub fn governs(path: impl std::fmt::Display, section: &str) -> Self {
+        Self::Governs {
+            path: path.to_string(),
+            section: section.to_owned(),
         }
     }
 

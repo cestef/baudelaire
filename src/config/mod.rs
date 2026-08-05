@@ -45,7 +45,7 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::lang::Rtl;
 use crate::config::node::NodeExt;
 use crate::content::listing::Titlecase;
-use crate::error::{ConfigError, Result};
+use crate::error::{ConfigError, Result, ThemeError};
 
 pub use announce::AnnounceConfig;
 pub use announce::standard::{StandardConfig, VerifyConfig};
@@ -217,14 +217,46 @@ impl Config {
         let Some(defaults) = theme.config() else {
             return Ok(config);
         };
-        // The project's root, not the theme's default: `theme.kdl` is a floor
-        // for what the site *builds*, and where it is being built is not one of
-        // the things it gets a say in.
-        let base = Self {
-            root: config.root,
-            ..Self::parse(&crate::fs::read_to_string(&defaults)?)?
+        Self::parse_over(Self::floor(&defaults, config.root)?, text)
+    }
+
+    /// A theme's `theme.kdl`, read as the floor the site's own config stands on.
+    ///
+    /// Two things it does not get a say in. The first is `root`: the theme's
+    /// defaults are a floor for what the site *builds*, and where it is being
+    /// built is the project's, so the project's root is passed in rather than
+    /// taken from the parse.
+    ///
+    /// The second is anything that decides what the machine does. A theme is
+    /// *fetched*: a package theme is downloaded at build time, so its
+    /// `theme.kdl` need never appear in the site's repository, and a section of
+    /// it naming a command or a destination would be an instruction the site
+    /// never wrote and cannot read. [`HooksConfig`] runs each entry through a
+    /// shell, `deploy` and `announce` say where the built site goes and with
+    /// which credentials, `paths` decides which trees the build reads and which
+    /// it prunes, and `profiles` is raw KDL that can carry any of them. Every
+    /// one of those is refused rather than dropped, so a theme author finds out
+    /// their block does nothing instead of shipping one that silently never
+    /// applies.
+    fn floor(at: &Path, root: PathBuf) -> Result<Self> {
+        let text = crate::fs::read_to_string(at)?;
+        let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(&text, e))?;
+        if let Some(section) = doc
+            .nodes()
+            .iter()
+            .map(|node| node.name().value())
+            .find(|name| Self::OWNED.contains(name))
+        {
+            return Err(ThemeError::governs(at.display(), section).into());
+        }
+        let mut config = Self {
+            root,
+            source: text.clone(),
+            ..Self::default()
         };
-        Self::parse_over(base, text)
+        config.apply(doc.nodes(), &text)?;
+        config.check()?;
+        Ok(config)
     }
 
     /// Apply a config text over an existing config, rather than over the
@@ -267,6 +299,25 @@ impl Config {
     /// The key holding the profile partials, shared by the top-level rule that
     /// parses it and the guard refusing one *inside* a profile.
     pub(crate) const PROFILES: &'static str = "profiles";
+
+    /// The four other keys named twice: once by their row in the `RULES` table
+    /// below, once by `OWNED`. Spelled once each so the table and the guard
+    /// cannot drift apart.
+    const PATHS: &'static str = "paths";
+    const HOOKS: &'static str = "hooks";
+    const ANNOUNCE: &'static str = "announce";
+    const DEPLOY: &'static str = "deploy";
+
+    /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
+    /// may not carry: see `Config::floor`, which is the only thing that reads
+    /// this and the only place the reason is written.
+    const OWNED: [&'static str; 5] = [
+        Self::PATHS,
+        Self::HOOKS,
+        Self::ANNOUNCE,
+        Self::DEPLOY,
+        Self::PROFILES,
+    ];
 
     /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the
     /// one builder every subsystem uses to locate its local state under
@@ -912,7 +963,7 @@ impl Section for Config {
             },
         ),
         (
-            "paths",
+            Self::PATHS,
             Nested(Paths::rows),
             "Where the content, output and asset trees live.",
             |c, n, t| c.paths.fill(n, t),
@@ -1020,19 +1071,19 @@ impl Section for Config {
             },
         ),
         (
-            "hooks",
+            Self::HOOKS,
             Nested(HooksConfig::rows),
             "External commands run before and after the build.",
             |c, n, t| c.hooks.fill(n, t),
         ),
         (
-            "announce",
+            Self::ANNOUNCE,
             Nested(AnnounceConfig::rows),
             "Where to announce the site's metadata.",
             |c, n, t| c.announce.fill(n, t),
         ),
         (
-            "deploy",
+            Self::DEPLOY,
             Nested(DeployConfig::rows),
             "Where `baudelaire deploy` uploads the built site.",
             |c, n, t| c.deploy.fill(n, t),

@@ -103,6 +103,38 @@ fn theme_config_supplies_defaults_the_site_overrides() {
     assert!(!config.html.pretty, "nested theme default inherited");
 }
 
+/// ...and a floor only for what the site *builds*. The sections that decide what
+/// the machine does are the site's, and a theme is fetched: a package theme is
+/// downloaded at build time, so its `theme.kdl` need never appear in the
+/// repository at all. `hooks` runs each entry through a shell, `deploy` and
+/// `announce` say where the built site goes and with which credentials, `paths`
+/// decides which trees are read and pruned, and `profiles` is raw KDL that can
+/// carry any of them. A site stating none of its own silently inherited every
+/// one.
+#[test]
+fn a_theme_cannot_set_the_sections_a_site_owns() {
+    use miette::Diagnostic;
+
+    for section in [
+        "hooks {\n  before \"touch pwned\"\n}\n",
+        "deploy {\n  s3 {\n    bucket \"theirs\"\n  }\n}\n",
+        "announce {\n  standard {\n    did \"did:plc:x\"\n  }\n}\n",
+        "paths {\n  content \"/etc\"\n}\n",
+        "profiles {\n  dev {\n    hooks {\n      before \"touch pwned\"\n    }\n  }\n}\n",
+    ] {
+        let site = site();
+        site.write("themes/plume/theme.kdl", section);
+
+        let err = Config::load(&site.read("config.kdl"), &site.root).expect_err(section);
+
+        assert_eq!(
+            err.code().map(|code| code.to_string()).as_deref(),
+            Some("baudelaire::theme::governs"),
+            "{section}"
+        );
+    }
+}
+
 /// A theme naming a directory that is not there fails at load, naming the
 /// value that is wrong.
 #[test]

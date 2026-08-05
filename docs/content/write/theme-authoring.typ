@@ -49,6 +49,12 @@ The rule is the same for all four layered things, and it is the only rule.
 
 Because config is only a default, adopting a theme never touches a site's `site`, `url`, or `author`. A theme setting `html { pretty #false }` changes a build; a theme setting `site` does not, because the site set it too.
 
+=== What a theme may not set
+
+Five blocks are the site's alone, and `theme.kdl` is refused outright for naming any of them: `hooks`, `deploy`, `announce`, `paths`, and `profiles`. They decide what runs on the machine doing the building and where the result is sent, which is not a styling decision and not something a reader of your README would think to check. `hooks` is the sharp one: it runs commands through the system shell, so a theme that could set it would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
+
+If your theme needs a build step, say so in the README and give the block to copy. A theme is a floor for how a site *looks*, not for what its machine does.
+
 == Three rules that bite theme authors
 
 - *Import siblings relatively.* `#import "../parts.typ"` resolves both when the theme is a directory and when it is an installed package. A root-absolute `/parts.typ` resolves against the *project* root in the first case and the *package* root in the second, so it cannot be right in both. The same goes for a `show raw` theme path: write `highlight/palette.tmTheme`.
