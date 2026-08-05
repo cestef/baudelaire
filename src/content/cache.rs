@@ -223,10 +223,10 @@ impl<'a> DiscoveryCache<'a> {
 
         let value = crate::codegen::Value::from(&typst::foundations::Value::Dict(dict));
         let dict = crate::codegen::Typst(&value).to_string();
-        let data = |origins| Data::Lowered { dict, origins };
-        let (body, origins) =
+        let data = |sourcemap| Data::Lowered { dict, sourcemap };
+        let (body, sourcemap) =
             Markdown::new(&document, &text, &named, &config.content.markdown).lower()?;
-        Ok((frontmatter, data(std::sync::Arc::new(origins)), body))
+        Ok((frontmatter, data(std::sync::Arc::new(sourcemap)), body))
     }
 
     /// The previous entry for `path` if it is still valid, its source and every

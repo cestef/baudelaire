@@ -16,7 +16,8 @@ use std::path::Path;
 use typst::syntax::{FileId, Source, Span, VirtualRoot};
 use typst::{World, WorldExt};
 
-use crate::world::PageWorld;
+use crate::content::Rebased;
+use crate::world::{PageWorld, Wrapper};
 
 /// Where in the project's source something was written, as an editor counts it.
 pub(super) struct Origin {
@@ -103,6 +104,30 @@ impl<'a> Origins<'a> {
             file: id.vpath().get_without_slash().to_owned(),
             line: line + 1,
             column: column + 1,
+        })
+    }
+
+    /// Where `span` was authored on a page this crate lowered, `map` being that
+    /// page's second hop: from the Typst it was turned into back to the file
+    /// its author typed.
+    ///
+    /// A lowered page compiles under a synthetic wrapper whose path names no
+    /// file ([`Wrapper`]), so an untranslated location sends the preview's
+    /// jump-to-source at `content/a.md@layout` and the editor opens nothing.
+    /// Only the compiled page itself is translated: a span in a template
+    /// already names a file its author wrote. A span the map cannot place is
+    /// dropped, the same contract the diagnostic bridge keeps - the element
+    /// goes unstamped rather than pointing at a line nobody wrote there.
+    pub(super) fn mapped(&mut self, span: Span, map: &Rebased) -> Option<Origin> {
+        let (id, range) = self.bytes(span)?;
+        if id != self.world.id() {
+            return self.locate(span);
+        }
+        let (line, column) = map.map().position(map.locate(&range)?.start)?;
+        Some(Origin {
+            file: Wrapper::page(id.vpath().get_without_slash()).to_owned(),
+            line,
+            column,
         })
     }
 

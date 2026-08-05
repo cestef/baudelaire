@@ -432,6 +432,36 @@ impl<W: World> World for Tracked<W> {
     }
 }
 
+/// How a page's synthetic layout module is named to the compiler.
+///
+/// The wrapper is a sibling of the page - so a relative template import
+/// resolves the same way - but a distinct file, so it can `#include` the real
+/// page without shadowing it as `main`. The suffix is written once here and
+/// read back here: [`crate::engine`] builds the id, and the passes that report
+/// a location have to undo it, since `content/a.md@layout` is a path no editor
+/// can open and no author ever wrote.
+pub struct Wrapper;
+
+impl Wrapper {
+    /// What distinguishes a wrapper's name from the page it wraps. Not a valid
+    /// path character sequence any real file would carry.
+    const SUFFIX: &'static str = "@layout";
+
+    /// The wrapper module's file id for the page at `rooted`.
+    pub fn id(rooted: &RootedPath) -> FileId {
+        let name = format!("{}{}", rooted.vpath().get_without_slash(), Self::SUFFIX);
+        let vpath = VirtualPath::new(&name)
+            .expect("a page vpath with a suffix stays a valid relative vpath");
+        FileId::new(RootedPath::new(VirtualRoot::Project, vpath))
+    }
+
+    /// The page behind a wrapper's name, or `path` unchanged when it names no
+    /// wrapper: what an author can actually open.
+    pub fn page(path: &str) -> &str {
+        path.strip_suffix(Self::SUFFIX).unwrap_or(path)
+    }
+}
+
 /// A world bound to a single page's source as `main`. Shares project fonts,
 /// files, and library so comemo caches hit across compiles.
 #[derive(Clone)]

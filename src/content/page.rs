@@ -25,10 +25,10 @@ pub enum Data {
     #[cfg(feature = "markdown")]
     Lowered {
         dict: String,
-        /// Where the authored parts of the lowered body came from, so a typst
-        /// error inside an `eval` fence is reported against the `.md` line
-        /// rather than against generated source.
-        origins: std::sync::Arc<crate::error::typ::Origins>,
+        /// Where the lowered body came from in the file the author wrote, so a
+        /// typst error and a `data-typst` stamp both name the `.md` line rather
+        /// than a line of generated source under a virtual path.
+        sourcemap: std::sync::Arc<crate::content::SourceMap>,
     },
     /// A generated listing with no file: the wrapper inlines `dict` (built by
     /// [`crate::codegen::Value`]) together with the generated body.

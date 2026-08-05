@@ -18,6 +18,7 @@ pub mod page;
 pub mod pagination;
 pub mod section;
 pub mod slug;
+pub mod sourcemap;
 mod stem;
 pub mod strings;
 pub mod taxonomy;
@@ -30,6 +31,7 @@ pub use page::{Data, Page, PageId, Sibling, Siblings};
 pub use pagination::Pagination;
 pub use section::Section;
 pub use slug::Slug;
+pub use sourcemap::{Rebased, SourceMap};
 pub use strings::Strings;
 pub use taxonomy::Taxonomy;
 

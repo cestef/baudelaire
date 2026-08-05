@@ -946,12 +946,12 @@ impl Engine {
             // line of the Typst the page was turned into.
             {
                 let named = page.source.display().to_string();
-                let mapped: Option<&Arc<crate::error::typ::Origins>> = match &page.data {
+                let mapped: Option<&Arc<crate::content::SourceMap>> = match &page.data {
                     #[cfg(feature = "markdown")]
-                    crate::content::Data::Lowered { origins, .. } => Some(origins),
+                    crate::content::Data::Lowered { sourcemap, .. } => Some(sourcemap),
                     _ => None,
                 };
-                mapped.map(|origins| (origins, named))
+                mapped.map(|sourcemap| (sourcemap, named))
             }
             .as_ref()
             .map(|(origins, name)| (*origins, name.as_str())),

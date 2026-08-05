@@ -160,6 +160,17 @@ chores are visible in the git history and change nothing for a site.
   A typst page that computes its frontmatter has no literal to point at, and
   there the snippet is still suppressed rather than aimed at a guess.
 
+- **markdown**: `html { spans }` stamps a markdown page with the line you wrote.
+  It stamped the lowered Typst instead, under a virtual path
+  (`content/a.md@layout:3:2` for prose on line 6), so the dev server's alt-click
+  asked the editor to open a file that does not exist. Every construct is mapped
+  now, nested ones included: a list item, and a link inside a list item, each
+  name their own line and column.
+
+  The map that does it moved out of the error module and covers the whole
+  lowering rather than `eval` fences alone. Both readers go through it, so a
+  diagnostic and a stamp cannot disagree about where a page came from.
+
 - **markdown**: a link naming a markdown page resolves to its permalink, and is
   checked. The test for "is this a source path" was the literal `typ`, so a
   `.md` target was classified as a URL: it was published as the relative path

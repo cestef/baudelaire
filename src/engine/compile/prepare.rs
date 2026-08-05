@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use typst::syntax::{FileId, RootedPath, VirtualPath, VirtualRoot};
+use typst::syntax::{FileId, RootedPath};
 
 use crate::codegen::{Typst, Value};
 use crate::config::Config;
@@ -28,6 +28,7 @@ use crate::render::Backlinks;
 use crate::theme::Theme;
 use crate::ui::markup;
 use crate::world::Project;
+use crate::world::Wrapper;
 use crate::world::module;
 
 use super::layout::{Bind, Body, Context, Layout};
@@ -153,7 +154,7 @@ impl<'a> Prepare<'a> {
         };
         let id = match &page.data {
             Data::Generated { .. } => FileId::new(rooted.clone()),
-            _ => Self::wrapper(&rooted),
+            _ => Wrapper::id(&rooted),
         };
         let dir = self.dir(template);
         // The page's identity is its wrapper as it would read with *no*
@@ -509,15 +510,5 @@ impl<'a> Prepare<'a> {
     /// what the wrapper's `#import`/`#include` literals resolve against.
     fn rooted_str(rooted: &RootedPath) -> String {
         format!("/{}", rooted.vpath().get_without_slash())
-    }
-
-    /// The synthetic wrapper's file id: a sibling of the page (so relative
-    /// template imports resolve the same way), but distinct from it, so the
-    /// wrapper can `#include` the real file without shadowing it as `main`.
-    fn wrapper(rooted: &RootedPath) -> FileId {
-        let name = format!("{}@layout", rooted.vpath().get_without_slash());
-        let vpath = VirtualPath::new(&name)
-            .expect("a page vpath with a suffix stays a valid relative vpath");
-        FileId::new(RootedPath::new(VirtualRoot::Project, vpath))
     }
 }

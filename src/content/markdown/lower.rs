@@ -29,9 +29,10 @@ use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Par
 
 use crate::codegen::{Call, Content, Value};
 use crate::config::{Extension, MarkdownConfig, RawHtml};
+use crate::content::SourceMap;
+use crate::content::sourcemap::{Mapping, Shape};
 use crate::error::Result;
 use crate::error::markdown::MarkdownError;
-use crate::error::typ::Origins;
 
 /// A markdown body, without its frontmatter block.
 ///
@@ -84,9 +85,9 @@ impl<'a> Markdown<'a> {
             .fold(Options::empty(), |all, one| all | one)
     }
 
-    /// The Typst source this page compiles as, and where the authored parts of
-    /// it came from.
-    pub fn lower(&self) -> Result<(String, Origins)> {
+    /// The Typst source this page compiles as, and where it came from in the
+    /// file the author wrote.
+    pub fn lower(&self) -> Result<(String, SourceMap)> {
         // `into_offset_iter` so every event knows the bytes it came from, which
         // is what lets a fault point at the markdown rather than at the Typst
         // this produces.
@@ -94,6 +95,11 @@ impl<'a> Markdown<'a> {
             Parser::new_ext(self.body, self.options())
                 .into_offset_iter()
                 .unzip();
+        // Numbered, and the numbers travel with the events. A footnote body is
+        // lowered by a walk of its own over a *copy* of its events, and a copy
+        // renumbers them: every span that walk recorded would name whichever
+        // event happened to sit at the same index in the whole document.
+        let events: Vec<Numbered<'_>> = events.into_iter().enumerate().collect();
         let mut writer = Writer::new(
             self.path,
             Located::new(self.file, self.offset, &spans),
@@ -106,12 +112,18 @@ impl<'a> Markdown<'a> {
         writer.notes(&events)?;
         writer.notes(&events)?;
         writer.walk(&events)?;
-        let spans = std::mem::take(&mut writer.origins);
-        let source = writer.finish();
-        let origins = Origins::new(self.file.to_owned(), source.len(), spans);
-        Ok((source, origins))
+        let body = writer.finish();
+        let map = SourceMap::new(self.file.to_owned(), body.text.len(), body.spans);
+        Ok((body.text, map))
     }
 }
+
+/// A parse event and its index into the parse's span table.
+///
+/// Carried as one value because the two are only useful together: an event
+/// separated from its number cannot say where it came from, and that is exactly
+/// what a nested walk over cloned events used to do.
+type Numbered<'a> = (usize, Event<'a>);
 
 /// A fence's info string: a language, and the parameters that say what to do
 /// with it. Parsed rather than matched whole so a new option is a key here and
@@ -204,10 +216,21 @@ impl<'a> Located<'a> {
         Self { ..*self }
     }
 
+    /// The current event's range in the file's own coordinates, or `None` for
+    /// an event with no span table entry.
+    ///
+    /// An empty range is `None` too: it would map a stretch of generated Typst
+    /// onto zero authored bytes, which reads as the top of the file rather than
+    /// as "nowhere".
+    fn range(&self) -> Option<Range<usize>> {
+        let range = self.spans.get(self.at)?;
+        (!range.is_empty()).then(|| (range.start + self.offset)..(range.end + self.offset))
+    }
+
     /// The current event's span, in the file's own coordinates.
     fn span(&self) -> miette::SourceSpan {
-        let range = self.spans.get(self.at).cloned().unwrap_or(0..0);
-        miette::SourceSpan::new((range.start + self.offset).into(), range.len())
+        let range = self.range().unwrap_or(self.offset..self.offset);
+        miette::SourceSpan::new(range.start.into(), range.len())
     }
 
     /// The range of the current fenced block's *content* in the file: its span
@@ -266,6 +289,49 @@ impl From<Align> for Value {
     }
 }
 
+/// Lowered Typst together with where each stretch of it came from.
+///
+/// Every buffer on the writer's stack carries its own list rather than the
+/// writer keeping one: a buffered construct is written apart from its parent
+/// and spliced in afterwards, so an offset taken while it was open names the
+/// wrong bytes once its text has moved. [`Buffer::splice`] shifts the child's
+/// list by where its text landed, which is the one operation that keeps the two
+/// in step - and which the lowering did not have, so it recorded top-level
+/// fences only and mapped everything nested to nothing.
+#[derive(Default, Clone)]
+struct Buffer {
+    text: String,
+    /// Where each stretch of `text` came from, in write order, so the innermost
+    /// construct covering an offset is always the one found first.
+    spans: Vec<Mapping>,
+}
+
+impl Buffer {
+    fn push(&mut self, text: &str) {
+        self.text.push_str(text);
+    }
+
+    /// Append `child`'s text, moving its spans to where that text landed.
+    fn splice(&mut self, child: Self) {
+        let at = self.text.len();
+        self.text.push_str(&child.text);
+        self.spans
+            .extend(child.spans.into_iter().map(|span| span.shifted(at)));
+    }
+
+    /// Record that everything written since `from` came from `source`.
+    ///
+    /// Nothing is recorded for an event that wrote nothing, which keeps an
+    /// empty pair out of the map: [`SourceMap`] resolves the first pair
+    /// covering an offset, and an empty one covers none.
+    fn record(&mut self, from: usize, source: Range<usize>, shape: Shape) {
+        let to = self.text.len();
+        if from < to {
+            self.spans.push(Mapping::new(from..to, source, shape));
+        }
+    }
+}
+
 struct Writer<'a> {
     path: &'a str,
     at: Located<'a>,
@@ -275,16 +341,24 @@ struct Writer<'a> {
     /// The output, and above it one buffer per open [`Buffered`] construct.
     /// Writing always targets the top, so a nested image inside a footnote
     /// nests its buffers too.
-    stack: Vec<String>,
+    stack: Vec<Buffer>,
     buffered: Vec<Buffered>,
     /// Footnote bodies by label, lowered in the pre-pass. Typst has no separate
     /// definition: the body belongs at the reference, so it has to be known
-    /// before the reference is reached.
-    notes: Vec<(String, String)>,
+    /// before the reference is reached. Kept as buffers, not strings, so a body
+    /// keeps pointing at the definition it was written from once it has been
+    /// moved to the reference.
+    notes: Vec<(String, Buffer)>,
     /// Column alignments of the table being written, from its `Start(Table)`.
     columns: Vec<Alignment>,
-    /// Spans of authored Typst, as `(range written, range it came from)`.
-    origins: Vec<(Range<usize>, Range<usize>)>,
+}
+
+/// Where the writer stood before an event: which buffer was on top, and how
+/// much of it was written. What lets the walk attribute exactly the bytes one
+/// event produced, and nothing else.
+struct Mark {
+    depth: usize,
+    at: usize,
 }
 
 impl<'a> Writer<'a> {
@@ -293,11 +367,10 @@ impl<'a> Writer<'a> {
             path,
             at,
             config,
-            stack: vec![String::new()],
+            stack: vec![Buffer::default()],
             buffered: Vec::new(),
             notes: Vec::new(),
             columns: Vec::new(),
-            origins: Vec::new(),
         }
     }
 
@@ -320,29 +393,58 @@ impl<'a> Writer<'a> {
         }
     }
 
-    fn finish(mut self) -> String {
+    fn finish(mut self) -> Buffer {
         self.stack.pop().unwrap_or_default()
     }
 
-    fn out(&mut self) -> &mut String {
+    fn out(&mut self) -> &mut Buffer {
         self.stack
             .last_mut()
             .expect("the root buffer is never popped")
     }
 
     fn push(&mut self, text: &str) {
-        self.out().push_str(text);
+        self.out().push(text);
+    }
+
+    /// Where the writer stands, taken before an event so what it writes can be
+    /// attributed afterwards.
+    fn mark(&mut self) -> Mark {
+        Mark {
+            depth: self.stack.len(),
+            at: self.out().text.len(),
+        }
+    }
+
+    /// Attribute everything the event just written produced to the markdown it
+    /// came from.
+    ///
+    /// Skipped when the event opened or closed a buffer: `before` was measured
+    /// against a buffer that is no longer the one being written to, and the
+    /// close is recorded by [`Writer::end`], which is the only place that knows
+    /// how the child's text was transformed on its way in.
+    fn attribute(&mut self, before: &Mark) {
+        if self.stack.len() != before.depth {
+            return;
+        }
+        let Some(source) = self.at.range() else {
+            return;
+        };
+        // Assembled, not copied: every construct but an `eval` fence is a
+        // generated call or an escaped literal, whose bytes line up with
+        // nothing on the authored side.
+        self.out().record(before.at, source, Shape::Whole);
     }
 
     /// Lower every footnote definition first. The main walk then skips them and
     /// reads the bodies back at each reference.
-    fn notes(&mut self, events: &[Event<'_>]) -> Result<()> {
+    fn notes(&mut self, events: &[Numbered<'_>]) -> Result<()> {
         let mut depth = 0usize;
         let mut current: Option<String> = None;
-        let mut body: Vec<Event<'_>> = Vec::new();
+        let mut body: Vec<Numbered<'_>> = Vec::new();
 
-        for event in events {
-            match event {
+        for numbered in events {
+            match &numbered.1 {
                 Event::Start(Tag::FootnoteDefinition(name)) if depth == 0 => {
                     current = Some(name.to_string());
                     depth = 1;
@@ -350,7 +452,7 @@ impl<'a> Writer<'a> {
                 _ if depth == 0 => {}
                 Event::Start(_) => {
                     depth += 1;
-                    body.push(event.clone());
+                    body.push(numbered.clone());
                 }
                 Event::End(TagEnd::FootnoteDefinition) if depth == 1 => {
                     depth = 0;
@@ -367,9 +469,9 @@ impl<'a> Writer<'a> {
                 }
                 Event::End(_) => {
                     depth -= 1;
-                    body.push(event.clone());
+                    body.push(numbered.clone());
                 }
-                _ => body.push(event.clone()),
+                _ => body.push(numbered.clone()),
             }
         }
         Ok(())
@@ -377,10 +479,10 @@ impl<'a> Writer<'a> {
 
     /// A footnote definition is not part of the flow: its body was lowered by
     /// [`Writer::notes`] and belongs at the reference, so it is skipped here.
-    fn walk(&mut self, events: &[Event<'_>]) -> Result<()> {
+    fn walk(&mut self, events: &[Numbered<'_>]) -> Result<()> {
         let mut depth = 0usize;
 
-        for (index, event) in events.iter().enumerate() {
+        for (index, event) in events {
             if depth > 0 {
                 match event {
                     Event::Start(_) => depth += 1,
@@ -394,8 +496,16 @@ impl<'a> Writer<'a> {
                 depth = 1;
                 continue;
             }
-            self.at.at = index;
+            self.at.at = *index;
+            // Every event is authored: the parser hands back the bytes each one
+            // was parsed from, so whatever this writes belongs to those bytes,
+            // generated call or literal text alike. What has no origin is what
+            // no event produced -- the wrapper the body is compiled inside, and
+            // the punctuation `end` writes while closing a buffered construct
+            // whose text was transformed rather than copied.
+            let before = self.mark();
             self.event(event)?;
+            self.attribute(&before);
         }
         Ok(())
     }
@@ -469,7 +579,10 @@ impl<'a> Writer<'a> {
                     .map(|(_, body)| body.clone())
                     .unwrap_or_default();
                 self.push(&Call::new("footnote").content().to_string());
-                self.push(&body);
+                // Spliced rather than pushed as text: the body was lowered at
+                // the definition, so its spans point there and have to be moved
+                // to wherever it lands at this reference.
+                self.out().splice(body);
                 self.push("]");
                 Ok(())
             }
@@ -541,7 +654,7 @@ impl<'a> Writer<'a> {
                     CodeBlockKind::Indented => Fence::parse(""),
                 };
                 self.buffered.push(Buffered::Code { fence });
-                self.stack.push(String::new());
+                self.stack.push(Buffer::default());
             }
             Tag::List(Some(start)) => {
                 let start = i64::try_from(*start).unwrap_or(1);
@@ -568,7 +681,7 @@ impl<'a> Writer<'a> {
                     dest: dest_url.to_string(),
                     alt: String::new(),
                 });
-                self.stack.push(String::new());
+                self.stack.push(Buffer::default());
             }
             Tag::Table(alignments) => {
                 self.columns.clone_from(alignments);
@@ -611,24 +724,22 @@ impl<'a> Writer<'a> {
             TagEnd::Paragraph => self.push("\n\n"),
             TagEnd::Heading(_) | TagEnd::BlockQuote(_) => self.push("]\n\n"),
             TagEnd::CodeBlock => {
-                let text = self.stack.pop().unwrap_or_default();
+                let code = self.stack.pop().unwrap_or_default();
+                let text = code.text;
                 let Some(Buffered::Code { fence }) = self.buffered.pop() else {
                     return;
                 };
+                let at = self.out().text.len();
                 if fence.runs(self.config) {
-                    // Only at the top level, where the offset taken here stays
-                    // valid: a fence inside a list item or a footnote is written
-                    // into a buffer that is spliced into its parent later, and
-                    // every offset taken before that move is wrong afterwards.
-                    // No entry means no translation, which is the honest answer
-                    // rather than a wrong underline.
-                    if self.stack.len() == 1
-                        && let Some(source) = self.at.fenced(text.len())
-                    {
-                        let at = self.out().len();
-                        self.origins.push((at..at + text.len(), source));
-                    }
+                    // Emitted verbatim, so the pair is byte-for-byte and an
+                    // error inside a multi-line fence lands on its own line.
+                    // `fenced` steps over the info line, which the block's own
+                    // span includes and its text does not.
+                    let source = self.at.fenced(text.len());
                     self.push(&text);
+                    if let Some(source) = source {
+                        self.out().record(at, source, Shape::Verbatim);
+                    }
                     self.push("\n\n");
                     return;
                 }
@@ -637,6 +748,13 @@ impl<'a> Writer<'a> {
                     call = call.named("lang", Value::str(&name));
                 }
                 self.push(&call.pos(Value::str(&text)).to_string());
+                // The call is nothing like the fence it renders -- the code is
+                // escaped into a string argument -- so the fence maps as a
+                // whole and an offset inside it resolves to the fence's start
+                // rather than to a byte the author never typed there.
+                if let Some(source) = self.at.range() {
+                    self.out().record(at, source, Shape::Whole);
+                }
                 self.push("\n\n");
             }
             TagEnd::List(_) | TagEnd::Table => self.push(")\n\n"),
@@ -656,7 +774,15 @@ impl<'a> Writer<'a> {
                 if !alt.is_empty() {
                     call = call.named("alt", Value::str(&alt));
                 }
+                let at = self.out().text.len();
                 self.push(&call.to_string());
+                // Recorded here rather than by the walk, which cannot attribute
+                // an event that closed a buffer. The call maps as a whole: it
+                // is assembled from the destination and the alt run, not copied
+                // from either.
+                if let Some(source) = self.at.range() {
+                    self.out().record(at, source, Shape::Whole);
+                }
             }
             TagEnd::TableHead => self.push("),"),
             TagEnd::TableRow
@@ -675,6 +801,7 @@ impl<'a> Writer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::Rebased;
 
     /// Split then lower, which is the path a real page takes: a test that
     /// skipped the split would not notice a body offset going wrong.
@@ -909,40 +1036,127 @@ mod tests {
         assert!(out.contains('\u{2026}'), "ellipsis: {out}");
     }
 
-    /// An `eval` fence is the only authored Typst on the page, so it is the
-    /// only thing a diagnostic can be pointed back at.
+    /// How many bytes of preamble the tests below put in front of a body. Any
+    /// number does; the map derives it from the wrapper rather than being told.
+    const PREAMBLE: usize = 100;
+
+    /// Lower `source`, then place the result in a wrapper the way a real
+    /// compile does: the preamble first, the body last.
+    fn mapped(source: &str) -> (String, Rebased) {
+        let document = super::super::Document::split(source, "a.md").expect("split");
+        let (lowered, map) = Markdown::new(&document, source, "a.md", &MarkdownConfig::default())
+            .lower()
+            .expect("lower");
+        let wrapper = format!("{}{lowered}", " ".repeat(PREAMBLE));
+        let rebased = Rebased::new(std::sync::Arc::new(map), &wrapper).expect("the body fits");
+        (lowered, rebased)
+    }
+
+    /// Where `needle` in the lowered body maps back to in the authored file.
+    fn back(lowered: &str, map: &Rebased, needle: &str) -> Range<usize> {
+        let at = lowered
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} was not emitted: {lowered}"));
+        map.locate(&((PREAMBLE + at)..(PREAMBLE + at + needle.len())))
+            .unwrap_or_else(|| panic!("{needle:?} maps to nothing: {lowered}"))
+    }
+
+    /// An `eval` fence is authored Typst copied out verbatim, so it is the one
+    /// construct whose offsets survive byte for byte.
     #[test]
     fn an_eval_fence_records_where_it_came_from() {
         let source = "---\ntitle \"A\"\n---\n\ntext\n\n```typ eval\n#emph[x]\n```\n";
-        let document = super::super::Document::split(source, "a.md").expect("split");
-        let (lowered, origins) =
-            Markdown::new(&document, source, "a.md", &MarkdownConfig::default())
-                .lower()
-                .expect("lower");
-
-        // A wrapper is the preamble plus the body; the body sits at its end.
-        let wrapper = 100 + lowered.len();
-        let authored = lowered.find("#emph").expect("the fence was emitted");
-        let at = origins
-            .locate(wrapper, &((100 + authored)..(100 + authored + 5)))
-            .expect("the fence maps back");
+        let (lowered, map) = mapped(source);
+        let at = back(&lowered, &map, "#emph");
         assert_eq!(&source[at.start..at.start + 5], "#emph");
     }
 
-    /// Generated code has no place in the authored file, and saying otherwise
-    /// would underline something the author never wrote.
+    /// The wrapper is not lowered from anything, so nothing in it maps.
     #[test]
-    fn generated_code_maps_to_nothing() {
-        let source = "---\ntitle \"A\"\n---\n\njust prose\n";
-        let document = super::super::Document::split(source, "a.md").expect("split");
-        let (lowered, origins) =
-            Markdown::new(&document, source, "a.md", &MarkdownConfig::default())
-                .lower()
-                .expect("lower");
-        let wrapper = 100 + lowered.len();
-        assert_eq!(origins.locate(wrapper, &(100..104)), None);
-        // ...and a span in the wrapper's own preamble, before the body starts.
-        assert_eq!(origins.locate(wrapper, &(4..8)), None);
+    fn the_wrapper_maps_to_nothing() {
+        let (_, map) = mapped("---\ntitle \"A\"\n---\n\njust prose\n");
+        assert_eq!(map.locate(&(4..8)), None);
+        assert_eq!(map.locate(&(0..PREAMBLE)), None);
+    }
+
+    /// A page with nothing under its frontmatter lowers to nothing, and an
+    /// empty map must answer "nowhere" rather than "the top of the file".
+    #[test]
+    fn an_empty_body_maps_to_nothing() {
+        let (_, map) = mapped("---\ntitle \"A\"\n---\n");
+        assert_eq!(map.locate(&(PREAMBLE..PREAMBLE + 1)), None);
+    }
+
+    /// Every construct the lowering emits is attributed, not just `eval`
+    /// fences: the generated call for a heading, a list, a link came from the
+    /// markdown that asked for it, and a jump-to-source that lands on the
+    /// generated Typst instead is a path no editor can open.
+    #[test]
+    fn every_construct_maps_back_to_the_markdown() {
+        let source = "---\ntitle \"A\"\n---\n\nFirst paragraph.\n\n## A heading\n\n- an item\n- another, with a [link](https://x.com)\n\nLast.\n";
+        let (lowered, map) = mapped(source);
+        let line = |needle: &str| {
+            let at = back(&lowered, &map, needle);
+            map.map().position(at.start).expect("in the file").0
+        };
+        assert_eq!(line(r#"#"First paragraph.""#), 5);
+        assert_eq!(line("#heading(level: 2)["), 7);
+        assert_eq!(line("#list("), 9);
+        assert_eq!(line(r#"#"an item""#), 9);
+        assert_eq!(line(r#"#"another, with a ""#), 10);
+        assert_eq!(line(r#"#link("https://x.com")["#), 10);
+        assert_eq!(line(r#"#"Last.""#), 12);
+    }
+
+    /// The subtle half of the map, tested on its own because a wrong shift is
+    /// invisible in the output: a buffered construct is written apart from its
+    /// parent, so its spans are in its own coordinates and the splice has to
+    /// move them by where its text landed. Unshifted, every one of them names
+    /// bytes that many too early.
+    #[test]
+    fn splicing_shifts_a_childs_spans_by_where_its_text_landed() {
+        let mut parent = Buffer::default();
+        parent.push("abcd");
+        let mut child = Buffer::default();
+        child.push("xy");
+        child.record(0, 40..42, Shape::Whole);
+        parent.splice(child);
+        assert_eq!(parent.text, "abcdxy");
+        assert_eq!(parent.spans, vec![Mapping::new(4..6, 40..42, Shape::Whole)]);
+    }
+
+    /// Splices compose, which is what a construct buffered inside another
+    /// buffered one needs: each level shifts by its own landing point, and the
+    /// pair that reaches the root has been moved by both.
+    #[test]
+    fn splices_compose_through_a_stack_of_buffers() {
+        let mut inner = Buffer::default();
+        inner.push("z");
+        inner.record(0, 7..8, Shape::Whole);
+
+        let mut middle = Buffer::default();
+        middle.push("ab");
+        middle.splice(inner);
+        assert_eq!(middle.spans, vec![Mapping::new(2..3, 7..8, Shape::Whole)]);
+
+        let mut root = Buffer::default();
+        root.push("0123");
+        root.splice(middle);
+        assert_eq!(root.text, "0123abz");
+        assert_eq!(root.spans, vec![Mapping::new(6..7, 7..8, Shape::Whole)]);
+    }
+
+    /// A footnote body is lowered at its definition by a walk of its own and
+    /// written at its reference, which is the splice a real page exercises: its
+    /// spans have to follow the text, and the walk that recorded them has to
+    /// have known which events it was looking at.
+    #[test]
+    fn a_footnote_body_maps_to_its_definition() {
+        let source = "---\ntitle \"A\"\n---\n\nsee[^n]\n\n[^n]: the note\n";
+        let (lowered, map) = mapped(source);
+        let at = back(&lowered, &map, r#"#"the note""#);
+        assert_eq!(&source[at.start..at.start + 8], "the note");
+        assert_eq!(map.map().position(at.start).expect("in the file").0, 7);
     }
 
     /// A comment renders as nothing anywhere, so it is the one raw-HTML shape
