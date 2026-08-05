@@ -239,7 +239,7 @@ impl<'a> DiscoveryCache<'a> {
         let data = Data::Lowered {
             dict: crate::codegen::Typst(&value).to_string(),
         };
-        let body = Markdown::new(&document, &text, &named).lower()?;
+        let body = Markdown::new(&document, &text, &named, &config.content.markdown).lower()?;
         Ok((frontmatter, data, body))
     }
 

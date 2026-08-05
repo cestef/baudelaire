@@ -309,3 +309,420 @@ scenario "unparseable frontmatter is a precise error" {
     }
   }
 }
+
+// The site decides what a markdown page may contain. Each knob is checked
+// through a real build, not just through the parser.
+scenario "a site can drop raw html instead of refusing it" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          html "drop"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/html.md" #"""
+      ---
+      title "Html"
+      template "page.typ"
+      ---
+
+      Before <div>spliced</div> after.
+      """#
+  }
+  expect {
+    ok
+    file "html/index.html" {
+      contains "Before"
+      contains "after."
+      // The *markup* is what goes: the text it wrapped is still the author's
+      // prose, and dropping that would lose the page a sentence.
+      contains "spliced"
+      missing "<div>"
+    }
+  }
+}
+
+// An `eval` fence runs arbitrary Typst at build time, so a site building
+// content it did not write can refuse it outright.
+scenario "a site can forbid eval fences" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          eval #false
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/fence.md" #"""
+      ---
+      title "Fence"
+      template "page.typ"
+      ---
+
+      ```typ eval
+      #html.elem("aside", "should not run")
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "fence/index.html" {
+      // Shown as source rather than executed.
+      contains "should not run"
+      missing "<aside>"
+    }
+  }
+}
+
+// `-name` removes one of the defaults, the same spelling `typst { features }`
+// uses, so a site keeps every default it did not mention.
+scenario "extensions toggle against the defaults" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          extensions "-tables"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/off.md" #"""
+      ---
+      title "Off"
+      template "page.typ"
+      ---
+
+      | a | b |
+      | --- | --- |
+      | 1 | 2 |
+
+      A ~~struck~~ word.
+      """#
+  }
+  expect {
+    ok
+    file "off/index.html" {
+      // Tables were switched off, so the pipes are literal text.
+      missing "<table"
+      // ...and strikethrough, which was never mentioned, still works.
+      contains "<s>struck</s>"
+    }
+  }
+}
+
+// A name no extension has is refused, with the same near-miss suggestion any
+// other misspelled config value gets.
+scenario "an unknown extension is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        markdown {
+          extensions "tabels"
+        }
+      }
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::config::unknown_value"
+    }
+  }
+}
+
+// Dropping raw HTML is not lossless for a *block*: CommonMark hands the whole
+// block over as one run, so its contents go with its tags. Pinned because the
+// inline case reads as though nothing is ever lost, and it is why `refuse` is
+// the default.
+scenario "dropping a raw html block drops what is inside it" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          html "drop"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/block.md" #"""
+      ---
+      title "Block"
+      template "page.typ"
+      ---
+
+      Kept prose.
+
+      <div class="callout">
+      This sentence lives inside an HTML block.
+      </div>
+      """#
+  }
+  expect {
+    ok
+    file "block/index.html" {
+      contains "Kept prose."
+      missing "lives inside"
+    }
+  }
+}
+
+// A toggled list says one thing per name. Every shape that would quietly mean
+// nothing is refused instead, because a setting that looks accepted and does
+// nothing is the failure the config layer exists to prevent.
+scenario "a contradictory extension list is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content { markdown { extensions "tables" "tables" } }
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::config::duplicate_entry"
+    }
+  }
+}
+
+scenario "an extension list written as key=value is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content { markdown { extensions tables=#false } }
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::config::unexpected_argument"
+    }
+  }
+}
+
+scenario "an empty extension list is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content { markdown { extensions } }
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::config::missing_arg"
+    }
+  }
+}
+
+// A profile's `extensions` is resolved against the built-in defaults, not
+// against what the base config left in force: config lists replace wholesale,
+// and `-name` is relative to the defaults rather than to the base.
+//
+// Pinned because the other reading is at least as natural, and nothing else in
+// the tree would notice if it changed.
+scenario "a profile resolves extensions against the defaults" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          extensions "-tables"
+        }
+      }
+      profiles {
+        prod {
+          content {
+            markdown {
+              extensions "smart"
+            }
+          }
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/t.md" #"""
+      ---
+      title "T"
+      template "page.typ"
+      ---
+
+      | a | b |
+      | --- | --- |
+      | 1 | 2 |
+      """#
+  }
+  // Without the profile, the base holds: tables are off.
+  build { expect { ok; file "t/index.html" { missing "<table" } } }
+  // With it, the profile's list replaced the base's wholesale, so `-tables` is
+  // gone and tables come back along with the rest of the defaults.
+  build {
+    profile "prod"
+    expect { ok; file "t/index.html" { contains "<table" } }
+  }
+}
+
+// `markdown #false` is the shorthand for `markdown { enabled #false }`, and it
+// puts `.md` files back to being files: a site with a README beside its pages
+// should not have to publish it.
+scenario "a site can turn markdown off and keep its md files" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown #false
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/real.typ" #"""
+      #let frontmatter = (title: "Real", template: "page.typ",)
+      A typst page.
+      """#
+    "content/README.md" #"""
+      # Notes to myself
+
+      Not a page.
+      """#
+  }
+  expect {
+    ok
+    file "real/index.html" { contains "A typst page." }
+    // The `.md` was never a page, so nothing was published for it.
+    absent "README/index.html"
+    absent "readme/index.html"
+  }
+}
+
+// ...and the long spelling means the same thing.
+scenario "the enabled key is the shorthand written out" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          enabled #false
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A", template: "page.typ",)
+      Kept.
+      """#
+    "content/skipped.md" #"""
+      ---
+      title "Skipped"
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" { contains "Kept." }
+    absent "skipped/index.html"
+  }
+}
+
+// The block still turns markdown *on* when it only configures it, so writing
+// `markdown { extensions .. }` does not silently disable the thing it configures.
+scenario "configuring markdown leaves it enabled" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      content {
+        markdown {
+          extensions "smart"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/on.md" #"""
+      ---
+      title "On"
+      template "page.typ"
+      ---
+
+      Still a page.
+      """#
+  }
+  expect {
+    ok
+    file "on/index.html" { contains "Still a page." }
+  }
+}

@@ -43,6 +43,17 @@ pub(super) struct Gate {
 
 const GATES: &[Gate] = &[
     Gate {
+        cargo: "markdown",
+        compiled: cfg!(feature = "markdown"),
+        setting: "content { markdown }",
+        // Wrote the node *and* left it on: a site that says `markdown #false`
+        // has decided against the capability, and warning that it is missing
+        // would answer a question it did not ask.
+        asked: |config| config.content.markdown.present && config.content.markdown.enabled,
+        effect: "`.md` files under `content/` are not pages, and are left where they lie",
+        rewrites: false,
+    },
+    Gate {
         cargo: "css",
         compiled: cfg!(feature = "css"),
         setting: "assets { minify }",

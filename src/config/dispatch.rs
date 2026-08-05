@@ -66,6 +66,27 @@ pub enum Kind {
     /// list, so the names the reference prints are read out of the very table
     /// that parses them.
     Choice(Names),
+    /// Any number of names from a fixed set, where `-name` removes one from the
+    /// key's defaults: `extensions "math" "-tables"`.
+    ///
+    /// [`Choice`](Kind::Choice) for a list, and carried the same way and for the
+    /// same reason: the accepted spellings are read out of the
+    /// [`Named`](crate::config::Named) table that parses them, so a new variant
+    /// cannot appear in one and be missing from the other.
+    ///
+    /// The second function names the ones that are on without being asked for,
+    /// so the reference states the default set rather than leaving prose to
+    /// restate it somewhere that can go stale.
+    Choices(Names, Names),
+    /// The same `-name` grammar over an *open* set, where the names are not a
+    /// table this crate owns: `typst { features "bundle" "-a11y-extras" }`.
+    ///
+    /// Separate from [`Choices`](Kind::Choices) because there is nothing to
+    /// list, and separate from [`Texts`](Kind::Texts) because the leading `-`
+    /// is grammar rather than part of the name: a key spelled in it that
+    /// rendered as a plain string list would leave the reader to discover the
+    /// prefix from prose.
+    Toggles,
     /// Any number of strings on one line: `footnotes "article" "main"`.
     Texts,
     /// Any number of whole numbers on one line: `widths 480 960 1440`.

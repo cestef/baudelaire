@@ -103,7 +103,7 @@ impl<'a> Discovery<'a> {
     }
 
     fn run(mut self, cache: &DiscoveryCache) -> Result<Vec<Collection>> {
-        self.files = Self::gather(&self.config.paths.content)?
+        self.files = Self::gather(&self.config.paths.content, &Self::sources(self.config))?
             .into_iter()
             .map(|path| (path, false))
             .collect();
@@ -128,18 +128,31 @@ impl<'a> Discovery<'a> {
             .collect())
     }
 
-    /// The extensions a content file may carry. One entry per source dialect,
-    /// so adding one is a line here and an arm in
+    /// The extensions a content file may carry, for this site. One entry per
+    /// source dialect, so adding one is a line here and an arm in
     /// [`DiscoveryCache::load_page`](crate::content::cache), not a new pipeline.
-    const SOURCES: &'static [&'static str] = &[
-        "typ",
+    ///
+    /// Markdown answers to two things, and both have to say yes: the binary
+    /// has to have been built with it, and the site has to want it. A site that
+    /// says `content { markdown #false }` keeps its `.md` files as files.
+    fn sources(config: &Config) -> Vec<&'static str> {
+        // Answered once, per flavor, so neither build carries a branch the
+        // other's `cfg` leaves dangling.
         #[cfg(feature = "markdown")]
-        "md",
-    ];
+        let markdown = config.content.markdown.enabled;
+        #[cfg(not(feature = "markdown"))]
+        let markdown = {
+            let _ = config;
+            false
+        };
+        std::iter::once("typ")
+            .chain(markdown.then_some("md"))
+            .collect()
+    }
 
     /// Every content file under `dir`, recursively, skipping dotfiles and
     /// dot-directories.
-    fn gather(dir: &Path) -> Result<Vec<PathBuf>> {
+    fn gather(dir: &Path, sources: &[&str]) -> Result<Vec<PathBuf>> {
         let hidden = |path: &Path| {
             path.file_name()
                 .and_then(|n| n.to_str())
@@ -154,7 +167,7 @@ impl<'a> Discovery<'a> {
                     && path
                         .extension()
                         .and_then(|e| e.to_str())
-                        .is_some_and(|e| Self::SOURCES.contains(&e))
+                        .is_some_and(|e| sources.contains(&e))
             })
             .collect())
     }

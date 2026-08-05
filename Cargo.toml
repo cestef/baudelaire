@@ -129,7 +129,8 @@ ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 announce = []
 
 # `.md` content pages, lowered to Typst source before they compile: CommonMark
-# plus the GFM set (tables, task lists, strikethrough, footnotes).
+# plus the GFM set. Which extensions exist and which are on by default is one
+# table, `config::Extension`, and the generated config reference reads it.
 # ~4k lines of parser. It is a source dialect, not a second pipeline: by the
 # time the engine sees a markdown page it *is* Typst, so highlighting, math,
 # link resolution, sidecars, the transform chain and the cache all apply

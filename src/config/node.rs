@@ -69,10 +69,43 @@ pub(super) trait NodeExt {
     fn words(&self, text: &str) -> Result<Vec<String>>;
     fn widths(&self, text: &str) -> Result<Vec<u32>>;
     fn mapped<T: super::Named>(&self, text: &str) -> Result<Vec<T>>;
+    /// A list of names over a fixed set, where `-name` removes one from
+    /// `defaults` and a bare name adds one: `extensions "math" "-tables"`.
+    ///
+    /// The shape a setting takes when it has defaults worth keeping. Spelling
+    /// the whole set out would mean a site that wants one extra silently loses
+    /// every default it did not repeat, which is the trap `typst { features }`
+    /// exists to avoid, generalised over any [`Named`](super::Named) table.
+    fn toggled<T: super::Named>(&self, text: &str, defaults: &[T]) -> Result<Vec<T>>;
     /// This node's first argument as a file name that stays inside the output
     /// directory, judged by [`crate::fs::Contained`] (the one owner of that
     /// rule, shared with theme roots and inlined SVG paths).
     fn contained(&self, text: &str) -> Result<String>;
+}
+
+/// One name in a toggled list, and whether it is being added or removed.
+///
+/// The `-name` / `+name` / `name` grammar, in the one place that knows it. Two
+/// keys are written in it -- `typst { features }` over an open set of names it
+/// forwards, and any [`Named`](super::Named) list through
+/// [`NodeExt::toggled`] -- and spelling the prefixes twice is how they would
+/// come to disagree about `+`.
+struct Toggle<'a> {
+    name: &'a str,
+    /// `false` for `-name`.
+    add: bool,
+}
+
+impl<'a> Toggle<'a> {
+    fn of(raw: &'a str) -> Self {
+        match raw.strip_prefix('-') {
+            Some(name) => Self { name, add: false },
+            None => Self {
+                name: raw.strip_prefix('+').unwrap_or(raw),
+                add: true,
+            },
+        }
+    }
 }
 
 impl NodeExt for KdlNode {
@@ -252,18 +285,20 @@ impl NodeExt for KdlNode {
             .map(|entry| {
                 let span = EntryExt::span(*entry);
                 let raw = entry.value().as_str(text, span)?;
-                // `-name` disables a feature, `+name`/`name` enables it. The
-                // normalized token keeps a leading `-` for disable and drops the
-                // optional `+` for enable; `world.rs` resolves them in order.
+                let toggle = Toggle::of(&raw);
                 // `html` underpins the whole HTML pipeline, so it is always on
                 // and refusing `-html` is clearer than silently keeping it.
-                if let Some(name) = raw.strip_prefix('-') {
-                    if name == "html" {
-                        return Err(ConfigError::feature_removal(text, name, span).into());
-                    }
-                    return Ok(format!("-{name}"));
+                if !toggle.add && toggle.name == "html" {
+                    return Err(ConfigError::feature_removal(text, toggle.name, span).into());
                 }
-                Ok(raw.strip_prefix('+').unwrap_or(&raw).to_owned())
+                // Normalized: a leading `-` survives for `world.rs` to resolve
+                // in order, and the optional `+` is dropped. This list is an
+                // *open* set forwarded to typst, which is why it stays strings
+                // rather than going through `toggled`.
+                Ok(match toggle.add {
+                    true => toggle.name.to_owned(),
+                    false => format!("-{}", toggle.name),
+                })
             })
             .collect()
     }
@@ -309,6 +344,59 @@ impl NodeExt for KdlNode {
             }
             out.push(value);
         }
+        Ok(out)
+    }
+
+    fn toggled<T: super::Named>(&self, text: &str, defaults: &[T]) -> Result<Vec<T>> {
+        // Every entry, not just the positional ones: `extensions tables=#false`
+        // is a plausible spelling (the config language has `key=value` lines
+        // elsewhere), and quietly keeping the defaults while ignoring it is the
+        // silent no-op this dispatch layer exists to prevent.
+        let mut out = defaults.to_vec();
+        let mut seen: Vec<T> = Vec::new();
+        for entry in self.entries() {
+            let span = EntryExt::span(entry);
+            if let Some(key) = entry.name() {
+                return Err(ConfigError::unexpected_argument(
+                    text,
+                    &format!("{}={}", key.value(), entry.value()),
+                    self.name().value(),
+                    span,
+                )
+                .into());
+            }
+            let raw = entry.value().as_str(text, span)?;
+            let toggle = Toggle::of(&raw);
+            // The same resolution and the same near-miss suggestion that naming
+            // one of these anywhere else gives; only the `-`/`+` is ours.
+            let value: T = T::of(toggle.name).ok_or_else(|| {
+                crate::config::dispatch::Keys::unknown_value(T::NAMES, text, toggle.name, span)
+            })?;
+            // Naming one twice is a contradiction to resolve by reading, not by
+            // silently taking the last word: `"math" "-math"` says two things.
+            if seen.contains(&value) {
+                return Err(
+                    ConfigError::duplicate_entry(text, &raw, self.name().value(), span).into(),
+                );
+            }
+            seen.push(value);
+            match toggle.add {
+                true if !out.contains(&value) => out.push(value),
+                true => {}
+                false => out.retain(|kept| *kept != value),
+            }
+        }
+        if seen.is_empty() {
+            return Err(
+                ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into(),
+            );
+        }
+        // Canonical order, so a set is stored the way it is *named* rather than
+        // the way it was reached. `"-tables" "tables"` and the defaults are the
+        // same set and must hash the same: this value reaches the build
+        // fingerprint, and a reorder that changes nothing would otherwise cost
+        // a cold rebuild of the whole site.
+        out.sort_by_key(|value| T::NAMES.iter().position(|(_, v)| v == value));
         Ok(out)
     }
 

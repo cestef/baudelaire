@@ -10,8 +10,8 @@ use kdl::{KdlDocument, KdlNode};
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::{
-    Block as Nested, Choice, Flag, Items, Line, Lines, Number, Numbers, Overlay, Path, Size, Table,
-    Template, Text, Texts, Url,
+    Block as Nested, Choice, Choices, Flag, Items, Line, Lines, Number, Numbers, Overlay, Path,
+    Size, Table, Template, Text, Texts, Toggles, Url,
 };
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
@@ -23,12 +23,12 @@ use crate::config::value::ValueExt;
 use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
     CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DisplayMode, DraftConfig,
-    Eagerness, FeedConfig, FeedKind, FeedNames, FieldSchema, FieldType, GenerateConfig,
+    Eagerness, Extension, FeedConfig, FeedKind, FeedNames, FieldSchema, FieldType, GenerateConfig,
     HooksConfig, HtmlConfig, IconConfig, IconPurpose, ImagesConfig, JpegConfig, LanguageConfig,
-    LinkConfig, Linked, LintConfig, LlmsConfig, ManifestConfig, NavigationConfig, OptimizeConfig,
-    PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip, Prefetch,
-    ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField, SearchFormat,
-    SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
+    LinkConfig, Linked, LintConfig, LlmsConfig, ManifestConfig, MarkdownConfig, NavigationConfig,
+    OptimizeConfig, PaginateConfig, Paths, PdfBundle, PdfConfig, PdfPages, PngConfig, PngStrip,
+    Prefetch, RawHtml, ResponsiveConfig, RobotsConfig, Router, S3Config, SearchConfig, SearchField,
+    SearchFormat, SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig, SshConfig,
     StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle, VerifyConfig,
 };
 use crate::content::Frontmatter;
@@ -373,7 +373,67 @@ impl Section for ContentConfig {
                 Ok(())
             },
         ),
+        (
+            "markdown",
+            Nested(MarkdownConfig::rows),
+            "Whether `.md` files are pages, and what one may contain. `markdown #false` is `markdown { enabled #false }`.",
+            |c, n, t| c.markdown.shorthand(n, t, "enabled"),
+        ),
     ]);
+}
+
+/// What a markdown page may contain. Nothing here decides whether `.md` is a
+/// page at all: that is the `markdown` cargo feature. A binary built without it
+/// still parses this block and then ignores it, since no `.md` file is a page
+/// for it to apply to.
+impl Section for MarkdownConfig {
+    const RULES: Block<Self> = Block(&[
+        (
+            "enabled",
+            Flag,
+            "Whether a `.md` file under `content/` is a page at all.",
+            |c, n, t| {
+                c.enabled = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "extensions",
+            Choices(Extension::names, Extension::defaults),
+            "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.",
+            |c, n, t| {
+                c.extensions = n.toggled::<Extension>(t, Extension::DEFAULT)?;
+                Ok(())
+            },
+        ),
+        (
+            "html",
+            Choice(RawHtml::names),
+            "What raw HTML in a page does: `refuse` the build, or `drop` it.",
+            |c, n, t| {
+                c.html = n.arg(t, 0)?.one::<RawHtml>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        (
+            "eval",
+            Flag,
+            "Whether a fence marked `eval` runs as Typst. Turn it off for content you did not write: it runs at build time.",
+            |c, n, t| {
+                c.eval = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+    ]);
+
+    /// Writing the block is how a site says it needs markdown at all, which is
+    /// what lets a binary built without the feature answer. Returning `true`
+    /// makes a bare `content { markdown }` legal, and that is its whole meaning:
+    /// "this site has `.md` pages".
+    fn enable(&mut self) -> bool {
+        self.present = true;
+        true
+    }
 }
 
 impl Section for DraftConfig {
@@ -1948,7 +2008,7 @@ impl Section for TypstConfig {
     const RULES: Block<Self> = Block(&[
         (
             "features",
-            Texts,
+            Toggles,
             "Typst language features to enable, or `-name` to disable one. `html` cannot be removed.",
             |c, n, t| {
                 c.features = n.features(t)?;

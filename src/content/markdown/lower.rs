@@ -28,6 +28,7 @@ use std::ops::Range;
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::codegen::{Call, Content, Value};
+use crate::config::{Extension, MarkdownConfig, RawHtml};
 use crate::error::Result;
 use crate::error::markdown::MarkdownError;
 
@@ -42,26 +43,44 @@ pub struct Markdown<'a> {
     offset: usize,
     /// The page this came from, for diagnostics.
     path: &'a str,
+    /// What this site allows a page to contain.
+    config: &'a MarkdownConfig,
 }
 
 impl<'a> Markdown<'a> {
     /// The body of `document`, positioned in the `file` it was split from.
-    pub fn new(document: &super::Document<'a>, file: &'a str, path: &'a str) -> Self {
+    pub fn new(
+        document: &super::Document<'a>,
+        file: &'a str,
+        path: &'a str,
+        config: &'a MarkdownConfig,
+    ) -> Self {
         Self {
             file,
             body: document.body,
             offset: document.body_offset,
             path,
+            config,
         }
     }
 
-    /// CommonMark plus exactly the GFM set. Listed once, because the parser
-    /// options and what the docs promise are the same fact.
-    fn options() -> Options {
-        Options::ENABLE_TABLES
-            | Options::ENABLE_FOOTNOTES
-            | Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_TASKLISTS
+    /// The parser options the configured extensions ask for.
+    ///
+    /// One arm per [`Extension`], so a variant added to that table fails to
+    /// compile until it says which option it turns on: the config name and the
+    /// parser bit cannot drift apart.
+    fn options(&self) -> Options {
+        self.config
+            .extensions
+            .iter()
+            .map(|extension| match extension {
+                Extension::Tables => Options::ENABLE_TABLES,
+                Extension::Footnotes => Options::ENABLE_FOOTNOTES,
+                Extension::Strikethrough => Options::ENABLE_STRIKETHROUGH,
+                Extension::Tasklists => Options::ENABLE_TASKLISTS,
+                Extension::Smart => Options::ENABLE_SMART_PUNCTUATION,
+            })
+            .fold(Options::empty(), |all, one| all | one)
     }
 
     /// The Typst source this page compiles as.
@@ -70,10 +89,14 @@ impl<'a> Markdown<'a> {
         // is what lets a fault point at the markdown rather than at the Typst
         // this produces.
         let (events, spans): (Vec<Event<'_>>, Vec<Range<usize>>) =
-            Parser::new_ext(self.body, Self::options())
+            Parser::new_ext(self.body, self.options())
                 .into_offset_iter()
                 .unzip();
-        let mut writer = Writer::new(self.path, Located::new(self.file, self.offset, &spans));
+        let mut writer = Writer::new(
+            self.path,
+            Located::new(self.file, self.offset, &spans),
+            self.config,
+        );
         // Twice: a definition may reference one defined further down the file,
         // and the first pass only knows the ones above it. The second pass runs
         // with all of them, which resolves a forward reference and bounds a
@@ -114,10 +137,11 @@ impl Fence {
         Self { lang, eval }
     }
 
-    /// Only Typst can be evaluated; `sh eval` would otherwise silently emit the
-    /// shell as Typst source.
-    fn runs(&self) -> bool {
-        self.eval && self.lang.as_deref() == Some("typ")
+    /// Whether this fence runs, which needs three things to agree: the page
+    /// asked, the language is Typst (`sh eval` would otherwise emit a shell
+    /// script as Typst source), and the site permits it at all.
+    fn runs(&self, config: &MarkdownConfig) -> bool {
+        config.eval && self.eval && self.lang.as_deref() == Some("typ")
     }
 }
 
@@ -228,6 +252,9 @@ impl From<Align> for Value {
 struct Writer<'a> {
     path: &'a str,
     at: Located<'a>,
+    /// What the site allows, consulted where a page asks for something it may
+    /// not have: an `eval` fence, and raw HTML.
+    config: &'a MarkdownConfig,
     /// The output, and above it one buffer per open [`Buffered`] construct.
     /// Writing always targets the top, so a nested image inside a footnote
     /// nests its buffers too.
@@ -242,10 +269,11 @@ struct Writer<'a> {
 }
 
 impl<'a> Writer<'a> {
-    fn new(path: &'a str, at: Located<'a>) -> Self {
+    fn new(path: &'a str, at: Located<'a>, config: &'a MarkdownConfig) -> Self {
         Self {
             path,
             at,
+            config,
             stack: vec![String::new()],
             buffered: Vec::new(),
             notes: Vec::new(),
@@ -307,7 +335,7 @@ impl<'a> Writer<'a> {
                 Event::End(TagEnd::FootnoteDefinition) if depth == 1 => {
                     depth = 0;
                     let name = current.take().unwrap_or_default();
-                    let mut inner = Writer::new(self.path, self.at.borrowed());
+                    let mut inner = Writer::new(self.path, self.at.borrowed(), self.config);
                     inner.notes.clone_from(&self.notes);
                     inner.walk(&body)?;
                     let lowered = inner.finish();
@@ -434,12 +462,24 @@ impl<'a> Writer<'a> {
             // second HTML parser is exactly the string templating the pipeline
             // exists to avoid. A fence with `html.elem` says the same thing in
             // the typed form.
-            Event::Html(_) | Event::InlineHtml(_) => Err(MarkdownError::RawHtml {
-                path: self.path.to_owned(),
-                src: self.at.source(self.path),
-                span: self.at.span(),
-            }
-            .into()),
+            //
+            // Refusing is the default and dropping is the site's call: content
+            // written elsewhere arrives carrying markup nobody wants to hand-fix.
+            //
+            // Dropping an *inline* run removes the tags and leaves the prose
+            // between them, because that prose arrives as its own text events.
+            // A block-level run is one event carrying its whole contents, so
+            // dropping it drops those too -- which is what `drop` has to mean
+            // for a block, and why `refuse` is the default.
+            Event::Html(_) | Event::InlineHtml(_) => match self.config.html {
+                RawHtml::Drop => Ok(()),
+                RawHtml::Refuse => Err(MarkdownError::RawHtml {
+                    path: self.path.to_owned(),
+                    src: self.at.source(self.path),
+                    span: self.at.span(),
+                }
+                .into()),
+            },
             Event::InlineMath(text) => {
                 let call = Call::new("math.equation")
                     .pos(Value::str(text.as_ref()))
@@ -552,7 +592,7 @@ impl<'a> Writer<'a> {
                 let Some(Buffered::Code { fence }) = self.buffered.pop() else {
                     return;
                 };
-                if fence.runs() {
+                if fence.runs(self.config) {
                     self.push(&text);
                     self.push("\n\n");
                     return;
@@ -603,9 +643,13 @@ mod tests {
 
     /// Split then lower, which is the path a real page takes: a test that
     /// skipped the split would not notice a body offset going wrong.
-    fn try_lower(source: &str) -> Result<String> {
+    fn under(source: &str, config: &MarkdownConfig) -> Result<String> {
         let document = super::super::Document::split(source, "a.md")?;
-        Markdown::new(&document, source, "a.md").lower()
+        Markdown::new(&document, source, "a.md", config).lower()
+    }
+
+    fn try_lower(source: &str) -> Result<String> {
+        under(source, &MarkdownConfig::default())
     }
 
     fn lower(source: &str) -> String {
@@ -777,6 +821,55 @@ mod tests {
         assert!(rendered.contains("<div>x</div>"), "{rendered}");
         let at = source.find("<div>").expect("the markup is in the source");
         assert!(at > source.find("title").expect("frontmatter"), "sanity");
+    }
+
+    /// Every knob is the site's, and each one has to actually reach the
+    /// lowering rather than merely parse.
+    #[test]
+    fn the_site_decides_what_a_page_may_contain() {
+        let dropping = MarkdownConfig {
+            html: RawHtml::Drop,
+            ..MarkdownConfig::default()
+        };
+        let out = under("a <b>c</b>\n", &dropping).expect("dropped, not refused");
+        assert!(!out.contains("<b>"), "{out}");
+        assert!(out.contains(r#"#"a ""#), "{out}");
+
+        // A site that does not trust its authors can refuse to run any of it.
+        let sealed = MarkdownConfig {
+            eval: false,
+            ..MarkdownConfig::default()
+        };
+        let out = under("```typ eval\n#emph[x]\n```\n", &sealed).expect("lower");
+        assert!(
+            out.contains("#raw(block: true"),
+            "eval should not run: {out}"
+        );
+    }
+
+    /// An extension the site did not ask for is not parsed, and one it added is.
+    #[test]
+    fn extensions_follow_the_configured_set() {
+        let table = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+        assert!(lower(table).contains("#table("));
+
+        let without = MarkdownConfig {
+            extensions: vec![Extension::Footnotes],
+            ..MarkdownConfig::default()
+        };
+        let out = under(table, &without).expect("lower");
+        assert!(!out.contains("#table("), "tables were off: {out}");
+
+        // Asserted on rendered characters, not on the call being emitted: an
+        // assertion that a call *appears* is what hid three extensions whose
+        // events the writer silently swallowed.
+        let smart = MarkdownConfig {
+            extensions: vec![Extension::Smart],
+            ..MarkdownConfig::default()
+        };
+        let out = under("a -- b ...\n", &smart).expect("lower");
+        assert!(out.contains('\u{2013}'), "en dash: {out}");
+        assert!(out.contains('\u{2026}'), "ellipsis: {out}");
     }
 
     /// A comment renders as nothing anywhere, so it is the one raw-HTML shape

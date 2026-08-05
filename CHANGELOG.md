@@ -35,14 +35,20 @@ chores are visible in the git history and change nothing for a site.
 - **A `.md` file under `content/` is now a page.** It used to be ignored, so a
   `README.md` or a note left beside your pages was invisible; it now builds, and
   a build that passed can go red -- on frontmatter it never had to declare, or
-  on raw HTML, which a README often carries. Move it out of `content/`, prefix
-  it with a dot (dotfiles are still skipped), or build without the `markdown`
-  feature to restore the old behaviour.
+  on raw HTML, which a README often carries. To keep such a file where it is and
+  publish nothing for it:
+
+  ```kdl
+  content { markdown #false }
+  ```
+
+  Prefixing the file with a dot works too (dotfiles are still skipped), as does
+  building without the `markdown` feature.
 
 ### Added
 
 - **markdown**: `.md` content pages, behind the default-on `markdown` feature.
-  CommonMark plus the GFM set (tables, task lists, strikethrough, footnotes),
+  CommonMark plus the GFM set,
   with frontmatter as a `---` fenced KDL block, so a site has one configuration
   language rather than three:
 
@@ -73,6 +79,41 @@ chores are visible in the git history and change nothing for a site.
   Raw HTML other than a comment is refused rather than dropped: the DOM is
   typed, and a string of markup has nowhere to be spliced into it. Write it as
   `html.elem("div")[..]` in an `eval` fence.
+
+  Whether `.md` is a page at all, and what one may contain, is the site's, in
+  `content { markdown { } }`. `markdown #false` is the shorthand for
+  `markdown { enabled #false }`, for a project whose binary has markdown and
+  which still wants its `.md` files left alone:
+
+  ```kdl
+  content {
+    markdown {
+      enabled #true                 // `markdown #false` is the shorthand
+      extensions "smart" "-tables"  // `-name` drops a default
+      html "drop"                   // or `refuse`, the default
+      eval #false                   // forbid `eval` fences outright
+    }
+  }
+  ```
+
+  `eval #false` is the one to reach for on content you did not write: an `eval`
+  fence runs arbitrary Typst at build time. `html "drop"` removes an inline
+  run's tags and keeps the prose between them; a block-level run is a single
+  chunk of HTML, so dropping it drops its contents too, which is why `refuse` is
+  the default.
+
+- **markdown**: a typst error inside an `eval` fence is reported against the line
+  you wrote, not against the Typst the page lowered to. Only authored spans are
+  mapped, so an error in generated code still reports where it really is rather
+  than pointing at a line of yours that has nothing to do with it.
+
+  ```
+  x unclosed delimiter
+    ,-[content/broken.md:9:10]
+  8 | ```typ eval
+  9 | #let x = [
+    :          -
+  ```
 
 - A frontmatter `date` may be written as an ISO day (`date: "2024-01-01"`), not
   only as `datetime(year: .., month: .., day: ..)`. KDL has no date literal, so

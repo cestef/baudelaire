@@ -239,6 +239,24 @@ impl Kind {
             Self::Numbers => "number ..".to_owned(),
             Self::Table => "key value ..".to_owned(),
             Self::Choice(names) => names().join(" | "),
+            // The `-` is half the grammar, so the rendering says so rather than
+            // leaving it to the key's prose. Both spellings of it render the
+            // same way; only the name set differs.
+            // A `*` marks a name that is on by default, which is the other half
+            // of what a reader needs: the set of names, and which of them they
+            // already have.
+            Self::Choices(names, on) => {
+                let on = on();
+                let names: Vec<String> = names()
+                    .into_iter()
+                    .map(|name| match on.contains(&name) {
+                        true => format!("{name}*"),
+                        false => name.to_owned(),
+                    })
+                    .collect();
+                format!("[-]({}) ..", names.join(" | "))
+            }
+            Self::Toggles => "[-]text ..".to_owned(),
             Self::Block(_) => "block".to_owned(),
             Self::Items(_) => "named blocks".to_owned(),
             Self::Line(_) => "key=value ..".to_owned(),

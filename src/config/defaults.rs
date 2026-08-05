@@ -9,11 +9,11 @@ use crate::config::{
     AnnounceConfig, AssetConfig, BudgetConfig, CacheConfig, CacheControl, CardsConfig,
     CollectionConfig, Config, ContentConfig, CspConfig, DeployConfig, DraftConfig, Eagerness,
     FeedConfig, Footnotes, GenerateConfig, HighlightConfig, HooksConfig, HtmlConfig, ImagesConfig,
-    JpegConfig, LinkConfig, LintConfig, NavigationConfig, OptimizeConfig, PaginateConfig, Paths,
-    PdfBundle, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig, Router, S3Config,
-    SearchConfig, SearchField, SecurityConfig, ServeConfig, SortKey, SpaConfig, SpeculationConfig,
-    SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig, UrlStyle,
-    VerifyConfig,
+    JpegConfig, LinkConfig, LintConfig, MarkdownConfig, NavigationConfig, OptimizeConfig,
+    PaginateConfig, Paths, PdfBundle, PdfPages, PngConfig, PngStrip, Prefetch, ResponsiveConfig,
+    Router, S3Config, SearchConfig, SearchField, SecurityConfig, ServeConfig, SortKey, SpaConfig,
+    SpeculationConfig, SshConfig, StandaloneConfig, StandardConfig, TaxonomyConfig, TypstConfig,
+    UrlStyle, VerifyConfig,
 };
 
 impl Default for Config {
@@ -75,6 +75,7 @@ impl Default for ContentConfig {
             drafts: DraftConfig::default(),
             collections: Vec::default(),
             taxonomies: Vec::default(),
+            markdown: MarkdownConfig::default(),
         }
     }
 }
