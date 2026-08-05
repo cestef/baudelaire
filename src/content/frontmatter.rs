@@ -13,11 +13,11 @@ use typst::syntax::{
 use crate::codegen;
 use crate::config::dispatch::Keys;
 use crate::config::{Config, FieldSchema, FieldType};
-use crate::error::{ContentError, Result, SchemaError};
+use crate::error::{BaudelaireErrorKind, ContentError, Result, SchemaError};
 
 /// A frontmatter field parser: reads the evaluated value into its slot on `fm`,
-/// naming `path`/`key` on a type mismatch (never silently dropped).
-type Field = fn(fm: &mut Frontmatter, value: &Value, path: &Path, key: &str) -> Result<()>;
+/// naming and underlining the key on a type mismatch (never silently dropped).
+type Field = fn(fm: &mut Frontmatter, value: &Value, at: At<'_>) -> Result<()>;
 
 /// What a built-in key holds, as a constructor rather than a value: a
 /// [`FieldType`] owns the types it wraps, which no constant can build.
@@ -33,96 +33,96 @@ const FIELDS: &[(&str, Shape, Field)] = &[
     (
         "title",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.title = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.title = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "date",
         || FieldType::Date,
-        |fm, v, p, k| {
-            fm.date = Some(v.date(p, k)?);
+        |fm, v, at| {
+            fm.date = Some(v.date(at)?);
             Ok(())
         },
     ),
     (
         "updated",
         || FieldType::Date,
-        |fm, v, p, k| {
-            fm.updated = Some(v.date(p, k)?);
+        |fm, v, at| {
+            fm.updated = Some(v.date(at)?);
             Ok(())
         },
     ),
     (
         "expiry",
         || FieldType::Date,
-        |fm, v, p, k| {
-            fm.expiry = Some(v.date(p, k)?);
+        |fm, v, at| {
+            fm.expiry = Some(v.date(at)?);
             Ok(())
         },
     ),
     (
         "draft",
         || FieldType::Bool,
-        |fm, v, p, k| {
-            fm.draft = v.boolean(p, k)?;
+        |fm, v, at| {
+            fm.draft = v.boolean(at)?;
             Ok(())
         },
     ),
     (
         "slug",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.slug = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.slug = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "path",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.path = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.path = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "lang",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.lang = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.lang = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "translation",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.translation = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.translation = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "template",
         || FieldType::Str,
-        |fm, v, p, k| {
-            fm.template = Some(v.string(p, k)?);
+        |fm, v, at| {
+            fm.template = Some(v.string(at)?);
             Ok(())
         },
     ),
     (
         "order",
         || FieldType::Int,
-        |fm, v, p, k| {
-            fm.order = Some(v.integer(p, k)?);
+        |fm, v, at| {
+            fm.order = Some(v.integer(at)?);
             Ok(())
         },
     ),
     (
         "redirect",
         || FieldType::List(Box::new(FieldType::Str)),
-        |fm, v, p, k| {
-            fm.redirect = v.strings(p, k)?;
+        |fm, v, at| {
+            fm.redirect = v.strings(at)?;
             Ok(())
         },
     ),
@@ -216,6 +216,30 @@ impl<'a> Origin<'a> {
         }
     }
 
+    /// Where the author wrote `key` itself, rather than the value under it:
+    /// what an unrecognized key underlines, since the mistake is the key.
+    ///
+    /// Only a top-level key, because that is the only depth at which a key is
+    /// held against the known set. A block dialect records an entry from its
+    /// key where its syntax has one to start from, so its recorded span is
+    /// already the closest thing to the key it has.
+    fn entry(&self, key: &str) -> Option<SourceSpan> {
+        match &self.dialect {
+            Dialect::Typst(source) => {
+                let Expr::Dict(dict) = Self::binding(source.root())?.init()? else {
+                    return None;
+                };
+                let name = dict.items().find_map(|item| match item {
+                    DictItem::Named(named) if named.name().get() == key => Some(named.name()),
+                    _ => None,
+                })?;
+                Self::locate(source, name.to_untyped())
+            }
+            #[cfg(feature = "markdown")]
+            Dialect::Block { spans, .. } => Self::in_block(spans, &[Step::Key(key.to_owned())]),
+        }
+    }
+
     /// Walk a typst dict literal.
     fn in_typst(source: &Source, path: &[Step]) -> Option<SourceSpan> {
         let binding = Self::binding(source.root())?;
@@ -237,6 +261,11 @@ impl<'a> Origin<'a> {
         if !path.is_empty() && reached == 0 {
             return None;
         }
+        Self::locate(source, node)
+    }
+
+    /// A node of the page's syntax tree, as a span into the page's text.
+    fn locate(source: &Source, node: &SyntaxNode) -> Option<SourceSpan> {
         let range = source.find(node.span())?.range();
         Some(SourceSpan::new(range.start.into(), range.len()))
     }
@@ -285,6 +314,81 @@ impl<'a> Origin<'a> {
             return Some(binding);
         }
         node.children().find_map(Self::binding)
+    }
+}
+
+/// One frontmatter key being read, and everything a diagnostic about it needs:
+/// the page it is on, the source that page was written in, and where in that
+/// source its value sits.
+///
+/// One value rather than the `(path, key)` pair the accessors used to take.
+/// That pair could name the file and the field but not point at either, so
+/// every wrong-typed value and every typo'd key reported itself with no snippet
+/// at all. The loop over the dict is the one place holding both the [`Origin`]
+/// and the key, and this is what carries them the rest of the way down.
+#[derive(Clone, Copy)]
+struct At<'a> {
+    origin: &'a Origin<'a>,
+    key: &'a str,
+    /// Which element of a list value, when the fault is in one: a wrong-typed
+    /// element underlines itself rather than the whole list around it.
+    element: Option<usize>,
+}
+
+impl<'a> At<'a> {
+    fn new(origin: &'a Origin<'a>, key: &'a str) -> Self {
+        Self {
+            origin,
+            key,
+            element: None,
+        }
+    }
+
+    /// The same key, narrowed to one element of the list it holds.
+    fn nth(self, index: usize) -> Self {
+        Self {
+            element: Some(index),
+            ..self
+        }
+    }
+
+    /// Where this value sits, as far down as the page literally spelled it out.
+    fn span(self) -> Option<SourceSpan> {
+        let mut steps = vec![Step::Key(self.key.to_owned())];
+        steps.extend(self.element.map(Step::Index));
+        self.origin.span(&steps)
+    }
+
+    /// A value that is not the type its key holds.
+    fn field(
+        self,
+        expected: &'static str,
+        got: &'static str,
+        help: Option<&'static str>,
+    ) -> BaudelaireErrorKind {
+        ContentError::frontmatter_field(
+            self.origin.path,
+            self.origin.text(),
+            self.span(),
+            self.key,
+            expected,
+            got,
+            help,
+        )
+        .into()
+    }
+
+    /// A key that is a near-miss of a known one, underlined where it was
+    /// written rather than at the value it carries.
+    fn unknown(self, suggestion: &str) -> BaudelaireErrorKind {
+        ContentError::unknown_frontmatter(
+            self.origin.path,
+            self.origin.text(),
+            self.origin.entry(self.key),
+            self.key,
+            suggestion,
+        )
+        .into()
     }
 }
 
@@ -456,7 +560,6 @@ impl Frontmatter {
         // otherwise surface as whatever the built-in reader made of the value,
         // which says nothing about the collection that asked for it.
         Self::validate(dict, origin, config)?;
-        let path = origin.path;
         let taxonomies: Vec<&str> = config
             .content
             .taxonomies
@@ -466,16 +569,14 @@ impl Frontmatter {
         let mut fm = Self::default();
         for (key, val) in dict {
             let key = key.as_str();
+            let at = At::new(origin, key);
             match FIELDS.iter().find(|(name, ..)| *name == key) {
-                Some((.., parse)) => parse(&mut fm, val, path, key)?,
+                Some((.., parse)) => parse(&mut fm, val, at)?,
                 None if taxonomies.contains(&key) => {
-                    fm.taxonomies
-                        .insert(key.to_owned(), val.strings(path, key)?);
+                    fm.taxonomies.insert(key.to_owned(), val.strings(at)?);
                 }
                 None => match Self::suggest(key, &taxonomies) {
-                    Some(near) => {
-                        return Err(ContentError::unknown_frontmatter(path, key, &near).into());
-                    }
+                    Some(near) => return Err(at.unknown(&near)),
                     None => {
                         fm.extra.insert(key.to_owned(), codegen::Value::from(val));
                     }
@@ -531,17 +632,17 @@ impl Frontmatter {
     }
 }
 
-/// Typed accessors over an evaluated frontmatter [`Value`]. The `path`/`key`
-/// parameters let a type mismatch name the file and field instead of being
-/// silently dropped. [`ValueExt::str`] (infallible, for `extra` reads) is the
-/// exception: a non-string there is simply "absent".
+/// Typed accessors over an evaluated frontmatter [`Value`]. The [`At`] each
+/// takes lets a type mismatch name the file and field and underline the value,
+/// instead of being silently dropped. [`ValueExt::str`] (infallible, for
+/// `extra` reads) is the exception: a non-string there is simply "absent".
 trait ValueExt {
     fn str(&self) -> Option<String>;
-    fn string(&self, path: &Path, key: &str) -> Result<String>;
-    fn boolean(&self, path: &Path, key: &str) -> Result<bool>;
-    fn integer(&self, path: &Path, key: &str) -> Result<i64>;
-    fn date(&self, path: &Path, key: &str) -> Result<time::Date>;
-    fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>>;
+    fn string(&self, at: At<'_>) -> Result<String>;
+    fn boolean(&self, at: At<'_>) -> Result<bool>;
+    fn integer(&self, at: At<'_>) -> Result<i64>;
+    fn date(&self, at: At<'_>) -> Result<time::Date>;
+    fn strings(&self, at: At<'_>) -> Result<Vec<String>>;
     /// This value's typst type name, for error messages.
     fn kind(&self) -> &'static str;
 }
@@ -696,31 +797,26 @@ impl ValueExt for Value {
         }
     }
 
-    fn string(&self, path: &Path, key: &str) -> Result<String> {
-        self.str().ok_or_else(|| {
-            ContentError::frontmatter_field(path, key, "a string", self.kind(), None).into()
-        })
+    fn string(&self, at: At<'_>) -> Result<String> {
+        self.str()
+            .ok_or_else(|| at.field("a string", self.kind(), None))
     }
 
-    fn boolean(&self, path: &Path, key: &str) -> Result<bool> {
+    fn boolean(&self, at: At<'_>) -> Result<bool> {
         match self {
             Self::Bool(b) => Ok(*b),
-            _ => Err(
-                ContentError::frontmatter_field(path, key, "a boolean", self.kind(), None).into(),
-            ),
+            _ => Err(at.field("a boolean", self.kind(), None)),
         }
     }
 
-    fn integer(&self, path: &Path, key: &str) -> Result<i64> {
+    fn integer(&self, at: At<'_>) -> Result<i64> {
         match self {
             Self::Int(i) => Ok(*i),
-            _ => Err(
-                ContentError::frontmatter_field(path, key, "an integer", self.kind(), None).into(),
-            ),
+            _ => Err(at.field("an integer", self.kind(), None)),
         }
     }
 
-    fn date(&self, path: &Path, key: &str) -> Result<time::Date> {
+    fn date(&self, at: At<'_>) -> Result<time::Date> {
         match self {
             Self::Datetime(Datetime::Date(d)) => Ok(*d),
             Self::Datetime(Datetime::Datetime(dt)) => Ok(dt.date()),
@@ -731,38 +827,32 @@ impl ValueExt for Value {
                 .parse::<crate::content::date::Iso>()
                 .map(|iso| iso.0)
                 .map_err(|()| {
-                    ContentError::frontmatter_field(
-                        path,
-                        key,
+                    at.field(
                         "a date",
                         "a string that is not an ISO day",
                         Some("write it as `\"2024-01-01\"`, or as `datetime(year: 2024, month: 1, day: 1)`"),
                     )
-                    .into()
                 }),
-            _ => Err(ContentError::frontmatter_field(
-                path,
-                key,
+            _ => Err(at.field(
                 "a date",
                 self.kind(),
                 Some("write dates as `\"2024-01-01\"` or `datetime(year: 2024, month: 1, day: 1)`"),
-            )
-            .into()),
+            )),
         }
     }
 
-    fn strings(&self, path: &Path, key: &str) -> Result<Vec<String>> {
+    fn strings(&self, at: At<'_>) -> Result<Vec<String>> {
         // a wrong-typed *element* is an error too, never silently dropped,
-        // same as every scalar accessor here.
-        let wrong = |kind| {
-            ContentError::frontmatter_field(path, key, "a list of strings", kind, None).into()
-        };
+        // same as every scalar accessor here, and underlined where it sits
+        // rather than under the whole list.
+        let wrong = |at: At<'_>, kind| at.field("a list of strings", kind, None);
         match self {
             Self::Array(arr) => arr
                 .iter()
-                .map(|v| v.str().ok_or_else(|| wrong(v.kind())))
+                .enumerate()
+                .map(|(i, v)| v.str().ok_or_else(|| wrong(at.nth(i), v.kind())))
                 .collect(),
-            _ => Err(wrong(self.kind())),
+            _ => Err(wrong(at, self.kind())),
         }
     }
 
@@ -773,12 +863,18 @@ impl ValueExt for Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{Check, FieldSchema, FieldType, Origin, Step};
+    use super::{At, Check, FieldSchema, FieldType, Origin, Step};
+    use miette::SourceSpan;
     use typst::foundations::{Dict, Str, Value};
     use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 
     fn key(name: &str) -> Step {
         Step::Key(name.to_owned())
+    }
+
+    /// What a span underlines, which is the only thing any of these assert on.
+    fn cut(text: &str, span: SourceSpan) -> &str {
+        &text[span.offset()..span.offset() + span.len()]
     }
 
     fn page(text: &str) -> Source {
@@ -849,6 +945,57 @@ mod tests {
         // The binding is still where it is; only the key inside it is not.
         assert!(origin(&computed).span(&[]).is_some());
         assert_eq!(origin(&computed).span(&[key("title")]), None);
+        // Neither is the key it never spelled out, so a typo in a computed
+        // frontmatter is reported without a snippet rather than with a wrong one.
+        assert_eq!(origin(&computed).entry("titel"), None);
+    }
+
+    /// The two frontmatter errors a page hits before any schema does: a
+    /// wrong-typed value and a typo'd key. Both are only readable with a
+    /// snippet, and these are what decides whether they get one.
+    #[test]
+    fn a_typst_page_locates_a_wrong_typed_value_and_a_typod_key() {
+        let text =
+            "#let frontmatter = (\n  titel: \"A\",\n  order: \"first\",\n  tags: (\"x\", 3),\n)\n";
+        let source = page(text);
+        let origin = origin(&source);
+
+        let order = At::new(&origin, "order").span().expect("order's value");
+        assert_eq!(cut(text, order), "\"first\"");
+        // A wrong-typed element of a list underlines itself, not the list.
+        let tag = At::new(&origin, "tags").nth(1).span().expect("the element");
+        assert_eq!(cut(text, tag), "3");
+        // The key, not the value under it: the mistake is the key.
+        let titel = origin.entry("titel").expect("the key as written");
+        assert_eq!(cut(text, titel), "titel");
+        assert_eq!(origin.entry("absent"), None);
+    }
+
+    /// The same two on a markdown page, which reaches them through a recorded
+    /// span map rather than a syntax tree: one walk per dialect would be one
+    /// place for the snippet to go missing.
+    #[cfg(feature = "markdown")]
+    #[test]
+    fn a_markdown_page_locates_the_same_two_things() {
+        use crate::content::markdown::Dialect;
+
+        let block = "titel: A\norder: not a number\ntags:\n  - x\n  - 3\n";
+        let text = format!("---\n{block}---\n\nBody.\n");
+        let spans = Dialect::Yaml
+            .parse(block, 4, "page.md", &text)
+            .expect("valid YAML")
+            .spans;
+        let path = std::path::Path::new("page.md");
+        let origin = Origin::block(&text, &spans, path, "blog");
+
+        // A block dialect records an entry from its key, so the value span
+        // covers the line rather than half of it.
+        let order = At::new(&origin, "order").span().expect("order's entry");
+        assert_eq!(cut(&text, order), "order: not a number");
+        let tag = At::new(&origin, "tags").nth(1).span().expect("the element");
+        assert_eq!(cut(&text, tag), "3");
+        let titel = origin.entry("titel").expect("the key as written");
+        assert_eq!(cut(&text, titel), "titel: A");
     }
 
     fn required(ty: FieldType) -> FieldSchema {

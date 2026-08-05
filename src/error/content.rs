@@ -3,7 +3,7 @@
 //! one file. Each names the page it came from, since a build reports them long
 //! after the file was opened.
 
-use miette::Diagnostic;
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 use crate::error::Annotated;
@@ -44,6 +44,13 @@ pub enum ContentError {
         got: String,
         #[help]
         help: Option<String>,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        // What the key holds, not what the value is: the message already says
+        // the latter, and `expected` is one of this crate's own literals rather
+        // than authored text, which a label renders raw.
+        #[label("must be {expected}")]
+        span: Option<SourceSpan>,
     },
 
     #[error("{} declares frontmatter with the removed `#frontmatter(..)` call", Text(.path))]
@@ -67,6 +74,10 @@ pub enum ContentError {
         key: String,
         #[help]
         help: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("no such frontmatter key")]
+        span: Option<SourceSpan>,
     },
 
     #[error("{} has no URL-safe characters, so its slug would be empty", Code(.name))]
@@ -154,30 +165,67 @@ impl ContentError {
 
     /// A known frontmatter key whose value has the wrong type; previously
     /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
+    ///
+    /// `span` is where the value sits in `source`; see [`Self::located`].
     pub fn frontmatter_field(
         path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
         key: &str,
         expected: &'static str,
         got: &'static str,
         help: Option<&'static str>,
     ) -> Self {
+        let (page, span) = Self::located(path, source, span);
         Self::FrontmatterField {
             path: path.display().to_string(),
             key: key.to_owned(),
             expected,
             got: got.to_owned(),
             help: help.map(str::to_owned),
+            page,
+            span,
         }
     }
 
     /// A frontmatter key that is a near-miss of a known one (a typo). Unknown
     /// keys with no close match pass through to `extra` untouched.
-    pub fn unknown_frontmatter(path: &std::path::Path, key: &str, suggestion: &str) -> Self {
+    ///
+    /// `span` is where the key itself was written, not its value: the mistake
+    /// is in the key, and that is what the label underlines.
+    pub fn unknown_frontmatter(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        key: &str,
+        suggestion: &str,
+    ) -> Self {
+        let (page, span) = Self::located(path, source, span);
         Self::UnknownFrontmatterKey {
             path: path.display().to_string(),
             key: key.to_owned(),
             help: markup!("did you mean `{}`?", suggestion),
+            page,
+            span,
         }
+    }
+
+    /// The page source a snippet renders from and the span into it, as the one
+    /// pair a located diagnostic is built from.
+    ///
+    /// A page may compute its frontmatter rather than spell it out
+    /// (`#let frontmatter = load(..)`), and then no offset in the source is the
+    /// thing at fault: the source is dropped along with the span, so the snippet
+    /// is suppressed rather than aimed at an arbitrary offset. Both come back
+    /// together so no variant can carry one without the other. `SchemaError`
+    /// draws the same line, by hand.
+    fn located(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+    ) -> (Option<NamedSource<String>>, Option<SourceSpan>) {
+        let page = span.map(|_| NamedSource::new(path.display().to_string(), source.to_owned()));
+        (page, span)
     }
 
     /// The pre-export `#frontmatter(..)` call form, pointed at the binding syntax.

@@ -146,6 +146,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- A frontmatter key that is a typo, and a frontmatter value of the wrong type,
+  now underline the line you wrote instead of only naming it. Neither error
+  carried a source snippet at all, on a markdown page or a typst one, though the
+  walk that raises them always knew where the field was:
+
+  ```
+  x unknown frontmatter key `titel` in content/a.md
+    ,-[content/a.md:2:1]
+  1 | ---
+  2 | titel: A
+    : ----+---
+    :     `-- no such frontmatter key
+    `----
+    help: did you mean `title`?
+  ```
+
+  A typst page that computes its frontmatter has no literal to point at, and
+  there the snippet is still suppressed rather than aimed at a guess.
+
 - **markdown**: a link naming a markdown page resolves to its permalink, and is
   checked. The test for "is this a source path" was the literal `typ`, so a
   `.md` target was classified as a URL: it was published as the relative path
