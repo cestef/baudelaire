@@ -98,6 +98,7 @@ Or with Cargo:
 ```sh
 cargo binstall baudelaire # prebuilt tarball, no compile
 cargo install baudelaire  # build from crates.io
+```
 
 If you're feeling fancy:
 
