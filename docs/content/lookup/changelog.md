@@ -15,7 +15,7 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [0.0.12] - 2026-08-05
 
 ### Upgrading
 
@@ -49,6 +49,68 @@ chores are visible in the git history and change nothing for a site.
 
   Prefixing the file with a dot works too (dotfiles are still skipped), as does
   building without the `markdown` feature.
+
+- **A value written on a block's own line is now read or refused, never
+  dropped.** A node-keyed line was dispatched on its name alone, so anything
+  else on it was accepted and discarded. Every one of these parsed green and
+  configured nothing:
+
+  ```kdl
+  lint #false                          // turned linting ON
+  html { highlight #false }            // turned highlighting ON
+  generate { cards #false }            // enabled cards
+  serve { port 1 2 }                   // dropped the 2
+  content { drafts suffix=".x" }       // kept `.draft`
+  content { collections { posts sort="date" } }  // read `date` as the glob
+  ```
+
+  Each is now an error naming the key, and where the pair belongs one level in
+  the help writes the line to use (`drafts { suffix ".x" }`). Nothing that was
+  ever read has changed meaning, so a config that meant what it said needs no
+  edit; a config that did not will say so on the next build.
+
+  `html { highlight #false }` is the one worth checking by hand: it was the
+  spelling for turning highlighting off, it did the opposite, and there was no
+  other spelling, so a site that wanted it off has been shipping it on. Turning
+  it off now works and the rendered HTML changes accordingly.
+
+- **A theme's `theme.kdl` can no longer set what the site's machine does.**
+  `paths`, `hooks`, `announce`, `deploy` and `profiles` are refused outright,
+  where they used to be inherited by any site that did not state its own. A
+  theme carrying one now fails the build that adopts it, naming the section.
+
+  `hooks` is why: it runs commands through the system shell, so an inherited
+  `hooks { before }` ran code on every build of every site using that theme, and
+  for a `@preview/` theme fetched at build time that code appeared nowhere in
+  the project. Move the block into the site's own `config.kdl`; a theme needing
+  a build step should say so in its README and give the block to copy.
+
+- **A `#fragment` link into a page's own body is now checked.** It used to pass
+  through unexamined, so `#link("#install")` naming no heading on the page was
+  published as a dead anchor out of a green build. It is now resolved like any
+  other deep link: a warning normally, and fatal under `links { strict }`, which
+  is on by default. A skip-link or a JS-driven toggle whose target is not a real
+  id is the usual first offender.
+
+- **A mistyped `paths { content }` fails instead of building nothing.** A
+  content directory that does not exist used to yield zero pages and exit 0, and
+  with `prune #true` that swept the published site away. A path the site *named*
+  is now an error; the default `content` staying absent is still quiet, since a
+  fresh scaffold and a site of nothing but `static` files both look like that.
+  A build that produces no pages at all now also leaves `dist` alone whatever
+  `prune` says, and says why.
+
+- `Renderer::SCHEMA` moved 16 to 17, so the first build after upgrading is a
+  cold one. Heading ids are slugged in document order, a `srcset` candidate no
+  longer repeats the directory its image was authored under, every vocabulary
+  names the same author, and a page records the fragments into its own body: an
+  entry written under the old rules holds markup slugged the old way and names
+  none of those fragments.
+
+- `content { collections { .. { paginate { mount } } } }` and `prefix` are
+  validated the way `permalink` always was. A `..` in either was previously
+  accepted and produced wrong URLs out of a green build; a placeholder spelling
+  that means nothing (`prefix "{n}"`) was silently ignored and is now an error.
 
 ### Added
 
@@ -132,8 +194,9 @@ chores are visible in the git history and change nothing for a site.
 
 - **init**: an interactive run asks what to start from, offering the four
   starter shapes and the four themes the binary carries, each with the line that
-  describes it. Naming one on the command line (`-t`, `--theme`) answers the
-  question and skips the prompt, and `-y` takes the default shape, as before.
+  describes it. Naming one on the command line (`-t` for a starter shape,
+  `--theme` for a theme) answers the question and skips the prompt, and `-y`
+  takes the default shape, as before.
   Choosing a theme writes it into `themes/<name>` and names that directory in
   the config, so the answer is a site that builds rather than one with a theme
   still to find.
@@ -182,6 +245,10 @@ chores are visible in the git history and change nothing for a site.
   bytes of the body, silently. A file written with CRLF also labels its
   unterminated block on the whole fence rather than one byte to the left of it.
 
+- **markdown**: an indented `eval` fence maps each of its lines. The block's own
+  indentation was stripped from the first line alone, so every diagnostic inside
+  a fence nested in a list item pointed one column off, growing with the depth.
+
 - A diagnostic snippet is tagged with the language the page is actually written
   in. All three sites that render one said `Typst`, which was true until a `.md`
   file became a page.
@@ -222,6 +289,152 @@ chores are visible in the git history and change nothing for a site.
   selection, so a key no scope has (`content { drafts #true }` written as
   `content { draft #true }`) parsed green, reloaded green under `serve`, and
   configured nothing at all whenever the profile was finally used.
+
+- **config**: a `${VAR}` inside a profile nobody selected no longer fails the
+  build. Checking every profile at parse time meant resolving its values too, so
+  the `${S3_BUCKET}` that the docs recommend putting in a `prod` profile broke
+  `baudelaire build` for everyone who had not exported it. The check now reads
+  the shape and stands a placeholder in for an unset variable; selecting the
+  profile still demands the real thing. A byte size is the one shape no
+  placeholder satisfies, so `${..}` in a `lint { budget { .. } }` key inside an
+  unselected profile still fails.
+
+- **render**: a heading's id is slugged from its text in document order. The
+  walk read an element's own text before the text nested inside it, so any
+  heading containing emphasis, a link, `raw`, math or a footnote marker was
+  slugged from a scramble: `== The *fast* way` produced `the-way-to-a-fast`.
+  Since the deep-link check reads the same ids, a link written correctly against
+  the heading as authored failed the build.
+
+- **render**: a responsive `srcset` names an image's directory once. A candidate
+  was built by appending a name that already carried its authored directories to
+  a URL that carried them too, so an image in a content subdirectory promised
+  `/assets/gallery/gallery/cover-480.png` while the file was written one
+  `gallery` shallower. Every downscale 404'd and only the full-size fallback
+  loaded. Images directly under `content/` were unaffected, which is why every
+  scenario missed it.
+
+- **render**: a markdown page's links reach the link graph. A lowered page's body
+  is inlined into its wrapper, and the test for "is this the page's own content"
+  asked whether the file was a `.typ`, so no link on a `.md` page was ever
+  recorded: `page.backlinks` never named a markdown source, and
+  `links { orphans }` called a page unlinked that a markdown page linked to.
+
+- **render**: `<meta name="author">` and the social vocabularies name the same
+  person. One read the site-wide author and the other the language-aware one, so
+  a site with `languages { fr { author .. } }` published two different authors on
+  the same page.
+
+- **render**: a page's recorded anchors come out in a stable order, so two
+  identical builds write the same manifest.
+
+- **render**: a link's scheme is read at its head. `://` anywhere in the href
+  counted, so `b.typ?redirect=https://x` was treated as external and published
+  as an unresolved `.typ` path.
+
+- **markdown**: raw HTML wrapped in comments is refused like any other. A run
+  beginning `<!--` and ending `-->` was taken for a comment whatever sat between
+  them, so `<!-- a --><div>x</div><!-- b -->`, which CommonMark reads as one HTML
+  block, was dropped silently: content lost, and the default `html "refuse"`
+  bypassed. Genuinely empty comments (`<!-->`, `<!--->`) are now read as comments
+  too, where the old length guard rejected them.
+
+- **markdown**: an email autolink keeps its scheme. `<me@example.com>` published
+  `href="me@example.com"`, a relative link to a page that does not exist, which
+  the link checker had no reason to flag. `[x](mailto:..)` on the same page was
+  correct, so the two spellings disagreed.
+
+- **markdown**: an image's alt text keeps the space between its lines, instead of
+  running `alpha\nbeta` together as `alphabeta`.
+
+- **markdown**: a `$` run is lowered as the text it is. Math is not enabled, so
+  the arms that would have handled it were unreachable, and they would have
+  flattened an equation into literal characters if they ever ran.
+
+- **markdown**: a YAML frontmatter error whose position falls past the end of the
+  block underlines the last thing you wrote, rather than the closing fence.
+
+- **engine**: `page.reading` counts a markdown page's words. The estimate skipped
+  every line beginning `#`, which is every line the lowering emits, so a markdown
+  page reported zero words and the shipped themes rendered "0 min read" on all of
+  them. It now counts the markdown you wrote, fenced code excluded.
+
+- **engine**: a markdown page inside a `generate { pdf { bundle } }` is bound as
+  the Typst it lowered to. The bundle had no case for one, so it handed the raw
+  `.md` to the compiler: a page with a heading failed the build, and a page
+  without one shipped its markdown verbatim with its frontmatter lost.
+
+- **engine**: `page.assets` lists a page bundle's assets only. It skipped `.typ`
+  alone, so a sibling `.md` page, and the page's own source, were offered as
+  assets at URLs that are never published.
+
+- **engine**: a slim binary says that it is ignoring `.md` files. The warning
+  asked whether the site had written `content { markdown }`, but the documented
+  way to use markdown is to write nothing at all, so the pages simply vanished
+  and `prune` removed the HTML an earlier build had written. It now asks whether
+  the site has any.
+
+- **engine**: a markdown page's backlink prediction reads the Typst it lowered
+  to, rather than parsing its `.md` as Typst and finding nothing.
+
+- **serve**: editing a `.md` page rebuilds. The watcher took only `.typ` under
+  `content/` and `templates/`, so a markdown edit produced no rebuild and no
+  reload until something else was touched. The same test dropped every non-`.typ`
+  dependency in those trees, so a colocated `data.json` a page read, or an image
+  in a page bundle, was equally invisible.
+
+- **serve**: the banner names the roots that are actually there, and a watch root
+  that does not exist is skipped by the same predicate that decides what to
+  advertise.
+
+- **cli**: `--json` leaves `completions`, `man` and `reference` alone. The report
+  was written to stdout after those commands had written their document there,
+  so `baudelaire completions bash --json > _bd` produced a file with a JSON
+  object stapled to the end of the script.
+
+- **cli**: `mirror` says when it could not read the config. It fell back to the
+  defaults in silence, so the `site` module an editor resolved against carried a
+  title and url the project had never set, while `build` failed on the same file.
+
+- **cli**: `new` says when it could not read the existing content. The error was
+  discarded, taking the next `order` and the permalink-collision check with it.
+
+- **cli**: `init -y` writes a placeholder author rather than `author ""` when git
+  has no `user.name`, which used to reach every page's `<meta>` and every feed.
+
+- **cli**: `theme` prints its output rather than its markup. `theme list`, `add`
+  and `info` wrote diagnostic markup straight to the terminal, so the backticks
+  and asterisks showed, and a path containing one was escaped on screen.
+
+- **cli**: several diagnostics named something that does not work. The unpinned
+  DID warning gave a dotted config key the parser rejects; the missing-VCS
+  warning suggested `init --vcs`, which is a usage error; a `serve` open request
+  with no location was reported as a malformed one; and every failure to spawn
+  the VCS was reported as the tool not being installed.
+
+- **cli**: `theme info` lines up its labels again, including the two that are
+  wider than the column was.
+
+### Security
+
+- **A theme unpacked from a `.tar.gz` can no longer write outside the project.**
+  The zip reader refused an entry naming `..` or an absolute path; the tar reader
+  had no such check and the install joined the entry onto the theme directory,
+  where an absolute path discards the directory entirely. The escaped file was
+  then recorded in the lock, so `theme update` overwrote it and `theme remove`
+  deleted it: create, overwrite and delete anywhere the user could write, from
+  `baudelaire theme add <url>`. Both formats now decide containment in one place.
+  A theme name derived from an archive's own wrapper directory is checked too,
+  which closes `..` reaching the same join.
+
+- **A theme can no longer run commands on `baudelaire build`.** A theme's
+  `theme.kdl` was parsed as a full config and used as the floor beneath the
+  site's, so a site that stated no `hooks` of its own inherited the theme's, and
+  `hooks { before }` runs through the system shell. See the note under
+  **Upgrading** for what is refused and why.
+
+- `gh:owner/..` and its siblings are refused when a forge shorthand is parsed,
+  rather than relying on the archive reader to catch the name later.
 
 ## [0.0.11] - 2026-08-05
 
@@ -1695,7 +1908,7 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[Unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.11...HEAD
+[0.0.12]: https://github.com/cestef/baudelaire/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/cestef/baudelaire/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/cestef/baudelaire/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/cestef/baudelaire/compare/v0.0.8...v0.0.9
