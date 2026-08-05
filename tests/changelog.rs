@@ -18,14 +18,18 @@ const SOURCE: &str = "CHANGELOG.md";
 /// the one language this repository already reads everywhere else.
 const FENCE: &str = ";;;";
 
-/// The frontmatter the docs site needs, in the KDL a `;;;` block declares.
+/// The fields the docs site needs, in the KDL a [`FENCE`] block declares.
 /// `order` puts it last in the `lookup` group, after the four reference pages.
-const FRONTMATTER: &str = ";;;\n\
-    title \"Changelog\"\n\
+const FIELDS: &str = "title \"Changelog\"\n\
     order 5\n\
     template \"changelog.typ\"\n\
-    description \"Every released version of baudelaire, and what changed in it.\"\n\
-    ;;;\n";
+    description \"Every released version of baudelaire, and what changed in it.\"\n";
+
+/// The block the page opens with: the fields between a pair of [`FENCE`] lines,
+/// so the fence this asserts on below is the one it was written with.
+fn frontmatter() -> String {
+    format!("{FENCE}\n{FIELDS}{FENCE}\n")
+}
 
 /// The page as it should read: the frontmatter, then the changelog without its
 /// top heading, which the page template already draws from the title.
@@ -35,7 +39,7 @@ fn expected() -> String {
         .strip_prefix("# Changelog\n")
         .unwrap_or(&source)
         .trim_start_matches('\n');
-    format!("{FRONTMATTER}\n{body}")
+    format!("{}\n{body}", frontmatter())
 }
 
 /// Regenerate with `just changelog-page`, which is this test with `BLESS=1`.

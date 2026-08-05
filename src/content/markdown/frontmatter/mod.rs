@@ -6,15 +6,14 @@
 //! built-in keys, configured taxonomy keys, the typo suggester and the
 //! collection schema are all the ones already there.
 //!
-//! Adding a dialect is one row in [`FENCES`], one row in [`Dialect::NAMES`],
-//! one arm in [`Dialect::parse`], and one module implementing it. Nothing else
-//! in the codebase learns the fence or the name: the splitter and the
-//! diagnostics both read the tables.
+//! Adding a dialect is one row in [`FENCES`], one arm in [`Dialect::parse`],
+//! and one module implementing it. Nothing else in the codebase learns the
+//! fence: the splitter and the diagnostics both read the table.
 //!
 //! # Spans
 //!
 //! Every dialect resolves its own document *once*, into a [`Spans`] map keyed by
-//! the dotted path that names each value. Diagnostics then walk one structure
+//! the path of steps that names each value. Diagnostics then walk one structure
 //! rather than three, and a parser's document model does not have to outlive the
 //! parse. That last part is not a nicety: `saphyr` borrows the input it parsed
 //! and `toml_edit` owns it, so keeping the three document types alive together
@@ -29,7 +28,6 @@ use std::ops::Range;
 
 use typst::foundations::Dict;
 
-use crate::config::Named;
 use crate::error::Result;
 
 /// The languages a frontmatter block may be written in.
@@ -43,14 +41,6 @@ pub enum Dialect {
     Yaml,
     Toml,
     Kdl,
-}
-
-impl Named for Dialect {
-    const NAMES: &'static [(&'static str, Self)] = &[
-        ("yaml", Self::Yaml),
-        ("toml", Self::Toml),
-        ("kdl", Self::Kdl),
-    ];
 }
 
 /// The fence that opens and closes a block in each dialect.
@@ -76,15 +66,6 @@ impl Dialect {
             .iter()
             .find(|(open, _)| *open == fence)
             .map(|(_, dialect)| *dialect)
-    }
-
-    /// The fence a block in this dialect is written between.
-    pub fn fence(self) -> &'static str {
-        FENCES
-            .iter()
-            .find(|(_, dialect)| *dialect == self)
-            .map(|(fence, _)| *fence)
-            .expect("FENCES lists every dialect")
     }
 
     /// Read a block written in this dialect.
@@ -122,29 +103,33 @@ impl Block {
     }
 }
 
-/// Where each value in a frontmatter block was written, by the dotted path that
-/// names it (`author.name`, `authors.1.email`).
+/// Where each value in a frontmatter block was written, by the path of steps
+/// that names it (`["author", "name"]`, `["authors", "1", "email"]`).
 ///
 /// One representation for every dialect, and the reason diagnostics do not carry
 /// a parser's document model around. The empty path is the block itself, which is
 /// where a reader goes to add a field that is missing.
+///
+/// The steps are kept apart rather than joined into one string, because a key
+/// may itself contain the separator any joining would pick: TOML `"a.b" = 1` and
+/// YAML `a.b:` are one key with a dot in it, and joined with `.` they collided
+/// with the path of `a` → `b` and underlined each other's value.
 #[derive(Debug, Default, Clone)]
-pub struct Spans(BTreeMap<String, Range<usize>>);
+pub struct Spans(BTreeMap<Vec<String>, Range<usize>>);
 
 impl Spans {
     /// Record where the value at `path` was written. Absolute file offsets: a
     /// dialect shifts by the block's own offset as it collects, so nothing
     /// downstream has to remember to.
-    pub fn insert(&mut self, path: String, span: Range<usize>) {
+    pub fn insert(&mut self, path: Vec<String>, span: Range<usize>) {
         self.0.insert(path, span);
     }
 
-    /// The dotted name a nested key is recorded under, given its parent's.
-    pub fn path(parent: &str, key: &str) -> String {
-        match parent.is_empty() {
-            true => key.to_owned(),
-            false => format!("{parent}.{key}"),
-        }
+    /// The path a nested key is recorded under, given its parent's.
+    pub fn path(parent: &[String], key: &str) -> Vec<String> {
+        let mut path = parent.to_vec();
+        path.push(key.to_owned());
+        path
     }
 
     /// The span to underline for `steps`: the deepest prefix of it the author
@@ -157,14 +142,13 @@ impl Spans {
     pub fn of(&self, steps: &[String]) -> Option<Range<usize>> {
         (0..=steps.len())
             .rev()
-            .find_map(|depth| self.0.get(&steps[..depth].join(".")).cloned())
+            .find_map(|depth| self.0.get(&steps[..depth]).cloned())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Dialect, Spans};
-    use crate::config::Named as _;
 
     #[test]
     fn each_fence_opens_one_dialect() {
@@ -174,22 +158,22 @@ mod tests {
         assert_eq!(Dialect::of_fence("~~~"), None);
     }
 
-    /// Every dialect is reachable by a fence and by a name, and no two share
-    /// either: a dialect that shipped without a fence would be unwritable, and
-    /// one sharing a fence would make the block ambiguous.
+    /// Every dialect is reachable by exactly one fence: one that shipped
+    /// without a fence would be unwritable, and one reachable by two would make
+    /// the fence stop being the selector.
+    ///
+    /// `ALL` is the only place a variant is listed twice, and the length check
+    /// below is what keeps it honest: a fourth dialect added to [`FENCES`] and
+    /// not here fails on the count, and one added here and not to `FENCES` fails
+    /// on its own row.
     #[test]
-    fn every_dialect_has_exactly_one_fence_and_one_name() {
-        for (name, dialect) in Dialect::NAMES {
-            assert_eq!(Dialect::of(name), Some(*dialect));
-            assert_eq!(dialect.name(), *name);
-            assert_eq!(Dialect::of_fence(dialect.fence()), Some(*dialect));
+    fn every_dialect_has_exactly_one_fence() {
+        const ALL: &[Dialect] = &[Dialect::Yaml, Dialect::Toml, Dialect::Kdl];
+        for dialect in ALL {
+            let fences = super::FENCES.iter().filter(|(_, d)| d == dialect).count();
+            assert_eq!(fences, 1, "{dialect:?}");
         }
-        let fences: Vec<&str> = super::FENCES.iter().map(|(fence, _)| *fence).collect();
-        let mut unique = fences.clone();
-        unique.sort_unstable();
-        unique.dedup();
-        assert_eq!(unique.len(), fences.len(), "a fence opens one dialect");
-        assert_eq!(fences.len(), Dialect::NAMES.len(), "every dialect has one");
+        assert_eq!(super::FENCES.len(), ALL.len(), "a fence opens one dialect");
     }
 
     /// Every fence is the same width, which is what lets the splitter read one
@@ -203,16 +187,32 @@ mod tests {
 
     #[test]
     fn a_span_falls_back_to_the_deepest_thing_the_author_wrote() {
-        let mut spans = Spans::default();
-        spans.insert(String::new(), 0..100);
-        spans.insert("author".to_owned(), 10..40);
-        spans.insert("author.name".to_owned(), 20..30);
-
         let steps = |parts: &[&str]| parts.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+
+        let mut spans = Spans::default();
+        spans.insert(steps(&[]), 0..100);
+        spans.insert(steps(&["author"]), 10..40);
+        spans.insert(steps(&["author", "name"]), 20..30);
+
         assert_eq!(spans.of(&steps(&["author", "name"])), Some(20..30));
         // Never written, so the dict that should have held it is underlined.
         assert_eq!(spans.of(&steps(&["author", "email"])), Some(10..40));
         assert_eq!(spans.of(&steps(&["nothing", "here"])), Some(0..100));
         assert_eq!(spans.of(&[]), Some(0..100));
+    }
+
+    /// A key with a separator in it is not a path. Joined into one string,
+    /// `"a.b"` and `a` → `b` were the same key, and each underlined the other's
+    /// value.
+    #[test]
+    fn a_key_holding_a_dot_is_not_the_path_that_spells_it() {
+        let steps = |parts: &[&str]| parts.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+
+        let mut spans = Spans::default();
+        spans.insert(steps(&["a.b"]), 0..10);
+        spans.insert(steps(&["a", "b"]), 20..30);
+
+        assert_eq!(spans.of(&steps(&["a.b"])), Some(0..10));
+        assert_eq!(spans.of(&steps(&["a", "b"])), Some(20..30));
     }
 }

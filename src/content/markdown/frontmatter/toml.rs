@@ -2,8 +2,8 @@
 //!
 //! The dialect Zola and Hugo established, so a post pasted out of either already
 //! parses. It is also the only one of the three with types the target does not
-//! have: a TOML date is a value, not a string, and [`value`] is where that is
-//! reconciled.
+//! have: a TOML date is a value, not a string, and [`Reader::value`] is where
+//! that is reconciled.
 
 use std::ops::Range;
 
@@ -20,6 +20,7 @@ pub const HINT: &str = "a `+++` block is TOML: `title = \"A page\"`";
 
 /// Read a TOML block into its fields and their spans.
 pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Block> {
+    let mut reader = Reader::new(text, offset);
     // `ImDocument`, never `DocumentMut`. Building the mutable document despans
     // it, so every `span()` on it answers `None` and every label in this module
     // would silently collapse onto the block. `FromStr for DocumentMut` goes
@@ -38,112 +39,141 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
             // than markup this crate wrote.
             faults: vec![FrontmatterFault::at(
                 Text(error.message()).to_string(),
-                shift(error.span().unwrap_or(0..text.len()), offset),
+                reader.shift(error.span().unwrap_or(0..text.len())),
             )],
         }
     })?;
-    let mut spans = Spans::default();
-    // The block itself, measured rather than asked for: a document that opens
-    // with a `[table]` header reports an empty span for its root table, and this
-    // is the span a field the page never wrote gets underlined at.
-    spans.insert(String::new(), shift(0..text.len(), offset));
-    let dict = fields(doc.as_table(), "", offset, &mut spans);
-    Ok(Block { dict, spans })
+    let dict = reader.fields(doc.as_table(), &[]);
+    Ok(Block {
+        dict,
+        spans: reader.spans,
+    })
 }
 
-/// A span of the block, as a span of the file it sits in.
-fn shift(span: Range<usize>, offset: usize) -> Range<usize> {
-    span.start + offset..span.end + offset
+/// One block being read: what the walk down it needs, and what it collects.
+struct Reader {
+    /// Where the block starts in the file, folded into every span this records
+    /// so no step of the walk can hand back one measured against the block.
+    offset: usize,
+    spans: Spans,
 }
 
-/// Every entry of a table as a `(key, value)` pair, recording where each was
-/// written on the way down.
-///
-/// One walk for both spellings of a table: `[header]` and `{ inline }` differ in
-/// syntax and in nothing this reads, which is what [`TableLike`] is for.
-fn fields(table: &dyn TableLike, at: &str, offset: usize, spans: &mut Spans) -> Dict {
-    table
-        .iter()
-        .map(|(key, item)| {
-            let path = Spans::path(at, key);
-            // A dotted key (`a.b.c = 1`, or `{ y.z = 2 }`) builds intermediate
-            // tables the author never wrote a delimiter for, and those carry no
-            // span. The key segment is what is left and is the honest thing to
-            // underline. When even that is absent nothing is recorded, and
-            // `Spans::of` falls back to the nearest parent that was written.
-            let span = item
-                .span()
-                .or_else(|| table.get_key_value(key).and_then(|(k, _)| k.span()));
-            if let Some(span) = span {
-                spans.insert(path.clone(), shift(span, offset));
-            }
-            (key.into(), read(item, &path, offset, spans))
-        })
-        .collect()
-}
-
-/// What an entry holds, by the shape TOML gave it.
-///
-/// ```toml
-/// title = "A"        # a value
-/// [author]           # a table
-/// [[post]]           # repeated: an array of tables
-/// ```
-fn read(item: &Item, at: &str, offset: usize, spans: &mut Spans) -> Value {
-    match item {
-        Item::Value(value) => self::value(value, at, offset, spans),
-        Item::Table(table) => Value::Dict(fields(table, at, offset, spans)),
-        // A repeated `[[header]]` is a list of dicts, indexed like any other
-        // list so that a fault in one underlines that table and not all of them.
-        Item::ArrayOfTables(tables) => Value::Array(
-            tables
-                .iter()
-                .enumerate()
-                .map(|(i, table)| {
-                    let path = Spans::path(at, &i.to_string());
-                    if let Some(span) = table.span() {
-                        spans.insert(path.clone(), shift(span, offset));
-                    }
-                    Value::Dict(fields(table, &path, offset, spans))
-                })
-                .collect(),
-        ),
-        // TOML has no null, and a parse never yields this: it is the hole an
-        // edit leaves behind, and `TableLike::iter` skips it. Named rather than
-        // swept up by a wildcard, so a fifth shape fails to compile here.
-        Item::None => Value::None,
+impl Reader {
+    /// A reader over `text`, which sits at `offset` in the file.
+    fn new(text: &str, offset: usize) -> Self {
+        let mut reader = Self {
+            offset,
+            spans: Spans::default(),
+        };
+        // The block itself, measured rather than asked for: a document that
+        // opens with a `[table]` header reports an empty span for its root
+        // table, and this is the span a field the page never wrote gets
+        // underlined at.
+        let block = reader.shift(0..text.len());
+        reader.spans.insert(Vec::new(), block);
+        reader
     }
-}
 
-/// A TOML value as its typst counterpart, recording where each element of an
-/// array was written on the way through.
-fn value(value: &TomlValue, at: &str, offset: usize, spans: &mut Spans) -> Value {
-    match value {
-        TomlValue::String(v) => Value::Str(v.value().as_str().into()),
-        TomlValue::Integer(v) => Value::Int(*v.value()),
-        TomlValue::Float(v) => Value::Float(*v.value()),
-        TomlValue::Boolean(v) => Value::Bool(*v.value()),
-        // The one place TOML says more than what reads it. `date = 2026-08-05`
-        // is a real date literal here, while the frontmatter date reader takes
-        // an ISO day *string*, so the literal is rendered back to its own
-        // spelling and goes through that same reader. Deliberate, and not lossy:
-        // TOML's own text for a datetime is what the reader already accepts, and
-        // giving dates a second private path is what this avoids.
-        TomlValue::Datetime(v) => Value::Str(v.value().to_string().into()),
-        TomlValue::Array(array) => Value::Array(
-            array
-                .iter()
-                .enumerate()
-                .map(|(i, element)| {
-                    let path = Spans::path(at, &i.to_string());
-                    if let Some(span) = element.span() {
-                        spans.insert(path.clone(), shift(span, offset));
-                    }
-                    self::value(element, &path, offset, spans)
-                })
-                .collect(),
-        ),
-        TomlValue::InlineTable(table) => Value::Dict(fields(table, at, offset, spans)),
+    /// A span of the block, as a span of the file it sits in.
+    fn shift(&self, span: Range<usize>) -> Range<usize> {
+        span.start + self.offset..span.end + self.offset
+    }
+
+    /// Every entry of a table as a `(key, value)` pair, recording where each was
+    /// written on the way down.
+    ///
+    /// One walk for both spellings of a table: `[header]` and `{ inline }`
+    /// differ in syntax and in nothing this reads, which is what [`TableLike`]
+    /// is for.
+    fn fields(&mut self, table: &dyn TableLike, at: &[String]) -> Dict {
+        table
+            .iter()
+            .map(|(key, item)| {
+                let path = Spans::path(at, key);
+                // A dotted key (`a.b.c = 1`, or `{ y.z = 2 }`) builds
+                // intermediate tables the author never wrote a delimiter for,
+                // and those carry no span. The key segment is what is left and
+                // is the honest thing to underline. When even that is absent
+                // nothing is recorded, and `Spans::of` falls back to the nearest
+                // parent that was written.
+                let span = item
+                    .span()
+                    .or_else(|| table.get_key_value(key).and_then(|(k, _)| k.span()));
+                if let Some(span) = span {
+                    let span = self.shift(span);
+                    self.spans.insert(path.clone(), span);
+                }
+                (key.into(), self.read(item, &path))
+            })
+            .collect()
+    }
+
+    /// What an entry holds, by the shape TOML gave it.
+    ///
+    /// ```toml
+    /// title = "A"        # a value
+    /// [author]           # a table
+    /// [[post]]           # repeated: an array of tables
+    /// ```
+    fn read(&mut self, item: &Item, at: &[String]) -> Value {
+        match item {
+            Item::Value(value) => self.value(value, at),
+            Item::Table(table) => Value::Dict(self.fields(table, at)),
+            // A repeated `[[header]]` is a list of dicts, indexed like any other
+            // list so a fault in one underlines that table and not all of them.
+            Item::ArrayOfTables(tables) => Value::Array(
+                tables
+                    .iter()
+                    .enumerate()
+                    .map(|(i, table)| {
+                        let path = Spans::path(at, &i.to_string());
+                        if let Some(span) = table.span() {
+                            let span = self.shift(span);
+                            self.spans.insert(path.clone(), span);
+                        }
+                        Value::Dict(self.fields(table, &path))
+                    })
+                    .collect(),
+            ),
+            // TOML has no null, and a parse never yields this: it is the hole an
+            // edit leaves behind, and `TableLike::iter` skips it. Named rather
+            // than swept up by a wildcard, so a fifth shape fails to compile.
+            Item::None => Value::None,
+        }
+    }
+
+    /// A TOML value as its typst counterpart, recording where each element of an
+    /// array was written on the way through.
+    fn value(&mut self, value: &TomlValue, at: &[String]) -> Value {
+        match value {
+            TomlValue::String(v) => Value::Str(v.value().as_str().into()),
+            TomlValue::Integer(v) => Value::Int(*v.value()),
+            TomlValue::Float(v) => Value::Float(*v.value()),
+            TomlValue::Boolean(v) => Value::Bool(*v.value()),
+            // The one place TOML says more than what reads it. `date =
+            // 2026-08-05` is a real date literal here, while the frontmatter
+            // date reader takes an ISO day *string*, so the literal is rendered
+            // back to its own spelling and goes through that same reader.
+            // Deliberate, and not lossy: TOML's own text for a datetime is what
+            // the reader already accepts, and giving dates a second private path
+            // is what this avoids.
+            TomlValue::Datetime(v) => Value::Str(v.value().to_string().into()),
+            TomlValue::Array(array) => Value::Array(
+                array
+                    .iter()
+                    .enumerate()
+                    .map(|(i, element)| {
+                        let path = Spans::path(at, &i.to_string());
+                        if let Some(span) = element.span() {
+                            let span = self.shift(span);
+                            self.spans.insert(path.clone(), span);
+                        }
+                        self.value(element, &path)
+                    })
+                    .collect(),
+            ),
+            TomlValue::InlineTable(table) => Value::Dict(self.fields(table, at)),
+        }
     }
 }
 
@@ -262,6 +292,21 @@ mod tests {
         };
         assert_eq!(at(&["author"]).as_deref(), Some("author"));
         assert_eq!(at(&["author", "name"]).as_deref(), Some("\"cstef\""));
+    }
+
+    /// A quoted key is one key that happens to hold a dot, not two steps. While
+    /// the span map joined its steps with `.`, this and `[a] b` were the same
+    /// entry and each underlined the other's value.
+    #[test]
+    fn a_quoted_key_holding_a_dot_does_not_collide_with_a_nested_one() {
+        let source = "\"a.b\" = 1\n[a]\nb = 2\n";
+        let block = parse(source, 0, "a.md", source).expect("valid");
+        let at = |path: &[&str]| {
+            let steps: Vec<String> = path.iter().map(|s| (*s).to_owned()).collect();
+            block.spans.of(&steps).map(|s| source[s].to_owned())
+        };
+        assert_eq!(at(&["a.b"]).as_deref(), Some("1"));
+        assert_eq!(at(&["a", "b"]).as_deref(), Some("2"));
     }
 
     #[test]

@@ -53,7 +53,7 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
                 let span = reader.span(root);
                 return Err(fault("frontmatter is not a block of fields".to_owned(), span).into());
             };
-            reader.fields(mapping, "")
+            reader.fields(mapping, &[])
         }
     };
     Ok(Block {
@@ -83,7 +83,7 @@ impl<'a> Reader<'a> {
         // The block itself, so a field the page never wrote underlines the
         // block rather than nothing.
         let block = reader.trim(offset..offset + text.len());
-        reader.spans.insert(String::new(), block);
+        reader.spans.insert(Vec::new(), block);
         reader
     }
 
@@ -92,7 +92,7 @@ impl<'a> Reader<'a> {
     ///
     /// An entry is recorded from its key to the end of its value, so a fault in
     /// `title` underlines `title: A page` and not one half of it.
-    fn fields(&mut self, mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>, at: &str) -> Dict {
+    fn fields(&mut self, mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>, at: &[String]) -> Dict {
         mapping
             .iter()
             .map(|(key, value)| {
@@ -106,7 +106,7 @@ impl<'a> Reader<'a> {
     }
 
     /// What a node holds, as its typst counterpart.
-    fn read(&mut self, node: &MarkedYaml<'_>, at: &str) -> Value {
+    fn read(&mut self, node: &MarkedYaml<'_>, at: &[String]) -> Value {
         match &node.data {
             YamlData::Value(scalar) => Self::scalar(scalar),
             YamlData::Sequence(items) => Value::Array(

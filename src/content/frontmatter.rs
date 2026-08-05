@@ -270,7 +270,7 @@ impl<'a> Origin<'a> {
         Some(SourceSpan::new(range.start.into(), range.len()))
     }
 
-    /// Look a block's span up, by the dotted path that names the value.
+    /// Look a block's span up, by the path of steps that names the value.
     ///
     /// Every dialect resolved its own document into a
     /// [`Spans`](crate::content::markdown::Spans) as it parsed, so there is one

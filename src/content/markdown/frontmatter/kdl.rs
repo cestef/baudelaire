@@ -35,106 +35,135 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
                     .map(|fault| FrontmatterFault::rebased(fault, offset))
                     .collect(),
             })?;
-    let mut spans = Spans::default();
-    spans.insert(String::new(), shift(doc.span(), offset));
-    let dict = fields(&doc, "", offset, &mut spans);
-    Ok(Block { dict, spans })
+    let mut reader = Reader::new(&doc, offset);
+    let dict = reader.fields(&doc, &[]);
+    Ok(Block {
+        dict,
+        spans: reader.spans,
+    })
 }
 
-/// A span of the block, as a span of the file it sits in.
-fn shift(span: miette::SourceSpan, offset: usize) -> std::ops::Range<usize> {
-    let start = span.offset() + offset;
-    start..start + span.len()
+/// One block being read: what the walk down it needs, and what it collects.
+struct Reader {
+    /// Where the block starts in the file, folded into every span this records
+    /// so no step of the walk can hand back one measured against the block.
+    offset: usize,
+    spans: Spans,
 }
 
-/// Every node of a document as a `(key, value)` pair, recording where each was
-/// written on the way down.
-fn fields(doc: &KdlDocument, at: &str, offset: usize, spans: &mut Spans) -> Dict {
-    doc.nodes()
-        .iter()
-        .map(|node| {
-            let key = node.name().value();
-            let path = Spans::path(at, key);
-            spans.insert(path.clone(), shift(node.span(), offset));
-            (key.into(), read(node, &path, offset, spans))
-        })
-        .collect()
-}
+impl Reader {
+    /// A reader over `doc`, which sits at `offset` in the file.
+    fn new(doc: &KdlDocument, offset: usize) -> Self {
+        let mut reader = Self {
+            offset,
+            spans: Spans::default(),
+        };
+        // The block itself, so a field the page never wrote underlines the
+        // block rather than nothing.
+        let block = reader.shift(doc.span());
+        reader.spans.insert(Vec::new(), block);
+        reader
+    }
 
-/// What a node holds, by the shape it was written in. The four spellings are
-/// the ones KDL itself distinguishes, so nothing here is a convention a reader
-/// has to learn separately:
-///
-/// ```kdl
-/// draft                      // a bare flag is true
-/// title "A"                  // one argument is that value
-/// tags "rust" "typst"        // several are a list
-/// author { name "cstef" }    // a block, or `key=value` entries, is a dict
-/// ```
-fn read(node: &KdlNode, at: &str, offset: usize, spans: &mut Spans) -> Value {
-    let named: Vec<_> = node
-        .entries()
-        .iter()
-        .filter_map(|e| {
-            let key = e.name()?.value();
-            spans.insert(Spans::path(at, key), shift(e.span(), offset));
-            Some((key.into(), scalar(e.value())))
-        })
-        .collect();
-    let children = node.children().map(|doc| fields(doc, at, offset, spans));
+    /// A span of the block, as a span of the file it sits in.
+    fn shift(&self, span: miette::SourceSpan) -> std::ops::Range<usize> {
+        let start = span.offset() + self.offset;
+        start..start + span.len()
+    }
 
-    if !named.is_empty() || children.is_some() {
-        let mut dict: Dict = named.into_iter().collect();
-        // A block and `key=value` entries on one node are both fields of it, so
-        // they land in one dict rather than the block silently winning.
-        for (key, value) in children.unwrap_or_default() {
-            dict.insert(key, value);
+    /// Every node of a document as a `(key, value)` pair, recording where each
+    /// was written on the way down.
+    fn fields(&mut self, doc: &KdlDocument, at: &[String]) -> Dict {
+        doc.nodes()
+            .iter()
+            .map(|node| {
+                let key = node.name().value();
+                let path = Spans::path(at, key);
+                let span = self.shift(node.span());
+                self.spans.insert(path.clone(), span);
+                (key.into(), self.read(node, &path))
+            })
+            .collect()
+    }
+
+    /// What a node holds, by the shape it was written in. The four spellings are
+    /// the ones KDL itself distinguishes, so nothing here is a convention a
+    /// reader has to learn separately:
+    ///
+    /// ```kdl
+    /// draft                      // a bare flag is true
+    /// title "A"                  // one argument is that value
+    /// tags "rust" "typst"        // several are a list
+    /// author { name "cstef" }    // a block, or `key=value` entries, is a dict
+    /// ```
+    fn read(&mut self, node: &KdlNode, at: &[String]) -> Value {
+        let named: Vec<_> = node
+            .entries()
+            .iter()
+            .filter_map(|e| {
+                let key = e.name()?.value();
+                let span = self.shift(e.span());
+                self.spans.insert(Spans::path(at, key), span);
+                Some((key.into(), Self::scalar(e.value())))
+            })
+            .collect();
+        let children = node.children().map(|doc| self.fields(doc, at));
+
+        if !named.is_empty() || children.is_some() {
+            let mut dict: Dict = named.into_iter().collect();
+            // A block and `key=value` entries on one node are both fields of it,
+            // so they land in one dict rather than the block silently winning.
+            for (key, value) in children.unwrap_or_default() {
+                dict.insert(key, value);
+            }
+            return Value::Dict(dict);
         }
-        return Value::Dict(dict);
-    }
 
-    let args: Vec<_> = node
-        .entries()
-        .iter()
-        .filter(|e| e.name().is_none())
-        .collect();
-    // A list's elements are indexed, so a fault in one underlines that element.
-    if args.len() > 1 {
-        for (i, entry) in args.iter().enumerate() {
-            spans.insert(Spans::path(at, &i.to_string()), shift(entry.span(), offset));
+        let args: Vec<_> = node
+            .entries()
+            .iter()
+            .filter(|e| e.name().is_none())
+            .collect();
+        // A list's elements are indexed, so a fault in one underlines that
+        // element.
+        if args.len() > 1 {
+            for (i, entry) in args.iter().enumerate() {
+                let span = self.shift(entry.span());
+                self.spans.insert(Spans::path(at, &i.to_string()), span);
+            }
+        }
+        let values: Vec<Value> = args.iter().map(|e| Self::scalar(e.value())).collect();
+        match <[Value; 1]>::try_from(values) {
+            Ok([only]) => only,
+            // Zero arguments is a flag that was written, and writing it is the
+            // point: `draft` means the same as `draft #true`.
+            Err(values) if values.is_empty() => Value::Bool(true),
+            Err(values) => Value::Array(values.into_iter().collect()),
         }
     }
-    let values: Vec<Value> = args.iter().map(|e| scalar(e.value())).collect();
-    match <[Value; 1]>::try_from(values) {
-        Ok([only]) => only,
-        // Zero arguments is a flag that was written, and writing it is the
-        // point: `draft` means the same as `draft #true`.
-        Err(values) if values.is_empty() => Value::Bool(true),
-        Err(values) => Value::Array(values.into_iter().collect()),
-    }
-}
 
-/// A KDL scalar as its typst counterpart. Read through the accessors rather
-/// than matched on the variants, so a new KDL number representation cannot turn
-/// into a silent `none` here.
-// The one lossy step, and it is the honest option: a KDL integer wider than
-// `i64` has no typst counterpart, and a float at least keeps the magnitude
-// where dropping the value would keep nothing.
-#[allow(clippy::cast_precision_loss)]
-fn scalar(value: &KdlValue) -> Value {
-    if let Some(text) = value.as_string() {
-        return Value::Str(text.into());
+    /// A KDL scalar as its typst counterpart. Read through the accessors rather
+    /// than matched on the variants, so a new KDL number representation cannot
+    /// turn into a silent `none` here.
+    // The one lossy step, and it is the honest option: a KDL integer wider than
+    // `i64` has no typst counterpart, and a float at least keeps the magnitude
+    // where dropping the value would keep nothing.
+    #[allow(clippy::cast_precision_loss)]
+    fn scalar(value: &KdlValue) -> Value {
+        if let Some(text) = value.as_string() {
+            return Value::Str(text.into());
+        }
+        if let Some(int) = value.as_integer() {
+            return i64::try_from(int).map_or_else(|_| Value::Float(int as f64), Value::Int);
+        }
+        if let Some(float) = value.as_float() {
+            return Value::Float(float);
+        }
+        if let Some(flag) = value.as_bool() {
+            return Value::Bool(flag);
+        }
+        Value::None
     }
-    if let Some(int) = value.as_integer() {
-        return i64::try_from(int).map_or_else(|_| Value::Float(int as f64), Value::Int);
-    }
-    if let Some(float) = value.as_float() {
-        return Value::Float(float);
-    }
-    if let Some(flag) = value.as_bool() {
-        return Value::Bool(flag);
-    }
-    Value::None
 }
 
 #[cfg(test)]
