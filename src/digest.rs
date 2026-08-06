@@ -11,7 +11,7 @@
 //! changed since the last build". These are cryptographic digests a *browser*
 //! verifies, so the algorithm and the encoding are not ours to choose.
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 use sha2::{Digest as _, Sha256, Sha384};
 
@@ -33,8 +33,8 @@ impl fmt::Display for Base64<'_> {
             let bits = (u32::from(chunk[0]) << 16)
                 | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
                 | u32::from(chunk.get(2).copied().unwrap_or(0));
-            f.write_str(&sextet(bits, 0).to_string())?;
-            f.write_str(&sextet(bits, 1).to_string())?;
+            f.write_char(sextet(bits, 0))?;
+            f.write_char(sextet(bits, 1))?;
             // A short chunk pads rather than encoding the zero bits it never had.
             let third = if chunk.len() > 1 {
                 sextet(bits, 2)
@@ -46,8 +46,8 @@ impl fmt::Display for Base64<'_> {
             } else {
                 '='
             };
-            f.write_str(&third.to_string())?;
-            f.write_str(&fourth.to_string())?;
+            f.write_char(third)?;
+            f.write_char(fourth)?;
         }
         Ok(())
     }
