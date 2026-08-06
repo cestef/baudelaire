@@ -6,7 +6,7 @@
 
 use crate::codegen::Value;
 use crate::config::Config;
-use crate::content::{Data, Page};
+use crate::content::Page;
 
 /// A page reduced to what a nav needs: where it lives and what to call it.
 pub struct Link {
@@ -31,10 +31,7 @@ impl Section {
     pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Self> {
         let mut root = Self::new("");
         for page in pages {
-            if matches!(page.data, Data::Generated { .. })
-                || page.lang != lang
-                || !page.listed(config)
-            {
+            if !page.authored() || page.lang != lang || !page.listed(config) {
                 continue;
             }
             let mut node = &mut root;

@@ -106,7 +106,7 @@ impl<'a> Bundle<'a> {
         pages
             .iter()
             .filter(|page| page.lang == lang)
-            .filter(|page| !matches!(page.data, Data::Generated { .. }))
+            .filter(|page| page.authored())
             .filter(|page| want(page))
             .collect()
     }

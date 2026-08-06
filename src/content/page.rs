@@ -137,6 +137,18 @@ pub struct Page {
 }
 
 impl Page {
+    /// Whether somebody wrote this page, as opposed to the plan having produced
+    /// it.
+    ///
+    /// The single spelling of the question. Nine places asked it by matching
+    /// [`Data::Generated`] inline, which reads as a test of *how the
+    /// frontmatter is bound* rather than of who is answerable for the page, and
+    /// every one of them would have to be found again if a second generated
+    /// shape were added.
+    pub fn authored(&self) -> bool {
+        !matches!(self.data, Data::Generated { .. })
+    }
+
     /// Load a single `.typ` file into a [`Page`]: evaluate it as a typst
     /// module (the compiler's own memoized evaluation) and read its
     /// `frontmatter` export.

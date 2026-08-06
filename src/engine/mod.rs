@@ -921,7 +921,7 @@ impl Engine {
                     Data::Generated { lists, .. } => lists,
                     _ => &[],
                 },
-                generated: matches!(page.data, Data::Generated { .. }),
+                generated: !page.authored(),
                 listed: page.listed(&self.config),
             })
             .collect();

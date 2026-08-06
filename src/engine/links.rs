@@ -12,7 +12,11 @@
 use rayon::prelude::*;
 use typst::syntax::Source;
 
-use crate::content::{Data, Page};
+// Only the lowered arm names `Data` now that authorship is asked of the page
+// itself, and that arm is markdown's.
+#[cfg(feature = "markdown")]
+use crate::content::Data;
+use crate::content::Page;
 use crate::error::Result;
 use crate::graph::Cache;
 use crate::render::{Backlinks, LinkMap, Outbound};
@@ -58,7 +62,7 @@ impl Graph {
                 Some(recorded) => Some((page, recorded.clone())),
                 // A generated listing contributes no edges at all, so there is
                 // nothing to scan it for; see the render transform.
-                None if matches!(page.data, Data::Generated { .. }) => None,
+                None if !page.authored() => None,
                 None => Some((
                     page,
                     Outbound::scanned(

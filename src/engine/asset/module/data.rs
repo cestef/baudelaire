@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::codegen::{Js, Value};
-use crate::content::{Data, Iso, Page};
+use crate::content::{Iso, Page};
 use crate::engine::emit::dts::Dts;
 use crate::world::BuildContext;
 
@@ -138,11 +138,7 @@ impl Module for Taxonomies {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
         // taxonomy -> term -> pages, sorted for deterministic output.
         let mut taxos: BTreeMap<&str, BTreeMap<&str, Vec<Value>>> = BTreeMap::new();
-        for page in cx
-            .pages
-            .iter()
-            .filter(|p| !matches!(p.data, Data::Generated { .. }))
-        {
+        for page in cx.pages.iter().filter(|p| p.authored()) {
             let link = Value::dict([
                 ("url", Value::str(&page.permalink)),
                 ("title", Value::str(page.title())),

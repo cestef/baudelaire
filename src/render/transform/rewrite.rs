@@ -3,7 +3,6 @@
 use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
-use crate::content::Data;
 use crate::render::links::{Link, Target};
 use crate::render::origin::Origins;
 use crate::render::transform::{Cx, DocumentExt, ElementExt, Transform};
@@ -32,16 +31,13 @@ impl Transform for Links {
         let lang = config.multilingual().then_some(page.lang.as_str());
         // Which of this page's links are *its own*, rather than its layout's.
         // A generated listing writes none of its own: what it lists is a fact
-        // about the plan and travels on the page itself (`Data::Generated`),
-        // because a listing with a template draws its entries from the template
-        // and those links are the template's, chrome like any other.
+        // about the plan and travels on the page itself, because a listing with
+        // a template draws its entries from the template and those links are
+        // the template's, chrome like any other.
         // ...and only while something reads the graph: with neither backlinks
         // nor the orphan report asked for, a page pays neither the check below
         // nor a manifest field per build.
-        let content = match page.data {
-            Data::Generated { .. } => None,
-            _ => config.links.graph().then_some(cx.content),
-        };
+        let content = (page.authored() && config.links.graph()).then_some(cx.content);
         let found = &mut cx.found;
         doc.walk(|element| {
             let span = element.span;

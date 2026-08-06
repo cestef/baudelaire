@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use typst::syntax::{Source, ast};
 
 use crate::codegen::Value;
-use crate::content::{Data, Page};
+use crate::content::Page;
 use crate::graph::Hash;
 
 /// A link that names a page of this site: which page, and what the author wrote
@@ -420,7 +420,7 @@ impl LinkMap {
     pub fn new(pages: &[Page], root: &Path, sources: Vec<&'static str>) -> Self {
         let by_source = pages
             .iter()
-            .filter(|p| !matches!(p.data, Data::Generated { .. }))
+            .filter(|p| p.authored())
             .map(|p| (crate::fs::resolved(&p.source), p.permalink.clone()))
             .collect();
         Self {

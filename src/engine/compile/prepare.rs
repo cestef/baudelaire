@@ -305,7 +305,7 @@ impl<'a> Prepare<'a> {
             .file_stem()
             .and_then(|stem| stem.to_str())
             .is_some_and(|stem| stem == self.config.index());
-        if !bundled || matches!(page.data, Data::Generated { .. }) {
+        if !bundled || !page.authored() {
             return Value::dict::<&str>([]);
         }
         let root = crate::fs::canonical(&self.config.root);
