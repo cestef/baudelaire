@@ -6,9 +6,10 @@
 //! built-in keys, configured taxonomy keys, the typo suggester and the
 //! collection schema are all the ones already there.
 //!
-//! Adding a dialect is one row in [`FENCES`], one arm in [`Dialect::parse`],
-//! and one module implementing it. Nothing else in the codebase learns the
-//! fence: the splitter and the diagnostics both read the table.
+//! Adding a dialect is one row in [`FENCES`] and one module implementing it.
+//! The row carries the reader as well as the fence, so nothing dispatches on
+//! the dialect a second time; nothing else in the codebase learns the fence
+//! either, since the splitter and the diagnostics both read the table.
 //!
 //! # Spans
 //!
@@ -43,29 +44,64 @@ pub enum Dialect {
     Kdl,
 }
 
-/// The fence that opens and closes a block in each dialect.
+/// Reading a block, as the one shape every dialect's module has: the text
+/// between the fences, where it sits in the file, and the page a syntax error
+/// names and renders its snippet from.
+type Read = fn(&str, usize, &str, &str) -> Result<Block>;
+
+/// One dialect as this module meets it: the fence that opens a block, the
+/// language that fence declares, and the module that reads it.
 ///
-/// Two of the three are the conventions already in the world: `---` is YAML,
-/// which is what every generator but one uses and what a pasted post already
-/// carries, and `+++` is TOML, which is Zola's and Hugo's. `;;;` is KDL, whose
-/// own statement terminator is the semicolon, and which is the one spelling
-/// CommonMark gives no meaning to at the start of a line.
+/// The reader sits in the row rather than behind a match on [`Dialect`],
+/// because a table and a match are the same knowledge written twice: a dialect
+/// listed in one and forgotten in the other is a fence that opens a block
+/// nobody can read. Here a dialect is one row, and there is nowhere else to
+/// forget it.
+pub struct Fence {
+    /// The characters that open a block in this dialect, and close it.
+    pub open: &'static str,
+    /// The language they declare.
+    pub dialect: Dialect,
+    /// What reads a block written in it.
+    read: Read,
+}
+
+/// The fence that opens and closes a block in each dialect, and the reader
+/// behind it.
+///
+/// Two of the three fences are the conventions already in the world: `---` is
+/// YAML, which is what every generator but one uses and what a pasted post
+/// already carries, and `+++` is TOML, which is Zola's and Hugo's. `;;;` is
+/// KDL, whose own statement terminator is the semicolon, and which is the one
+/// spelling CommonMark gives no meaning to at the start of a line.
 ///
 /// The fence *is* the selector: there is no name after it to get wrong, and no
 /// dialect can be reached by two spellings.
-pub const FENCES: &[(&str, Dialect)] = &[
-    ("---", Dialect::Yaml),
-    ("+++", Dialect::Toml),
-    (";;;", Dialect::Kdl),
+pub const FENCES: &[Fence] = &[
+    Fence {
+        open: "---",
+        dialect: Dialect::Yaml,
+        read: yaml::parse,
+    },
+    Fence {
+        open: "+++",
+        dialect: Dialect::Toml,
+        read: toml::parse,
+    },
+    Fence {
+        open: ";;;",
+        dialect: Dialect::Kdl,
+        read: kdl::parse,
+    },
 ];
 
 impl Dialect {
     /// The dialect a fence opens.
-    pub fn of_fence(fence: &str) -> Option<Self> {
+    pub fn of_fence(open: &str) -> Option<Self> {
         FENCES
             .iter()
-            .find(|(open, _)| *open == fence)
-            .map(|(_, dialect)| *dialect)
+            .find(|fence| fence.open == open)
+            .map(|fence| fence.dialect)
     }
 
     /// Read a block written in this dialect.
@@ -75,11 +111,21 @@ impl Dialect {
     /// own first line. `path` and `source` are the file a syntax error names and
     /// renders its snippet from.
     pub fn parse(self, text: &str, offset: usize, path: &str, source: &str) -> Result<Block> {
-        match self {
-            Self::Yaml => yaml::parse(text, offset, path, source),
-            Self::Toml => toml::parse(text, offset, path, source),
-            Self::Kdl => kdl::parse(text, offset, path, source),
-        }
+        (self.fence().read)(text, offset, path, source)
+    }
+
+    /// The row that declares this dialect.
+    ///
+    /// Every variant has one, and it is a test that says so rather than this
+    /// lookup: `every_dialect_has_exactly_one_fence` fails on a variant the
+    /// table never listed, which is where a missing row belongs. A dialect with
+    /// no row could not be opened by any fence anyway, so nothing outside this
+    /// module could reach one.
+    fn fence(self) -> &'static Fence {
+        FENCES
+            .iter()
+            .find(|fence| fence.dialect == self)
+            .expect("every dialect has a row in FENCES")
     }
 }
 
@@ -170,7 +216,10 @@ mod tests {
     fn every_dialect_has_exactly_one_fence() {
         const ALL: &[Dialect] = &[Dialect::Yaml, Dialect::Toml, Dialect::Kdl];
         for dialect in ALL {
-            let fences = super::FENCES.iter().filter(|(_, d)| d == dialect).count();
+            let fences = super::FENCES
+                .iter()
+                .filter(|fence| fence.dialect == *dialect)
+                .count();
             assert_eq!(fences, 1, "{dialect:?}");
         }
         assert_eq!(super::FENCES.len(), ALL.len(), "a fence opens one dialect");
@@ -180,8 +229,32 @@ mod tests {
     /// before it knows which it found.
     #[test]
     fn every_fence_is_three_characters() {
-        for (fence, _) in super::FENCES {
-            assert_eq!(fence.len(), 3, "`{fence}`");
+        for fence in super::FENCES {
+            assert_eq!(fence.open.len(), 3, "`{}`", fence.open);
+        }
+    }
+
+    /// A row reads the language it declares. The reader used to sit in a match
+    /// of its own, where a dialect could be listed in the table and read by
+    /// another module's parser; now that both are one row, this is what says the
+    /// row is wired to the right one -- and, by reaching every dialect through
+    /// [`Dialect::parse`], that each one has a row to be found at all.
+    #[test]
+    fn each_dialect_reads_the_language_its_fence_declares() {
+        let blocks = [
+            (Dialect::Yaml, "title: A\n"),
+            (Dialect::Toml, "title = \"A\"\n"),
+            (Dialect::Kdl, "title \"A\"\n"),
+        ];
+        for (dialect, text) in blocks {
+            let block = dialect
+                .parse(text, 0, "a.md", text)
+                .unwrap_or_else(|_| panic!("{dialect:?} should read its own block"));
+            assert_eq!(
+                block.dict.at("title".into(), None),
+                Ok(typst::foundations::Value::Str("A".into())),
+                "{dialect:?}"
+            );
         }
     }
 

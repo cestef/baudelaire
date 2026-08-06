@@ -15,7 +15,7 @@
 mod frontmatter;
 mod lower;
 
-pub use frontmatter::{Block, Dialect, FENCES, Spans};
+pub use frontmatter::{Block, Dialect, FENCES, Fence, Spans};
 pub use lower::Markdown;
 
 use crate::error::Result;
@@ -55,13 +55,10 @@ impl<'a> Document<'a> {
 
         // Whichever fence the file opens with decides the language. Read from
         // the table, so a new dialect is openable the moment it is listed.
-        let Some((fence, dialect)) = FENCES
-            .iter()
-            .find(|(fence, _)| trimmed.starts_with(*fence))
-            .map(|(fence, dialect)| (*fence, *dialect))
-        else {
+        let Some(opened) = FENCES.iter().find(|row| trimmed.starts_with(row.open)) else {
             return Ok(bare(source));
         };
+        let fence = opened.open;
         let rest = &trimmed[fence.len()..];
         // A fence opens a block only on a line of its own; anything else on that
         // line is a thematic break or a setext heading, and the file is body.
@@ -108,7 +105,7 @@ impl<'a> Document<'a> {
             .unwrap_or(after);
         Ok(Self {
             frontmatter: Some(&rest[..end]),
-            dialect,
+            dialect: opened.dialect,
             body,
             offset: start,
             body_offset: source.len() - body.len(),
@@ -153,12 +150,13 @@ mod tests {
     /// terminated by a different dialect's fence.
     #[test]
     fn the_fence_decides_the_dialect() {
-        for (fence, dialect) in FENCES {
-            let source = format!("{fence}\ntitle = 1\n{fence}\nBody.\n");
+        for fence in FENCES {
+            let open = fence.open;
+            let source = format!("{open}\ntitle = 1\n{open}\nBody.\n");
             let doc = Document::split(&source, "a.md").expect("split");
-            assert_eq!(doc.dialect, *dialect, "`{fence}`");
-            assert_eq!(doc.frontmatter, Some("title = 1\n"), "`{fence}`");
-            assert_eq!(doc.body, "Body.\n", "`{fence}`");
+            assert_eq!(doc.dialect, fence.dialect, "`{open}`");
+            assert_eq!(doc.frontmatter, Some("title = 1\n"), "`{open}`");
+            assert_eq!(doc.body, "Body.\n", "`{open}`");
         }
     }
 
@@ -181,9 +179,10 @@ mod tests {
 
     #[test]
     fn an_unterminated_block_is_an_error() {
-        for (fence, _) in FENCES {
-            let source = format!("{fence}\ntitle = 1\n");
-            assert!(Document::split(&source, "a.md").is_err(), "`{fence}`");
+        for fence in FENCES {
+            let open = fence.open;
+            let source = format!("{open}\ntitle = 1\n");
+            assert!(Document::split(&source, "a.md").is_err(), "`{open}`");
         }
     }
 
