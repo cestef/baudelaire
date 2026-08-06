@@ -14,7 +14,7 @@
 use std::fmt::{self, Write as _};
 use std::path::PathBuf;
 
-use crate::codegen::{Str, Typst, Value};
+use crate::codegen::{Import, Str, Typst, Value};
 use crate::config::Config;
 use crate::content::{Data, Page};
 use crate::error::Result;
@@ -164,7 +164,7 @@ impl<'a> Bundle<'a> {
             let (frontmatter, body) = match &page.data {
                 Data::Export => {
                     let alias = format!("__fm{i}");
-                    writeln!(imports, "#import {}: frontmatter as {alias}", Str(&vpath))
+                    writeln!(imports, "{}", Import::new(&vpath, "frontmatter", &alias))
                         .expect("writing to a String cannot fail");
                     (alias, format!("include {}", Str(&vpath)))
                 }
@@ -250,12 +250,7 @@ struct Module {
 
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "#import {}: {} as __bundle",
-            Str(&self.import),
-            self.func
-        )?;
+        writeln!(f, "{}", Import::new(&self.import, &self.func, "__bundle"))?;
         f.write_str(&self.imports)?;
         write!(f, "#__bundle({}, (", self.meta)?;
         for entry in &self.entries {

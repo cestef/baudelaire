@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use typst::syntax::RootedPath;
 
-use crate::codegen::{Str, Typst, Value};
+use crate::codegen::{Import, Typst, Value};
 use crate::config::Config;
 use crate::content::{Data, Iso, Page};
 use crate::error::Result;
@@ -154,10 +154,10 @@ impl fmt::Display for Template {
             "#set page(width: {}pt, height: {}pt, margin: 0pt)",
             self.width, self.height
         )?;
-        writeln!(f, "#import {}: {} as __card", Str(&self.import), self.func)?;
+        writeln!(f, "{}", Import::new(&self.import, &self.func, "__card"))?;
         let extra = match &self.frontmatter {
             Some(page) => {
-                writeln!(f, "#import {}: frontmatter as __data", Str(page))?;
+                writeln!(f, "{}", Import::new(page, "frontmatter", "__data"))?;
                 "__data"
             }
             None => "(:)",

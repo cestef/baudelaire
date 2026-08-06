@@ -401,6 +401,55 @@ pub(crate) fn ident(s: &str) -> bool {
     head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
 }
 
+/// Displays a Typst import binding one item under a local alias:
+/// `#import "<path>": <item> as <alias>`.
+///
+/// Every synthetic module this build compiles opens with one or two of these
+/// (the layout template, a page's own `frontmatter` export), and each was
+/// spelled out with `format!` where it was needed. Three of the six were
+/// byte-identical, which is the shape of a rule about to be applied
+/// inconsistently: the path is the half that comes from user input, and it is
+/// escaped here once rather than at whichever call site last remembered to.
+///
+/// The item and the alias are *not* escaped, because Typst offers no form in
+/// which they could be: an import binds identifiers, and nothing rescues one
+/// that is not the way [`Format::key`] quotes an awkward dict key. Both are
+/// identifiers by construction here, an alias being a name this crate chose and
+/// an item a template's file stem, but neither can be a `&'static str` the way
+/// [`Call::named`]'s key is: two of the six are computed. So the invariant is
+/// stated rather than typed, and a template whose stem is not an identifier
+/// (`2col.typ`) fails in the compiler, exactly as it did before.
+pub struct Import<'a> {
+    path: &'a str,
+    item: &'a str,
+    alias: &'a str,
+}
+
+impl<'a> Import<'a> {
+    /// An import of `item` from `path`, bound locally as `alias`. The
+    /// arguments are in the order the line writes them, so a call reads as its
+    /// own output.
+    ///
+    /// `path` is a project-root absolute path (`/templates/post.typ`) or a
+    /// package spec; `alias` is `__`-prefixed by every caller here, so nothing
+    /// a page or a template binds can shadow it.
+    pub fn new(path: &'a str, item: &'a str, alias: &'a str) -> Self {
+        Self { path, item, alias }
+    }
+}
+
+impl fmt::Display for Import<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "#import {}: {} as {}",
+            Str(self.path),
+            self.item,
+            self.alias
+        )
+    }
+}
+
 /// Displays a Typst `let` binding: `#let name = <value>`, with the value
 /// rendered by [`Typst`]. The one way generated module source binds a value, so
 /// no caller ever formats a binding (and its escaping) by hand.
@@ -581,7 +630,7 @@ impl fmt::Display for Content<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Call, Content, Js, Let, Str, Ts, Typst, Value};
+    use super::{Call, Content, Import, Js, Let, Str, Ts, Typst, Value};
 
     #[test]
     fn escapes_quotes_and_backslashes() {
@@ -634,6 +683,21 @@ mod tests {
         assert_eq!(
             Let("langs", &Value::array([Value::str("fr")])).to_string(),
             "#let langs = (\"fr\", )"
+        );
+    }
+
+    /// An import's path is the half that comes from a config value, so it is
+    /// escaped exactly as a string literal anywhere else would be: a template
+    /// directory carrying a quote cannot close it and start writing Typst.
+    #[test]
+    fn imports_bind_one_item_under_an_alias() {
+        assert_eq!(
+            Import::new("/templates/post.typ", "post", "__layout").to_string(),
+            "#import \"/templates/post.typ\": post as __layout"
+        );
+        assert_eq!(
+            Import::new("/a\"b/x.typ", "frontmatter", "__data").to_string(),
+            "#import \"/a\\\"b/x.typ\": frontmatter as __data"
         );
     }
 

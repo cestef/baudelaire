@@ -10,7 +10,7 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::codegen::Str;
+use crate::codegen::{Import, Str};
 
 /// Where a page's frontmatter dict comes from, as an expression in the
 /// synthetic module.
@@ -182,13 +182,12 @@ impl fmt::Display for Layout<'_> {
         // are never shadowed by a page binding, even a `page.typ`/`body.typ`.
         writeln!(
             f,
-            "#import {}: {} as __layout",
-            Str(&self.import()),
-            self.func()
+            "{}",
+            Import::new(&self.import(), self.func(), "__layout")
         )?;
         let frontmatter: &dyn fmt::Display = match &self.context.data {
             Bind::Import => {
-                writeln!(f, "#import {}: frontmatter as __data", Str(self.page))?;
+                writeln!(f, "{}", Import::new(self.page, "frontmatter", "__data"))?;
                 &"__data"
             }
             Bind::Literal(dict) => dict,
