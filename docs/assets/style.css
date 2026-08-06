@@ -112,22 +112,26 @@ button,
   border-radius: 3px;
 }
 
-/* Skip link: first tab stop, off-screen until focused. */
+/* Skip link: first tab stop, clipped away until focused. Clipped rather than
+   held off-screen by a negative `top`: `.site-header` is positioned, so it is
+   this link's containing block, and an offset above it is only off-screen while
+   the header itself starts at the top of the page. Anything stacked above the
+   header slides the link back into view. */
 .skip-link {
   position: absolute;
   left: 0.5rem;
-  top: -3rem;
+  top: 0.5rem;
   z-index: 100;
   margin: 0;
   padding: 0;
   color: var(--wine-ink);
   font-family: var(--sans);
   font-size: 0.85rem;
-  transition: top 0.15s ease;
+  clip-path: inset(50%);
 }
 
 .skip-link:focus {
-  top: 0.5rem;
+  clip-path: none;
 }
 
 /* Inline icons (lucide). */
