@@ -2,8 +2,10 @@
 
 use clap::Args;
 
-use super::{BuildOverrides, Cx, Run, remote};
-use crate::error::Result;
+use super::remote::{Destination, PublishArgs};
+use super::{BuildOverrides, Cx, Run};
+use crate::config::DeployConfig;
+use crate::error::{DeployError, Result};
 
 /// Arguments for `baudelaire deploy`.
 #[derive(Args, Debug, Clone)]
@@ -11,35 +13,30 @@ pub struct DeployArgs {
     #[command(flatten)]
     pub overrides: BuildOverrides,
 
-    /// Secret for the destination (S3 secret access key, or SSH password/key
-    /// passphrase); `-` reads it from stdin. Prefer stdin, the backend's
-    /// environment variable, or the interactive prompt: a literal flag can leak
-    /// into shell history.
-    #[arg(long)]
-    pub secret: Option<String>,
-    /// Skip the confirmation prompt.
-    #[arg(short = 'y', long)]
-    pub yes: bool,
-    /// Report what would change without writing to any destination.
-    #[arg(long)]
-    pub dry_run: bool,
+    #[command(flatten)]
+    pub publish: PublishArgs,
 }
 
-impl remote::Flags for DeployArgs {
-    fn dry_run(&self) -> bool {
-        self.dry_run
-    }
-    fn yes(&self) -> bool {
-        self.yes
-    }
-    fn secret(&self) -> Option<String> {
-        self.secret.clone()
-    }
+impl DeployArgs {
+    /// Where `deploy` sends the site.
+    ///
+    /// `named` destructures [`DeployConfig`], so a new backend fails to compile
+    /// until it is answered for: a pre-flight check that did not know about it
+    /// would refuse a config that names it, before the build that would have
+    /// worked.
+    pub(super) const DESTINATION: Destination = Destination {
+        named: |config| {
+            let DeployConfig { s3, ssh } = &config.deploy;
+            s3.is_some() || ssh.is_some()
+        },
+        unconfigured: || DeployError::Unconfigured.into(),
+        publish: crate::deploy::Deploy::run,
+    };
 }
 
 impl Run for DeployArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.configured(&self.overrides, "deploying")?;
-        remote::run(cx.ui, &config, self, crate::deploy::run)
+        self.publish.send(cx.ui, &config, &Self::DESTINATION)
     }
 }

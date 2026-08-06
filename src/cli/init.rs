@@ -84,6 +84,6 @@ impl Run for InitArgs {
             return Err(ScaffoldError::Profile.into());
         }
         cx.ui.banner("init");
-        scaffold::init::init(cx.ui, cx.root, self, &cx.cli.global.config)
+        scaffold::init::Init::run(cx.ui, cx.root, self, &cx.cli.global.config)
     }
 }

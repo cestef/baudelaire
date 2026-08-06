@@ -71,8 +71,10 @@ impl Route {
         // this produces, so decoding cannot open a traversal.
         let rel = Percent::decode(rel);
         let base = self.dist.join(&rel);
+        // The directory index is the build's own spelling of it, not a second
+        // copy: a URL ending in `/` is served the file the build wrote there.
         self.within(&base)
-            .or_else(|| self.within(&base.join("index.html")))
+            .or_else(|| self.within(&base.join(Config::INDEX)))
             .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
     }
 
@@ -233,7 +235,7 @@ impl Handler {
         if !Self::same_origin(req) {
             return Err(Unopenable::Foreign);
         }
-        let raw = Self::query(url, "at").ok_or(Unopenable::Unaddressed)?;
+        let raw = Self::addressed(url).ok_or(Unopenable::Unaddressed)?;
         let decoded = Percent::decode(raw);
         let at = At::parse(&decoded).ok_or_else(|| Unopenable::Malformed(decoded.clone()))?;
         let open = self.route.lock().open.clone();
@@ -251,6 +253,19 @@ impl Handler {
             .iter()
             .find(|header| header.field.equiv("Sec-Fetch-Site"))
             .is_none_or(|header| header.value.as_str() == "same-origin")
+    }
+
+    /// The source location a request names, still encoded: the `at` parameter,
+    /// when it carries anything at all.
+    ///
+    /// A parameter that is absent and one that is present but empty name a
+    /// location equally little, so both answer `None` and become
+    /// [`Unopenable::Unaddressed`]. An empty one used to reach [`At::parse`],
+    /// which failed it as [`Unopenable::Malformed`] and reported "not a source
+    /// location: " with nothing after the colon, sending the reader to look for
+    /// a badly written location that was never written at all.
+    fn addressed(url: &str) -> Option<&str> {
+        Self::query(url, "at").filter(|raw| !raw.is_empty())
     }
 
     /// The value of `key` in a URL's query string, undecoded.
@@ -378,6 +393,20 @@ mod tests {
         assert_eq!(
             route.resolve("/docs/posts/a/"),
             Some(route.dist.join("posts/a/index.html"))
+        );
+    }
+
+    /// Naming no location and naming a bad one are different failures, and the
+    /// query answers for the first of them: `?at=` with nothing after it names
+    /// no location, so it must not be reported as a badly written one.
+    #[test]
+    fn an_empty_at_names_no_location_rather_than_a_bad_one() {
+        assert_eq!(Handler::addressed("/__baudelaire/open"), None);
+        assert_eq!(Handler::addressed("/__baudelaire/open?at="), None);
+        assert_eq!(Handler::addressed("/__baudelaire/open?other=1"), None);
+        assert_eq!(
+            Handler::addressed("/__baudelaire/open?at=a.typ:1:2"),
+            Some("a.typ:1:2")
         );
     }
 }

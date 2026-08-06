@@ -76,6 +76,12 @@ impl CleanArgs {
     /// are about to be confirmed: they come from config, so the directory named
     /// `dist` is only the one you expect if the config says what you think it
     /// does.
+    ///
+    /// What is refused is settled before the listing, not during the removal.
+    /// It used to be settled during: a `--dry-run` listed every existing target
+    /// and reported them all as "to remove", including the ones a real run
+    /// would then refuse, so the preview of a destructive command disagreed
+    /// with the command.
     fn sweep(
         &self,
         ui: &Ui,
@@ -83,11 +89,16 @@ impl CleanArgs {
         root: &Path,
         interaction: &dyn crate::remote::Interaction,
     ) -> Result<()> {
-        let dirs: Vec<PathBuf> = self
+        let (dirs, refused): (Vec<PathBuf>, Vec<PathBuf>) = self
             .targets(config)
             .into_iter()
             .filter(|dir| dir.exists())
-            .collect();
+            .partition(|dir| Self::removable(dir, root));
+        // Warned about in a dry run too: "this one is not going anywhere" is
+        // exactly what a preview is for.
+        for dir in refused {
+            ui.warn(CleanRefused { dir });
+        }
         if dirs.is_empty() {
             ui.done("nothing to clean");
             return Ok(());
@@ -99,23 +110,20 @@ impl CleanArgs {
             ui.done(format_args!("{} to remove", Self::count(dirs.len())));
             return Ok(());
         }
+        // A refusal is an answer, and saying "nothing to clean" reported the
+        // opposite of what happened: there was something to clean, and it is
+        // still there.
         if !self.consented(interaction, dirs.len())? {
-            ui.done("nothing to clean");
+            ui.done(format_args!(
+                "declined; {} left in place",
+                Self::count(dirs.len())
+            ));
             return Ok(());
         }
-        let mut removed = 0;
-        for dir in dirs {
-            if !Self::removable(&dir, root) {
-                ui.warn(CleanRefused { dir });
-                continue;
-            }
-            crate::fs::remove_dir_all(&dir)?;
-            removed += 1;
+        for dir in &dirs {
+            crate::fs::remove_dir_all(dir)?;
         }
-        match removed {
-            0 => ui.done("nothing to clean"),
-            _ => ui.done("clean"),
-        }
+        ui.done("clean");
         Ok(())
     }
 
@@ -212,5 +220,73 @@ impl Run for CleanArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = Self::config(cx)?;
         self.sweep(cx.ui, &config, cx.root.path(), &prompt::Tty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::Level;
+
+    /// Someone is there, and they say no.
+    struct Declines;
+
+    impl crate::remote::Interaction for Declines {
+        fn interactive(&self) -> bool {
+            true
+        }
+        fn confirm(&self, _prompt: &str) -> Result<bool> {
+            Ok(false)
+        }
+        fn secret(&self, _label: &str) -> Result<Option<String>> {
+            Ok(None)
+        }
+    }
+
+    /// A project whose `dist` is the project root itself (the config mistake
+    /// `removable` exists for) and a cache directory beside it.
+    fn project() -> (tempfile::TempDir, Config) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path().to_path_buf();
+        std::fs::create_dir_all(root.join("cache")).expect("mkdir");
+        let mut config = Config {
+            root: root.clone(),
+            ..Config::default()
+        };
+        config.paths.dist = root.clone();
+        config.cache.dir = root.join("cache");
+        (tmp, config)
+    }
+
+    /// The dry run counts what a real run would take, and nothing else. It used
+    /// to list every existing target, refused ones included, so the preview of
+    /// the destructive command promised more than the command delivered.
+    #[test]
+    fn a_dry_run_leaves_out_what_a_real_run_would_refuse() {
+        let (tmp, config) = project();
+        let ui = Ui::new(Level::Silent);
+        let args = CleanArgs {
+            output: true,
+            cache: true,
+            dry_run: true,
+            ..CleanArgs::default()
+        };
+        args.sweep(&ui, &config, tmp.path(), &Declines)
+            .expect("a dry run removes nothing and fails at nothing");
+        // The dist that swallows the project is refused, and said so.
+        assert_eq!(ui.warnings(), 1);
+        assert!(tmp.path().join("cache").is_dir());
+    }
+
+    /// Declining says so. It used to report `nothing to clean`, which is the
+    /// opposite of what happened: there was something, and it is still there.
+    #[test]
+    fn a_declined_sweep_removes_nothing_and_does_not_claim_otherwise() {
+        let (tmp, config) = project();
+        let ui = Ui::new(Level::Silent);
+        CleanArgs::default()
+            .sweep(&ui, &config, tmp.path(), &Declines)
+            .expect("a refusal is an answer, not a failure");
+        assert!(tmp.path().join("cache").is_dir());
     }
 }

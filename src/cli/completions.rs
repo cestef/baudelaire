@@ -2,7 +2,7 @@
 
 use clap::Args;
 
-use super::{Cli, Cx, Run};
+use super::{Cli, Cx, Run, help};
 use crate::error::Result;
 use crate::error::cli::Generated;
 
@@ -62,37 +62,27 @@ impl Shell {
 
     /// The per-shell install lines, appended to `completions --help`.
     ///
-    /// Laid out like [`Cli::examples`], for the same reason: the shell column is
-    /// measured from the rows rather than hand-tuned to the longest one.
+    /// Rendered by the one help-block layout ([`help::Table`]), keyed by shell:
+    /// the line to type is the value here rather than the key, which is the
+    /// only thing that differs from an ordinary `Examples:` table. It used to
+    /// lay the same table out itself, so the column width and the accent colour
+    /// were decided twice.
     fn help() -> String {
         use clap::ValueEnum;
         use owo_colors::{OwoColorize, Stream::Stdout};
-        use std::fmt::Write;
 
-        let rows: Vec<_> = Self::value_variants()
-            .iter()
-            .filter_map(|shell| {
-                let name = shell.to_possible_value()?;
-                Some((name.get_name().to_owned(), shell.install()))
-            })
-            .collect();
-        let column = rows.iter().map(|(n, _)| n.len()).max().unwrap_or(0) + 2;
-        let mut out = format!(
-            "{}\n",
-            "Examples:".if_supports_color(Stdout, |t| t.cyan().bold().to_string())
-        );
-        for (name, line) in &rows {
-            let pad = " ".repeat(column - name.len());
-            let colored = line.if_supports_color(Stdout, |t| t.green().bold().to_string());
-            let _ = writeln!(out, "  {name}{pad}{colored}");
-        }
-        let _ = write!(
-            out,
-            "\nThe directory has to exist, and the shell has to be told to read it;\n\
-             {} cover both.",
-            "your shell's completion docs".if_supports_color(Stdout, |t| t.dimmed().to_string())
-        );
-        out
+        let rows = Self::value_variants().iter().filter_map(|shell| {
+            let name = shell.to_possible_value()?;
+            Some((name.get_name().to_owned(), shell.install().to_owned()))
+        });
+        help::Table::keyed(rows)
+            .footer(format!(
+                "The directory has to exist, and the shell has to be told to read it;\n\
+                 {} cover both.",
+                "your shell's completion docs"
+                    .if_supports_color(Stdout, |t| t.dimmed().to_string())
+            ))
+            .to_string()
     }
 
     /// Render the completion script for `command` under `name`.

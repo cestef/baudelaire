@@ -68,7 +68,7 @@ impl Summary<'_> {
         if !parts.is_empty() {
             // Wrap under the tree row's content column (col 5) so a long
             // breakdown flows onto extra lines rather than off-screen.
-            rows.push(crate::ui::wrap(&parts, 5, crate::ui::term_width()));
+            rows.push(crate::ui::Wrap::new(&parts, 5).to_string());
         }
         rows.push(Paths(&self.dist.display().to_string()).to_string());
         ui.tree(&rows);

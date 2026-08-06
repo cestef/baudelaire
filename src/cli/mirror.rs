@@ -49,7 +49,7 @@ impl MirrorArgs {
                  The run ends in the one setting each family needs, so an editor\n\
                  resolves it. `-v` lists every module it wrote."
             ),
-            help::Examples::new(&[
+            help::Table::examples(&[
                 ("baudelaire mirror", "Into .baudelaire/generated"),
                 (
                     "baudelaire mirror --global",

@@ -19,7 +19,7 @@ impl ReferenceArgs {
     /// Appended to `reference --help`. The narrowing argument is the part worth
     /// showing: the bare command prints a hundred and fifty keys.
     fn examples() -> String {
-        help::Examples::new(&[
+        help::Table::examples(&[
             ("baudelaire reference", "Every key"),
             ("baudelaire reference assets", "Just the asset pipeline"),
             (

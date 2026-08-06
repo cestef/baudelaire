@@ -18,79 +18,110 @@ use crate::error::warning::MirrorSkipped;
 use crate::mirror::{Mirror, Settings};
 use crate::ui::{Paths, Ui};
 
-/// Scaffold a new project: pick the starter shape, fill its placeholders from
-/// the flags (prompting for what they left out, when there is a terminal to
-/// prompt at), write the files the flags did not exclude, and optionally
-/// initialize a repository.
-pub(crate) fn init(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
-    // Every selection is resolved before anything is prompted for or written,
-    // so a mistyped name fails on the spot rather than half a scaffold in.
-    // These two first, because they are settled by flags alone: a mistyped
-    // `--with` has to fail before the shape question, not after answering it.
-    let extras = Extra::resolve(&args.with)?;
-    let config = templates::File::config_at(config)?;
-    let interactive = !args.yes && std::io::stdin().is_terminal();
-    let start = Start::gather(args, interactive)?;
-    let template = Template::select(start.template.as_deref(), start.theme.is_some(), ui)?;
-    let (target, details) = Details::gather(args, root, interactive)?;
-    let repo = Repo::wanted(interactive, args.vcs)?;
-    if interactive {
-        ui.blank();
-    }
+/// Scaffolding a whole project: what `init` decides, in what order, and what it
+/// writes. A namespace rather than a value, in the unit-struct style the rest of
+/// the codebase uses for an action with no state of its own (`Editor`, `Http`).
+pub(in crate::cli) struct Init;
 
-    let files = template.files(&details.vars());
-    // What the shape already configures is not appended a second time: `--with
-    // search` on a shape whose config already sets `formats`, `fields` and a
-    // palette used to bolt a barer `search { formats "json" }` on beneath it.
-    let extras = Extra::wanted(&extras, &files, ui);
-
-    let mut scaffold = Scaffold::new(&target).ignore();
-    for file in files {
-        if args.no_sample && file.sample() {
-            continue;
+impl Init {
+    /// Scaffold a new project: pick the starter shape, fill its placeholders from
+    /// the flags (prompting for what they left out, when there is a terminal to
+    /// prompt at), write the files the flags did not exclude, and optionally
+    /// initialize a repository.
+    pub(in crate::cli) fn run(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
+        // Every selection is resolved before anything is prompted for or written,
+        // so a mistyped name fails on the spot rather than half a scaffold in.
+        // These two first, because they are settled by flags alone: a mistyped
+        // `--with` has to fail before the shape question, not after answering it.
+        let extras = Extra::resolve(&args.with)?;
+        let config = templates::File::config_at(config)?;
+        let interactive = !args.yes && std::io::stdin().is_terminal();
+        let start = Start::gather(args, interactive)?;
+        let template = Template::select(start.template.as_deref(), start.theme.is_some(), ui)?;
+        let (target, details) = Details::gather(args, root, interactive)?;
+        let repo = Repo::wanted(interactive, args.vcs)?;
+        if interactive {
+            ui.blank();
         }
-        let (rel, body) = match file.is_config() {
-            true => (
-                config.clone(),
-                Details::config(&file.body, start.theme.as_deref(), &extras),
-            ),
-            false => (file.rel, file.body),
+
+        let files = template.files(&details.vars());
+        // What the shape already configures is not appended a second time: `--with
+        // search` on a shape whose config already sets `formats`, `fields` and a
+        // palette used to bolt a barer `search { formats "json" }` on beneath it.
+        let extras = Extra::wanted(&extras, &files, ui);
+
+        let mut scaffold = Scaffold::new(&target).ignore();
+        for file in files {
+            if args.no_sample && file.sample() {
+                continue;
+            }
+            let (rel, body) = match file.is_config() {
+                true => (
+                    config.clone(),
+                    Details::config(&file.body, start.theme.as_deref(), &extras),
+                ),
+                false => (file.rel, file.body),
+            };
+            scaffold = scaffold.file(rel, body);
+        }
+        scaffold.apply(ui)?;
+
+        if let Some(vcs) = repo {
+            Repo::new(&target, vcs).setup(ui);
+        }
+
+        let settings = Self::packages(ui, &target);
+
+        ui.blank();
+        ui.done_plain(format_args!(
+            "{} project ready in {}",
+            template.name,
+            Paths(&target.display().to_string())
+        ));
+        ui.detail(format_args!("{}", template.about));
+        ui.detail(format_args!(
+            "run {} to build, {} for a live preview",
+            "baudelaire build".cyan(),
+            "baudelaire serve".cyan()
+        ));
+        // Before the editor settings, because a build cannot succeed until the
+        // theme is where the config says it is, and `init` naming a directory
+        // nobody has put anything in yet is the ordinary case.
+        if let Some(spec) = &start.theme {
+            Placement::of(spec, &target).settle(ui, &target)?;
+        }
+        // Last, because it is the one thing here that a reader has to act on: a
+        // scaffold that mirrors the modules and never says they need pointing at
+        // leaves every import in the templates it just wrote marked unresolved.
+        if let Some(settings) = settings {
+            settings.render(ui);
+        }
+        Ok(())
+    }
+
+    /// Mirror the generated modules for editor tooling, so the imports the
+    /// scaffolded templates and scripts carry resolve from the first minute.
+    ///
+    /// A warning rather than an error: this is tooling convenience, and a
+    /// platform with no data directory (or one that is read-only) is no reason
+    /// to fail a scaffold that otherwise succeeded. The site builds either way,
+    /// since a build serves these modules from memory and never reads what this
+    /// writes.
+    fn packages(ui: &Ui, target: &Path) -> Option<Settings> {
+        let config = Config {
+            root: target.to_path_buf(),
+            ..Config::default()
         };
-        scaffold = scaffold.file(rel, body);
+        match Mirror::new(&config, None, false).install() {
+            Ok(install) => Some(install.render(ui)),
+            Err(error) => {
+                ui.warn(MirrorSkipped {
+                    reason: error.to_string(),
+                });
+                None
+            }
+        }
     }
-    scaffold.apply(ui)?;
-
-    if let Some(vcs) = repo {
-        Repo::new(&target, vcs).setup(ui);
-    }
-
-    let settings = packages(ui, &target);
-
-    ui.blank();
-    ui.done_plain(format_args!(
-        "{} project ready in {}",
-        template.name,
-        Paths(&target.display().to_string())
-    ));
-    ui.detail(format_args!("{}", template.about));
-    ui.detail(format_args!(
-        "run {} to build, {} for a live preview",
-        "baudelaire build".cyan(),
-        "baudelaire serve".cyan()
-    ));
-    // Before the editor settings, because a build cannot succeed until the
-    // theme is where the config says it is, and `init` naming a directory
-    // nobody has put anything in yet is the ordinary case.
-    if let Some(spec) = &start.theme {
-        Placement::of(spec, &target).settle(ui, &target)?;
-    }
-    // Last, because it is the one thing here that a reader has to act on: a
-    // scaffold that mirrors the modules and never says they need pointing at
-    // leaves every import in the templates it just wrote marked unresolved.
-    if let Some(settings) = settings {
-        settings.render(ui);
-    }
-    Ok(())
 }
 
 /// What a run scaffolds from, once the flags and the prompts have both had
@@ -280,29 +311,6 @@ impl<'a> Placement<'a> {
             }
         }
         Ok(())
-    }
-}
-
-/// Mirror the generated modules for editor tooling, so the imports the
-/// scaffolded templates and scripts carry resolve from the first minute.
-///
-/// A warning rather than an error: this is tooling convenience, and a platform
-/// with no data directory (or one that is read-only) is no reason to fail a
-/// scaffold that otherwise succeeded. The site builds either way, since a build
-/// serves these modules from memory and never reads what this writes.
-fn packages(ui: &Ui, target: &Path) -> Option<Settings> {
-    let config = Config {
-        root: target.to_path_buf(),
-        ..Config::default()
-    };
-    match Mirror::new(&config, None, false).install() {
-        Ok(install) => Some(install.render(ui)),
-        Err(error) => {
-            ui.warn(MirrorSkipped {
-                reason: error.to_string(),
-            });
-            None
-        }
     }
 }
 

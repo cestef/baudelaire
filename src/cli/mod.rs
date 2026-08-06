@@ -45,6 +45,7 @@ pub use man::ManArgs;
 pub use mirror::MirrorArgs;
 pub use new::NewArgs;
 pub use reference::ReferenceArgs;
+pub use remote::PublishArgs;
 pub use serve::ServeArgs;
 #[cfg(feature = "themes")]
 pub use theme::ThemeArgs;
@@ -93,6 +94,33 @@ const EXAMPLES: &[(&str, &str)] = &[
         "Build with the prod profile",
     ),
     ("baudelaire clean --cache", "Drop the incremental cache"),
+];
+
+/// What the process exits with, as `(code, when)`.
+///
+/// Two, and only two: `main` maps a run to success or failure and nothing
+/// finer, so a script branches on zero rather than on a taxonomy of numbers
+/// this would otherwise have to keep true. Listed because a reader cannot know
+/// that without being told, and a wrapper written against invented codes is
+/// worse than one written against these.
+const EXIT_CODES: &[(&str, &str)] = &[
+    ("0", "Everything asked for was done"),
+    (
+        "1",
+        "The run failed, or --strict was passed and something warned",
+    ),
+];
+
+/// The environment a run reads, as `(name, what it decides)`.
+///
+/// A flag always beats the variable beside it, which is the precedence the
+/// whole CLI follows: --color over the two colour variables, -v over RUST_LOG.
+const ENVIRONMENT: &[(&str, &str)] = &[
+    ("RUST_LOG", "Debug-log filter, for a run that passed no -v"),
+    ("NO_COLOR", "Set to anything, colour is off"),
+    ("CLICOLOR_FORCE", "Set to anything but 0, colour is on"),
+    ("VISUAL, EDITOR", "What new --edit opens the page in"),
+    ("${VAR}", "Expanded in every config.kdl string value"),
 ];
 
 /// The absolute project root: the directory `--root` selected (into which the
@@ -144,7 +172,7 @@ impl Root {
                   builds, a live-reload dev server, feeds, search, taxonomies, and more, all \
                   driven by Typst templates rather than HTML string templating.",
     styles = HELP_STYLES,
-    after_help = Cli::examples(),
+    after_help = Cli::help(),
     subcommand_value_name = "COMMAND",
 )]
 pub struct Cli {
@@ -161,7 +189,9 @@ pub struct Cli {
 #[derive(Args, Debug, Clone)]
 pub struct GlobalArgs {
     /// Path to config.kdl.
-    #[arg(short, long, global = true, default_value = "config.kdl", help_heading = group::PROJECT)]
+    // The default is the one spelling of the file name, not a second copy of
+    // it: clap takes anything that converts to an `OsStr`.
+    #[arg(short, long, global = true, default_value = Config::FILE, help_heading = group::PROJECT)]
     pub config: PathBuf,
 
     /// Project root directory.
@@ -176,9 +206,14 @@ pub struct GlobalArgs {
     #[arg(short, long, global = true, action = clap::ArgAction::Count, help_heading = group::LOGGING)]
     pub verbose: u8,
 
-    /// Quiet output.
-    #[arg(short, long, global = true, conflicts_with = "verbose", help_heading = group::LOGGING)]
-    pub quiet: bool,
+    /// Quiet output: warnings and the final result (-qq drops the result too).
+    ///
+    /// Counted, like `-v`, and for the same reason: one level was not enough to
+    /// separate "do not narrate the build" from "say nothing unless something
+    /// is wrong". `-qq` leaves diagnostics and the exit code, which is what a
+    /// cron job wants and what `-q` alone could not express.
+    #[arg(short, long, global = true, action = clap::ArgAction::Count, conflicts_with = "verbose", help_heading = group::LOGGING)]
+    pub quiet: u8,
 
     /// Fail the run if anything warned.
     #[arg(long, global = true, help_heading = group::LOGGING)]
@@ -187,6 +222,16 @@ pub struct GlobalArgs {
     /// Write a machine-readable summary of the run to stdout.
     #[arg(long, global = true, help_heading = group::LOGGING)]
     pub json: bool,
+
+    /// When to colour output.
+    ///
+    /// Layers over the automatic detection rather than replacing it: `auto`
+    /// leaves `NO_COLOR`, `CLICOLOR_FORCE` and the terminal check to decide,
+    /// and naming `always` or `never` overrules all three.
+    // Under `Logging` rather than `Output`: that heading is where the build
+    // writes its files, and this is about what the terminal reads.
+    #[arg(long, global = true, value_name = "WHEN", value_enum, default_value = "auto", help_heading = group::LOGGING)]
+    pub color: Color,
 }
 
 /// Config overrides that only make sense for a build: `build` and `serve`, and
@@ -223,7 +268,7 @@ pub struct CommonOverrides {
     /// by design, and the same value written in the config is refused by the
     /// same rule, so a preview deploy cannot smuggle in a base the config
     /// would have rejected.
-    #[arg(long, help_heading = group::OUTPUT, value_parser = absolute_url)]
+    #[arg(long, help_heading = group::OUTPUT, value_parser = CommonOverrides::absolute)]
     pub base_url: Option<String>,
 
     /// Build draft pages (`--no-drafts` excludes them, whatever the config says).
@@ -238,7 +283,14 @@ pub struct CommonOverrides {
     #[arg(long, overrides_with = "future", hide = true)]
     pub no_future: bool,
 
-    /// Error on broken internal links (default; `--no-strict-links` warns instead).
+    /// Error on a `.typ` link to a missing page or heading (default;
+    /// `--no-strict-links` warns instead).
+    ///
+    /// Says `.typ` because that is the whole of it: a link the build can judge
+    /// is one naming a page this site renders. An `http(s)` URL is checked only
+    /// by `check --external`, and a link to a static file is never checked at
+    /// all, so "broken internal links" promised two things this flag does not
+    /// decide.
     #[arg(long, overrides_with = "no_strict_links", help_heading = group::BUILD)]
     pub strict_links: bool,
     #[arg(long, overrides_with = "strict_links", hide = true)]
@@ -302,19 +354,21 @@ pub enum Command {
 }
 
 impl Cli {
-    /// [`EXAMPLES`] rendered for the bottom of the top-level help. owo-colors
-    /// gates the colour on the stdout stream itself (`if_supports_color`), so
-    /// escapes never leak when piped or under `NO_COLOR`: the same policy
-    /// [`crate::ui`] uses.
-    fn examples() -> String {
-        help::Examples {
-            rows: EXAMPLES,
-            footer: Some(&format!(
+    /// The blocks under the top-level help: [`EXAMPLES`], [`EXIT_CODES`] and
+    /// [`ENVIRONMENT`], each through the one help-block layout so the three
+    /// agree about their column and their accent. owo-colors gates the colour
+    /// on the stdout stream itself (`if_supports_color`), so escapes never leak
+    /// when piped or under `NO_COLOR`: the same policy [`crate::ui`] uses.
+    fn help() -> String {
+        format!(
+            "{}\n{}\n{}",
+            help::Table::examples(EXAMPLES),
+            help::Table::codes(EXIT_CODES),
+            help::Table::environment(ENVIRONMENT).footer(format!(
                 "Run {} for command-specific options.",
                 help::Literal("baudelaire <command> --help")
             )),
-        }
-        .to_string()
+        )
     }
 
     /// The parsed config: read from `--config`, then narrowed by the active
@@ -354,18 +408,101 @@ impl Cli {
         })
     }
 
-    /// The UI verbosity. `-vv` and beyond only deepen the `tracing` filter
-    /// (see [`crate::ui::trace`]): the terminal report itself has one
-    /// verbose level.
+    /// The UI verbosity, from the two counted flags.
+    ///
+    /// `-vv` and beyond only deepen the `tracing` filter (see
+    /// [`crate::ui::trace`]): the terminal report itself has one verbose level.
+    /// Downward there are two, because they suppress different things: `-q`
+    /// drops the narration and keeps the result line, `-qq` drops that too and
+    /// leaves only what went wrong. Nothing silences a diagnostic; that is what
+    /// the exit code and `--json` are for.
     fn level(&self) -> Level {
         let g = &self.global;
-        if g.quiet {
-            Level::Quiet
-        } else if g.verbose > 0 {
-            Level::Verbose
-        } else {
-            Level::Default
+        match (g.quiet, g.verbose) {
+            (0, 0) => Level::Default,
+            (0, _) => Level::Verbose,
+            (1, _) => Level::Quiet,
+            (_, _) => Level::Silent,
         }
+    }
+}
+
+/// What `--color` says about styled output.
+///
+/// Layered *over* the detection `anstream` and owo-colors already do, never
+/// replacing it: [`Auto`](Self::Auto) leaves both to their own answer (is it a
+/// terminal, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `TERM=dumb`), and the
+/// other two settle it outright.
+///
+/// An explicit flag beats every environment signal, `CLICOLOR_FORCE` included.
+/// That is the case a bare environment policy cannot express: a script that
+/// inherits the variable and wants plain text has nothing else to say, and
+/// unsetting a variable it did not set is not something a caller can be asked
+/// to do.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Color {
+    /// Colour when the stream is a terminal that wants it.
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl Color {
+    /// Install this choice for the process: the `anstream` writers every
+    /// [`Ui`] line goes through, and the owo-colors override the help blocks
+    /// and the prompts consult (`if_supports_color`).
+    ///
+    /// Both, because the two detect independently: anstream's global choice
+    /// does not reach `if_supports_color`, and owo's override does not reach a
+    /// stream's own stripping. Setting them together here is what keeps one
+    /// flag from colouring half the output.
+    fn install(self) {
+        use anstream::ColorChoice;
+        match self {
+            Self::Auto => {
+                ColorChoice::Auto.write_global();
+                owo_colors::unset_override();
+            }
+            Self::Always => {
+                ColorChoice::Always.write_global();
+                owo_colors::set_override(true);
+            }
+            Self::Never => {
+                ColorChoice::Never.write_global();
+                owo_colors::set_override(false);
+            }
+        }
+    }
+
+    /// The `--color` value on a raw command line, before clap has parsed it.
+    ///
+    /// Deliberately lenient: a value it cannot read is left alone, so clap
+    /// reports the usage error rather than this quietly picking something. The
+    /// last spelling wins, as it does for every other flag.
+    fn declared<'a>(args: impl IntoIterator<Item = &'a str>) -> Option<Self> {
+        let mut args = args.into_iter();
+        let mut chosen = None;
+        while let Some(arg) = args.next() {
+            let Some(tail) = arg.strip_prefix("--color") else {
+                continue;
+            };
+            let value = match tail.is_empty() {
+                true => args.next(),
+                false => tail.strip_prefix('='),
+            };
+            if let Some(color) = value.and_then(Self::named) {
+                chosen = Some(color);
+            }
+        }
+        chosen
+    }
+
+    /// The variant `value` names, off clap's own value table, so the pre-scan
+    /// and the parse cannot disagree about what `always` means.
+    fn named(value: &str) -> Option<Self> {
+        use clap::ValueEnum as _;
+        Self::from_str(value, true).ok()
     }
 }
 
@@ -409,17 +546,6 @@ impl Toggle {
     }
 }
 
-/// A `--base-url` that is an absolute base, by the same rule the config's own
-/// `url` answers to.
-fn absolute_url(value: &str) -> std::result::Result<String, String> {
-    match crate::config::BaseUrl::absolute(value) {
-        true => Ok(value.to_owned()),
-        false => {
-            Err("not an absolute URL: write the scheme too, e.g. `https://example.com`".into())
-        }
-    }
-}
-
 /// A set of CLI flags that overlay the loaded config.
 trait Overrides {
     fn apply(&self, config: &mut Config);
@@ -435,6 +561,20 @@ impl Overrides for BuildOverrides {
     }
 }
 
+impl CommonOverrides {
+    /// The `--base-url` value parser: a base that is absolute, by the same rule
+    /// the config's own `url` answers to. On the flags it validates rather than
+    /// loose beside them, so the rule has one home and one caller.
+    fn absolute(value: &str) -> std::result::Result<String, String> {
+        match crate::config::BaseUrl::absolute(value) {
+            true => Ok(value.to_owned()),
+            false => {
+                Err("not an absolute URL: write the scheme too, e.g. `https://example.com`".into())
+            }
+        }
+    }
+}
+
 impl Overrides for CommonOverrides {
     fn apply(&self, config: &mut Config) {
         if let Some(url) = &self.base_url {
@@ -446,62 +586,73 @@ impl Overrides for CommonOverrides {
     }
 }
 
-/// Run a parsed CLI: install the debug-log subscriber, dispatch, and flush any
-/// collected warnings, on success and failure alike, so a failed run still
-/// shows what it warned about before dying.
-// The process entry point owns the parsed CLI for the whole run and drops it at
-// the end; borrowing here would only push that ownership back into `main`.
-#[allow(clippy::needless_pass_by_value)]
-pub fn run(cli: Cli) -> Result<()> {
-    crate::ui::trace::init(cli.global.verbose);
-    let ui = Ui::new(cli.level());
-    let result = dispatch(&cli, &ui);
-    // Counted before the flush empties them, and reported after, so `--strict`
-    // fails *behind* the warnings that explain it rather than in front of them.
-    let warned = ui.warnings();
-    let outcome = result.and_then(|()| match cli.global.strict && warned > 0 {
-        true => Err(StrictWarnings { count: warned }.into()),
-        false => Ok(()),
-    });
-    // Built while the diagnostics are still collected, and written before the
-    // flush, so the JSON object lands on stdout uninterleaved with the prose on
-    // stderr. Not at all for a command whose own document owns stdout: see
-    // [`Command::owns_stdout`].
-    if cli.global.json && !cli.command.as_ref().is_some_and(Command::owns_stdout) {
-        emit_json(&ui.summary(outcome.is_ok()));
+impl Cli {
+    /// Parse the command line with the colour choice already in force.
+    ///
+    /// The process entry point, in place of `Cli::parse`. `--help` and
+    /// `--version` are written by clap during the parse and never reach
+    /// [`Cli::run`], so a `--color` that only took effect afterwards would
+    /// colour every line of a run and none of its help. The value is read off
+    /// the raw arguments first; clap then parses it properly, and reports a
+    /// misspelling as the usage error it is.
+    #[must_use]
+    pub fn parsed() -> Self {
+        let args: Vec<String> = std::env::args().collect();
+        Color::declared(args.iter().map(String::as_str))
+            .unwrap_or_default()
+            .install();
+        Self::parse()
     }
-    ui.flush();
-    outcome
-}
 
-/// Write the run's summary to stdout, the one thing that ever goes there.
-///
-/// A serialization failure is swallowed rather than replacing the run's real
-/// outcome: the report describes what happened, and losing the description is
-/// not the same as the thing having failed.
-fn emit_json(report: &crate::ui::Report) {
-    use std::io::Write;
-    if let Ok(text) = serde_json::to_string(report) {
-        let mut out = std::io::stdout().lock();
-        let _ = writeln!(out, "{text}");
-        let _ = out.flush();
+    /// Run this parsed CLI: install the debug-log subscriber, dispatch, and
+    /// flush any collected warnings, on success and failure alike, so a failed
+    /// run still shows what it warned about before dying.
+    // The process entry point owns the parsed CLI for the whole run and drops
+    // it at the end; borrowing here would only push that ownership back into
+    // `main`.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn run(self) -> Result<()> {
+        // Again, and not only in `parsed`: a `Cli` built any other way (a test,
+        // an embedder) has had nothing installed for it yet, and the choice is
+        // idempotent.
+        self.global.color.install();
+        crate::ui::trace::Logs::new(self.global.verbose).install();
+        let ui = Ui::new(self.level());
+        let result = self.dispatch(&ui);
+        // Counted before the flush empties them, and reported after, so
+        // `--strict` fails *behind* the warnings that explain it rather than in
+        // front of them.
+        let warned = ui.warnings();
+        let outcome = result.and_then(|()| match self.global.strict && warned > 0 {
+            true => Err(StrictWarnings { count: warned }.into()),
+            false => Ok(()),
+        });
+        // Built while the diagnostics are still collected, and written before
+        // the flush, so the JSON object lands on stdout uninterleaved with the
+        // prose on stderr. Not at all for a command whose own document owns
+        // stdout: see [`Command::owns_stdout`].
+        if self.global.json && !self.command.as_ref().is_some_and(Command::owns_stdout) {
+            ui.summary(outcome.is_ok()).emit();
+        }
+        ui.flush();
+        outcome
     }
-}
 
-/// Dispatch to the matching subcommand. Each command owns its wiring in a
-/// [`Run`] impl; this only picks the variant (defaulting to `build`) and hands
-/// it the shared [`Cx`].
-fn dispatch(cli: &Cli, ui: &Ui) -> Result<()> {
-    let root = Root::enter(cli.global.root.as_deref())?;
-    let command = cli
-        .command
-        .clone()
-        .unwrap_or_else(|| Command::Build(BuildArgs::default()));
-    command.run(&Cx {
-        cli,
-        ui,
-        root: &root,
-    })
+    /// Dispatch to the matching subcommand. Each command owns its wiring in a
+    /// [`Run`] impl; this only picks the variant (defaulting to `build`) and
+    /// hands it the shared [`Cx`].
+    fn dispatch(&self, ui: &Ui) -> Result<()> {
+        let root = Root::enter(self.global.root.as_deref())?;
+        let command = self
+            .command
+            .clone()
+            .unwrap_or_else(|| Command::Build(BuildArgs::default()));
+        command.run(&Cx {
+            cli: self,
+            ui,
+            root: &root,
+        })
+    }
 }
 
 /// The shared context a subcommand runs against: the parsed CLI (for config +
@@ -684,6 +835,64 @@ mod tests {
         assert!(!owns(&["baudelaire", "check"]));
         assert!(!owns(&["baudelaire", "clean"]));
         assert!(!owns(&["baudelaire", "new", "posts/a"]));
+    }
+
+    /// The two counted flags between them name four levels, and `-qq` is the
+    /// one that could not be spelled at all while `--quiet` was a boolean.
+    #[test]
+    fn the_two_counted_flags_name_four_levels() {
+        use clap::Parser;
+        let level = |argv: &[&str]| Cli::parse_from(argv.iter().copied()).level();
+        assert_eq!(level(&["baudelaire", "build"]), Level::Default);
+        assert_eq!(level(&["baudelaire", "-v", "build"]), Level::Verbose);
+        assert_eq!(level(&["baudelaire", "-vv", "build"]), Level::Verbose);
+        assert_eq!(level(&["baudelaire", "-q", "build"]), Level::Quiet);
+        assert_eq!(level(&["baudelaire", "-qq", "build"]), Level::Silent);
+        assert_eq!(level(&["baudelaire", "-qqq", "build"]), Level::Silent);
+        // The two still refuse each other.
+        assert!(Cli::try_parse_from(["baudelaire", "-q", "-v", "build"]).is_err());
+    }
+
+    /// The flag is read off the raw arguments as well as parsed, so `--help`,
+    /// which clap writes and exits on, is coloured by it too. Both spellings,
+    /// because clap accepts both.
+    #[test]
+    fn a_colour_choice_is_read_before_clap_sees_it() {
+        assert_eq!(Color::declared(["baudelaire", "build"]), None);
+        assert_eq!(
+            Color::declared(["baudelaire", "--color=never", "build"]),
+            Some(Color::Never)
+        );
+        assert_eq!(
+            Color::declared(["baudelaire", "--color", "always", "build"]),
+            Some(Color::Always)
+        );
+        // The last one wins, as everywhere else.
+        assert_eq!(
+            Color::declared(["baudelaire", "--color=always", "--color=never"]),
+            Some(Color::Never)
+        );
+        // A value it cannot read is clap's to report, not this to guess at.
+        assert_eq!(Color::declared(["baudelaire", "--color=maybe"]), None);
+        assert_eq!(Color::declared(["baudelaire", "--colorful"]), None);
+    }
+
+    /// `--color` is what a run has to say when the environment has already
+    /// decided: `never` has to beat `CLICOLOR_FORCE`, which nothing else can.
+    ///
+    /// Installs process-global state, which is what makes it worth stating that
+    /// the suite runs one process per test (nextest). Everything that renders
+    /// colour in a test strips it before asserting, for the same reason.
+    #[test]
+    fn an_explicit_choice_overrules_the_environment() {
+        use anstream::ColorChoice;
+        Color::Never.install();
+        assert_eq!(ColorChoice::global(), ColorChoice::Never);
+        Color::Always.install();
+        assert_eq!(ColorChoice::global(), ColorChoice::Always);
+        // ..and `auto` hands the question back.
+        Color::Auto.install();
+        assert_eq!(ColorChoice::global(), ColorChoice::Auto);
     }
 
     /// A headless session: nobody to put the question to.

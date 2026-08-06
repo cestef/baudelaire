@@ -40,7 +40,7 @@ use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Severity};
 use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
-pub use fmt::{Bytes, Count, Dur, List, Paths, term_width, wrap};
+pub use fmt::{Bytes, Count, Dur, List, Paths, Wrap};
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;
 pub use markup::{Code, Markup, Styled, Text};
@@ -145,6 +145,19 @@ impl Report {
     /// change breaks it silently; a consumer that has always seen `schema` can
     /// refuse what it does not know.
     pub const SCHEMA: u32 = 1;
+
+    /// Write this report to stdout, the one thing that ever goes there.
+    ///
+    /// A serialization failure is swallowed rather than replacing the run's
+    /// real outcome: the report describes what happened, and losing the
+    /// description is not the same as the thing having failed.
+    pub fn emit(&self) {
+        if let Ok(text) = serde_json::to_string(self) {
+            let mut out = std::io::stdout().lock();
+            let _ = writeln!(out, "{text}");
+            let _ = out.flush();
+        }
+    }
 }
 
 /// One collected diagnostic, reduced to what a machine can act on: which class

@@ -88,10 +88,17 @@ impl Display for StyledCount<'_> {
     }
 }
 
-/// A byte count in binary units (`512 B`, `1.4 MB`): 1024-based with one
+/// A byte count in binary units (`512 B`, `1.4 MiB`): 1024-based with one
 /// decimal above the byte threshold. The single source of size formatting *and*
 /// of reading a size back in, so a budget is authored in the units the summary
 /// prints.
+///
+/// The units are labeled as what they are. The maths has always been 1024-based
+/// and stays so, because every configured budget was authored against it; what
+/// changed is the label, which said `KB` for 1024 bytes and so overstated a
+/// budget by 2.4% at kilobytes and 4.9% at megabytes. `kB`/`MB` are still
+/// *accepted* on the way in ([`Bytes::parse`]), where they have always meant the
+/// same thing, so no config has to be rewritten.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bytes(pub u64);
 
@@ -147,7 +154,7 @@ impl Bytes {
     // this produces shows one decimal anyway.
     #[allow(clippy::cast_precision_loss)]
     fn parts(self) -> (String, &'static str) {
-        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+        const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
         let mut size = self.0 as f64;
         let mut unit = 0;
         while size >= 1024.0 && unit < UNITS.len() - 1 {
@@ -253,58 +260,100 @@ pub(super) fn clock() -> String {
 /// the build breakdown), so they wrap and read the same way.
 const DOT: &str = " · ";
 
-/// The band [`term_width`] clamps a terminal's real width into: below 40
-/// columns wrapping stops helping, and past 200 a line is too long to scan back
-/// along. Outside a terminal there is no width to read, so a conventional 100
-/// stands in.
+/// The band [`Wrap`] clamps a terminal's real width into: below 40 columns
+/// wrapping stops helping, and past 200 a line is too long to scan back along.
+/// Outside a terminal there is no width to read, so a conventional 100 stands
+/// in.
 const MIN_WIDTH: usize = 40;
 const MAX_WIDTH: usize = 200;
 const NO_TERMINAL_WIDTH: usize = 100;
 
-/// The usable terminal width in columns, clamped to a sane band and falling back
-/// when the size is unavailable (piped output, no tty). The single width source
-/// for [`wrap`].
-pub fn term_width() -> usize {
-    console::Term::stdout()
-        .size_checked()
-        .map_or(NO_TERMINAL_WIDTH, |(_, cols)| {
-            usize::from(cols).clamp(MIN_WIDTH, MAX_WIDTH)
-        })
+/// A `·`-separated list laid out to the terminal: the watch list, the build
+/// breakdown. Every line after the first is indented to `indent` columns, so
+/// continuations align under the first item instead of running off-screen. A
+/// single item wider than the budget takes its own line rather than being split.
+///
+/// The width is the type's own business, measured once when the layout is made:
+/// a caller has a list and a column to hang it under, and nothing to say about
+/// how wide the terminal is.
+pub struct Wrap<'a> {
+    items: &'a [String],
+    indent: usize,
+    width: usize,
 }
 
-/// Lay out `·`-separated `items` so no line exceeds `width`, with every line
-/// after the first indented to `indent` columns, aligning continuations under
-/// the first item. Returns the ready-to-print value (embedded newlines and all),
-/// so a long watch list or build breakdown flows onto extra lines instead of
-/// running off-screen. A single item wider than the budget still takes its own
-/// line rather than being split.
-pub fn wrap(items: &[String], indent: usize, width: usize) -> String {
-    // Measure display columns, not bytes: the separator's middle dot is
-    // multi-byte, and an item may carry ANSI color (the build breakdown does),
-    // both of which a byte or char count would get wrong.
-    let sep = console::measure_text_width(DOT);
-    let mut lines: Vec<String> = Vec::new();
-    let mut line = String::new();
-    let mut col = indent;
-    for item in items {
-        let w = console::measure_text_width(item);
-        if line.is_empty() {
-            line.push_str(item);
-            col = indent + w;
-        } else if col + sep + w <= width {
-            line.push_str(DOT);
-            line.push_str(item);
-            col += sep + w;
-        } else {
-            lines.push(std::mem::take(&mut line));
-            line.push_str(item);
-            col = indent + w;
+impl<'a> Wrap<'a> {
+    /// Lay `items` out under `indent`, to the width of the stream they are
+    /// written to.
+    pub fn new(items: &'a [String], indent: usize) -> Self {
+        Self {
+            items,
+            indent,
+            width: Self::width(),
         }
     }
-    if !line.is_empty() {
-        lines.push(line);
+
+    /// The usable width in columns, clamped to a sane band and falling back
+    /// when the size is unavailable (piped output, no tty).
+    ///
+    /// Measured on **stderr**, which is where every line laid out here is
+    /// written. It used to measure `Term::stdout()`: a run whose stdout was
+    /// redirected (`--json`, or a tee'd log) read no size at all and wrapped
+    /// the dev server's banner to 100 columns on a terminal twice that wide,
+    /// while its stderr was sitting on the real one.
+    fn width() -> usize {
+        console::Term::stderr()
+            .size_checked()
+            .map_or(NO_TERMINAL_WIDTH, |(_, cols)| {
+                usize::from(cols).clamp(MIN_WIDTH, MAX_WIDTH)
+            })
     }
-    lines.join(&format!("\n{}", " ".repeat(indent)))
+
+    /// A layout at a stated width, so the tests below describe a terminal
+    /// rather than depend on the one they happen to run under.
+    #[cfg(test)]
+    fn at(items: &'a [String], indent: usize, width: usize) -> Self {
+        Self {
+            items,
+            indent,
+            width,
+        }
+    }
+}
+
+impl Display for Wrap<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Measure display columns, not bytes: the separator's middle dot is
+        // multi-byte, and an item may carry ANSI color (the build breakdown
+        // does), both of which a byte or char count would get wrong.
+        let sep = console::measure_text_width(DOT);
+        let mut lines: Vec<String> = Vec::new();
+        let mut line = String::new();
+        let mut col = self.indent;
+        for item in self.items {
+            let w = console::measure_text_width(item);
+            if line.is_empty() {
+                line.push_str(item);
+                col = self.indent + w;
+            } else if col + sep + w <= self.width {
+                line.push_str(DOT);
+                line.push_str(item);
+                col += sep + w;
+            } else {
+                lines.push(std::mem::take(&mut line));
+                line.push_str(item);
+                col = self.indent + w;
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+        write!(
+            f,
+            "{}",
+            lines.join(&format!("\n{}", " ".repeat(self.indent)))
+        )
+    }
 }
 
 #[cfg(test)]
@@ -315,9 +364,13 @@ mod tests {
         list.iter().copied().map(str::to_owned).collect()
     }
 
+    fn wrap(list: &[&str], indent: usize, width: usize) -> String {
+        Wrap::at(&items(list), indent, width).to_string()
+    }
+
     #[test]
     fn wrap_keeps_a_short_list_on_one_line() {
-        assert_eq!(wrap(&items(&["a", "b", "c"]), 2, 80), "a · b · c");
+        assert_eq!(wrap(&["a", "b", "c"], 2, 80), "a · b · c");
     }
 
     #[test]
@@ -325,7 +378,7 @@ mod tests {
         // indent 2: "aaa · bbb" ends at col 11; " · ccc" would reach 17 > 14, so
         // ccc starts a new line padded to the indent.
         assert_eq!(
-            wrap(&items(&["aaa", "bbb", "ccc", "ddd"]), 2, 14),
+            wrap(&["aaa", "bbb", "ccc", "ddd"], 2, 14),
             "aaa · bbb\n  ccc · ddd"
         );
     }
@@ -334,7 +387,7 @@ mod tests {
     fn wrap_gives_an_overlong_item_its_own_line() {
         // A single item wider than the budget is not split; it just sits alone.
         assert_eq!(
-            wrap(&items(&["short", "a-very-long-single-item"]), 0, 10),
+            wrap(&["short", "a-very-long-single-item"], 0, 10),
             "short\na-very-long-single-item"
         );
     }
@@ -343,7 +396,18 @@ mod tests {
     fn wrap_counts_the_multibyte_separator_by_columns() {
         // ` · ` is 3 columns but 4 bytes; two 4-char items plus a separator is
         // 11 columns, which fits a width of 11 exactly.
-        assert_eq!(wrap(&items(&["aaaa", "bbbb"]), 0, 11), "aaaa · bbbb");
+        assert_eq!(wrap(&["aaaa", "bbbb"], 0, 11), "aaaa · bbbb");
+    }
+
+    /// The width comes off stderr, the stream every wrapped line is written to.
+    /// Whatever the test terminal is, it stays inside the band.
+    #[test]
+    fn the_measured_width_stays_in_the_band() {
+        let width = Wrap::width();
+        assert!(
+            width == NO_TERMINAL_WIDTH || (MIN_WIDTH..=MAX_WIDTH).contains(&width),
+            "{width}"
+        );
     }
 
     #[test]
@@ -363,7 +427,17 @@ mod tests {
     #[test]
     fn bytes_scale_binary() {
         assert_eq!(Bytes(512).to_string(), "512 B");
-        assert_eq!(Bytes(1_468_006).to_string(), "1.4 MB");
+        assert_eq!(Bytes(1024).to_string(), "1.0 KiB");
+        assert_eq!(Bytes(1_468_006).to_string(), "1.4 MiB");
+    }
+
+    /// A printed size reads back in as itself: the label names the same unit
+    /// the scaling used, which is the whole point of relabeling them.
+    #[test]
+    fn a_printed_size_parses_back_to_itself() {
+        for size in [Bytes(0), Bytes(512), Bytes(51_200), Bytes(2 << 20)] {
+            assert_eq!(Bytes::parse(&size.to_string()), Some(size), "{size}");
+        }
     }
 
     /// A size reads back in the units it prints in, plus the spellings an

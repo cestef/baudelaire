@@ -2,8 +2,10 @@
 
 use clap::Args;
 
-use super::{BuildOverrides, Cx, Run, remote};
-use crate::error::Result;
+use super::remote::{Destination, PublishArgs};
+use super::{BuildOverrides, Cx, Run};
+use crate::config::AnnounceConfig;
+use crate::error::{AnnounceError, Result};
 
 /// Arguments for `baudelaire announce`.
 #[derive(Args, Debug, Clone)]
@@ -11,36 +13,27 @@ pub struct AnnounceArgs {
     #[command(flatten)]
     pub overrides: BuildOverrides,
 
-    /// Secret (app password / token) for the destination; `-` reads it from
-    /// stdin. Prefer stdin, the environment variable, or the interactive prompt:
-    /// a literal flag can leak into shell history.
-    // Spelled the same as `deploy`'s: one concept, one name. `--password` stays
-    // as an alias, since that is what the atproto side calls an app password.
-    #[arg(long, alias = "password")]
-    pub secret: Option<String>,
-    /// Skip the confirmation prompt.
-    #[arg(short = 'y', long)]
-    pub yes: bool,
-    /// Report what would change without writing to any destination.
-    #[arg(long)]
-    pub dry_run: bool,
+    #[command(flatten)]
+    pub publish: PublishArgs,
 }
 
-impl remote::Flags for AnnounceArgs {
-    fn dry_run(&self) -> bool {
-        self.dry_run
-    }
-    fn yes(&self) -> bool {
-        self.yes
-    }
-    fn secret(&self) -> Option<String> {
-        self.secret.clone()
-    }
+impl AnnounceArgs {
+    /// Where `announce` sends the site's metadata. Destructured for the same
+    /// reason `deploy`'s is: a new backend has to be answered for here or the
+    /// check refuses a config that names it.
+    pub(super) const DESTINATION: Destination = Destination {
+        named: |config| {
+            let AnnounceConfig { standard } = &config.announce;
+            standard.is_some()
+        },
+        unconfigured: || AnnounceError::Unconfigured.into(),
+        publish: crate::announce::Announce::run,
+    };
 }
 
 impl Run for AnnounceArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.configured(&self.overrides, "announcing")?;
-        remote::run(cx.ui, &config, self, crate::announce::run)
+        self.publish.send(cx.ui, &config, &Self::DESTINATION)
     }
 }

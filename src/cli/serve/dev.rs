@@ -42,8 +42,35 @@ pub(super) struct Dev<'a> {
     pub(super) rewatch: bool,
 }
 
-impl Dev<'_> {
-    pub(super) fn run(mut self) -> Result<()> {
+impl<'a> Dev<'a> {
+    /// Start a session: build once, serve `dist`, and (unless `--no-watch`)
+    /// watch for changes to rebuild and live-reload browsers.
+    ///
+    /// The session's own constructor, so the fields below stay private to it:
+    /// assembling them was a free function in the parent module, which is the
+    /// one place outside this file that had to know what a session is made of.
+    /// CLI flags (`--port`, `--bind`, `--open`, `--no-watch`) are already folded
+    /// into `config.serve` by `ServeArgs::apply`.
+    pub(super) fn start(
+        ui: &'a Ui,
+        config: Config,
+        root: &'a Root,
+        config_path: PathBuf,
+        reload: impl FnMut() -> Result<Config> + 'a,
+    ) -> Result<()> {
+        Self {
+            config,
+            ui,
+            root,
+            config_path,
+            reload: Box::new(reload),
+            tracked: Vec::new(),
+            rewatch: false,
+        }
+        .run()
+    }
+
+    fn run(mut self) -> Result<()> {
         let requested = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&requested).map_err(|e| ServeError::bind(&requested, e))?;
         // What was bound, not what was asked for: `port 0` means "any free
@@ -95,13 +122,10 @@ impl Dev<'_> {
                 // Wrap the watched roots to the terminal, aligned under the
                 // arrow's value column, so a long list flows onto extra lines
                 // instead of running off-screen.
-                true => crate::ui::wrap(
-                    &self.watched(),
-                    crate::ui::ARROW_VALUE_COLUMN,
-                    crate::ui::term_width(),
-                )
-                .dimmed()
-                .to_string(),
+                true => crate::ui::Wrap::new(&self.watched(), crate::ui::ARROW_VALUE_COLUMN)
+                    .to_string()
+                    .dimmed()
+                    .to_string(),
                 false => "off (--no-watch)".dimmed().to_string(),
             },
         );

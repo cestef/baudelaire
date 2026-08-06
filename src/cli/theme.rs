@@ -290,7 +290,7 @@ impl ThemeAddArgs {
             cx.ui.detail(about);
         }
         cx.ui.section("next");
-        cx.ui.arrow("config.kdl", format!("theme \"{at}\"").cyan());
+        cx.ui.arrow(Config::FILE, format!("theme \"{at}\"").cyan());
         cx.ui.item(format_args!(
             "then {}; the theme's README says what it reads from a page",
             "baudelaire build".cyan()
@@ -378,7 +378,7 @@ impl Ships {
 
     /// A theme installed in the project, read off the disk.
     fn at(dir: &Path) -> Self {
-        let files: Vec<PathBuf> = crate::theme::present(dir).into_iter().collect();
+        let files: Vec<PathBuf> = crate::theme::Lock::present(dir).into_iter().collect();
         let defaults = std::fs::read_to_string(dir.join(crate::theme::Theme::CONFIG)).ok();
         Self::new(&files, defaults)
     }
@@ -474,10 +474,10 @@ impl ThemeUpdateArgs {
     }
 
     fn remove(&self, cx: &Cx, says: &Says) -> Result<()> {
-        use crate::theme::{State, uninstall};
+        use crate::theme::{Lock, State};
 
         let this = self.theme.vendored(cx, says.theme(), &self.theme.name)?;
-        let tracked = uninstall(&this.dir, self.force)?;
+        let tracked = Lock::uninstall(&this.dir, self.force)?;
         cx.ui.done(format_args!(
             "removed {} from {}",
             this.name.cyan(),
@@ -503,7 +503,7 @@ impl ThemeUpdateArgs {
         );
         cx.ui.section("next");
         cx.ui.arrow(
-            "config.kdl",
+            Config::FILE,
             format_args!(
                 "drop the {} line",
                 format!("theme \"{}\"", this.at()).cyan()

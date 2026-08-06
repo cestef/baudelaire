@@ -9,40 +9,13 @@ mod open;
 mod route;
 mod watch;
 
-use std::path::PathBuf;
-
 use clap::Args;
 
-use crate::cli::{BuildOverrides, Cx, Overrides, Root, Run, Toggle, group};
+use crate::cli::{BuildOverrides, Cx, Overrides, Run, Toggle, group};
 use crate::config::Config;
 use crate::error::Result;
-use crate::ui::Ui;
 
 use dev::Dev;
-
-/// Run the dev server: build once, serve `dist`, and (unless `--no-watch`)
-/// watch for changes to rebuild and live-reload browsers.
-///
-/// CLI flags (`--port`, `--bind`, `--open`, `--no-watch`) are already folded
-/// into `config.serve` by [`ServeArgs::apply`].
-pub(crate) fn run<'a>(
-    ui: &'a Ui,
-    config: Config,
-    root: &'a Root,
-    config_path: PathBuf,
-    reload: impl FnMut() -> Result<Config> + 'a,
-) -> Result<()> {
-    Dev {
-        config,
-        ui,
-        root,
-        config_path,
-        reload: Box::new(reload),
-        tracked: Vec::new(),
-        rewatch: false,
-    }
-    .run()
-}
 
 /// Arguments for `baudelaire serve`.
 #[derive(Args, Debug, Clone)]
@@ -100,7 +73,7 @@ impl Run for ServeArgs {
             self.apply(&mut config);
             Ok(config)
         };
-        crate::cli::serve::run(cx.ui, config, cx.root, cx.cli.global.config.clone(), reload)
+        Dev::start(cx.ui, config, cx.root, cx.cli.global.config.clone(), reload)
     }
 }
 
