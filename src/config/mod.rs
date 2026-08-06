@@ -207,18 +207,33 @@ impl Config {
     /// changed into the project (a test, an embedding) resolves correctly. It is
     /// recorded on the returned config, so the theme the engine later resolves
     /// is the one resolved here.
-    pub fn load(text: &str, root: &std::path::Path) -> Result<Self> {
-        let config = Self {
+    ///
+    /// `theme` is the `--theme` override, and it is a parameter rather than an
+    /// [`crate::cli::Overrides`] field because of where in this function it has
+    /// to land: between learning which theme to fetch and reading its defaults.
+    /// Applied to the result instead, it would name a theme whose `theme.kdl`
+    /// floor was never read. It is re-applied after the second pass for the same
+    /// reason it cannot be applied only there: that pass re-reads the site's own
+    /// text, which names the theme the override is replacing, or names none.
+    pub fn load(text: &str, root: &std::path::Path, theme: Option<&str>) -> Result<Self> {
+        let requested = |config: Self| match theme {
+            Some(theme) => Self {
+                theme: Some(theme.to_owned()),
+                ..config
+            },
+            None => config,
+        };
+        let config = requested(Self {
             root: root.to_path_buf(),
             ..Self::parse(text)?
-        };
-        let Some(theme) = crate::theme::Theme::of(&config)? else {
+        });
+        let Some(resolved) = crate::theme::Theme::of(&config)? else {
             return Ok(config);
         };
-        let Some(defaults) = theme.config() else {
+        let Some(defaults) = resolved.config() else {
             return Ok(config);
         };
-        Self::parse_over(Self::floor(&defaults, config.root)?, text)
+        Self::parse_over(Self::floor(&defaults, config.root)?, text).map(requested)
     }
 
     /// A theme's `theme.kdl`, read as the floor the site's own config stands on.

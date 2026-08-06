@@ -14,6 +14,20 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`--theme <theme>`**: build with a theme the config does not name, or with a
+  different one:
+
+  ```sh
+  baudelaire build --theme themes/albatros
+  baudelaire build --theme @preview/plume:1.0.0
+  ```
+
+  Global, beside `--profile`, and takes what `theme` in the config takes: a
+  directory inside the project, or a package. A profile still cannot name a
+  theme, and this is the reason it exists: the theme's `theme.kdl` supplies the
+  floor the site's own keys are layered over, so it has to be known while the
+  config is being read, and a profile is overlaid after that.
+
 - **`assets { sourcemap }`**: source maps, so a minified bundle reads in
   devtools as the files it was built from. One word says what becomes of the
   map, per kind of asset:

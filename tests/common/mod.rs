@@ -82,7 +82,7 @@ impl Site {
     /// config rather than panic on it (the scenario runner, whose whole job is
     /// to survive one broken case and report the rest).
     pub fn try_config(&self) -> baudelaire::Result<Config> {
-        let mut cfg = Config::load(&self.read("config.kdl"), &self.root)?;
+        let mut cfg = Config::load(&self.read("config.kdl"), &self.root, None)?;
         cfg.root.clone_from(&self.root);
         cfg.paths.content = self.root.join(&cfg.paths.content);
         cfg.paths.dist = self.root.join(&cfg.paths.dist);

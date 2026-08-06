@@ -15,10 +15,11 @@
 #
 #   - A theme has to sit inside the project root of the site using it, so the
 #     demo is built from the repository root and names `themes/<name>`.
-#   - The theme cannot be a `profiles { }` entry: it is resolved when the config
-#     loads, before any profile is overlaid, so a theme named in a profile would
-#     supply templates and assets but none of its `theme.kdl` defaults. Hence the
-#     one appended line rather than a near-identical config file per theme.
+#   - The theme is picked with `--theme`, not with a `profiles { }` entry: it is
+#     resolved when the config loads, before any profile is overlaid, so a theme
+#     named in a profile would supply templates and assets but none of its
+#     `theme.kdl` defaults. This loop used to copy each demo config and append a
+#     `theme` line to the copy for that reason.
 #
 # It must run *after* the docs site is built: that site sets `prune`, which
 # deletes everything under its `dist` that its own build did not produce.
@@ -37,16 +38,12 @@ for pair in "albatros blog" "spleen blog" "phares docs" "paysage folio"; do
     theme="$1"
     demo="$2"
 
-    config="target/previews/$theme.kdl"
-    mkdir -p "$(dirname "$config")"
-    cp "themes/demo/$demo/config.kdl" "$config"
-    printf '\ntheme "themes/%s"\n' "$theme" >>"$config"
-
     # Unquoted on purpose: BAUDELAIRE carries its own arguments
     # (`cargo run -q --`), and quoting it would look for one such binary.
     # shellcheck disable=SC2086
     $BAUDELAIRE build \
-        --config "$config" \
+        --config "themes/demo/$demo/config.kdl" \
+        --theme "themes/$theme" \
         --out "$PREVIEW_OUT/$theme" \
         --base-url "$PREVIEW_URL/$theme"
 done

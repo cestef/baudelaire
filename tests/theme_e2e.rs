@@ -94,13 +94,50 @@ fn assets_and_static_files_layer_with_the_project_on_top() {
 #[test]
 fn theme_config_supplies_defaults_the_site_overrides() {
     let site = site();
-    let config = Config::load(&site.read("config.kdl"), &site.root).expect("config");
+    let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
 
     // Stated by the site: the site wins.
     assert_eq!(config.site.as_deref(), Some("T"));
     // Stated only by the theme: inherited, nested keys included.
     assert_eq!(config.lang, "fr");
     assert!(!config.html.pretty, "nested theme default inherited");
+}
+
+/// `--theme` replaces the theme the config names, and it replaces it early
+/// enough to matter: the `theme.kdl` that supplies the defaults has to be the
+/// overriding theme's. Applying the name to a config already loaded would leave
+/// the site standing on the *other* theme's floor.
+#[test]
+fn the_theme_override_supplies_its_own_defaults() {
+    let site = site();
+    site.write(
+        "themes/other/theme.kdl",
+        "lang \"de\"\nhtml {\n  pretty #true\n}\n",
+    );
+
+    let config =
+        Config::load(&site.read("config.kdl"), &site.root, Some("themes/other")).expect("config");
+
+    assert_eq!(config.theme.as_deref(), Some("themes/other"));
+    // The overriding theme's floor, not `themes/plume`'s `fr`/`#false`.
+    assert_eq!(config.lang, "de");
+    assert!(config.html.pretty);
+    // The site's own keys still win over it.
+    assert_eq!(config.site.as_deref(), Some("T"));
+}
+
+/// The same when the config names no theme at all, which is the case the
+/// previews build has: one demo config, one theme named per run.
+#[test]
+fn the_theme_override_applies_to_a_config_naming_none() {
+    let site = Site::with("site \"T\"\npaths { content \"content\"; dist \"public\" }\n");
+    site.write("themes/plume/theme.kdl", "lang \"fr\"\n");
+
+    let config =
+        Config::load(&site.read("config.kdl"), &site.root, Some("themes/plume")).expect("config");
+
+    assert_eq!(config.theme.as_deref(), Some("themes/plume"));
+    assert_eq!(config.lang, "fr");
 }
 
 /// ...and a floor only for what the site *builds*. The sections that decide what
@@ -125,7 +162,7 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
         let site = site();
         site.write("themes/plume/theme.kdl", section);
 
-        let err = Config::load(&site.read("config.kdl"), &site.root).expect_err(section);
+        let err = Config::load(&site.read("config.kdl"), &site.root, None).expect_err(section);
 
         assert_eq!(
             err.code().map(|code| code.to_string()).as_deref(),
@@ -140,7 +177,7 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
 #[test]
 fn a_missing_theme_is_a_precise_error() {
     let site = Site::with("site \"T\"\ntheme \"themes/absent\"\n");
-    let err = Config::load(&site.read("config.kdl"), &site.root).expect_err("missing theme");
+    let err = Config::load(&site.read("config.kdl"), &site.root, None).expect_err("missing theme");
     assert!(format!("{err}").contains("themes/absent"), "{err}");
 }
 

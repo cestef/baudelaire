@@ -49,6 +49,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`-c, --config <path>`], [`config.kdl`], [Config file to read.],
   [`-r, --root <dir>`], [--], [Change into `dir` first, so relative paths resolve under it.],
   [`-p, --profile <name>`], [--], [Apply a named #link("../configure/profiles.typ")[profile].],
+  [`--theme <theme>`], [--], [Build with this #link("../start/themes.typ")[theme], whatever `theme` in the config says. A profile cannot name one: the theme's own defaults are read before profiles are overlaid.],
   [`-v, --verbose`], [--], [Per-page progress plus debug logs (`-vv` for trace).],
   [`-q, --quiet`], [--], [Less output; `-qq` leaves only diagnostics and the exit code. Conflicts with `-v`.],
   [`--color <when>`], [`auto`], [`auto`, `always` or `never`. Beats every environment signal, including `NO_COLOR` and `CLICOLOR_FORCE`.],

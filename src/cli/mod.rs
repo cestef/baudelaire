@@ -202,6 +202,16 @@ pub struct GlobalArgs {
     #[arg(short, long, global = true, help_heading = group::PROJECT)]
     pub profile: Option<String>,
 
+    /// Build with this theme, whatever `theme` in the config says.
+    ///
+    /// Here beside `--profile` and not in [`CommonOverrides`] because it does
+    /// not edit a config that has been read: a theme supplies the `theme.kdl`
+    /// floor that the site's own keys are layered over, so it has to be known
+    /// during the load rather than applied to its result. The same reason a
+    /// theme cannot be named in a `profiles { }` entry.
+    #[arg(long, global = true, value_name = "THEME", help_heading = group::PROJECT)]
+    pub theme: Option<String>,
+
     /// Verbose output: per-page progress plus debug logs (-vv for trace logs).
     #[arg(short, long, global = true, action = clap::ArgAction::Count, help_heading = group::LOGGING)]
     pub verbose: u8,
@@ -387,7 +397,8 @@ impl Cli {
         };
         // `Root::enter` has already made the project directory the cwd, so a
         // directory-theme resolves against it.
-        let mut config = Config::load(&text, Path::new(".")).map_err(named)?;
+        let mut config =
+            Config::load(&text, Path::new("."), self.global.theme.as_deref()).map_err(named)?;
         if let Some(profile) = &self.global.profile {
             config = config.with_profile(profile).map_err(named)?;
         }
