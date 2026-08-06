@@ -3,7 +3,7 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::ui::{Code, Text};
+use crate::ui::{Bytes, Code, Text};
 
 /// A configured theme that could not be resolved. Fatal: the site's templates
 /// and assets are expected to come from it, so continuing would build a
@@ -17,12 +17,20 @@ pub enum ThemeError {
     )]
     Spec { spec: String, why: String },
 
-    #[error("theme {} could not be obtained: {}", Code(.spec), Text(.why))]
+    /// The package store could not produce the package. Its own
+    /// [`PackageError`](typst::diag::PackageError) is kept as the source: it
+    /// tells "no such package" from "no such version" from "the download
+    /// failed", which a flattened message reduces to one sentence.
+    #[error("theme {} could not be obtained", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unavailable),
         help("check the name and version, and that the machine can reach the package registry")
     )]
-    Unavailable { spec: String, why: String },
+    Unavailable {
+        spec: String,
+        #[source]
+        source: typst::diag::PackageError,
+    },
 
     #[error("theme directory {} is outside the project", Code(.path))]
     #[diagnostic(
@@ -38,7 +46,8 @@ pub enum ThemeError {
     #[diagnostic(
         code(baudelaire::theme::missing),
         help(
-            "create it, `baudelaire theme add <name>` to write one of the shipped              themes there, or name a published theme as `@namespace/name:version`"
+            "create it, `baudelaire theme add <name>` to write one of the shipped themes \
+             there, or name a published theme as `@namespace/name:version`"
         )
     )]
     Missing { path: String },
@@ -51,23 +60,32 @@ pub enum ThemeError {
     #[diagnostic(
         code(baudelaire::theme::uninstalled),
         help(
-            "`baudelaire theme add <name>` writes one there; a theme you wrote or copied              in yourself is yours to move and delete"
+            "`baudelaire theme add <name>` writes one there; a theme you wrote or copied \
+             in yourself is yours to move and delete"
         )
     )]
     Uninstalled { path: String },
 
-    #[error("the theme record at {} could not be written: {}", Code(.path), Text(.why))]
+    /// The record beside a theme's files could not be serialized. The
+    /// serializer's own error is kept as the source, so the offending field is
+    /// still named.
+    #[error("the theme record at {} could not be written", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::lock),
         help("it records which files are baudelaire's, so `theme update` can keep yours")
     )]
-    Lock { path: String, why: String },
+    Lock {
+        path: String,
+        #[source]
+        source: serde_json::Error,
+    },
 
     #[error("{} holds no files, so it is not a theme", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::empty),
         help(
-            "a theme is `templates {{ }}`, `assets {{ }}`, `static {{ }}` and a `theme.kdl`,              in a directory of its own"
+            "a theme is `templates {{ }}`, `assets {{ }}`, `static {{ }}` and a `theme.kdl`, \
+             in a directory of its own"
         )
     )]
     Empty { path: String },
@@ -79,19 +97,49 @@ pub enum ThemeError {
     )]
     Unnamed { path: String },
 
-    #[error("{} could not be fetched: {}", Code(.url), Text(.why))]
+    /// The download itself failed. Boxed because the two halves of one fetch
+    /// fail with different types (the client's error for the request, an
+    /// `io::Error` for the body), and both are the answer.
+    #[error("{} could not be fetched", Code(.url))]
     #[diagnostic(
         code(baudelaire::theme::fetch),
         help("this is the one theme command that needs the network; nothing else here does")
     )]
-    Fetch { url: String, why: String },
+    Fetch {
+        url: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
-    #[error("the archive at {} could not be read: {}", Code(.url), Text(.why))]
+    /// The archive could not be decompressed or walked. Boxed for the same
+    /// reason: the tar branch fails with an `io::Error`, the zip branch with
+    /// the zip reader's own error.
+    #[error("the archive at {} could not be read", Code(.url))]
     #[diagnostic(
         code(baudelaire::theme::unpack),
         help("`.tar.gz`, `.tgz` and `.zip` are what this reads; a forge's source download is one")
     )]
-    Unpack { url: String, why: String },
+    Unpack {
+        url: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    /// The download ran past the ceiling a theme may weigh.
+    ///
+    /// Refused rather than truncated. The reader used to stop at the limit and
+    /// hand back what it had, so an oversize (or endless) URL installed as a
+    /// theme missing whatever fell off the end: a green `theme add` and a
+    /// directory of half-written files.
+    #[error("the archive at {} is larger than the {} a theme may weigh", Code(.url), Code(Bytes(*limit)))]
+    #[diagnostic(
+        code(baudelaire::theme::oversize),
+        help(
+            "nothing was written; a theme is templates, assets and a `theme.kdl`, and the \
+             shipped ones weigh about 60 KiB each"
+        )
+    )]
+    Oversize { url: String, limit: u64 },
 
     #[error("the archive at {} names a file outside itself: {}", Code(.url), Code(.entry))]
     #[diagnostic(
@@ -101,26 +149,6 @@ pub enum ThemeError {
         )
     )]
     Escapes { url: String, entry: String },
-
-    #[error("{} could not be cloned: {}", Code(.url), Text(.why))]
-    #[diagnostic(
-        code(baudelaire::theme::clone),
-        help(
-            "check the URL and that this machine may reach it; a private repository needs              credentials this does not have, and a forge's `.tar.gz` needs none"
-        )
-    )]
-    Clone { url: String, why: String },
-
-    #[error("{} has no ref named {}: {}", Code(.url), Code(.name), Text(.why))]
-    #[diagnostic(
-        code(baudelaire::theme::reference),
-        help("a branch or a tag, written after `#`; a bare commit is not one this can clone")
-    )]
-    Reference {
-        url: String,
-        name: String,
-        why: String,
-    },
 
     /// A theme's `theme.kdl` naming a section that is not a theme's to name.
     ///
@@ -148,7 +176,9 @@ pub enum ThemeError {
     #[diagnostic(
         code(baudelaire::theme::unsupported),
         help(
-            "a theme comes from a name `baudelaire theme list` prints, or from a spelling              this build recognises; a copy whose record names a source this baudelaire              does not have was written by a newer one"
+            "a theme comes from a name `baudelaire theme list` prints, or from a spelling \
+             this build recognises; a copy whose record names a source this baudelaire \
+             does not have was written by a newer one"
         )
     )]
     Unsupported { spec: String },
@@ -170,20 +200,30 @@ impl ThemeError {
         Self::Unsupported { spec }
     }
 
-    /// The transport's own message, kept as text: it is a foreign string, and
-    /// what it says about a redirect or a TLS failure is the answer.
-    pub fn fetch(url: &str, why: impl std::fmt::Display) -> Self {
+    /// The transport's own error, kept whole: what it says about a redirect or
+    /// a TLS failure is the answer, and it is a different type for the request
+    /// and for the body.
+    pub fn fetch(url: &str, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Fetch {
             url: url.to_owned(),
-            why: why.to_string(),
+            source: Box::new(source),
         }
     }
 
-    /// The decompressor's own message, for the same reason.
-    pub fn unpack(url: &str, why: impl std::fmt::Display) -> Self {
+    /// The decompressor's own error, for the same reason.
+    pub fn unpack(url: &str, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Unpack {
             url: url.to_owned(),
-            why: why.to_string(),
+            source: Box::new(source),
+        }
+    }
+
+    /// The download stopped at the ceiling, so what arrived is a prefix of a
+    /// theme and not a theme.
+    pub fn oversize(url: &str, limit: u64) -> Self {
+        Self::Oversize {
+            url: url.to_owned(),
+            limit,
         }
     }
 
@@ -201,23 +241,6 @@ impl ThemeError {
         Self::Escapes {
             url: url.to_owned(),
             entry: entry.to_owned(),
-        }
-    }
-
-    /// The client's own message: what it says about a host, a redirect or a
-    /// missing repository is the answer.
-    pub fn cloning(url: &str, why: impl std::fmt::Display) -> Self {
-        Self::Clone {
-            url: url.to_owned(),
-            why: why.to_string(),
-        }
-    }
-
-    pub fn reference(url: &str, name: &str, why: impl std::fmt::Display) -> Self {
-        Self::Reference {
-            url: url.to_owned(),
-            name: name.to_owned(),
-            why: why.to_string(),
         }
     }
 
@@ -239,17 +262,17 @@ impl ThemeError {
         }
     }
 
-    /// The serializer's own message, kept as text.
-    pub fn lock(path: impl std::fmt::Display, why: impl std::fmt::Display) -> Self {
+    /// The serializer's own error, kept whole.
+    pub fn lock(path: impl std::fmt::Display, source: serde_json::Error) -> Self {
         Self::Lock {
             path: path.to_string(),
-            why: why.to_string(),
+            source,
         }
     }
 
-    /// The parser's own message, kept as text: naming typst's error type here
-    /// would put the compiler's package API in this crate's error API for one
-    /// string.
+    /// The one place a `why: String` is right rather than a `#[source]`:
+    /// `PackageSpec::from_str` fails with an `EcoString`, so there is no error
+    /// to keep. The text *is* the parser's whole answer.
     pub fn spec(spec: &str, why: impl std::fmt::Display) -> Self {
         Self::Spec {
             spec: spec.to_owned(),
@@ -257,11 +280,13 @@ impl ThemeError {
         }
     }
 
-    /// The package store's own message, kept as text for the same reason.
-    pub fn unavailable(spec: &str, why: impl std::fmt::Display) -> Self {
+    /// The package store's own error, kept whole: it is a real error type, and
+    /// it tells a missing package from a missing version from a failed
+    /// download.
+    pub fn unavailable(spec: &str, source: typst::diag::PackageError) -> Self {
         Self::Unavailable {
             spec: spec.to_owned(),
-            why: why.to_string(),
+            source,
         }
     }
 

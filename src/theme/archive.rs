@@ -32,7 +32,7 @@ impl Archive {
     /// that fetch a repository.
     const SUFFIXES: [&'static str; 3] = [".tar.gz", ".tgz", ".zip"];
 
-    /// What a theme may weigh, uncompressed and in total.
+    /// What a theme may weigh, compressed and in total.
     ///
     /// A ceiling, not a guess: this reads a remote stream into memory, and
     /// without a limit a hostile (or merely wrong) URL decides how much of it
@@ -60,6 +60,9 @@ impl Archive {
     }
 
     /// Fetch the bytes at `url`.
+    ///
+    /// One byte past the ceiling is read on purpose, so [`Archive::whole`] can
+    /// tell a theme that exactly fills it from one that ran over.
     fn download(url: &str) -> Result<Vec<u8>> {
         let mut body = Http::agent("fetching a theme", Status::Fatal)
             .get(url)
@@ -67,11 +70,26 @@ impl Archive {
             .map_err(|why| ThemeError::fetch(url, why))?
             .into_body()
             .into_reader()
-            .take(Self::LIMIT);
+            .take(Self::LIMIT + 1);
         let mut bytes = Vec::new();
         body.read_to_end(&mut bytes)
             .map_err(|why| ThemeError::fetch(url, why))?;
-        Ok(bytes)
+        Self::whole(url, bytes)
+    }
+
+    /// The downloaded bytes, unless the read ran past [`Archive::LIMIT`].
+    ///
+    /// The ceiling used to be a `take`, and a `take` is a truncation: an
+    /// oversize (or endless) URL handed back its first 64 MiB, which unpacked
+    /// as far as it went and installed as a theme with whatever fell off the
+    /// end simply absent. A prefix of an archive is not a smaller theme, so
+    /// hitting the ceiling is a failure that names it rather than a silent
+    /// shortening.
+    fn whole(url: &str, bytes: Vec<u8>) -> Result<Vec<u8>> {
+        match u64::try_from(bytes.len()).is_ok_and(|read| read <= Self::LIMIT) {
+            true => Ok(bytes),
+            false => Err(ThemeError::oversize(url, Self::LIMIT).into()),
+        }
     }
 
     /// The files inside, by the archive's own kind.
@@ -355,6 +373,23 @@ mod tests {
         assert!(Archive::names("https://x.dev/d.tar.gz", Some("/etc".to_owned())).is_err());
         assert!(Archive::names("https://x.dev/...tar.gz", None).is_err());
         assert!(Archive::names("https://x.dev/.tar.gz", None).is_err());
+    }
+
+    /// A download that ran past the ceiling is refused, not shortened. The
+    /// reader used to `take` the limit, so an oversize URL installed as a theme
+    /// with whatever fell off the end simply missing.
+    #[test]
+    fn an_archive_past_the_ceiling_is_refused_rather_than_truncated() {
+        const URL: &str = "https://x.dev/t.tar.gz";
+        // Exactly the ceiling is a theme; one byte more is not. The reader
+        // takes `LIMIT + 1`, so this is the pair the guard has to separate.
+        let limit = usize::try_from(Archive::LIMIT).expect("64 MiB fits a usize");
+        assert!(Archive::whole(URL, vec![0; 16]).is_ok());
+        assert!(Archive::whole(URL, vec![0; limit]).is_ok());
+        assert!(matches!(
+            Archive::whole(URL, vec![0; limit + 1]),
+            Err(BaudelaireErrorKind::Theme(ThemeError::Oversize { .. }))
+        ));
     }
 
     fn entries(paths: &[&str]) -> BTreeMap<PathBuf, Vec<u8>> {

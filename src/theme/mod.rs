@@ -46,7 +46,7 @@ mod source;
 #[cfg(feature = "themes")]
 pub use bundled::{BUNDLED, Bundled};
 #[cfg(feature = "themes")]
-pub use install::{Lock, State, Tracked, present, uninstall};
+pub use install::{Lock, State, Tracked};
 #[cfg(feature = "themes")]
 pub use source::{Fetched, Fetching, Origin, Source};
 

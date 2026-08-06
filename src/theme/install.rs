@@ -128,6 +128,69 @@ impl Lock {
     fn claims(&self, rel: &Path) -> bool {
         self.files.contains_key(&rel.to_string_lossy().into_owned())
     }
+
+    /// Take an installed copy back off, and report what each of its files was.
+    ///
+    /// Files still ours go; anything you edited stays unless `force`, and so
+    /// does anything that was never ours, at any force: taking our copy off is
+    /// no licence to delete a file we did not write. The record goes only when
+    /// nothing it tracks is left, so a `remove` that kept your edits can still
+    /// be finished with `--force` later. The directory itself goes once it is
+    /// empty.
+    ///
+    /// Nothing is fetched: what a copy is, is what its own record says it is,
+    /// so removing a theme never reaches for the network.
+    pub fn uninstall(dir: &Path, force: bool) -> Result<Vec<Tracked>> {
+        let Some(lock) = Self::read(dir) else {
+            return Err(ThemeError::not_installed(&dir.display().to_string()).into());
+        };
+        let tracked = lock.state(dir);
+        let mut kept = false;
+        for file in &tracked {
+            let remove = match file.state {
+                State::Pristine => true,
+                State::Edited => force,
+                State::Gone | State::Added | State::Yours => false,
+            };
+            match remove {
+                true => crate::fs::remove_file(dir.join(&file.rel))?,
+                false => kept |= file.state == State::Edited,
+            }
+        }
+        if !kept {
+            crate::fs::remove_file(dir.join(Self::FILE))?;
+            Self::prune(dir);
+        }
+        Ok(tracked)
+    }
+
+    /// Drop the directories an uninstall emptied. [`crate::fs::Walk`] lists them
+    /// children before parents, which is the order they can go in; one that
+    /// still holds a file of yours simply will not, and that is the answer.
+    fn prune(dir: &Path) {
+        let Ok(tree) = crate::fs::Walk::new(dir).tree() else {
+            return;
+        };
+        for path in tree.dirs.iter().chain([&dir.to_path_buf()]) {
+            let _ = std::fs::remove_dir(path);
+        }
+    }
+
+    /// The files an installed copy holds, whatever its record claims: what a
+    /// report on a theme this binary cannot fetch has to read from instead.
+    pub fn present(dir: &Path) -> BTreeSet<PathBuf> {
+        crate::fs::Walk::new(dir)
+            .tree()
+            .map(|tree| {
+                tree.files
+                    .iter()
+                    .filter_map(|path| path.strip_prefix(dir).ok())
+                    .filter(|rel| rel != &Path::new(Self::FILE))
+                    .map(Path::to_path_buf)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 impl Fetched {
@@ -280,71 +343,9 @@ impl Fetched {
     }
 }
 
-/// Take an installed copy back off, and report what each of its files was.
-///
-/// Files still ours go; anything you edited stays unless `force`, and so does
-/// anything that was never ours, at any force: taking our copy off is no licence
-/// to delete a file we did not write. The record goes only when nothing it
-/// tracks is left, so a `remove` that kept your edits can still be finished with
-/// `--force` later. The directory itself goes once it is empty.
-///
-/// Nothing is fetched: what a copy is, is what its own record says it is, so
-/// removing a theme never reaches for the network.
-pub fn uninstall(dir: &Path, force: bool) -> Result<Vec<Tracked>> {
-    let Some(lock) = Lock::read(dir) else {
-        return Err(ThemeError::not_installed(&dir.display().to_string()).into());
-    };
-    let tracked = lock.state(dir);
-    let mut kept = false;
-    for file in &tracked {
-        let remove = match file.state {
-            State::Pristine => true,
-            State::Edited => force,
-            State::Gone | State::Added | State::Yours => false,
-        };
-        match remove {
-            true => crate::fs::remove_file(dir.join(&file.rel))?,
-            false => kept |= file.state == State::Edited,
-        }
-    }
-    if !kept {
-        crate::fs::remove_file(dir.join(Lock::FILE))?;
-        prune(dir);
-    }
-    Ok(tracked)
-}
-
-/// Drop the directories an uninstall emptied. [`crate::fs::Walk`] lists them
-/// children before parents, which is the order they can go in; one that still
-/// holds a file of yours simply will not, and that is the answer.
-fn prune(dir: &Path) {
-    let Ok(tree) = crate::fs::Walk::new(dir).tree() else {
-        return;
-    };
-    for path in tree.dirs.iter().chain([&dir.to_path_buf()]) {
-        let _ = std::fs::remove_dir(path);
-    }
-}
-
-/// The files an installed copy holds, whatever its record claims: what a report
-/// on a theme this binary cannot fetch has to read from instead.
-pub fn present(dir: &Path) -> BTreeSet<PathBuf> {
-    crate::fs::Walk::new(dir)
-        .tree()
-        .map(|tree| {
-            tree.files
-                .iter()
-                .filter_map(|path| path.strip_prefix(dir).ok())
-                .filter(|rel| rel != &Path::new(Lock::FILE))
-                .map(Path::to_path_buf)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Lock, State, uninstall};
+    use super::{Lock, State};
     use crate::theme::Bundled;
 
     /// A shipped theme, as any source hands one over: the fixture every case
@@ -402,7 +403,7 @@ mod tests {
             "a found file is the author's, not a file this version adds"
         );
 
-        uninstall(&dir, true).expect("remove");
+        Lock::uninstall(&dir, true).expect("remove");
         assert_eq!(std::fs::read(&style).expect("read"), MINE);
     }
 
