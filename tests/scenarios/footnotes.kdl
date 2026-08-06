@@ -232,7 +232,7 @@ scenario "a name no element can carry is refused where it is written" {
   }
   expect {
     fails {
-      code "baudelaire::config::unknown_value"
+      code "baudelaire::config::not_an_element"
     }
   }
 }

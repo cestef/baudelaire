@@ -2,7 +2,7 @@
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::{Choice, Path, Text};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
@@ -59,6 +59,8 @@ impl Default for StandaloneConfig {
 /// The `standalone { file ..; entry ..; router .. }` block. Its presence
 /// enables the single-file export; the rest keep their defaults unless named.
 impl Section for StandaloneConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "file",
@@ -83,9 +85,4 @@ impl Section for StandaloneConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

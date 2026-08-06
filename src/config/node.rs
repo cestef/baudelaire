@@ -36,6 +36,30 @@ impl Loopback {
 
 /// Typed reads of a [`KdlNode`]'s arguments and children, each erroring with a
 /// span into the config text rather than coercing.
+///
+/// # What a list key written with no values means
+///
+/// One rule, here rather than restated by each reader, because spread over five
+/// of them it reads as arbitrary:
+///
+/// - A list that **replaces** what the key holds ([`words`](NodeExt::words),
+///   [`widths`](NodeExt::widths), [`mapped`](NodeExt::mapped)) reads a bare node
+///   as the *empty list*. That is the one spelling for clearing a list, and a
+///   profile needs it: config lists replace wholesale, so a profile that could
+///   not write the empty one could never undo an inherited one. Omitting the key
+///   is how a scope says it has no opinion; writing it bare is how it says the
+///   answer is none, and `generate { search { formats } }` turns search off by
+///   saying exactly that.
+/// - A list that **amends** the key's defaults, in the `-name` grammar
+///   ([`toggled`](NodeExt::toggled), [`features`](NodeExt::features)), refuses a
+///   bare node. There "no names" is not a way of saying none: it is a line that
+///   amends nothing and so configures nothing, which is the silent no-op this
+///   layer exists to prevent. Nothing is lost by refusing it, because that
+///   grammar already says "none" by naming what it removes.
+///
+/// The split is [`Kind`](super::dispatch::Kind)'s own: `Texts`, `Numbers` and
+/// `Choices` replace, `Toggled` and `Toggles` amend, and `Toggle::required` is
+/// the one place the second rule is enforced.
 pub(super) trait NodeExt {
     fn span(&self) -> SourceSpan;
     fn string(&self, text: &str, idx: usize) -> Result<String>;
@@ -117,6 +141,18 @@ impl<'a> Toggle<'a> {
                 add: true,
             },
         }
+    }
+
+    /// A list in this grammar amends the key's defaults, so one naming nothing
+    /// amends nothing: refused, rather than parsed as a line that configures
+    /// nothing. Both keys written in it are held to it here, which is what keeps
+    /// them from disagreeing about it (see [`NodeExt`] for the rule, and why
+    /// every *replacing* list key reads the same spelling as "none").
+    fn required(node: &KdlNode, text: &str, named: usize) -> Result<()> {
+        if named > 0 {
+            return Ok(());
+        }
+        Err(ConfigError::missing_arg(text, node.name().value(), NodeExt::span(node)).into())
     }
 }
 
@@ -295,11 +331,7 @@ impl NodeExt for KdlNode {
             .iter()
             .filter(|e| e.name().is_none())
             .collect();
-        if positional.is_empty() {
-            return Err(
-                ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into(),
-            );
-        }
+        Toggle::required(self, text, positional.len())?;
         positional
             .iter()
             .map(|entry| {
@@ -408,11 +440,7 @@ impl NodeExt for KdlNode {
                 false => out.retain(|kept| *kept != value),
             }
         }
-        if seen.is_empty() {
-            return Err(
-                ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into(),
-            );
-        }
+        Toggle::required(self, text, seen.len())?;
         // Canonical order, so a set is stored the way it is *named* rather than
         // the way it was reached. `"-tables" "tables"` and the defaults are the
         // same set and must hash the same: this value reaches the build

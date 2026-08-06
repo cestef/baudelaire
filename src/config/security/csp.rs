@@ -1,7 +1,7 @@
 //! `security { csp { } }`: the generated `Content-Security-Policy`.
 
 use crate::config::dispatch::Kind::{Flag, Text, Url};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// A generated `Content-Security-Policy`.
@@ -72,10 +72,7 @@ impl Default for CspConfig {
 /// The `security { csp { .. } }` section: one key per directive, each taking a
 /// CSP source list verbatim.
 impl Section for CspConfig {
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 
     const RULES: Block<Self> = Block(&[
         (

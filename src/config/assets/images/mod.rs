@@ -79,7 +79,7 @@ impl Section for ImagesConfig {
         (
             "responsive",
             Nested(ResponsiveConfig::rows),
-            "Generate width variants and a `srcset`. Its presence turns them on.",
+            "Generate width variants and a `srcset`. Its presence turns them on; `#false` turns them off again.",
             |c, n, t| c.responsive.fill(n, t),
         ),
     ]);

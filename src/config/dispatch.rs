@@ -34,6 +34,10 @@ type Rule<T> = (
     fn(&mut T, &KdlNode, &str) -> Result<()>,
 );
 
+/// The setter a switchable [`Section`] names for the flag its own presence turns
+/// on: see [`Section::SWITCH`].
+pub(super) type Switch<T> = fn(&mut T, bool);
+
 /// A `(key, kind, doc, handler)` rule for an attribute-keyed [`Attrs`] scope.
 type Attr<T> = (
     &'static str,
@@ -62,27 +66,34 @@ pub enum Kind {
     Url,
     /// A permalink template: `permalink "/{slug}/"`.
     Template,
-    /// One of a fixed set of names. Carried as a function over
+    /// One of a fixed set of names: `html "drop"`. Carried as a function over
     /// [`Named::names`](crate::config::Named::names) rather than as a literal
     /// list, so the names the reference prints are read out of the very table
     /// that parses them.
     Choice(Names),
+    /// Any number of names from a fixed set, written on one line and replacing
+    /// whatever the key held: `formats "rss" "atom"`.
+    ///
+    /// [`Choice`](Kind::Choice) for a list, carried the same way and for the
+    /// same reason. Its own variant because the three keys of this shape were
+    /// declared `Choice` and so documented themselves as taking *one* name,
+    /// while [`NodeExt::mapped`](super::node::NodeExt::mapped) read every one
+    /// the author wrote.
+    Choices(Names),
     /// Any number of names from a fixed set, where `-name` removes one from the
     /// key's defaults: `extensions "math" "-tables"`.
     ///
-    /// [`Choice`](Kind::Choice) for a list, and carried the same way and for the
-    /// same reason: the accepted spellings are read out of the
-    /// [`Named`](crate::config::Named) table that parses them, so a new variant
-    /// cannot appear in one and be missing from the other.
-    ///
-    /// The second function names the ones that are on without being asked for,
-    /// so the reference states the default set rather than leaving prose to
-    /// restate it somewhere that can go stale.
-    Choices(Names, Names),
+    /// Named after [`NodeExt::toggled`](super::node::NodeExt::toggled), which
+    /// reads it, and distinct from [`Choices`](Kind::Choices) in what a list
+    /// means: there it replaces, here it amends. The second function names the
+    /// ones that are on without being asked for, so the reference states the
+    /// default set rather than leaving prose to restate it somewhere that can go
+    /// stale.
+    Toggled(Names, Names),
     /// The same `-name` grammar over an *open* set, where the names are not a
     /// table this crate owns: `typst { features "bundle" "-a11y-extras" }`.
     ///
-    /// Separate from [`Choices`](Kind::Choices) because there is nothing to
+    /// Separate from [`Toggled`](Kind::Toggled) because there is nothing to
     /// list, and separate from [`Texts`](Kind::Texts) because the leading `-`
     /// is grammar rather than part of the name: a key spelled in it that
     /// rendered as a plain string list would leave the reader to discover the
@@ -141,9 +152,11 @@ impl Kind {
     /// carry.
     fn takes(self) -> Arity {
         match self {
-            // Every scalar: one value, and a second one is nobody's. `Table` is
-            // here too, since its free-form block may be preceded by the flag
-            // that turns a section on (see [`Kind::Table`]).
+            // Every scalar: one value, and a second one is nobody's. `Choice`
+            // is one of these -- it names *one* of a set -- and was exempt only
+            // for as long as three multi-value keys were declared with it.
+            // `Table` is here too, since its free-form block may be preceded by
+            // the flag that turns a section on (see [`Kind::Table`]).
             Self::Text
             | Self::Flag
             | Self::Number
@@ -151,13 +164,10 @@ impl Kind {
             | Self::Path
             | Self::Url
             | Self::Template
+            | Self::Choice(_)
             | Self::Table => Arity::Args(1),
-            // A list written on one line, however long. `Choice` names *one*
-            // name and belongs above, except that three keys spell a list with
-            // it (`generate { feed { formats "rss" "atom" } }`): what that
-            // variant documents and what it parses already disagree, and the
-            // strict reading here would refuse a documented spelling.
-            Self::Choice(_) | Self::Choices(..) | Self::Toggles | Self::Texts | Self::Numbers => {
+            // A list written on one line, however long.
+            Self::Choices(_) | Self::Toggled(..) | Self::Toggles | Self::Texts | Self::Numbers => {
                 Arity::Every
             }
             // A block of author-named children -- blocks, attribute lines, or a
@@ -166,11 +176,12 @@ impl Kind {
             // [`Attrs::apply`] reads belong to the *children*, and the parent
             // node's own were read by nobody.
             Self::Items(_) | Self::Lines(_) | Self::Overlay => Arity::Args(0),
-            // Somebody else's line. A section owns its own -- [`Section::fill`]
-            // refuses arguments and [`Section::shorthand`] hands them to the key
-            // it stands for -- and a single attribute line is read entry by
-            // entry by [`Attrs::apply`], which refuses the ones it does not
-            // know.
+            // Somebody else's line. A section owns its own -- [`Section::line`]
+            // allows exactly what the section reads there (its
+            // [`SWITCH`](Section::SWITCH), a collection's glob) and refuses the
+            // rest, and [`Section::shorthand`] hands them to the key it stands
+            // for -- and a single attribute line is read entry by entry by
+            // [`Attrs::apply`], which refuses the ones it does not know.
             Self::Block(_) | Self::Line(_) => Arity::Elsewhere,
         }
     }
@@ -202,9 +213,10 @@ impl Arity {
     /// The [`Block`] counterpart of the check [`Attrs::apply`] has always run,
     /// and the reason it had to exist: a node-keyed rule dispatched on the name
     /// alone and never looked at the line, so every value written there was
-    /// accepted and discarded. `lint #false` turned linting *on*,
-    /// `serve { port 1 2 }` dropped the `2`, and `content { drafts suffix=".x" }`
-    /// configured nothing while reporting nothing.
+    /// accepted and discarded. `lint #false` turned linting *on* (it is now the
+    /// spelling that turns it off), `serve { port 1 2 }` dropped the `2`, and
+    /// `content { drafts suffix=".x" }` configured nothing while reporting
+    /// nothing.
     pub(super) fn check(self, node: &KdlNode, text: &str) -> Result<()> {
         if matches!(self, Self::Elsewhere) {
             return Ok(());
@@ -369,29 +381,56 @@ pub(super) trait Section: Sized + 'static {
     /// reason.
     const LEADING: usize = 0;
 
-    /// Refuse whatever a section's own line carries past the
-    /// [`LEADING`](Section::LEADING) arguments its caller reads.
+    /// The flag this section's own presence turns on, for a section that has
+    /// one: `lint` enables linting, and `lint #false` takes it back off again.
+    ///
+    /// Declared as the setter rather than as a `bool` beside an
+    /// [`enable`](Section::enable) override, so that "this section has a switch"
+    /// and "here is the field it sets" are one statement rather than two that
+    /// can disagree. [`Section::line`] reads the first half to decide whether
+    /// the line may carry a boolean at all, and [`Section::enable`] the second
+    /// to apply it.
+    ///
+    /// Off has to be sayable. Presence alone is a fine switch until a base
+    /// config or a theme's `theme.kdl` names the section, at which point nothing
+    /// downstream could take it back: a profile overlays nodes onto the base, so
+    /// naming the section is what re-enables it, and the config language has no
+    /// spelling for deleting a node.
+    const SWITCH: Option<Switch<Self>> = None;
+
+    /// Refuse whatever a section's own line carries past the arguments the
+    /// section itself reads: the [`LEADING`](Section::LEADING) ones its caller
+    /// consumes, plus the [`SWITCH`](Section::SWITCH) boolean where there is
+    /// one.
     ///
     /// Called by [`Section::fill`], and by a caller that reads the line itself
     /// before deciding whether there is a block to fill from at all
     /// (`CollectionConfig::item`, where `posts sort="date"` has no block and so
     /// never reached `fill`).
     fn line(node: &KdlNode, text: &str) -> Result<()> {
-        Arity::Args(Self::LEADING).check(node, text)
+        Arity::Args(Self::LEADING + usize::from(Self::SWITCH.is_some())).check(node, text)
     }
 
-    /// Run before a block's keys are applied. A section that is turned on by the
-    /// mere presence of its block flips its `enabled` flag here and returns
-    /// `true`, so that rule lives with the section rather than at every parent
-    /// mentioning it.
+    /// Run before a block's keys are applied, with `on` read off the section's
+    /// own line (a bare node is `#true`). A section that is turned on by the
+    /// mere presence of its block sets its flag here and returns `true`, so that
+    /// rule lives with the section rather than at every parent mentioning it.
     ///
     /// The return value is what lets a *bare* node with no `{ }` mean "just turn
     /// it on": the docs promise that `generate { robots }` enables robots.txt by
     /// existing, and it used to be a hard `missing_children` error instead.
-    /// Reporting it from the same override that does the enabling is what keeps
-    /// the two from disagreeing.
-    fn enable(&mut self) -> bool {
-        false
+    /// Reporting it from the same place that does the enabling is what keeps the
+    /// two from disagreeing.
+    ///
+    /// Overridden only where presence records something the line's boolean is
+    /// *not* (`MarkdownConfig::present`, `PdfBundle::present`); everything else
+    /// names a [`SWITCH`](Section::SWITCH) and inherits this.
+    fn enable(&mut self, on: bool) -> bool {
+        let Some(set) = Self::SWITCH else {
+            return false;
+        };
+        set(self, on);
+        true
     }
 
     /// Apply a node's `{ .. }` children onto `self`, *filling in place*: a key
@@ -403,11 +442,15 @@ pub(super) trait Section: Sized + 'static {
     /// merely holds settings, a bare `paths` configures nothing and is far more
     /// likely a forgotten block than an intent, so it still errors.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
-        // A section is configured from its block, so a value on its line is read
-        // by nobody: `lint #false` used to turn linting *on*, and
-        // `generate { robots "junk" }` to generate a robots.txt.
+        // A section with no switch is configured from its block alone, so a
+        // value on its line is read by nobody: `paths "junk"` and
+        // `generate { robots "junk" }` are both refused here, the second as a
+        // boolean it is not.
         Self::line(node, text)?;
-        let switch = self.enable();
+        // Presence is the switch and the line is how it is taken back, so a
+        // bare node reads as `#true` -- which is also what every section
+        // without a switch reads, `line` having just refused it an argument.
+        let switch = self.enable(node.boolean(text, Self::LEADING)?);
         match node.children() {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),
             None if switch => Ok(()),
@@ -427,17 +470,17 @@ pub(super) trait Section: Sized + 'static {
     /// whole point is that the common case (one boolean) does not have to open
     /// braces to say it.
     fn shorthand(&mut self, node: &KdlNode, text: &str, stands_for: &'static str) -> Result<()> {
-        // Unconditionally, exactly as [`Section::fill`] does, and for the same
-        // reason: naming a section at all is what [`Section::enable`] records,
-        // and a section reached through a shorthand is still named. The return
-        // value is what `fill` needs and this does not, since a bare node is
-        // always legal here.
+        // Unconditionally `true`, and never the line's own boolean: here that
+        // value belongs to `stands_for`'s handler, and what `enable` records is
+        // only that the section was named at all. The return value is what
+        // `fill` needs and this does not, since a bare node is always legal
+        // here.
         //
         // Without this, `content { markdown }` left `MarkdownConfig::present`
         // false in *every* spelling, because `markdown` is only ever dispatched
         // through here. The feature gate reads `present && enabled`, so a slim
         // binary dropped every `.md` page and said nothing at all.
-        self.enable();
+        self.enable(true);
         match node.children() {
             Some(block) => {
                 if !node.entries().is_empty() {

@@ -1,7 +1,7 @@
 //! `generate { robots { } }`: `robots.txt`.
 
 use crate::config::dispatch::Kind::Texts;
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// `robots.txt` generation. Enabled by the presence of a `generate { robots }`
@@ -15,6 +15,8 @@ pub struct RobotsConfig {
 }
 
 impl Section for RobotsConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[(
         "disallow",
         Texts,
@@ -24,9 +26,4 @@ impl Section for RobotsConfig {
             Ok(())
         },
     )]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

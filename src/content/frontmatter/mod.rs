@@ -383,20 +383,20 @@ impl ValueExt for Value {
 
     fn string(&self, at: At<'_>) -> Result<String> {
         self.str()
-            .ok_or_else(|| at.field("a string", self.kind(), None))
+            .ok_or_else(|| at.field(FieldType::Str.words().article, self.kind(), None))
     }
 
     fn boolean(&self, at: At<'_>) -> Result<bool> {
         match self {
             Self::Bool(b) => Ok(*b),
-            _ => Err(at.field("a boolean", self.kind(), None)),
+            _ => Err(at.field(FieldType::Bool.words().article, self.kind(), None)),
         }
     }
 
     fn integer(&self, at: At<'_>) -> Result<i64> {
         match self {
             Self::Int(i) => Ok(*i),
-            _ => Err(at.field("an integer", self.kind(), None)),
+            _ => Err(at.field(FieldType::Int.words().article, self.kind(), None)),
         }
     }
 
@@ -412,13 +412,13 @@ impl ValueExt for Value {
                 .map(|iso| iso.0)
                 .map_err(|()| {
                     at.field(
-                        "a date",
+                        FieldType::Date.words().article,
                         "a string that is not an ISO day",
                         Some("write it as `\"2024-01-01\"`, or as `datetime(year: 2024, month: 1, day: 1)`"),
                     )
                 }),
             _ => Err(at.field(
-                "a date",
+                FieldType::Date.words().article,
                 self.kind(),
                 Some("write dates as `\"2024-01-01\"` or `datetime(year: 2024, month: 1, day: 1)`"),
             )),
@@ -429,7 +429,7 @@ impl ValueExt for Value {
         // a wrong-typed *element* is an error too, never silently dropped,
         // same as every scalar accessor here, and underlined where it sits
         // rather than under the whole list.
-        let wrong = |at: At<'_>, kind| at.field("a list of strings", kind, None);
+        let wrong = |at: At<'_>, kind| at.field(FieldType::Str.words().list, kind, None);
         match self {
             Self::Array(arr) => arr
                 .iter()

@@ -240,13 +240,16 @@ impl Kind {
             Self::Numbers => "number ..".to_owned(),
             Self::Table => "key value ..".to_owned(),
             Self::Choice(names) => names().join(" | "),
+            // The trailing `..` is what tells a reader the key takes as many
+            // names as it likes, the same mark `Texts` and `Numbers` carry.
+            Self::Choices(names) => format!("({}) ..", names().join(" | ")),
             // The `-` is half the grammar, so the rendering says so rather than
             // leaving it to the key's prose. Both spellings of it render the
             // same way; only the name set differs.
             // A `*` marks a name that is on by default, which is the other half
             // of what a reader needs: the set of names, and which of them they
             // already have.
-            Self::Choices(names, on) => {
+            Self::Toggled(names, on) => {
                 let on = on();
                 let names: Vec<String> = names()
                     .into_iter()
@@ -264,5 +267,49 @@ impl Kind {
             Self::Lines(_) => "named lines".to_owned(),
             Self::Overlay => "named overlays".to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Kind, Reference};
+
+    /// A key taking any number of names says so, with the same trailing `..`
+    /// every other list key carries. Three of these were declared with the
+    /// single-name variant, so the reference documented
+    /// `formats "rss" "atom"` as a key that reads one word.
+    #[test]
+    fn a_multi_value_choice_renders_as_a_list() {
+        let reference = Reference::new();
+        for path in [
+            "generate.feed.formats",
+            "generate.search.formats",
+            "generate.search.fields",
+        ] {
+            let entry = reference
+                .entries()
+                .iter()
+                .find(|e| e.path == path)
+                .unwrap_or_else(|| panic!("{path} is a key"));
+            assert!(matches!(entry.kind, Kind::Choices(_)), "{path}");
+            let label = entry.kind.label();
+            assert!(label.ends_with(" .."), "{path}: {label}");
+            assert!(label.contains(" | "), "{path}: {label}");
+        }
+    }
+
+    /// And a key that reads exactly one name still reads as one, with no list
+    /// mark to suggest otherwise.
+    #[test]
+    fn a_single_choice_carries_no_list_mark() {
+        let reference = Reference::new();
+        let entry = reference
+            .entries()
+            .iter()
+            .find(|e| e.path == "links.style")
+            .expect("links.style is a key");
+        let label = entry.kind.label();
+        assert!(!label.ends_with(".."), "{label}");
+        assert!(label.contains("clean"), "{label}");
     }
 }

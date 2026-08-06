@@ -1,7 +1,7 @@
 //! `generate { llms { } }`: `llms.txt`.
 
 use crate::config::dispatch::Kind::Text;
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// `llms.txt` generation ([llmstxt.org]): a Markdown index of the site's pages
@@ -17,6 +17,8 @@ pub struct LlmsConfig {
 }
 
 impl Section for LlmsConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[(
         "summary",
         Text,
@@ -26,9 +28,4 @@ impl Section for LlmsConfig {
             Ok(())
         },
     )]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

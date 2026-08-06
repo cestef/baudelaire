@@ -19,6 +19,38 @@ use crate::content::Frontmatter;
 use crate::error::{BaudelaireErrorKind, ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
 
+/// How a type is named to a reader, in every shape a diagnostic needs it: `a
+/// string`, `strings`, `a list of strings`.
+///
+/// Static, and that is the point. A frontmatter type mismatch renders the
+/// expected type in a miette *label*, which is not markup-rendered and so may
+/// only ever carry this crate's own literals; a `String` assembled at the call
+/// site could not promise that. Built by the `words!` table below, so the
+/// plural is written once and the list form is concatenated from it at compile
+/// time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Words {
+    /// `a string`
+    pub article: &'static str,
+    /// `strings`
+    pub plural: &'static str,
+    /// `a list of strings`
+    pub list: &'static str,
+}
+
+/// One row of [`FieldType::words`], from the two words that are not derivable
+/// from each other. The list form is neither: it is the plural, and saying so
+/// here is what stops the two from drifting.
+macro_rules! words {
+    ($article:literal, $plural:literal) => {
+        Words {
+            article: $article,
+            plural: $plural,
+            list: concat!("a list of ", $plural),
+        }
+    };
+}
+
 /// One field a collection's frontmatter schema declares.
 ///
 /// Declaring a field *requires* it. A field that may be absent says so with
@@ -144,18 +176,32 @@ impl FieldType {
         }
     }
 
+    /// The English a diagnostic names this type by: the single table every
+    /// message describing a frontmatter value reads, whether it came from a
+    /// declared schema or from a built-in key's own reader.
+    ///
+    /// A list is named after what it holds, so [`article`](Self::article) and
+    /// [`plural`](Self::plural) answer for one before reaching here; the row is
+    /// the bare form, which is what a `list` with no parameter would be called.
+    pub fn words(&self) -> Words {
+        match self {
+            Self::Any => words!("any value", "values"),
+            Self::Str => words!("a string", "strings"),
+            Self::Bool => words!("a boolean", "booleans"),
+            Self::Int => words!("an integer", "integers"),
+            Self::Float => words!("a float", "floats"),
+            Self::Date => words!("a date", "dates"),
+            Self::Dict(_) => words!("a dictionary", "dictionaries"),
+            Self::List(_) => words!("a list", "lists"),
+        }
+    }
+
     /// How a diagnostic names this type ("a string"), so the schema errors read
     /// like the built-in frontmatter ones rather than printing a config keyword.
     pub fn article(&self) -> String {
         match self {
-            Self::Any => "any value".to_owned(),
-            Self::Str => "a string".to_owned(),
-            Self::Bool => "a boolean".to_owned(),
-            Self::Int => "an integer".to_owned(),
-            Self::Float => "a float".to_owned(),
-            Self::Date => "a date".to_owned(),
-            Self::Dict(_) => "a dictionary".to_owned(),
             Self::List(inner) => format!("a list of {}", inner.plural()),
+            _ => self.words().article.to_owned(),
         }
     }
 
@@ -163,14 +209,8 @@ impl FieldType {
     /// one reads as "a list of lists of integers" rather than stacking articles.
     fn plural(&self) -> String {
         match self {
-            Self::Any => "values".to_owned(),
-            Self::Str => "strings".to_owned(),
-            Self::Bool => "booleans".to_owned(),
-            Self::Int => "integers".to_owned(),
-            Self::Float => "floats".to_owned(),
-            Self::Date => "dates".to_owned(),
-            Self::Dict(_) => "dictionaries".to_owned(),
             Self::List(inner) => format!("lists of {}", inner.plural()),
+            _ => self.words().plural.to_owned(),
         }
     }
 
@@ -372,6 +412,23 @@ mod tests {
             FieldType::parse("list<int>>"),
             Err(TypeError::Malformed("list<int>>".to_owned()))
         );
+    }
+
+    /// The static list form and the one `article` composes are the same words,
+    /// and have to stay so: a frontmatter reader needs a `&'static str` and
+    /// reads the first, while a schema mismatch renders the second, and the two
+    /// describe the same failure to the same reader.
+    #[test]
+    fn the_static_list_form_is_the_composed_one() {
+        for ty in [
+            FieldType::Str,
+            FieldType::Bool,
+            FieldType::Int,
+            FieldType::Float,
+            FieldType::Date,
+        ] {
+            assert_eq!(ty.words().list, list(ty.clone()).article(), "{ty:?}");
+        }
     }
 
     #[test]

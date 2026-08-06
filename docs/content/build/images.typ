@@ -118,7 +118,8 @@ Set `extract #false` to keep typst's inlining.
 
 == Responsive variants
 
-The block's presence turns variants on. Each raster gets a downscaled copy per
+The block's presence turns variants on, and `responsive #false` turns them off.
+Each raster gets a downscaled copy per
 width, and the `<img>` gets a `srcset` so the browser fetches the smallest one
 that fits:
 

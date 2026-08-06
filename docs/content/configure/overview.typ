@@ -186,8 +186,33 @@ written.
   intent.
 ]
 
-Two blocks answer a question presence cannot, because they have a setting that is
-already decided before you write anything. Those take a bare flag:
+=== Turning one back off
+
+Deleting the node is not always available. A #link("profiles.typ")[profile] and a
+theme's `theme.kdl` both *overlay* nodes onto a base, so they can set a key but
+never remove one, and naming the block is exactly what turns it on. Every block
+of this kind takes `#false` on its own line:
+
+```kdl
+profiles {
+  fast {
+    lint #false
+    generate {
+      cards #false
+      pdf { pages #false }
+    }
+  }
+}
+```
+
+`#true` is accepted too, and means what presence already meant.
+
+One block is not switchable this way: `generate { pdf { bundle } }` is on
+whenever it names a target, so naming none is already how it is off.
+
+Some blocks have a setting decided before you write anything, so they carry a
+bare flag rather than a presence switch, in whichever polarity the default calls
+for:
 
 ```kdl
 content {
@@ -199,8 +224,7 @@ content {
 Each is shorthand for the block's own flag key, and the two keys differ:
 `markdown #false` is `markdown { enabled #false }`, `drafts #true` is
 `drafts { build #true }`. Write the long form when the block configures something
-else too, or in a profile, where an overlay can set a key but cannot delete a
-node.
+else too.
 
 == Commenting a block out
 

@@ -4,13 +4,30 @@ mod images;
 mod languages;
 mod remote;
 mod schema;
+mod switches;
 mod typst;
 mod urls;
+mod values;
 
 use crate::config::Config;
 
 pub(super) fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")
+}
+
+/// The rendered diagnostic of a config that must not parse: message, help and
+/// snippet, as a reader actually sees them.
+pub(super) fn err(text: &str) -> String {
+    let error = Config::parse(text).expect_err("should be refused");
+    format!("{:?}", miette::Report::from(error))
+}
+
+/// The diagnostic code a config that must not parse reports. Beside [`err`]
+/// because the two are different contracts: the prose is for a reader, the code
+/// is what a caller and a scenario key on, and only the second is stable.
+pub(super) fn code(text: &str) -> String {
+    let error = Config::parse(text).expect_err("should be refused");
+    miette::Diagnostic::code(&error).map_or_else(String::new, |code| code.to_string())
 }
 
 #[test]

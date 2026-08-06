@@ -7,7 +7,6 @@ use crate::config::dispatch::Kind::{Flag, Table, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::error::ConfigError;
-use crate::ui::markup;
 
 /// HTML output options.
 #[derive(Debug, Clone, Hash)]
@@ -171,18 +170,11 @@ impl Section for HtmlConfig {
                 let span = NodeExt::span(n);
                 let names = n.words(t)?;
                 for name in &names {
-                    // The DOM's own judgement of what can be an element, rather than
-                    // a second opinion here. Checked at the span the author wrote,
-                    // because a name no element can carry would otherwise fail
-                    // silently at render, as a container the page simply never has.
-                    typst_html::HtmlTag::intern(name).map_err(|why| {
-                        ConfigError::unknown_value(
-                            t,
-                            name,
-                            markup!("name an element your layout emits, like `article`: {}", why),
-                            span,
-                        )
-                    })?;
+                    // The DOM's own judgement of what can be an element, rather
+                    // than a second opinion here; why it is judged at this span
+                    // is on `NotAnElement`.
+                    typst_html::HtmlTag::intern(name)
+                        .map_err(|why| ConfigError::not_an_element(t, name, &why, span))?;
                 }
                 c.footnotes = names.into();
                 Ok(())

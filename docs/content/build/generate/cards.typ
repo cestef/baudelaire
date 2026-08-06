@@ -18,7 +18,8 @@ generate {
 }
 ```
 
-The block's presence turns it on. Every page without an `image` of its own gets
+The block's presence turns it on, and `cards #false` turns it off. Every page
+without an `image` of its own gets
 a PNG under `cards/` in the output directory, and its `og:image` and
 `twitter:image` point at it. A page at `/posts/hello/` gets
 `/cards/posts/hello.png`; the home page gets `/cards/index.png`.

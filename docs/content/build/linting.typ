@@ -19,8 +19,8 @@ lint {
 ```
 
 Nothing is linted until the block is there. Its presence turns every rule on, and
-findings are warnings: the build still succeeds. `strict` makes a finding fail it
-instead.
+`lint #false` turns them all off again, which is how a profile says it. Findings
+are warnings: the build still succeeds. `strict` makes a finding fail it instead.
 
 Because pages are post-processed as a typed DOM and every element still carries
 the typst span it came from, a finding is reported against the line you wrote,
@@ -116,7 +116,7 @@ limit you wrote down, and a limit that only warns is a number in a config file.
 
 ```text
 × 1 page over budget
-├─▶ posts/heavy.typ: `images` is 412.6 KB, over the 300 KB budget
+├─▶ posts/heavy.typ: `images` is 412.6 KiB, over the 300 KiB budget
 ╰─▶ help: ship less, or raise the limit under `lint { budget { } }`
 ```
 

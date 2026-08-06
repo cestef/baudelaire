@@ -3,7 +3,7 @@
 use kdl::KdlNode;
 
 use crate::config::dispatch::Kind::{Choice, Lines, Number, Text};
-use crate::config::dispatch::{Attributed, Attrs, Block, Section};
+use crate::config::dispatch::{Attributed, Attrs, Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 use crate::config::{Config, Named};
@@ -163,6 +163,8 @@ impl Named for IconPurpose {
 /// something only the author knows, since what the build knows it fills in
 /// itself.
 impl Section for ManifestConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "name",
@@ -250,11 +252,6 @@ impl Section for ManifestConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }
 
 impl IconConfig {

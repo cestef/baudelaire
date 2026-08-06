@@ -1,6 +1,6 @@
 //! `generate { feed { } }`: syndication feeds and their file names.
 
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Number, Path};
+use crate::config::dispatch::Kind::{Block as Nested, Choices, Flag, Number, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{BaseUrl, Named, Permalink};
@@ -121,7 +121,7 @@ impl Section for FeedConfig {
     const RULES: Block<Self> = Block(&[
         (
             "formats",
-            Choice(FeedKind::names),
+            Choices(FeedKind::names),
             "Which feed formats to write, one word each.",
             |c, n, t| {
                 c.formats = n.mapped::<FeedKind>(t)?;

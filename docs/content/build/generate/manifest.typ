@@ -6,7 +6,8 @@
 
 A `manifest.webmanifest` is what a browser reads when a visitor installs the
 site to a home screen: what to call it, what to launch, what to paint before the
-first page renders. The block's presence writes it.
+first page renders. The block's presence writes it, and `manifest #false` stops
+it.
 
 ```kdl
 site "Baudelaire"

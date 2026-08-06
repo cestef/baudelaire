@@ -2,7 +2,7 @@
 
 use crate::config::Basename;
 use crate::config::dispatch::Kind::{Number, Text};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
@@ -65,6 +65,8 @@ impl Default for CardsConfig {
 /// The `cards { template ..; width ..; height .. }` block. Its presence enables
 /// social card rendering.
 impl Section for CardsConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "template",
@@ -84,9 +86,4 @@ impl Section for CardsConfig {
             Ok(())
         }),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

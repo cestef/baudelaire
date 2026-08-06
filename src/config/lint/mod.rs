@@ -5,7 +5,7 @@ pub mod budget;
 use crate::config::BudgetConfig;
 use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::Kind::Flag;
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a
@@ -16,7 +16,8 @@ use crate::config::node::NodeExt;
 /// same opinionated-default problem as a generated page nobody wanted.
 #[derive(Debug, Clone, Hash)]
 pub struct LintConfig {
-    /// Whether the DOM lint pass runs at all; flipped by the block's presence.
+    /// Whether the DOM lint pass runs at all; flipped by the block's presence,
+    /// and back off again by `lint #false`.
     pub enabled: bool,
     /// Fail the build on a finding instead of warning, exactly as
     /// [`LinkConfig::strict`](crate::config::LinkConfig::strict) does for a broken link.
@@ -58,10 +59,7 @@ impl Default for LintConfig {
 /// The `lint { .. }` section: the rules run over each built page's DOM, and how
 /// loud a finding is. The block's presence is what turns linting on.
 impl Section for LintConfig {
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 
     const RULES: Block<Self> = Block(&[
         (

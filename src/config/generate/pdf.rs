@@ -2,7 +2,7 @@
 
 use crate::config::Basename;
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Text, Texts};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// What the typesetter writes on paper: `generate { pdf { .. } }`.
@@ -130,7 +130,7 @@ impl Section for PdfConfig {
         (
             "pages",
             Nested(PdfPages::rows),
-            "A PDF per page, beside its HTML. Its presence turns it on.",
+            "A PDF per page, beside its HTML. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.pages.fill(n, t),
         ),
         (
@@ -144,6 +144,8 @@ impl Section for PdfConfig {
 
 /// The `pages { template .. }` block. Its presence enables the per-page PDF.
 impl Section for PdfPages {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[(
         "template",
         Text,
@@ -153,11 +155,6 @@ impl Section for PdfPages {
             Ok(())
         },
     )]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }
 
 /// The `bundle { template ..; collections ..; site .. }` block: many pages as
@@ -196,7 +193,14 @@ impl Section for PdfBundle {
 
     /// Presence is recorded but enables nothing: a bundle binds what the block
     /// names, and naming nothing is asking for nothing.
-    fn enable(&mut self) -> bool {
+    ///
+    /// Which is also why this is not a [`Section::SWITCH`] and why `bundle
+    /// #false` stays refused. There is no flag for it to set: `enabled` is
+    /// derived from the targets, so an off switch would have to clear
+    /// `collections` and `site`, and it would then be undone by any target the
+    /// block went on to name. Turning bundling off is naming no target, which
+    /// `collections` and `site #false` already spell.
+    fn enable(&mut self, _on: bool) -> bool {
         self.present = true;
         true
     }

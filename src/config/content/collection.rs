@@ -3,7 +3,7 @@
 use kdl::KdlNode;
 
 use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Items, Number, Template, Text};
-use crate::config::dispatch::{Attributed, Block, Section};
+use crate::config::dispatch::{Attributed, Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 use crate::config::{FieldSchema, Named, Permalink};
@@ -210,7 +210,7 @@ impl Section for CollectionConfig {
         (
             "paginate",
             Nested(PaginateConfig::rows),
-            "Generate an index over the collection. Its presence turns the index on.",
+            "Generate an index over the collection. Its presence turns the index on; `#false` turns it off again.",
             |c, n, t| c.paginate.fill(n, t),
         ),
         (
@@ -241,6 +241,8 @@ impl Section for CollectionConfig {
 /// The `paginate { .. }` block inside a collection: its presence generates the
 /// index, and every key tunes it.
 impl Section for PaginateConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "size",
@@ -291,9 +293,4 @@ impl Section for PaginateConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

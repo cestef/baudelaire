@@ -1,7 +1,7 @@
 //! `generate { search { } }`: client-side search indexes.
 
 use crate::config::Named;
-use crate::config::dispatch::Kind::{Choice, Flag, Number, Text, Texts};
+use crate::config::dispatch::Kind::{Choices, Flag, Number, Text, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
@@ -109,7 +109,7 @@ impl Section for SearchConfig {
     const RULES: Block<Self> = Block(&[
         (
             "formats",
-            Choice(SearchFormat::names),
+            Choices(SearchFormat::names),
             "Which index formats to write, one word each.",
             |c, n, t| {
                 c.formats = n.mapped::<SearchFormat>(t)?;
@@ -118,7 +118,7 @@ impl Section for SearchConfig {
         ),
         (
             "fields",
-            Choice(SearchField::names),
+            Choices(SearchField::names),
             "Which parts of a page go into the index, one word each.",
             |c, n, t| {
                 c.fields = n.mapped::<SearchField>(t)?;

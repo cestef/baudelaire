@@ -85,7 +85,7 @@ pub use navigation::speculation::{Eagerness, SpeculationConfig};
 pub use navigation::standalone::{Router, StandaloneConfig};
 pub use paths::{Paths, Rooted};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
-pub use schema::{FieldSchema, FieldType, TypeError};
+pub use schema::{FieldSchema, FieldType, TypeError, Words};
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
 pub use serve::ServeConfig;
@@ -295,6 +295,19 @@ impl Config {
     /// static hosts serve for unmatched URLs, and what the dev server falls
     /// back to; single source for both.
     pub const NOT_FOUND: &'static str = "404.html";
+
+    /// The config file, by the one name it is spelled: the `--config` default,
+    /// what `init` writes, and what a diagnostic names its source until the
+    /// loader supplies the path actually read.
+    pub const FILE: &'static str = "config.kdl";
+
+    /// The file a URL ending in `/` is served from, and so the one a clean URL
+    /// is written to: `index` plus [`UrlStyle::PAGE`].
+    ///
+    /// Single source for both ends of that agreement. The build writes it
+    /// ([`Config::destination`]) and the dev server looks for it, and a
+    /// disagreement is a page that builds and 404s.
+    pub const INDEX: &'static str = "index.html";
 
     /// The key holding the profile partials, shared by the top-level rule that
     /// parses it and the guard refusing one *inside* a profile.
@@ -674,7 +687,7 @@ impl Config {
     /// redirect stubs.
     pub fn destination(&self, url: &str) -> PathBuf {
         if url == "/" {
-            return self.paths.dist.join("index.html");
+            return self.paths.dist.join(Self::INDEX);
         }
         // A URL that already names a file is one: a page whose frontmatter
         // `path` spells the old `/2019/post.html` a migration is preserving
@@ -687,7 +700,7 @@ impl Config {
         }
         let trimmed = Self::segments(url);
         match self.links.style {
-            UrlStyle::Clean => self.paths.dist.join(&trimmed).join("index.html"),
+            UrlStyle::Clean => self.paths.dist.join(&trimmed).join(Self::INDEX),
             // A flat page URL already names its file; a raw path (a frontmatter
             // `redirect` old-path) still needs the extension.
             UrlStyle::Flat => self
@@ -1013,7 +1026,7 @@ impl Section for Config {
         (
             "lint",
             Nested(LintConfig::rows),
-            "Checks run over the built pages. Its presence turns them on.",
+            "Checks run over the built pages. Its presence turns them on; `#false` turns them off again.",
             |c, n, t| c.lint.fill(n, t),
         ),
         (
@@ -1052,7 +1065,7 @@ impl Section for Config {
         (
             "caching",
             Nested(CacheControl::rows),
-            "The `Cache-Control` policy uploaded files are given.",
+            "The `Cache-Control` policy uploaded files are given. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.caching.fill(n, t),
         ),
         (

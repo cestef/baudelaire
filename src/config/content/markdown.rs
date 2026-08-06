@@ -1,7 +1,7 @@
 //! `content { markdown { } }`: what a `.md` page may contain.
 
 use crate::config::Named;
-use crate::config::dispatch::Kind::{Choice, Choices, Flag};
+use crate::config::dispatch::Kind::{Choice, Flag, Toggled};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
@@ -143,7 +143,7 @@ impl Section for MarkdownConfig {
         ),
         (
             "extensions",
-            Choices(Extension::names, Extension::defaults),
+            Toggled(Extension::names, Extension::defaults),
             "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.",
             |c, n, t| {
                 c.extensions = n.toggled::<Extension>(t, Extension::DEFAULT)?;
@@ -174,7 +174,13 @@ impl Section for MarkdownConfig {
     /// what lets a binary built without the feature answer. Returning `true`
     /// makes a bare `content { markdown }` legal, and that is its whole meaning:
     /// "this site has `.md` pages".
-    fn enable(&mut self) -> bool {
+    ///
+    /// Not a [`Section::SWITCH`], even though `markdown #false` reads like one:
+    /// this section is dispatched through [`Section::shorthand`], which hands
+    /// the line's boolean to the `enabled` key's own handler, so the one
+    /// documented key and the short spelling are one code path. `on` is
+    /// therefore always `true` here and says nothing.
+    fn enable(&mut self, _on: bool) -> bool {
         self.present = true;
         true
     }

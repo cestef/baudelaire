@@ -1,14 +1,15 @@
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
+use crate::config::Config;
 use crate::ui::{Code, Text, markup};
 
 #[derive(Error, Debug)]
 #[error("{kind}")]
 pub struct ConfigError {
     /// The config text, named so the rendered snippet says *which* file it came
-    /// from. The name is the conventional one until [`ConfigError::named`]
-    /// replaces it with the path actually loaded, which is what makes
+    /// from. The name is [`Config::FILE`] until [`ConfigError::named`] replaces
+    /// it with the path actually loaded, which is what makes
     /// `--config prod.kdl` report `prod.kdl`.
     file: NamedSource<String>,
     span: SourceSpan,
@@ -16,13 +17,9 @@ pub struct ConfigError {
 }
 
 impl ConfigError {
-    /// The conventional config filename, used until the loader supplies the
-    /// real one.
-    pub const FILE: &'static str = "config.kdl";
-
     pub fn at(source: &str, kind: ConfigErrorKind, span: SourceSpan) -> Self {
         Self {
-            file: NamedSource::new(Self::FILE, source.to_owned()).with_language("KDL"),
+            file: NamedSource::new(Config::FILE, source.to_owned()).with_language("KDL"),
             span,
             kind,
         }
@@ -51,7 +48,7 @@ impl ConfigError {
 
     pub fn unknown_feature(name: &str, valid: &str) -> Self {
         Self {
-            file: NamedSource::new(Self::FILE, String::new()),
+            file: NamedSource::new(Config::FILE, String::new()),
             span: SourceSpan::new(0.into(), 0),
             kind: ConfigErrorKind::UnknownFeature {
                 name: name.to_owned(),
@@ -68,7 +65,7 @@ impl ConfigError {
     /// would have.
     pub fn dist_contains_source(dist: &std::path::Path, key: &'static str, path: &str) -> Self {
         Self {
-            file: NamedSource::new(Self::FILE, String::new()),
+            file: NamedSource::new(Config::FILE, String::new()),
             span: SourceSpan::new(0.into(), 0),
             kind: ConfigErrorKind::DistContainsSource {
                 dist: dist.display().to_string(),
@@ -99,6 +96,31 @@ impl ConfigError {
             ConfigErrorKind::UnknownValue {
                 value: value.to_owned(),
                 help,
+            },
+            span,
+        )
+    }
+
+    /// A whole command line written as a single string, where the key reads the
+    /// program and each of its arguments as its own word.
+    pub fn command_line(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::CommandLine {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
+    /// A name no HTML element answers to, on a key that names elements. `why`
+    /// is typst's own reason, carried through verbatim.
+    pub fn not_an_element(source: &str, name: &str, why: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::NotAnElement {
+                name: name.to_owned(),
+                why: why.to_owned(),
             },
             span,
         )
@@ -352,7 +374,7 @@ impl ConfigError {
             .first()
             .map_or_else(|| SourceSpan::new(0.into(), 0), |d| d.span);
         Self {
-            file: NamedSource::new(Self::FILE, source.to_owned()).with_language("KDL"),
+            file: NamedSource::new(Config::FILE, source.to_owned()).with_language("KDL"),
             span,
             kind: ConfigErrorKind::Parse(Box::new(error)),
         }
@@ -429,6 +451,36 @@ pub enum ConfigErrorKind {
         #[help]
         help: String,
     },
+
+    /// A command written the way a shell would take it, by a key that runs its
+    /// words directly. Not an [`UnknownValue`](Self::UnknownValue): the value is
+    /// drawn from no fixed set, so there is nothing to list and nothing to
+    /// suggest, and "unknown value `code --goto`" says the wrong thing about it.
+    ///
+    /// Raised by `serve { editor }`, the one key that spells a command.
+    #[error("{} is a command line, not a program", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::command_line),
+        help(
+            "nothing runs this through a shell, so give the program and each argument its own word: `editor \"code\" \"--goto\" \"{{file}}:{{line}}:{{column}}\"`"
+        )
+    )]
+    CommandLine { got: String },
+
+    /// A name that no HTML element answers to, on a key that names elements.
+    /// Also not an [`UnknownValue`](Self::UnknownValue): the set is the whole of
+    /// HTML and typst owns it, so the judgement and the reason both come from
+    /// there. `why` is that foreign text, escaped rather than parsed as markup.
+    ///
+    /// Raised by `html { footnotes }`, checked at the span the author wrote
+    /// because a name no element can carry would otherwise fail silently at
+    /// render, as a container the page simply never has.
+    #[error("{} is not an HTML element", Code(.name))]
+    #[diagnostic(
+        code(baudelaire::config::not_an_element),
+        help("name an element your layout emits, like `article`: {}", Text(.why))
+    )]
+    NotAnElement { name: String, why: String },
 
     #[error("missing argument for {}", Code(.node))]
     #[diagnostic(
@@ -596,8 +648,10 @@ pub enum ConfigErrorKind {
         example: String,
     },
 
-    /// A value on a section's own line. The rule dispatched the section's block
-    /// and never looked at the line, so `lint #false` *enabled* linting.
+    /// A value on the line of a section that reads none. The rule dispatched the
+    /// section's block and never looked at the line, so `lint #false` *enabled*
+    /// linting; it is now a section that reads one boolean there, and this is
+    /// what the ones that read nothing (`paths`, `serve`) still answer.
     #[error("unexpected argument {} for {}", Text(.value), Code(.node))]
     #[diagnostic(
         code(baudelaire::config::unexpected_section_argument),

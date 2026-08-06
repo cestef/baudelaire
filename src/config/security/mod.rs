@@ -43,7 +43,7 @@ impl Section for SecurityConfig {
         (
             "csp",
             Nested(CspConfig::rows),
-            "The content security policy written into `_headers`. Its presence turns it on.",
+            "The content security policy written into `_headers`. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.csp.fill(n, t),
         ),
     ]);

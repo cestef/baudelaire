@@ -1,7 +1,7 @@
 //! `assets { images { responsive { } } }`: width variants and `srcset`.
 
 use crate::config::dispatch::Kind::{Number, Numbers, Text};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
@@ -71,6 +71,8 @@ impl Default for ResponsiveConfig {
 /// width-variant generation; widths and quality keep their defaults unless
 /// named.
 impl Section for ResponsiveConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "widths",
@@ -100,9 +102,4 @@ impl Section for ResponsiveConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

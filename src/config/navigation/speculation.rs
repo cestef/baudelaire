@@ -2,7 +2,7 @@
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::Choice;
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
@@ -68,6 +68,8 @@ impl Default for SpeculationConfig {
 /// The `speculation { prefetch ..; prerender .. }` block. Its presence enables
 /// the navigation hints.
 impl Section for SpeculationConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "prefetch",
@@ -88,9 +90,4 @@ impl Section for SpeculationConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

@@ -4,7 +4,6 @@ use crate::config::dispatch::Kind::{Flag, Number, Text, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::error::ConfigError;
-use crate::ui::markup;
 
 /// Dev server options.
 #[derive(Debug, Clone, Hash)]
@@ -122,15 +121,7 @@ impl Section for ServeConfig {
                 if let [only] = words.as_slice()
                     && only.split_whitespace().count() > 1
                 {
-                    return Err(ConfigError::unknown_value(
-                    t,
-                    only,
-                    markup!(
-                        "give the program and each argument as its own word, like `editor \"code\" \"--goto\" \"{{file}}:{{line}}:{{column}}\"`"
-                    ),
-                    span,
-                )
-                .into());
+                    return Err(ConfigError::command_line(t, only, span).into());
                 }
                 c.editor = words;
                 Ok(())

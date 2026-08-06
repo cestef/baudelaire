@@ -2,7 +2,7 @@
 
 use crate::config::Named;
 use crate::config::dispatch::Kind::{Choice, Text};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
@@ -58,6 +58,8 @@ impl Default for SpaConfig {
 /// The `spa { root ..; prefetch .. }` block. Its presence enables the
 /// client-side navigation runtime.
 impl Section for SpaConfig {
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+
     const RULES: Block<Self> = Block(&[
         (
             "root",
@@ -78,9 +80,4 @@ impl Section for SpaConfig {
             },
         ),
     ]);
-
-    fn enable(&mut self) -> bool {
-        self.enabled = true;
-        true
-    }
 }

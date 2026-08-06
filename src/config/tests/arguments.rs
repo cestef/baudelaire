@@ -6,24 +6,20 @@
 //! configured nothing -- or, where the section was turned on by its own
 //! presence, the exact opposite of what it said.
 
-use super::parse;
-use crate::config::Config;
+use super::{err, parse};
 
-/// The rendered diagnostic of a config that must not parse.
-fn err(text: &str) -> String {
-    let err = Config::parse(text).expect_err("should be refused");
-    format!("{:?}", miette::Report::from(err))
-}
-
-/// A section is configured from its block, so a value on its line is read by
-/// nobody. Each of these parsed, and each turned the section *on*.
+/// A section with no switch of its own is configured from its block, so a value
+/// on its line is read by nobody. Each of these parsed, and configured nothing.
+///
+/// A section that *does* have a switch reads one boolean there and nothing else
+/// (`switches.rs`), which is why `lint`, `generate { cards }` and
+/// `security { csp }` were taken off this list: they used to be refused here,
+/// having no way to say "off" at all.
 #[test]
 fn err_a_value_on_a_section_line_is_refused() {
     for (config, node) in [
-        ("lint #false", "lint"),
-        ("generate {\n  cards #false\n}", "cards"),
-        ("security {\n  csp #false\n}", "csp"),
-        ("generate {\n  robots \"junk\"\n}", "robots"),
+        ("paths \"junk\"", "paths"),
+        ("generate {\n  pdf {\n    bundle \"junk\"\n  }\n}", "bundle"),
         (
             "content {\n  collections \"junk\" {\n    posts\n  }\n}",
             "collections",
@@ -53,6 +49,13 @@ fn err_a_second_value_on_a_scalar_key_is_refused() {
         ("serve {\n  port 1 2\n}", "port"),
         ("site \"a\" \"b\"", "site"),
         ("prune #false #true", "prune"),
+        // A key naming one of a fixed set is a scalar like any other. It was
+        // exempt only because three multi-value keys were declared as one.
+        ("links {\n  style \"clean\" \"flat\"\n}", "style"),
+        (
+            "content {\n  markdown {\n    html \"drop\" \"refuse\"\n  }\n}",
+            "html",
+        ),
         (
             "content {\n  collections {\n    posts \"a/*.typ\" \"b/*.typ\"\n  }\n}",
             "posts",
@@ -147,6 +150,9 @@ fn the_shapes_a_key_does_take_still_parse() {
     let cfg = parse("generate {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}");
     assert_eq!(cfg.generate.feed.formats.len(), 2, "a list of names");
 
+    let cfg = parse("generate {\n  search {\n    fields \"title\" \"tags\"\n  }\n}");
+    assert_eq!(cfg.generate.search.fields.len(), 2, "a list of names");
+
     let cfg = parse("html {\n  footnotes \"article\" \"main\"\n}");
     assert_eq!(cfg.html.footnotes.targets().len(), 2, "a list of words");
 
@@ -182,4 +188,47 @@ fn the_shapes_a_key_does_take_still_parse() {
         Some("p/*.typ"),
         "a leading positional the caller reads"
     );
+}
+
+/// A list key written with no values at all. The rule is one, and it is on
+/// `NodeExt`: a list that *replaces* what the key holds reads a bare node as
+/// the empty list, which is the only spelling a profile has for undoing an
+/// inherited one.
+#[test]
+fn a_bare_list_key_is_the_empty_list_where_a_list_replaces() {
+    assert!(parse("serve {\n  exclude\n}").serve.exclude.is_empty());
+    assert!(
+        parse("generate {\n  search {\n    formats\n  }\n}")
+            .generate
+            .search
+            .formats
+            .is_empty(),
+        "and so turns search off"
+    );
+    assert!(
+        parse("assets {\n  images {\n    responsive {\n      widths\n    }\n  }\n}")
+            .assets
+            .images
+            .responsive
+            .widths
+            .is_empty(),
+        "even where the default is not empty"
+    );
+}
+
+/// The other half of that rule: a list written in the `-name` grammar amends
+/// the key's defaults, so one naming nothing amends nothing, and a line that
+/// configures nothing is the silent no-op this layer exists to prevent.
+#[test]
+fn err_a_bare_list_key_is_refused_where_a_list_amends() {
+    for config in [
+        "typst {\n  features\n}",
+        "content {\n  markdown {\n    extensions\n  }\n}",
+    ] {
+        let rendered = err(config);
+        assert!(
+            rendered.contains("missing argument"),
+            "{config}: {rendered}"
+        );
+    }
 }

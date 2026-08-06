@@ -78,19 +78,19 @@ impl Section for GenerateConfig {
         (
             "robots",
             Nested(RobotsConfig::rows),
-            "Write `robots.txt`. Its presence turns it on.",
+            "Write `robots.txt`. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.robots.fill(n, t),
         ),
         (
             "llms",
             Nested(LlmsConfig::rows),
-            "Write `llms.txt`. Its presence turns it on.",
+            "Write `llms.txt`. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.llms.fill(n, t),
         ),
         (
             "manifest",
             Nested(ManifestConfig::rows),
-            "Write `manifest.webmanifest`. Its presence turns it on.",
+            "Write `manifest.webmanifest`. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.manifest.fill(n, t),
         ),
         (
@@ -108,7 +108,7 @@ impl Section for GenerateConfig {
         (
             "cards",
             Nested(CardsConfig::rows),
-            "Draw a social card per page. Its presence turns it on.",
+            "Draw a social card per page. Its presence turns it on; `#false` turns it off again.",
             |c, n, t| c.cards.fill(n, t),
         ),
         (

@@ -68,7 +68,8 @@ security {
 ```
 
 The block's presence generates a policy into `_headers`, the rule file Netlify
-and Cloudflare Pages read out of the publish directory. See
+and Cloudflare Pages read out of the publish directory, and `csp #false` stops
+it again. See
 #link("hosts/static-hosts.typ")[static hosts]. A silent block is already a real
 policy:
 
