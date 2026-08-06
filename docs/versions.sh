@@ -144,6 +144,13 @@ done > "$out/_headers"
 # where any template using a config key or module newer than that tag breaks the
 # build.
 #
+# Below the header, not above it: a frozen theme's CSS was written for a header
+# that starts at the top of the page, and the header is positioned, so it is the
+# containing block for anything absolute inside it. Stacking the banner on top
+# shifted the header down and dragged the skip link, parked just above it, into
+# view. Going under the header disturbs nothing, in trees whose CSS this cannot
+# reach either.
+#
 # `|` delimits the substitution, so nothing here may contain one, and `&` is the
 # whole match in a sed replacement, so nothing here may contain one of those
 # either.
@@ -179,7 +186,9 @@ for tag in $versions; do
             */index.html) href=/${rel%index.html} ;;
             *) href=/$rel ;;
         esac
-        sed "s|<body>|<body>$(banner "$tag" "$href")|" "$file" > "$file.tmp"
+        # Every page of every published tree closes exactly one `header`, so a
+        # plain global substitution lands the banner once.
+        sed "s|</header>|</header>$(banner "$tag" "$href")|" "$file" > "$file.tmp"
         mv "$file.tmp" "$file"
     done
 done
