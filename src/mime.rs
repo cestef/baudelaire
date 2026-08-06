@@ -53,10 +53,22 @@ impl Mime {
         })
     }
 
-    /// The `Content-Type` header value: the type, plus a UTF-8 charset for
-    /// textual types.
+    /// The `Content-Type` header value: the type, plus a UTF-8 charset for the
+    /// types that define one.
+    ///
+    /// Read off the media type rather than listed beside the table above, so a
+    /// type added there cannot be forgotten here. It is *not* every type a
+    /// human would call textual: `application/json` and the `+json` suffix
+    /// register no `charset` parameter at all (RFC 8259 is explicit that adding
+    /// one has no effect), while XML does (RFC 7303), which is what puts
+    /// `image/svg+xml` on this side of the line and leaves
+    /// `application/manifest+json` off it. The doc used to say "textual types"
+    /// and the code tested `text/`, so `application/xml` and every SVG the dev
+    /// server sent went out with no encoding declared.
     pub fn header(self) -> String {
-        match self.0.starts_with("text/") {
+        let charset =
+            self.0.starts_with("text/") || self.0 == "application/xml" || self.0.ends_with("+xml");
+        match charset {
             true => format!("{}; charset=utf-8", self.0),
             false => self.0.to_owned(),
         }
@@ -189,14 +201,21 @@ mod tests {
     }
 
     #[test]
-    fn header_adds_charset_only_for_text() {
+    fn header_adds_charset_to_the_types_that_define_one() {
         assert_eq!(Mime::of("i.html").header(), "text/html; charset=utf-8");
         assert_eq!(Mime::of("a.js").header(), "text/javascript; charset=utf-8");
         assert_eq!(Mime::of("n.txt").header(), "text/plain; charset=utf-8");
-        // Non-text types carry no charset.
-        assert_eq!(Mime::of("p.png").header(), "image/png");
+        // XML defines a charset parameter, so a suffixed type carries one too.
+        assert_eq!(Mime::of("f.xml").header(), "application/xml; charset=utf-8");
+        assert_eq!(Mime::of("s.svg").header(), "image/svg+xml; charset=utf-8");
+        // JSON registers none, however textual it reads.
         assert_eq!(Mime::of("d.json").header(), "application/json");
-        assert_eq!(Mime::of("s.svg").header(), "image/svg+xml");
+        assert_eq!(
+            Mime::of("m.webmanifest").header(),
+            "application/manifest+json"
+        );
+        // A binary carries none either.
+        assert_eq!(Mime::of("p.png").header(), "image/png");
     }
 
     #[test]
