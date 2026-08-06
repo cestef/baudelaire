@@ -574,10 +574,205 @@ mod tests {
         false
     }
 
-    /// Everything between a pair of backticks on one line. Naive by design: a
-    /// diagnostic literal is one line of prose, not Rust to be parsed.
-    fn spans(line: &str) -> impl Iterator<Item = &str> {
-        line.split('`').skip(1).step_by(2)
+    /// Everything between a pair of backticks. Naive by design: a diagnostic
+    /// message is one line of prose, not Rust to be parsed.
+    fn spans(text: &str) -> impl Iterator<Item = &str> {
+        text.split('`').skip(1).step_by(2)
+    }
+
+    /// A Rust source file, walked for the text a reader will see rendered as
+    /// markup: the string literals inside an `#[error(..)]`, a `help(..)`, or a
+    /// [`markup!`] call.
+    ///
+    /// Finding the constructs rather than the files is what makes the check
+    /// reach the whole crate. It used to read `src/error/` alone, one directory
+    /// deep, and only ever looked at whole lines: a diagnostic declared
+    /// anywhere else (`config/permalink.rs`, `cli/serve/open.rs`) was never
+    /// checked at all, an attribute broken across lines was checked one line at
+    /// a time, and a help string built at runtime was invisible.
+    struct Scan<'a> {
+        text: &'a str,
+        /// Whether every string literal counts, rather than only the ones
+        /// inside one of [`Scan::TRIGGERS`]. True under `src/error/`, where a
+        /// literal is diagnostic text or it is nothing, which is also what
+        /// covers the messages assembled there with `format!`. Elsewhere a
+        /// `format!` is as likely to be a typst message or a test assertion, so
+        /// the construct has to say so.
+        everything: bool,
+        at: usize,
+        line: usize,
+        /// Unclosed parens of the construct being walked, zero when outside one.
+        depth: usize,
+        found: Vec<(usize, String)>,
+    }
+
+    impl<'a> Scan<'a> {
+        /// The constructs whose text reaches a reader through [`Styled`].
+        /// `help(` covers both the `#[diagnostic(help(..))]` attribute and the
+        /// builders that assemble one.
+        const TRIGGERS: &'static [&'static str] = &["#[error(", "help(", "markup!("];
+
+        /// Where the walk stops: a test module's literals are assertions about
+        /// rendered output, not output.
+        const TESTS: &'static str = "#[cfg(test)]";
+
+        fn new(text: &'a str, everything: bool) -> Self {
+            Self {
+                text,
+                everything,
+                at: 0,
+                line: 1,
+                depth: 0,
+                found: Vec::new(),
+            }
+        }
+
+        /// Every literal that will be rendered as markup, as `(line, text)`.
+        fn messages(mut self) -> Vec<(usize, String)> {
+            let b = self.text.as_bytes();
+            while self.at < b.len() {
+                let next = b.get(self.at + 1).copied();
+                match b[self.at] {
+                    b'\n' => {
+                        self.line += 1;
+                        self.at += 1;
+                    }
+                    b'/' if next == Some(b'/') => self.skip_line(),
+                    b'/' if next == Some(b'*') => self.block_comment(),
+                    b'"' => self.literal(0),
+                    b'r' => match (!self.in_word()).then(|| self.raw()).flatten() {
+                        Some(hashes) => self.literal(hashes),
+                        None => self.step(),
+                    },
+                    b'(' if self.depth > 0 => {
+                        self.depth += 1;
+                        self.at += 1;
+                    }
+                    b')' if self.depth > 0 => {
+                        self.depth -= 1;
+                        self.at += 1;
+                    }
+                    _ => self.step(),
+                }
+            }
+            self.found
+        }
+
+        /// One byte of ordinary code: enters a construct when one starts here,
+        /// and stops the walk at a test module.
+        fn step(&mut self) {
+            let rest = &self.text.as_bytes()[self.at..];
+            if rest.starts_with(Self::TESTS.as_bytes()) {
+                self.at = self.text.len();
+                return;
+            }
+            if self.depth == 0
+                && let Some(trigger) = Self::TRIGGERS
+                    .iter()
+                    .find(|t| rest.starts_with(t.as_bytes()))
+            {
+                // The trigger ends in its own `(`, so entering it is depth 1.
+                self.depth = 1;
+                self.at += trigger.len();
+                return;
+            }
+            self.at += 1;
+        }
+
+        /// The number of `#`s in a raw-string opener starting here, if this is
+        /// one.
+        fn raw(&self) -> Option<usize> {
+            let b = self.text.as_bytes();
+            let mut i = self.at + 1;
+            while b.get(i) == Some(&b'#') {
+                i += 1;
+            }
+            (b.get(i) == Some(&b'"')).then_some(i - self.at - 1)
+        }
+
+        /// Whether the byte before this one continues an identifier, so an `r`
+        /// is the tail of a name rather than a raw-string prefix.
+        fn in_word(&self) -> bool {
+            let Some(prev) = self.at.checked_sub(1).map(|i| self.text.as_bytes()[i]) else {
+                return false;
+            };
+            prev.is_ascii_alphanumeric() || prev == b'_'
+        }
+
+        /// Read the string literal starting here, recording it when it is
+        /// diagnostic text. `hashes` is zero for an ordinary literal.
+        fn literal(&mut self, hashes: usize) {
+            let b = self.text.as_bytes();
+            let raw = b[self.at] == b'r';
+            let start = self.at + usize::from(raw) + hashes + 1;
+            let opened = self.line;
+            let mut i = start;
+            while i < b.len() {
+                match b[i] {
+                    // A `\` at the end of a line continues the literal on the
+                    // next one, so the newline it hides still counts.
+                    b'\\' if !raw => {
+                        self.line += usize::from(b.get(i + 1) == Some(&b'\n'));
+                        i += 2;
+                    }
+                    b'\n' => {
+                        self.line += 1;
+                        i += 1;
+                    }
+                    b'"' if b[i + 1..].iter().take(hashes).all(|c| *c == b'#') => break,
+                    _ => i += 1,
+                }
+            }
+            let end = i.min(b.len());
+            if self.everything || self.depth > 0 {
+                self.found.push((opened, self.text[start..end].to_owned()));
+            }
+            self.at = (end + hashes + 1).min(b.len());
+        }
+
+        fn skip_line(&mut self) {
+            let b = self.text.as_bytes();
+            while self.at < b.len() && b[self.at] != b'\n' {
+                self.at += 1;
+            }
+        }
+
+        fn block_comment(&mut self) {
+            let b = self.text.as_bytes();
+            self.at += 2;
+            while self.at < b.len() && !b[self.at..].starts_with(b"*/") {
+                if b[self.at] == b'\n' {
+                    self.line += 1;
+                }
+                self.at += 1;
+            }
+            self.at = (self.at + 2).min(b.len());
+        }
+    }
+
+    /// Every `.rs` file under `src/`, with the path each was read from.
+    fn sources() -> Vec<std::path::PathBuf> {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("a readable directory") {
+                let path = entry.expect("a readable entry").path();
+                if path.is_dir() {
+                    // A `tests` directory holds assertions about rendered
+                    // output, which quote the shorthand on purpose.
+                    if path.file_name().is_some_and(|n| n == "tests") {
+                        continue;
+                    }
+                    walk(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src")),
+            &mut out,
+        );
+        out
     }
 
     /// The rule [`Text`] and [`Code`] exist to enforce: a value interpolated
@@ -590,19 +785,14 @@ mod tests {
     /// renders as code.
     #[test]
     fn no_diagnostic_interpolates_a_raw_value_inside_a_code_span() {
-        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/error");
         let mut offenders = Vec::new();
-        for entry in std::fs::read_dir(dir).expect("the error module is checked in") {
-            let path = entry.expect("readable entry").path();
+        for path in sources() {
             let text = std::fs::read_to_string(&path).expect("readable source");
-            for (n, line) in text.lines().enumerate() {
-                // Prose about the grammar is not the grammar.
-                if line.trim_start().starts_with("//") {
-                    continue;
-                }
-                if spans(line).any(shorthand) {
-                    let name = path.file_name().expect("a file").to_string_lossy();
-                    offenders.push(format!("{name}:{}: {}", n + 1, line.trim()));
+            let everything = path.components().any(|c| c.as_os_str() == "error");
+            for (line, message) in Scan::new(&text, everything).messages() {
+                if spans(&message).any(shorthand) {
+                    let name = path.display();
+                    offenders.push(format!("{name}:{line}: {message}"));
                 }
             }
         }
@@ -610,6 +800,41 @@ mod tests {
             offenders.is_empty(),
             "interpolate through `Code(.field)` or `Text(.field)` instead:\n{}",
             offenders.join("\n")
+        );
+    }
+
+    /// The check has to be able to fail, and to fail on the shapes it is aimed
+    /// at: an attribute broken across lines, a runtime-built help, and the
+    /// `{{` a message quoting a KDL block writes.
+    #[test]
+    fn the_check_reads_the_constructs_and_not_the_lines() {
+        let scan = |text: &str| {
+            Scan::new(text, false)
+                .messages()
+                .into_iter()
+                .filter(|(_, m)| spans(m).any(shorthand))
+                .count()
+        };
+        assert_eq!(scan("#[error(\"read `{path}`\")]"), 1);
+        assert_eq!(
+            scan("#[diagnostic(\n  code(x::y),\n  help(\"try `{other}`\")\n)]"),
+            1
+        );
+        assert_eq!(scan("let h = markup!(\"try `{guess}`\");"), 1);
+        // The adapters, the positional form, and doubled braces are all fine.
+        assert_eq!(scan("#[error(\"read {}\", Code(.path))]"), 0);
+        assert_eq!(scan("markup!(\"did you mean `{}`?\", guess)"), 0);
+        assert_eq!(scan("#[error(\"write `assets {{ tsconfig }}`\")]"), 0);
+        // A literal outside any of the constructs is not diagnostic text.
+        assert_eq!(scan("let s = \"a `{name}` label\";"), 0);
+        // ..but under `src/error` every literal is.
+        assert_eq!(
+            Scan::new("let s = \"a `{name}` label\";", true)
+                .messages()
+                .into_iter()
+                .filter(|(_, m)| spans(m).any(shorthand))
+                .count(),
+            1
         );
     }
 }
