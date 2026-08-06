@@ -96,7 +96,7 @@ js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
 # ~3.2 MiB. Off means `assets { minify }` warns and `.css` files are copied
 # verbatim. It also forces `assets { fingerprint }` off, since a verbatim sheet
 # keeps naming its assets by their pre-hash filenames: see `Gate::rewrites`.
-css = ["dep:lightningcss"]
+css = ["dep:lightningcss", "dep:parcel_sourcemap"]
 
 # Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
 # EXIF-orientation baking (image), plus responsive width variants. Off means
@@ -207,7 +207,13 @@ open = "5"
 # live behind those. What they cost is `parcel_sourcemap` and with it `rkyv`
 # 0.7, whose derives are the only thing in the tree still on `syn` 1: ~150
 # cpu-seconds and 15 crates for three features nothing calls.
-lightningcss = { version = "1.0.0-alpha.71", default-features = false, optional = true }
+lightningcss = { version = "1.0.0-alpha.71", default-features = false, features = [
+    "sourcemap",
+], optional = true }
+# lightningcss writes its mappings into one of these, and does not re-export the
+# type, so the stylesheet handler names it directly. Same version lightningcss
+# resolves, so the two share one copy.
+parcel_sourcemap = { version = "2.1.1", features = ["json"], optional = true }
 rolldown = { version = "1", optional = true }
 # Wanted by two independent capabilities: `js` (rolldown drives an async
 # bundler) and `ssh` (russh is async). The feature list is the union of what

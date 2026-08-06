@@ -10,7 +10,7 @@
 use std::path::Component;
 use std::path::{Path, PathBuf};
 
-use crate::config::Config;
+use crate::config::{Config, SourceMaps};
 use crate::error::Result;
 use crate::fs;
 use crate::graph::AssetName;
@@ -171,6 +171,17 @@ pub(super) trait Handler: Sync {
         Phase::Early
     }
 
+    /// What becomes of the source map for the kind of asset this handler owns.
+    ///
+    /// Asked of the handler rather than read from the config by the pipeline,
+    /// because "which kind of asset is this" is the one thing the pipeline
+    /// deliberately does not know: it is the handler's whole identity. Default
+    /// is [`SourceMaps::Off`], so a kind that cannot produce a map says so by
+    /// saying nothing.
+    fn sourcemaps(&self, _config: &Config) -> SourceMaps {
+        SourceMaps::Off
+    }
+
     /// Whether this handler's output is a pure function of the file's own bytes
     /// and the config, and so can be memoized across builds.
     ///
@@ -198,11 +209,9 @@ pub(super) trait Handler: Sync {
         rel.to_path_buf()
     }
 
-    /// Transform `file` (relative path `rel`) into the bytes written to `dist`,
-    /// or `None` to emit nothing: a script partial pulled in only through
-    /// imports. `map` holds the served names of every asset processed so far.
-    fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx)
-    -> Result<Option<Vec<u8>>>;
+    /// Transform `file` (relative path `rel`) into what is written to `dist`.
+    /// `map` holds the served names of every asset processed so far.
+    fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Produced>;
 
     /// Responsive width variants derived from `file`, beyond the primary
     /// [`render`](Handler::render) output: the raster handler's downscaled
@@ -212,6 +221,34 @@ pub(super) trait Handler: Sync {
     /// [`Handler::render`]: Handler::render
     fn variants(&self, _file: &Path, _rel: &Path, _ctx: &Ctx) -> Result<Vec<Variant>> {
         Ok(Vec::new())
+    }
+}
+
+/// Everything a handler produced for one file: the bytes served under its own
+/// name, and the source map they were built against, when it built one.
+///
+/// A struct rather than the bare `Option<Vec<u8>>` this used to be, because a
+/// map is a *second* file: written beside the first and named after it. The
+/// handler cannot name it, since the served name is only settled once the
+/// pipeline has fingerprinted the bytes, so the link between the two is the
+/// pipeline's to write and this type is how the map reaches it.
+pub(in crate::engine) struct Produced {
+    /// The served bytes, or `None` to emit nothing: a script partial pulled in
+    /// only through imports.
+    pub bytes: Option<Vec<u8>>,
+    /// The source map for `bytes`, when the site asked for one and this handler
+    /// can build it. Never carries the `sourceMappingURL` link; that is the
+    /// pipeline's, for the reason above.
+    pub map: Option<Vec<u8>>,
+}
+
+impl Produced {
+    /// The ordinary case: bytes, no map.
+    pub(in crate::engine) fn bytes(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes: Some(bytes),
+            map: None,
+        }
     }
 }
 
@@ -249,14 +286,8 @@ impl Handler for Verbatim {
         true
     }
 
-    fn render(
-        &self,
-        file: &Path,
-        _rel: &Path,
-        _map: &AssetMap,
-        _ctx: &Ctx,
-    ) -> Result<Option<Vec<u8>>> {
-        Ok(Some(fs::read(file)?))
+    fn render(&self, file: &Path, _rel: &Path, _map: &AssetMap, _ctx: &Ctx) -> Result<Produced> {
+        Ok(Produced::bytes(fs::read(file)?))
     }
 }
 

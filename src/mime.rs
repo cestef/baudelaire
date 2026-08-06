@@ -44,7 +44,9 @@ impl Mime {
             "woff2" => "font/woff2",
             "woff" => "font/woff",
             "ttf" => "font/ttf",
-            "json" => "application/json",
+            // A source map is JSON, and the dev server has to say so: served as
+            // a generic binary, a browser fetches it and declines to parse it.
+            "json" | "map" => "application/json",
             "webmanifest" => "application/manifest+json",
             "xml" => "application/xml",
             "txt" => "text/plain",

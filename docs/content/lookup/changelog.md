@@ -15,6 +15,42 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **`assets { sourcemap }`**: source maps, so a minified bundle reads in
+  devtools as the files it was built from. One word says what becomes of the
+  map, per kind of asset:
+
+  ```kdl
+  assets {
+    sourcemap "external"            // both kinds
+
+    sourcemap "external" {          // ..or set both and narrow one
+      styles "off"
+    }
+
+    sourcemap {                     // ..or name each
+      scripts "hidden"
+      styles  "inline"
+    }
+  }
+  ```
+
+  `off` writes nothing; `inline` puts the map inside the file as a `data:` URI;
+  `external` writes it beside the file and names it in a `sourceMappingURL`
+  comment; `hidden` writes it and points at it from nowhere, which is the shape
+  for uploading to an error tracker.
+
+  Off by default, and it has to be opt-in: the pipeline never publishes the
+  `.ts`, `.jsx` or unminified `.css` a map would name, so each map carries the
+  original text inside it, and asking for one publishes your sources.
+
+  The link survives `fingerprint`: the served name is hashed before the
+  `sourceMappingURL` comment is appended, so the comment cannot change the name
+  it points at, and the map is named after the file it maps, hash included.
+
 ## [0.0.12] - 2026-08-06
 
 ### Upgrading
@@ -2029,6 +2065,7 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.12...HEAD
 [0.0.12]: https://github.com/cestef/baudelaire/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/cestef/baudelaire/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/cestef/baudelaire/compare/v0.0.9...v0.0.10

@@ -368,3 +368,219 @@ scenario "bundling publishes the bundle and none of its inputs" {
     absent "assets/_partial.ts"
   }
 }
+
+// Source maps are the one asset output that is a *second* file, named after the
+// first and naming it back. The pair only works if the link survives
+// fingerprinting, which renames the file the map is named after, so both halves
+// are asserted together rather than either alone.
+scenario "a bundled script ships the map it was built from" {
+  requires "js"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+        sourcemap "external"
+      }
+      """#
+    "assets/_util.js" #"""
+      export function hi() { return 42; }
+      """#
+    "assets/main.js" #"""
+      import { hi } from './_util.js';
+      console.log(hi());
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/main.js" {
+      contains "sourceMappingURL=main.js.map"
+    }
+    file "assets/main.js.map" {
+      // The sources travel inside the map: the pipeline never publishes a
+      // partial, so a map that only named them would resolve to nothing.
+      contains "sourcesContent"
+      contains "return 42"
+    }
+  }
+}
+
+scenario "a stylesheet ships the map it was built from" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+        sourcemap "external"
+      }
+      """#
+    "assets/app.css" #"""
+      .a { color: red; }
+      .b { color: blue; }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/app.css" {
+      // The css comment form, not the `//` one a script takes.
+      contains "/*# sourceMappingURL=app.css.map */"
+    }
+    file "assets/app.css.map" {
+      contains "sourcesContent"
+      contains "color: red"
+    }
+  }
+}
+
+// Without the flag nothing is written and nothing is linked, which is what
+// keeps a site's sources unpublished by default.
+scenario "no source map is written unless the site asks" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+      }
+      """#
+    "assets/app.css" #"""
+      .a { color: red; }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/app.css" { missing "sourceMappingURL" }
+    absent "assets/app.css.map"
+  }
+}
+
+// The value is a posture, and each one is a different answer to "who is meant
+// to read this map". `hidden` writes it and links to it from nothing, which is
+// the shape for uploading to an error tracker.
+scenario "a hidden map is written but nothing points at it" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+        sourcemap "hidden"
+      }
+      """#
+    "assets/app.css" #"""
+      .a { color: red; }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/app.css" { missing "sourceMappingURL" }
+    file "assets/app.css.map" { contains "sourcesContent" }
+  }
+}
+
+scenario "an inline map travels inside the asset instead of beside it" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+        sourcemap "inline"
+      }
+      """#
+    "assets/app.css" #"""
+      .a { color: red; }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/app.css" {
+      contains "sourceMappingURL=data:application/json"
+    }
+    absent "assets/app.css.map"
+  }
+}
+
+// The line sets every kind and the block narrows from there, so one line can
+// say "maps everywhere except styles" without repeating itself.
+scenario "the line sets every kind and the block narrows one" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify #true
+        bundle #true
+        sourcemap "external" {
+          styles "off"
+        }
+      }
+      """#
+    "assets/app.css" #"""
+      .a { color: red; }
+      """#
+    "assets/main.js" #"""
+      console.log(1);
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/app.css" { missing "sourceMappingURL" }
+    absent "assets/app.css.map"
+  }
+}

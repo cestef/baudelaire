@@ -23,6 +23,7 @@ mod js;
 pub(in crate::engine) mod memo;
 #[cfg(feature = "js")]
 mod module;
+mod sourcemap;
 
 use std::path::{Path, PathBuf};
 
@@ -41,7 +42,9 @@ use memo::Memo;
 
 // Re-exported for the handler modules (and [`memo`]), which name these as
 // `super::*`; the protocol itself lives in [`handler`].
-use handler::{Ctx, Handler, PathExt, Phase, Private, Variant, builtin};
+use crate::config::SourceMaps;
+use handler::{Ctx, Handler, PathExt, Phase, Private, Produced, Variant, builtin};
+use sourcemap::SourceMap;
 
 #[cfg(feature = "js")]
 use js::Js;
@@ -76,6 +79,10 @@ struct Render {
     /// Where it is served from, which a handler may rename (`.ts` -> `.js`).
     served: PathBuf,
     primary: Option<Vec<u8>>,
+    /// The source map for `primary`, still unlinked to it: naming the map is
+    /// the emit pass's, since the name it is linked under is only settled once
+    /// `primary` has been fingerprinted.
+    map: Option<Vec<u8>>,
     variants: Vec<Variant>,
 }
 
@@ -270,15 +277,17 @@ impl<'a> Assets<'a> {
                 .map(|file| self.render(handler, file, ctx, &out.map))
                 .collect::<Result<_>>()?,
         };
+        let posture = handler.sourcemaps(self.config);
         for render in rendered {
             let Render {
                 rel,
                 served,
                 primary,
+                map,
                 variants,
             } = render;
             if let Some(bytes) = primary {
-                let dst = self.emit(ctx, &served, &bytes, out)?;
+                let dst = self.mapped(ctx, &served, bytes, map, posture, out)?;
                 // A renamed asset is referenced by *either* name: authors write
                 // `main.js` for a bundle, but `main.ts` is what is on disk and
                 // what an editor completes. Map both, or one of the two spellings
@@ -324,20 +333,70 @@ impl<'a> Assets<'a> {
                 rel,
                 served,
                 primary,
+                // A memoized handler is a pure one, and a pure handler is one
+                // whose output is its own bytes: nothing that builds a source
+                // map qualifies, so there is none to have stored.
+                map: None,
                 variants,
             });
         }
-        let primary = handler.render(file, &rel, map, ctx)?;
+        let Produced { bytes, map } = handler.render(file, &rel, map, ctx)?;
         let variants = handler.variants(file, &rel, ctx)?;
         if let Some(key) = &key {
-            self.memo.put(key, primary.as_deref(), &variants);
+            self.memo.put(key, bytes.as_deref(), &variants);
         }
         Ok(Render {
             rel,
             served,
-            primary,
+            primary: bytes,
+            map,
             variants,
         })
+    }
+
+    /// Write an asset together with the source map it was built against, each
+    /// naming the other. Returns the path the asset itself was written to.
+    ///
+    /// The order is the whole of it. The name is fingerprinted from the bytes
+    /// the handler produced, *before* the `sourceMappingURL` comment is
+    /// appended, so the comment cannot change the name it has just been made to
+    /// point at. The map is then named after that settled name, and the linked
+    /// bytes are what gets hashed for `integrity` and weighed for a budget,
+    /// because they are what a browser fetches.
+    ///
+    /// The map itself is deliberately not fingerprinted: it is already named
+    /// after a file that is, so it turns over whenever that one does, and a map
+    /// is fetched by name from the comment rather than from any page.
+    fn mapped(
+        &self,
+        ctx: &Ctx,
+        rel: &Path,
+        bytes: Vec<u8>,
+        map: Option<Vec<u8>>,
+        posture: SourceMaps,
+        out: &mut Processed,
+    ) -> Result<PathBuf> {
+        let dst = self.fingerprint(rel, &bytes);
+        let Some(map) = map else {
+            self.write(ctx, rel, &dst, &bytes, out)?;
+            return Ok(dst);
+        };
+        // An inline map is written into the asset instead of beside it, so
+        // there is no second file and nothing else to name.
+        if posture.inline() {
+            let bytes = SourceMap::inlined(bytes, &dst, &map);
+            self.write(ctx, rel, &dst, &bytes, out)?;
+            return Ok(dst);
+        }
+        let bytes = match posture.linked() {
+            true => SourceMap::linked(bytes, &dst),
+            // Hidden: the map is written and the asset says nothing about it.
+            false => bytes,
+        };
+        self.write(ctx, rel, &dst, &bytes, out)?;
+        let at = SourceMap::beside(&dst);
+        self.write(ctx, &at, &at, &map, out)?;
+        Ok(dst)
     }
 
     /// Fingerprint (when enabled) and write `bytes` for the asset at `rel`,
@@ -345,14 +404,32 @@ impl<'a> Assets<'a> {
     /// the path actually written.
     fn emit(&self, ctx: &Ctx, rel: &Path, bytes: &[u8], out: &mut Processed) -> Result<PathBuf> {
         let dst = self.fingerprint(rel, bytes);
-        fs::write_all(self.dst.join(&dst), bytes)?;
+        self.write(ctx, rel, &dst, bytes, out)?;
+        Ok(dst)
+    }
+
+    /// Write `bytes` to the already-settled `dst`, recording the request->served
+    /// URL mapping when the name changed.
+    ///
+    /// Split from [`Assets::emit`] because a mapped asset has to choose its name
+    /// before it has its final bytes, which is the one case that cannot go
+    /// through fingerprint-then-write in a single step.
+    fn write(
+        &self,
+        ctx: &Ctx,
+        rel: &Path,
+        dst: &Path,
+        bytes: &[u8],
+        out: &mut Processed,
+    ) -> Result<()> {
+        fs::write_all(self.dst.join(dst), bytes)?;
         out.count += 1;
         out.bytes += bytes.len() as u64;
-        out.emitted.insert(ctx.url(&dst), bytes, self.config.sri());
+        out.emitted.insert(ctx.url(dst), bytes, self.config.sri());
         if dst != rel {
-            out.map.insert(ctx.url(rel), ctx.url(&dst));
+            out.map.insert(ctx.url(rel), ctx.url(dst));
         }
-        Ok(dst)
+        Ok(())
     }
 
     /// The relative output path for an asset, splicing a content hash into the

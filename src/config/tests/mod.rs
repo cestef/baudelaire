@@ -4,6 +4,7 @@ mod images;
 mod languages;
 mod remote;
 mod schema;
+mod sourcemaps;
 mod switches;
 mod typst;
 mod urls;

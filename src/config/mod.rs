@@ -53,6 +53,7 @@ pub use assets::AssetConfig;
 pub use assets::images::ImagesConfig;
 pub use assets::images::optimize::{JpegConfig, OptimizeConfig, PngConfig, PngStrip};
 pub use assets::images::responsive::ResponsiveConfig;
+pub use assets::sourcemap::{SourceMapConfig, SourceMaps};
 pub use cache::CacheConfig;
 pub use caching::CacheControl;
 pub use content::ContentConfig;

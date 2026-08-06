@@ -34,6 +34,11 @@ assets {
   [`#false`],
   [Puts a content hash in each output filename, and rewrites every reference to match.],
 
+  [`sourcemap`],
+  [`off` | `inline` | `external` | `hidden`],
+  [`off`],
+  [What becomes of each kind of asset's source map. See #link(<sourcemaps>)[Source maps].],
+
   [`tsconfig`],
   [path],
   [discovered],
@@ -90,6 +95,97 @@ exactly those files.
   #link("../lookup/js-modules.typ")[`baudelaire:*` virtual modules], so client
   code names an asset by its logical path.
 ]
+
+== Source maps <sourcemaps>
+
+A source map lets a minified bundle read in devtools as the files you wrote.
+`sourcemap` takes one word saying what becomes of it:
+
+```kdl
+assets {
+  minify #true
+  bundle #true
+  sourcemap "external"
+}
+```
+
+```text
+public/assets/app.4f2a1c.js
+public/assets/app.4f2a1c.js.map
+public/assets/style.9f3c1a.css
+public/assets/style.9f3c1a.css.map
+```
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Value], [Does]),
+  [`off`], [Writes nothing, and discloses nothing. The default.],
+  [`inline`],
+  [Puts the map inside the file, as a `data:` URI. One file and no second
+   request, but every visitor downloads it whether or not anyone looks.],
+
+  [`external`],
+  [Writes the map beside the file and names it in a `sourceMappingURL` comment.
+   A browser fetches it only when devtools are open.],
+
+  [`hidden`],
+  [Writes the map beside the file and points at it from nowhere. For uploading
+   to an error tracker: the file is still served, so this hides the map rather
+   than protecting it.],
+)
+
+Each kind of asset takes its own value. The word on the line sets both, and a
+block narrows from there:
+
+```kdl
+assets {
+  // maps for scripts, none for stylesheets
+  sourcemap "external" {
+    styles "off"
+  }
+}
+```
+
+```kdl
+assets {
+  // ship the bundle's map for the tracker, inline the stylesheet's for dev
+  sourcemap {
+    scripts "hidden"
+    styles  "inline"
+  }
+}
+```
+
+The value on the line is required: a bare `sourcemap` is an error rather than a
+guess, so that a profile naming the block cannot silently re-apply a default
+over what the base config chose. Writing only a block narrows what is already
+there and leaves the rest alone.
+
+An external or hidden map is named after the file it maps, fingerprint included,
+and both names are settled before the comment is written, so the pair survives
+`fingerprint`.
+
+#callout(kind: "warn")[
+  *A source map publishes your sources.* It has to: the pipeline never writes
+  your `.ts`, `.jsx` or unminified `.css` to the output, so a map that merely
+  named them would resolve to nothing. Each map therefore carries the original
+  text inside it, and anyone can read it.
+
+  That is usually the point in development and rarely what you want in
+  production, so it belongs in a #link("../configure/profiles.typ")[profile]:
+
+  ```kdl
+  profiles {
+    dev {
+      assets { sourcemap "external" }
+    }
+  }
+  ```
+]
+
+The map is fetched only when devtools are open, so it costs a visitor nothing;
+`lint { budget { } }` does not count it, because no page references it.
 
 == TypeScript and JSX <typescript>
 

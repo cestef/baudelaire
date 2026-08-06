@@ -75,6 +75,20 @@ const GATES: &[Gate] = &[
         rewrites: true,
     },
     Gate {
+        cargo: "css",
+        compiled: cfg!(feature = "css"),
+        setting: "assets { sourcemap }",
+        // Keyed to `css` rather than to `js`, though both write maps, because
+        // this is the half that always has work to do: a stylesheet is processed
+        // on every site that has one, while a script is only bundled when the
+        // site asks, and `assets { bundle }` says so on its own row. A binary
+        // with `js` but not `css` genuinely ships no stylesheet map, and this
+        // says exactly that.
+        asked: |config| config.assets.sourcemap.styles.wanted(),
+        effect: "no source map is written beside a processed stylesheet",
+        rewrites: false,
+    },
+    Gate {
         cargo: "js",
         compiled: cfg!(feature = "js"),
         setting: "assets { bundle }",

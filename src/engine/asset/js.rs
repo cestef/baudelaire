@@ -11,14 +11,15 @@ use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinif
 use rolldown_common::CodeSplittingMode;
 use rolldown_common::Output;
 use rolldown_common::TsConfig;
+use rolldown_common::{SourceMapType, StrOrBytes};
 
-use crate::config::Config;
+use crate::config::{Config, SourceMaps};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::AssetMap;
 
 use super::module::{ModuleCx, Virtual};
-use super::{Ctx, Handler, PathExt, Phase};
+use super::{Ctx, Handler, PathExt, Phase, Produced};
 
 /// Every extension the bundler reads as a script, which is rolldown's own
 /// module-type table for the ECMAScript family. An extension left out of this
@@ -46,20 +47,18 @@ impl Handler for Script {
         Phase::Bundle
     }
 
+    fn sourcemaps(&self, config: &Config) -> SourceMaps {
+        config.assets.sourcemap.scripts
+    }
+
     /// A bundle is JavaScript whatever its entry was written in.
     fn rename(&self, rel: &Path) -> PathBuf {
         rel.with_extension("js")
     }
 
-    fn render(
-        &self,
-        file: &Path,
-        _rel: &Path,
-        _map: &AssetMap,
-        ctx: &Ctx,
-    ) -> Result<Option<Vec<u8>>> {
+    fn render(&self, file: &Path, _rel: &Path, _map: &AssetMap, ctx: &Ctx) -> Result<Produced> {
         let bundler = ctx.bundler.expect("bundler present when bundling");
-        Ok(Some(bundler.bundle(file)?))
+        bundler.bundle(file)
     }
 }
 
@@ -70,6 +69,9 @@ pub(super) struct Js {
     runtime: tokio::runtime::Runtime,
     cwd: PathBuf,
     minify: bool,
+    /// What becomes of a bundle's source map, which decides whether rolldown is
+    /// asked for one at all.
+    sourcemap: SourceMaps,
     /// The site's pinned `tsconfig.json`, absolute. `None` leaves rolldown on
     /// its own discovery, which walks up from each module as `tsc` does.
     tsconfig: Option<TsConfig>,
@@ -94,6 +96,7 @@ impl Js {
             runtime,
             cwd,
             minify: cx.config.assets.minify,
+            sourcemap: cx.config.assets.sourcemap.scripts,
             tsconfig: cx
                 .config
                 .assets
@@ -118,7 +121,7 @@ impl Js {
     }
 
     /// Bundle a single entry to its output code.
-    pub(super) fn bundle(&self, entry: &Path) -> Result<Vec<u8>> {
+    pub(super) fn bundle(&self, entry: &Path) -> Result<Produced> {
         let import = fs::canonical(entry);
         let options = BundlerOptions {
             input: Some(vec![InputItem {
@@ -133,6 +136,19 @@ impl Js {
             // that did not exist in `dist`.
             code_splitting: Some(CodeSplittingMode::Bool(false)),
             minify: self.minify.then(|| RawMinifyOptions::Bool(true)),
+            // `File`, so the map is its own file rather than a base64 blob
+            // inside the bundle: the map is the larger of the two by far, and
+            // inlining it would put it in front of every visitor instead of
+            // only the one who opens devtools. The `sourceMappingURL` rolldown
+            // would write names the file it thinks it is emitting, which is not
+            // the fingerprinted name this pipeline writes, so it is stripped
+            // and the pipeline writes the link itself.
+            // Always `File`, whatever the posture: the pipeline decides where
+            // the map ends up, because only it knows the fingerprinted name and
+            // whether anything should point at it. `Inline` here would hand back
+            // a bundle with the map already fused into it, past the point where
+            // that choice can still be made.
+            sourcemap: self.sourcemap.wanted().then_some(SourceMapType::File),
             tsconfig: self.tsconfig.clone(),
             ..BundlerOptions::default()
         };
@@ -145,13 +161,32 @@ impl Js {
             .runtime
             .block_on(bundler.generate())
             .map_err(|e| AssetError::js(entry.display(), e))?;
-        // Code splitting is off, so exactly one chunk is expected. Anything
-        // else would be silently discarded, so say so instead.
+        // Code splitting is off, so exactly one chunk is expected, plus its map
+        // when one was asked for. Anything else would be silently discarded, so
+        // say so instead.
         let mut code = None;
+        let mut map = None;
         for asset in &output.assets {
             match asset {
                 Output::Chunk(chunk) if chunk.is_entry && code.is_none() => {
-                    code = Some(chunk.code.clone().into_bytes());
+                    // Without the trailing `sourceMappingURL`: rolldown writes
+                    // one naming the file it believes it is emitting, and the
+                    // name this pipeline serves it under is not settled until it
+                    // has been fingerprinted. The pipeline appends the real one.
+                    code = Some(Self::unlinked(&chunk.code).into_bytes());
+                    if let Some(chunk) = chunk.map.as_ref() {
+                        map = Some(chunk.to_json_string().into_bytes());
+                    }
+                }
+                Output::Asset(asset)
+                    if self.sourcemap.wanted() && asset.filename.ends_with(".map") =>
+                {
+                    // A map rolldown chose to emit as a separate asset rather
+                    // than hang off the chunk. Same file either way.
+                    map.get_or_insert_with(|| match asset.source.clone() {
+                        StrOrBytes::Str(text) => text.into_bytes(),
+                        StrOrBytes::Bytes(bytes) => bytes,
+                    });
                 }
                 other => {
                     let name = other.filename();
@@ -165,6 +200,24 @@ impl Js {
                 }
             }
         }
-        code.ok_or_else(|| AssetError::js(entry.display(), "no entry chunk produced").into())
+        let bytes =
+            code.ok_or_else(|| AssetError::js(entry.display(), "no entry chunk produced"))?;
+        Ok(Produced {
+            bytes: Some(bytes),
+            map,
+        })
+    }
+
+    /// `code` with any trailing `sourceMappingURL` comment removed.
+    ///
+    /// The bundler names the map after the filename it was told to write, which
+    /// is not the fingerprinted one this pipeline serves. Left in place there
+    /// would be two such comments, and a browser reads the last, so the wrong
+    /// one would win exactly when fingerprinting is on.
+    fn unlinked(code: &str) -> String {
+        match code.rfind("//# sourceMappingURL=") {
+            Some(at) => code[..at].to_owned(),
+            None => code.to_owned(),
+        }
     }
 }

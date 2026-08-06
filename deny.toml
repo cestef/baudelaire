@@ -56,6 +56,24 @@ ignore = [
     # Revisit on a typst bump that moves citationberg to quick-xml >= 0.41.
     { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 is typst's CSL parser; input is author-controlled" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 is typst's CSL parser; input is author-controlled" },
+
+    # RUSTSEC-2026-0235, `rkyv 0.7`, reached only through `parcel_sourcemap`,
+    # which is what lightningcss writes its mappings into for
+    # `assets { sourcemap }`. rkyv is a *non-optional* dependency there, so the
+    # capability cannot be had without it, and the 0.7 series is unsupported
+    # upstream, so there is nothing to upgrade to.
+    #
+    # The flaw is in rkyv's checked deserialization (`access` / `from_bytes`),
+    # where a shared pointer could carry forged metadata and hand back a slice
+    # with a length that reads out of bounds. Nothing here deserializes an rkyv
+    # archive: the only door to it is `SourceMap::from_buffer`, and baudelaire
+    # builds a map (`new`, `add_source`, `set_source_content`, `offset_columns`)
+    # and serializes it with `to_json`. It never reads one back, from a trusted
+    # source or otherwise.
+    #
+    # This applies again the moment anything calls `from_buffer`, which is what
+    # reading an existing `.map` back in would need.
+    { id = "RUSTSEC-2026-0235", reason = "rkyv 0.7 archive reading is never reached; source maps are written, never parsed" },
 ]
 yanked = "deny"
 unmaintained = "workspace"

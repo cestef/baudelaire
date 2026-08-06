@@ -13,7 +13,7 @@ use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::mime::ImageFormat;
 
-use super::{Ctx, Handler, PathExt, Variant};
+use super::{Ctx, Handler, PathExt, Produced, Variant};
 
 /// Raster images: losslessly optimized (PNG) or re-encoded at a quality (JPEG),
 /// and downscaled into responsive width variants. An optimizer must never make a
@@ -43,8 +43,8 @@ impl Handler for Raster {
         _rel: &Path,
         _map: &super::AssetMap,
         ctx: &Ctx,
-    ) -> Result<Option<Vec<u8>>> {
-        Ok(Some(Self::tightened(
+    ) -> Result<Produced> {
+        Ok(Produced::bytes(Self::tightened(
             fs::read(file)?,
             file,
             &ctx.config.assets.images.optimize,

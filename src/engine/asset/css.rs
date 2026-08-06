@@ -6,13 +6,14 @@ use std::path::Path;
 
 use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
+use parcel_sourcemap::SourceMap;
 
-use crate::config::Config;
+use crate::config::{Config, SourceMaps};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::{AssetMap, Tail};
 
-use super::{Ctx, Handler, PathExt, Phase};
+use super::{Ctx, Handler, PathExt, Phase, Produced};
 use crate::engine::layers::Layered;
 
 /// Stylesheets: minified when enabled, with their references rewritten to the
@@ -29,18 +30,16 @@ impl Handler for Stylesheet {
         Phase::Late
     }
 
+    fn sourcemaps(&self, config: &Config) -> SourceMaps {
+        config.assets.sourcemap.styles
+    }
+
     fn order(&self, files: Vec<Layered>, ctx: &Ctx) -> Vec<Layered> {
         Self::order(files, ctx)
     }
 
-    fn render(
-        &self,
-        file: &Path,
-        rel: &Path,
-        map: &AssetMap,
-        ctx: &Ctx,
-    ) -> Result<Option<Vec<u8>>> {
-        Self::transform(file, rel, map, ctx).map(Some)
+    fn render(&self, file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Produced> {
+        Self::transform(file, rel, map, ctx)
     }
 }
 
@@ -56,9 +55,10 @@ impl Stylesheet {
     /// Minify (when enabled) and rewrite the sheet's references so it still
     /// points at its assets after they are content-hashed. Copied verbatim when
     /// neither minify nor fingerprint is on.
-    fn transform(file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Vec<u8>> {
-        if !ctx.config.assets.minify && !ctx.config.assets.fingerprint {
-            return fs::read(file);
+    fn transform(file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Produced> {
+        let wanted = ctx.config.assets.sourcemap.styles.wanted();
+        if !ctx.config.assets.minify && !ctx.config.assets.fingerprint && !wanted {
+            return Ok(Produced::bytes(fs::read(file)?));
         }
         let code = fs::read_to_string(file)?;
         let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
@@ -68,11 +68,21 @@ impl Stylesheet {
                 .minify(MinifyOptions::default())
                 .map_err(|e| AssetError::css(file.display(), e))?;
         }
+        // The sheet's own text travels inside the map, because the sheet itself
+        // is not published under a name the map could point at: it is processed
+        // into the file the map belongs to.
+        let mut sm = wanted.then(|| {
+            let mut sm = SourceMap::new("/");
+            let source = sm.add_source(&rel.to_string_lossy());
+            let _ = sm.set_source_content(source as usize, &code);
+            sm
+        });
         // Only fingerprinting renames assets, so only then analyze `url()`s.
         let analyze = ctx.config.assets.fingerprint;
         let printed = sheet
             .to_css(PrinterOptions {
                 minify: ctx.config.assets.minify,
+                source_map: sm.as_mut(),
                 analyze_dependencies: analyze.then(DependencyOptions::default),
                 ..PrinterOptions::default()
             })
@@ -86,9 +96,57 @@ impl Stylesheet {
                 Dependency::Import(dep) => (dep.placeholder, dep.url),
             };
             let resolved = Self::resolve(rel, &url, map, ctx).unwrap_or(url);
-            out = out.replace(&placeholder, &resolved);
+            Self::swap(&mut out, &placeholder, &resolved, sm.as_mut());
         }
-        Ok(out.into_bytes())
+        let map = match sm.as_mut() {
+            Some(sm) => Some(
+                sm.to_json(None)
+                    .map_err(|e| AssetError::css(file.display(), e))?
+                    .into_bytes(),
+            ),
+            None => None,
+        };
+        Ok(Produced {
+            bytes: Some(out.into_bytes()),
+            map,
+        })
+    }
+
+    /// Replace every `placeholder` in `out` with `resolved`, moving any source
+    /// map along with the text.
+    ///
+    /// The substitution happens *after* the map was recorded, and a resolved URL
+    /// is almost never the length of the placeholder it replaces, so every
+    /// mapping later on the same line refers to a column that has moved. Minified
+    /// output is one long line, which makes that the whole file. Done as a plain
+    /// `replace`, a stylesheet's map was accurate only until its first `url()`.
+    fn swap(out: &mut String, placeholder: &str, resolved: &str, mut sm: Option<&mut SourceMap>) {
+        // A stylesheet is a file that was read into memory, so neither length
+        // is anywhere near the range where these conversions could lose one.
+        let delta = i64::try_from(resolved.len()).unwrap_or(i64::MAX)
+            - i64::try_from(placeholder.len()).unwrap_or(i64::MAX);
+        let mut from = 0;
+        while let Some(at) = out[from..].find(placeholder).map(|found| from + found) {
+            if let Some(sm) = sm.as_deref_mut() {
+                // Columns after the replacement move; the line does not, since
+                // neither a placeholder nor a URL contains a newline.
+                let (line, column) = Self::position(out, at);
+                let _ = sm.offset_columns(line, column, delta);
+            }
+            out.replace_range(at..at + placeholder.len(), resolved);
+            from = at + resolved.len();
+        }
+    }
+
+    /// The zero-based line and column of byte offset `at` in `text`, counted the
+    /// way a source map counts them.
+    fn position(text: &str, at: usize) -> (u32, u32) {
+        let before = &text[..at];
+        let line = u32::try_from(before.matches('\n').count()).unwrap_or(u32::MAX);
+        let start = before.rfind('\n').map_or(0, |nl| nl + 1);
+        // UTF-16 units, which is what a source map's columns are.
+        let column = u32::try_from(text[start..at].encode_utf16().count()).unwrap_or(u32::MAX);
+        (line, column)
     }
 
     /// The fingerprinted URL for a reference written in the sheet at `rel`, or

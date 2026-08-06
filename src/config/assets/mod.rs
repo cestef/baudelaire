@@ -1,13 +1,14 @@
 //! `assets { }`: the asset pipeline (minify, bundle, fingerprint, images).
 
 pub mod images;
+pub mod sourcemap;
 
 use std::path::PathBuf;
 
-use crate::config::ImagesConfig;
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::{ImagesConfig, SourceMapConfig};
 
 /// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
 ///
@@ -24,6 +25,14 @@ pub struct AssetConfig {
     /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
     /// rewrite references, for far-future caching.
     pub fingerprint: bool,
+    /// What becomes of the source map for each kind of processed asset.
+    ///
+    /// Off for every kind by default, and it has to be: a map is only usable if
+    /// it carries the original sources inside it, because the sources
+    /// themselves are build inputs the pipeline deliberately never publishes.
+    /// Asking for one therefore publishes the TypeScript, JSX and unminified
+    /// CSS a site is written in.
+    pub sourcemap: SourceMapConfig,
     /// The `tsconfig.json` the bundler transforms TypeScript and JSX against,
     /// relative to the project root. `None` means the bundler discovers one per
     /// module, walking up from the file as `tsc` does; a path pins the whole
@@ -58,6 +67,12 @@ impl Section for AssetConfig {
                 c.fingerprint = n.boolean(t, 0)?;
                 Ok(())
             },
+        ),
+        (
+            "sourcemap",
+            Nested(SourceMapConfig::rows),
+            "What becomes of each kind of asset's source map. Embeds the original sources, so asking for one publishes them.",
+            |c, n, t| c.sourcemap.fill(n, t),
         ),
         (
             "tsconfig",
