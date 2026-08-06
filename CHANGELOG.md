@@ -10,7 +10,7 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [0.0.12] - 2026-08-05
+## [0.0.12] - 2026-08-06
 
 ### Upgrading
 
@@ -59,10 +59,11 @@ chores are visible in the git history and change nothing for a site.
   content { collections { posts sort="date" } }  // read `date` as the glob
   ```
 
-  Each is now an error naming the key, and where the pair belongs one level in
-  the help writes the line to use (`drafts { suffix ".x" }`). Nothing that was
-  ever read has changed meaning, so a config that meant what it said needs no
-  edit; a config that did not will say so on the next build.
+  Each now does what it says or errors naming the key, and where the pair
+  belongs one level in the help writes the line to use (`drafts { suffix ".x" }`).
+  The first three read as the off switch described below; the rest are errors.
+  Nothing that was ever read has changed meaning, so a config that meant what it
+  said needs no edit; a config that did not will say so on the next build.
 
   `html { highlight #false }` is the one worth checking by hand: it was the
   spelling for turning highlighting off, it did the opposite, and there was no
@@ -106,6 +107,36 @@ chores are visible in the git history and change nothing for a site.
   validated the way `permalink` always was. A `..` in either was previously
   accepted and produced wrong URLs out of a green build; a placeholder spelling
   that means nothing (`prefix "{n}"`) was silently ignored and is now an error.
+
+- `deploy { ssh { .. } }` now requires `host` and an absolute `path`, and
+  `deploy { s3 { .. } }` requires a non-empty `bucket`. Both were optional and
+  defaulted to nothing, so an incomplete block deployed the site to `/` on the
+  host and issued `create_dir("/assets")`. Name where the site was actually
+  landing:
+
+  ```kdl
+  deploy {
+    ssh {
+      host "srv.example"
+      path "/var/www/site"
+    }
+  }
+  ```
+
+  The check runs before anything connects, so a wrong block fails without a
+  build behind it.
+
+- A config key that takes one value out of a fixed set now refuses a second one.
+  `links { style "clean" "flat" }` used to drop `"flat"` in silence. Nothing
+  legitimate is refused: every such key reads exactly one value. Write the one
+  you meant.
+
+- Two config diagnostics have their own codes rather than borrowing
+  `baudelaire::config::unknown_value`, which described neither: a `serve
+  { editor }` that is a command line rather than a program is now
+  `baudelaire::config::command_line`, and an `html { footnotes }` naming no
+  element is `baudelaire::config::not_an_element`. Only a consumer keying on the
+  code is affected.
 
 ### Added
 
@@ -201,6 +232,34 @@ chores are visible in the git history and change nothing for a site.
   a markdown page needs the string form; a typst page gets it too, since both
   read through one reader. Exactly `YYYY-MM-DD` is accepted, so a string that
   merely resembles a date cannot silently become one.
+
+- **A section turned on by its presence can be turned back off on its own line.**
+  `lint #false`, `caching #false`, `generate { robots #false }`, `navigation
+  { spa #false }` and ten siblings, where naming the section at all used to be
+  the only thing a config could say about it. It is the spelling
+  `content { markdown #false }` already had. This is what a profile or a theme's
+  `theme.kdl` had no way to express: an overlay applies nodes over the base, so
+  naming the section is what re-enables it, and the language has no spelling for
+  deleting a node.
+
+- **cli**: `--color=auto|always|never`. It layers over the existing detection
+  rather than replacing it, and an explicit choice beats every environment
+  signal, so `--color=never` wins over `CLICOLOR_FORCE`. It is read before clap
+  writes `--help`, so that output is coloured to match too.
+
+- **cli**: `-q` counts. `-qq` leaves only diagnostics and the exit code.
+
+- **cli**: `--help` lists the exit codes it returns and the environment
+  variables it reads.
+
+- A `deploy { s3 { endpoint } }` or `announce { standard { pds } }` written as
+  `http://` is now reported, because the secret sent to it travels in clear. A
+  warning rather than a refusal, since a local MinIO or PDS is how both get
+  developed against.
+
+- A deploy or announce that stops partway now says where it stopped, and an
+  announce keeps the skip-cache it had built, so a re-run resumes instead of
+  starting over.
 
 ### Fixed
 
@@ -409,6 +468,68 @@ chores are visible in the git history and change nothing for a site.
 
 - **cli**: `theme info` lines up its labels again, including the two that are
   wider than the column was.
+
+- An image sized in typst renders identically whether `assets { images { extract
+  } }` is on or off. With it on the sizing CSS is reproduced rather than reused,
+  because typst's encoder is private, and the reproduction was wrong three ways:
+  a negative term was added rather than subtracted (`width: 50% - 10pt` came out
+  `calc(50% + -10pt)`), a ratio was rounded to four decimals where typst rounds
+  to two (`33.3333%` against `33.33%`), and the properties were written in
+  authored order without spaces where typst sorts them and writes `name: value`.
+  A page genuinely rendered two ways depending on the setting.
+
+- A downscaled variant of an image under an absolute `paths { assets }` is found
+  rather than externalized a second time.
+
+- The JSON islands the standalone export and the JSON-LD tag write now escape
+  every `<`, not only `</`. A value carrying `<!--<script` opened the
+  script-data-double-escaped state, after which the island's own `</script>` did
+  not close it and the rest of the document was swallowed.
+
+- A title carrying a control character no longer makes `rss.xml` and
+  `sitemap.xml` unparseable. Those characters are forbidden outright in XML and
+  have no character reference, so they are dropped at the writer.
+
+- A value carrying a line break no longer writes a line of its own into
+  `_redirects`, `_headers`, `robots.txt` or `llms.txt`, and a space in a
+  `_redirects` path no longer splits its record. The five line-oriented formats
+  now go through one writer, as the XML and script outputs already did.
+
+- **theme**: an archive larger than the 64 MiB ceiling fails, naming the limit,
+  instead of installing a truncated copy.
+
+- **deploy**: an SSH key file that is missing or unreadable is reported as such.
+  Every failure to load one was read as "encrypted", so a wrong path prompted
+  for a passphrase that could not help.
+
+- **deploy**: the host-key remedy names the `known_hosts` entry that was
+  actually checked. On any port but 22 the entry is written `[host]:port`, so
+  the `ssh-keygen -R <host>` both diagnostics printed matched no line and
+  removed nothing.
+
+- **deploy**: paths a remote's own listing named that a deploy cannot act on are
+  reported instead of dropped. Such a key is invisible to `--delete` and to the
+  summary alike, so it sat on the remote for ever with nothing saying it was
+  there.
+
+- **cli**: `deploy` and `announce` check that a destination is configured before
+  building the site, rather than after.
+
+- **cli**: `clean --dry-run` lists what would actually be removed, and a
+  declined prompt says it was declined instead of `nothing to clean`.
+
+- **cli**: sizes are labelled `KiB`/`MiB`/`GiB`/`TiB`, which is what they have
+  always been measured in. `Bytes` still parses `kB` and `MB` as 1024, so no
+  configured budget changes meaning.
+
+- **cli**: `--strict-links` says what it checks, which is a `.typ` link to a
+  missing page or heading, not every internal link.
+
+- **serve**: `?at=` with an empty value reports no source location rather than a
+  malformed one, which rendered as a message ending in a bare colon.
+
+- **serve**: an XML or SVG file is served with the charset it is encoded in.
+  Only `text/*` carried one, though XML defines the parameter and JSON does not.
 
 ### Security
 
