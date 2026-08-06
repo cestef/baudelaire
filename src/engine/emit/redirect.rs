@@ -1,11 +1,11 @@
 //! Redirect stubs: a minimal HTML page that forwards a stale URL to its new one.
 
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use super::line::Lines;
 use super::xml::Xml;
-use super::{Emit, Processor, Site, Warn};
+use super::{Emit, Processor, Site, WROTE, Warn};
 use crate::content::Strings;
 use crate::error::Result;
 use crate::error::warning::{RedirectCollision, RedirectsShadowed};
@@ -83,7 +83,10 @@ impl Processor for Redirects {
             out.file(&path, &Self::rules(&rules))?;
         }
         if !claimed.is_empty() {
-            out.note(format_args!("wrote {}", Count::redirects(claimed.len())));
+            // A count rather than a path: this is the one processor that
+            // writes a file per rule, so there is no single destination for
+            // `Emit::wrote` to name.
+            out.note(format_args!("{WROTE} {}", Count::redirects(claimed.len())));
         }
         Ok(())
     }
@@ -134,12 +137,16 @@ impl Redirects {
     /// the old URL is not coming back. The meta-refresh stub this replaces
     /// could only ever be a client-side round trip, which passes link equity
     /// worse than a real 301 and costs a page load to do it.
+    ///
+    /// Both paths are written as *fields*, not as text: the line is read by
+    /// splitting on spaces, so a path carrying one would put the status where
+    /// the host looks for the target and leave the rule pointing at `301`.
     fn rules(rules: &[(String, String)]) -> String {
-        let mut body = String::new();
+        let mut body = Lines::default();
         for (old, new) in rules {
-            let _ = writeln!(body, "{old} {new} 301");
+            body.line().word(old).lit(" ").word(new).lit(" 301");
         }
-        body
+        body.finish()
     }
 
     /// A client-side redirect to `target`: a meta-refresh with a canonical link
@@ -220,6 +227,15 @@ mod tests {
         assert_eq!(rec.warns.len(), 1, "{:?}", rec.warns);
         assert!(rec.warns[0].contains("content/b.typ"), "{:?}", rec.warns);
         assert_eq!(rec.notes, ["wrote 1 redirect"]);
+    }
+
+    /// A `_redirects` line is three space-separated fields. A path carrying a
+    /// space used to shift the target into the status column, leaving a rule
+    /// that forwards to `301`.
+    #[test]
+    fn a_rule_keeps_each_path_to_one_field() {
+        let rules = [("/old path/".to_owned(), "/new/".to_owned())];
+        assert_eq!(Redirects::rules(&rules), "/oldpath/ /new/ 301\n");
     }
 
     #[test]

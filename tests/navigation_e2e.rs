@@ -44,7 +44,12 @@ fn site() -> Site {
 }
 
 /// The route table the exported file carries, parsed the way its own script
-/// parses it: `<\/` back to `</`, then JSON.
+/// parses it: as JSON, unmodified.
+///
+/// The island escapes every `<` as `<`, which is an ordinary JSON string
+/// escape, so nothing has to be undone before parsing. This used to reverse the
+/// island's `<\/` by hand, and that step is now not only unnecessary but unable
+/// to find anything to reverse.
 fn routes(html: &str) -> serde_json::Value {
     let after = html
         .split_once("baudelaire-routes")
@@ -52,7 +57,7 @@ fn routes(html: &str) -> serde_json::Value {
         .1;
     let json = after.split_once('>').expect("island opens").1;
     let json = json.split_once("</script>").expect("island closes").0;
-    serde_json::from_str(&json.replace("<\\/", "</")).expect("valid JSON")
+    serde_json::from_str(json).expect("valid JSON")
 }
 
 #[test]

@@ -13,6 +13,7 @@ mod csp;
 pub(crate) mod dts;
 mod feed;
 mod headers;
+mod line;
 mod llms;
 mod manifest;
 mod redirect;
@@ -128,6 +129,11 @@ impl Artifact {
     }
 }
 
+/// The verb every progress note opens with. A const rather than a literal in
+/// each of the three notes that spell it, since it is the one word a reader
+/// greps a verbose build for.
+const WROTE: &str = "wrote";
+
 /// Sink for a processor's output: file writes plus progress reporting.
 ///
 /// A trait so processors are unit-testable against an in-memory sink instead of
@@ -144,9 +150,30 @@ pub(super) trait Emit {
     /// static tree is the escape hatch, and it wins) and a processor whose
     /// *only* output is shadowed has to do something else instead of nothing.
     fn claimed(&self, path: &Path) -> bool;
-    /// A progress note (e.g. `wrote sitemap.xml`): a debug log line in
-    /// production, captured verbatim by test sinks.
+    /// A progress note (e.g. `wrote 3 redirects`): a debug log line in
+    /// production, captured verbatim by test sinks. Prefer [`Emit::wrote`],
+    /// which is what nearly every processor has to say.
     fn note(&mut self, msg: fmt::Arguments);
+
+    /// Note that `path` was written.
+    ///
+    /// The one spelling of the note almost every processor ends with. Half of
+    /// them named the file (`wrote robots.txt`) and half the destination it
+    /// landed at, so one build's log answered "and where did that go?" two
+    /// different ways depending on which processor was speaking. The
+    /// destination is the answer, since it is the thing a reader can go and
+    /// look at.
+    fn wrote(&mut self, path: &Path) {
+        self.note(format_args!("{WROTE} {}", path.display()));
+    }
+
+    /// The same note with something only that processor knows after it, as
+    /// `wrote <path> (<detail>)`: how many documents an index holds, how many
+    /// routes an export carries.
+    fn wrote_with(&mut self, path: &Path, detail: fmt::Arguments) {
+        self.note(format_args!("{WROTE} {} ({detail})", path.display()));
+    }
+
     /// A warning from a processor, already boxed. Call [`Warn::warn`] instead:
     /// this is the object-safe primitive it forwards to, the same split [`Ui`]
     /// makes between `warn` and `report`.

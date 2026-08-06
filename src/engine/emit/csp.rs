@@ -16,6 +16,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use super::line::Plain;
 use crate::config::CspConfig;
 use crate::render::Inline;
 
@@ -152,6 +153,11 @@ impl<'a> Policy<'a> {
 }
 
 /// `default-src 'self'; script-src 'self' 'sha256-..'`, the header value itself.
+///
+/// Each directive's source list is written through [`Plain`], the same door
+/// every other value bound for `_headers` goes through: this is one line of
+/// that file, and a configured source carrying a line break would end it and
+/// leave the rest of the policy where the host reads a path pattern.
 impl fmt::Display for Policy<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let directives = self.directives();
@@ -159,7 +165,7 @@ impl fmt::Display for Policy<'_> {
             if index > 0 {
                 f.write_str("; ")?;
             }
-            write!(f, "{name} {value}")?;
+            write!(f, "{name} {}", Plain(value.as_str()))?;
         }
         Ok(())
     }
@@ -255,6 +261,17 @@ mod tests {
         let value = policy("security { csp { } }", &[page]);
         assert!(value.contains("style-src 'self' 'sha256-"), "{value}");
         assert!(!value.contains("unsafe-hashes"), "{value}");
+    }
+
+    /// The policy is one line of `_headers`, so a configured source list that
+    /// carries a line break cannot be allowed to become two.
+    #[test]
+    fn a_configured_source_cannot_break_the_line_it_is_written_on() {
+        let mut config = config("security { csp { } }");
+        config.security.csp.default = Some("'self'\nX-Frame-Options: ALLOWALL".into());
+        let digests = Digests::default();
+        let value = Policy::new(&config.security.csp, &digests).to_string();
+        assert_eq!(value, "default-src 'self'X-Frame-Options: ALLOWALL");
     }
 
     /// Rolling a policy out means reporting without blocking.

@@ -57,13 +57,12 @@ impl Processor for Standalone {
             script: &cfg.script(&entry),
         }
         .render();
-        out.file(&site.dist(&[&cfg.file]), &document)?;
-        out.note(format_args!(
-            "wrote {} ({} routes, {} bytes)",
-            cfg.file,
-            routes.len(),
-            document.len()
-        ));
+        let path = site.dist(&[&cfg.file]);
+        out.file(&path, &document)?;
+        out.wrote_with(
+            &path,
+            format_args!("{} routes, {} bytes", routes.len(), document.len()),
+        );
         Ok(())
     }
 }
@@ -165,9 +164,22 @@ impl<'a> Routes<'a> {
         shared
     }
 
-    /// The route table, safe to nest inside a `<script>`: `</` is escaped as
-    /// `<\/`, which JSON reads as the same slash and an HTML parser no longer
-    /// reads as the end of the element.
+    /// The route table, safe to nest inside a `<script>`: every `<` is written
+    /// as its JSON unicode escape for U+003C, which a JSON parser reads back as
+    /// the same character and an HTML tokenizer never reads as markup at all.
+    ///
+    /// Every `<`, not just `</`. A `<script>` element's content ends at the
+    /// first `</script>`, but `<!--` is the other door into it: the tokenizer
+    /// treats that as the start of an escaped block, and `<!--<script` puts it
+    /// in the state where the island's own `</script>` no longer closes
+    /// anything and the rest of the document is swallowed as text. An inlined
+    /// SVG carrying a generator comment is enough to reach it. Escaping the one
+    /// character both sequences begin with closes the class rather than the two
+    /// spellings of it, and costs five bytes per `<` in a file whose markup is
+    /// JSON-escaped throughout anyway.
+    ///
+    /// `<` appears in serialized JSON only inside a string, so replacing it
+    /// wholesale cannot touch the structure.
     fn json(&self, shared: &[&str]) -> Result<String> {
         let swaps: BTreeMap<&str, Swap> = self
             .0
@@ -175,7 +187,7 @@ impl<'a> Routes<'a> {
             .map(|(url, route)| (url.as_str(), route.swap(shared)))
             .collect();
         let json = Artifact::Standalone.json(&swaps)?;
-        Ok(json.replace("</", "<\\/"))
+        Ok(json.replace('<', "\\u003c"))
     }
 }
 
@@ -350,13 +362,14 @@ mod tests {
         rec
     }
 
-    /// The exported file's route table, as the browser's JSON parser would see
-    /// it: the text between the island's tags, `<\/` unescaped back to `</`.
-    fn island(html: &str) -> String {
+    /// The exported file's route table: the text between the island's tags,
+    /// exactly as the browser's JSON parser is handed it. Nothing is undone
+    /// here, because nothing has to be: the escape the island carries is a
+    /// plain JSON one that any parser resolves.
+    fn island(html: &str) -> &str {
         let after = html.split_once(ROUTES_ID).expect("island present").1;
         let json = after.split_once('>').expect("island opens").1;
-        let json = json.split_once("</script>").expect("island closes").0;
-        json.replace("<\\/", "</")
+        json.split_once("</script>").expect("island closes").0
     }
 
     /// The happy path: one file, every page a route, the entry rendered into
@@ -376,7 +389,7 @@ mod tests {
         assert!(html.contains(r#"const MODE = "hash";"#), "{html}");
         assert!(rec.warns.is_empty(), "{:?}", rec.warns);
 
-        let routes: serde_json::Value = serde_json::from_str(&island(html)).unwrap();
+        let routes: serde_json::Value = serde_json::from_str(island(html)).unwrap();
         assert_eq!(routes["/"]["title"], "Home");
         assert_eq!(routes["/about/"]["title"], "About");
         assert_eq!(routes["/about/"]["html"], "<p>about</p>");
@@ -399,7 +412,7 @@ mod tests {
         let (_, html) = &rec.files[0];
         assert_eq!(html.matches(SITE_CSS).count(), 1, "hoisted once: {html}");
 
-        let routes: serde_json::Value = serde_json::from_str(&island(html)).unwrap();
+        let routes: serde_json::Value = serde_json::from_str(island(html)).unwrap();
         assert_eq!(routes["/"]["html"], "<p>home</p>");
         assert_eq!(routes["/about/"]["html"], format!("{OWN}<p>about</p>"));
     }
@@ -436,12 +449,28 @@ mod tests {
         let rec = export(&config(), &built);
 
         let (_, html) = &rec.files[0];
-        let raw = html.split_once(ROUTES_ID).expect("island present").1;
-        let raw = raw.split_once("</script>").expect("island closes").0;
+        let raw = island(html);
         assert!(!raw.contains("</script"), "closes early: {raw}");
         // ..and the escape is one the JSON parser undoes, so the route is intact.
-        let routes: serde_json::Value = serde_json::from_str(&island(html)).unwrap();
+        let routes: serde_json::Value = serde_json::from_str(raw).unwrap();
         assert_eq!(routes["/"]["html"], "<p>a</p><script>1</script>");
+    }
+
+    /// `</script>` is not the only way out of a `<script>` element: `<!--`
+    /// opens the escaped state, and `<!--<script` the double-escaped one, where
+    /// the island's own closing tag stops closing it and the whole rest of the
+    /// document is read as its text. An inlined SVG carrying a generator
+    /// comment reaches this, which is why no `<` at all survives the island.
+    #[test]
+    fn a_comment_in_route_markup_cannot_reopen_the_island() {
+        let built = Built::of(&[("index", "Home", "<!--<script-->ok")]);
+        let rec = export(&config(), &built);
+
+        let (_, html) = &rec.files[0];
+        let raw = island(html);
+        assert!(!raw.contains('<'), "markup escaped into the island: {raw}");
+        let routes: serde_json::Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(routes["/"]["html"], "<!--<script-->ok");
     }
 
     /// The generated script never carries the sequence that would end its own

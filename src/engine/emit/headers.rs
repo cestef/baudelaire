@@ -1,9 +1,10 @@
 //! `_headers`: what the host serving the built files is told about them, the
 //! `Cache-Control` policy and the `Content-Security-Policy` both.
 
-use std::fmt::Write as _;
+use std::fmt;
 
 use super::csp::{Digests, Policy};
+use super::line::Lines;
 use super::{Emit, Processor, Site};
 use crate::config::Config;
 use crate::error::Result;
@@ -33,7 +34,7 @@ impl Processor for Headers {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let config = site.config;
-        let mut body = String::new();
+        let mut body = Lines::default();
         // Most specific first: a host matches rules in order, so the catch-all
         // has to come last or it would claim the asset paths too.
         //
@@ -43,14 +44,13 @@ impl Processor for Headers {
         // page, which is the same call `CacheControl::header` makes per object.
         if config.caching.enabled && config.assets.fingerprint {
             let prefix = config.prefixed(&format!("{}/*", config.asset_prefix()));
-            body.push_str(&Self::rule(
-                &prefix,
-                &[("Cache-Control", &config.caching.immutable)],
-            ));
+            let immutable = [("Cache-Control", &config.caching.immutable)];
+            Self::rule(&mut body, &prefix, &immutable);
         }
-        body.push_str(&Self::rule(&config.prefixed("/*"), &Self::catchall(site)));
-        out.file(&site.dist(&[Self::FILE]), &body)?;
-        out.note(format_args!("wrote {}", Self::FILE));
+        Self::rule(&mut body, &config.prefixed("/*"), &Self::catchall(site));
+        let path = site.dist(&[Self::FILE]);
+        out.file(&path, &body.finish())?;
+        out.wrote(&path);
         Ok(())
     }
 }
@@ -73,14 +73,14 @@ impl Headers {
     }
 
     /// One rule: the path pattern on its own line, then each header indented
-    /// beneath it. The format both hosts read.
-    fn rule(pattern: &str, headers: &[(&'static str, impl AsRef<str>)]) -> String {
-        let mut rule = format!("{pattern}\n");
+    /// beneath it, then the blank line that ends the record. The format both
+    /// hosts read.
+    fn rule(body: &mut Lines, pattern: &str, headers: &[(&'static str, impl fmt::Display)]) {
+        body.line().value(pattern);
         for (name, value) in headers {
-            let _ = writeln!(rule, "  {name}: {}", value.as_ref());
+            body.line().lit("  ").field(name, value);
         }
-        rule.push('\n');
-        rule
+        body.blank();
     }
 }
 
