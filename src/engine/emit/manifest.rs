@@ -40,11 +40,9 @@ impl Processor for WebManifest {
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
             let document = Document::new(site.config, lang);
-            out.file(
-                &site.dist(&[&scope, ManifestConfig::FILE]),
-                &Artifact::WebManifest.json(&document)?,
-            )?;
-            out.note(format_args!("wrote {}/{}", scope, ManifestConfig::FILE));
+            let path = site.dist(&[&scope, ManifestConfig::FILE]);
+            out.file(&path, &Artifact::WebManifest.json(&document)?)?;
+            out.wrote(&path);
         }
         Ok(())
     }

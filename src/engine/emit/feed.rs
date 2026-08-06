@@ -176,7 +176,7 @@ impl Feeds {
         for kind in &site.config.generate.feed.formats {
             let path = site.dist(&[feed.scope, site.config.generate.feed.file(*kind)]);
             out.file(&path, &feed.render(*kind)?)?;
-            out.note(format_args!("wrote {}", path.display()));
+            out.wrote(&path);
         }
         Ok(())
     }

@@ -32,7 +32,7 @@ impl Processor for WellKnown {
         };
         let path = site.dist(&[Self::DIR, PUBLICATION.as_str()]);
         out.file(&path, &publication_uri(did).to_string())?;
-        out.note(format_args!("wrote {}/{}", Self::DIR, PUBLICATION.as_str()));
+        out.wrote(&path);
         Ok(())
     }
 }

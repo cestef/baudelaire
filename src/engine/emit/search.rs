@@ -49,22 +49,16 @@ impl Processor for SearchIndex {
             let scope = site.config.scope(lang, "");
             let corpus = Corpus::build(site, cfg, lang);
             for &format in &cfg.formats {
-                out.file(
-                    &site.dist(&[&scope, format.file()]),
-                    &format.json(&corpus, cfg)?,
-                )?;
-                out.note(format_args!(
-                    "wrote {}/{} ({} docs)",
-                    scope,
-                    format.file(),
-                    corpus.len()
-                ));
+                let path = site.dist(&[&scope, format.file()]);
+                out.file(&path, &format.json(&corpus, cfg)?)?;
+                out.wrote_with(&path, format_args!("{} docs", corpus.len()));
                 if cfg.ui {
+                    let path = site.dist(&[&scope, format.client_file()]);
                     out.file(
-                        &site.dist(&[&scope, format.client_file()]),
+                        &path,
                         &format.client(site.config.base_path(), &format.index(site.config, lang)),
                     )?;
-                    out.note(format_args!("wrote {}/{}", scope, format.client_file()));
+                    out.wrote(&path);
                 }
             }
         }

@@ -27,8 +27,9 @@ impl Processor for Spa {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let cfg = &site.config.navigation.spa;
-        out.file(&site.dist(&[SpaConfig::FILE]), &cfg.client())?;
-        out.note(format_args!("wrote {}", SpaConfig::FILE));
+        let path = site.dist(&[SpaConfig::FILE]);
+        out.file(&path, &cfg.client())?;
+        out.wrote(&path);
         Ok(())
     }
 }
