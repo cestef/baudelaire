@@ -201,6 +201,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # `gh workflow run` against `docs.yml`, once the assets it needs exist.
+      actions: write
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -303,6 +305,19 @@ jobs:
             gh release create "$tag" release/* \
               --title "$tag" --notes-file release-notes.md
           fi
+
+      # The docs site builds each published version from its own released
+      # binary, so it can only serve this one once the assets above exist. The
+      # run the release commit triggered is long finished by then, and it
+      # skipped this tag as undownloadable.
+      #
+      # A dispatch rather than `on: release` in `docs.yml`: an event raised by
+      # `GITHUB_TOKEN` does not start a workflow run, and `workflow_dispatch` is
+      # one of the two exceptions to that.
+      - name: rebuild the docs site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docs.yml --ref main
 
       - name: badge (binary size)
         uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b

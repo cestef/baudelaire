@@ -23,11 +23,12 @@ on:
       - ".github/workflows/docs.yml"
   pull_request:
     paths: *paths
-  # A release is what makes a version publishable, and it lands after the commit
-  # that named it. Without this trigger the site would keep serving the previous
-  # version until some unrelated push happened to rebuild it.
-  release:
-    types: [published]
+  # A release is what makes a version publishable, and it lands well after the
+  # commit that named it: the run that push triggered has already skipped the new
+  # tag as undownloadable. `release.yml` dispatches this workflow once the assets
+  # are up, which is why there is no `on: release` here. There was, and it never
+  # fired once: the release is created with `GITHUB_TOKEN`, and an event that
+  # token raises does not start a workflow run.
   workflow_dispatch:
 
 concurrency:
