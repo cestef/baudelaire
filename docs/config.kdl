@@ -104,7 +104,15 @@ generate {
 
 // Sweep orphaned outputs (a deleted page, a renamed permalink, a dropped
 // taxonomy term) out of the output directory on every build.
-prune #true
+//
+// `keep` names what this build does not write and must not delete: `docs/
+// versions.sh` puts one pinned copy of the site under each released tag, and
+// `themes/demo/build.sh` a demo site per shipped theme. Both write into this
+// same `public/`, so without this the sweep's only defence is running them
+// after the site build, which is an order nothing enforces.
+prune {
+  keep "v*/**" "themes/**"
+}
 
 // The icons `theme.typ` inlines with `svg()` live outside `assets/`, so they are
 // never published as standalone files. The dev server watches content,

@@ -21,8 +21,9 @@
 #     `theme.kdl` defaults. This loop used to copy each demo config and append a
 #     `theme` line to the copy for that reason.
 #
-# It must run *after* the docs site is built: that site sets `prune`, which
-# deletes everything under its `dist` that its own build did not produce.
+# The docs site prunes, and these previews survive it because its config names
+# `themes/**` in `prune { keep }`. Running after that build is still the tidier
+# order, but it is no longer what stands between a preview and deletion.
 #
 # Overridable: BAUDELAIRE (the command to build with), PREVIEW_URL, PREVIEW_OUT.
 set -eu

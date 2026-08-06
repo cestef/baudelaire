@@ -61,7 +61,7 @@ fn loads_full_config() {
     assert_eq!(cfg.site.as_deref(), Some("Fixture Site"));
     assert_eq!(cfg.url.as_deref(), Some("https://fixture.test"));
     assert_eq!(cfg.lang, "en");
-    assert!(cfg.prune);
+    assert!(cfg.prune.enabled);
     assert_eq!(cfg.typst.inputs, vec![("env".into(), "test".into())]);
     assert_eq!(cfg.typst.features, vec!["html".to_owned()]);
     assert_eq!(cfg.content.collections.len(), 2);

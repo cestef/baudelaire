@@ -26,6 +26,7 @@ mod node;
 pub mod paths;
 pub mod permalink;
 pub mod profile;
+pub mod prune;
 pub mod reference;
 pub mod schema;
 pub mod security;
@@ -40,7 +41,7 @@ use std::path::{Path, PathBuf};
 
 use kdl::{KdlDocument, KdlNode};
 
-use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Overlay, Table, Text, Url};
+use crate::config::dispatch::Kind::{Block as Nested, Items, Overlay, Table, Text, Url};
 use crate::config::dispatch::{Block, Section};
 use crate::config::lang::Rtl;
 use crate::config::node::NodeExt;
@@ -86,6 +87,7 @@ pub use navigation::speculation::{Eagerness, SpeculationConfig};
 pub use navigation::standalone::{Router, StandaloneConfig};
 pub use paths::{Paths, Rooted};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
+pub use prune::PruneConfig;
 pub use schema::{FieldSchema, FieldType, TypeError, Words};
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
@@ -162,8 +164,9 @@ pub struct Config {
     /// Remove orphaned outputs from `dist` on each build: files a previous
     /// build wrote that this one no longer produces (a deleted page, a renamed
     /// permalink, a dropped taxonomy term). The asset tree and build cache are
-    /// never touched. Set with `prune #true | #false`.
-    pub prune: bool,
+    /// never touched. Set with `prune #true | #false`, and narrowed with
+    /// `prune { keep .. }`.
+    pub prune: PruneConfig,
     /// Typst engine knobs (`sys.inputs`, experimental features).
     pub typst: TypstConfig,
     /// Build-time constants exposed to client JS through the `baudelaire:config`
@@ -897,7 +900,7 @@ impl Default for Config {
             security: SecurityConfig::default(),
             generate: GenerateConfig::default(),
             navigation: NavigationConfig::default(),
-            prune: true,
+            prune: PruneConfig::default(),
             typst: TypstConfig::default(),
             client: Vec::default(),
             cache: CacheConfig::default(),
@@ -1065,12 +1068,9 @@ impl Section for Config {
         ),
         (
             "prune",
-            Flag,
-            "Delete anything under the output directory that this build did not produce.",
-            |c, n, t| {
-                c.prune = n.boolean(t, 0)?;
-                Ok(())
-            },
+            Nested(PruneConfig::rows),
+            "Delete anything under the output directory that this build did not produce. On by default; `#false` turns it off, and `keep` narrows it.",
+            |c, n, t| c.prune.fill(n, t),
         ),
         (
             "cache",

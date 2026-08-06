@@ -114,7 +114,7 @@ page that answers it in full is on the right.
   [#link("../ship/navigating.typ")[SPA & single-file export]],
 
   [`prune`],
-  [Whether output this build did not produce is deleted.],
+  [Whether output this build did not produce is deleted, and what is spared.],
   [#link("reference.typ")[reference]],
 
   [`cache`],

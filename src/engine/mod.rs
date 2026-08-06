@@ -609,7 +609,7 @@ impl Engine {
         generated: &Generated,
         bundled: &Bundled,
     ) -> Result<()> {
-        if !self.config.prune {
+        if !self.config.prune.enabled {
             return Ok(());
         }
         if outputs.is_empty() {
@@ -634,7 +634,8 @@ impl Engine {
             &self.config.paths.dist,
             &self.config.asset_dist(),
             &self.config.cache.dir,
-        )
+            &self.config.prune.keep,
+        )?
         .run(&keep)?;
         debug!(pruned, "orphaned outputs removed");
         Ok(())

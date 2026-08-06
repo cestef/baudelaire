@@ -24,8 +24,10 @@
 # base URLs. The pinned copy is what a link written today still resolves to
 # after the next release.
 #
-# It must run *before* `themes/demo/build.sh`: the root build sets `prune`,
-# which deletes everything under its `dist` that its own build did not produce.
+# The root build prunes, so everything else under `public/` survives only
+# because `docs/config.kdl` names it in `prune { keep }`. That is what makes the
+# order this runs in relative to `themes/demo/build.sh` a preference rather than
+# a rule; before the keep list existed it was a rule, and an unwritten one.
 #
 # Overridable: SITE_URL, OUT, WORK (scratch for worktrees and binaries), WINDOW.
 set -eu

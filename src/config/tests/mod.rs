@@ -47,7 +47,7 @@ fn empty_uses_defaults() {
     let cfg = parse("");
     assert_eq!(cfg.lang, "en");
     assert_eq!(cfg.links.style, crate::config::UrlStyle::Clean);
-    assert!(cfg.prune);
+    assert!(cfg.prune.enabled);
     assert!(cfg.html.pretty);
     assert_eq!(cfg.serve.port, 1821);
     assert!(cfg.cache.incremental);
@@ -186,9 +186,24 @@ fn err_missing_children() {
 #[test]
 fn bare_flag_node_enables() {
     // A bare flag node enables; the default is on too.
-    assert!(parse("").prune);
-    assert!(parse("prune").prune);
-    assert!(!parse("prune #false").prune);
+    assert!(parse("").prune.enabled);
+    assert!(parse("prune").prune.enabled);
+    assert!(!parse("prune #false").prune.enabled);
+}
+
+/// `prune` grew a block without losing the flag it has always been: the keep
+/// list reads on its own, and the flag still stands in front of it.
+#[test]
+fn prune_keeps_what_it_is_told_to() {
+    assert!(parse("prune").prune.keep.is_empty());
+
+    let cfg = parse("prune {\n  keep \"themes/**\" \"v*/**\"\n}\n");
+    assert!(cfg.prune.enabled, "a block alone still enables");
+    assert_eq!(cfg.prune.keep, ["themes/**", "v*/**"]);
+
+    let off = parse("prune #false {\n  keep \"themes/**\"\n}\n");
+    assert!(!off.prune.enabled);
+    assert_eq!(off.prune.keep, ["themes/**"]);
 }
 
 #[test]

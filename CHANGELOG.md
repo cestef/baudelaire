@@ -14,6 +14,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`prune { keep }`**: globs, relative to the output directory, the sweep never
+  deletes:
+
+  ```kdl
+  prune {
+    keep "themes/**" "v*/**"
+  }
+  ```
+
+  For a `dist` that receives more than this build: a second site published under
+  a subdirectory, artifacts another tool writes there. Until now the only way to
+  combine the two was to run the pruning build first, an order nothing enforced
+  and no error reported.
+
+  `prune` keeps every spelling it had. `prune #false` turns the sweep off,
+  `prune` and `prune #true` turn it on, and the flag now stands in front of the
+  block: `prune #false { keep .. }` parses and stays off.
+
 - **`--theme <theme>`**: build with a theme the config does not name, or with a
   different one:
 

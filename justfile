@@ -148,9 +148,9 @@ mirror:
 # docs site can link a real example of each.
 #
 # The loop lives in the script because the docs workflow runs it too, and CI has
-# no `just`. Depends on `docs` and must run after it: the docs site sets
-# `prune`, which deletes everything under its `dist` that its own build did not
-# produce, previews included.
+# no `just`. It depends on `docs` to have something to link them from; the docs
+# site's own `prune { keep }` is what stops that build sweeping the previews
+# away, so the order is no longer the thing protecting them.
 previews: docs
     themes/demo/build.sh
 
