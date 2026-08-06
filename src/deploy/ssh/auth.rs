@@ -9,7 +9,7 @@ use russh::client::AuthResult;
 use russh::client::Handle;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::AgentClient;
-use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
+use russh::keys::{Error as KeyError, HashAlg, PrivateKey, PrivateKeyWithHashAlg, load_secret_key};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::hosts::Client;
@@ -98,14 +98,43 @@ impl<'a> Auth<'a> {
 
     /// Load the configured private key, prompting for a passphrase only if the
     /// key turns out to be encrypted.
+    ///
+    /// The four ways this can go are told apart, because they were not: every
+    /// failure to read the key was answered by asking for a passphrase, so a
+    /// path with a typo in it, and a key the process may not open, both came
+    /// back as a prompt for the passphrase of a file that had never been read.
+    /// Whatever was typed then failed a second time, and the diagnostic blamed
+    /// the decoding.
     fn load(&self) -> Result<PrivateKey> {
         let key = self.config.key.as_ref().expect("key configured");
         let path = Self::expand(key, std::env::var_os("HOME"));
-        load_secret_key(&path, None).or_else(|_| {
-            let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
-            load_secret_key(&path, Some(&passphrase))
-                .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
-        })
+        match load_secret_key(&path, None) {
+            Ok(key) => Ok(key),
+            // `load_secret_key` opens and reads the file itself, so its I/O
+            // failures are the file's: not found, not readable, not text.
+            Err(KeyError::IO(why)) => Err(Self::unreadable(&path, why)),
+            // The one case a passphrase can answer.
+            Err(KeyError::KeyIsEncrypted) => {
+                let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
+                load_secret_key(&path, Some(&passphrase))
+                    .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
+            }
+            // Read, and not a key: an unsupported type, a corrupt body. Asking
+            // for a passphrase here only postpones the same answer.
+            Err(why) => Err(DeployError::local(Setup::PrivateKey, why).into()),
+        }
+    }
+
+    /// Which of the two file-level failures this is. They want different
+    /// answers (fix the path, or fix the mode) and neither wants a passphrase
+    /// prompt, which is what both used to get.
+    fn unreadable(path: &Path, why: std::io::Error) -> crate::error::BaudelaireErrorKind {
+        let path = path.display().to_string();
+        match why.kind() {
+            std::io::ErrorKind::NotFound => DeployError::KeyMissing { path },
+            _ => DeployError::KeyUnreadable { path, source: why },
+        }
+        .into()
     }
 
     /// Expand a leading `~` in a key path against `home`, leaving other paths
@@ -186,6 +215,27 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::BaudelaireErrorKind;
+
+    /// A path that names nothing, and a file that cannot be read, are told
+    /// apart and neither is called encrypted. Both used to fall into the same
+    /// `or_else`, which prompted for the passphrase of a file it had never
+    /// opened.
+    #[test]
+    fn a_key_that_was_never_read_is_not_called_encrypted() {
+        let key = Path::new("/does/not/exist/id_ed25519");
+        assert!(matches!(
+            Auth::unreadable(key, std::io::Error::from(std::io::ErrorKind::NotFound)),
+            BaudelaireErrorKind::Deploy(DeployError::KeyMissing { .. })
+        ));
+        assert!(matches!(
+            Auth::unreadable(
+                key,
+                std::io::Error::from(std::io::ErrorKind::PermissionDenied)
+            ),
+            BaudelaireErrorKind::Deploy(DeployError::KeyUnreadable { .. })
+        ));
+    }
 
     #[test]
     fn expand_replaces_leading_tilde_with_home() {

@@ -1,5 +1,5 @@
 //! End-to-end SSH deploy tests: the real `russh`-backed backend driven through
-//! the public [`baudelaire::deploy::run`], against an in-process SSH/SFTP
+//! the public [`baudelaire::deploy::Deploy::run`], against an in-process SSH/SFTP
 //! server. Split out from `deploy_e2e.rs` (which keeps the S3 half) because the
 //! backend under test is compiled in only by the `ssh` feature, and a whole file
 //! is the one granularity cargo will skip building outright.
@@ -326,7 +326,7 @@ fn ssh_deploy_uploads_new_files_and_deletes_orphans() {
     let port = spawn_ssh(Arc::clone(&store), orphan_listing("orphan.html"));
 
     let headless = Headless;
-    deploy::run(
+    deploy::Deploy::run(
         &ssh_config(&site, port),
         &options(false, &headless),
         &silent(),
@@ -379,7 +379,7 @@ fn ssh_refuses_a_changed_host_key() {
     let mut config = ssh_config(&site, port);
     config.deploy.ssh.as_mut().unwrap().strict = true;
     let headless = Headless;
-    let err = deploy::run(&config, &options(false, &headless), &silent()).unwrap_err();
+    let err = deploy::Deploy::run(&config, &options(false, &headless), &silent()).unwrap_err();
 
     assert!(
         matches!(
@@ -403,7 +403,7 @@ fn ssh_dry_run_writes_nothing() {
     let port = spawn_ssh(Arc::clone(&store), String::new());
 
     let headless = Headless;
-    deploy::run(
+    deploy::Deploy::run(
         &ssh_config(&site, port),
         &options(true, &headless),
         &silent(),

@@ -114,7 +114,10 @@ and a *changed* key is refused before anything uploads.
 
 #callout(kind: "note")[
   If you trust the change (a rebuilt server, a rotated key), run
-  `ssh-keygen -R <host>` and retry.
+  `ssh-keygen -R <host>` and retry. On any port but 22 the entry is written
+  `[host]:port`, so removing it takes `ssh-keygen -R '[host]:2222'`, quoted
+  because the brackets are a shell glob. The diagnostic prints the exact
+  command for the port it checked.
 ]
 
 `strict #false` accepts any key, the equivalent of

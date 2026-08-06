@@ -1,5 +1,5 @@
 //! End-to-end deploy tests: the real backends driven through the public
-//! [`baudelaire::deploy::run`], against in-process servers. They exercise the
+//! [`baudelaire::deploy::Deploy::run`], against in-process servers. They exercise the
 //! whole round trip (signing, HTTP/SFTP, listing, and the upload/delete plan)
 //! without any external service. The digest *skip* path (unchanged files) is
 //! covered by unit tests in `deploy`; here we assert the observable effects:
@@ -209,7 +209,7 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
         secret: None,
         interaction: &Headless,
     };
-    deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
+    deploy::Deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
 
     let store = store.lock().unwrap();
     assert_eq!(
@@ -280,7 +280,7 @@ fn s3_deploy_reports_the_reason_the_bucket_gave() {
         secret: None,
         interaction: &Headless,
     };
-    let err = deploy::run(&s3_config(&site, port), &opts, &silent()).expect_err("refused");
+    let err = deploy::Deploy::run(&s3_config(&site, port), &opts, &silent()).expect_err("refused");
     let rendered = format!("{:?}", miette::Report::from(err));
     assert!(rendered.contains("SignatureDoesNotMatch"), "{rendered}");
     assert!(rendered.contains("403"), "{rendered}");
@@ -302,7 +302,7 @@ fn s3_dry_run_lists_but_writes_nothing() {
         secret: None,
         interaction: &Headless,
     };
-    deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
+    deploy::Deploy::run(&s3_config(&site, port), &opts, &silent()).unwrap();
 
     assert!(store.lock().unwrap().is_empty(), "dry run must not upload");
     let log = log.lock().unwrap();

@@ -48,62 +48,81 @@ pub struct Doc {
     pub tags: Vec<String>,
 }
 
-impl Doc {
-    fn from_page(page: &Page) -> Self {
+/// A page reduced to what a destination might publish.
+///
+/// The summary is [`crate::content::Frontmatter::description`],
+/// never a second reading of the same keys: the head tags, the feed entry and
+/// the announced record answer one question, and a reader who saw a preview in
+/// a `<meta>` tag but not in the record would be reading a bug. This used to
+/// spell the `description`-else-`summary` rule out again here, which is exactly
+/// how the three could drift.
+impl From<&Page> for Doc {
+    fn from(page: &Page) -> Self {
         let fm = &page.frontmatter;
         Self {
             path: page.permalink.clone(),
             title: page.title().to_owned(),
-            description: fm.text("description").or_else(|| fm.text("summary")),
+            description: fm.description(),
             date: fm.date,
             tags: fm.taxonomies.values().flatten().cloned().collect(),
         }
     }
 }
 
-/// Announce to every configured destination in turn. Errors if none is
-/// configured, so `baudelaire announce` on an unconfigured project explains
-/// itself rather than silently doing nothing.
-pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
-    let backends = configured(config);
-    if backends.is_empty() {
-        return Err(AnnounceError::Unconfigured.into());
-    }
-    let site = view(config)?;
-    remote::publish(
-        "announce",
-        backends,
-        &site,
-        |site| Count::documents(site.documents.len()).to_string(),
-        opts,
-        ui,
-    )
-}
+/// The `announce` command: which destinations a run targets, and what it hands
+/// them.
+///
+/// A namespace rather than a value, like [`crate::deploy::Deploy`] beside it:
+/// everything a run needs is on the [`Config`] it is given, so there is nothing
+/// to hold.
+pub struct Announce;
 
-/// The enabled destinations, from config alone. THE single source of what a
-/// `announce` run targets: add a backend by adding one line here.
-fn configured(config: &Config) -> Vec<Box<dyn Backend<SiteView<'_>>>> {
-    let mut out: Vec<Box<dyn Backend<SiteView<'_>>>> = Vec::new();
-    if let Some(standard) = &config.announce.standard {
-        out.push(Box::new(Standard::new(standard.clone())));
+impl Announce {
+    /// Announce to every configured destination in turn. Errors if none is
+    /// configured, so `baudelaire announce` on an unconfigured project explains
+    /// itself rather than silently doing nothing.
+    pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
+        let backends = Self::configured(config);
+        if backends.is_empty() {
+            return Err(AnnounceError::Unconfigured.into());
+        }
+        let site = Self::view(config)?;
+        remote::publish(
+            "announce",
+            backends,
+            &site,
+            |site| Count::documents(site.documents.len()).to_string(),
+            opts,
+            ui,
+        )
     }
-    out
-}
 
-/// Reduce the discovered, eligible content pages to a [`SiteView`]. Only real
-/// content pages are included: generated index and taxonomy pages are site
-/// navigation, not publishable documents.
-fn view(config: &Config) -> Result<SiteView<'_>> {
-    let theme = crate::theme::Theme::of(config)?;
-    let project = crate::world::Project::new(config, crate::world::Mode::Build, theme.as_ref())?;
-    let collections = discover(config, &project)?;
-    let documents = collections
-        .iter()
-        .flat_map(|c| c.pages.iter())
-        .filter(|page| page.eligible(config) && page.listed(config))
-        .map(Doc::from_page)
-        .collect();
-    Ok(SiteView { config, documents })
+    /// The enabled destinations, from config alone. THE single source of what
+    /// an `announce` run targets: add a backend by adding one line here.
+    fn configured(config: &Config) -> Vec<Box<dyn Backend<SiteView<'_>>>> {
+        let mut out: Vec<Box<dyn Backend<SiteView<'_>>>> = Vec::new();
+        if let Some(standard) = &config.announce.standard {
+            out.push(Box::new(Standard::new(standard.clone())));
+        }
+        out
+    }
+
+    /// Reduce the discovered, eligible content pages to a [`SiteView`]. Only
+    /// real content pages are included: generated index and taxonomy pages are
+    /// site navigation, not publishable documents.
+    fn view(config: &Config) -> Result<SiteView<'_>> {
+        let theme = crate::theme::Theme::of(config)?;
+        let project =
+            crate::world::Project::new(config, crate::world::Mode::Build, theme.as_ref())?;
+        let collections = discover(config, &project)?;
+        let documents = collections
+            .iter()
+            .flat_map(|c| c.pages.iter())
+            .filter(|page| page.eligible(config) && page.listed(config))
+            .map(Doc::from)
+            .collect();
+        Ok(SiteView { config, documents })
+    }
 }
 
 /// A disposable, per-backend skip-cache mapping a record identifier to a

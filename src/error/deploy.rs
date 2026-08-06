@@ -1,9 +1,9 @@
 //! Errors from deploying built files to a host.
 //!
 //! Same discipline as [`super::fs`]: what was being done is a typed label
-//! ([`Method`], [`Step`], [`Setup`]) rather than a message the call site spells
-//! out, so every message reads the same way and a new operation is a new
-//! variant, not a new string.
+//! ([`Method`], [`Step`], [`Setup`], [`Phase`], [`Required`]) rather than a
+//! message the call site spells out, so every message reads the same way and a
+//! new operation is a new variant, not a new string.
 
 use std::fmt;
 
@@ -77,6 +77,64 @@ impl fmt::Display for Setup {
     }
 }
 
+/// Which half of a reconcile a run was in when it stopped. Shared by every
+/// destination, because [`Dist::reconcile`](crate::deploy::Dist::reconcile) is.
+#[derive(Debug, Clone, Copy)]
+pub enum Phase {
+    Upload,
+    Delete,
+}
+
+impl fmt::Display for Phase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Upload => "uploading",
+            Self::Delete => "deleting",
+        })
+    }
+}
+
+/// A `deploy { }` setting a destination cannot work without.
+///
+/// A typed label rather than a message at the call site, the same discipline as
+/// [`Step`] and [`Setup`]: the key's spelling and the sentence that says what to
+/// write in it live together, so a destination that gains a required setting
+/// gains one variant here and cannot describe it two ways.
+#[derive(Debug, Clone, Copy)]
+pub enum Required {
+    SshHost,
+    SshPath,
+    S3Bucket,
+}
+
+impl Required {
+    /// The setting as `config.kdl` spells it, and what belongs in it.
+    const fn spellings(self) -> (&'static str, &'static str) {
+        match self {
+            Self::SshHost => (
+                "deploy { ssh { host } }",
+                "name the server, as `ssh` would take it: a hostname or an IP",
+            ),
+            Self::SshPath => (
+                "deploy { ssh { path } }",
+                "give the absolute path of the directory the site is written into, such as `/var/www/site`",
+            ),
+            Self::S3Bucket => ("deploy { s3 { bucket } }", "name the bucket to upload into"),
+        }
+    }
+
+    /// What to write in it.
+    const fn help(self) -> &'static str {
+        self.spellings().1
+    }
+}
+
+impl fmt::Display for Required {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.spellings().0)
+    }
+}
+
 /// A failure while deploying to a destination.
 #[derive(Debug, Error, Diagnostic)]
 pub enum DeployError {
@@ -102,6 +160,59 @@ pub enum DeployError {
     #[error("missing credential: set {}", Code(.var))]
     #[diagnostic(code(baudelaire::deploy::credentials))]
     MissingCredentials { var: String },
+
+    /// A destination block is present but a setting it cannot work without was
+    /// left empty.
+    ///
+    /// Refused before anything connects, because the empty spellings all mean
+    /// something and none of them means what was written: an empty `path` made
+    /// the deploy root `/`, so `index.html` became `/index.html` and the run
+    /// issued `create_dir("/assets")` on the host. `deploy { ssh { host "srv" } }`
+    /// with no `path` at all parsed, and did exactly that.
+    #[error("{} is required and was left empty", Code(.setting))]
+    #[diagnostic(code(baudelaire::deploy::required), help("{}", setting.help()))]
+    Required { setting: Required },
+
+    /// `deploy { ssh { path } }` naming a path that does not start at the root.
+    ///
+    /// The remote path is joined by string, not resolved, so a relative one is
+    /// resolved by the *host* against whatever directory the SFTP session
+    /// happens to start in, which is the login user's home on OpenSSH and
+    /// nothing in particular anywhere else. A deploy that cannot say where it
+    /// wrote is not a deploy.
+    #[error("{} is not an absolute remote path", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::deploy::relative),
+        help(
+            "write it from the root, such as `/var/www/site`: a relative path is resolved by \
+             the host against wherever the session starts, which is not something this can know"
+        )
+    )]
+    Relative { path: String },
+
+    /// A reconcile that stopped partway through, naming where it stopped.
+    ///
+    /// Uploads and deletes are individually idempotent, so a half-finished run
+    /// leaves the remote consistent with neither the old site nor the new one
+    /// but corrupts nothing: re-running finishes it, and sends only what still
+    /// differs. What it used to leave out was any word about how much of the
+    /// site had already changed under the reader's feet.
+    #[error("{phase} stopped after {done} of {total}, at {}", Code(.key))]
+    #[diagnostic(
+        code(baudelaire::deploy::interrupted),
+        help(
+            "the remote holds everything up to this point; re-running compares digests again \
+             and sends only what still differs"
+        )
+    )]
+    Interrupted {
+        phase: Phase,
+        done: usize,
+        total: usize,
+        key: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     /// The transport itself failed (DNS, TLS, connection, malformed response).
     #[error("request to the deploy host failed")]
@@ -158,15 +269,18 @@ pub enum DeployError {
 
     /// The server presented a different host key than the one recorded in
     /// `known_hosts`, the man-in-the-middle guard.
+    ///
+    /// The check is made against one host *and port*, so the remedy has to name
+    /// the same pair: see [`DeployError::entry`].
     #[error("the host key for {} has changed", Code(.host))]
     #[diagnostic(
         code(baudelaire::deploy::ssh::host_key),
         help(
             "if you trust the change, run `ssh-keygen -R {}`; else set `strict #false`",
-            Text(.host)
+            Text(Self::entry(host, *port))
         )
     )]
-    HostKeyChanged { host: String },
+    HostKeyChanged { host: String, port: u16 },
 
     /// No SSH user could be resolved.
     #[error("no ssh user configured and `$USER` is unset")]
@@ -183,6 +297,39 @@ pub enum DeployError {
         help("check the `key`/password and that the user is authorized on the host")
     )]
     Auth { user: String },
+
+    /// `deploy { ssh { key } }` names a file that is not there.
+    ///
+    /// Its own error rather than one of the two below it, because a key that
+    /// was never opened is not a key that failed to decode. Every failure to
+    /// read the file used to answer with a passphrase prompt, so a typo in the
+    /// path asked for the passphrase of a file nobody had read, and then
+    /// blamed whatever was typed for not decrypting it.
+    #[error("no private key at {}", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::key_missing),
+        help(
+            "check `deploy {{ ssh {{ key }} }}`: a leading `~` is expanded against `$HOME`, \
+             and nothing else in the path is"
+        )
+    )]
+    KeyMissing { path: String },
+
+    /// The private key is there and could not be read: a mode that excludes
+    /// this user, a directory in the way, a file that is not text.
+    #[error("the private key at {} could not be read", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::key_unreadable),
+        help(
+            "check the file's ownership and mode; a private key is usually `0600` and owned \
+             by the user this runs as"
+        )
+    )]
+    KeyUnreadable {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
 
     /// An SFTP transfer or remote command failed.
     #[error("{step} failed on the ssh host")]
@@ -240,6 +387,29 @@ impl DeployError {
         }
     }
 
+    /// A reconcile that stopped at `key`, having done `done` of `total`,
+    /// keeping the failure that stopped it.
+    pub fn interrupted(
+        phase: Phase,
+        done: usize,
+        total: usize,
+        key: &str,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Interrupted {
+            phase,
+            done,
+            total,
+            key: key.to_owned(),
+            source: Box::new(source),
+        }
+    }
+
+    /// A destination whose block leaves `setting` empty.
+    pub fn required(setting: Required) -> Self {
+        Self::Required { setting }
+    }
+
     /// A non-2xx response, with the host's body clamped and a hint chosen from
     /// the status.
     pub fn request(method: Method, uri: &str, status: u16, body: &str) -> Self {
@@ -274,9 +444,35 @@ impl DeployError {
         }
     }
 
-    /// The host key changed for `host`.
-    pub fn host_key_changed(host: impl Into<String>) -> Self {
-        Self::HostKeyChanged { host: host.into() }
+    /// The host key changed for `host` on `port`.
+    pub fn host_key_changed(host: impl Into<String>, port: u16) -> Self {
+        Self::HostKeyChanged {
+            host: host.into(),
+            port,
+        }
+    }
+
+    /// The port a `known_hosts` line is written without brackets for.
+    ///
+    /// SSH's own default, not this config's: the bracketed form exists because
+    /// the file has to distinguish two servers at one address, and the protocol
+    /// port is the one that needs no distinguishing. `deploy { ssh { port } }`
+    /// defaults to the same number for a different reason.
+    const PORT: u16 = 22;
+
+    /// The `known_hosts` entry the check was made against, which is what
+    /// `ssh-keygen -R` has to be handed.
+    ///
+    /// OpenSSH records a non-default port as `[host]:port` and so does the
+    /// check here, so `ssh-keygen -R host` matches no line and removes nothing:
+    /// the help used to name a command that exits 0 and leaves the changed key
+    /// exactly where it was. Quoted at the other port, because `[` and `]` are
+    /// glob characters and an unquoted entry is a pattern the shell expands.
+    pub(crate) fn entry(host: &str, port: u16) -> String {
+        match port {
+            Self::PORT => host.to_owned(),
+            port => format!("'[{host}]:{port}'"),
+        }
     }
 }
 
@@ -291,5 +487,33 @@ impl From<ureq::Error> for DeployError {
 impl From<roxmltree::Error> for DeployError {
     fn from(source: roxmltree::Error) -> Self {
         Self::Listing { source }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DeployError;
+
+    /// The remedy has to name the entry the check was made against. A
+    /// non-default port is recorded as `[host]:port`, so the bare-host command
+    /// this used to print matched nothing and removed nothing, while reporting
+    /// success.
+    #[test]
+    fn the_host_key_remedy_names_the_entry_the_check_used() {
+        assert_eq!(DeployError::entry("srv.example", 22), "srv.example");
+        assert_eq!(
+            DeployError::entry("srv.example", 2222),
+            "'[srv.example]:2222'"
+        );
+    }
+
+    /// ...and the help actually carries it, since that is the whole point of
+    /// keeping the port on the variant.
+    #[test]
+    fn the_host_key_help_carries_the_port() {
+        let help = miette::Diagnostic::help(&DeployError::host_key_changed("srv.example", 2222))
+            .expect("help")
+            .to_string();
+        assert!(help.contains("[srv.example]:2222"), "{help}");
     }
 }

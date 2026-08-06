@@ -4,7 +4,7 @@ pub(crate) mod asset;
 mod check;
 mod compile;
 mod emit;
-mod gate;
+pub(crate) mod gate;
 mod hook;
 mod layers;
 mod links;

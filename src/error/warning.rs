@@ -313,11 +313,20 @@ pub struct CleanRefused {
     severity(warning),
     help(
         "confirm the new key out of band, run `ssh-keygen -R {}`, and set `strict #true`",
-        Text(.host)
+        Text(.entry)
     )
 )]
 pub struct HostKeyAccepted {
     pub host: String,
+    /// The `known_hosts` entry the key was checked against, built by
+    /// [`crate::error::DeployError::entry`] rather than spelled again here.
+    ///
+    /// This help and `HostKeyChanged`'s are the same sentence about the same
+    /// file, and they used to disagree: both named the bare host, which matches
+    /// no line and removes nothing when the check was made at any port but 22.
+    /// Carried as the finished entry because a miette `help` substitutes field
+    /// names and cannot call anything.
+    pub entry: String,
 }
 
 /// The version-control tool ran but failed to initialize a repository.
@@ -587,4 +596,59 @@ pub struct NotFoundMissing;
 )]
 pub struct DidUnpinned {
     pub did: String,
+}
+
+/// A remote endpoint the site named over plain HTTP, so the credential this run
+/// sends to it travels in clear.
+///
+/// About the scheme in `config.kdl`, not about the transport: TLS is configured
+/// and verified for every `https://` request. `http://` is what opts out of all
+/// of it, and it used to do so in silence. A warning rather than a refusal,
+/// because a MinIO or a PDS on `localhost` is how both of these get developed
+/// against.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} is plain HTTP, so {} is sent in clear", Code(.url), Text(.secret))]
+#[diagnostic(
+    code(baudelaire::remote::plaintext),
+    severity(warning),
+    help(
+        "write {} as `https://`, unless it is a local server you control end to end",
+        Code(.setting)
+    )
+)]
+pub struct PlaintextEndpoint {
+    /// The config that named it, as the author writes it in `config.kdl`.
+    pub setting: &'static str,
+    /// The endpoint, exactly as it was written.
+    pub url: String,
+    /// What travels over it: `the app password`, ..
+    pub secret: &'static str,
+}
+
+/// Paths a remote's own file listing named that a deploy will not act on.
+///
+/// [`crate::deploy::Listed`] refuses a path that could escape the deploy root,
+/// which is right: the listing feeds a delete. Dropping it in silence was not.
+/// A key the reconcile can neither overwrite nor delete is invisible to
+/// `--delete` and to the summary alike, so it sits on the remote for ever with
+/// nothing anywhere saying it is there, and a key holding `//` or ending in `/`
+/// is enough to get into that state.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error(
+    "{} on {} cannot be reached from here",
+    crate::ui::Count::files(*.count),
+    Code(.target)
+)]
+#[diagnostic(
+    code(baudelaire::deploy::refused),
+    severity(warning),
+    help(
+        "they are neither uploaded over nor deleted: their keys are not paths this can join \
+         safely (a `//`, a trailing `/`, a `..`). Run with `-v` to see them"
+    )
+)]
+pub struct RemotePathsRefused {
+    pub count: usize,
+    /// The destination, as the deploy's summary names it.
+    pub target: String,
 }

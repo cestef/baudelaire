@@ -16,6 +16,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
+use crate::engine::gate::Gate;
+use crate::error::deploy::Phase;
+use crate::error::warning::RemotePathsRefused;
 use crate::error::{DeployError, Result};
 use crate::remote::{self, Backend, Options};
 use crate::ui::{Count, Marker, Ui};
@@ -60,6 +63,53 @@ impl Listed {
     /// once and then used twice over.
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+/// A remote's own file list, split into what this client may act on and what
+/// [`Listed`] refused.
+///
+/// The refusals are carried rather than dropped. Refusing them is right: they
+/// are the paths a hostile or broken host could use to have the client delete
+/// outside the deploy root. Dropping them in silence is not, because a key that
+/// never appears in the listing is one the reconcile can neither upload over
+/// nor delete: it sits on the remote for ever, invisible to `--delete` and to
+/// the summary alike, and nothing anywhere says it exists. A key holding `//`
+/// or ending in `/` is enough, and both are things an ordinary tool can put in
+/// a bucket.
+#[derive(Debug, Default)]
+pub struct Inventory {
+    files: Digests,
+    /// Paths the remote named and this client will not touch, verbatim.
+    refused: Vec<String>,
+}
+
+impl Inventory {
+    /// Record a checked path and the digest the remote reported for it.
+    fn admit(&mut self, path: String, digest: String) {
+        self.files.insert(path, digest);
+    }
+
+    /// Record a path this client will not act on.
+    fn refuse(&mut self, path: impl Into<String>) {
+        self.refused.push(path.into());
+    }
+
+    /// Report what was refused, and hand back what the reconcile may act on.
+    /// Each refusal is named at verbose; the count always warns, because a
+    /// remote holding files no deploy can reach is a fact about the remote and
+    /// not about this run.
+    fn report(self, ui: &Ui, target: &str) -> Digests {
+        if !self.refused.is_empty() {
+            for path in &self.refused {
+                ui.skip(path, "outside the deploy root");
+            }
+            ui.warn(RemotePathsRefused {
+                count: self.refused.len(),
+                target: target.to_owned(),
+            });
+        }
+        self.files
     }
 }
 
@@ -134,17 +184,40 @@ impl Dist {
         ui: &Ui,
     ) -> Result<()> {
         let local = self.digests(|bytes| store.digest(bytes))?;
-        let plan = Plan::compute(&local, &store.list()?, delete);
+        let plan = Plan::compute(&local, &store.list(ui)?, delete);
         plan.preview(ui, opts.dry_run);
         if opts.dry_run {
             return Ok(());
         }
-        for key in &plan.uploads {
-            store.upload(key, &self.read(key)?)?;
+        // Neither loop lets a failure out unlabelled. Each file that went is a
+        // change the remote is already serving, so a bare transport error says
+        // the deploy failed without saying how much of the site had moved
+        // under the reader in the meantime.
+        for (done, key) in plan.uploads.iter().enumerate() {
+            let sent = self.read(key).and_then(|body| store.upload(key, &body));
+            if let Err(why) = sent {
+                return Err(DeployError::interrupted(
+                    Phase::Upload,
+                    done,
+                    plan.uploads.len(),
+                    key,
+                    why,
+                )
+                .into());
+            }
             ui.item(format_args!("{} {key}", Marker::Uploaded));
         }
-        for key in &plan.deletes {
-            store.delete(key)?;
+        for (done, key) in plan.deletes.iter().enumerate() {
+            if let Err(why) = store.delete(key) {
+                return Err(DeployError::interrupted(
+                    Phase::Delete,
+                    done,
+                    plan.deletes.len(),
+                    key,
+                    why,
+                )
+                .into());
+            }
             ui.item(format_args!("{} {key}", Marker::Removed));
         }
         plan.done(ui, store.target());
@@ -162,7 +235,11 @@ pub trait Store {
     fn digest(&self, bytes: &[u8]) -> String;
 
     /// Everything the store currently holds, keyed by dist-relative path.
-    fn list(&self) -> Result<Digests>;
+    ///
+    /// Takes the `Ui` because a listing is the one place a *remote* names paths
+    /// this client will not act on: see [`Inventory`], which every backend
+    /// gathers its answer into and reports through.
+    fn list(&self, ui: &Ui) -> Result<Digests>;
 
     /// Write `body` at the dist-relative `key`.
     fn upload(&self, key: &str, body: &[u8]) -> Result<()>;
@@ -174,60 +251,78 @@ pub trait Store {
     fn target(&self) -> String;
 }
 
-/// Deploy to every configured destination in turn. Errors if none is configured,
-/// so `baudelaire deploy` on an unconfigured project explains itself rather than
-/// silently doing nothing.
-pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
-    let backends = configured(config);
-    // `deploy` never constructs an `Engine`, so the gate table that warns the
-    // build-shaped commands about a missing capability never runs here. Say it
-    // at the one place that can: as a warning when another destination still
-    // carries the run, and as an error when skipping ssh leaves nothing to do
-    // (which `Unconfigured` would otherwise misreport as an empty config).
-    #[cfg(not(feature = "ssh"))]
-    if config.deploy.ssh.is_some() {
-        if backends.is_empty() {
-            return Err(DeployError::SshUnsupported.into());
-        }
-        ui.warn(crate::error::warning::FeatureMissing {
-            setting: "deploy { ssh }",
-            cargo: "ssh",
-            effect: "the SSH destination is skipped",
-        });
-    }
-    if backends.is_empty() {
-        return Err(DeployError::Unconfigured.into());
-    }
-    let dist = Dist::scan(&config.paths.dist)?;
-    remote::publish(
-        "deploy",
-        backends,
-        &dist,
-        |dist| Count::files(dist.files.len()).to_string(),
-        opts,
-        ui,
-    )
-}
+/// The `deploy` command: which destinations a run targets, and what it hands
+/// them.
+///
+/// A namespace rather than a value, like [`crate::announce::Announce`] beside
+/// it: everything a run needs is on the [`Config`] it is given, so there is
+/// nothing to hold.
+pub struct Deploy;
 
-/// The enabled destinations, from config alone. THE single source of what a
-/// `deploy` run targets: add a backend by adding one line here.
-fn configured(config: &Config) -> Vec<Box<dyn Backend<Dist>>> {
-    let mut out: Vec<Box<dyn Backend<Dist>>> = Vec::new();
-    if let Some(s3) = &config.deploy.s3 {
-        out.push(Box::new(S3::new(
-            s3.clone(),
-            config.caching.clone(),
-            Fingerprinted {
-                prefix: config.asset_name().to_owned(),
-                hashed: config.assets.fingerprint,
-            },
-        )));
+impl Deploy {
+    /// Deploy to every configured destination in turn. Errors if none is
+    /// configured, so `baudelaire deploy` on an unconfigured project explains
+    /// itself rather than silently doing nothing.
+    pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
+        let backends = Self::configured(config)?;
+        // `deploy` never constructs an `Engine`, so the gate table that warns
+        // the build-shaped commands about a missing capability never runs here.
+        // Say it at the one place that can, *out of the table*: as a warning
+        // when another destination still carries the run, and as an error when
+        // skipping ssh leaves nothing to do (which `Unconfigured` would
+        // otherwise misreport as an empty config). The row's three fields used
+        // to be written out again here, beside the table that exists to stop
+        // exactly that.
+        if config.deploy.ssh.is_some()
+            && let Some(gap) = Gate::missing_for(Gate::SSH)
+        {
+            #[cfg(not(feature = "ssh"))]
+            if backends.is_empty() {
+                return Err(DeployError::SshUnsupported.into());
+            }
+            ui.warn(gap);
+        }
+        if backends.is_empty() {
+            return Err(DeployError::Unconfigured.into());
+        }
+        let dist = Dist::scan(&config.paths.dist)?;
+        remote::publish(
+            "deploy",
+            backends,
+            &dist,
+            |dist| Count::files(dist.files.len()).to_string(),
+            opts,
+            ui,
+        )
     }
-    #[cfg(feature = "ssh")]
-    if let Some(ssh) = &config.deploy.ssh {
-        out.push(Box::new(Ssh::new(ssh.clone())));
+
+    /// The enabled destinations, from config alone. THE single source of what a
+    /// `deploy` run targets: add a backend by adding one line here.
+    ///
+    /// Each destination checks its own block before it is built, so a setting
+    /// it cannot work without is refused here rather than turning into a
+    /// request against the wrong place: `path` was unchecked, and an empty one
+    /// made the deploy root `/`.
+    fn configured(config: &Config) -> Result<Vec<Box<dyn Backend<Dist>>>> {
+        let mut out: Vec<Box<dyn Backend<Dist>>> = Vec::new();
+        if let Some(s3) = &config.deploy.s3 {
+            S3::check(s3)?;
+            out.push(Box::new(S3::new(
+                s3.clone(),
+                config.caching.clone(),
+                Fingerprinted {
+                    prefix: config.asset_name().to_owned(),
+                    hashed: config.assets.fingerprint,
+                },
+            )));
+        }
+        #[cfg(feature = "ssh")]
+        if let Some(ssh) = &config.deploy.ssh {
+            Ssh::check(ssh)?;
+            out.push(Box::new(Ssh::new(ssh.clone())));
+        }
+        Ok(out)
     }
-    out
 }
 
 /// What a reconcile will do to the remote, shared by every [`Backend`], which
@@ -325,7 +420,8 @@ mod tests {
     #[test]
     fn unconfigured_deploy_errors() {
         let config = Config::default();
-        assert!(configured(&config).is_empty());
+        let backends = Deploy::configured(&config).expect("nothing to check");
+        assert!(backends.is_empty());
         let opts = Options {
             dry_run: true,
             yes: true,
@@ -333,11 +429,53 @@ mod tests {
             interaction: &Headless,
         };
         assert!(matches!(
-            run(&config, &opts, &Ui::new(Level::Silent)),
+            Deploy::run(&config, &opts, &Ui::new(Level::Silent)),
             Err(crate::error::BaudelaireErrorKind::Deploy(
                 DeployError::Unconfigured
             ))
         ));
+    }
+
+    /// A destination whose own block is incomplete is refused before anything
+    /// connects. `deploy { ssh { host "srv" } }` with no `path` parsed, and the
+    /// empty `path` became a deploy root of `/`: `index.html` uploaded to
+    /// `/index.html`, and `create_dir("/assets")` issued on the host.
+    #[test]
+    fn an_incomplete_destination_is_refused_before_it_connects() {
+        let refused = |text: &str| {
+            matches!(
+                Deploy::configured(&Config::parse(text).expect("parses")),
+                Err(crate::error::BaudelaireErrorKind::Deploy(
+                    DeployError::Required { .. } | DeployError::Relative { .. }
+                ))
+            )
+        };
+        assert!(refused("deploy { s3 { bucket \"\" } }"));
+        assert!(!refused(
+            "deploy { ssh { host \"srv\"; path \"/var/www\" } }"
+        ));
+        if cfg!(feature = "ssh") {
+            assert!(refused("deploy { ssh { host \"srv\" } }"), "no path");
+            assert!(refused("deploy { ssh { path \"/var/www\" } }"), "no host");
+            assert!(
+                refused("deploy { ssh { host \"srv\"; path \"www\" } }"),
+                "a relative remote path"
+            );
+        }
+    }
+
+    /// A path the remote named that this client will not touch is reported, not
+    /// dropped: it can be neither uploaded over nor deleted, so nothing else in
+    /// the run would ever mention that it is there.
+    #[test]
+    fn a_refused_remote_path_is_reported_rather_than_dropped() {
+        let mut inventory = Inventory::default();
+        inventory.admit("index.html".to_owned(), "aa".to_owned());
+        inventory.refuse("posts//a.html");
+        let ui = Ui::new(Level::Silent);
+        let files = inventory.report(&ui, "bucket");
+        assert_eq!(files.len(), 1);
+        assert_eq!(ui.warnings(), 1);
     }
 
     struct Headless;

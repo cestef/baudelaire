@@ -21,7 +21,7 @@ use crate::error::warning::{FeatureMissing, SettingInert};
 /// a card is never drawn, an image is never re-encoded, and the build is green
 /// either way. One row here is what turns that into a diagnostic, instead of a
 /// warning hand-written at each site that happens to notice.
-pub(super) struct Gate {
+pub(crate) struct Gate {
     /// The cargo feature that compiles the capability in.
     cargo: &'static str,
     /// Whether this binary has it. Spelled per row because `cfg!` takes a
@@ -121,7 +121,7 @@ const GATES: &[Gate] = &[
     Gate {
         cargo: "ssh",
         compiled: cfg!(feature = "ssh"),
-        setting: "deploy { ssh }",
+        setting: Gate::SSH,
         asked: |config| config.deploy.ssh.is_some(),
         effect: "the SSH destination is skipped",
         rewrites: false,
@@ -323,6 +323,30 @@ impl From<&Inert> for SettingInert {
 }
 
 impl Gate {
+    /// The setting the SSH destination is asked for by.
+    ///
+    /// Named because two places need it: the row below, and `deploy`, which
+    /// never constructs an `Engine` and so never reaches [`Gate::resolve`].
+    /// The literal used to be spelled at both, beside a hand-written copy of
+    /// the row's other two fields.
+    pub(crate) const SSH: &'static str = "deploy { ssh }";
+
+    /// The gap this binary has at `setting`, or `None` when it has the
+    /// capability.
+    ///
+    /// For the callers that are not the build: the table's own rows are the
+    /// only description of a missing capability, and a command that cannot
+    /// reach [`Gate::resolve`] must still derive its warning from them rather
+    /// than restate them. `asked` is deliberately not consulted, because such
+    /// a caller has already established that the site asked, in whatever way
+    /// its own config makes sense of.
+    pub(crate) fn missing_for(setting: &str) -> Option<FeatureMissing> {
+        GATES
+            .iter()
+            .find(|gate| gate.setting == setting && !gate.compiled)
+            .map(FeatureMissing::from)
+    }
+
     /// Whether this site has markdown pages to lose: the capability is on (it
     /// is, unless the site turned it off) and at least one `.md` file sits under
     /// the content tree.
@@ -440,6 +464,20 @@ mod tests {
         // ...and a site that turned the capability off has decided against it,
         // whatever is lying in its content tree.
         assert!(!Gate::markdown(&site("content { markdown #false }")));
+    }
+
+    /// The lookup `deploy` reads its own warning out of. It answers for a row
+    /// the binary lacks and for nothing else, so the full build is silent about
+    /// the very same setting.
+    #[test]
+    fn a_gap_is_looked_up_by_the_setting_that_asks_for_it() {
+        let ssh = Gate::missing_for(Gate::SSH);
+        assert_eq!(ssh.is_some(), !cfg!(feature = "ssh"));
+        if let Some(gap) = ssh {
+            assert_eq!(gap.cargo, "ssh");
+            assert_eq!(gap.setting, Gate::SSH);
+        }
+        assert!(Gate::missing_for("deploy { carrier-pigeon }").is_none());
     }
 
     /// A gate names the config that asks for it, and codes read as identity, so

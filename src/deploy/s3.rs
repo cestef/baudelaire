@@ -15,9 +15,10 @@ use time::OffsetDateTime;
 
 use super::digest::Digest;
 use super::sigv4::{DATE_HEADER, Request, Signer};
-use super::{Backend, Digests, Dist, Listed, Store};
+use super::{Backend, Digests, Dist, Inventory, Listed, Store};
 use crate::config::{CacheControl, S3Config};
-use crate::error::deploy::Method;
+use crate::error::deploy::{Method, Required};
+use crate::error::warning::PlaintextEndpoint;
 use crate::error::{DeployError, Result};
 use crate::mime::Mime;
 use crate::remote::Options;
@@ -62,6 +63,9 @@ impl Backend<Dist> for S3 {
     }
 
     fn run(&self, dist: &Dist, opts: &Options, ui: &Ui) -> Result<()> {
+        if let Some(warning) = Self::plaintext(self.config.endpoint.as_deref()) {
+            ui.warn(warning);
+        }
         // The access key id is an identifier, read straight from the environment;
         // the secret key flows through the shared resolver so `--password`, stdin,
         // and the interactive prompt all work.
@@ -80,6 +84,35 @@ impl Backend<Dist> for S3 {
 }
 
 impl S3 {
+    /// Refuse a `s3 { }` block that names no bucket.
+    ///
+    /// An empty `bucket` is not a default: it builds a host of
+    /// `.s3.<region>.amazonaws.com` for AWS addressing, or a path-style root of
+    /// `/`, and every request under it is signed against an authority nobody
+    /// meant. Checked once, before a client exists.
+    pub(super) fn check(config: &S3Config) -> Result<()> {
+        match config.bucket.trim().is_empty() {
+            true => Err(DeployError::required(Required::S3Bucket).into()),
+            false => Ok(()),
+        }
+    }
+
+    /// Whether `endpoint` is spelled over plain HTTP, in which case the signed
+    /// request, its `x-amz-security-token` included, travels in clear.
+    ///
+    /// The scheme the author typed, not the transport: TLS is configured and
+    /// verified for every `https://` request (see [`crate::remote::Http`]).
+    /// `http://` in `config.kdl` is what opts out of all of it. Reported rather
+    /// than refused, because a MinIO on `localhost` is how this gets tested.
+    fn plaintext(endpoint: Option<&str>) -> Option<PlaintextEndpoint> {
+        let endpoint = endpoint?;
+        endpoint.starts_with("http://").then(|| PlaintextEndpoint {
+            setting: "deploy { s3 { endpoint } }",
+            url: endpoint.to_owned(),
+            secret: "the signed request, session token included",
+        })
+    }
+
     /// Read a required credential from the environment, erroring with the
     /// variable's name when it is unset or empty.
     /// The session token accompanying temporary credentials, if any.
@@ -184,14 +217,16 @@ impl Bucket {
     }
 
     /// Every object currently under the prefix, keyed by object key with its
-    /// ETag, following continuation tokens to the end.
-    fn objects(&self) -> Result<Digests> {
+    /// ETag, following continuation tokens to the end. Keys the deploy will not
+    /// act on are kept in the [`Inventory`] rather than dropped, so the caller
+    /// can report them.
+    fn objects(&self) -> Result<Inventory> {
         // A host that keeps answering with the same continuation token (buggy
         // or hostile) fails loudly instead of looping for ever with `out`
         // growing. The same ceiling reasoning as `atproto::Repo`'s page limit;
         // at 1000 keys/page this admits ten million objects.
         const MAX_PAGES: usize = 10_000;
-        let mut out = Digests::new();
+        let mut out = Inventory::default();
         let mut token: Option<String> = None;
         for _ in 0..MAX_PAGES {
             let mut query = vec![("list-type", "2".to_owned())];
@@ -208,12 +243,16 @@ impl Bucket {
                 &[],
             )?;
             let listing = Listing::parse(&body)?;
-            out.extend(
-                listing
-                    .objects
-                    .into_iter()
-                    .map(|(key, etag)| (self.relative(key), etag)),
-            );
+            for (key, etag) in listing.objects {
+                // The key came off the network and feeds a delete request, so
+                // it only travels on once `Listed` has admitted it; one it
+                // refuses is recorded, because a key nothing here can name is
+                // still a key sitting in the bucket.
+                match Listed::try_from(key.as_str()).is_ok() {
+                    true => out.admit(self.relative(key), etag),
+                    false => out.refuse(key),
+                }
+            }
             match listing.next {
                 Some(next) => token = Some(next),
                 None => return Ok(out),
@@ -371,8 +410,8 @@ impl Store for Bucket {
         Self::etag(bytes)
     }
 
-    fn list(&self) -> Result<Digests> {
-        self.objects()
+    fn list(&self, ui: &Ui) -> Result<Digests> {
+        Ok(self.objects()?.report(ui, &self.target()))
     }
 
     /// Upload `body` to `key` (a relative dist path), with its content type from
@@ -421,6 +460,11 @@ struct Authorization {
 
 /// A parsed bucket listing: the objects on this page and the continuation token
 /// for the next, if the result was truncated.
+///
+/// Keys are exactly as the bucket named them. Deciding which of them this
+/// client may act on belongs to [`Bucket::objects`], which is where a refusal
+/// can be recorded: the check used to live inside an `.ok()?` here, so a key it
+/// turned down vanished between the XML and the reconcile.
 struct Listing {
     objects: Vec<(String, String)>,
     next: Option<String>,
@@ -498,11 +542,9 @@ impl Listing {
             .descendants()
             .filter(|node| node.has_tag_name("Contents"))
             .filter_map(|node| {
-                // The key came off the network and feeds a delete request, so
-                // it only leaves here as a `Listed`.
-                let key = Listed::try_from(text(node, "Key")?.as_str()).ok()?;
+                let key = text(node, "Key")?;
                 let etag = Self::unquote(&text(node, "ETag")?).to_owned();
-                Some((key.into_string(), etag))
+                Some((key, etag))
             })
             .collect();
         let next = document
@@ -680,6 +722,41 @@ mod tests {
             ]
         );
         assert_eq!(listing.next.as_deref(), Some("TOKEN=="));
+    }
+
+    /// A key the client will not act on still comes out of the parse: refusing
+    /// it is the listing's caller's job, and dropping it here is what made a
+    /// key with `//` in it permanently invisible to the reconcile.
+    #[test]
+    fn listing_keeps_the_keys_the_bucket_named() {
+        let xml = r#"<ListBucketResult>
+              <Contents><Key>a.html</Key><ETag>"abc"</ETag></Contents>
+              <Contents><Key>posts//a.html</Key><ETag>"def"</ETag></Contents>
+              <Contents><Key>../etc/passwd</Key><ETag>"ghi"</ETag></Contents>
+            </ListBucketResult>"#;
+        let listing = Listing::parse(xml).unwrap();
+        assert_eq!(listing.objects.len(), 3);
+        // ...and the guard that used to live here still refuses them.
+        assert!(Listed::try_from("posts//a.html").is_err());
+        assert!(Listed::try_from("../etc/passwd").is_err());
+    }
+
+    /// A bucket nobody named is not a default: it signs against
+    /// `.s3.<region>.amazonaws.com`, an authority no one meant.
+    #[test]
+    fn an_unnamed_bucket_is_refused() {
+        assert!(S3::check(&config(None, "")).is_ok());
+        assert!(S3::check(&S3Config::default()).is_err());
+    }
+
+    /// The signed request carries the credentials and, for a temporary one, the
+    /// session token. Over `http://` all of it is on the wire in clear.
+    #[test]
+    fn a_plaintext_endpoint_is_reported() {
+        assert!(S3::plaintext(None).is_none());
+        assert!(S3::plaintext(Some("https://acct.r2.cloudflarestorage.com")).is_none());
+        let warning = S3::plaintext(Some("http://localhost:9000")).expect("warned");
+        assert_eq!(warning.url, "http://localhost:9000");
     }
 
     #[test]

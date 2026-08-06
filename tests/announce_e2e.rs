@@ -2,7 +2,7 @@
 #![cfg(feature = "announce")]
 
 //! End-to-end announce tests: the standard.site backend driven through the
-//! public [`baudelaire::announce::run`], against an in-process PDS.
+//! public [`baudelaire::announce::Announce::run`], against an in-process PDS.
 //!
 //! The build-time half of announcing (the verification artifacts) is covered by
 //! `scenarios/announce.kdl`, which deliberately touches no network. This is the
@@ -220,7 +220,7 @@ fn a_record_whose_page_is_gone_is_deleted_from_the_repo() {
 
     let site = site();
     set_password();
-    announce::run(&config_at(&site, port), &options(false), &silent()).unwrap();
+    announce::Announce::run(&config_at(&site, port), &options(false), &silent()).unwrap();
 
     let records = records.lock().unwrap();
     assert!(
@@ -257,7 +257,7 @@ fn a_dry_run_diffs_the_live_repo_without_writing() {
 
     let site = site();
     set_password();
-    announce::run(&config_at(&site, port), &options(true), &silent()).unwrap();
+    announce::Announce::run(&config_at(&site, port), &options(true), &silent()).unwrap();
 
     assert_eq!(
         *records.lock().unwrap(),
@@ -293,7 +293,8 @@ fn a_mismatched_did_pin_refuses_to_publish() {
     let mut config = config_at(&site, port);
     config.announce.standard.as_mut().unwrap().did = Some("did:plc:somebodyelse".into());
 
-    let err = announce::run(&config, &options(false), &silent()).expect_err("should refuse");
+    let err =
+        announce::Announce::run(&config, &options(false), &silent()).expect_err("should refuse");
     assert!(format!("{err}").contains("did"), "{err}");
     assert!(
         records.lock().unwrap().is_empty(),

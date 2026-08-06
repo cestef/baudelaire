@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use super::auth::Auth;
 use super::hosts::{Client, Verdict};
 use crate::config::SshConfig;
-use crate::deploy::{Digests, Listed};
+use crate::deploy::{Inventory, Listed};
 use crate::error::deploy::Step;
 use crate::error::warning::HostKeyAccepted;
 use crate::error::{DeployError, Result};
@@ -47,7 +47,11 @@ impl Session {
                 // alive for the arms, which lock nothing but would hold it.
                 let seen = *verdict.lock();
                 match seen {
-                    Some(Verdict::Changed) => DeployError::host_key_changed(&config.host),
+                    // The port too: the check is scoped to it, and so is the
+                    // `known_hosts` line the remedy has to name.
+                    Some(Verdict::Changed) => {
+                        DeployError::host_key_changed(&config.host, config.port)
+                    }
                     _ => DeployError::connect(&config.host, e),
                 }
             })?;
@@ -56,6 +60,7 @@ impl Session {
         if *verdict.lock() == Some(Verdict::Changed) {
             ui.warn(HostKeyAccepted {
                 host: config.host.clone(),
+                entry: DeployError::entry(&config.host, config.port),
             });
             // Rendered now, not at the end of the run: warnings are buffered,
             // and every file would otherwise be uploaded to the new host before
@@ -84,8 +89,10 @@ impl Session {
 
     /// The remote files' digests, from the host's `sha256sum`. A missing
     /// directory or absent tool yields an empty map, so every file reads as new
-    /// and the site uploads in full rather than skipping wrongly.
-    pub async fn digests(&self) -> Result<Digests> {
+    /// and the site uploads in full rather than skipping wrongly. Paths the
+    /// host named that this client will not act on come back in the
+    /// [`Inventory`] rather than being dropped.
+    pub async fn digests(&self) -> Result<Inventory> {
         Ok(Remote::parse(&self.exec(&self.remote.command()).await?))
     }
 
@@ -191,6 +198,14 @@ struct Remote {
 }
 
 impl Remote {
+    /// The remote root, with any trailing slash trimmed so [`Remote::path`] can
+    /// add exactly one.
+    ///
+    /// `base` is an absolute path by the time it gets here: [`super::Ssh::check`]
+    /// refuses an empty or relative one before a session is opened. It did not
+    /// use to, and an unset `path` produced a base of `""`, which turned
+    /// `index.html` into `/index.html` and had the run issue
+    /// `create_dir("/assets")` on the host.
     fn new(base: &str) -> Self {
         Self {
             base: base.trim_end_matches('/').to_owned(),
@@ -218,19 +233,25 @@ impl Remote {
     /// Parse `sha256sum` output (`<hex>  ./path` per line) into digests keyed by
     /// the relative path, dropping the `./` prefix `find` emits.
     ///
-    /// Paths that would escape the deploy root are dropped here, the one place
+    /// Paths that would escape the deploy root are refused here, the one place
     /// the host's own answer becomes a path this client joins and deletes: see
-    /// [`Listed`].
-    fn parse(output: &str) -> Digests {
-        output
+    /// [`Listed`]. Refused, and *kept*: one that is merely dropped is a file
+    /// the reconcile can neither overwrite nor delete, and that nothing in the
+    /// run ever mentions.
+    fn parse(output: &str) -> Inventory {
+        let mut out = Inventory::default();
+        for (hash, path) in output
             .lines()
             .filter_map(|line| line.split_once("  "))
             .filter(|(hash, _)| !hash.is_empty())
-            .filter_map(|(hash, path)| {
-                let path = Listed::try_from(path.trim().trim_start_matches("./")).ok()?;
-                Some((path.into_string(), hash.to_owned()))
-            })
-            .collect()
+        {
+            let path = path.trim().trim_start_matches("./");
+            match Listed::try_from(path) {
+                Ok(listed) => out.admit(listed.into_string(), hash.to_owned()),
+                Err(()) => out.refuse(path),
+            }
+        }
+        out
     }
 }
 
@@ -252,13 +273,18 @@ mod tests {
         );
     }
 
+    /// The files a parse admitted, for the cases that only care about those.
+    fn admitted(output: &str) -> crate::deploy::Digests {
+        Remote::parse(output).report(&Ui::new(crate::ui::Level::Silent), "host")
+    }
+
     #[test]
     fn parse_reads_sha256sum_output() {
         let out = "\
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./index.html
 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  ./posts/a.css
 ";
-        let digests = Remote::parse(out);
+        let digests = admitted(out);
         assert_eq!(digests.len(), 2);
         assert_eq!(
             digests["index.html"],
@@ -272,8 +298,26 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./index.html
 
     #[test]
     fn parse_ignores_blank_and_malformed_lines() {
-        assert!(Remote::parse("").is_empty());
-        assert!(Remote::parse("no-double-space ./x").is_empty());
-        assert!(Remote::parse("\n\n").is_empty());
+        assert!(admitted("").is_empty());
+        assert!(admitted("no-double-space ./x").is_empty());
+        assert!(admitted("\n\n").is_empty());
+    }
+
+    /// A path the host named that this client will not join is refused *and*
+    /// reported. It used to be dropped inside a `filter_map`, so a file the
+    /// reconcile could neither overwrite nor delete simply did not exist as far
+    /// as the run was concerned.
+    #[test]
+    fn a_refused_remote_path_is_kept_for_reporting() {
+        let out = "\
+aa  ./index.html
+bb  ../../etc/nginx/nginx.conf
+cc  ./posts//a.html
+";
+        let inventory = Remote::parse(out);
+        let ui = Ui::new(crate::ui::Level::Silent);
+        let files = inventory.report(&ui, "host");
+        assert_eq!(files.keys().collect::<Vec<&String>>(), ["index.html"]);
+        assert_eq!(ui.warnings(), 1);
     }
 }

@@ -19,7 +19,7 @@ use tokio::runtime::{Builder, Runtime};
 use super::digest::Digest;
 use super::{Backend, Digests, Dist, Store};
 use crate::config::SshConfig;
-use crate::error::deploy::Setup;
+use crate::error::deploy::{Required, Setup};
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
 use crate::ui::Ui;
@@ -34,6 +34,33 @@ pub struct Ssh {
 impl Ssh {
     pub fn new(config: SshConfig) -> Self {
         Self { config }
+    }
+
+    /// Refuse an `ssh { }` block this backend cannot act on, before a socket is
+    /// opened.
+    ///
+    /// Neither `host` nor `path` has a defensible default, and both defaulted
+    /// to the empty string: `deploy { ssh { host "srv" } }` parsed, and the
+    /// empty `path` made the deploy root `/`, so `index.html` went to
+    /// `/index.html` and the run issued `create_dir("/assets")` on the host as
+    /// whichever user it had authenticated as. A relative `path` is refused
+    /// too: it is joined as a string and resolved by the *host*, against
+    /// whatever directory the SFTP session happens to start in.
+    pub(super) fn check(config: &SshConfig) -> Result<()> {
+        if config.host.trim().is_empty() {
+            return Err(DeployError::required(Required::SshHost).into());
+        }
+        let path = config.path.trim();
+        if path.is_empty() {
+            return Err(DeployError::required(Required::SshPath).into());
+        }
+        if !path.starts_with('/') {
+            return Err(DeployError::Relative {
+                path: config.path.clone(),
+            }
+            .into());
+        }
+        Ok(())
     }
 
     /// The user to authenticate as: the configured one, else `login` (the
@@ -112,8 +139,9 @@ impl Store for Sftp<'_> {
         Digest::sha256(bytes)
     }
 
-    fn list(&self) -> Result<Digests> {
-        self.runtime.block_on(self.session.digests())
+    fn list(&self, ui: &Ui) -> Result<Digests> {
+        let inventory = self.runtime.block_on(self.session.digests())?;
+        Ok(inventory.report(ui, &self.target()))
     }
 
     fn upload(&self, key: &str, body: &[u8]) -> Result<()> {
@@ -143,6 +171,24 @@ mod tests {
         let err = err.to_string();
         assert!(err.contains("no ssh user"), "{err}");
         assert!(!err.contains("root"), "{err}");
+    }
+
+    /// `host` and `path` have no defensible default, and both defaulted to the
+    /// empty string. The empty `path` is the dangerous half: it made the deploy
+    /// root `/`.
+    #[test]
+    fn a_block_without_a_host_or_an_absolute_path_is_refused() {
+        let block = |host: &str, path: &str| SshConfig {
+            host: host.into(),
+            path: path.into(),
+            ..SshConfig::default()
+        };
+        assert!(Ssh::check(&block("srv", "/var/www/site")).is_ok());
+        assert!(Ssh::check(&block("", "/var/www/site")).is_err(), "no host");
+        assert!(Ssh::check(&block("srv", "")).is_err(), "no path");
+        assert!(Ssh::check(&block("srv", "  ")).is_err(), "a blank path");
+        assert!(Ssh::check(&block("srv", "var/www")).is_err(), "relative");
+        assert!(Ssh::check(&block("srv", "~/site")).is_err(), "a `~` path");
     }
 
     #[test]

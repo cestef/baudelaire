@@ -20,7 +20,8 @@ use owo_colors::OwoColorize;
 
 use crate::atproto::{AtUri, Blob, Did, Repo, Rkey, Session};
 use crate::config::StandardConfig;
-use crate::error::warning::{DidUnpinned, Undated};
+use crate::error::announce::Stage;
+use crate::error::warning::{DidUnpinned, PlaintextEndpoint, Undated};
 use crate::error::{AnnounceError, Result};
 use crate::mime::Mime;
 use crate::ui::Ui;
@@ -56,6 +57,9 @@ impl Backend<SiteView<'_>> for Standard {
             return Err(AnnounceError::Unconfigured.into());
         }
         let base = site.config.base().ok_or(AnnounceError::NoUrl)?;
+        if let Some(warning) = Self::plaintext(&self.config.pds) {
+            ui.warn(warning);
+        }
 
         let target = self.connect(opts, ui)?;
         if let Some(advice) = Self::pinned(self.config.did.as_deref(), target.did())? {
@@ -110,16 +114,52 @@ impl Standard {
         }
     }
 
+    /// Stop the run at `at`, keeping what it has already done.
+    ///
+    /// The skip-cache is written as it stands, *without* [`SkipCache::retain`]:
+    /// the desired set is only as complete as the loop got, and pruning against
+    /// a half-built one would disown records the run never reached. Its own
+    /// failure is swallowed here and only here, because this path is already
+    /// failing and the cost of not writing it is one repeated re-send.
+    fn stopped(
+        &self,
+        cache: &SkipCache,
+        stage: Stage,
+        done: usize,
+        total: usize,
+        at: &str,
+        why: AnnounceError,
+    ) -> crate::error::BaudelaireErrorKind {
+        let _ = cache.save(self.name());
+        AnnounceError::interrupted(stage, done, total, at, why).into()
+    }
+
+    /// Whether `pds` is spelled over plain HTTP, in which case the app password
+    /// this run sends travels in clear on the wire.
+    ///
+    /// The scheme the author typed, not the transport: TLS is configured and
+    /// verified for every `https://` request (see [`crate::remote::Http`]). It
+    /// is `http://` in `config.kdl` that quietly opts out of all of it.
+    /// Reported rather than refused, because a PDS on `localhost` is how the
+    /// protocol is developed against.
+    fn plaintext(pds: &str) -> Option<PlaintextEndpoint> {
+        pds.starts_with("http://").then(|| PlaintextEndpoint {
+            setting: "announce { standard { pds } }",
+            url: pds.to_owned(),
+            secret: "the app password",
+        })
+    }
+
     /// Upload the configured publication icon as a blob, if any. The path is
     /// resolved against the project root (the process cwd during an announce).
     fn icon(&self, session: &Session) -> Result<Option<Blob>> {
         let Some(path) = &self.config.icon else {
             return Ok(None);
         };
-        let bytes = std::fs::read(path).map_err(|source| AnnounceError::Icon {
-            path: path.display().to_string(),
-            source,
-        })?;
+        // `crate::fs` is what carries the path and the operation into the
+        // diagnostic. This used to build an `FsError` by hand over a raw
+        // `std::fs::read`, which is the same error with a second spelling.
+        let bytes = crate::fs::read(path)?;
         Ok(Some(session.upload_blob(&bytes, Mime::of(path))?))
     }
 
@@ -128,6 +168,11 @@ impl Standard {
     /// gone. Undated pages are not documents (standard.site requires a
     /// publication date) and are reported as skipped. A preview [`Target`] runs
     /// the same diff but writes nothing.
+    ///
+    /// A write that fails partway stops the run through [`Standard::stopped`],
+    /// which keeps what was already done: the loops here never `?` a write
+    /// straight out, because that threw away both the skip-cache and any word
+    /// about how far the run had got.
     fn reconcile_documents(
         &self,
         site: &SiteView,
@@ -146,6 +191,11 @@ impl Standard {
         let mut desired = BTreeSet::new();
         let (mut sent, mut unchanged) = (0usize, 0usize);
         let mut undated: Vec<&str> = Vec::new();
+        let dated = site
+            .documents
+            .iter()
+            .filter(|doc| doc.date.is_some())
+            .count();
         for doc in &site.documents {
             // Undated pages are not documents (standard.site requires a
             // `publishedAt`), so they are skipped and reported.
@@ -164,16 +214,28 @@ impl Standard {
                 continue;
             }
             if let Some(session) = target.writer() {
-                session.put_record(DOCUMENT, &rkey, &record)?;
+                if let Err(why) = session.put_record(DOCUMENT, &rkey, &record) {
+                    return Err(self.stopped(
+                        &cache,
+                        Stage::Send,
+                        sent + unchanged,
+                        dated,
+                        &doc.path,
+                        why,
+                    ));
+                }
                 cache.set(rkey.as_str().to_owned(), digest);
             }
             sent += 1;
         }
 
+        let stale: Vec<&str> = remote.difference(&desired).map(String::as_str).collect();
         let mut removed = 0usize;
-        for stale in remote.difference(&desired) {
-            if let Some(session) = target.writer() {
-                session.delete_record(DOCUMENT, &Rkey::parsed(stale))?;
+        for rkey in stale.iter().copied() {
+            if let Some(session) = target.writer()
+                && let Err(why) = session.delete_record(DOCUMENT, &Rkey::parsed(rkey))
+            {
+                return Err(self.stopped(&cache, Stage::Remove, removed, stale.len(), rkey, why));
             }
             removed += 1;
         }
@@ -303,6 +365,19 @@ mod tests {
     fn pinned_advises_pinning_when_unset() {
         let advice = Standard::pinned(None, &Did::new("did:plc:x")).unwrap();
         assert_eq!(advice.unwrap().did, "did:plc:x");
+    }
+
+    /// An app password sent to an `http://` PDS travels in clear. TLS is
+    /// configured and verified for everything else; the scheme in `config.kdl`
+    /// is the one thing that opts out of it, and it used to do so in silence.
+    #[test]
+    fn a_plaintext_pds_is_reported() {
+        assert!(Standard::plaintext("https://bsky.social").is_none());
+        let warning = Standard::plaintext("http://pds.example.test").expect("warned");
+        assert_eq!(warning.url, "http://pds.example.test");
+        // A local PDS is how the protocol is developed against, so this warns
+        // rather than refusing.
+        assert!(Standard::plaintext("http://localhost:2583").is_some());
     }
 
     fn summary(name: &str, sent: usize, unchanged: usize, removed: usize, preview: bool) -> String {
