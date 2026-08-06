@@ -286,6 +286,29 @@ mod tests {
         );
     }
 
+    /// The registry's one ordering invariant, which `builtin()` states in a
+    /// comment and nothing enforced: [`super::Verbatim`] claims every file, so
+    /// anything registered after it could never run. The crate's two other
+    /// registries (`engine/emit/mod.rs`, `engine/compile/sidecar.rs`) both pin
+    /// theirs; this one is why adding a handler is not quite "one impl plus one
+    /// line".
+    ///
+    /// Holds in both flavors: with `css`, `js` and `images` off the fallback is
+    /// the only handler there is, and it is still the last one.
+    #[test]
+    fn only_the_last_handler_claims_a_file_nothing_else_wants() {
+        let config = crate::config::Config::default();
+        let handlers = super::builtin();
+        let unknown = Path::new("data/notes.baudelaire-no-such-format");
+        let claimed: Vec<usize> = handlers
+            .iter()
+            .enumerate()
+            .filter(|(_, handler)| handler.claims(unknown, &config))
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(claimed, [handlers.len() - 1]);
+    }
+
     /// The trait is a spelling of [`crate::graph::AssetName`], which owns the
     /// splice and is tested there; this only pins the wiring.
     #[test]
