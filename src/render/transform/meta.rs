@@ -161,11 +161,16 @@ impl Card<'_> {
         // Infallible: every value is a string, a list of them, or a map of the
         // same. `serde_json` only fails on what cannot be a JSON key.
         let json = serde_json::to_string(&object).expect("plain strings");
-        // A title or description containing `</script>` would close the island
-        // early and spill the rest into the document as text. JSON reads
-        // `<\/` as the same slash; an HTML parser no longer reads it as the end
-        // of the element.
-        let json = json.replace("</", "<\\/");
+        // A title or description carrying `</script>` would close the island
+        // early and spill the rest into the document as text, and `<!--<script`
+        // would do worse: it puts the tokenizer into the script-data
+        // double-escaped state, where the island's own `</script>` stops closing
+        // it and the remainder of the page is swallowed. Escaping `</` alone
+        // shut only the first door. Every `<` becomes its JSON escape for
+        // U+003C, which parses back to the same character and closes the class;
+        // it is safe wholesale because `<` only ever occurs inside a string
+        // here, never in the JSON structure.
+        let json = json.replace('<', "\\u003c");
         let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "application/ld+json");
         el.children
             .push(HtmlNode::Text(json.into(), typst::syntax::Span::detached()));
@@ -551,14 +556,16 @@ mod tests {
     }
 
     /// A title carrying `</script>` would close the island early and spill the
-    /// rest of the object into the document as text. The swap is what JSON
-    /// reads as the same slash and an HTML parser no longer reads as the end of
-    /// the element.
+    /// rest of the object into the document as text; one carrying `<!--<script`
+    /// would open the double-escaped state instead, after which the island's own
+    /// closing tag is not read as one and the rest of the page is swallowed.
+    /// Escaping every `<` closes both, and JSON reads it back as the same
+    /// character.
     #[test]
     fn a_title_cannot_close_the_json_island() {
         let facts = super::Facts {
             title: "Escaping </script> in typst".into(),
-            description: None,
+            description: Some("A comment opener, <!--<script, is the other way in".into()),
             image: None,
             alt: None,
             canonical: None,
@@ -576,7 +583,8 @@ mod tests {
             panic!("expected text")
         };
         assert!(!json.contains("</script"), "{json}");
-        assert!(json.contains("<\\/script"), "{json}");
+        assert!(!json.contains("<!--"), "{json}");
+        assert!(json.contains("\\u003c/script"), "{json}");
         // ...and it is still the JSON it claims to be.
         let parsed: serde_json::Value = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(parsed["headline"], "Escaping </script> in typst");
