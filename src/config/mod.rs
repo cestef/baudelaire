@@ -742,6 +742,23 @@ impl Config {
             .is_some_and(|last| last.contains('.') && !last.starts_with('.'))
     }
 
+    /// Whether a `redirect` old path is a pattern rather than a path: it
+    /// carries a `*`, so it matches a family of URLs and names no file.
+    ///
+    /// The one place that decides this, because three things have to agree
+    /// about it: the accounting that reserves an output file per redirect
+    /// ([`crate::content`]), the emitter that writes either a rule or a stub,
+    /// and the gate that warns when a pattern has no rule file to go in. A
+    /// wildcard can only ever be a rule: an HTML stub is a file at one path, and
+    /// a family of URLs has no one path to put it at.
+    ///
+    /// What the *target* may say in return (`/:splat`, `/:placeholder`) is the
+    /// host's grammar and is passed through untouched, so nothing here has to
+    /// know it.
+    pub(crate) fn wildcard(old: &str) -> bool {
+        old.contains('*')
+    }
+
     /// Whether the site declares languages beyond the default.
     pub fn multilingual(&self) -> bool {
         !self.languages.is_empty()

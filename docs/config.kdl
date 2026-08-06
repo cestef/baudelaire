@@ -77,8 +77,27 @@ assets {
 }
 
 // Files the build emits beside the pages themselves.
+// Old paths nothing on the site owns. `/latest/` is the URL that never goes
+// stale: `docs/versions.sh` publishes the newest release at the root, and this
+// forwards every path under `/latest/` to the same page there. A pattern, so it
+// covers the whole site in one line, and it needs `generate { redirects }`
+// below: a family of URLs has no single file an HTML stub could sit at.
+redirect {
+  "/latest/*" "/:splat"
+}
+
 generate {
   sitemap #true
+  redirects #true
+
+  // The pinned copies under `/vX.Y.Z/` duplicate the root's pages word for
+  // word, so they stay out of search and each page has one result. One rule
+  // rather than one per release: the pattern matches the family.
+  headers {
+    "/v*" {
+      X-Robots-Tag "noindex"
+    }
+  }
 
   // Client-side search: a flat document index. The palette UI is the generated
   // client, imported into assets/main.ts as the `baudelaire:search` virtual
@@ -101,6 +120,12 @@ generate {
     limit 20
   }
 }
+
+// What the host serves the built files with. Assets are fingerprinted above, so
+// their names change with their content and they can be cached forever; a bare
+// block is already that policy. Written into the same `_headers` as the rules
+// above.
+caching { }
 
 // Sweep orphaned outputs (a deleted page, a renamed permalink, a dropped
 // taxonomy term) out of the output directory on every build.

@@ -19,6 +19,21 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A `redirect` old path may carry `*`**, matching a family of URLs rather than
+  one:
+
+  ```kdl
+  redirect {
+    "/latest/*" "/:splat"
+  }
+  ```
+
+  What the destination says back is the host's own grammar and is passed through
+  untouched. A pattern needs `generate { redirects }`: an HTML stub is a file at
+  one path, and a family of URLs has no single path to put one at. Without it the
+  pattern is dropped and the build says so, rather than writing a stub into a
+  directory literally named `*`.
+
 - **`generate { headers { } }`** now takes rules of the site's own, beside the
   `Cache-Control` and CSP it already derived:
 

@@ -49,7 +49,21 @@ impl Processor for Redirects {
         // file it had overwritten. Keep the first and say so, as the sibling
         // image-collision path does.
         let mut claimed: BTreeMap<PathBuf, Option<&PathBuf>> = BTreeMap::new();
+        // Rules that claim no file, so the summary counts what was declared
+        // rather than only what landed somewhere.
+        let mut patterns = 0;
         for rule in Self::declared(site) {
+            // A pattern names a family of URLs, so there is no one file to put
+            // a stub at and nothing to claim. Without the rule file it is
+            // dropped rather than mangled into a literal `*` directory; the
+            // gate has already said so, once, before the build got here.
+            if crate::config::Config::wildcard(&rule.old) {
+                if rules_wanted {
+                    rules.push((site.config.prefixed(&rule.old), rule.target));
+                    patterns += 1;
+                }
+                continue;
+            }
             let destination = site.config.destination(&rule.old);
             if let Some(kept) = claimed.get(&destination) {
                 // Reachable only if [`Claim::unique`] let two claims on one
@@ -82,11 +96,12 @@ impl Processor for Redirects {
         if !rules.is_empty() {
             out.file(&path, &Self::rules(&rules))?;
         }
-        if !claimed.is_empty() {
+        let declared = claimed.len() + patterns;
+        if declared > 0 {
             // A count rather than a path: this is the one processor that
             // writes a file per rule, so there is no single destination for
             // `Emit::wrote` to name.
-            out.note(format_args!("{WROTE} {}", Count::redirects(claimed.len())));
+            out.note(format_args!("{WROTE} {}", Count::redirects(declared)));
         }
         Ok(())
     }
@@ -256,5 +271,48 @@ mod tests {
 
         assert_eq!(rec.files.len(), 2, "{:?}", rec.files);
         assert!(rec.warns.is_empty(), "{:?}", rec.warns);
+    }
+
+    /// A config pair whose old path carries a `*` becomes a rule and nothing
+    /// else: one family of URLs, one line, no file at a literal `*` path.
+    #[test]
+    fn a_wildcard_old_path_is_written_as_a_rule() {
+        let config = Config::parse(
+            "generate {\n  redirects #true\n}\nredirect {\n  \"/latest/*\" \"/:splat\"\n}\n",
+        )
+        .expect("should parse");
+        let site = Site {
+            config: &config,
+            pages: &[],
+            outputs: &[],
+        };
+
+        let mut rec = Recorder::default();
+        Redirects.run(&site, &mut rec).unwrap();
+
+        assert_eq!(rec.files.len(), 1, "{:?}", rec.files);
+        assert!(rec.files[0].0.ends_with("_redirects"), "{:?}", rec.files[0]);
+        assert_eq!(rec.files[0].1, "/latest/* /:splat 301\n");
+        assert_eq!(rec.notes, ["wrote 1 redirect"]);
+    }
+
+    /// Without the rule file there is nowhere for a pattern to go, and a stub
+    /// at a literal `*` directory is not it. The build drops it; `gate.rs` is
+    /// what tells the author, once, before any of this runs.
+    #[test]
+    fn a_wildcard_writes_no_stub() {
+        let config =
+            Config::parse("redirect {\n  \"/latest/*\" \"/:splat\"\n}\n").expect("should parse");
+        let site = Site {
+            config: &config,
+            pages: &[],
+            outputs: &[],
+        };
+
+        let mut rec = Recorder::default();
+        Redirects.run(&site, &mut rec).unwrap();
+
+        assert!(rec.files.is_empty(), "{:?}", rec.files);
+        assert!(rec.notes.is_empty(), "{:?}", rec.notes);
     }
 }

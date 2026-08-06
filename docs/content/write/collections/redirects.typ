@@ -68,6 +68,21 @@ Every declared old path becomes one rule, pointing at the page that claimed it:
   The stubs are *replaced*, not joined. Both hosts serve a static file in preference to a redirect rule, so a stub left at the old path would win and the 301 would never fire.
 ]
 
+=== Whole families of paths
+
+An old path carrying a `*` matches a family of URLs rather than one. Whatever the host reads on the destination side (`:splat` on Netlify and Cloudflare Pages) is passed through untouched:
+
+```kdl
+redirect {
+  "/latest/*" "/:splat"
+  "/docs/*" "/guide/:splat"
+}
+```
+
+#callout(kind: "warn")[
+  A pattern only works with `generate { redirects }` on. A stub is a file at one path, and a family of URLs has no single path to put one at, so without the rule file the pattern is dropped. The build says so rather than dropping it quietly.
+]
+
 Leave it off for a host that reads no rule file. The stubs work anywhere, which is why they are the default. See #link("../../ship/deploy.typ")[deploying] for which host reads what.
 
 === If you write your own `_redirects`

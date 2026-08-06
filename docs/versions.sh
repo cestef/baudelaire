@@ -127,17 +127,15 @@ done
 echo "--> $latest: site root"
 (cd "$work/tree/$latest/docs" && "$work/bin/$latest/baudelaire" build --out "$out")
 
-# Cloudflare Pages deploy files, written after the root build because that build
-# prunes everything under `public/` it did not produce itself.
+# `_redirects` and `_headers` are the root build's own output now, declared in
+# `docs/config.kdl`: `/latest/*` forwards to the same page at the root, and every
+# pinned copy is kept out of search, since those copies duplicate the root's
+# pages word for word and one result per page is the point. Both files used to
+# be written here with `echo`, after the build, which meant a truncating write
+# over whatever the build had put there.
 #
-# `/latest/` is the URL that never goes stale. The pinned copies duplicate the
-# root's pages word for word, so keeping them out of search leaves one result
-# per page while a link someone pinned still resolves.
-echo "/latest/*  /:splat  302" > "$out/_redirects"
-for tag in $versions; do
-    echo "/$tag/*"
-    echo "  X-Robots-Tag: noindex"
-done > "$out/_headers"
+# Neither rule names a version, so neither has to be rewritten when one is
+# published: the header rule matches the whole `/v*` family at once.
 
 # The banner every pinned copy carries, since the theme that rendered it is
 # frozen and cannot grow a picker. Injected into the built HTML rather than

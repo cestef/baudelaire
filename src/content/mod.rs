@@ -129,11 +129,19 @@ impl Claim {
     /// page does own would otherwise bury that page under a stub forwarding
     /// away from it, and the site would lose a page to a config line. Last, so
     /// a page is always the claim reported as the first.
+    ///
+    /// A wildcard pair claims nothing: it is written as a rule and never as a
+    /// file, so reserving `dist/latest/*/index.html` for it would be accounting
+    /// for a file no build writes, and colliding over one.
     fn declared(config: &Config) -> impl Iterator<Item = Self> + '_ {
-        config.redirect.iter().map(|(old, _)| Self {
-            output: config.destination(old),
-            origin: markup!("`redirect {{ \"{}\" }}` in the config", old),
-        })
+        config
+            .redirect
+            .iter()
+            .filter(|(old, _)| !Config::wildcard(old))
+            .map(|(old, _)| Self {
+                output: config.destination(old),
+                origin: markup!("`redirect {{ \"{}\" }}` in the config", old),
+            })
     }
 
     /// Every file `page` will write: its own HTML, plus one stub per
@@ -150,13 +158,18 @@ impl Claim {
         // `/fr/old/a/` are two files. Compared unlocalized they looked like one,
         // and the documented workflow failed the build on a collision that does
         // not exist.
-        let stubs = page.frontmatter.redirect.iter().map(|old| {
-            let old = config.localize(&page.lang, old);
-            Self {
-                output: config.destination(&old),
-                origin: markup!("`redirect \"{}\"` in {}", old, page.source.display()),
-            }
-        });
+        let stubs = page
+            .frontmatter
+            .redirect
+            .iter()
+            .filter(|old| !Config::wildcard(old))
+            .map(|old| {
+                let old = config.localize(&page.lang, old);
+                Self {
+                    output: config.destination(&old),
+                    origin: markup!("`redirect \"{}\"` in {}", old, page.source.display()),
+                }
+            });
         std::iter::once(own).chain(stubs)
     }
 }

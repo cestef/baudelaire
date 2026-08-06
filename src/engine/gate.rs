@@ -292,6 +292,24 @@ const INERT: &[Inert] = &[
     // content-addressed, the file behind it changes while the pages naming it
     // stay cached, and every one of them then blocks the very stylesheet it
     // asked for. Stamping nothing is the safe half of that bargain.
+    // A wildcard matches a family of URLs, and the only thing that can answer a
+    // family is a rule the host reads. An HTML stub is a file at one path, so
+    // there is nowhere to write one: without the rule file the pattern is
+    // dropped, and dropping it in silence is a redirect the author believes is
+    // live.
+    Inert {
+        setting: "a `redirect` old path carrying `*`",
+        asked: |config| {
+            config
+                .redirect
+                .iter()
+                .any(|(old, _)| crate::config::Config::wildcard(old))
+        },
+        needs: "generate { redirects }",
+        met: |config| config.generate.redirects,
+        effect: "the pattern is dropped, since a wildcard cannot be an HTML stub",
+        help: "turn on `generate { redirects }`, or write the old paths out one by one",
+    },
     // The policy is written into `_headers` and nowhere else: it is a header,
     // and a static build has no other way to send one. Without that file the
     // whole block is a paragraph of config that produces nothing.
@@ -532,6 +550,11 @@ mod tests {
                 "announce { standard { verify } }",
                 "announce { standard { handle \"a.example\" } }",
                 "announce { standard { handle \"a.example\"; did \"did:plc:x\" } }",
+            ),
+            (
+                "a `redirect` old path carrying `*`",
+                "redirect {\n  \"/latest/*\" \"/:splat\"\n}",
+                "generate {\n  redirects #true\n}\nredirect {\n  \"/latest/*\" \"/:splat\"\n}",
             ),
         ];
         for (setting, asked, satisfied) in cases {
