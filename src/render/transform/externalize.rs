@@ -63,7 +63,7 @@ impl Transform for Externalize {
                 // wrote the source bytes over (or beside) the processed ones,
                 // warned that two images claimed one name, and left the page
                 // pointing at whichever won.
-                if let Some(url) = ImageRef::pipelined(vpath, config) {
+                if let Some(url) = ImageRef::pipelined(vpath, root, config) {
                     return Some(url);
                 }
                 let image = ImageRef::of(vpath, root, config);
@@ -93,9 +93,24 @@ impl ImageRef {
     /// under the URL its own relative path spells. The authored URL is what is
     /// emitted, so the `srcset` and fingerprint transforms match it exactly as
     /// they match a `src` written by hand.
-    fn pipelined(vpath: &str, config: &Config) -> Option<String> {
-        let rel = Path::new(vpath).strip_prefix(&config.paths.assets).ok()?;
+    fn pipelined(vpath: &str, root: &Path, config: &Config) -> Option<String> {
+        let rel = Path::new(vpath)
+            .strip_prefix(Self::rooted(&config.paths.assets, root))
+            .ok()?;
         Some(config.asset_url(rel))
+    }
+
+    /// A configured directory spelled the way a marker's `vpath` is: relative
+    /// to the project root.
+    ///
+    /// A resolved config carries these absolute, and no root-relative path
+    /// begins with an absolute one, so stripping the configured form as it
+    /// stands matches nothing. [`ImageRef::of`] read the content directory this
+    /// way and [`ImageRef::pipelined`] read the asset directory the other,
+    /// which made the pipelined branch unreachable under an absolute
+    /// `paths { assets }` and externalized every image in it a second time.
+    fn rooted<'a>(dir: &'a Path, root: &Path) -> &'a Path {
+        dir.strip_prefix(root).unwrap_or(dir)
     }
 
     /// The reference for a marker's virtual path. The name is fingerprinted
@@ -122,13 +137,8 @@ impl ImageRef {
         // project-relative one: an image loaded from elsewhere in the project
         // (a `data/` tree) still gets a name nothing else can claim.
         // `vpath` is root-relative, so the content directory has to be read the
-        // same way: a resolved config carries it as an absolute path, and
-        // stripping that would never match.
-        let content = config
-            .paths
-            .content
-            .strip_prefix(root)
-            .unwrap_or(&config.paths.content);
+        // same way (see [`ImageRef::rooted`]).
+        let content = Self::rooted(&config.paths.content, root);
         let rel = Path::new(vpath)
             .strip_prefix(content)
             .unwrap_or_else(|_| Path::new(vpath));
