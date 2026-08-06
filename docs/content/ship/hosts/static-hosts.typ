@@ -78,8 +78,8 @@ generate {
   align: (left, left, left),
   table.header([Key], [Type], [Does]),
   [`headers`],
-  [flag],
-  [Write `_headers` from the caching and CSP policies.],
+  [flag or block],
+  [Write `_headers` from the caching and CSP policies, plus any rule the block adds.],
 
   [`redirects`],
   [flag],
@@ -107,10 +107,32 @@ asset keeps its authored name across builds and is exactly as mutable as a page.
 A configured #link("../security.typ")[Content-Security-Policy] is written into the
 same file.
 
+Anything else the site wants to send is a rule of its own: a path pattern, and
+the headers it adds.
+
+```kdl
+generate {
+  headers {
+    "/private/*" {
+      X-Robots-Tag "noindex"
+    }
+    "/*" {
+      X-Frame-Options "DENY"
+    }
+  }
+}
+```
+
+These come first in the file, before the two derived rules, which end in a
+catch-all. Patterns are written relative to the site, so a site under a
+#link("../../configure/overview.typ")[base path] gets that path prefixed for it.
+A block replaces the whole list, like every other list in the config, and the
+flag still stands in front of it: `headers #false { .. }` writes nothing.
+
 #callout(kind: "warn")[
   `generate { headers }` on its own writes nothing. It needs a `caching { }`
-  block or a CSP to have something to say, and an empty rule file means what the
-  host already assumed.
+  block, a CSP, or a rule of its own to have something to say, and an empty rule
+  file means what the host already assumed.
 ]
 
 === `_redirects`

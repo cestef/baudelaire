@@ -219,7 +219,12 @@ impl Kind {
     pub fn section(self) -> bool {
         matches!(
             self,
-            Self::Block(_) | Self::Items(_) | Self::Line(_) | Self::Lines(_) | Self::Overlay
+            Self::Block(_)
+                | Self::Items(_)
+                | Self::Line(_)
+                | Self::Lines(_)
+                | Self::Tables
+                | Self::Overlay
         )
     }
 
@@ -263,6 +268,7 @@ impl Kind {
             Self::Toggles => "[-]text ..".to_owned(),
             Self::Block(_) => "block".to_owned(),
             Self::Items(_) => "named blocks".to_owned(),
+            Self::Tables => "named key value blocks".to_owned(),
             Self::Line(_) => "key=value ..".to_owned(),
             Self::Lines(_) => "named lines".to_owned(),
             Self::Overlay => "named overlays".to_owned(),

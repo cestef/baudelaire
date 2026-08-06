@@ -66,6 +66,18 @@ impl Line<'_> {
         self.lit(name).lit(": ").value(value)
     }
 
+    /// A `name: value` pair whose *name* is a value from the site too: a header
+    /// the author named in `generate { headers { } }`, where this crate knows
+    /// neither half.
+    ///
+    /// The name is written as a [`word`](Line::word) rather than as a
+    /// [`value`](Line::value), because a header name may not carry whitespace
+    /// and one that did would put the rest of itself where the host reads the
+    /// value.
+    pub(super) fn pair(&mut self, name: impl fmt::Display, value: impl fmt::Display) -> &mut Self {
+        self.word(name).lit(": ").value(value)
+    }
+
     /// A value from the site, with everything a line cannot carry dropped.
     pub(super) fn value(&mut self, value: impl fmt::Display) -> &mut Self {
         let _ = write!(self.0, "{}", Plain(&value.to_string()));

@@ -133,6 +133,15 @@ pub enum Kind {
     /// `key=value` attributes: one line per taxonomy, per icon.
     Lines(Rows),
     /// A block of repeated child nodes, each named by the author and each
+    /// holding a free [`Table`](Kind::Table) of its own: both levels are the
+    /// author's, `generate { headers { "/v*/*" { X-Robots-Tag "noindex" } } }`.
+    ///
+    /// Distinct from [`Items`](Kind::Items), whose children accept a *fixed*
+    /// set of keys, and which therefore has rows for the reference to walk into.
+    /// This one has none, and neither level is a name this crate knows: a path
+    /// pattern names the outer node and a header names the inner one.
+    Tables,
+    /// A block of repeated child nodes, each named by the author and each
     /// accepting *any top-level key*.
     ///
     /// Its own variant rather than [`Kind::Items(Config::rows)`](Kind::Items), which is
@@ -156,7 +165,8 @@ impl Kind {
             // is one of these -- it names *one* of a set -- and was exempt only
             // for as long as three multi-value keys were declared with it.
             // `Table` is here too, since its free-form block may be preceded by
-            // the flag that turns a section on (see [`Kind::Table`]).
+            // the flag that turns a section on (see [`Kind::Table`]), and
+            // `Tables` for the same reason one level up.
             Self::Text
             | Self::Flag
             | Self::Number
@@ -165,7 +175,8 @@ impl Kind {
             | Self::Url
             | Self::Template
             | Self::Choice(_)
-            | Self::Table => Arity::Args(1),
+            | Self::Table
+            | Self::Tables => Arity::Args(1),
             // A list written on one line, however long.
             Self::Choices(_) | Self::Toggled(..) | Self::Toggles | Self::Texts | Self::Numbers => {
                 Arity::Every

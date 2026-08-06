@@ -68,6 +68,7 @@ pub use deploy::ssh::SshConfig;
 pub use generate::GenerateConfig;
 pub use generate::cards::CardsConfig;
 pub use generate::feed::{FeedConfig, FeedKind, FeedNames};
+pub use generate::headers::HeadersConfig;
 pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
 pub use generate::pdf::{PdfBundle, PdfConfig, PdfPages};
@@ -481,7 +482,7 @@ impl Config {
     /// `_headers` would pay for them, and pay again in [`Config::pretty`], to
     /// produce a policy nobody is ever served.
     pub fn hashes(&self) -> bool {
-        self.generate.headers && self.security.csp.enabled && self.security.csp.hashes
+        self.generate.headers.enabled && self.security.csp.enabled && self.security.csp.hashes
     }
 
     /// Whether the HTML is pretty-printed: `html { pretty }`, unless this build

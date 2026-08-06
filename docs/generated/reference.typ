@@ -123,7 +123,7 @@
   (path: "generate", key: "generate", shape: "block", doc: "The files a build emits beside the pages.", depth: 0, section: true),
   (path: "generate.sitemap", key: "sitemap", shape: "flag", doc: "Write `sitemap.xml`.", depth: 1, section: false),
   (path: "generate.redirects", key: "redirects", shape: "flag", doc: "Write a `_redirects` file from each page's declared aliases.", depth: 1, section: false),
-  (path: "generate.headers", key: "headers", shape: "flag", doc: "Write a `_headers` file from the caching policy.", depth: 1, section: false),
+  (path: "generate.headers", key: "headers", shape: "named key value blocks", doc: "Write a `_headers` file from the caching policy. A block adds rules of the site's own: a path pattern, and the headers it sends.", depth: 1, section: true),
   (path: "generate.robots", key: "robots", shape: "block", doc: "Write `robots.txt`. Its presence turns it on; `#false` turns it off again.", depth: 1, section: true),
   (path: "generate.robots.disallow", key: "disallow", shape: "text ..", doc: "Paths to disallow, one word each.", depth: 2, section: false),
   (path: "generate.llms", key: "llms", shape: "block", doc: "Write `llms.txt`. Its presence turns it on; `#false` turns it off again.", depth: 1, section: true),

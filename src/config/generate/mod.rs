@@ -2,6 +2,7 @@
 
 pub mod cards;
 pub mod feed;
+pub mod headers;
 pub mod llms;
 pub mod manifest;
 pub mod pdf;
@@ -9,11 +10,12 @@ pub mod robots;
 pub mod search;
 
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::Flag;
+use crate::config::dispatch::Kind::{Flag, Tables};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
-    CardsConfig, FeedConfig, LlmsConfig, ManifestConfig, PdfConfig, RobotsConfig, SearchConfig,
+    CardsConfig, FeedConfig, HeadersConfig, LlmsConfig, ManifestConfig, PdfConfig, RobotsConfig,
+    SearchConfig,
 };
 
 /// The files a build emits beside the pages themselves. Each one is opt-in:
@@ -22,8 +24,9 @@ use crate::config::{
 pub struct GenerateConfig {
     /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
     pub sitemap: bool,
-    /// Emit a `_headers` rule file stating the `caching` policy to the host.
-    pub headers: bool,
+    /// Emit a `_headers` rule file: the `caching` policy, the content security
+    /// policy, and whatever else the site states for itself.
+    pub headers: HeadersConfig,
     /// Emit a `_redirects` rule file instead of the per-path HTML stubs.
     ///
     /// Netlify and Cloudflare Pages read it from the publish directory and
@@ -68,12 +71,9 @@ impl Section for GenerateConfig {
         ),
         (
             "headers",
-            Flag,
-            "Write a `_headers` file from the caching policy.",
-            |c, n, t| {
-                c.headers = n.boolean(t, 0)?;
-                Ok(())
-            },
+            Tables,
+            "Write a `_headers` file from the caching policy. A block adds rules of the site's own: a path pattern, and the headers it sends.",
+            |c, n, t| c.headers.fill(n, t),
         ),
         (
             "robots",

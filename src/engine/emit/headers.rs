@@ -27,14 +27,23 @@ impl Headers {
 impl Processor for Headers {
     /// Needs the file, and something to put in it. `generate { headers }` alone
     /// would emit an empty rule file, which reads as "no policy" and is what the
-    /// host already assumed.
+    /// host already assumed. A rule the site wrote itself is something to put in
+    /// it, as much as either derived policy is.
     fn enabled(&self, config: &Config) -> bool {
-        config.generate.headers && (config.caching.enabled || config.security.csp.enabled)
+        let headers = &config.generate.headers;
+        headers.enabled
+            && (config.caching.enabled || config.security.csp.enabled || !headers.rules.is_empty())
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let config = site.config;
         let mut body = Lines::default();
+        // The site's own rules lead. They are the only ones whose order the
+        // author controls, and the two derived rules below end in a catch-all
+        // that would otherwise be answered first.
+        for (pattern, headers) in &config.generate.headers.rules {
+            Self::rule(&mut body, &config.prefixed(pattern), headers);
+        }
         // Most specific first: a host matches rules in order, so the catch-all
         // has to come last or it would claim the asset paths too.
         //
@@ -75,10 +84,14 @@ impl Headers {
     /// One rule: the path pattern on its own line, then each header indented
     /// beneath it, then the blank line that ends the record. The format both
     /// hosts read.
-    fn rule(body: &mut Lines, pattern: &str, headers: &[(&'static str, impl fmt::Display)]) {
+    ///
+    /// The name is a value here rather than a literal, because a site's own
+    /// rules name their own headers; the derived ones pass a literal that
+    /// happens to satisfy the same signature.
+    fn rule(body: &mut Lines, pattern: &str, headers: &[(impl fmt::Display, impl fmt::Display)]) {
         body.line().value(pattern);
         for (name, value) in headers {
-            body.line().lit("  ").field(name, value);
+            body.line().lit("  ").pair(name, value);
         }
         body.blank();
     }
@@ -131,6 +144,55 @@ mod tests {
             "{body}"
         );
         assert!(!body.contains("Cache-Control"), "{body}");
+    }
+
+    /// A rule the site wrote itself earns the file on its own: a header that is
+    /// neither a cache policy nor a security one is still a header, and this
+    /// used to be the case that had to be written by hand after the build.
+    #[test]
+    fn a_rule_of_the_sites_own_earns_the_file() {
+        let text = "generate {\n  headers {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}";
+        assert!(Headers.enabled(&config(text)));
+
+        let body = body(&config(text));
+        assert!(body.contains("/v*/*\n  X-Robots-Tag: noindex\n"), "{body}");
+        assert!(!body.contains("Cache-Control"), "{body}");
+    }
+
+    /// The site's rules lead, because the derived ones end in a catch-all: a
+    /// host reads the file in order and the first match wins.
+    #[test]
+    fn the_sites_own_rules_precede_the_derived_ones() {
+        let body = body(&config(
+            "caching { }\ngenerate {\n  headers {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
+        ));
+        let own = body.find("/private/*").expect("no rule of its own");
+        let catchall = body.rfind("/*\n").expect("no catch-all");
+        assert!(own < catchall, "{body}");
+    }
+
+    /// Base-path prefixed like every other pattern in the file: a site served
+    /// under a subdirectory states paths relative to itself.
+    #[test]
+    fn a_rule_is_written_under_the_base_path() {
+        let body = body(&config(
+            "url \"https://e.xyz/docs/\"\ngenerate {\n  headers {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
+        ));
+        assert!(body.contains("/docs/private/*"), "{body}");
+    }
+
+    /// A header name is the author's text, so it goes through the same filter
+    /// every other value does. Written raw, a name carrying a line break would
+    /// open a record of its own.
+    #[test]
+    fn a_header_name_cannot_open_a_line_of_its_own() {
+        let mut config = config("generate {\n  headers #true\n}");
+        config.generate.headers.rules = vec![(
+            "/*".to_owned(),
+            vec![("X-A\nX-B".to_owned(), "v".to_owned())],
+        )];
+        let body = body(&config);
+        assert!(body.contains("  X-AX-B: v\n"), "{body}");
     }
 
     /// The asset rule is only true where the names are content-addressed, and

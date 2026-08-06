@@ -19,6 +19,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`generate { headers { } }`** now takes rules of the site's own, beside the
+  `Cache-Control` and CSP it already derived:
+
+  ```kdl
+  generate {
+    headers {
+      "/private/*" {
+        X-Robots-Tag "noindex"
+      }
+    }
+  }
+  ```
+
+  A path pattern, and the headers it sends. These lead the file, ahead of the
+  derived rules and the catch-all that ends it, and a pattern is prefixed with
+  the site's base path like every other pattern in it. `generate { headers }`
+  keeps both spellings it had: the bare flag, and `#false` in front of a block.
+
 - **`prune { keep }`**: globs, relative to the output directory, the sweep never
   deletes:
 
