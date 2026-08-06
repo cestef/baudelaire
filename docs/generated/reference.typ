@@ -16,6 +16,7 @@
   (path: "paths.assets", key: "assets", shape: "path", doc: "Assets that go through the pipeline: CSS, JS, images.", depth: 1, section: false),
   (path: "paths.static", key: "static", shape: "path", doc: "Files copied to the output verbatim, untouched by the pipeline.", depth: 1, section: false),
   (path: "paths.templates", key: "templates", shape: "path", doc: "Where layouts and partials are imported from.", depth: 1, section: false),
+  (path: "paths.sources", key: "sources", shape: "key value ..", doc: "Files a page may take as its body, each under a name: a page names the name, never the path.", depth: 1, section: false),
   (path: "content", key: "content", shape: "block", doc: "What the content tree holds and how it is read.", depth: 0, section: true),
   (path: "content.index", key: "index", shape: "text", doc: "The filename stem that publishes at its directory's own URL, without extension.", depth: 1, section: false),
   (path: "content.future", key: "future", shape: "flag", doc: "Build pages dated later than now.", depth: 1, section: false),

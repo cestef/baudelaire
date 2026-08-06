@@ -146,12 +146,49 @@ x unclosed delimiter
   :          -
 `````
 
+== A body from elsewhere
+
+A page's body can be a file the site does not otherwise publish: a `CHANGELOG.md`
+at the top of the repository, a `README.md` shared with another project. The
+config declares the file under a name, and the page names the name:
+
+```kdl
+paths {
+  sources {
+    changelog "../CHANGELOG.md"
+  }
+}
+```
+
+```md
+;;;
+title "Changelog"
+source "changelog"
+;;;
+```
+
+That is the whole page: a `source` and a body of its own is an error, since one
+of the two would have to be dropped. The file is read as markdown under its own
+name, so a fault in it is reported where the prose is.
+
+#callout(kind: "note")[
+  A page names a *name*, never a path, and `paths { sources }` is the only place
+  a path is written. A page cannot reach a file the config did not offer it, and
+  a #link("../start/themes.typ")[theme] cannot add one: `paths` is among the
+  sections a theme is refused. The declared path may sit outside the project,
+  which is the case this exists for, and that is the config's call to make.
+]
+
+Typst pages have no need of it: `#include` reads a file already, and typst tracks
+it as a dependency of the page. A `source` on a `.typ` page is refused rather
+than ignored.
+
 == A worked example
 
-This site's own #link("../lookup/changelog.md")[changelog] is a markdown page,
-generated from the repository's `CHANGELOG.md` with a frontmatter block in front
-of it. It exercises tables, reference links, nested lists and sixty-odd fenced
-samples, and nothing about it was rewritten by hand.
+This site's own #link("../lookup/changelog.md")[changelog] is exactly that: a
+five-line frontmatter block whose body is the repository's `CHANGELOG.md`. It
+exercises tables, reference links, nested lists and sixty-odd fenced samples, and
+no copy of it is kept anywhere.
 
 == Linking to one
 

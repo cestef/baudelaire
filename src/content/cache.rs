@@ -223,6 +223,16 @@ impl<'a> DiscoveryCache<'a> {
 
         let value = crate::codegen::Value::from(&typst::foundations::Value::Dict(dict));
         let dict = crate::codegen::Typst(&value).to_string();
+
+        // A `source` moves the body to another file, so everything below reads
+        // that file's text under that file's name: a fault the lowering finds is
+        // reported where the prose is, not against the stub that named it.
+        let sourced = Self::sourced(&frontmatter, &document, path, config)?;
+        let (document, text, named) = match &sourced {
+            Some((path, text)) => (Document::whole(text), text.as_str(), path.clone()),
+            None => (document, text.as_str(), named),
+        };
+
         // Measured here, on the body the author wrote: what the lowering
         // produces is Typst code line for line, and a reading estimate taken
         // from *that* counts none of the prose. See [`Data::Lowered`].
@@ -233,8 +243,44 @@ impl<'a> DiscoveryCache<'a> {
             reading,
         };
         let (body, sourcemap) =
-            Markdown::new(&document, &text, &named, &config.content.markdown).lower()?;
+            Markdown::new(&document, text, &named, &config.content.markdown).lower()?;
         Ok((frontmatter, data(std::sync::Arc::new(sourcemap)), body))
+    }
+
+    /// The file a page's `source` names, read: its display name and its text.
+    ///
+    /// The name is resolved against `paths { sources { } }` and nowhere else, so
+    /// a page can only ever reach a file the config already offered it. An
+    /// undeclared name is an error rather than a path to try, which is the
+    /// difference between a key that selects and a key that opens.
+    ///
+    /// The declared path is joined to the project root, and is allowed to leave
+    /// it: that is the config's call to make, and the reason the declaration
+    /// lives in a section a theme may not write.
+    ///
+    /// Gated with its one caller: `source` replaces a *markdown* body, and
+    /// without that feature there is no markdown page to give one to. A `.typ`
+    /// page carrying the key is refused either way, in `Page::load`.
+    #[cfg(feature = "markdown")]
+    fn sourced(
+        frontmatter: &Frontmatter,
+        document: &crate::content::markdown::Document<'_>,
+        path: &Path,
+        config: &Config,
+    ) -> Result<Option<(String, String)>> {
+        let Some(name) = &frontmatter.source else {
+            return Ok(None);
+        };
+        if !document.body.trim().is_empty() {
+            return Err(crate::error::ContentError::source_and_body(path).into());
+        }
+        let declared = config.paths.source(name).ok_or_else(|| {
+            crate::error::ContentError::unknown_source(path, name, &config.paths.declared())
+        })?;
+        let file = config.root.join(declared);
+        let text = Self::decode(&crate::fs::read(&file)?)
+            .ok_or_else(|| crate::error::ContentError::non_utf8_source(&file))?;
+        Ok(Some((file.display().to_string(), text)))
     }
 
     /// The previous entry for `path` if it is still valid, its source and every

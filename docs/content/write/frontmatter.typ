@@ -46,6 +46,7 @@ the block is read into the same dict, and everything below is the same walk.
   [`template`], [str], [The template that wraps this page, overriding the collection's default.],
   [`order`], [int], [The sort key for a `sort "order"` collection.],
   [`redirect`], [list], [One old path, or a list of them, forwarded to this page.],
+  [`source`], [str], [The name of a `paths { sources }` entry whose file is this page's body. Markdown pages only.],
 )
 
 Values are typed. A key with the wrong type stops the build with a diagnostic

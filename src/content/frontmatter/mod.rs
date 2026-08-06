@@ -131,6 +131,14 @@ const FIELDS: &[(&str, Shape, Field)] = &[
             Ok(())
         },
     ),
+    (
+        "source",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.source = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
 ];
 
 /// Parsed frontmatter for a single page.
@@ -185,6 +193,14 @@ pub struct Frontmatter {
     pub template: Option<String>,
     pub order: Option<i64>,
     pub redirect: Vec<String>,
+    /// The name of a `paths { sources { } }` entry whose file is this page's
+    /// body, in place of the one written under the frontmatter.
+    ///
+    /// A *name*, never a path: the config declares which files may be read and
+    /// under what name, and a page can only ask for one of those. That is what
+    /// keeps a key that reads a file off disk from being a way for content to
+    /// name any file on the machine.
+    pub source: Option<String>,
     pub taxonomies: BTreeMap<String, Vec<String>>,
     pub extra: BTreeMap<String, codegen::Value>,
 }

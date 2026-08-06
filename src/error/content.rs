@@ -103,6 +103,40 @@ pub enum ContentError {
         help: String,
     },
 
+    /// A page named a `source` the config does not declare.
+    ///
+    /// Deliberately not a fallback to reading the name as a path: that would be
+    /// the hole this design exists to close, since a page could then reach any
+    /// file the build can open. The name is either declared or it is nothing.
+    #[error("{} names source {}, which the config does not declare", Text(.path), Code(.name))]
+    #[diagnostic(code(baudelaire::content::unknown_source))]
+    UnknownSource {
+        path: String,
+        name: String,
+        #[help]
+        help: String,
+    },
+
+    /// A page carrying both a `source` and a body of its own.
+    #[error("{} has both a {} and a body of its own", Text(.path), Code("source"))]
+    #[diagnostic(
+        code(baudelaire::content::source_and_body),
+        help(
+            "a sourced page is a frontmatter block and nothing else: move the prose into the sourced file, or drop the `source`"
+        )
+    )]
+    SourceAndBody { path: String },
+
+    /// A `.typ` page carrying a `source`.
+    #[error("{} is a typst page, so its {} would replace what typst compiles", Text(.path), Code("source"))]
+    #[diagnostic(
+        code(baudelaire::content::source_on_typst),
+        help(
+            "use typst's own `include` for a `.typ` page, which tracks the file it reads; `source` is for markdown, which has no include"
+        )
+    )]
+    SourceOnTypst { path: String },
+
     #[error("{} and {} both write {}", Code(.first), Code(.second), Code(.target))]
     #[diagnostic(
         code(baudelaire::content::collision),
@@ -259,6 +293,43 @@ impl ContentError {
                 "declare it under `languages`, or use one of: {}",
                 known.join(", ")
             ),
+        }
+    }
+
+    /// A page naming a source the config never declared. The help lists what it
+    /// did declare, since the name is the only thing a page may write and a
+    /// typo is otherwise indistinguishable from a missing declaration.
+    pub fn unknown_source(path: &std::path::Path, name: &str, declared: &[&str]) -> Self {
+        let help = match declared.is_empty() {
+            true => markup!(
+                "declare it: `paths {{ sources {{ {} \"../FILE.md\" }} }}`",
+                name
+            ),
+            false => markup!(
+                "declare it under `paths {{ sources }}`, or use one of: {}",
+                declared.join(", ")
+            ),
+        };
+        Self::UnknownSource {
+            path: path.display().to_string(),
+            name: name.to_owned(),
+            help,
+        }
+    }
+
+    /// A sourced page that also wrote a body under its frontmatter. Refused
+    /// rather than resolved either way: one of the two would be dropped, and
+    /// dropping the prose somebody wrote is not something to do quietly.
+    pub fn source_and_body(path: &std::path::Path) -> Self {
+        Self::SourceAndBody {
+            path: path.display().to_string(),
+        }
+    }
+
+    /// A `source` on a `.typ` page, where typst's own `include` is the answer.
+    pub fn source_on_typst(path: &std::path::Path) -> Self {
+        Self::SourceOnTypst {
+            path: path.display().to_string(),
         }
     }
 

@@ -163,6 +163,14 @@ impl Page {
         // cache skips both the parse and the evaluation for a page whose source
         // and dependencies are unchanged, returning the body straight from disk.
         let (mut frontmatter, data, body) = cache.load_page(collection, path, config, project)?;
+        // `source` replaces a page's body with a declared file's, which only a
+        // markdown page has a body to replace: a `.typ` page's is the module the
+        // frontmatter was just read out of, and typst's own `include` already
+        // reads a file and is tracked as that page's dependency. Checked here
+        // rather than in the loader so it holds whichever cache path answered.
+        if frontmatter.source.is_some() && path.extension().is_none_or(|e| e != "md") {
+            return Err(ContentError::source_on_typst(path).into());
+        }
         // Reject a name that is not text before decoding it. `Stem::of` falls
         // back to `index` for one, which is the *bundle index* name: the file
         // silently took its parent directory's slug and could overwrite the

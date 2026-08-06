@@ -75,6 +75,10 @@ pub(super) struct Filter {
     watches: Vec<(PathBuf, notify::RecursiveMode)>,
     include: Vec<Glob<'static>>,
     exclude: Vec<Glob<'static>>,
+    /// The files `paths { sources { } }` declares, absolute: a page's body can
+    /// come from one, and it is the only build input that may sit outside the
+    /// project root entirely.
+    sourced: Vec<PathBuf>,
     /// Directories the last build read outside the watched trees (see
     /// [`Filter::watching`]), so an event in one is relevant without a glob.
     tracked: Vec<PathBuf>,
@@ -112,6 +116,22 @@ impl Filter {
                 watches.push((Self::absolute(&base, &prefix), Recursive));
             }
         }
+        // Every file `paths { sources { } }` declares, watched through its own
+        // parent directory for the reason the config file is: an editor saving
+        // by rename-over drops a watch pinned to the file. These are the one
+        // input a page can take from outside every tree above, and one that
+        // typically sits *above* the project root, where nothing else looks.
+        let sourced: Vec<PathBuf> = config
+            .paths
+            .sources
+            .iter()
+            .map(|(_, path)| Self::absolute(&base, path))
+            .collect();
+        for file in &sourced {
+            if let Some(dir) = file.parent() {
+                watches.push((dir.to_path_buf(), NonRecursive));
+            }
+        }
         let exclude = Self::compile(&config.serve.exclude)?;
         Ok(Self {
             root: base,
@@ -120,6 +140,7 @@ impl Filter {
             watches,
             include,
             exclude,
+            sourced,
             tracked: Vec::new(),
             scratch: cache,
         })
@@ -265,6 +286,7 @@ impl Filter {
             return true;
         }
         self.is_config(path)
+            || self.sourced.iter().any(|file| file == path)
             || self.trees.iter().any(|tree| path.starts_with(tree))
             || self.tracked.iter().any(|dir| path.starts_with(dir))
     }

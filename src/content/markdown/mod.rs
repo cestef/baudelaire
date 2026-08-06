@@ -41,6 +41,22 @@ pub struct Document<'a> {
 }
 
 impl<'a> Document<'a> {
+    /// `source` as a document that is body from its first byte.
+    ///
+    /// What a `paths { sources { } }` file is read as: the frontmatter came
+    /// from the page that named it, so a fence at the top of this one is a
+    /// thematic break in somebody else's file and not a block to consume. A
+    /// `CHANGELOG.md` opening with `---` under its title is exactly that.
+    pub fn whole(source: &'a str) -> Self {
+        Self {
+            frontmatter: None,
+            dialect: Dialect::Yaml,
+            body: source,
+            offset: 0,
+            body_offset: 0,
+        }
+    }
+
     /// Split `source`. A file whose first line is not a fence has no
     /// frontmatter, which is not an error: a page may declare nothing.
     pub fn split(source: &'a str, path: &str) -> Result<Self> {

@@ -1,0 +1,184 @@
+// `paths { sources { } }` and a page's `source`: a markdown page whose body is
+// a file the config declared, somewhere the content tree does not reach.
+//
+// The shape of the feature is the security of it. A page names a *name*, and the
+// config is the only thing that maps a name to a path, so content -- the part of
+// a site a pull request touches -- can never name a file. Half of these cases
+// exist to hold that line rather than to demonstrate the feature.
+
+scenario "a page takes its body from a declared source" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+        sources {
+          changelog "notes/CHANGELOG.md"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    // Outside `content/`, so nothing discovers it as a page of its own: it is
+    // read because one page asked for it by name.
+    "notes/CHANGELOG.md" #"""
+      Released **today**, with a [link](/other/).
+
+      - one
+      - two
+      """#
+    "content/changelog.md" #"""
+      ;;;
+      title "Changelog"
+      template "page.typ"
+      source "changelog"
+      ;;;
+      """#
+    "content/other.typ" #"""
+      #let frontmatter = (title: "Other", template: "page.typ",)
+      Target.
+      """#
+  }
+  expect {
+    ok
+    file "changelog/index.html" {
+      // The stub's frontmatter still reached the template.
+      contains ">Changelog</h1>"
+      // The sourced file became the body, lowered like any markdown.
+      contains "<strong>today</strong>"
+      contains "<li>one</li>"
+      // ..including its links, which resolve through the same graph.
+      contains #"href="/other/""#
+    }
+    // The sourced file is an input, never an output: it sits outside `content/`
+    // and nothing publishes it.
+    absent "notes/CHANGELOG/index.html"
+  }
+}
+
+// The line the whole design rests on. A page may write a name; a path is not a
+// name, so this is an unknown source rather than a file to open. Were it read as
+// a path, any page in any pull request could publish any file the build can
+// read.
+scenario "a page cannot name a path instead of a source" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          changelog "notes/CHANGELOG.md"
+        }
+      }
+      """#
+    "notes/CHANGELOG.md" #"""
+      Released today.
+      """#
+    "content/leak.md" #"""
+      ;;;
+      title "Leak"
+      source "../../../etc/passwd"
+      ;;;
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::unknown_source" }
+  }
+}
+
+// The same refusal for a name that is merely wrong: a typo is not a fallback to
+// reading it as a path either.
+scenario "an undeclared source name is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          changelog "notes/CHANGELOG.md"
+        }
+      }
+      """#
+    "notes/CHANGELOG.md" #"""
+      Released today.
+      """#
+    "content/page.md" #"""
+      ;;;
+      title "Page"
+      source "changlog"
+      ;;;
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::unknown_source" }
+  }
+}
+
+// Two bodies, and no rule for choosing between them that does not silently
+// discard prose somebody wrote.
+scenario "a sourced page may not also have a body" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          changelog "notes/CHANGELOG.md"
+        }
+      }
+      """#
+    "notes/CHANGELOG.md" #"""
+      Released today.
+      """#
+    "content/page.md" #"""
+      ;;;
+      title "Page"
+      source "changelog"
+      ;;;
+
+      Prose of my own.
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::source_and_body" }
+  }
+}
+
+// A `.typ` page's body is the module its frontmatter was read out of, and typst
+// has `include`, which reads a file and is tracked as a dependency of the page.
+scenario "a typst page is refused a source" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          changelog "notes/CHANGELOG.md"
+        }
+      }
+      """#
+    "notes/CHANGELOG.md" #"""
+      Released today.
+      """#
+    "content/page.typ" #"""
+      #let frontmatter = (title: "Page", source: "changelog",)
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::source_on_typst" }
+  }
+}

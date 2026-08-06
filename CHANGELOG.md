@@ -31,6 +31,35 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A page's body can be a file the site does not publish**: a `CHANGELOG.md` at
+  the top of the repository, a `README.md` shared with another project. The
+  config declares the file under a name, and a markdown page names the name:
+
+  ```kdl
+  paths {
+    sources {
+      changelog "../CHANGELOG.md"
+    }
+  }
+  ```
+
+  ```md
+  ;;;
+  title "Changelog"
+  source "changelog"
+  ;;;
+  ```
+
+  A page names a *name* and never a path, and `paths { sources }` is the only
+  place a path is written, so a page cannot reach a file the config did not offer
+  it. A theme cannot add one either: `paths` is among the sections a theme is
+  refused. The declared path may sit outside the project, which is the case this
+  exists for.
+
+  The file is read as markdown under its own name, so a fault in it is reported
+  where the prose is. A `source` beside a body of its own is an error, and so is
+  one on a `.typ` page, which has `#include` and typst's own dependency tracking.
+
 - **A `redirect` old path may carry `*`**, matching a family of URLs rather than
   one:
 

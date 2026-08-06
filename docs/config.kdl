@@ -11,6 +11,14 @@ paths {
   assets "assets"
   templates "templates"
   static "static"
+
+  // The changelog page *is* `CHANGELOG.md`, read from the repository root one
+  // directory up. Declared here because a page names a source by name and never
+  // by path, so this line is the only thing that decides what may be read. The
+  // page used to be a generated copy, kept honest by a test.
+  sources {
+    changelog "../CHANGELOG.md"
+  }
 }
 
 // What is a page and how pages group. Collections and taxonomies read from
@@ -76,7 +84,6 @@ assets {
   tsconfig "tsconfig.json"
 }
 
-// Files the build emits beside the pages themselves.
 // Old paths nothing on the site owns. `/latest/` is the URL that never goes
 // stale: `docs/versions.sh` publishes the newest release at the root, and this
 // forwards every path under `/latest/` to the same page there. A pattern, so it
@@ -86,6 +93,7 @@ redirect {
   "/latest/*" "/:splat"
 }
 
+// Files the build emits beside the pages themselves.
 generate {
   sitemap #true
   redirects #true

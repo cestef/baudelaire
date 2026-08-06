@@ -13,6 +13,11 @@
 #let changelog(page, body) = shell(
   page.frontmatter.title,
   {
+    // `CHANGELOG.md` opens with its own `# Changelog`, which the shell has
+    // already drawn from the title. Dropped here rather than stripped out of
+    // the file: the file is read as it stands now, and it is a repository
+    // document before it is a page of this site.
+    show heading.where(level: 1): none
     // A release. `## [0.0.11] - 2026-08-05` in the source; the version and the
     // date are split apart by `_changelog.ts`, which needs one element to hang
     // the rail entry off either way.

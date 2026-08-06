@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::config::dispatch::Kind::Path as Directory;
+use crate::config::dispatch::Kind::Table;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
@@ -20,6 +21,24 @@ pub struct Paths {
     pub r#static: PathBuf,
     /// Layout / template directory.
     pub templates: PathBuf,
+    /// Files a page may adopt as its body, each under a name of the site's
+    /// choosing: `sources { changelog "../CHANGELOG.md" }`.
+    ///
+    /// Declared here and named nowhere else, which is the whole security model
+    /// of the feature. A page selects a source *by name*, so content -- the part
+    /// of a site a pull request can touch -- can never name a path, and cannot
+    /// reach a file the config did not already offer it. `paths` is also one of
+    /// the sections a theme is refused ([`Config::OWNED`]), so a fetched theme
+    /// cannot introduce one either.
+    ///
+    /// Unlike every other entry here, a value may climb out of the project: a
+    /// repository whose site lives in `docs/` publishes its `../CHANGELOG.md`,
+    /// and refusing that would leave the copy-it-in workaround the feature
+    /// exists to remove. It is the config's to allow, on the same footing as
+    /// `hooks`, which can already run any command at all.
+    ///
+    /// [`Config::OWNED`]: crate::config::Config
+    pub sources: Vec<(String, PathBuf)>,
 }
 
 impl Paths {
@@ -29,7 +48,7 @@ impl Paths {
     /// sweep, so a new `paths` entry is covered by adding it here alone.
     ///
     /// [`swallowed`]: Paths::swallowed
-    pub fn sources(&self) -> [(&'static str, &Path); 4] {
+    pub fn trees(&self) -> [(&'static str, &Path); 4] {
         [
             ("content", &self.content),
             ("assets", &self.assets),
@@ -50,7 +69,7 @@ impl Paths {
     /// that has not changed into the project still gets the right answer.
     pub fn swallowed(&self, root: &Path) -> Option<(&'static str, &Path)> {
         let dist = crate::fs::resolved(root.join(&self.dist));
-        self.sources()
+        self.trees()
             .into_iter()
             .find(|(_, path)| crate::fs::resolved(root.join(path)).starts_with(&dist))
     }
@@ -100,6 +119,7 @@ impl Default for Paths {
             assets: PathBuf::from("assets"),
             r#static: PathBuf::from("static"),
             templates: PathBuf::from("templates"),
+            sources: Vec::new(),
         }
     }
 }
@@ -152,5 +172,36 @@ impl Section for Paths {
                 Ok(())
             },
         ),
+        (
+            "sources",
+            Table,
+            "Files a page may take as its body, each under a name: a page names the name, never the path.",
+            |c, n, t| {
+                c.sources = n
+                    .pairs(t)?
+                    .into_iter()
+                    .map(|(name, path)| (name, PathBuf::from(path)))
+                    .collect();
+                Ok(())
+            },
+        ),
     ]);
+}
+
+impl Paths {
+    /// The file declared under `name`, if the site declared one.
+    ///
+    /// A linear scan: a site declares a handful of these, and the order they
+    /// were written in is worth keeping for the diagnostic that lists them.
+    pub fn source(&self, name: &str) -> Option<&Path> {
+        self.sources
+            .iter()
+            .find(|(declared, _)| declared == name)
+            .map(|(_, path)| path.as_path())
+    }
+
+    /// The names declared, for the error that reports one that is not.
+    pub fn declared(&self) -> Vec<&str> {
+        self.sources.iter().map(|(name, _)| name.as_str()).collect()
+    }
 }
