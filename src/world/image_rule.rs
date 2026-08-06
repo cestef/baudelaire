@@ -14,11 +14,12 @@
 //! `images.extract` is on. It is a bare `fn` with no captured state, so it can
 //! only emit markup; all IO, naming, and caching stay in baudelaire's pass.
 //!
-//! Fidelity note: typst-html's own `css` module (which the native rule uses to
-//! reserve layout for `image(width: ..)` sizing) is private, so this rule
-//! reproduces only the pixel `width`/`height` attributes, not the sizing CSS.
-//! Explicit typst image sizing is therefore not preserved under `extract`; size
-//! with CSS instead.
+//! Fidelity note: typst-html's own `css` module is private, so the sizing CSS
+//! the native rule reserves for `image(width: ..)` is reproduced here rather
+//! than reused (see [`Css`]). An image sized in typst keeps that size under
+//! `extract`, and the reproduction is checked by
+//! `tests/scenarios/images.kdl`, which renders one sized image under both
+//! settings of `images.extract` and asserts the same `style`.
 
 use std::fmt::Write;
 
@@ -74,15 +75,28 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     // Reproduce the sizing typst's native rule sets as inline CSS: pixel-hinting,
     // and the author's `width`/`height`. typst-html's own `css` builder is
     // private, so the same values are rendered here (see [`Css`]).
-    let mut style = String::new();
+    let mut props: Vec<(&str, String)> = Vec::new();
     if let Some(rendering) = typst_svg::convert_image_scaling(image.scaling()) {
-        let _ = write!(style, "image-rendering:{rendering};");
+        props.push(("image-rendering", rendering.to_owned()));
     }
     if let Smart::Custom(width) = elem.width.get(styles) {
-        let _ = write!(style, "width:{};", Css(&width));
+        props.push(("width", Css(&width).to_string()));
     }
     if let Sizing::Rel(height) = elem.height.get(styles) {
-        let _ = write!(style, "height:{};", Css(&height));
+        props.push(("height", Css(&height).to_string()));
+    }
+    // Down to the whitespace and the ordering: typst's `css::Properties` keeps
+    // its entries sorted by property name and writes them `name: value`, joined
+    // by `; ` with none trailing. A page built with `extract` off is typst's own
+    // output, so anything this rule spells differently is a diff between two
+    // builds of the same page.
+    props.sort_by_key(|(name, _)| *name);
+    let mut style = String::new();
+    for (name, value) in props {
+        if !style.is_empty() {
+            style.push_str("; ");
+        }
+        let _ = write!(style, "{name}: {value}");
     }
     if !style.is_empty() {
         attrs.push(attr::style, style);
@@ -96,42 +110,60 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     ))
 };
 
-/// Displays a relative length as a CSS dimension, mirroring typst-html's own
-/// (private) `ToCss` encoding: a ratio becomes a percent, an absolute length
-/// points, an em-length ems, and a mix becomes a `calc(..)` sum. A single term
-/// is emitted bare, and an all-zero length is `0`.
+/// Displays a relative length as a CSS dimension, reproducing typst-html's own
+/// (private) `ToCss` encoding term for term: a ratio becomes a percent, an
+/// em-length ems, an absolute length points, and a mix becomes a `calc(..)`
+/// sum. A zero term is dropped, a single term is emitted bare, and an all-zero
+/// length is `0`.
+///
+/// Every detail below is upstream's, not a choice made here, because the whole
+/// value of this type is that a page renders the same under both settings of
+/// `images.extract`. Two of them were wrong and produced valid CSS anyway,
+/// which is why they survived: a negative term was summed rather than
+/// subtracted (`50% - 10pt` came out `calc(50% + -10pt)`), and every term was
+/// rounded to four decimals where upstream rounds a ratio to two (`100%/3` came
+/// out `33.3333%` against upstream's `33.33%`).
 struct Css<'a>(&'a Rel<Length>);
 
 impl Css<'_> {
-    /// Decimals kept before trailing zeros are trimmed.
-    const PRECISION: usize = 4;
-
-    /// A finite number formatted for CSS: up to [`Css::PRECISION`] decimals,
-    /// with trailing zeros (and any bare decimal point) trimmed, so `50.0`
-    /// renders as `50`.
-    fn number(value: f64) -> String {
-        let s = format!("{value:.precision$}", precision = Self::PRECISION);
-        s.trim_end_matches('0').trim_end_matches('.').to_owned()
-    }
+    /// Decimal places kept, per term, as typst-html keeps them: a ratio to two,
+    /// a length of either kind to four.
+    const RATIO: i16 = 2;
+    const LENGTH: i16 = 4;
 }
 
 impl std::fmt::Display for Css<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rel = self.0;
-        let mut terms = Vec::new();
-        if rel.rel.get() != 0.0 {
-            terms.push(format!("{}%", Self::number(rel.rel.get() * 100.0)));
+        // The three terms typst sums, in the order it sums them.
+        let terms = [
+            (rel.rel.get() * 100.0, Self::RATIO, "%"),
+            (rel.abs.em.get(), Self::LENGTH, "em"),
+            (rel.abs.abs.to_pt(), Self::LENGTH, "pt"),
+        ];
+        let mut sum = String::new();
+        let mut written = 0;
+        for (value, precision, unit) in terms {
+            // Zero is tested before rounding, as upstream tests it: a term too
+            // small to survive its own precision still counts as a term, and
+            // prints as the `0` it rounded to.
+            if value == 0.0 {
+                continue;
+            }
+            let round = |v: f64| typst::utils::round_with_precision(v, precision);
+            match written {
+                0 => write!(sum, "{}{unit}", round(value))?,
+                // Negated and subtracted rather than summed, so a negative term
+                // reads as the CSS an author would have written.
+                _ if value < 0.0 => write!(sum, " - {}{unit}", round(-value))?,
+                _ => write!(sum, " + {}{unit}", round(value))?,
+            }
+            written += 1;
         }
-        if rel.abs.em.get() != 0.0 {
-            terms.push(format!("{}em", Self::number(rel.abs.em.get())));
-        }
-        if rel.abs.abs.to_pt() != 0.0 {
-            terms.push(format!("{}pt", Self::number(rel.abs.abs.to_pt())));
-        }
-        match terms.len() {
+        match written {
             0 => f.write_str("0"),
-            1 => f.write_str(&terms[0]),
-            _ => write!(f, "calc({})", terms.join(" + ")),
+            1 => f.write_str(&sum),
+            _ => write!(f, "calc({sum})"),
         }
     }
 }
@@ -168,5 +200,31 @@ mod tests {
     #[test]
     fn css_of_zero_is_zero() {
         assert_eq!(css(&Rel::new(Ratio::zero(), Length::zero())), "0");
+    }
+
+    #[test]
+    fn css_subtracts_a_negative_term_rather_than_summing_it() {
+        let rel = Rel::new(Ratio::new(0.5), Length::from(Abs::pt(-10.0)));
+        assert_eq!(css(&rel), "calc(50% - 10pt)");
+    }
+
+    #[test]
+    fn css_emits_a_lone_negative_term_as_written() {
+        let rel = Rel::new(Ratio::zero(), Length::from(Abs::pt(-10.0)));
+        assert_eq!(css(&rel), "-10pt");
+    }
+
+    #[test]
+    fn css_rounds_a_ratio_to_two_decimals_and_a_length_to_four() {
+        let third = Rel::new(Ratio::new(1.0 / 3.0), Length::zero());
+        assert_eq!(css(&third), "33.33%");
+        let em = Rel::new(Ratio::zero(), Length::from(Em::new(1.0 / 3.0)));
+        assert_eq!(css(&em), "0.3333em");
+    }
+
+    #[test]
+    fn css_keeps_a_term_too_small_for_its_own_precision() {
+        let rel = Rel::new(Ratio::new(0.5), Length::from(Abs::pt(0.000_01)));
+        assert_eq!(css(&rel), "calc(50% + 0pt)");
     }
 }

@@ -49,6 +49,12 @@ scenario "extract off restores typst's native base64 inlining" {
   }
 }
 
+// The next four are two pairs, and they are only meaningful as pairs. With
+// `extract` off the `style` is typst's own output; with it on the `style` is
+// reproduced by `world/image_rule.rs` against typst's private `ToCss`, which
+// carries no compatibility promise. Each pair asserts the *same* literal, so a
+// typst bump that changes the encoding turns one of them red instead of
+// silently rendering a page two ways.
 scenario "externalizing preserves typst's image sizing as inline css" {
   files {
     "config.kdl" #"""
@@ -68,7 +74,76 @@ scenario "externalizing preserves typst's image sizing as inline css" {
   }
   expect {
     ok
-    file "index.html" { contains "width:50%" }
+    file "index.html" { contains #"style="display: block; width: 50%""# }
+  }
+}
+
+scenario "typst's own sizing css reads the same with extract off" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #false }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png", width: 50%)
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains #"style="display: block; width: 50%""# }
+  }
+}
+
+scenario "a mixed image width externalizes as the calc typst writes" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #true }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png", width: 50% - 10pt)
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains #"style="display: block; width: calc(50% - 10pt)""# }
+  }
+}
+
+scenario "a mixed image width reads the same with extract off" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      assets {
+        images { extract #false }
+      }
+      """#
+    "content/pic.png" png="2x2"
+    "content/index.typ" #"""
+      #image("pic.png", width: 50% - 10pt)
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains #"style="display: block; width: calc(50% - 10pt)""# }
   }
 }
 
