@@ -11,7 +11,11 @@ Fenced code blocks are highlighted by Typst itself. Register a grammar and a the
 #show raw: set raw(theme: "/highlight/baudelaire.tmTheme")
 ```
 
-`syntaxes` points at a Sublime-syntax grammar (`.sublime-syntax`), `theme` at a TextMate theme (`.tmTheme`). Typst ships grammars for most common languages, so you only need your own for niche ones. This site adds `kdl.sublime-syntax` for its config examples.
+`syntaxes` points at a Sublime-syntax grammar (`.sublime-syntax`), `theme` at a TextMate theme (`.tmTheme`). Typst ships grammars for most common languages, so you only need your own for niche ones. This site adds `kdl.sublime-syntax` for its config examples and `powershell.sublime-syntax` for the Windows install steps.
+
+#callout(kind: "note")[
+  Typst builds a syntax set from the files you hand it and nothing else, so a grammar that reaches into another Sublime package (`embed: scope:source.regexp`, `set: scope:source.cs`) cannot resolve that reference, and the text it covers is dropped from the output rather than left unhighlighted. Vendoring a grammar from the wild usually means replacing those few contexts with plain handling.
+]
 
 == Colors that follow a dark-mode toggle
 
