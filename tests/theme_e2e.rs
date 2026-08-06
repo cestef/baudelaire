@@ -172,6 +172,55 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
     }
 }
 
+/// Two keys a theme may not carry from inside a section it is otherwise
+/// allowed. Both are ways for a fetched theme to speak to a browser in the
+/// site's name, which is the line the section list draws.
+///
+/// A header rule is an arbitrary response header on an arbitrary path:
+/// `Refresh` forwards every page elsewhere, `Access-Control-Allow-Origin` hands
+/// the site's content to anyone. A wildcard `redirect` claims no output file, so
+/// the collision check that stops a theme's redirect burying a real page has
+/// nothing to compare it against, and `"/*"` covers the site.
+#[test]
+fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
+    use miette::Diagnostic;
+
+    for section in [
+        "generate {\n  headers {\n    \"/*\" {\n      Refresh \"0; url=https://evil.example\"\n    }\n  }\n}\n",
+        "redirect {\n  \"/*\" \"https://evil.example/:splat\"\n}\n",
+    ] {
+        let site = site();
+        site.write("themes/plume/theme.kdl", section);
+
+        let err = Config::load(&site.read("config.kdl"), &site.root, None).expect_err(section);
+
+        assert_eq!(
+            err.code().map(|code| code.to_string()).as_deref(),
+            Some("baudelaire::theme::governs"),
+            "{section}"
+        );
+    }
+}
+
+/// ...and what stays allowed, so the refusal above is a line and not a ban. A
+/// theme may still turn the rule files on: what goes in them is then computed
+/// from the site's own `caching` and `csp`, and a literal old path is still held
+/// to the collision check every redirect is.
+#[test]
+fn a_theme_may_still_ask_for_the_rule_files() {
+    let site = site();
+    site.write(
+        "themes/plume/theme.kdl",
+        "generate {\n  headers #true\n  redirects #true\n}\nredirect {\n  \"/old/\" \"/new/\"\n}\n",
+    );
+
+    let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
+
+    assert!(config.generate.headers.enabled);
+    assert!(config.generate.redirects);
+    assert_eq!(config.redirect, [("/old/".to_owned(), "/new/".to_owned())]);
+}
+
 /// A theme naming a directory that is not there fails at load, naming the
 /// value that is wrong.
 #[test]

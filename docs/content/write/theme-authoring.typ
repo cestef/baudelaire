@@ -53,6 +53,10 @@ Because config is only a default, adopting a theme never touches a site's `site`
 
 Five blocks are the site's alone, and `theme.kdl` is refused outright for naming any of them: `hooks`, `deploy`, `announce`, `paths`, and `profiles`. They decide what runs on the machine doing the building and where the result is sent, which is not a styling decision and not something a reader of your README would think to check. `hooks` is the sharp one: it runs commands through the system shell, so a theme that could set it would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
 
+Two keys inside blocks a theme *is* allowed are refused for the same reason: a `generate { headers { } }` rule, and a `redirect` whose old path carries a `*`. Both let a fetched theme speak to a browser in the site's name. A header rule sends any header on any path, and `Refresh` alone forwards every page somewhere else; a wildcard redirect claims no output file, so the check that stops a theme's redirect burying a real page has nothing to compare it against.
+
+Turning the two rule files on stays yours: what goes in `_headers` is then computed from the site's own `caching` and `csp` blocks, and a literal `redirect` is still held to the collision check every redirect is.
+
 If your theme needs a build step, say so in the README and give the block to copy. A theme is a floor for how a site *looks*, not for what its machine does.
 
 == Three rules that bite theme authors

@@ -12,6 +12,23 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Upgrading
+
+- **A theme's `theme.kdl` may no longer carry a `generate { headers { } }` rule
+  or a wildcard `redirect`**, and a build using such a theme now fails where it
+  previously took them. Both are new in this release, so nothing that worked
+  before stops working; the refusal is stated here because it is a build that can
+  go red on a theme you did not write.
+
+  A theme is *fetched*, so its defaults are text the site never read. A header
+  rule is an arbitrary response header on an arbitrary path (`Refresh` forwards
+  every page elsewhere; `Access-Control-Allow-Origin` hands the site's content to
+  any origin), and a wildcard redirect claims no output file, so the collision
+  check that stops a theme's redirect burying a real page has nothing to compare
+  it against. A theme may still turn both rule files on and declare literal
+  redirects: what goes in `_headers` is then computed from the site's own
+  `caching` and `csp`.
+
 ### Added
 
 - **A `redirect` old path may carry `*`**, matching a family of URLs rather than

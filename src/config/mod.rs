@@ -275,8 +275,40 @@ impl Config {
             ..Self::default()
         };
         config.apply(doc.nodes(), &text)?;
+        if let Some(section) = config.usurped() {
+            return Err(ThemeError::governs(at.display(), section).into());
+        }
         config.check()?;
         Ok(config)
+    }
+
+    /// What a theme's defaults may not carry from *inside* a section it is
+    /// otherwise allowed: read off the parsed values, because these are keys
+    /// within `generate` and `redirect` rather than sections of their own, and
+    /// [`OWNED`](Config::OWNED) refuses whole sections by name.
+    ///
+    /// Both are ways for a fetched theme to speak to the browser in the site's
+    /// name, which is the line `OWNED` draws:
+    ///
+    /// - A `generate { headers { } }` rule is an arbitrary response header on an
+    ///   arbitrary path. `Refresh` forwards every page somewhere else and
+    ///   `Access-Control-Allow-Origin` hands the site's content to any origin
+    ///   that asks. The derived halves of that file stay a theme's to enable,
+    ///   since a `Cache-Control` and a policy are computed from the site's own
+    ///   `caching` and `csp` blocks and say nothing a theme chose.
+    /// - A *wildcard* `redirect` claims no output file, so the accounting that
+    ///   stops a theme's redirect burying a real page ([`crate::content`]) has
+    ///   nothing to compare: `"/*"` is a rule over the whole site that no
+    ///   collision can catch. A literal old path stays allowed, and is still
+    ///   refused if it lands on a path some page publishes.
+    fn usurped(&self) -> Option<&'static str> {
+        if !self.generate.headers.rules.is_empty() {
+            return Some("generate { headers { .. } }");
+        }
+        self.redirect
+            .iter()
+            .any(|(old, _)| Self::wildcard(old))
+            .then_some("a wildcard `redirect`")
     }
 
     /// Apply a config text over an existing config, rather than over the
