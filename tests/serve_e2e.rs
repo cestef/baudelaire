@@ -342,6 +342,43 @@ fn a_data_file_beside_a_page_is_watched() {
     assert!(body.contains("later "), "rebuilt page: {body}");
 }
 
+/// A declared source, which is the one input that typically sits *outside* every
+/// watched tree: `paths { sources }` may name a file above the project root, and
+/// nothing else looks there.
+///
+/// Markdown on purpose, and gated with it: a `.md` source is read by baudelaire
+/// rather than opened by typst, so it is no page's tracked dependency and
+/// `Filter::sourced` is the only thing watching it. A `.typ` source would be
+/// watched twice over and prove less.
+#[cfg(feature = "markdown")]
+#[test]
+fn a_declared_source_outside_the_project_is_watched() {
+    let t = Site::new();
+    t.write(
+        "site/config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n  sources {\n    notes \"../notes.md\"\n  }\n}\nserve { open #false; }",
+    );
+    // Above the project root, which is what makes this the interesting case.
+    t.write("notes.md", "First.\n");
+    t.write(
+        "site/content/page.md",
+        ";;;\ntitle \"Page\"\nsource \"notes\"\n;;;\n",
+    );
+    let srv = Serve::start(&t, &["--root", "site"]);
+    let (code, body) = srv.get("/page/");
+    assert_eq!(code, 200, "{body}");
+    assert!(body.contains("First."), "first build: {body}");
+
+    let mut n = 0;
+    let pushed = awaits_reload(&srv, || {
+        n += 1;
+        t.write("notes.md", &format!("Later {n}.\n"));
+    });
+    assert!(pushed, "editing a declared source pushed no reload");
+    let (_, body) = srv.get("/page/");
+    assert!(body.contains("Later "), "rebuilt page: {body}");
+}
+
 /// The same hole in `templates/`: a template's own data file.
 ///
 /// Identical to the tracked-`data/` case above except for where the file sits,
