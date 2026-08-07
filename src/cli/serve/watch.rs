@@ -201,8 +201,8 @@ impl Filter {
             .collect()
     }
 
-    /// A path in the one form this filter compares in: absolute, canonical when
-    /// it resolves, else root-joined.
+    /// A path in the one form this filter compares in: absolute, and canonical
+    /// as far as it exists.
     ///
     /// Watch roots go through here too, not just the comparison bases: a
     /// watcher reports events under the path it was registered with, so a
@@ -221,10 +221,15 @@ impl Filter {
         } else {
             root.join(path)
         };
-        // `canonical`, not `canonicalize`: the unresolvable case is the ordinary
-        // one here (a root that is not there yet), and a typed diagnostic
-        // constructed only to be thrown away is a diagnostic nobody reads.
-        crate::fs::canonical(joined)
+        // `resolved`, not `canonical`: the unresolvable case is ordinary here (a
+        // declared source that is not written yet, a root that is not there
+        // yet), and `canonical` falls back to the *whole* lexical path, which
+        // keeps every `..` and every symlinked ancestor unresolved. That spells
+        // differently from the very same file once it appears, and this filter
+        // compares a declared source by equality against the path an event
+        // carries. `resolved` climbs to the deepest existing ancestor instead,
+        // so both spellings converge by construction.
+        crate::fs::resolved(joined)
     }
 
     /// Compile a list of patterns into owned globs.
@@ -370,6 +375,35 @@ mod tests {
     /// Watch roots are registered resolved and absolute, in the same form
     /// `is_relevant` compares against: a watcher reports events under the path
     /// it was given, so the two must agree by construction.
+    /// A declared source is compared by equality against the path an event
+    /// carries, so the spelling has to be the one the file will have. It is
+    /// typically written *after* the session starts (that is what the session is
+    /// for), and a path that does not resolve keeps its `..` and its symlinked
+    /// ancestors, which the same file loses the moment it appears.
+    #[test]
+    fn a_declared_source_spells_the_same_before_and_after_it_appears() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = crate::fs::canonical(tmp.path());
+        crate::fs::create_dir_all(base.join("site")).unwrap();
+
+        let mut config = Config::default();
+        config.paths.sources = vec![("notes".to_owned(), PathBuf::from("../notes.md"))];
+        let root = Root::at(base.join("site"));
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+
+        // Not written yet, and the watcher already has to name it as it will be.
+        let expected = base.join("notes.md");
+        assert!(
+            filter.is_relevant(&expected),
+            "a source not yet written is judged against {expected:?}: {:?}",
+            filter.sourced
+        );
+
+        // And once it exists, the canonical path is the same one.
+        std::fs::write(&expected, "prose").unwrap();
+        assert!(filter.is_relevant(&crate::fs::canonical(&expected)));
+    }
+
     #[test]
     fn watch_roots_are_absolute_and_asset_edits_are_relevant() {
         let config = Config::default();
