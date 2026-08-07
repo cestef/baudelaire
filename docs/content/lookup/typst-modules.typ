@@ -46,7 +46,7 @@ nothing to resolve and marks the import unknown. Write them out once:
 baudelaire mirror
 ```
 
-That writes all four into `.baudelaire/generated/packages/`, alongside the
+That writes them all into `.baudelaire/generated/packages/`, alongside the
 #link("js-modules.typ")[`baudelaire:*` declarations]. `baudelaire init` does it
 for you.
 

@@ -121,6 +121,8 @@ What `slim` leaves out:
     and the verification artifacts are not emitted.],
   [`themes`], [The `theme` command is gone, and the four shipped themes are not
     carried; a theme there is a directory you put in the project yourself.],
+  [`markdown`], [A `.md` file under `content/` is not a page at all, and
+    `@baudelaire/markdown` is not served, so `md` cannot be imported either.],
 )
 
 Turning one off never changes what a site that doesn't ask for it produces. A

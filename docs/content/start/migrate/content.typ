@@ -14,6 +14,12 @@
   Convert a page to Typst when you want what Typst gives you: math, a figure, a
   chart, a template helper mid-page. A markdown page reaches some of that
   through an `eval` fence without being converted at all.
+
+  And converting is not all-or-nothing in the other direction either: a Typst
+  page can keep a stubborn chunk as markdown with
+  #link("../../lookup/typst-modules.typ")[`md`], which is worth reaching for
+  when a page is one long table or reference list you would rather not
+  hand-translate.
 ]
 
 Typst markup is close enough to Markdown that most prose survives a mechanical
@@ -119,6 +125,19 @@ awk 'BEGIN{n=0} /^\+\+\+$/{n++; next} n>=2{print}' post.md | pandoc -f gfm -t ty
   table, and a `<label>` under every heading that duplicates what
   `html { anchors }` already emits.
 ]
+
+Where it mangles a self-contained chunk rather than a whole page, `md` is the
+cheaper answer: paste the original markdown into it and move on.
+
+````typ
+#import "@baudelaire/markdown:0.1.0": md
+
+#md(```md
+| Option | Default |
+| ------ | ------- |
+| `port` | `1821`  |
+```)
+````
 
 Three things it drops or mangles, all of them silent:
 

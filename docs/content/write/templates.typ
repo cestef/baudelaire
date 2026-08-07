@@ -173,7 +173,7 @@ Values follow what HTML actually wants, which removes most of the guards a templ
   [anything else], [The coerced value, so `width: size` needs no `str(size)`.],
 )
 
-`classes` joins class names, skipping what is absent and taking a `(name, condition)` pair for a conditional one. `svg` inlines an icon file as real DOM. Both are covered on #link("../lookup/typst-modules.typ")[Typst modules], along with `@baudelaire/site`, `@baudelaire/sections`, and `@baudelaire/pages`.
+`classes` joins class names, skipping what is absent and taking a `(name, condition)` pair for a conditional one. `svg` inlines an icon file as real DOM. Both are covered on #link("../lookup/typst-modules.typ")[Typst modules], along with every other `@baudelaire/*` package.
 
 #callout(kind: "warn")[
   A template must never emit `html`, `head`, or `body` elements. typst-html owns those. A page whose layout emits a single `html` root hands Typst the author's document instead, and everything that appends to the head, meta tags and verification links included, silently disappears.
