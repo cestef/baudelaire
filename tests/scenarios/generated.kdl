@@ -169,19 +169,26 @@ scenario "a page declines the files a build generates about it" {
         collections {
           posts { paginate { size 10 }; feed #true }
         }
+        taxonomies {
+          tags listing=#true
+        }
       }
       generate {
         sitemap #true
         search { formats "json" }
         cards { }
-        feed { formats "atom" }
+        feed { formats "atom"; terms #true }
       }
       """#
     "templates/card.typ" #"""
       #let card(data) = rect(width: 100%, height: 100%)[#data.title]
       """#
     "content/posts/public.typ" #"""
-      #let frontmatter = (title: "Public", date: "2026-01-02",)
+      #let frontmatter = (
+        title: "Public",
+        date: "2026-01-02",
+        tags: ("rust",),
+      )
       body
       """#
     "content/posts/quiet.typ" #"""
@@ -189,6 +196,7 @@ scenario "a page declines the files a build generates about it" {
         title: "Quiet",
         date: "2026-01-03",
         exclude: ("sitemap", "feed", "search", "card"),
+        tags: ("rust",),
       )
       body
       """#
@@ -200,6 +208,12 @@ scenario "a page declines the files a build generates about it" {
       missing "/posts/quiet/"
     }
     file "posts/atom.xml" {
+      contains "Public"
+      missing "Quiet"
+    }
+    // A term's feed is a feed: the opt-out reaches it too, and does not stop at
+    // the one feed the site writes for the collection.
+    file "tags/rust/atom.xml" {
       contains "Public"
       missing "Quiet"
     }

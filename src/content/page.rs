@@ -407,7 +407,6 @@ impl Page {
             !matches!(p.data, Data::Generated { .. })
                 && p.lang == lang
                 && p.listed(config)
-                && !p.frontmatter.excludes(crate::content::Generated::Feed)
                 && within.is_none_or(|id| p.collection == id)
         });
         Self::newest(candidates, limit)
@@ -428,13 +427,22 @@ impl Page {
     }
 
     /// The newest `limit` dated pages among `pages`, newest first; undated ones
-    /// are dropped. The single ordering rule every feed is built on: the site
-    /// feed hands it a language's pages, a term feed hands it that term's
-    /// members, and both come out in the same order.
+    /// are dropped, and so is a page that excluded itself from the feeds. The
+    /// single ordering rule every feed is built on: the site feed hands it a
+    /// language's pages, a term feed hands it that term's members, and both come
+    /// out in the same order.
+    ///
+    /// The opt-out is applied *here* rather than by each caller because this is
+    /// the one function both of them reach. It lived on [`Page::recent`], which
+    /// a term feed does not go through, so a page that had left the site feed
+    /// was still syndicated by every tag it carried.
     pub fn newest<'a>(pages: impl IntoIterator<Item = &'a Self>, limit: usize) -> Vec<&'a Self> {
         let mut dated: Vec<&Self> = pages
             .into_iter()
-            .filter(|p| p.frontmatter.date.is_some())
+            .filter(|p| {
+                p.frontmatter.date.is_some()
+                    && !p.frontmatter.excludes(crate::content::Generated::Feed)
+            })
             .collect();
         dated.sort_by_key(|p| std::cmp::Reverse(p.frontmatter.date));
         dated.truncate(limit);

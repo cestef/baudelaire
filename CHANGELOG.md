@@ -163,7 +163,8 @@ chores are visible in the git history and change nothing for a site.
   could say nothing about either. A name outside the list fails the build.
 
   It names generated *files*, not listings: a page left out of the search index
-  is still listed by its collection index.
+  is still listed by its collection index. `feed` covers every feed a build
+  writes, the per-term ones included.
 
 - **`html { anchors }` is a block, and can emit the self link it always claimed
   to.**
