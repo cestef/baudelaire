@@ -134,9 +134,10 @@ the URL. Move it and they break loudly at build time.
 
 == Heading anchors
 
-Every heading gets a slug `id`, so a section can be linked to. An `id` you wrote
-yourself is left alone, and two headings that slug alike are disambiguated
-(`setup`, `setup-2`) rather than duplicated.
+A heading gets a slug `id`, so a section can be linked to. An `id` you wrote
+yourself is left alone, a heading whose text slugs to nothing is skipped, and two
+headings that slug alike are disambiguated (`setup`, `setup-2`) rather than
+duplicated.
 
 ```kdl
 html {
@@ -157,8 +158,11 @@ html {
   [`place`], [`after`], [Which side of the heading's text that link sits on.],
 )
 
-`html { anchors #false }` turns the whole thing off, which also stops the
-deep-link check reporting fragments it can no longer see.
+`html { anchors #false }` stops ids being derived. Ids you wrote yourself are
+still collected, so the deep-link check keeps working on those, and a link naming
+a heading that would have been derived one now reports as broken. `levels`
+narrows the same way: a level it leaves out gets no `id`, and a fragment naming
+one dangles.
 
 `link` is opt-in because it is markup you did not write: a theme with no rule for
 it gets a stray `#` in its titles. When it is on, the link carries

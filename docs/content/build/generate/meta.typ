@@ -66,7 +66,7 @@ way an authored one is, so `/og.png` becomes a full URL under the site's `url`.
   align: (left, left, left),
   table.header([Key], [Falls back to], [Fills]),
   [`description`], [`summary`], [`<meta name="description">`, `og:description`, `twitter:description`.],
-  [`image`], [a #link("cards.typ")[generated card]], [`og:image`, `twitter:image`.],
+  [`image`], [a #link("cards.typ")[generated card], then `html { meta { image } }`], [`og:image`, `twitter:image`.],
   [`alt`], [the page title, for a generated card], [`og:image:alt`.],
   [`author`], [the site-wide `author`], [`<meta name="author">`, `article:author`.],
   [`date`], [--], [`og:type`, `article:published_time`.],

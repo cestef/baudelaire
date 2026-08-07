@@ -218,7 +218,7 @@
   (path: "caching", key: "caching", shape: "block", doc: "The `Cache-Control` policy uploaded files are given. Its presence turns it on; `#false` turns it off again.", depth: 0, section: true),
   (path: "caching.immutable", key: "immutable", shape: "text", doc: "The `Cache-Control` value for fingerprinted assets, which can be cached forever.", depth: 1, section: false),
   (path: "caching.default", key: "default", shape: "text", doc: "The `Cache-Control` value for everything else.", depth: 1, section: false),
-  (path: "typst", key: "typst", shape: "block", doc: "Typst engine knobs: language features, inputs, package registry.", depth: 0, section: true),
+  (path: "typst", key: "typst", shape: "block", doc: "Typst engine knobs: language features, inputs, fonts, package registry.", depth: 0, section: true),
   (path: "typst.features", key: "features", shape: "[-]text ..", doc: "Typst language features to enable, or `-name` to disable one. `html` cannot be removed.", depth: 1, section: false),
   (path: "typst.inputs", key: "inputs", shape: "key value ..", doc: "Values passed to every compile as `sys.inputs`, one `key value` line per entry.", depth: 1, section: false),
   (path: "typst.fonts", key: "fonts", shape: "block", doc: "Where a compile looks for glyphs.", depth: 1, section: true),

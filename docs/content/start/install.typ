@@ -105,10 +105,12 @@ What `slim` leaves out:
   columns: 2,
   align: (left, left),
   table.header([Feature], [Off means]),
-  [`embedded-fonts`], [Only fonts found on the host are available, so keep this
-    one for containers and CI images that ship none.],
+  [`embedded-fonts`], [Only the host's fonts and whatever `typst { fonts { paths } }`
+    names are available, so keep this one for containers and CI images that ship
+    neither.],
   [`js`], [`assets { bundle }` warns and `.js` files are copied verbatim.],
-  [`css`], [`assets { minify }` warns and `.css` files are copied verbatim.],
+  [`css`], [`assets { minify }` and `assets { targets }` warn, and `.css` files
+    are copied verbatim.],
   [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and
     PNG/JPEG assets are copied unchanged.],
   [`cards`], [`generate { cards }` warns and renders no card.],

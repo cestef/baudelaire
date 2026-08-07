@@ -208,8 +208,8 @@ is billed to `html`.
 
 == Elsewhere
 
-Two more checks live under `links { }` rather than here, because neither is about
-a page's own markup: broken internal links (`links { strict }`, see
+Two more checks are documented elsewhere, because neither is about a page's own
+markup: broken internal links (`links { strict }`, see
 #link("../write/pages.typ")[pages]) and the pages nothing links to
 (`links { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
 

@@ -122,7 +122,8 @@ a known asset. The default export is the raw map.
 An array of rows, one per authored page, the same shape a generated listing hands
 its template and the Typst `@baudelaire/pages` catalogue serves:
 `url`, `label`, `collection`, `lang`, `date`, `display`, `note`, `description`,
-`image`, `alt`, `author`, `taxonomies`, `extra`. Generated listings and the not-found page are excluded.
+`image`, `alt`, `author`, `taxonomies`, `extra`. Generated listings and the
+not-found page are excluded.
 
 ```js
 import pages from "baudelaire:pages";

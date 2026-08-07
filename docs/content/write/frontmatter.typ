@@ -69,6 +69,23 @@ only matter once a `languages` block exists; see
 #link("i18n.typ")[multiple languages]. `redirect` is covered on
 #link("collections/redirects.typ")[redirects].
 
+`description`, `summary`, `image`, `alt` and `author` drive
+#link("../build/generate/meta.typ")[meta and social tags], the feeds, and what a
+listing row carries:
+
+```typ
+#let frontmatter = (
+  title: "A post",
+  description: "A short summary for search and social cards.",
+  image: "cover.png",
+  alt: "The cover, described for a reader who cannot see it",
+)
+```
+
+They read the same in a listing, as `entry.description`, `entry.image`,
+`entry.alt` and `entry.author`, so a card component draws the very image the
+`og:image` tag names.
+
 == Naming a URL outright
 
 `path` publishes a page where you say, whatever its collection's
@@ -116,22 +133,6 @@ a list of terms:
 
 With `taxonomies { tags }` configured, this page is grouped under both terms.
 See #link("collections/taxonomies.typ")[taxonomies].
-
-The last five drive #link("../build/generate/meta.typ")[meta and social tags],
-the feeds, and what a listing row carries:
-
-```typ
-#let frontmatter = (
-  title: "A post",
-  description: "A short summary for search and social cards.",
-  image: "cover.png",
-  alt: "The cover, described for a reader who cannot see it",
-)
-```
-
-They read the same in a listing, as `entry.description`, `entry.image`,
-`entry.alt` and `entry.author`, so a card component draws the very image the
-`og:image` tag names.
 
 == Opting out <exclude>
 

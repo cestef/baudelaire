@@ -108,8 +108,12 @@ component renders a collection index, a
   [`date`], [str or none], [Its date as ISO-8601, for a `<time datetime>`.],
   [`display`], [str or none], [The same date written the way the page's language writes one.],
   [`note`], [str or none], [A trailing annotation, such as a term's member count.],
+  [`description`], [str or none], [Its one-line summary, from `description` or the `summary` alias.],
+  [`image`], [str or none], [Its own social image.],
+  [`alt`], [str or none], [What that image shows. Empty marks it decorative.],
+  [`author`], [str or none], [Who wrote it. The page's own; never the site default.],
   [`taxonomies`], [dict], [Its terms, keyed by taxonomy.],
-  [`extra`], [dict], [Its whole extra #link("../frontmatter.typ")[frontmatter], for summaries and cover images.],
+  [`extra`], [dict], [The #link("../frontmatter.typ")[frontmatter] baudelaire does not name: the theme's own keys.],
 )
 
 #callout(kind: "warn")[

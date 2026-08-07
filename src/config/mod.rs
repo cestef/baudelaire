@@ -1160,7 +1160,7 @@ impl Section for Config {
         (
             "typst",
             Nested(TypstConfig::rows),
-            "Typst engine knobs: language features, inputs, package registry.",
+            "Typst engine knobs: language features, inputs, fonts, package registry.",
             |c, n, t| c.typst.fill(n, t),
         ),
         (
