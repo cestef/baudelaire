@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
+use crate::error::ImageError;
+use crate::fs::Contained;
 use crate::graph::AssetName;
 use crate::render::Candidate;
 
@@ -51,6 +53,7 @@ impl Transform for Externalize {
         // Gather markers while walking, then record: the walk borrows the DOM
         // mutably, so the `cx` accumulator is written after it finishes.
         let mut refs = Vec::new();
+        let mut failed = Vec::new();
         let mut variants = BTreeMap::new();
         doc.walk(|element| {
             if element.tag != tag::img {
@@ -58,6 +61,22 @@ impl Transform for Externalize {
             }
             element.rewrite(&[attr::src], |src| {
                 let vpath = src.strip_prefix(MARKER)?;
+                // The marker is baudelaire's own, but nothing stops evaluated
+                // typst from writing one by hand
+                // (`html.elem("img", attrs: (src: ..))`), and the path below is
+                // joined onto the root to read from and onto the asset
+                // directory to write to. Neither join is checked by typst,
+                // which refuses `#read("../..")` in the author's own file, so
+                // without this the marker is a way around the compiler's
+                // sandbox rather than a spelling inside it.
+                //
+                // Nothing legitimate is refused: the show rule emits a vpath
+                // typst has already resolved, which carries no `..` and no
+                // root.
+                if Contained::new(vpath).is_none() {
+                    failed.push(ImageError::escaping(vpath));
+                    return None;
+                }
                 // A picture the asset pipeline already owns is referenced where
                 // the pipeline put it, not copied a second time: extracting it
                 // wrote the source bytes over (or beside) the processed ones,
@@ -80,6 +99,7 @@ impl Transform for Externalize {
             });
         });
         cx.found.images.extend(refs);
+        cx.found.invalid.extend(failed.into_iter().map(Into::into));
         cx.extracted.extend(variants);
     }
 }

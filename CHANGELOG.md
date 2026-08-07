@@ -58,6 +58,16 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **An image marker may not name a path outside the project.** The marker an
+  `#image` leaves behind is resolved by the build rather than by typst, joined
+  onto the project root to read from and onto the asset directory to write to,
+  and neither join was checked. A marker written by hand, which any evaluated
+  typst can do, therefore read files above the root and wrote a copy outside
+  the output directory, on a build that reported success. Typst refuses the
+  same reach in an author's own file, so this was a way around the compiler's
+  sandbox and not a spelling inside it. Nothing legitimate is refused: a marker
+  the show rule emits carries a path typst has already resolved.
+
 - **A frontmatter key spelled like a typst keyword no longer breaks every
   template.** `in`, `as`, `set`, `show`, `context` and `none` all pass typst's
   character rule for an identifier and are only then reclassified, so one such

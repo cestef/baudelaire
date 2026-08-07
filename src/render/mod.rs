@@ -138,10 +138,15 @@ pub struct Rewrite {
     /// The digests of the page's inline scripts and styles, for the generated
     /// content security policy. Empty unless one is being generated.
     pub inline: Inline,
-    /// SVG files `svg()` marked that could not be turned into DOM nodes. The
-    /// element is already in the page, so the caller must fail rather than ship
-    /// an empty `<svg>` where an icon was asked for.
-    pub invalid: Vec<crate::error::SvgError>,
+    /// Markers the render pass refused: an icon `svg()` could not turn into DOM
+    /// nodes, an image marker naming a path outside the project. The element is
+    /// already in the page in either case, so the caller must fail rather than
+    /// ship an empty `<svg>` or a `src` naming a file nothing wrote.
+    ///
+    /// Typed as the crate's error rather than as one pass's, because the two
+    /// passes that write it report different classes and a third would report a
+    /// third: the channel is "this page cannot be shipped", not "an SVG failed".
+    pub invalid: Vec<crate::error::BaudelaireErrorKind>,
 }
 
 /// The live render-side maps a page's recorded probes are revalidated against.

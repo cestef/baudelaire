@@ -797,12 +797,14 @@ impl Engine {
         let mut rewrite = pass
             .renderer
             .rewrite(&mut doc, page, &self.config, world.inner());
-        // An icon that could not be inlined leaves an empty `<svg>` in the DOM,
-        // so the page cannot be shipped: fail on the first one.
+        // A marker the render pass refused leaves the page unshippable: an icon
+        // that could not be inlined is an empty `<svg>` in the DOM, an image
+        // marker naming a path outside the project is a `src` pointing at a
+        // file nothing wrote. Fail on the first one either way.
         // Only the first is reported: the files are independent, and stopping
         // at one error is the contract every other pass has.
         if let Some(invalid) = std::mem::take(&mut rewrite.invalid).into_iter().next() {
-            return Err(invalid.into());
+            return Err(invalid);
         }
         let options = HtmlOptions {
             pretty: self.config.pretty(),

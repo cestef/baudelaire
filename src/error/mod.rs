@@ -26,6 +26,7 @@ pub mod content;
 pub mod deploy;
 pub mod fs;
 pub mod hook;
+pub mod image;
 pub mod link;
 pub mod lint;
 #[cfg(feature = "markdown")]
@@ -53,6 +54,7 @@ pub use content::ContentError;
 pub use deploy::DeployError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
+pub use image::ImageError;
 pub use link::{Broken, BrokenLinks, Dead, DeadLinks, Orphan, OrphanPages};
 pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
 pub use mirror::MirrorError;
@@ -135,6 +137,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Svg(#[from] crate::error::svg::SvgError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Image(#[from] crate::error::image::ImageError),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

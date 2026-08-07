@@ -274,3 +274,44 @@ scenario "a responsive width at or above the source would upscale, so it is drop
     absent "assets/small-100.png"
   }
 }
+
+// The marker `#image` leaves is baudelaire's own, and the render pass joins it
+// onto the project root to read from and onto the asset directory to write to.
+// Evaluated typst can write one by hand, so the path is checked: without the
+// check the marker reads and writes outside the project, which is the one thing
+// typst refuses in the author's own file (`#read("../..")`).
+scenario "a hand-written image marker cannot name a path outside the project" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/index.typ" #"""
+      #html.elem("img", attrs: (src: "baudelaire:asset:../../outside.png"))
+      """#
+  }
+  expect {
+    fails { code "baudelaire::image::escaping" }
+  }
+}
+
+scenario "an absolute image marker is refused the same way" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/index.typ" #"""
+      #html.elem("img", attrs: (src: "baudelaire:asset:/etc/hostname"))
+      """#
+  }
+  expect {
+    fails { code "baudelaire::image::escaping" }
+  }
+}

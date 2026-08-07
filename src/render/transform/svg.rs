@@ -107,7 +107,7 @@ impl Transform for Svg {
             }
         });
         cx.found.read.extend(read);
-        cx.found.invalid.extend(failed);
+        cx.found.invalid.extend(failed.into_iter().map(Into::into));
     }
 }
 
