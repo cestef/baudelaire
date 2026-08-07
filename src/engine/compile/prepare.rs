@@ -240,8 +240,11 @@ impl<'a> Prepare<'a> {
         let nav = Typst(&Self::nav(&page.siblings)).to_string();
         let translations = Typst(&Self::translations(page)).to_string();
         let strings = Typst(&self.strings(&page.lang)).to_string();
-        // Derived from this page's own body, so it names nothing outside the
-        // page and cannot widen the fingerprint the way a site-wide value would.
+        // The word count is this page's own; the rate it is divided by is the
+        // site's (`content { reading { wpm } }`, or the language's). A scalar
+        // out of `Config`, which is already in the manifest fingerprint, so it
+        // names no *other page* and cannot widen this page's identity the way
+        // the section tree once did.
         let reading = Typst(&self.reading(page)).to_string();
         // Names only the pages that link *here*, the same line `nav` sits on: a
         // page's neighbours, never the site. What keeps it out of the page's

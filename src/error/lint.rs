@@ -370,8 +370,12 @@ impl Diagnostic for Overweight {
     }
 }
 
-/// The pages that broke a weight budget. Always an error: a budget is a limit
-/// the author wrote down, not an opinion this tool holds.
+/// The pages that broke a weight budget.
+///
+/// An error by default, because a budget is a limit the author wrote down
+/// rather than an opinion this tool holds. `budget { strict #false }` turns it
+/// into a report, which is what a site adopting a budget on pages it already has
+/// needs, and the [`Severity`] it carries is that choice.
 #[derive(Debug)]
 pub struct Overweights {
     over: Vec<Overweight>,

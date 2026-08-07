@@ -42,18 +42,14 @@ pub struct Region<'a> {
 }
 
 impl Default for Region<'_> {
+    /// What a site that has configured nothing gets, read from the config type
+    /// that owns the setting rather than spelled again here.
     fn default() -> Self {
         Self {
-            element: Self::MAIN,
+            element: crate::config::RegionConfig::MAIN,
             ignore: &[],
         }
     }
-}
-
-impl Region<'_> {
-    /// The landmark a page's own prose lives in, and the default everything
-    /// falls back to.
-    pub const MAIN: &'static str = "main";
 }
 
 impl<'a> From<&'a crate::config::RegionConfig> for Region<'a> {
@@ -561,7 +557,7 @@ mod tests {
     fn ignored_elements_are_dropped_from_the_region() {
         let html = "<main><nav>Home About</nav><p>prose</p><aside>related</aside></main>";
         let region = Region {
-            element: Region::MAIN,
+            element: crate::config::RegionConfig::MAIN,
             ignore: &["nav".to_owned(), "aside".to_owned()],
         };
         assert_eq!(Text::extract(html, region), "prose");

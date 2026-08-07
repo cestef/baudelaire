@@ -27,12 +27,21 @@ pub struct RegionConfig {
     pub ignore: Vec<String>,
 }
 
+impl RegionConfig {
+    /// The landmark a page's prose lives in under any conventional layout, and
+    /// the one every consumer falls back to.
+    ///
+    /// Named here because this is the type that owns the setting: the extractor
+    /// spelled the same word again for its own default, which is two statements
+    /// of one fact and exactly what moving `region` under `html` was meant to
+    /// end.
+    pub const MAIN: &'static str = "main";
+}
+
 impl Default for RegionConfig {
     fn default() -> Self {
         Self {
-            // The landmark a page's prose lives in under any conventional
-            // layout, and the one every consumer falls back to.
-            element: "main".into(),
+            element: Self::MAIN.into(),
             ignore: Vec::new(),
         }
     }
