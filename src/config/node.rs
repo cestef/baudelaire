@@ -280,9 +280,23 @@ impl NodeExt for KdlNode {
 
     /// A browser version. Always a string: `safari 15.4` is a *float* in KDL,
     /// and `15.10` would round-trip as `15.1`.
+    ///
+    /// A value that is not a string is reported as a bad *version* rather than
+    /// as a type mismatch, because writing one unquoted is the whole mistake
+    /// this key has: `safari 15.4` is the natural spelling, and the help that
+    /// explains the quoting reached only an author who had already got it right.
     fn version(&self, text: &str, idx: usize) -> Result<Version> {
         let span = NodeExt::span(self);
-        let written = self.string(text, idx)?;
+        let value = self.arg(text, idx)?;
+        let written = match value.as_string() {
+            Some(written) => written.to_owned(),
+            // Quoted back as the KDL that was written, not printed: `15.10` is
+            // already `15.1` by the time it is a float, and the message has to
+            // show what the file says.
+            None => {
+                return Err(ConfigError::bad_version(text, &Kdl(value).to_string(), span).into());
+            }
+        };
         Version::parse(&written)
             .ok_or_else(|| ConfigError::bad_version(text, &written, span).into())
     }

@@ -1,6 +1,6 @@
 //! `assets { minify { } }` and `assets { targets { } }`.
 
-use super::{code, parse};
+use super::{code, err, parse};
 use crate::config::{Config, Version};
 
 /// `minify` was a flag, and the block has to stay that flag: its presence turns
@@ -61,11 +61,20 @@ fn a_version_that_is_not_one_is_refused() {
     ] {
         assert_eq!(code(text), "baudelaire::config::bad_version", "{text}");
     }
-    // A number is refused as the wrong KDL type, before it can round to another
-    // version.
-    assert_eq!(
-        code("assets {\n  targets {\n    chrome 80\n  }\n}"),
-        "baudelaire::config::type_mismatch"
+    // Written unquoted it is refused as a *version*, not as a type mismatch:
+    // that is the mistake this key actually has, and the help explaining the
+    // quoting used to reach only an author who had already got it right.
+    for text in [
+        "assets {\n  targets {\n    chrome 80\n  }\n}",
+        "assets {\n  targets {\n    safari 15.4\n  }\n}",
+    ] {
+        assert_eq!(code(text), "baudelaire::config::bad_version", "{text}");
+    }
+    // And what the message quotes back is what the file says, not the float it
+    // has already become.
+    assert!(
+        err("assets {\n  targets {\n    safari 15.4\n  }\n}").contains("15.4"),
+        "the message quotes the value as written"
     );
 }
 
