@@ -78,6 +78,7 @@ pub use generate::pdf::{PdfBundle, PdfConfig, PdfPages};
 pub use generate::robots::RobotsConfig;
 pub use generate::search::{SearchConfig, SearchField, SearchFormat};
 pub use hooks::HooksConfig;
+pub use html::anchors::{AnchorConfig, Place};
 pub use html::highlight::HighlightConfig;
 pub use html::{Footnotes, HtmlConfig};
 pub use lang::LanguageConfig;

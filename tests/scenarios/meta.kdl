@@ -151,6 +151,104 @@ scenario "anchors off leaves headings bare" {
   }
 }
 
+// The key documented itself as giving a heading "an `id` and a self link" and
+// only ever gave it the id. The link is opt-in, because it is markup the site
+// did not write and a theme with no rule for it gets a stray `#` in its titles.
+scenario "a heading carries the self link its site asked for" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors {
+          link "#"
+        }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      // Inside the heading, after its text, and hidden from a screen reader
+      // that has just read the heading out.
+      contains ##"<a href="#setup" class="anchor" aria-hidden="true" tabindex="-1">#</a></h3>"##
+    }
+  }
+}
+
+// And on the other side, for the margin a stylesheet pulls it out into.
+scenario "a self link can lead its heading" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors {
+          link "\u{00B6}"
+          place "before"
+        }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      contains ##"<h3 id="setup"><a href="#setup""##
+    }
+  }
+}
+
+// `levels` narrows which headings are covered: a layout's own `<h1>` is not a
+// section heading, and a table of contents rarely wants every `<h6>`.
+scenario "levels narrow which headings get an anchor" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors {
+          levels 3
+          link "#"
+        }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      = Guide
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      // typst-html reserves `<h1>` for the title, so `=` is an `<h2>` and `==`
+      // an `<h3>`: only the latter is covered here.
+      contains #"<h3 id="setup">"#
+      missing #"id="guide""#
+    }
+  }
+}
+
 // A dated page is an article, and an article has a vocabulary: when it was
 // published, when it changed, who wrote it, what it is about. The tags were the
 // half of OpenGraph that was never emitted, and several unfurlers read

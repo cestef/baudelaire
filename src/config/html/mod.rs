@@ -1,11 +1,12 @@
 //! `html { }`: what the rendered markup carries.
 
+pub mod anchors;
 pub mod highlight;
 
-use crate::config::HighlightConfig;
-use crate::config::dispatch::Kind::{Flag, Table, Texts};
+use crate::config::dispatch::Kind::{Block as Nested, Flag, Table, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::{AnchorConfig, HighlightConfig};
 use crate::error::ConfigError;
 
 /// HTML output options.
@@ -18,9 +19,9 @@ pub struct HtmlConfig {
     /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
     /// into each page's `<head>` from frontmatter and config.
     pub meta: bool,
-    /// Give every heading a slug `id` (when it lacks one), so sections are
-    /// deep-linkable and a table of contents can target them.
-    pub anchors: bool,
+    /// Deep-linkable headings: a slug `id` where one is missing, and the link
+    /// back to it.
+    pub anchors: AnchorConfig,
     /// Rewrite syntax-highlight colours as CSS classes.
     pub highlight: HighlightConfig,
     /// Emit a schema.org JSON-LD island in each page's `<head>`.
@@ -94,7 +95,7 @@ impl Default for HtmlConfig {
             pretty: true,
             embed: false,
             meta: true,
-            anchors: true,
+            anchors: AnchorConfig::default(),
             highlight: HighlightConfig::default(),
             // opt-in: structured data is a claim about the page, not a restating
             // of what it already says.
@@ -134,12 +135,9 @@ impl Section for HtmlConfig {
         ),
         (
             "anchors",
-            Flag,
-            "Give every heading an `id` and a self link.",
-            |c, n, t| {
-                c.anchors = n.boolean(t, 0)?;
-                Ok(())
-            },
+            Nested(AnchorConfig::rows),
+            "Give every heading an `id`, and optionally a link back to it. On by default; `#false` turns it off.",
+            |c, n, t| c.anchors.fill(n, t),
         ),
         (
             "jsonld",

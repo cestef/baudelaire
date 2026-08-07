@@ -1,15 +1,20 @@
-//! Gives every heading a slug `id`, so sections are deep-linkable.
+//! Gives every heading a slug `id`, so sections are deep-linkable, and
+//! optionally the link a reader clicks to copy it.
 //!
-//! When `html { anchors true }` is set (the default), each `<h1>`..`<h6>` without
-//! an explicit `id` gets one derived from its text (the same slug rule as page
+//! With `html { anchors }` on (the default), each `<h1>`..`<h6>` without an
+//! explicit `id` gets one derived from its text (the same slug rule as page
 //! URLs). An author-set `id` is always left untouched. A heading whose text has
 //! no URL-safe characters is skipped rather than given an empty anchor.
+//!
+//! `anchors { link "#" }` adds an `<a class="anchor" href="#id">` inside the
+//! heading. Off by default: it is markup the site did not write, and a theme
+//! with no rule for it gets a stray `#` in its titles.
 
 use std::collections::BTreeSet;
 
-use typst_html::{HtmlDocument, attr};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
-use crate::config::Config;
+use crate::config::{AnchorConfig, Config, Place};
 use crate::content::Slug;
 
 use super::{Cx, DocumentExt, ElementExt, Transform};
@@ -43,14 +48,30 @@ impl Transform for Anchors {
                 seen.insert(id.to_string());
             }
         });
-        if cx.config.html.anchors {
+        let anchors = &cx.config.html.anchors;
+        if anchors.enabled {
             doc.walk(|element| {
-                if element.heading().is_none() || element.attrs.get(attr::id).is_some() {
+                // A heading the site did not ask to cover keeps whatever it has:
+                // no derived id, and so nothing to link to either.
+                if !element.heading().is_some_and(|level| anchors.covers(level)) {
                     return;
                 }
-                if let Some(slug) = Slug::parse(&element.text()) {
-                    let id = Self::unique(slug.into_string(), &mut seen);
-                    element.attrs.push(attr::id, id.as_str());
+                // An authored id is the author's, and is still worth linking to.
+                let id = match element.attrs.get(attr::id) {
+                    Some(id) => id.to_string(),
+                    None => match Slug::parse(&element.text()) {
+                        Some(slug) => {
+                            let id = Self::unique(slug.into_string(), &mut seen);
+                            element.attrs.push(attr::id, id.as_str());
+                            id
+                        }
+                        // Nothing URL-safe survives, so there is no id to link
+                        // to and an empty one would link to the page itself.
+                        None => return,
+                    },
+                };
+                if let Some(text) = &anchors.link {
+                    Self::link(element, &id, text, anchors.place);
                 }
             });
         }
@@ -62,6 +83,36 @@ impl Transform for Anchors {
 }
 
 impl Anchors {
+    /// Put the self link inside `heading`, on the side `place` names.
+    ///
+    /// Inside rather than beside, because a heading is what a reader is pointing
+    /// at: a sibling would sit outside the element a table of contents and a
+    /// stylesheet both reach for, and would break the `h2 + p` selectors a theme
+    /// is written with.
+    ///
+    /// `aria-hidden` and a negative `tabindex`: the link says nothing a screen
+    /// reader has not just read out as the heading, and a keyboard user tabbing
+    /// through a long page should not stop at one per section.
+    fn link(heading: &mut HtmlElement, id: &str, text: &str, place: Place) {
+        let link = HtmlNode::from(
+            HtmlElement::new(tag::a)
+                .with_attr(attr::href, format!("#{id}"))
+                .with_attr(attr::class, AnchorConfig::CLASS)
+                .with_attr(attr::aria_hidden, "true")
+                .with_attr(attr::tabindex, "-1")
+                // Detached: the link is this crate's markup, not the author's,
+                // so there is no source position to stamp it with.
+                .with_children(
+                    std::iter::once(HtmlNode::Text(text.into(), typst::syntax::Span::detached()))
+                        .collect(),
+                ),
+        );
+        match place {
+            Place::After => heading.children.push(link),
+            Place::Before => heading.children.insert(0, link),
+        }
+    }
+
     /// `base`, or the first `base-N` (N≥2) not already taken, reserving the
     /// result in `seen`.
     fn unique(base: String, seen: &mut BTreeSet<String>) -> String {

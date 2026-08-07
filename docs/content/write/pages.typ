@@ -132,6 +132,45 @@ an external URL is left alone.
 Rename a page and the links to it keep working, because they name the file, not
 the URL. Move it and they break loudly at build time.
 
+== Heading anchors
+
+Every heading gets a slug `id`, so a section can be linked to. An `id` you wrote
+yourself is left alone, and two headings that slug alike are disambiguated
+(`setup`, `setup-2`) rather than duplicated.
+
+```kdl
+html {
+  anchors {
+    levels 2 3 4
+    link "#"
+    place "after"
+  }
+}
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Default], [Does]),
+  [`levels`], [every level], [The heading levels that get an `id`, as `1` to `6`.],
+  [`link`], [none], [The text of a link back to the heading, e.g. `#`.],
+  [`place`], [`after`], [Which side of the heading's text that link sits on.],
+)
+
+`html { anchors #false }` turns the whole thing off, which also stops the
+deep-link check reporting fragments it can no longer see.
+
+`link` is opt-in because it is markup you did not write: a theme with no rule for
+it gets a stray `#` in its titles. When it is on, the link carries
+`class="anchor"` for a stylesheet to reach it by, plus `aria-hidden` and
+`tabindex="-1"`, since it says nothing a screen reader has not just read out and
+a keyboard user should not stop at one per section.
+
+#callout(kind: "note")[
+  typst-html reserves `<h1>` for the document title, so a `=` in your content is
+  an `<h2>` and a `==` is an `<h3>`. `levels` counts the *emitted* elements.
+]
+
 == Whether a page builds at all
 
 `draft: true` pages are skipped unless you pass `--drafts`. A `date` in the

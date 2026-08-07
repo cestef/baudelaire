@@ -56,6 +56,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`html { anchors }` is a block, and can emit the self link it always claimed
+  to.**
+
+  ```kdl
+  html {
+    anchors {
+      levels 2 3 4
+      link "#"
+      place "after"
+    }
+  }
+  ```
+
+  The key documented itself as giving a heading "an `id` and a self link" and only
+  ever gave it the id. `link` is opt-in, because it is markup the site did not
+  write; when on, it carries `class="anchor"`, `aria-hidden` and `tabindex="-1"`.
+  `levels` narrows which headings are covered at all. `html { anchors #false }`
+  means what it did.
+
 - **A taxonomy orders its term listings**, with the keys a collection already
   has:
 

@@ -36,6 +36,8 @@ const SWITCHES: &[(&str, Reads)] = &[
     // Reads `css` for the whole: the switch sets every kind, so any one of
     // them answers whether it was thrown.
     ("assets {\n  minify @\n}", |c| c.assets.minify.css),
+    // The one switch that is *on* by default, so the table's "off until named"
+    // case does not apply to it: see `anchors_keep_the_flag_and_gain_a_block`.
     ("navigation {\n  spa @\n}", |c| c.navigation.spa.enabled),
     ("navigation {\n  standalone @\n}", |c| {
         c.navigation.standalone.enabled

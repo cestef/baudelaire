@@ -297,3 +297,46 @@ fn err_unset_env_var_without_default() {
     );
     assert!(rendered.contains(":-default"), "{rendered}");
 }
+
+/// `html { anchors }` was a flag and stays one, with a block behind it: the id
+/// half has always been on, and the link half is opt-in because it is markup the
+/// site did not write.
+#[test]
+fn anchors_keep_the_flag_and_gain_a_block() {
+    use crate::config::Place;
+
+    let default = Config::default().html.anchors;
+    assert!(
+        default.enabled,
+        "ids are derived unless a site says otherwise"
+    );
+    assert!(default.levels.is_empty(), "every level, until narrowed");
+    assert_eq!(default.link, None, "no link until asked for");
+
+    assert!(!parse("html {\n  anchors #false\n}").html.anchors.enabled);
+    assert!(parse("html {\n  anchors\n}").html.anchors.enabled);
+
+    let cfg =
+        parse("html {\n  anchors {\n    levels 2 3\n    link \"#\"\n    place \"before\"\n  }\n}");
+    let anchors = &cfg.html.anchors;
+    assert!(anchors.enabled, "the block's presence is still the switch");
+    assert_eq!(anchors.levels, vec![2, 3]);
+    assert_eq!(anchors.link.as_deref(), Some("#"));
+    assert_eq!(anchors.place, Place::Before);
+    // An empty list is every level; a narrowed one covers what it names.
+    assert!(anchors.covers(2) && anchors.covers(3));
+    assert!(!anchors.covers(1) && !anchors.covers(4));
+    assert!(default.covers(1) && default.covers(6));
+}
+
+/// There are six heading levels, so `levels 0` and `levels 7` are typos that
+/// would narrow the set to nothing at all.
+#[test]
+fn err_a_heading_level_that_is_not_one_is_refused() {
+    for text in [
+        "html {\n  anchors {\n    levels 0\n  }\n}",
+        "html {\n  anchors {\n    levels 2 7\n  }\n}",
+    ] {
+        assert_eq!(code(text), "baudelaire::config::out_of_range", "{text}");
+    }
+}
