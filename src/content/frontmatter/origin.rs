@@ -259,6 +259,22 @@ impl<'a> At<'a> {
         .into()
     }
 
+    /// A name this key does not answer to, underlined where it was written.
+    ///
+    /// `valid` is the list of names it does, built by the caller from the very
+    /// table that parses them.
+    pub(super) fn name(self, got: &str, valid: &str) -> BaudelaireErrorKind {
+        ContentError::frontmatter_name(
+            self.origin.path,
+            self.origin.text(),
+            self.span(),
+            self.key,
+            got,
+            valid,
+        )
+        .into()
+    }
+
     /// A key that is a near-miss of a known one, underlined where it was
     /// written rather than at the value it carries.
     pub(super) fn unknown(self, suggestion: &str) -> BaudelaireErrorKind {

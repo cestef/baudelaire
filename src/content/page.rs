@@ -371,6 +371,7 @@ impl Page {
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
         config.generate.cards.active()
             && self.frontmatter.image.is_none()
+            && !self.frontmatter.excludes(crate::content::Generated::Card)
             && !matches!(self.data, Data::Generated { .. })
     }
 
@@ -381,7 +382,9 @@ impl Page {
     /// have to agree. A generated listing is excluded: a tag index is a table of
     /// contents for a site, not a document anyone prints.
     pub fn wants_pdf(&self, config: &crate::config::Config) -> bool {
-        config.generate.pdf.pages.active() && !matches!(self.data, Data::Generated { .. })
+        config.generate.pdf.pages.active()
+            && !self.frontmatter.excludes(crate::content::Generated::Pdf)
+            && !matches!(self.data, Data::Generated { .. })
     }
 
     /// The most recent dated pages of one language, newest first, capped at
@@ -404,6 +407,7 @@ impl Page {
             !matches!(p.data, Data::Generated { .. })
                 && p.lang == lang
                 && p.listed(config)
+                && !p.frontmatter.excludes(crate::content::Generated::Feed)
                 && within.is_none_or(|id| p.collection == id)
         });
         Self::newest(candidates, limit)

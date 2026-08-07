@@ -52,6 +52,7 @@ the block is read into the same dict, and everything below is the same walk.
   [`image`], [str], [The social preview image, which wins over a generated card.],
   [`alt`], [str], [What that image shows. Empty marks it decorative.],
   [`author`], [str], [Who wrote the page, over the site default for its language.],
+  [`exclude`], [list], [The generated files this page declines to appear in. See #link(<exclude>)[Opting out].],
 )
 
 Values are typed. A key with the wrong type stops the build with a diagnostic
@@ -131,6 +132,37 @@ the feeds, and what a listing row carries:
 They read the same in a listing, as `entry.description`, `entry.image`,
 `entry.alt` and `entry.author`, so a card component draws the very image the
 `og:image` tag names.
+
+== Opting out <exclude>
+
+The site decides whether a sitemap, a feed, a search index, a social card or a
+PDF is generated at all. A page decides whether it is *in* them:
+
+```typ
+#let frontmatter = (
+  title: "Thanks for subscribing",
+  exclude: ("sitemap", "search"),
+)
+```
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Name], [Leaves out],),
+  [`sitemap`], [The page's entry in `sitemap.xml`.],
+  [`feed`], [Its entry in every syndication feed.],
+  [`search`], [Its entry in the client-side search index.],
+  [`card`], [Its social card, and the `og:image` that names one.],
+  [`pdf`], [Its PDF, and the `<link rel="alternate">` that points at one.],
+)
+
+A name outside that list fails the build rather than being ignored.
+
+#callout(kind: "note")[
+  `exclude` names generated *files*, not listings. A page left out of the search
+  index is still listed by its collection index, and still reachable: to leave a
+  page out of listings, see `content { drafts }` and `expiry` above.
+]
 
 == Everything else
 

@@ -3,7 +3,7 @@
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
-use crate::content::Page;
+use crate::content::{Generated, Page};
 use crate::error::Result;
 
 /// Emits a [sitemaps.org] `sitemap.xml` listing every built page as an absolute
@@ -23,7 +23,10 @@ impl SiteMap {
         let mut xml = Xml::document();
         let ns: &[(&str, &str)] = &[("xmlns", Self::XMLNS), ("xmlns:xhtml", Self::XHTML)];
         xml.nest("urlset", ns, |xml| {
-            for page in pages.iter().filter(|p| p.listed(config)) {
+            for page in pages
+                .iter()
+                .filter(|p| p.listed(config) && !p.frontmatter.excludes(Generated::Sitemap))
+            {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
                     if let Some(date) = page.frontmatter.modified() {

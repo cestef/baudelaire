@@ -87,7 +87,14 @@ impl Corpus {
         let mut documents: Vec<Document> = site
             .outputs
             .par_iter()
-            .filter(|out| out.page.lang == lang && out.page.listed(site.config))
+            .filter(|out| {
+                out.page.lang == lang
+                    && out.page.listed(site.config)
+                    && !out
+                        .page
+                        .frontmatter
+                        .excludes(crate::content::Generated::Search)
+            })
             .map(|out| Document {
                 url: out.page.permalink.clone(),
                 title: has(SearchField::Title)

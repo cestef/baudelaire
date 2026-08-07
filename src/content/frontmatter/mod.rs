@@ -20,6 +20,36 @@ use crate::config::dispatch::Keys;
 use crate::config::{Config, FieldType};
 use crate::error::{ContentError, Result, SchemaError};
 
+/// One file a build generates *about* a page, which the page may decline.
+///
+/// A table rather than five booleans, because a site declining two of them
+/// should not have to write two lines, and because adding a sixth generated
+/// artifact should be one variant here rather than a key, a field, a row and a
+/// call site. `Named` gives the parser and the "valid names" help one source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Generated {
+    /// The page's entry in `sitemap.xml`.
+    Sitemap,
+    /// Its entry in every syndication feed.
+    Feed,
+    /// Its entry in the client-side search index.
+    Search,
+    /// Its social card, and the `og:image` that names one.
+    Card,
+    /// Its PDF, and the `<link rel="alternate">` that points at one.
+    Pdf,
+}
+
+impl crate::config::Named for Generated {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("sitemap", Self::Sitemap),
+        ("feed", Self::Feed),
+        ("search", Self::Search),
+        ("card", Self::Card),
+        ("pdf", Self::Pdf),
+    ];
+}
+
 /// A frontmatter field parser: reads the evaluated value into its slot on `fm`,
 /// naming and underlining the key on a type mismatch (never silently dropped).
 type Field = fn(fm: &mut Frontmatter, value: &Value, at: At<'_>) -> Result<()>;
@@ -136,6 +166,24 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         || FieldType::Str,
         |fm, v, at| {
             fm.source = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
+    (
+        "exclude",
+        || FieldType::List(Box::new(FieldType::Str)),
+        |fm, v, at| {
+            use crate::config::Named;
+            let valid = Generated::names().join(", ");
+            for (index, name) in v.strings(at)?.into_iter().enumerate() {
+                let generated =
+                    Generated::of(&name).ok_or_else(|| at.nth(index).name(&name, &valid))?;
+                // A name written twice is the same claim twice, not an error:
+                // the set is what matters, and `excludes` reads it as one.
+                if !fm.exclude.contains(&generated) {
+                    fm.exclude.push(generated);
+                }
+            }
             Ok(())
         },
     ),
@@ -260,6 +308,13 @@ pub struct Frontmatter {
     pub alt: Option<String>,
     /// Who wrote this page, over the site's default for its language.
     pub author: Option<String>,
+    /// The generated files this page declines to appear in.
+    ///
+    /// Every one of them used to be all-or-nothing per site: a thank-you page
+    /// was in the sitemap, a changelog was in the feed, and a page could say
+    /// nothing about either. The site decides whether an artifact is generated
+    /// at all; this decides whether *this* page is in it.
+    pub exclude: Vec<Generated>,
     pub taxonomies: BTreeMap<String, Vec<String>>,
     pub extra: BTreeMap<String, codegen::Value>,
 }
@@ -286,6 +341,15 @@ impl Frontmatter {
     /// was first published, and never got recrawled or resurfaced.
     pub fn modified(&self) -> Option<time::Date> {
         self.updated.or(self.date)
+    }
+
+    /// Whether this page declined the file a build would generate about it.
+    ///
+    /// The one reader of `exclude`, so the five consumers ask the same question
+    /// the same way and a name added to [`Generated`] has one place to be
+    /// honoured.
+    pub fn excludes(&self, what: Generated) -> bool {
+        self.exclude.contains(&what)
     }
 
     /// The page's one-line summary: `description`, else its `summary` alias.

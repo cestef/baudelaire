@@ -31,6 +31,19 @@ pub enum ContentError {
         repr: String,
     },
 
+    #[error("frontmatter {} in {} names no such thing: {}", Code(.key), Text(.path), Code(.got))]
+    #[diagnostic(code(baudelaire::content::frontmatter_name), help("{help}"))]
+    FrontmatterName {
+        path: String,
+        key: String,
+        got: String,
+        help: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("not one of the names this key takes")]
+        span: Option<SourceSpan>,
+    },
+
     #[error(
         "frontmatter {} in {} must be {expected}, but is a {got}",
         Code(.key),
@@ -217,6 +230,31 @@ impl ContentError {
             expected,
             got: got.to_owned(),
             help: help.map(str::to_owned),
+            page,
+            span,
+        }
+    }
+
+    /// A name a frontmatter key does not know, where the key takes names from a
+    /// fixed set rather than free text.
+    ///
+    /// Distinct from [`ContentError::frontmatter_field`], which is about the
+    /// value's *shape*: here the shape is right and the word is not one this
+    /// crate answers to, so the help is the list of words that are.
+    pub fn frontmatter_name(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        key: &str,
+        got: &str,
+        valid: &str,
+    ) -> Self {
+        let (page, span) = Self::located(path, source, span);
+        Self::FrontmatterName {
+            path: path.display().to_string(),
+            key: key.to_owned(),
+            got: got.to_owned(),
+            help: markup!("valid names: {}", valid),
             page,
             span,
         }

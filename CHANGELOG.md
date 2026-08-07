@@ -56,6 +56,23 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A page opts out of the files a build generates about it**, with an `exclude`
+  list in its frontmatter:
+
+  ```typ
+  #let frontmatter = (
+    title: "Thanks for subscribing",
+    exclude: ("sitemap", "search"),
+  )
+  ```
+
+  `sitemap`, `feed`, `search`, `card`, `pdf`. Each was all-or-nothing per site: a
+  thank-you page was in the sitemap, a changelog was in the feed, and a page
+  could say nothing about either. A name outside the list fails the build.
+
+  It names generated *files*, not listings: a page left out of the search index
+  is still listed by its collection index.
+
 - **`html { anchors }` is a block, and can emit the self link it always claimed
   to.**
 
