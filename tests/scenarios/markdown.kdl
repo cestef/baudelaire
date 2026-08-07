@@ -1164,3 +1164,182 @@ scenario "a markdown link is a file link where markdown is off" {
     file "index.html" { contains #"href="readme.md""# }
   }
 }
+
+// `#md` is the other direction: markdown inside a typst page, rather than a
+// page that is markdown. The same lowering either way, so the two agree about
+// what a table or a list becomes, and it reads the site's own extensions.
+scenario "a typst page renders markdown with md" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+
+      Typst first.
+
+      #md("A **bold** claim and a [link](https://example.com).")
+
+      #md(```md
+      | a | b |
+      | - | - |
+      | 1 | 2 |
+      ```)
+      """##
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<p>Typst first.</p>"
+      contains "<strong>bold</strong>"
+      contains #"<a href="https://example.com">link</a>"#
+      // The GFM table extension is on by default, so the pipes are a table.
+      contains "<table>"
+      contains "<td>1</td>"
+    }
+  }
+}
+
+// The site's own `extensions` reach it, or a fragment and a page would disagree
+// about the same markdown.
+scenario "md reads the site's markdown extensions" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        markdown { extensions "-tables" }
+      }
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md(```md
+      | a | b |
+      | - | - |
+      ```)
+      """##
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      missing "<table>"
+      contains "| a | b |"
+    }
+  }
+}
+
+// A file, resolved against the page rather than against the package the
+// function is served from, and read through the world so it is one of the
+// page's own dependencies.
+scenario "md renders a file beside the page" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "fragments/intro.md" #"""
+      Shared **prose**.
+      """#
+    "content/posts/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md(path: "beside.md")
+      #md(path: "/fragments/intro.md")
+      """##
+    "content/posts/beside.md" #"""
+      Right **here**.
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains "Right <strong>here</strong>"
+      contains "Shared <strong>prose</strong>"
+    }
+  }
+}
+
+// Editing the file rebuilds the page that renders it, and nothing else: the
+// read goes through the world, so it is a tracked dependency like any other.
+scenario "editing a rendered fragment rebuilds only its page" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "fragments/intro.md" #"""
+      first **version**
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md(path: "/fragments/intro.md")
+      """##
+    "content/b.typ" #"""
+      #let frontmatter = (title: "B")
+      unrelated
+      """#
+  }
+  build {
+    expect {
+      ok
+      cached 0
+      file "a/index.html" { contains "first <strong>version</strong>" }
+    }
+  }
+  build {
+    files {
+      "fragments/intro.md" #"""
+        second *version*
+        """#
+    }
+    expect {
+      ok
+      cached 1
+      file "a/index.html" { contains "second <em>version</em>" }
+    }
+  }
+}
+
+// A content block is the one mistake the spelling invites: Typst parses it
+// before `md` is reached, so the markdown is gone by then. Refused by name, and
+// underlined in the page rather than inside the package.
+scenario "md refuses a content block" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md[**bold**]
+      """##
+  }
+  expect {
+    fails { code "baudelaire::typst::compile" }
+  }
+}

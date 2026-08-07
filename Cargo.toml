@@ -145,7 +145,14 @@ announce = []
 # time the engine sees a markdown page it *is* Typst, so highlighting, math,
 # link resolution, sidecars, the transform chain and the cache all apply
 # unchanged. Off means a `.md` file under `content/` is not a page at all.
-markdown = ["dep:pulldown-cmark", "dep:saphyr", "dep:toml_edit"]
+markdown = [
+  "dep:pulldown-cmark",
+  "dep:saphyr",
+  "dep:toml_edit",
+  # `#md`'s native function; see the dependency note.
+  "dep:typst-library",
+  "dep:typst-utils",
+]
 
 # Build OpenSSL from source and link it statically instead of using the host's
 # libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
@@ -168,6 +175,12 @@ typst-kit = { version = "0.15", features = [
   "scan-fonts",
 ] }
 typst-eval = "0.15"
+# Named only so `#[func]` expands: the macro emits absolute `::typst_library`
+# and `::typst_utils` paths, which `typst`'s re-exports cannot satisfy. Nothing
+# here imports either crate directly, and both are already in the tree under
+# `typst` at the same pinned version.
+typst-library = { version = "0.15", optional = true }
+typst-utils = { version = "0.15", optional = true }
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }

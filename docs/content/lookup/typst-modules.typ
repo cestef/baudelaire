@@ -4,8 +4,8 @@
 )
 #import "/templates/theme.typ": callout
 
-Four packages your templates can import without anything existing on disk.
-Nothing is downloaded: typst asks for the package, baudelaire answers it.
+Five packages your templates and pages can import without anything existing on
+disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
 
 ```typ
 #import "@baudelaire/html:0.1.0": h, classes
@@ -22,6 +22,7 @@ Nothing is downloaded: typst asks for the package, baudelaire answers it.
   [`@baudelaire/site`], [`version`, `title`, `url`, `lang`, `author`, `languages`], [Site identity as typed bindings.],
   [`@baudelaire/sections`], [`sections(lang)`], [The site's content tree.],
   [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
+  [`@baudelaire/markdown`], [`md`], [Markdown rendered inside a Typst page.],
 )
 
 They are the Typst counterpart of the #link("js-modules.typ")[`baudelaire:*`
@@ -316,3 +317,51 @@ being collected is the one thing it cannot do: the catalogue is built from the
 frontmatter of every page, this one included, so at that moment it reads empty.
 Deriving a `title`, a `slug`, or a `date` from `pages()` gets you nothing;
 showing a count, a list, or a grid in the body works.
+
+== markdown
+
+`md` renders a chunk of markdown inside a Typst page, through the same parser a
+#link("../write/markdown.typ")[`.md` page] goes through. A fragment and a page
+agree about what a table, a list or a footnote becomes, and it reads this site's
+own `content { markdown { extensions } }`.
+
+````typ
+#import "@baudelaire/markdown:0.1.0": md
+
+#md("A **bold** claim and a [link](https://example.com).")
+
+#md(```md
+| Format | File     |
+| ------ | -------- |
+| RSS    | rss.xml  |
+```)
+
+#md(path: "notes.md")
+````
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Written as], [Is]),
+  [a string], [The markdown, as written.],
+  [a `raw` block], [Its text. Marking it ```` ```md ```` keeps editor highlighting.],
+  [`path:`], [A file to read it from, resolved against the page. A leading `/` is the project root.],
+)
+
+#callout(kind: "warn")[
+  Not a content block. `md[**bold**]` is parsed by *Typst* before `md` is
+  reached, so the markdown is gone by then and `**bold**` would render as Typst
+  markup. It is refused by name rather than silently rendered wrong.
+]
+
+A file read this way is an ordinary dependency, so editing it rebuilds the pages
+that render it and nothing else. Keep fragments *outside* `content/`: a `.md`
+file under there is a page in its own right, and would publish at its own URL as
+well as appearing wherever you render it.
+
+#callout(kind: "note")[
+  Unlike every other module here, this one is not pure Typst underneath: `md`
+  calls into baudelaire, because lowering markdown is not something Typst can do.
+  A mirrored copy still resolves in an editor, and a plain `typst compile` of a
+  page using it fails at the call saying so.
+]

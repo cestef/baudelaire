@@ -190,6 +190,22 @@ five-line frontmatter block whose body is the repository's `CHANGELOG.md`. It
 exercises tables, reference links, nested lists and sixty-odd fenced samples, and
 no copy of it is kept anywhere.
 
+== The other direction
+
+A whole page need not be markdown for a *part* of one to be. `md` renders a
+chunk of markdown inside a Typst page, through this same parser and these same
+`extensions`:
+
+```typ
+#import "@baudelaire/markdown:0.1.0": md
+
+#md("A **bold** claim.")
+#md(path: "notes.md")
+```
+
+See #link("../lookup/typst-modules.typ")[Typst modules] for what it takes and
+the one shape it refuses.
+
 == Linking to one
 
 A link names the file, so a markdown page is reached by its `.md` name. The link

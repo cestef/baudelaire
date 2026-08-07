@@ -16,6 +16,8 @@ mod context;
 mod fonts;
 pub(crate) mod generated;
 pub mod image_rule;
+#[cfg(feature = "markdown")]
+mod markdown;
 pub(crate) mod module;
 mod packages;
 
@@ -115,6 +117,12 @@ impl Project {
             .with_features(Features::from_iter(features))
             .with_inputs(inputs)
             .build();
+        // `#md`'s engine half. In the global scope because that is the only
+        // scope a native function can be put in: a virtual module's bindings
+        // are generated source, so `@baudelaire/markdown` closes over this
+        // rather than carrying it.
+        #[cfg(feature = "markdown")]
+        markdown::define(&mut library);
         // Externalize typst-embedded images (base64 -> file reference) by
         // overriding typst-html's native image rule. Off by default and skipped
         // when `html.embed` inlines everything anyway.
@@ -128,7 +136,11 @@ impl Project {
             lib: Arc::new(LazyHash::new(library)),
             fonts: Arc::new(Fonts::of(&config.typst.fonts, &project_root)),
             files: Arc::new(RwLock::new(FileStore::new(Files::new(
-                &ModuleCx { context: &tree },
+                &ModuleCx {
+                    context: &tree,
+                    #[cfg(feature = "markdown")]
+                    markdown: &config.content.markdown,
+                },
                 &project_root,
                 FsRoot::new(project_root.clone()),
                 SystemPackages::from(Registry(config.typst.registry.as_deref())),

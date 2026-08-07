@@ -102,7 +102,14 @@ impl Packages {
         let root = crate::fs::canonical(&config.root);
         let tree = Value::from(&BuildContext::of(config));
         Self {
-            modules: Modules::new(&super::ModuleCx { context: &tree }, &root),
+            modules: Modules::new(
+                &super::ModuleCx {
+                    context: &tree,
+                    #[cfg(feature = "markdown")]
+                    markdown: &config.content.markdown,
+                },
+                &root,
+            ),
         }
     }
 

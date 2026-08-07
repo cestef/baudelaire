@@ -101,6 +101,32 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **Markdown inside a Typst page**, through `@baudelaire/markdown`:
+
+  ````typ
+  #import "@baudelaire/markdown:0.1.0": md
+
+  #md("A **bold** claim and a [link](https://example.com).")
+
+  #md(```md
+  - one
+  - two
+  ```)
+
+  #md(path: "notes.md")
+  ````
+
+  The same parser a `.md` page goes through, reading the site's own
+  `content { markdown { extensions } }`, so a fragment and a page never disagree
+  about what a table or a footnote becomes. A `path` resolves against the page
+  (a leading `/` against the project root) and is read as a tracked dependency,
+  so editing the file rebuilds the pages that render it and nothing else.
+
+  It takes a string or a raw block, never a content block: `md[**bold**]` is
+  parsed by Typst before `md` is reached, so it is refused by name rather than
+  rendered as Typst markup.
+
+
 - **A redirect names the status it forwards with:**
 
   ```kdl

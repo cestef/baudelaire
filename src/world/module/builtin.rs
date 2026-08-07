@@ -53,6 +53,52 @@ impl Module for Html {
 /// module-level note on why nothing volatile may be baked in.
 pub(super) struct Site;
 
+/// `@baudelaire/markdown`: `md()`, which renders a chunk of markdown inside a
+/// Typst page.
+///
+/// The only module whose body is not pure Typst underneath: `md()` calls a
+/// native function (see [`crate::world::markdown`]) because lowering markdown
+/// is Rust. What this module contributes is the site's own parser settings,
+/// which that function cannot capture, and the argument handling around them.
+#[cfg(feature = "markdown")]
+pub(super) struct Markdown;
+
+#[cfg(feature = "markdown")]
+impl Module for Markdown {
+    fn name(&self) -> &'static str {
+        "markdown"
+    }
+
+    fn bindings(&self, cx: &ModuleCx) -> Vec<(String, Value)> {
+        use crate::config::Named;
+        let markdown = cx.markdown;
+        vec![
+            // The name of the global the body looks up, so the two sides of the
+            // lookup are one constant rather than two spellings.
+            (
+                "_binding".to_owned(),
+                Value::str(crate::world::markdown::INTERNAL),
+            ),
+            (
+                "_extensions".to_owned(),
+                Value::Array(
+                    markdown
+                        .extensions
+                        .iter()
+                        .map(|extension| Value::str(extension.name()))
+                        .collect(),
+                ),
+            ),
+            ("_html".to_owned(), Value::str(markdown.html.name())),
+            ("_eval".to_owned(), Value::Bool(markdown.eval)),
+        ]
+    }
+
+    fn body(&self) -> &'static str {
+        include_str!("typ/markdown.typ")
+    }
+}
+
 impl Module for Site {
     fn name(&self) -> &'static str {
         "site"

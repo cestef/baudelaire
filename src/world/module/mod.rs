@@ -81,6 +81,11 @@ pub(super) struct ModuleCx<'a> {
     /// The `sys.inputs.baudelaire` value, so `@baudelaire/site` and its
     /// JavaScript counterpart `baudelaire:site` serve one build context.
     pub context: &'a Value,
+    /// How this site reads markdown, so `@baudelaire/markdown` renders a
+    /// fragment the way it would render a `.md` page. Gated with the module
+    /// that reads it: a binary that cannot lower markdown serves none.
+    #[cfg(feature = "markdown")]
+    pub markdown: &'a crate::config::MarkdownConfig,
 }
 
 /// One provider of an `@baudelaire/*` Typst module: a set of generated
@@ -110,8 +115,16 @@ trait Module {
 }
 
 /// The registered virtual modules.
-fn builtin() -> [Box<dyn Module>; 2] {
-    [Box::new(builtin::Html), Box::new(builtin::Site)]
+///
+/// A `Vec` rather than an array because one of them is feature-gated: `markdown`
+/// is served only by a binary that can lower markdown at all.
+fn builtin() -> Vec<Box<dyn Module>> {
+    vec![
+        Box::new(builtin::Html),
+        Box::new(builtin::Site),
+        #[cfg(feature = "markdown")]
+        Box::new(builtin::Markdown),
+    ]
 }
 
 /// The modules whose source the build writes to a file instead of generating
@@ -487,6 +500,8 @@ mod tests {
         let modules = Modules::new(
             &ModuleCx {
                 context: &Value::None,
+                #[cfg(feature = "markdown")]
+                markdown: &crate::config::MarkdownConfig::default(),
             },
             Path::new("."),
         );

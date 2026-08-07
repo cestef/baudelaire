@@ -265,10 +265,13 @@ fn an_unknown_module_suggests_the_nearest() {
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     assert!(err.contains("did you mean `html`?"), "{err}");
-    assert!(
-        err.contains("valid modules: `html`, `pages`, `sections`, `site`"),
-        "{err}"
-    );
+    // `markdown` is served only by a binary that can lower markdown, so the
+    // list it appears in is the one the running flavor actually serves.
+    let valid = match cfg!(feature = "markdown") {
+        true => "valid modules: `html`, `markdown`, `pages`, `sections`, `site`",
+        false => "valid modules: `html`, `pages`, `sections`, `site`",
+    };
+    assert!(err.contains(valid), "{err}");
 }
 
 /// A version the registry does not serve fails at the import instead of
