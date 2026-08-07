@@ -120,9 +120,12 @@ A duration is a number and a unit (`250ms`, `30s`, `5m`, `2h`, `7d`); a bare
 number is seconds.
 
 Only successes are remembered, in `.baudelaire/links/seen.json`, so shortening
-`fresh` re-asks and never keeps reporting a link you have already fixed. Lower
-`concurrency` for a host that answers 429 to a site linking it fifty times; the
-limit applies to these requests alone and leaves the rest of the build parallel.
+`fresh` re-asks and never keeps reporting a link you have already fixed.
+Narrowing `accept` re-asks too: what the host answered is remembered beside when
+it answered, and both are judged again under the settings of the run that reads
+them. Lower `concurrency` for a host that answers 429 to a site linking it fifty
+times; the limit applies to these requests alone and leaves the rest of the build
+parallel.
 
 `ignore` drops a URL before it is ever requested. The glob grammar is the one
 `prune { keep }` uses, matched against the URL with its scheme removed, so

@@ -12,7 +12,6 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -49,7 +48,7 @@ impl External {
         let stale: Vec<&str> = targets
             .keys()
             .copied()
-            .filter(|url| !verified.is_fresh(url, policy.fresh))
+            .filter(|url| !verified.is_fresh(url, policy))
             .collect();
         ui.detail(format_args!(
             "checking {} of {} outbound link{} ({} still verified)",
@@ -95,7 +94,7 @@ impl External {
         let mut unreachable: Vec<Unreachable> = Vec::new();
         for (url, probe) in probed {
             match probe {
-                Probe::Alive => verified.record(url),
+                Probe::Alive(status) => verified.record(url, status),
                 Probe::Status(status) => dead.push(Dead {
                     url: url.to_owned(),
                     status,
@@ -175,7 +174,9 @@ impl<'a> Ignored<'a> {
 
 /// What one request found.
 enum Probe {
-    Alive,
+    /// The host answered something the site calls alive, and what that was: the
+    /// record keeps it, so a later run can judge it again.
+    Alive(u16),
     /// The host answered, and said no.
     Status(u16),
     /// Nothing answered: DNS, TLS, a timeout, a refused connection.
@@ -219,7 +220,7 @@ impl Probe {
             Ok(response) => {
                 let status = response.status().as_u16();
                 match policy.alive(status) {
-                    true => Self::Alive,
+                    true => Self::Alive(status),
                     false => Self::Status(status),
                 }
             }
@@ -228,10 +229,22 @@ impl Probe {
     }
 }
 
+/// One remembered verification: when the host answered, and what it answered.
+///
+/// The status is kept because "alive" is a judgement the *site* makes, not the
+/// host: `accept 401` makes a 401 alive. Without it, narrowing `accept` left
+/// every URL it had waved through verified for the rest of the window, and the
+/// check went green against links the site now calls dead.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+struct Seen {
+    at: i64,
+    status: u16,
+}
+
 /// URLs that answered, and when. Only successes are remembered: caching a
 /// failure would keep reporting a link that has since been fixed.
 #[derive(Default, Serialize, Deserialize)]
-struct Verified(BTreeMap<String, i64>);
+struct Verified(BTreeMap<String, Seen>);
 
 impl Verified {
     /// Where the record lives: under the scratch directory, so `clean` wipes it
@@ -242,7 +255,8 @@ impl Verified {
 
     /// Load the previous run's record. Unreadable or corrupt is not an error:
     /// the worst case is re-checking every link, which is what a first run does
-    /// anyway.
+    /// anyway. A record written by an older baudelaire, which stored a bare
+    /// timestamp, reads as corrupt and costs exactly that.
     fn load(config: &Config) -> Self {
         std::fs::read_to_string(Self::path(config))
             .ok()
@@ -250,16 +264,21 @@ impl Verified {
             .unwrap_or_default()
     }
 
-    /// Whether `url` was verified within `fresh` and can be skipped.
+    /// Whether `url` was verified recently enough to skip, *and* answered
+    /// something this run's policy still calls alive.
+    ///
+    /// Both halves are the site's own settings, so both are re-applied here
+    /// rather than trusted from the record: shortening `fresh` re-asks, and so
+    /// does narrowing `accept`.
     ///
     /// A timestamp from the future counts as unknown: a clock that jumped
     /// backwards must not freeze every link as permanently verified.
-    fn is_fresh(&self, url: &str, fresh: Duration) -> bool {
-        let Some(&at) = self.0.get(url) else {
+    fn is_fresh(&self, url: &str, policy: &ExternalConfig) -> bool {
+        let Some(&seen) = self.0.get(url) else {
             return false;
         };
-        let age = Self::now() - at;
-        (0..fresh.as_secs().cast_signed()).contains(&age)
+        let age = Self::now() - seen.at;
+        policy.alive(seen.status) && (0..policy.fresh.as_secs().cast_signed()).contains(&age)
     }
 
     /// Now, in the unix seconds the record is keyed by.
@@ -267,8 +286,14 @@ impl Verified {
         OffsetDateTime::now_utc().unix_timestamp()
     }
 
-    fn record(&mut self, url: &str) {
-        self.0.insert(url.to_owned(), Self::now());
+    fn record(&mut self, url: &str, status: u16) {
+        self.0.insert(
+            url.to_owned(),
+            Seen {
+                at: Self::now(),
+                status,
+            },
+        );
     }
 
     /// Persist the record, best-effort: failing to write a cache must not fail
@@ -289,47 +314,79 @@ impl Verified {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
-    /// The default window, which the cases below are written against.
-    fn fresh() -> Duration {
-        ExternalConfig::default().fresh
+    /// The default policy, which the cases below are written against.
+    fn policy() -> ExternalConfig {
+        ExternalConfig::default()
+    }
+
+    /// A record holding one URL last seen `secs` ago answering `status`.
+    fn seen(url: &str, secs: i64, status: u16) -> Verified {
+        let mut verified = Verified::default();
+        verified.saw(url, secs, status);
+        verified
+    }
+
+    impl Verified {
+        /// Remember `url` as having answered `status`, `secs` ago.
+        fn saw(&mut self, url: &str, secs: i64, status: u16) {
+            let at = OffsetDateTime::now_utc().unix_timestamp() - secs;
+            self.0.insert(url.to_owned(), Seen { at, status });
+        }
     }
 
     #[test]
     fn a_recent_verification_is_fresh_and_an_old_one_is_not() {
-        let now = OffsetDateTime::now_utc().unix_timestamp();
-        let mut verified = Verified::default();
-        verified.0.insert("https://fresh.test".into(), now - 60);
-        verified.0.insert(
-            "https://stale.test".into(),
-            now - fresh().as_secs().cast_signed() - 1,
-        );
+        let window = policy().fresh.as_secs().cast_signed();
+        let mut verified = seen("https://fresh.test", 60, 200);
+        verified.saw("https://stale.test", window + 1, 200);
 
-        assert!(verified.is_fresh("https://fresh.test", fresh()));
-        assert!(!verified.is_fresh("https://stale.test", fresh()));
-        assert!(!verified.is_fresh("https://unknown.test", fresh()));
+        assert!(verified.is_fresh("https://fresh.test", &policy()));
+        assert!(!verified.is_fresh("https://stale.test", &policy()));
+        assert!(!verified.is_fresh("https://unknown.test", &policy()));
     }
 
     /// The window is the site's, so shortening it re-asks a link the default
     /// would still be trusting.
     #[test]
     fn a_shorter_window_makes_a_verification_stale() {
-        let mut verified = Verified::default();
-        let now = OffsetDateTime::now_utc().unix_timestamp();
-        verified.0.insert("https://a.test".into(), now - 3600);
-        assert!(verified.is_fresh("https://a.test", fresh()));
-        assert!(!verified.is_fresh("https://a.test", Duration::from_mins(5)));
+        let verified = seen("https://a.test", 3600, 200);
+        assert!(verified.is_fresh("https://a.test", &policy()));
+
+        let brief = ExternalConfig {
+            fresh: Duration::from_mins(5),
+            ..policy()
+        };
+        assert!(!verified.is_fresh("https://a.test", &brief));
+    }
+
+    /// So is `accept`. A URL remembered as alive only because the site accepted
+    /// its status must be asked again once it stops accepting it, or narrowing
+    /// the list goes green for a week against links it now calls dead.
+    #[test]
+    fn narrowing_accept_makes_a_verification_stale() {
+        let mut verified = seen("https://gated.test", 60, 401);
+        verified.saw("https://plain.test", 60, 200);
+
+        let lenient = ExternalConfig {
+            accept: vec![401],
+            ..policy()
+        };
+        assert!(verified.is_fresh("https://gated.test", &lenient));
+        assert!(!verified.is_fresh("https://gated.test", &policy()));
+        // A 2xx was never the site's call, so it is untouched either way.
+        assert!(verified.is_fresh("https://plain.test", &policy()));
     }
 
     /// A clock that jumped backwards must not make everything permanently
     /// fresh, so a future timestamp is treated as unknown.
     #[test]
     fn a_timestamp_from_the_future_is_not_fresh() {
-        let mut verified = Verified::default();
-        let ahead = OffsetDateTime::now_utc().unix_timestamp() + 3600;
-        verified.0.insert("https://ahead.test".into(), ahead);
-        assert!(!verified.is_fresh("https://ahead.test", fresh()));
+        let verified = seen("https://ahead.test", -3600, 200);
+        assert!(!verified.is_fresh("https://ahead.test", &policy()));
     }
 
     #[test]
