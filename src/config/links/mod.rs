@@ -1,10 +1,12 @@
 //! `links { }`: link shape, link checking, and the link graph.
 
-use crate::config::dispatch::Kind::{Choice, Flag};
+pub mod external;
+
+use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
-use crate::config::{Named, UrlStyle};
+use crate::config::{ExternalConfig, Named, UrlStyle};
 
 /// Link shape and link checking: what a page's URL looks like, and how hard the
 /// build tries to prove every reference to one resolves.
@@ -15,12 +17,9 @@ pub struct LinkConfig {
     pub style: UrlStyle,
     /// Treat unresolved internal `.typ` links as errors (else warnings).
     pub strict: bool,
-    /// Also verify outbound `http(s)` links over the network.
-    ///
-    /// Read by `check` alone: a build stays offline and deterministic, so a
-    /// flaky host or an airplane can never change what it produces. `check
-    /// --external` turns it on for one run.
-    pub external: bool,
+    /// Verifying outbound `http(s)` links over the network: whether it happens,
+    /// and the manners it happens with.
+    pub external: ExternalConfig,
     /// Hand each page the pages whose content links to it, as `page.backlinks`.
     ///
     /// Opt-in because it is the one page value that cannot be known before the
@@ -84,7 +83,7 @@ impl Default for LinkConfig {
         Self {
             style: UrlStyle::default(),
             strict: true,
-            external: false,
+            external: ExternalConfig::default(),
             // Off: a page whose backlinks change is compiled twice, which a
             // site that shows none must not pay for.
             backlinks: false,
@@ -119,12 +118,9 @@ impl Section for LinkConfig {
         ),
         (
             "external",
-            Flag,
-            "Also check outbound `http(s)` links over the network.",
-            |c, n, t| {
-                c.external = n.boolean(t, 0)?;
-                Ok(())
-            },
+            Nested(ExternalConfig::rows),
+            "Check outbound `http(s)` links over the network. Its presence turns it on; `#false` turns it off again.",
+            |c, n, t| c.external.fill(n, t),
         ),
         (
             "backlinks",

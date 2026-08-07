@@ -22,7 +22,7 @@ pub struct CheckArgs {
 impl Run for CheckArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let mut config = cx.configured(&self.overrides, "checking")?;
-        Toggle::of(self.external, self.no_external).apply(&mut config.links.external);
+        Toggle::of(self.external, self.no_external).apply(&mut config.links.external.enabled);
         let stats = crate::engine::Engine::new(config, crate::engine::Mode::Check)?.check(cx.ui)?;
         cx.ui.built(stats.pages, stats.cached);
         Ok(())

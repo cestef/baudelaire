@@ -31,6 +31,33 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`links { external }` is a block**, so the outbound check can be tuned instead
+  of only turned off:
+
+  ```kdl
+  links {
+    external {
+      fresh "7d"
+      timeout "10s"
+      concurrency 4
+      ignore "*.internal/**"
+      accept 401 429
+    }
+  }
+  ```
+
+  `fresh` is how long a link that answered is trusted, `timeout` how long one
+  request may take, `concurrency` how many are in flight at once (a limit on
+  these requests alone, not on the rest of the build). `ignore` drops URLs before
+  they are requested, in the glob grammar `prune { keep }` uses, matched against
+  the URL without its scheme so one pattern covers `http` and `https`. `accept`
+  names status codes that count as alive beyond 2xx and 3xx: a page behind a
+  login answers 401 and is still there.
+
+  A duration is a number and an optional unit (`250ms`, `30s`, `5m`, `2h`, `7d`);
+  a bare number is seconds. `links { external }` and `links { external #false }`
+  mean exactly what they did.
+
 - **A page's body can be a file the site does not publish**: a `CHANGELOG.md` at
   the top of the repository, a `README.md` shared with another project. The
   config declares the file under a name, and a markdown page names the name:

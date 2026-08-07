@@ -189,6 +189,17 @@ impl ConfigError {
         )
     }
 
+    /// A key written in something that is not a length of time.
+    pub fn bad_duration(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::BadDuration {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A count field given a negative value.
     pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
@@ -517,6 +528,15 @@ pub enum ConfigErrorKind {
         help("a size is a number and an optional unit: `0`, `500`, `50kB`, `1.5 MB`")
     )]
     BadSize { got: String },
+
+    #[error("{} is not a length of time", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::bad_duration),
+        help(
+            "a duration is a number and an optional unit: `30`, `10s`, `5m`, `7d`; a bare number is seconds"
+        )
+    )]
+    BadDuration { got: String },
 
     #[error("{} is not an absolute URL", Code(.got))]
     #[diagnostic(

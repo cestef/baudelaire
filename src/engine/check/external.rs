@@ -17,17 +17,13 @@ use std::time::Duration;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use wax::{Glob, Program};
 
 use super::Compiled;
-use crate::config::Config;
+use crate::config::{Config, ExternalConfig};
 use crate::error::warning::{Unreachable, UnreachableLinks};
-use crate::error::{Dead, DeadLinks, Result};
+use crate::error::{ContentError, Dead, DeadLinks, Result};
 use crate::ui::Ui;
-
-/// How long a verified URL stays verified. A link that answered last week is
-/// almost certainly still there, and re-asking every host on every CI run is
-/// both slow and rude.
-const FRESH: Duration = Duration::from_hours(7 * 24);
 
 /// The external link check.
 pub(in crate::engine) struct External;
@@ -35,11 +31,13 @@ pub(in crate::engine) struct External;
 impl External {
     /// Verify every outbound link the compiled pages carry.
     pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
+        let policy = &site.config.links.external;
+        let ignored = Ignored::of(policy)?;
         // URL -> the pages that link to it, so a dead link names every place it
         // has to be fixed and is requested exactly once however often it appears.
         let mut targets: BTreeMap<&str, Vec<String>> = BTreeMap::new();
         for page in site.pages {
-            for url in page.external {
+            for url in page.external.iter().filter(|url| !ignored.claims(url)) {
                 targets.entry(url).or_default().push(page.label.clone());
             }
         }
@@ -51,7 +49,7 @@ impl External {
         let stale: Vec<&str> = targets
             .keys()
             .copied()
-            .filter(|url| !verified.is_fresh(url))
+            .filter(|url| !verified.is_fresh(url, policy.fresh))
             .collect();
         ui.detail(format_args!(
             "checking {} of {} outbound link{} ({} still verified)",
@@ -62,15 +60,35 @@ impl External {
         ));
 
         let progress = ui.progress("checking", stale.len());
-        let agent = Self::agent();
-        let probed: Vec<(&str, Probe)> = stale
-            .par_iter()
-            .map(|url| {
-                let probe = Probe::of(&agent, url);
-                progress.tick((*url).to_owned());
-                (*url, probe)
-            })
-            .collect();
+        let agent = Self::agent(policy);
+        let probe = || {
+            stale
+                .par_iter()
+                .map(|url| {
+                    let probe = Probe::of(&agent, url, policy);
+                    progress.tick((*url).to_owned());
+                    (*url, probe)
+                })
+                .collect()
+        };
+        // A site that names a concurrency asks for *these* requests to be
+        // throttled, not for the rest of the build to be: a pool of its own is
+        // what keeps the limit off every other parallel pass.
+        let probed: Vec<(&str, Probe)> = match policy.concurrency {
+            Some(threads) => match rayon::ThreadPoolBuilder::new().num_threads(threads).build() {
+                Ok(pool) => pool.install(probe),
+                // Spawning threads is the only way this fails, and the global
+                // pool the fallback uses is made of the same threads: there is
+                // no second thing to try, and failing the check over it would
+                // report the machine as a dead link. Recorded rather than
+                // silent, as `Verified::save` is.
+                Err(e) => {
+                    tracing::debug!("link checker pool of {threads} not built: {e}");
+                    probe()
+                }
+            },
+            None => probe(),
+        };
         progress.finish();
 
         let mut dead: Vec<Dead> = Vec::new();
@@ -102,13 +120,56 @@ impl External {
         }
     }
 
-    /// The agent every probe shares: one connection pool, a bounded wait, and a
-    /// user agent that tells an administrator who is knocking.
+    /// The agent every probe shares: one connection pool, the site's own
+    /// deadline, and a user agent that tells an administrator who is knocking.
     ///
     /// [`Status::Read`] because a 404 *is* the answer here, not a transport
     /// failure to be unwrapped out of an error type.
-    fn agent() -> ureq::Agent {
-        crate::remote::Http::agent("link checker", crate::remote::Status::Read)
+    fn agent(policy: &ExternalConfig) -> ureq::Agent {
+        crate::remote::Http::within("link checker", crate::remote::Status::Read, policy.timeout)
+    }
+}
+
+/// The URLs `links { external { ignore } }` says never to request.
+///
+/// Compiled once per run rather than per URL, in the glob grammar `prune
+/// { keep }` uses, so there is one glob dialect in the project rather than a
+/// second one for URLs.
+struct Ignored<'a>(Vec<Glob<'a>>);
+
+impl<'a> Ignored<'a> {
+    /// The compiled patterns, or a precise error naming the one that is not a
+    /// glob. Checked here rather than at config parse for the same reason
+    /// `prune { keep }` is: the grammar belongs to `wax`, and its error carries
+    /// the offset within the pattern.
+    fn of(policy: &'a ExternalConfig) -> Result<Self> {
+        policy
+            .ignore
+            .iter()
+            .map(|pattern| {
+                Glob::new(pattern)
+                    .map_err(|e| ContentError::bad_glob("external", pattern, e).into())
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Self)
+    }
+
+    /// Whether any pattern claims `url`.
+    fn claims(&self, url: &str) -> bool {
+        let rest = Self::unschemed(url);
+        self.0.iter().any(|glob| glob.is_match(rest))
+    }
+
+    /// A URL without its `scheme://`, which is what a pattern is matched
+    /// against.
+    ///
+    /// Two reasons, and the second is why this is not a compromise. A glob
+    /// cannot carry the scheme anyway -- `//` is two adjacent component
+    /// boundaries, which the grammar refuses -- and a site excluding a host
+    /// means the host, not one way of addressing it: `*.internal/**` covers
+    /// both spellings without writing the pattern twice.
+    fn unschemed(url: &str) -> &str {
+        url.split_once("://").map_or(url, |(_, rest)| rest)
     }
 }
 
@@ -127,10 +188,13 @@ impl Probe {
     /// Plenty of servers answer `HEAD` with 403, 405, or 501 while serving the
     /// page perfectly well, so a rejection of the *method* is not an answer
     /// about the *link* and has to be asked again properly.
-    fn of(agent: &ureq::Agent, url: &str) -> Self {
-        match Self::request(agent.head(url).call()) {
+    /// A status the site accepts is checked *before* the method fallback, so
+    /// `accept 403` costs one request rather than two: with 403 in both sets,
+    /// asking again with `GET` can only arrive at the same answer.
+    fn of(agent: &ureq::Agent, url: &str, policy: &ExternalConfig) -> Self {
+        match Self::request(agent.head(url).call(), policy) {
             Self::Status(code) if Self::method_rejected(code) => {
-                Self::request(agent.get(url).call())
+                Self::request(agent.get(url).call(), policy)
             }
             probe => probe,
         }
@@ -144,16 +208,19 @@ impl Probe {
         REJECTED.contains(&code)
     }
 
-    /// A 2xx or 3xx answer is the link working: a redirect that resolves is a
-    /// live target, and following the chain is the agent's business, not this
-    /// pass's.
-    fn request(result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Self {
+    /// A 2xx or 3xx answer is the link working, as is anything the site added to
+    /// `accept`: a redirect that resolves is a live target, and following the
+    /// chain is the agent's business, not this pass's.
+    fn request(
+        result: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+        policy: &ExternalConfig,
+    ) -> Self {
         match result {
             Ok(response) => {
-                let status = response.status();
-                match status.is_success() || status.is_redirection() {
+                let status = response.status().as_u16();
+                match policy.alive(status) {
                     true => Self::Alive,
-                    false => Self::Status(status.as_u16()),
+                    false => Self::Status(status),
                 }
             }
             Err(e) => Self::Unreachable(e.to_string()),
@@ -183,16 +250,16 @@ impl Verified {
             .unwrap_or_default()
     }
 
-    /// Whether `url` was verified recently enough to skip.
+    /// Whether `url` was verified within `fresh` and can be skipped.
     ///
     /// A timestamp from the future counts as unknown: a clock that jumped
     /// backwards must not freeze every link as permanently verified.
-    fn is_fresh(&self, url: &str) -> bool {
+    fn is_fresh(&self, url: &str, fresh: Duration) -> bool {
         let Some(&at) = self.0.get(url) else {
             return false;
         };
         let age = Self::now() - at;
-        (0..FRESH.as_secs().cast_signed()).contains(&age)
+        (0..fresh.as_secs().cast_signed()).contains(&age)
     }
 
     /// Now, in the unix seconds the record is keyed by.
@@ -224,6 +291,11 @@ impl Verified {
 mod tests {
     use super::*;
 
+    /// The default window, which the cases below are written against.
+    fn fresh() -> Duration {
+        ExternalConfig::default().fresh
+    }
+
     #[test]
     fn a_recent_verification_is_fresh_and_an_old_one_is_not() {
         let now = OffsetDateTime::now_utc().unix_timestamp();
@@ -231,12 +303,23 @@ mod tests {
         verified.0.insert("https://fresh.test".into(), now - 60);
         verified.0.insert(
             "https://stale.test".into(),
-            now - FRESH.as_secs().cast_signed() - 1,
+            now - fresh().as_secs().cast_signed() - 1,
         );
 
-        assert!(verified.is_fresh("https://fresh.test"));
-        assert!(!verified.is_fresh("https://stale.test"));
-        assert!(!verified.is_fresh("https://unknown.test"));
+        assert!(verified.is_fresh("https://fresh.test", fresh()));
+        assert!(!verified.is_fresh("https://stale.test", fresh()));
+        assert!(!verified.is_fresh("https://unknown.test", fresh()));
+    }
+
+    /// The window is the site's, so shortening it re-asks a link the default
+    /// would still be trusting.
+    #[test]
+    fn a_shorter_window_makes_a_verification_stale() {
+        let mut verified = Verified::default();
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        verified.0.insert("https://a.test".into(), now - 3600);
+        assert!(verified.is_fresh("https://a.test", fresh()));
+        assert!(!verified.is_fresh("https://a.test", Duration::from_mins(5)));
     }
 
     /// A clock that jumped backwards must not make everything permanently
@@ -246,7 +329,7 @@ mod tests {
         let mut verified = Verified::default();
         let ahead = OffsetDateTime::now_utc().unix_timestamp() + 3600;
         verified.0.insert("https://ahead.test".into(), ahead);
-        assert!(!verified.is_fresh("https://ahead.test"));
+        assert!(!verified.is_fresh("https://ahead.test", fresh()));
     }
 
     #[test]
@@ -257,5 +340,49 @@ mod tests {
         for code in [404, 410, 500, 503] {
             assert!(!Probe::method_rejected(code), "{code}");
         }
+    }
+
+    /// 2xx and 3xx always live; everything else needs the site to say so.
+    #[test]
+    fn accept_widens_what_counts_as_alive() {
+        let mut policy = ExternalConfig::default();
+        assert!(policy.alive(200));
+        assert!(policy.alive(301));
+        assert!(!policy.alive(401));
+        assert!(!policy.alive(404));
+
+        policy.accept = vec![401, 429];
+        assert!(policy.alive(401));
+        assert!(policy.alive(429));
+        assert!(!policy.alive(404));
+    }
+
+    /// The pattern is matched against the URL without its scheme, so it names a
+    /// host and a path the way `prune { keep }` names a path: `/` is a segment
+    /// boundary, and `**` is what crosses one.
+    #[test]
+    fn ignore_claims_the_urls_it_names() {
+        let policy = ExternalConfig {
+            ignore: vec!["*.internal/**".into(), "one.test/**".into()],
+            ..ExternalConfig::default()
+        };
+        let ignored = Ignored::of(&policy).expect("the patterns are globs");
+
+        assert!(ignored.claims("https://box.internal/health"));
+        assert!(ignored.claims("https://one.test/a/b"));
+        assert!(!ignored.claims("https://other.test/a"));
+        // A host is a host however it is addressed: one pattern, both schemes.
+        assert!(ignored.claims("http://box.internal/health"));
+    }
+
+    /// A pattern that is not a glob is the author's mistake, named as one rather
+    /// than quietly matching nothing.
+    #[test]
+    fn a_pattern_that_is_not_a_glob_is_an_error() {
+        let policy = ExternalConfig {
+            ignore: vec!["{unclosed".into()],
+            ..ExternalConfig::default()
+        };
+        assert!(Ignored::of(&policy).is_err());
     }
 }

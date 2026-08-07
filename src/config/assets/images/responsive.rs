@@ -79,7 +79,8 @@ impl Section for ResponsiveConfig {
             Numbers,
             "The pixel widths to emit a variant at.",
             |c, n, t| {
-                c.widths = n.widths(t)?;
+                // 16384 is the max texture size browsers guarantee.
+                c.widths = n.bounds::<u32>(t, 1, 16384)?;
                 Ok(())
             },
         ),

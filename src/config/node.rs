@@ -2,13 +2,15 @@
 //! config rule is written in terms of. The [`KdlValue`] half lives in
 //! [`super::value`], the schema those primitives spell out in [`super::parse`].
 
+use std::time::Duration;
+
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::url::BaseUrl;
 use crate::config::value::{Kdl, ValueExt};
 use crate::error::{ConfigError, Result};
-use crate::ui::Bytes;
+use crate::ui::{Bytes, Dur};
 
 /// The loopback interface, by the spellings a URL authority can name it.
 struct Loopback;
@@ -71,6 +73,10 @@ pub(super) trait NodeExt {
     /// A byte size, written either as a plain integer of bytes (`js 0`) or as a
     /// string carrying a unit (`html "50kB"`).
     fn size(&self, text: &str, idx: usize) -> Result<Bytes>;
+    /// A length of time, written either as a plain integer of seconds
+    /// (`timeout 30`) or as a string carrying a unit (`fresh "7d"`). The
+    /// [`NodeExt::size`] counterpart, reading the same two spellings.
+    fn duration(&self, text: &str, idx: usize) -> Result<Duration>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn base_url(&self, text: &str, idx: usize) -> Result<String>;
     /// A permalink template, or a piece of one, checked by [`Permalink::parse`]:
@@ -103,7 +109,15 @@ pub(super) trait NodeExt {
     fn pairs(&self, text: &str) -> Result<Vec<(String, String)>>;
     fn features(&self, text: &str) -> Result<Vec<String>>;
     fn words(&self, text: &str) -> Result<Vec<String>>;
-    fn widths(&self, text: &str) -> Result<Vec<u32>>;
+    /// The node's positional integer args, each range-checked by
+    /// [`ValueExt::bounded`]: `widths 480 960 1440`, `accept 401 429`.
+    ///
+    /// The single reader for a list of numbers, so an out-of-range one is
+    /// reported the same way whatever key it was written under, at the span of
+    /// the value rather than of the line.
+    fn bounds<T>(&self, text: &str, min: T, max: T) -> Result<Vec<T>>
+    where
+        T: TryFrom<i64> + Into<i64> + Copy;
     fn mapped<T: super::Named>(&self, text: &str) -> Result<Vec<T>>;
     /// A list of names over a fixed set, where `-name` removes one from
     /// `defaults` and a bare name adds one: `extensions "math" "-tables"`.
@@ -221,6 +235,20 @@ impl NodeExt for KdlNode {
                 .ok_or_else(|| ConfigError::bad_size(text, written, span).into());
         }
         Ok(Bytes(self.count(text, idx)? as u64))
+    }
+
+    /// A length of time. An integer is seconds and is range-checked like any
+    /// other count; a string is read by [`Dur::parse`], so a duration can be
+    /// written in the unit that says what it means.
+    fn duration(&self, text: &str, idx: usize) -> Result<Duration> {
+        let span = NodeExt::span(self);
+        let value = self.arg(text, idx)?;
+        if let Some(written) = value.as_string() {
+            return Dur::parse(written)
+                .map(|d| d.0)
+                .ok_or_else(|| ConfigError::bad_duration(text, written, span).into());
+        }
+        Ok(Duration::from_secs(self.count(text, idx)? as u64))
     }
 
     /// A base-URL argument, required to be `https://` unless it names the
@@ -365,15 +393,16 @@ impl NodeExt for KdlNode {
             .collect()
     }
 
-    /// The positional integer arguments of a `widths 480 960 ..` node, each a
-    /// pixel width in `1..=16384` (the max texture size browsers guarantee).
-    /// Mirrors [`NodeExt::words`] for the integer case.
-    fn widths(&self, text: &str) -> Result<Vec<u32>> {
-        let span = NodeExt::span(self);
+    /// The positional integer arguments of a `widths 480 960 ..` node, each
+    /// held to `min..=max`. Mirrors [`NodeExt::words`] for the integer case.
+    fn bounds<T>(&self, text: &str, min: T, max: T) -> Result<Vec<T>>
+    where
+        T: TryFrom<i64> + Into<i64> + Copy,
+    {
         self.entries()
             .iter()
             .filter(|e| e.name().is_none())
-            .map(|e| e.value().bounded::<u32>(text, span, 1, 16384))
+            .map(|e| e.value().bounded::<T>(text, EntryExt::span(e), min, max))
             .collect()
     }
 

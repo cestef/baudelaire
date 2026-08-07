@@ -238,6 +238,7 @@ impl Kind {
             Self::Flag => "flag".to_owned(),
             Self::Number => "number".to_owned(),
             Self::Size => "size".to_owned(),
+            Self::Time => "duration".to_owned(),
             Self::Path => "path".to_owned(),
             Self::Url => "url".to_owned(),
             Self::Template => "template".to_owned(),

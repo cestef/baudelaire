@@ -2,6 +2,7 @@ mod arguments;
 mod content;
 mod images;
 mod languages;
+mod links;
 mod remote;
 mod schema;
 mod sourcemaps;

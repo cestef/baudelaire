@@ -37,14 +37,25 @@ pub struct Http;
 impl Http {
     /// Per-request ceiling. Generous enough for a slow host, short enough that
     /// one black hole does not hold up the run.
-    const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+    ///
+    /// Public because it is also what `links { external { timeout } }` defaults
+    /// to: the configurable deadline and the fixed one are the same number, and
+    /// stating it twice is how they would come to disagree.
+    pub const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
     /// An agent for the work `doing` describes, which is what an administrator
     /// reading their logs sees knocking.
     pub fn agent(doing: &str, status: Status) -> ureq::Agent {
+        Self::within(doing, status, Self::TIMEOUT)
+    }
+
+    /// The same agent on a caller-chosen deadline, for the one caller a site can
+    /// set one for. Everything else takes [`Http::TIMEOUT`]: pushing credentials
+    /// to a black hole is not a wait anyone should be able to lengthen.
+    pub fn within(doing: &str, status: Status, timeout: std::time::Duration) -> ureq::Agent {
         ureq::Agent::config_builder()
             .http_status_as_error(status == Status::Fatal)
-            .timeout_global(Some(Self::TIMEOUT))
+            .timeout_global(Some(timeout))
             .user_agent(format!("baudelaire/{} ({doing})", crate::VERSION))
             .tls_config(Self::tls())
             .build()

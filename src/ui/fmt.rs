@@ -196,6 +196,52 @@ impl Display for StyledBytes<'_> {
 /// single source of elapsed-time formatting (hyperfine-style, no parentheses).
 pub struct Dur(pub Duration);
 
+impl Dur {
+    /// The units a duration may be written in, longest spelling first so `ms`
+    /// is matched before the `s` inside it.
+    const UNITS: &'static [(&'static str, u64)] = &[
+        ("ms", 1),
+        ("s", 1_000),
+        ("m", 60 * 1_000),
+        ("h", 60 * 60 * 1_000),
+        ("d", 24 * 60 * 60 * 1_000),
+    ];
+
+    /// A duration written as a number and an optional unit (`0`, `30`, `10s`,
+    /// `7d`, `1.5h`), or `None` when it is neither. Case and inner spaces are
+    /// ignored; a bare number is seconds, the unit a config reaches for most.
+    ///
+    /// The counterpart of [`Bytes::parse`], and deliberately *not* the inverse
+    /// of this type's [`Display`]: that renders an elapsed time for a reader
+    /// (`1m 15s`), which is a sentence rather than a value, while this reads the
+    /// single value an author writes. Sharing the type is what keeps the crate
+    /// to one duration and one place that knows what `d` means.
+    // Same float math, and for the same reason, as `Bytes::parse`: `1.5h` has to
+    // scale. Checked finite and non-negative, and a product past `u64` is
+    // rejected, so the narrowing rounds an in-range number.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim().to_ascii_lowercase().replace(' ', "");
+        let (number, scale) = Self::UNITS
+            .iter()
+            .find_map(|&(unit, scale)| Some((text.strip_suffix(unit)?, scale)))
+            // A bare number is seconds, so it scales like one.
+            .unwrap_or((text.as_str(), 1_000));
+        let value: f64 = number.parse().ok()?;
+        if !value.is_finite() || value < 0.0 {
+            return None;
+        }
+        // Beyond this an `f64` no longer counts single milliseconds, and a
+        // config asking to wait that long is a typo rather than an intent.
+        let millis = value * scale as f64;
+        (millis <= u64::MAX as f64).then(|| Self(Duration::from_millis(millis as u64)))
+    }
+}
+
 impl Display for Dur {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let d = self.0;
@@ -416,6 +462,30 @@ mod tests {
         assert_eq!(Dur(Duration::from_millis(132)).to_string(), "132ms");
         assert_eq!(Dur(Duration::from_millis(1240)).to_string(), "1.24s");
         assert_eq!(Dur(Duration::from_secs(75)).to_string(), "1m 15s");
+    }
+
+    #[test]
+    fn durations_parse_their_units() {
+        let parse = |text| Dur::parse(text).map(|d| d.0);
+        // A bare number is seconds, which is what a timeout is written in.
+        assert_eq!(parse("30"), Some(Duration::from_secs(30)));
+        assert_eq!(parse("10s"), Some(Duration::from_secs(10)));
+        assert_eq!(parse("7d"), Some(Duration::from_hours(7 * 24)));
+        assert_eq!(parse("1.5h"), Some(Duration::from_mins(90)));
+        // `ms` is matched before the `s` inside it.
+        assert_eq!(parse("250ms"), Some(Duration::from_millis(250)));
+        assert_eq!(parse(" 5 M "), Some(Duration::from_mins(5)));
+        assert_eq!(parse("0"), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn durations_refuse_what_is_not_one() {
+        assert_eq!(Dur::parse("soon").map(|d| d.0), None);
+        assert_eq!(Dur::parse("-1s").map(|d| d.0), None);
+        assert_eq!(Dur::parse("").map(|d| d.0), None);
+        // A unit this crate does not know, rather than a number with a stray
+        // letter that happens to end in one it does.
+        assert_eq!(Dur::parse("3w").map(|d| d.0), None);
     }
 
     #[test]

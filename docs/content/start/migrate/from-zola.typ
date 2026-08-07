@@ -64,7 +64,7 @@ the shortcodes, the internal links and the config; the templates are a rewrite.
   [`minify_html`], [none],
   [`[markdown] highlight_code`], [always on; `html { highlight }` maps the colours to classes],
   [`[markdown] smart_punctuation`], [`content { markdown { extensions "smart" } }`, off by default as it is there],
-  [`[link_checker]`], [`links { external #true }`],
+  [`[link_checker]`], [`links { external { } }`; `skip_prefixes` is `ignore`],
   [`[slugify]`], [fixed rules; override per page with `slug`],
   [`[extra]`], [`client { }` for the browser, `typst { inputs }` for the compiler],
 )

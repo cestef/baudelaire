@@ -77,6 +77,59 @@ failing. That asymmetry is deliberate: a `.typ` link naming no page is a
 certainty, while a missing `alt` is a judgement about content baudelaire did not
 write.
 
+== Outbound links
+
+`links { external }` verifies every `http(s)` link the pages carry. It reaches
+the network, so only `baudelaire check` runs it: a build produces the same bytes
+offline, on a plane, and when somebody else's host is having a bad afternoon.
+
+```kdl
+links {
+  external {
+    fresh "7d"
+    timeout "10s"
+    concurrency 4
+    ignore "*.internal/**" "staging.example.com/**"
+    accept 401 429
+  }
+}
+```
+
+The block's presence turns the check on, so `links { external }` alone is the
+whole of it; `external #false` turns it back off.
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Default], [Does]),
+  [`fresh`], [`7d`], [How long a link that answered is trusted before it is asked again.],
+  [`timeout`], [`10s`], [How long one request may take before the link counts as unreachable.],
+  [`concurrency`], [the build's threads], [How many links are fetched at once.],
+  [`ignore`], [none], [Globs, matched against each URL without its scheme, never requested.],
+  [`accept`], [none], [Status codes that count as alive, beyond 2xx and 3xx.],
+)
+
+A duration is a number and a unit (`250ms`, `30s`, `5m`, `2h`, `7d`); a bare
+number is seconds.
+
+Only successes are remembered, in `.baudelaire/links/seen.json`, so shortening
+`fresh` re-asks and never keeps reporting a link you have already fixed. Lower
+`concurrency` for a host that answers 429 to a site linking it fifty times; the
+limit applies to these requests alone and leaves the rest of the build parallel.
+
+`ignore` drops a URL before it is ever requested. The glob grammar is the one
+`prune { keep }` uses, matched against the URL with its scheme removed, so
+`*.internal/**` covers `http` and `https` alike and `/` is a segment boundary.
+
+`accept` widens what counts as working. A page behind a login answers 401 and is
+still there; a rate limiter answers 429 and says nothing about the link.
+
+#callout(kind: "note")[
+  A dead link fails the check. A link that could not be reached at all (DNS, TLS,
+  a timeout) is only a warning: the most likely cause is the network in between,
+  not the site.
+]
+
 == Budgets
 
 A ceiling on what one page ships, written in bytes or in the units the build
@@ -133,8 +186,8 @@ is billed to `html`.
 
 == Elsewhere
 
-Two checks live outside this block, because neither is about a page's own
-markup: broken internal links (`links { strict }`, see
+Two more checks live under `links { }` rather than here, because neither is about
+a page's own markup: broken internal links (`links { strict }`, see
 #link("../write/pages.typ")[pages]) and the pages nothing links to
 (`links { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
 

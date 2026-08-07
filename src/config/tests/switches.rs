@@ -32,6 +32,7 @@ const SWITCHES: &[(&str, Reads)] = &[
     ("generate {\n  pdf {\n    pages @\n  }\n}", |c| {
         c.generate.pdf.pages.enabled
     }),
+    ("links {\n  external @\n}", |c| c.links.external.enabled),
     ("navigation {\n  spa @\n}", |c| c.navigation.spa.enabled),
     ("navigation {\n  standalone @\n}", |c| {
         c.navigation.standalone.enabled

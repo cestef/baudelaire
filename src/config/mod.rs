@@ -78,6 +78,7 @@ pub use hooks::HooksConfig;
 pub use html::highlight::HighlightConfig;
 pub use html::{Footnotes, HtmlConfig};
 pub use lang::LanguageConfig;
+pub use links::external::ExternalConfig;
 pub use links::{LinkConfig, Linked};
 pub use lint::LintConfig;
 pub use lint::budget::BudgetConfig;

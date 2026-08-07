@@ -60,6 +60,8 @@ pub enum Kind {
     Number,
     /// A byte size, with or without a unit: `html "50kB"`, `js 0`.
     Size,
+    /// A length of time, with or without a unit: `fresh "7d"`, `timeout 30`.
+    Time,
     /// A filesystem path, relative to the project root: `content "content"`.
     Path,
     /// A URL: `url "https://example.com"`.
@@ -171,6 +173,7 @@ impl Kind {
             | Self::Flag
             | Self::Number
             | Self::Size
+            | Self::Time
             | Self::Path
             | Self::Url
             | Self::Template

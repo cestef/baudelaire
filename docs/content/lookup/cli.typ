@@ -170,11 +170,12 @@ fast CI gate. Takes the #link(<build-flags>)[build flags] except `--out` and
   align: (left, left),
   table.header([Flag], [Does]),
   [`--external`], [Also verify outbound `http(s)` links over the network.],
-  [`--no-external`], [Skip them even when `links { external #true }` is set.],
+  [`--no-external`], [Skip them even when `links { external }` is set.],
 )
 
 Builds never reach the network, whatever `links { external }` says. See
-#link("../build/linting.typ")[linting] for what else the check covers.
+#link("../build/linting.typ")[linting] for what the check covers and how to tune
+its deadline, its cache and what it may skip.
 
 == new
 

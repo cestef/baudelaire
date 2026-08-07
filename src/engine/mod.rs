@@ -937,7 +937,7 @@ impl Engine {
             Lints::run(&site, ui)?;
             Budgets::run(&site)?;
         }
-        if outbound && self.config.links.external {
+        if outbound && self.config.links.external.enabled {
             External::run(&site, ui)?;
         }
         Ok(())
