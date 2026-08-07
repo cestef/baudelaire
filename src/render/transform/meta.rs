@@ -23,7 +23,7 @@ pub(super) struct Meta;
 
 impl Transform for Meta {
     fn enabled(&self, config: &Config) -> bool {
-        config.html.meta
+        config.html.meta.enabled
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
@@ -102,7 +102,7 @@ impl Card<'_> {
         let mut tags = Vec::new();
         Self::document(&facts, &mut tags);
         self.opengraph(&facts, &mut tags);
-        Self::twitter(&facts, &mut tags);
+        self.twitter(&facts, &mut tags);
         if let Some(url) = &facts.canonical {
             tags.push(Self::canonical(url));
         }
@@ -258,7 +258,12 @@ impl Card<'_> {
         // Resolved before the struct literal because resolution records an
         // asset dependency, and so needs `self` mutably.
         let generated = authored.is_none();
-        let image = authored.or_else(|| self.generated_card());
+        // The page's own, else the card the build drew it, else the site's
+        // floor. Last because it is a floor: a site image on a page that has one
+        // of its own would preview the wrong thing.
+        let image = authored
+            .or_else(|| self.generated_card())
+            .or_else(|| self.config.html.meta.image.clone());
         let image = image.map(|src| self.absolute(&src));
         // A generated card draws the page title, so that is a true description
         // of it. An authored image is the author's to describe.
@@ -353,8 +358,14 @@ impl Card<'_> {
     }
 
     /// The Twitter card tags, which only restate what OpenGraph already said,
-    /// bar the card size an image implies.
-    fn twitter(facts: &Facts, tags: &mut Vec<HtmlNode>) {
+    /// bar the card size an image implies and the account the site names.
+    fn twitter(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+        // Whose site this is. Nothing on the page says it, so without the
+        // config a card attributes the link to whoever posted it and to nobody
+        // else.
+        if let Some(handle) = &self.config.html.meta.twitter {
+            tags.push(Self::named("twitter:site", handle));
+        }
         tags.push(Self::named(
             "twitter:card",
             match facts.image.is_some() {

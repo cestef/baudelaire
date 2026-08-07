@@ -401,3 +401,44 @@ scenario "a longer key that extends a built-in passes through" {
     file "post/index.html" { contains "body" }
   }
 }
+
+// Two facts the markup cannot derive: whose site this is, and what to preview a
+// page that names no image and gets no generated card. Both had to be written by
+// hand in a template, beside the tags this pass already emitted.
+scenario "the site states the social facts a page cannot" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      html {
+        meta {
+          twitter "@s"
+          image "/og.png"
+        }
+      }
+      """#
+    "content/plain.typ" #"""
+      #let frontmatter = (title: "Plain")
+      body
+      """#
+    "content/own.typ" #"""
+      #let frontmatter = (title: "Own", image: "/cover.png")
+      body
+      """#
+  }
+  expect {
+    ok
+    file "plain/index.html" {
+      contains #"name="twitter:site" content="@s""#
+      // The site's floor, absolutized like an authored one.
+      contains #"property="og:image" content="https://s.example/og.png""#
+      // An image means a large card.
+      contains #"content="summary_large_image""#
+    }
+    // A page's own always wins: a floor is not an override.
+    file "own/index.html" {
+      contains #"property="og:image" content="https://s.example/cover.png""#
+      missing "og.png"
+    }
+  }
+}

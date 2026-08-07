@@ -2,12 +2,13 @@
 
 pub mod anchors;
 pub mod highlight;
+pub mod meta;
 pub mod region;
 
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Table, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{AnchorConfig, HighlightConfig, RegionConfig};
+use crate::config::{AnchorConfig, HighlightConfig, MetaConfig, RegionConfig};
 use crate::error::ConfigError;
 
 /// HTML output options.
@@ -17,9 +18,9 @@ pub struct HtmlConfig {
     pub pretty: bool,
     /// Inline local assets (`/assets/..` refs) as `data:` URIs.
     pub embed: bool,
-    /// Inject SEO + social meta tags (description, OpenGraph, Twitter, canonical)
-    /// into each page's `<head>` from frontmatter and config.
-    pub meta: bool,
+    /// SEO and social meta tags (description, OpenGraph, Twitter, canonical) in
+    /// each page's `<head>`, from frontmatter and config.
+    pub meta: MetaConfig,
     /// Deep-linkable headings: a slug `id` where one is missing, and the link
     /// back to it.
     pub anchors: AnchorConfig,
@@ -98,7 +99,7 @@ impl Default for HtmlConfig {
         Self {
             pretty: true,
             embed: false,
-            meta: true,
+            meta: MetaConfig::default(),
             anchors: AnchorConfig::default(),
             region: RegionConfig::default(),
             highlight: HighlightConfig::default(),
@@ -131,12 +132,9 @@ impl Section for HtmlConfig {
         ),
         (
             "meta",
-            Flag,
-            "Emit the `<meta>` description, Open Graph and Twitter tags.",
-            |c, n, t| {
-                c.meta = n.boolean(t, 0)?;
-                Ok(())
-            },
+            Nested(MetaConfig::rows),
+            "The `<meta>` description, Open Graph and Twitter tags. On by default; `#false` turns them off.",
+            |c, n, t| c.meta.fill(n, t),
         ),
         (
             "anchors",

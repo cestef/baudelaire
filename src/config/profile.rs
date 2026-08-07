@@ -156,7 +156,7 @@ mod tests {
         let prod = cfg.with_profile("prod").expect("profile exists");
         assert!(!prod.html.pretty, "pretty overridden");
         assert!(prod.html.embed, "embed inherited from base");
-        assert!(prod.html.meta, "meta inherited from base");
+        assert!(prod.html.meta.enabled, "meta inherited from base");
     }
 
     /// Fill-in-place has to hold all the way down, not just one level: the

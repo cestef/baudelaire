@@ -16,6 +16,32 @@ html {
 
 `meta` is on by default. `jsonld` is not.
 
+== What the site states
+
+Two of these tags say something no page can. Both live in the `meta` block, which
+is the flag above with settings behind it:
+
+```kdl
+html {
+  meta {
+    twitter "@example"
+    image "/og.png"
+  }
+}
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Default], [Does]),
+  [`twitter`], [--], [The site's account, as `twitter:site`. Without it a card credits whoever posted the link and nobody else.],
+  [`image`], [--], [The preview image for a page that names none and gets no generated card.],
+)
+
+`image` is a floor, not an override: a page's own `image` wins, and so does a
+#link("cards.typ")[generated card]. It is resolved and made absolute the same
+way an authored one is, so `/og.png` becomes a full URL under the site's `url`.
+
 #callout(kind: "note")[
   typst-html owns the document `<head>`, so these tags can't be written in a
   layout. baudelaire appends them to the parsed DOM instead, which is why they
@@ -59,7 +85,7 @@ none: it draws the page title, so that's what its `og:image:alt` says.
   [Document], [`description` and `author`.],
   [#link("https://ogp.me")[Open Graph]], [`og:type`, `og:title`, `og:description`, `og:url`, `og:site_name`, `og:locale`, `og:image`, `og:image:alt`.],
   [Article], [`article:published_time`, `article:modified_time`, `article:author`, one `article:tag` per taxonomy term. Dated pages only.],
-  [Twitter Card], [`twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`.],
+  [Twitter Card], [`twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`, and `twitter:site` when the site names an account.],
   [Link relations], [`canonical`, one `alternate` per translation plus `x-default`, one `alternate` per #link("feeds.typ")[feed format], the page's #link("pdf.typ")[PDF] when it has one, and the #link("manifest.typ")[web app manifest] when the site writes one.],
 )
 

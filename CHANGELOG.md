@@ -74,6 +74,23 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`html { meta }` is a block**, holding the two social facts a page cannot
+  state for itself:
+
+  ```kdl
+  html {
+    meta {
+      twitter "@example"
+      image "/og.png"
+    }
+  }
+  ```
+
+  `twitter` fills `twitter:site`, which credits the site rather than whoever
+  posted the link. `image` is the preview for a page that names none and gets no
+  generated card: a floor, so a page's own `image` and a generated card both win.
+  `html { meta #false }` means what it did.
+
 - **A feed can carry each entry in full**, not just its one-line summary:
 
   ```kdl
