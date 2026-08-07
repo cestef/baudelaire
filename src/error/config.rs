@@ -257,6 +257,23 @@ impl ConfigError {
         )
     }
 
+    /// A `paths { sources }` name that typst cannot bind.
+    ///
+    /// The one config key whose *names* are emitted as generated typst: a page
+    /// reaches a declared file by importing the name from
+    /// `@baudelaire/sources`, so a name that is not an identifier produces a
+    /// module that does not parse, and the failure lands at the first import,
+    /// inside a generated file nobody has opened.
+    pub fn not_an_identifier(source: &str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::NotAnIdentifier {
+                name: name.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A repeated entry within a list-valued node (e.g. `formats rss rss`).
     pub fn duplicate_entry(source: &str, name: &str, scope: &str, span: SourceSpan) -> Self {
         Self::at(
@@ -596,6 +613,15 @@ pub enum ConfigErrorKind {
     #[error("{} must not be negative, got {got}", Code(.field))]
     #[diagnostic(code(baudelaire::config::negative_count))]
     NegativeCount { field: String, got: i64 },
+
+    #[error("{} is not a name a page can import", Code(.name))]
+    #[diagnostic(
+        code(baudelaire::config::not_an_identifier),
+        help(
+            "a declared source is bound under its name in `@baudelaire/sources`, so the name has to be a typst identifier: a letter or `_` first, then letters, digits, `_` or `-`"
+        )
+    )]
+    NotAnIdentifier { name: String },
 
     #[error("paginate must be at least 1, got {got}")]
     #[diagnostic(code(baudelaire::config::paginate_too_small))]

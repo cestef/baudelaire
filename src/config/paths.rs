@@ -6,6 +6,7 @@ use crate::config::dispatch::Kind::Path as Directory;
 use crate::config::dispatch::Kind::Table;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::error::ConfigError;
 
 /// Directory layout, every entry relative to [`Config::root`](crate::config::Config::root).
 #[derive(Debug, Clone, Hash)]
@@ -177,6 +178,25 @@ impl Section for Paths {
             Table,
             "Files a page may take as its body, each under a name: a page names the name, never the path.",
             |c, n, t| {
+                // Both checks are here because both failures are silent
+                // otherwise, and both land far from the line that caused them.
+                // A name is emitted as a `#let` in `@baudelaire/sources`, so one
+                // typst cannot bind breaks that module rather than this config;
+                // and a name declared twice resolves to the *first* file for a
+                // page's `source` and to the *last* for an import, which is one
+                // name meaning two files on the same build.
+                let mut seen: Vec<String> = Vec::new();
+                for entry in n.block(t)?.nodes() {
+                    let name = entry.name().value();
+                    let span = NodeExt::span(entry);
+                    if !typst::syntax::is_ident(name) {
+                        return Err(ConfigError::not_an_identifier(t, name, span).into());
+                    }
+                    if seen.iter().any(|declared| declared == name) {
+                        return Err(ConfigError::duplicate_id(t, "source", name, span).into());
+                    }
+                    seen.push(name.to_owned());
+                }
                 c.sources = n
                     .pairs(t)?
                     .into_iter()

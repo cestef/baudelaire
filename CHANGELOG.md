@@ -43,6 +43,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A declared source name must be one a page can import, and may be declared
+  once.** Both were silent: a name typst cannot bind (`"my file"`) broke the
+  generated `@baudelaire/sources` module at the first import, inside a file
+  nobody has opened, and a name declared twice meant the *first* file to a
+  page's `source` and the *last* to an import, on the same build.
+
 - **A `source` naming a file no reader claims is refused**, instead of being
   lowered as markdown anyway. `sources { notes "../notes.rst" }` came out as
   prose with its own syntax in it, on a green build: the reader was the page's,

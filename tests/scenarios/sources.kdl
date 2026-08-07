@@ -157,6 +157,63 @@ scenario "a sourced page may not also have a body" {
   }
 }
 
+// The names are emitted as `#let` bindings in `@baudelaire/sources`, so one
+// typst cannot bind breaks that module rather than this config, at the first
+// import, inside a generated file nobody has opened.
+scenario "a source name typst cannot bind is refused" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          "my file" "notes/a.md"
+        }
+      }
+      """#
+    "notes/a.md" #"""
+      A.
+      """#
+    "content/page.typ" #"""
+      #let frontmatter = (title: "Page",)
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::not_an_identifier" }
+  }
+}
+
+// One name, two files: a page's `source` took the first and an import took the
+// last, so the same name meant different files on the same build.
+scenario "a source declared twice is refused" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          notes "notes/a.md"
+          notes "notes/b.md"
+        }
+      }
+      """#
+    "notes/a.md" #"""
+      A.
+      """#
+    "notes/b.md" #"""
+      B.
+      """#
+    "content/page.typ" #"""
+      #let frontmatter = (title: "Page",)
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::duplicate_id" }
+  }
+}
+
 // A typst source is not lowered at all: it is mounted where the compiler can
 // open it, so the page's body is one `include` and the file's own spans, its
 // dependency on the page, and its imports are typst's to handle.
