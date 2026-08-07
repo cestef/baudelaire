@@ -126,7 +126,7 @@ page that answers it in full is on the right.
   [#link("../ship/hosts/s3.typ")[S3 storage]],
 
   [`typst`],
-  [Compiler features, `sys.inputs`, package registry.],
+  [Compiler features, `sys.inputs`, fonts, package registry.],
   [#link("../lookup/context.typ")[build metadata]],
 
   [`client`],

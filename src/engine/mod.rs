@@ -118,6 +118,12 @@ impl Engine {
             )
             .into());
         }
+        // Beside it, and for the same reason it is not a parse-time check: the
+        // paths are only settled once the profile overlay has had its say, and
+        // this asks the filesystem rather than the text.
+        if let Some(dir) = config.typst.fonts.missing(&config.root) {
+            return Err(ConfigError::missing_font_dir(dir).into());
+        }
         // A gate can turn a setting off, and a half-applied config is what ships
         // the broken site that guards against.
         let (config, gaps) = Gate::resolve(config);

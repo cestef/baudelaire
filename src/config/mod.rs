@@ -95,6 +95,7 @@ pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
 pub use serve::ServeConfig;
 pub use typst::TypstConfig;
+pub use typst::fonts::FontConfig;
 pub use url::{BaseUrl, Basename, Percent, UrlStyle};
 
 /// Top-level site configuration.

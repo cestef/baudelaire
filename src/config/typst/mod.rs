@@ -1,6 +1,9 @@
-//! `typst { }`: engine knobs, `sys.inputs`, and the package registry.
+//! `typst { }`: engine knobs, `sys.inputs`, fonts, and the package registry.
 
-use crate::config::dispatch::Kind::{Table, Toggles, Url};
+pub mod fonts;
+
+use crate::config::FontConfig;
+use crate::config::dispatch::Kind::{Block as Nested, Table, Toggles, Url};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
@@ -20,6 +23,8 @@ pub struct TypstConfig {
     /// resolve through the same store. Only `preview` is affected: every other
     /// namespace is served from the local package directories and never fetched.
     pub registry: Option<String>,
+    /// Where a compile looks for glyphs.
+    pub fonts: FontConfig,
 }
 
 /// The `typst { .. }` section: typst engine knobs.
@@ -46,6 +51,12 @@ impl Section for TypstConfig {
         // Stored without its trailing slash: the store joins `/preview/..` onto
         // it, and a doubled slash is a 404 from some hosts and a redirect from
         // others.
+        (
+            "fonts",
+            Nested(FontConfig::rows),
+            "Where a compile looks for glyphs.",
+            |c, n, t| c.fonts.fill(n, t),
+        ),
         (
             "registry",
             Url,

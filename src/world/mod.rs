@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use time::OffsetDateTime;
 use typst::{
@@ -13,6 +13,7 @@ use typst::{
     utils::LazyHash,
 };
 mod context;
+mod fonts;
 pub(crate) mod generated;
 pub mod image_rule;
 pub(crate) mod module;
@@ -22,8 +23,9 @@ pub use context::{BuildContext, Mode};
 pub(crate) use packages::Registry;
 
 use parking_lot::RwLock;
-use typst_kit::{files::FileStore, files::FsRoot, fonts::FontStore, packages::SystemPackages};
+use typst_kit::{files::FileStore, files::FsRoot, packages::SystemPackages};
 
+use fonts::Fonts;
 use module::{Files, ModuleCx};
 
 use crate::codegen;
@@ -47,9 +49,8 @@ const FEATURES: &[(&str, Feature)] = &[
 #[derive(Clone)]
 pub struct Project {
     lib: Arc<LazyHash<Library>>,
-    /// System fonts, discovered lazily on first glyph lookup: a fully-cached
-    /// rebuild compiles nothing, so it never pays to scan the font directories.
-    fonts: Arc<LazyLock<FontStore>>,
+    /// What a glyph may resolve to, discovered lazily on first lookup.
+    fonts: Arc<Fonts>,
     /// Behind a lock because one build writes files the store has already
     /// served: see [`Project::tables_written`].
     files: Arc<RwLock<FileStore<Files>>>,
@@ -125,7 +126,7 @@ impl Project {
 
         Ok(Self {
             lib: Arc::new(LazyHash::new(library)),
-            fonts: Arc::new(LazyLock::new(Self::system_fonts)),
+            fonts: Arc::new(Fonts::of(&config.typst.fonts, &project_root)),
             files: Arc::new(RwLock::new(FileStore::new(Files::new(
                 &ModuleCx { context: &tree },
                 &project_root,
@@ -139,24 +140,6 @@ impl Project {
             now,
             context,
         })
-    }
-
-    /// Discover and load the system fonts. Used as the [`LazyLock`] initializer
-    /// for [`Project::fonts`] so the cost (scanning font directories, parsing
-    /// fontconfig) is paid only when a page is actually compiled: never on a
-    /// fully-cached rebuild.
-    fn system_fonts() -> FontStore {
-        let mut fonts = FontStore::new();
-        // Typst's embedded defaults (Libertinus, New Computer Modern, DejaVu)
-        // first, then system fonts, so a glyph resolves the same way it does
-        // under `typst` itself, instead of falling back to whatever the system
-        // happens to offer (which can rasterize digits as colour-font images).
-        // Without the `embedded-fonts` feature the defaults are not bundled, so
-        // resolution depends entirely on what the host provides.
-        #[cfg(feature = "embedded-fonts")]
-        fonts.extend(typst_kit::fonts::embedded());
-        fonts.extend(typst_kit::fonts::system());
-        fonts
     }
 
     /// Build metadata injected into `sys.inputs.baudelaire`.

@@ -75,6 +75,22 @@ impl ConfigError {
         }
     }
 
+    /// A `typst { fonts { paths } }` entry that is not a directory.
+    ///
+    /// Sourceless, and so unlabeled, for the same reason
+    /// [`ConfigError::dist_contains_source`] is: it is checked once the paths
+    /// are settled, against the filesystem, well after the text that named them
+    /// has been parsed. Naming the path carries what a label would have.
+    pub fn missing_font_dir(path: &std::path::Path) -> Self {
+        Self {
+            file: NamedSource::new(Config::FILE, String::new()),
+            span: SourceSpan::new(0.into(), 0),
+            kind: ConfigErrorKind::MissingFontDir {
+                path: path.display().to_string(),
+            },
+        }
+    }
+
     /// An unrecognized structural key, with a caller-built `help` (nearest match
     /// + the valid keys for the enclosing scope).
     pub fn unknown_key(source: &str, key: &str, help: String, span: SourceSpan) -> Self {
@@ -639,6 +655,15 @@ pub enum ConfigErrorKind {
         key: &'static str,
         path: String,
     },
+
+    #[error("font directory {} is not there", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::config::missing_font_dir),
+        help(
+            "scanning it would yield no faces and say nothing, leaving the site to typeset in a fallback; create it, or drop it from `typst {{ fonts {{ paths }} }}`"
+        )
+    )]
+    MissingFontDir { path: String },
 
     #[error("feature {} is required and cannot be disabled", Code(.name))]
     #[diagnostic(

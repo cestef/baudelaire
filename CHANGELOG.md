@@ -31,6 +31,27 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`typst { fonts { } }`**: the faces a build can see.
+
+  ```kdl
+  typst {
+    fonts {
+      paths "assets/fonts"
+      system #false
+    }
+  }
+  ```
+
+  `paths` names directories scanned recursively, searched after typst's bundled
+  faces and before the machine's, so a face a site ships wins over a same-named
+  installed one. `system #false` drops the machine's entirely, which is what
+  makes a build reproducible: until now the output depended on what happened to
+  be installed, and a site had no way to ship a face at all.
+
+  A directory that is not there fails the build. Scanning one yields no faces and
+  no error, so the typo would otherwise surface as a page silently typeset in a
+  fallback.
+
 - **`links { external }` is a block**, so the outbound check can be tuned instead
   of only turned off:
 
