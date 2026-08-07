@@ -343,6 +343,30 @@ impl Modules {
     }
 }
 
+/// The project path a mount answers under.
+///
+/// The matching rule, written once: a mount claims a file id only when the id is
+/// a *project* path and the prefix covers whole segments, so a project's
+/// `.baudelaire/themes` is not read as a file of `.baudelaire/theme`. Two mounts
+/// ask it (a theme's root, the declared sources) and they must agree, or one
+/// would serve a file the other resolves to somewhere else.
+struct Prefix<'a>(&'a str);
+
+impl Prefix<'_> {
+    /// What `id` names under this prefix, or `None` when it names nothing under
+    /// it. The mount point itself is `""`.
+    fn strips<'a>(&self, id: &'a FileId) -> Option<&'a str> {
+        if id.root() != &VirtualRoot::Project {
+            return None;
+        }
+        let rest = id.vpath().get_without_slash().strip_prefix(self.0)?;
+        match rest.is_empty() {
+            true => Some(rest),
+            false => rest.strip_prefix('/'),
+        }
+    }
+}
+
 /// A package theme's root, served under a project path.
 ///
 /// The compiler reaches a package only through a specifier, and a specifier
@@ -360,14 +384,7 @@ impl Mount {
     /// the mount. Matched on whole segments, so a project's `.baudelaire/themes`
     /// is not read as a file of `.baudelaire/theme`.
     fn within(&self, id: FileId) -> Option<VirtualPath> {
-        if id.root() != &VirtualRoot::Project {
-            return None;
-        }
-        let rest = id.vpath().get_without_slash().strip_prefix(&self.prefix)?;
-        match rest.is_empty() {
-            true => VirtualPath::new("").ok(),
-            false => VirtualPath::new(rest.strip_prefix('/')?).ok(),
-        }
+        VirtualPath::new(Prefix(&self.prefix).strips(&id)?).ok()
     }
 }
 
@@ -443,15 +460,9 @@ impl Sources {
     /// mount. The single test both serving and path resolution ask, so the
     /// mount cannot serve one file and resolve another.
     fn file(&self, id: FileId) -> Option<&Path> {
-        if id.root() != &VirtualRoot::Project {
-            return None;
-        }
-        let rest = id
-            .vpath()
-            .get_without_slash()
-            .strip_prefix(&Self::prefix())?
-            .strip_prefix('/')?;
-        self.files.get(rest).map(PathBuf::as_path)
+        self.files
+            .get(Prefix(&Self::prefix()).strips(&id)?)
+            .map(PathBuf::as_path)
     }
 }
 

@@ -397,7 +397,10 @@ fn a_declared_source_created_after_the_session_starts_is_watched() {
     );
     let srv = Serve::start(&t, &["--root", "site"]);
     let (code, _) = srv.get("/page/");
-    assert_ne!(code, 200, "the sourced file is missing: the build must fail");
+    assert_ne!(
+        code, 200,
+        "the sourced file is missing: the build must fail"
+    );
 
     let pushed = awaits_reload(&srv, || t.write("notes.md", "Arrived.\n"));
     assert!(pushed, "creating a declared source pushed no reload");

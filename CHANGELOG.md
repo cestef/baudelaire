@@ -38,6 +38,12 @@ chores are visible in the git history and change nothing for a site.
   is invalidated by an edit to it, and a fault inside it is reported against that
   file.
 
+- **A declared source written after `serve` started is picked up.** The watcher
+  compares one by path, and a file that does not exist yet was named with its
+  `..` and its symlinked ancestors unresolved, which the same file loses the
+  moment it appears. Starting a session, then writing the file the config
+  declares, is the ordinary way round.
+
 - **An `svg()` may name a declared source**, so an icon shared with another
   project inlines like one in the asset tree. The marker the call leaves is
   resolved against the project root, which the mounted path is not under.
