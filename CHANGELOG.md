@@ -56,6 +56,23 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **The reading rate is configurable, and a language may state its own.**
+
+  ```kdl
+  content {
+    reading { wpm 250 }
+  }
+  languages {
+    ja { name "日本語"; wpm 600 }
+  }
+  ```
+
+  `page.reading.minutes` was 200 words a minute, a constant. The figure is a fact
+  about the language: Japanese and Chinese are read several times faster by word,
+  so a site in one reported every article as a fraction of the read it is. A
+  language with no `wpm` falls back to `content { reading { wpm } }`, the same
+  way `author` and `description` do.
+
 - **`assets { targets { } }`**: the oldest browsers the CSS must run on.
 
   ```kdl

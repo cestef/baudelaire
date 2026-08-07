@@ -3,12 +3,13 @@
 pub mod collection;
 pub mod drafts;
 pub mod markdown;
+pub mod reading;
 pub mod taxonomy;
 
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Lines, Text};
 use crate::config::dispatch::{Attributed, Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{CollectionConfig, DraftConfig, MarkdownConfig, TaxonomyConfig};
+use crate::config::{CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, TaxonomyConfig};
 use crate::error::{ConfigError, ConfigErrorKind};
 
 /// What the content tree holds and how it is read. The directory itself is
@@ -31,6 +32,8 @@ pub struct ContentConfig {
     pub taxonomies: Vec<(String, TaxonomyConfig)>,
     /// How markdown pages are read.
     pub markdown: MarkdownConfig,
+    /// How a page's reading estimate is measured.
+    pub reading: ReadingConfig,
 }
 
 impl Default for ContentConfig {
@@ -42,6 +45,7 @@ impl Default for ContentConfig {
             collections: Vec::default(),
             taxonomies: Vec::default(),
             markdown: MarkdownConfig::default(),
+            reading: ReadingConfig::default(),
         }
     }
 }
@@ -108,6 +112,12 @@ impl Section for ContentConfig {
                 c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
                 Ok(())
             },
+        ),
+        (
+            "reading",
+            Nested(ReadingConfig::rows),
+            "How a page's reading estimate is measured.",
+            |c, n, t| c.reading.fill(n, t),
         ),
         (
             "markdown",

@@ -269,7 +269,7 @@ impl Text {
     }
 }
 
-/// How long a page takes to read: its word count, and the minutes that implies.
+/// How long a page takes to read, as the prose words it carries.
 ///
 /// Counted from the page's *source*, not from its rendered HTML, because that is
 /// the only version available when a template is handed its page: the render has
@@ -280,18 +280,17 @@ impl Text {
 /// constructor per dialect, because what counts as machinery is exactly what
 /// differs between them, and a page measured by the other one's rule reads as
 /// nothing at all.
+///
+/// Words and not minutes, because the rate is the *site's* and this is measured
+/// before a page knows which language it is in: [`Reading::minutes`] applies it
+/// where both are in hand. Storing the minutes meant baking a constant into a
+/// value carried across the build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub words: usize,
-    pub minutes: usize,
 }
 
 impl Reading {
-    /// Words per minute. The figure every other generator uses for prose, and
-    /// the one a reader has been calibrated against by every "6 min read" badge
-    /// they have seen.
-    const WPM: usize = 200;
-
     /// Estimate `body`, a page's typst source.
     ///
     /// Code lines are dropped: in typst markup a leading `#` starts code, so an
@@ -368,13 +367,18 @@ impl Reading {
             .count()
     }
 
-    /// The estimate a word count implies. The one place [`Reading::WPM`] is
-    /// applied, so the two dialects cannot round differently.
+    /// The minutes this many words imply at `wpm`, rounded up: the one place a
+    /// rate is applied, so the two dialects cannot round differently.
+    ///
+    /// A rate of nothing is refused at config parse, so the division is safe;
+    /// the guard is belt and braces against a caller that built one by hand.
+    pub fn minutes(self, wpm: usize) -> usize {
+        self.words.div_ceil(wpm.max(1))
+    }
+
+    /// A word count as a reading estimate.
     fn counted(words: usize) -> Self {
-        Self {
-            words,
-            minutes: words.div_ceil(Self::WPM),
-        }
+        Self { words }
     }
 }
 
@@ -487,11 +491,15 @@ mod tests {
         // a word), and the sentence six, counting `#emph[one]` as the one word
         // it reads as.
         assert_eq!(Reading::of(body).words, 8);
-        assert_eq!(Reading::of(body).minutes, 1);
+        assert_eq!(Reading::of(body).minutes(200), 1);
         assert_eq!(Reading::of("").words, 0);
-        assert_eq!(Reading::of("").minutes, 0, "nothing takes no time");
+        assert_eq!(Reading::of("").minutes(200), 0, "nothing takes no time");
         let long = "word ".repeat(401);
-        assert_eq!(Reading::of(&long).minutes, 3, "401 words rounds up to 3");
+        assert_eq!(
+            Reading::of(&long).minutes(200),
+            3,
+            "401 words rounds up to 3"
+        );
     }
 
     /// A markdown page is estimated from the markdown, never from the typst it
@@ -514,7 +522,7 @@ mod tests {
         // The heading contributes `A heading` (the `##` is punctuation, not a
         // word), the sentence six, the list item three, and the fence none.
         assert_eq!(Reading::markdown(body).words, 11);
-        assert_eq!(Reading::markdown(body).minutes, 1);
+        assert_eq!(Reading::markdown(body).minutes(200), 1);
         // ...and the lowered typst of the very same page reads as nothing,
         // which is what makes the authored text the only thing worth counting.
         let lowered = "#heading(level: 2)[#\"A heading\"]\n\

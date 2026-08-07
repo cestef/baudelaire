@@ -261,6 +261,48 @@ scenario "a template can render a reading estimate" {
   }
 }
 
+// The rate is the page's language's, so a site whose Japanese edition reads
+// three times faster by word says so once and each edition reports the read it
+// is. 200 words a minute is European prose, and was a constant.
+scenario "a language sets the rate its reading estimate is measured at" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lang "en"
+      content {
+        reading { wpm 5 }
+        collections {
+          posts { template "post.typ" }
+        }
+      }
+      languages {
+        en { name "English" }
+        ja { name "JA"; wpm 20 }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("html", html.elem("body", {
+        html.elem("p", page.lang + "=" + str(page.reading.minutes))
+        body
+      }))
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      one two three four five six seven eight nine ten
+      """#
+    "content/posts/a.ja.typ" #"""
+      #let frontmatter = (title: "A",)
+      one two three four five six seven eight nine ten
+      """#
+  }
+  expect {
+    ok
+    // Ten words: two minutes at the site's 5 a minute, one at Japanese's 20.
+    file "posts/a/index.html" { contains "en=2" }
+    file "ja/posts/a/index.html" { contains "ja=1" }
+  }
+}
+
 // ISO-8601 is right for a machine and wrong for a reader, and typst cannot fix
 // it in a template: its own `datetime.display` knows English month names only.
 // Both forms reach the page, and a language names its own months.

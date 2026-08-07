@@ -2,9 +2,10 @@
 
 use kdl::KdlNode;
 
-use crate::config::dispatch::Kind::{Table, Text};
+use crate::config::dispatch::Kind::{Number, Table, Text};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::value::ValueExt;
 use crate::error::Result;
 
 /// Languages written right to left, so `dir="rtl"` is right without the site
@@ -43,6 +44,13 @@ pub struct LanguageConfig {
     pub description: Option<String>,
     /// Per-language author override (else the site-wide `author`).
     pub author: Option<String>,
+    /// Per-language reading rate override (else `content { reading { wpm } }`).
+    ///
+    /// The one number here that is a fact about the *language* rather than a
+    /// label for it: 200 words a minute is European prose, and a reader of
+    /// Japanese gets through three times as many, so a shared figure reports
+    /// every article in one of those languages as a third of the read it is.
+    pub wpm: Option<usize>,
     /// UI-string table for this language, exposed to templates as
     /// `page.strings` and to client JS via `baudelaire:i18n`.
     pub strings: Vec<(String, crate::codegen::Value)>,
@@ -104,6 +112,20 @@ impl Section for LanguageConfig {
             "What the site is, in this language.",
             |c, n, t| {
                 c.description = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "wpm",
+            Number,
+            "Words a reader of this language gets through in a minute.",
+            |c, n, t| {
+                c.wpm = Some(usize::from(n.arg(t, 0)?.bounded::<u16>(
+                    t,
+                    NodeExt::span(n),
+                    1,
+                    u16::MAX,
+                )?));
                 Ok(())
             },
         ),

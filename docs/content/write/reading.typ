@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Every page reaches its template knowing how long it takes to read. Nothing to configure, nothing to declare.
+Every page reaches its template knowing how long it takes to read. Nothing to declare on the page itself.
 
 ```typ
 #let page(page, body) = {
@@ -18,10 +18,35 @@ Every page reaches its template knowing how long it takes to read. Nothing to co
   align: (left, left, left),
   table.header([Field], [Type], [Holds]),
   [`page.reading.words`], [int], [The page's word count.],
-  [`page.reading.minutes`], [int], [That count at 200 words per minute, rounded up.],
+  [`page.reading.minutes`], [int], [That count at the page language's rate, rounded up.],
 )
 
 An empty page reads as zero minutes, not one.
+
+== The rate
+
+200 words a minute by default: the figure every other generator uses, and the one
+a reader has been calibrated against by every "6 min read" badge they have seen.
+
+```kdl
+content {
+  reading { wpm 250 }
+}
+```
+
+It is a fact about the language, not about the site, so a language may state its
+own. Japanese and Chinese are read several times faster by *word*, and a site in
+one reported every article as a fraction of the read it is:
+
+```kdl
+languages {
+  en { name "English" }
+  ja { name "日本語"; wpm 600 }
+}
+```
+
+A language with no `wpm` uses `content { reading { wpm } }`, which is the same
+fallback `author` and `description` follow.
 
 == Counted from the source
 

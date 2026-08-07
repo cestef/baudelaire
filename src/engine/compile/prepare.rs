@@ -242,7 +242,7 @@ impl<'a> Prepare<'a> {
         let strings = Typst(&self.strings(&page.lang)).to_string();
         // Derived from this page's own body, so it names nothing outside the
         // page and cannot widen the fingerprint the way a site-wide value would.
-        let reading = Typst(&Self::reading(page)).to_string();
+        let reading = Typst(&self.reading(page)).to_string();
         // Names only the pages that link *here*, the same line `nav` sits on: a
         // page's neighbours, never the site. What keeps it out of the page's
         // fingerprint is in [`Prepare::input`], not here.
@@ -466,12 +466,17 @@ impl<'a> Prepare<'a> {
     /// reading the generated body counts machinery and not prose, since every
     /// line of a lowered markdown page opens with `#`, and each one shipped
     /// `0 min read`.
-    fn reading(page: &Page) -> Value {
+    ///
+    /// The rate is the page's *language's*, so a site whose Japanese edition
+    /// reads three times faster by word says so once and both editions of a
+    /// translated page report the read they are.
+    fn reading(&self, page: &Page) -> Value {
         let reading = match &page.data {
             #[cfg(feature = "markdown")]
             Data::Lowered { reading, .. } => *reading,
             _ => crate::engine::text::Reading::of(&page.body),
         };
+        let minutes = reading.minutes(self.config.wpm(&page.lang));
         Value::dict([
             (
                 "words",
@@ -479,7 +484,7 @@ impl<'a> Prepare<'a> {
             ),
             (
                 "minutes",
-                Value::Int(i64::try_from(reading.minutes).unwrap_or(i64::MAX)),
+                Value::Int(i64::try_from(minutes).unwrap_or(i64::MAX)),
             ),
         ])
     }

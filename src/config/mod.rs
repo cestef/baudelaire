@@ -63,6 +63,7 @@ pub use content::ContentConfig;
 pub use content::collection::{CollectionConfig, PaginateConfig, SortKey};
 pub use content::drafts::DraftConfig;
 pub use content::markdown::{Extension, MarkdownConfig, RawHtml};
+pub use content::reading::ReadingConfig;
 pub use content::taxonomy::TaxonomyConfig;
 pub use deploy::DeployConfig;
 pub use deploy::s3::S3Config;
@@ -461,6 +462,18 @@ impl Config {
         self.language(code)
             .and_then(|lang| lang.author.as_deref())
             .or(self.author.as_deref())
+    }
+
+    /// How fast prose reads in a given language: the language's own `wpm` if it
+    /// declares one, else the site's `content { reading { wpm } }`.
+    ///
+    /// The one resolver, so a page's badge and anything else measuring the same
+    /// page cannot disagree. Mirrors [`Config::author`], which resolves the same
+    /// way for the same reason.
+    pub fn wpm(&self, code: &str) -> usize {
+        self.language(code)
+            .and_then(|lang| lang.wpm)
+            .unwrap_or(self.content.reading.wpm)
     }
 
     /// A language's display name, if declared (e.g. `Français`), else `None`.
