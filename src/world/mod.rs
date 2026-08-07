@@ -165,6 +165,13 @@ impl Project {
         self.files.read().loader().fingerprint()
     }
 
+    /// A content fingerprint over the faces the site ships itself, for the build
+    /// cache, or `None` when it ships none. See [`fonts::Fonts::digest`] for why
+    /// a font is not a tracked dependency and has to be hashed here.
+    pub fn fonts(&self) -> Option<crate::graph::Hash> {
+        self.fonts.digest()
+    }
+
     /// The generated tables (`@baudelaire/sections`, `@baudelaire/pages`) are
     /// on disk. Called once per build, by the pass that writes them.
     ///

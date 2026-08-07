@@ -239,6 +239,13 @@ pub struct SiteInputs {
     /// nothing volatile by construction, so hashing them whole costs a full
     /// rebuild only when baudelaire or the site's identity changes.
     pub modules: Hash,
+    /// A content hash of the fonts the site ships, or `None` when it ships none.
+    ///
+    /// A page resolves a face by name out of a store built by walking a
+    /// directory, so no font file is ever read through the world and none can
+    /// appear in a page's dependency set. See
+    /// [`Fonts::digest`](crate::world::Project::fonts).
+    pub fonts: Option<Hash>,
 }
 
 /// One freshly compiled page as [`Cache::record`] takes it: the text it was
@@ -725,6 +732,7 @@ mod tests {
         config.cache.dir = root.join(".cache");
         let inputs = SiteInputs {
             modules: Hash::of_bytes(b""),
+            fonts: None,
         };
         Cache::load(
             &config,

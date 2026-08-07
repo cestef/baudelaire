@@ -384,6 +384,7 @@ impl Engine {
     fn cache(&self, pass: &Pass, planned: &Planned, ui: &Ui) -> Result<Cache> {
         let inputs = SiteInputs {
             modules: self.project.modules(),
+            fonts: self.project.fonts(),
         };
         Cache::load(
             &self.config,

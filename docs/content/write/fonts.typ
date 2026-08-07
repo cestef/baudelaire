@@ -42,6 +42,11 @@ same bytes on your laptop and on CI.
   page silently typeset in a fallback.
 ]
 
+The faces under `paths` are build inputs, so replacing one rebuilds the site: a
+new cut of a face reaches the pages, the social cards and the PDFs together. The
+contents are what count, not the timestamps, so a fresh checkout on CI is not a
+cold build. A site that names no directory pays nothing for this.
+
 A face is used by naming it in Typst, as usual. The config only decides what can
 be found:
 

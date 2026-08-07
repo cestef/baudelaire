@@ -29,8 +29,6 @@ chores are visible in the git history and change nothing for a site.
   redirects: what goes in `_headers` is then computed from the site's own
   `caching` and `csp`.
 
-### Upgrading
-
 - **`generate { search { region } }` and its `ignore` moved to
   `html { region { element } }`** and `html { region { ignore } }`. The old
   spelling is an unknown key and fails the build.
@@ -72,6 +70,25 @@ chores are visible in the git history and change nothing for a site.
   pass through as they always did. So does any key a collection's schema
   declares.
 
+- **A `redirect` line is now read as a line, not as a bare pair.** It gained a
+  `status` attribute, and with it the checks every other line in the config
+  already had. Four spellings that used to be accepted (three of them silently
+  doing nothing) now fail:
+
+  - two lines claiming the same old path, which used to have the second
+    overwrite the first at emit time
+  - a third positional, `"/old/" "/new/" "/extra/"`
+  - any attribute other than `status`
+  - a `{ }` block on the line
+
+  The documented spelling, `"/old/" "/new/"`, is untouched.
+
+- **A site that ships its own fonts rebuilds when one of them changes.** The
+  faces under `typst { fonts { paths } }` are now part of the build fingerprint,
+  so the first build after this upgrade is a cold one for those sites. Every
+  other site is unaffected: nothing is walked or hashed when no directory is
+  named.
+
 ### Added
 
 - **A redirect names the status it forwards with:**
@@ -87,10 +104,8 @@ chores are visible in the git history and change nothing for a site.
   spelling: the target is still the line's one positional and `status` is an
   attribute beside it. Anything outside `300`-`399` is refused. The status only
   reaches a host through `generate { redirects }`, and setting one without it is
-  reported as inert rather than silently written as a 301.
-
-  Two old paths that were the same now fail the build as a duplicate id, where
-  the second used to overwrite the first at emit time.
+  reported as inert rather than silently written as a 301. Reading the line as a
+  line also brings the checks every other one has; see **Upgrading**.
 
 - **A lint rule carries its own severity**, so `strict` is a default rather than
   an override:
