@@ -36,6 +36,11 @@ const MANIFEST: &str = "discovery.json";
 /// a declared file and gets whatever that file is, rather than whatever the page
 /// itself is written in. `DiscoveryCache::READERS` is the extension each answers
 /// to.
+/// Turns a declared file into a body: its name, the path as declared, the path
+/// as resolved, and its text.
+#[cfg(feature = "markdown")]
+type Reader = fn(&str, &Path, &Path, String) -> Sourced;
+
 #[cfg(feature = "markdown")]
 enum Sourced {
     /// Markdown, read here and lowered under its own name, so a fault in it is
@@ -282,14 +287,43 @@ impl<'a> DiscoveryCache<'a> {
         Ok((frontmatter, data(std::sync::Arc::new(sourcemap)), body))
     }
 
-    /// The dialects a declared source can be a body in, by the extension that
-    /// names each. The single table the check and the error's help both read, so
-    /// the message cannot list a set the build does not have.
+    /// The dialects a declared source can be a body in: the extension that
+    /// names each, beside the reader that turns the file into a body. Adding one
+    /// is a row here and a [`Sourced`] variant, and nothing else: the row *is*
+    /// the dispatch, so a dialect cannot be listed and left unhandled, and the
+    /// error's help lists exactly the readers the build has.
     ///
-    /// Gated with its one reader: `source` replaces a *markdown* page's body,
+    /// Gated with its one caller: `source` replaces a *markdown* page's body,
     /// and a binary without that feature has no such page to give one to.
     #[cfg(feature = "markdown")]
-    const READERS: &'static [&'static str] = &[Config::MARKDOWN, Config::TYPST];
+    const READERS: &'static [(&'static str, Reader)] = &[
+        // Markdown: lowered here, under its own name, so a fault in it is
+        // reported where the prose is rather than against the stub that named
+        // it.
+        (Config::MARKDOWN, |_, _, file, text| Sourced::Markdown {
+            named: file.display().to_string(),
+            text,
+        }),
+        // Typst: the compiler opens it through the mount, so the body is the one
+        // `include` that names it and every span inside the file is typst's own.
+        // The text is read for the reading estimate and nothing else.
+        (Config::TYPST, |name, declared, _, text| Sourced::Typst {
+            include: format!(
+                "#include {}",
+                crate::codegen::Typst(&crate::codegen::Value::str(
+                    crate::world::module::Sources::vpath(name, declared)
+                ))
+            ),
+            reading: crate::engine::text::Reading::of(&text),
+        }),
+    ];
+
+    /// The extensions [`READERS`](Self::READERS) claims, for the error that
+    /// reports one it does not.
+    #[cfg(feature = "markdown")]
+    fn readable() -> Vec<&'static str> {
+        Self::READERS.iter().map(|(named, _)| *named).collect()
+    }
 
     /// The file a page's `source` names, read: its display name and its text.
     ///
@@ -321,41 +355,23 @@ impl<'a> DiscoveryCache<'a> {
         let declared = config.paths.source(name).ok_or_else(|| {
             crate::error::ContentError::unknown_source(path, name, &config.paths.declared())
         })?;
-        // The reader follows the *file*, not the page that names it. Everything
-        // below used to lower the text as markdown whatever it came from, so a
-        // file of another kind came out as prose with its own syntax in it, on a
-        // green build.
-        if !Self::READERS.contains(&declared.extension().and_then(|e| e.to_str()).unwrap_or("")) {
-            return Err(crate::error::ContentError::source_unreadable(
-                name,
-                declared,
-                Self::READERS,
-            )
-            .into());
-        }
+        // The reader follows the *file*, not the page that names it: the row
+        // that claims the extension is the row that reads it, so a dialect
+        // cannot be listed and then fall through to somebody else's reader. It
+        // did, and a file of another kind came out as prose with its own syntax
+        // in it, on a green build.
+        let ext = declared.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let read = Self::READERS
+            .iter()
+            .find(|(named, _)| *named == ext)
+            .map(|(_, read)| read)
+            .ok_or_else(|| {
+                crate::error::ContentError::source_unreadable(name, declared, &Self::readable())
+            })?;
         let file = config.root.join(declared);
         let text = Self::decode(&crate::fs::read(&file)?)
             .ok_or_else(|| crate::error::ContentError::non_utf8_source(&file))?;
-        Ok(Some(match declared.extension().and_then(|e| e.to_str()) {
-            // Typst: the compiler opens it through the mount, so the body is one
-            // `include` and every span inside the file is typst's own. The text
-            // read just above is used for the reading estimate and nothing else.
-            Some(Config::TYPST) => Sourced::Typst {
-                include: format!(
-                    "#include {}",
-                    crate::codegen::Typst(&crate::codegen::Value::str(
-                        crate::world::module::Sources::vpath(name, declared)
-                    ))
-                ),
-                reading: crate::engine::text::Reading::of(&text),
-            },
-            // Markdown: lowered here, under its own name, so a fault in it is
-            // reported where the prose is.
-            _ => Sourced::Markdown {
-                named: file.display().to_string(),
-                text,
-            },
-        }))
+        Ok(Some(read(name, declared, &file, text)))
     }
 
     /// The previous entry for `path` if it is still valid, its source and every
