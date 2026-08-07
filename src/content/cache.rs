@@ -254,7 +254,7 @@ impl<'a> DiscoveryCache<'a> {
         // A `source` moves the body to another file, so everything below reads
         // that file's text under that file's name: a fault the lowering finds is
         // reported where the prose is, not against the stub that named it.
-        let sourced = Self::sourced(&frontmatter, &document, path, config)?;
+        let sourced = Self::sourced(&frontmatter, &document, path, config, &origin)?;
         // A typst source is not lowered at all: it is a file the compiler opens,
         // and the page's body is the one line that names it.
         if let Some(Sourced::Typst { include, reading }) = &sourced {
@@ -345,15 +345,26 @@ impl<'a> DiscoveryCache<'a> {
         document: &crate::content::markdown::Document<'_>,
         path: &Path,
         config: &Config,
+        origin: &Origin<'_>,
     ) -> Result<Option<Sourced>> {
         let Some(name) = &frontmatter.source else {
             return Ok(None);
         };
+        // Every refusal below is about the key the author wrote, so each is
+        // raised at it: the page is named either way, but a page with a dozen
+        // frontmatter lines does not say which one this is about.
+        let (text, at) = (origin.text(), origin.entry(Frontmatter::SOURCE));
         if !document.body.trim().is_empty() {
-            return Err(crate::error::ContentError::source_and_body(path).into());
+            return Err(crate::error::ContentError::source_and_body(path, text, at).into());
         }
         let declared = config.paths.source(name).ok_or_else(|| {
-            crate::error::ContentError::unknown_source(path, name, &config.paths.declared())
+            crate::error::ContentError::unknown_source(
+                path,
+                name,
+                &config.paths.declared(),
+                text,
+                at,
+            )
         })?;
         // The reader follows the *file*, not the page that names it: the row
         // that claims the extension is the row that reads it, so a dialect
@@ -366,7 +377,13 @@ impl<'a> DiscoveryCache<'a> {
             .find(|(named, _)| *named == ext)
             .map(|(_, read)| read)
             .ok_or_else(|| {
-                crate::error::ContentError::source_unreadable(name, declared, &Self::readable())
+                crate::error::ContentError::source_unreadable(
+                    name,
+                    declared,
+                    &Self::readable(),
+                    text,
+                    at,
+                )
             })?;
         let file = config.root.join(declared);
         let text = Self::decode(&crate::fs::read(&file)?)

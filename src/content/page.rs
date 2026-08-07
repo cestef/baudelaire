@@ -169,7 +169,17 @@ impl Page {
         // reads a file and is tracked as that page's dependency. Checked here
         // rather than in the loader so it holds whichever cache path answered.
         if frontmatter.source.is_some() && path.extension().is_none_or(|e| e != Config::MARKDOWN) {
-            return Err(ContentError::source_on_typst(path).into());
+            // The page is parsed again to underline the key: this is a terminal
+            // error, so the cost is one parse the build was about to stop
+            // paying anything at all, and the store has the file already.
+            let source = project.source(path)?;
+            let origin = crate::content::Origin::new(&source, path, collection);
+            return Err(ContentError::source_on_typst(
+                path,
+                source.text(),
+                origin.entry(Frontmatter::SOURCE),
+            )
+            .into());
         }
         // Reject a name that is not text before decoding it. `Stem::of` falls
         // back to `index` for one, which is the *bundle index* name: the file

@@ -67,7 +67,7 @@ impl<'a> Origin<'a> {
     }
 
     /// The text a diagnostic renders its snippet from.
-    pub(super) fn text(&self) -> &str {
+    pub(crate) fn text(&self) -> &str {
         match &self.dialect {
             Dialect::Typst(source) => source.text(),
             #[cfg(feature = "markdown")]
@@ -102,7 +102,11 @@ impl<'a> Origin<'a> {
     /// held against the known set. A block dialect records an entry from its
     /// key where its syntax has one to start from, so its recorded span is
     /// already the closest thing to the key it has.
-    pub(super) fn entry(&self, key: &str) -> Option<SourceSpan> {
+    ///
+    /// `pub(crate)` rather than `pub(super)` like its siblings: the keys are
+    /// *read* here, but a fault in what one names is found by whoever resolves
+    /// it, and `source` is resolved a module away.
+    pub(crate) fn entry(&self, key: &str) -> Option<SourceSpan> {
         match &self.dialect {
             Dialect::Typst(source) => {
                 let Expr::Dict(dict) = Self::binding(source.root())?.init()? else {

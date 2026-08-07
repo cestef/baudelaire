@@ -162,7 +162,7 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         },
     ),
     (
-        "source",
+        Frontmatter::SOURCE,
         || FieldType::Str,
         |fm, v, at| {
             fm.source = Some(v.string(at)?);
@@ -320,6 +320,10 @@ pub struct Frontmatter {
 }
 
 impl Frontmatter {
+    /// The key naming a declared source. Spelled once: the table above parses
+    /// it, and whoever resolves what it names underlines it from a module away.
+    pub(crate) const SOURCE: &'static str = "source";
+
     /// The permalink context for a page with this frontmatter, at an
     /// already-resolved `slug` (frontmatter-else-stem precedence is decided
     /// once, in `Page::load`).

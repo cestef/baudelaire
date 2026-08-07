@@ -128,6 +128,10 @@ pub enum ContentError {
         name: String,
         #[help]
         help: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("no declaration under this name")]
+        span: Option<SourceSpan>,
     },
 
     /// A page carrying both a `source` and a body of its own.
@@ -138,7 +142,13 @@ pub enum ContentError {
             "a sourced page is a frontmatter block and nothing else: move the prose into the sourced file, or drop the `source`"
         )
     )]
-    SourceAndBody { path: String },
+    SourceAndBody {
+        path: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("this names a body, and the page has one below")]
+        span: Option<SourceSpan>,
+    },
 
     /// A `source` naming a file of a kind nothing here can read as a body.
     ///
@@ -152,6 +162,10 @@ pub enum ContentError {
         path: String,
         #[help]
         help: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("declared as a file nothing here reads")]
+        span: Option<SourceSpan>,
     },
 
     /// A `.typ` page carrying a `source`.
@@ -159,10 +173,16 @@ pub enum ContentError {
     #[diagnostic(
         code(baudelaire::content::source_on_typst),
         help(
-            "use typst's own `include` for a `.typ` page, which tracks the file it reads; `source` is for markdown, which has no include"
+            "a typst page reaches a declared file by name: `#import \"@baudelaire/sources:0.1.0\": <name>`, then `#include <name>`"
         )
     )]
-    SourceOnTypst { path: String },
+    SourceOnTypst {
+        path: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("a typst page's body is its own")]
+        span: Option<SourceSpan>,
+    },
 
     #[error("{} and {} both write {}", Code(.first), Code(.second), Code(.target))]
     #[diagnostic(
@@ -357,12 +377,19 @@ impl ContentError {
     /// it is in the config, which the page cannot see. The help lists the
     /// extensions there are readers for, out of the table that dispatches them,
     /// so it cannot name a set the build does not have.
-    pub fn source_unreadable(name: &str, path: &std::path::Path, readable: &[&str]) -> Self {
+    pub fn source_unreadable(
+        name: &str,
+        path: &std::path::Path,
+        readable: &[&str],
+        source: &str,
+        span: Option<SourceSpan>,
+    ) -> Self {
         let kinds = readable
             .iter()
             .map(|ext| format!(".{ext}"))
             .collect::<Vec<_>>()
             .join(", ");
+        let (page, span) = Self::located(path, source, span);
         Self::SourceUnreadable {
             name: name.to_owned(),
             path: path.display().to_string(),
@@ -370,13 +397,21 @@ impl ContentError {
                 "a source is read as the dialect its extension names: {}",
                 kinds
             ),
+            page,
+            span,
         }
     }
 
     /// A page naming a source the config never declared. The help lists what it
     /// did declare, since the name is the only thing a page may write and a
     /// typo is otherwise indistinguishable from a missing declaration.
-    pub fn unknown_source(path: &std::path::Path, name: &str, declared: &[&str]) -> Self {
+    pub fn unknown_source(
+        path: &std::path::Path,
+        name: &str,
+        declared: &[&str],
+        source: &str,
+        span: Option<SourceSpan>,
+    ) -> Self {
         let help = match declared.is_empty() {
             true => markup!(
                 "declare it: `paths {{ sources {{ {} \"../FILE.md\" }} }}`",
@@ -387,26 +422,35 @@ impl ContentError {
                 declared.join(", ")
             ),
         };
+        let (page, span) = Self::located(path, source, span);
         Self::UnknownSource {
             path: path.display().to_string(),
             name: name.to_owned(),
             help,
+            page,
+            span,
         }
     }
 
     /// A sourced page that also wrote a body under its frontmatter. Refused
     /// rather than resolved either way: one of the two would be dropped, and
     /// dropping the prose somebody wrote is not something to do quietly.
-    pub fn source_and_body(path: &std::path::Path) -> Self {
+    pub fn source_and_body(path: &std::path::Path, source: &str, span: Option<SourceSpan>) -> Self {
+        let (page, span) = Self::located(path, source, span);
         Self::SourceAndBody {
             path: path.display().to_string(),
+            page,
+            span,
         }
     }
 
     /// A `source` on a `.typ` page, where typst's own `include` is the answer.
-    pub fn source_on_typst(path: &std::path::Path) -> Self {
+    pub fn source_on_typst(path: &std::path::Path, source: &str, span: Option<SourceSpan>) -> Self {
+        let (page, span) = Self::located(path, source, span);
         Self::SourceOnTypst {
             path: path.display().to_string(),
+            page,
+            span,
         }
     }
 

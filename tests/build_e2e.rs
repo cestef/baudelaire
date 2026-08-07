@@ -87,6 +87,43 @@ fn compile_error_reports_with_context() {
     assert!(stderr.contains("bad.typ:2"), "no line number: {stderr}");
 }
 
+/// A refusal about `source` underlines the key that caused it. The page is
+/// named either way; a page with a dozen frontmatter lines does not say which
+/// one this is about, and its neighbours in the same file have said so for
+/// their own keys all along.
+#[cfg(feature = "markdown")]
+#[test]
+fn a_source_refusal_underlines_the_key() {
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            paths {
+                content "content"
+                dist "public"
+                sources { changelog "notes/a.md" }
+            }
+        "#,
+    );
+    site.write("notes/a.md", "A.\n");
+    site.write(
+        "content/page.md",
+        ";;;\ntitle \"P\"\ndescription \"x\"\nsource \"changlog\"\n;;;\n",
+    );
+
+    let out = site.run(&["build"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("unknown_source"), "{stderr}");
+    // The key's own line, and the label under it.
+    assert!(stderr.contains("page.md:4"), "no line number: {stderr}");
+    assert!(
+        stderr.contains("no declaration under this name"),
+        "no label: {stderr}"
+    );
+}
+
 #[test]
 fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
     // The one silent failure the classes mode has: a `.tmTheme` is still loaded

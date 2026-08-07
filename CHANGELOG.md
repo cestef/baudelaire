@@ -38,6 +38,11 @@ chores are visible in the git history and change nothing for a site.
   is invalidated by an edit to it, and a fault inside it is reported against that
   file.
 
+- **Every refusal about a page's `source` underlines the key that caused it**,
+  rather than naming the page and leaving the reader to find the line. All four
+  said only which file was at fault, while their neighbours in the same
+  frontmatter block have underlined their own keys all along.
+
 - **A declared source written after `serve` started is picked up.** The watcher
   compares one by path, and a file that does not exist yet was named with its
   `..` and its symlinked ancestors unresolved, which the same file loses the
