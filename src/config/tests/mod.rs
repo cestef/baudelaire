@@ -362,13 +362,20 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     assert!(!mixed.lint.ids.on());
     assert!(mixed.lint.headings.on(), "a warning rule still runs");
 
-    // The flag spelling every site already wrote.
-    let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n}");
+    // The flag spelling every site already wrote, bare form included: these
+    // keys were flags before they took a severity, and a bare node enables
+    // everywhere else in this config language.
+    let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
     assert_eq!(flags.lint.severity(Ruled::Aria), Severity::Off);
     assert_eq!(
         flags.lint.severity(Ruled::Alt),
         Severity::Error,
         "`#true` is on, and `strict` says how loud"
+    );
+    assert_eq!(
+        flags.lint.severity(Ruled::Headings),
+        Severity::Error,
+        "a bare rule is on, and follows `strict` like any other"
     );
 }
 

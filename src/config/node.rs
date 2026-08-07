@@ -263,12 +263,18 @@ impl NodeExt for KdlNode {
 
     /// A lint rule's loudness. A boolean is "on at the site's default" or
     /// "off"; a string names the severity and so overrides `strict`.
+    ///
+    /// Everything that is not a string goes through [`NodeExt::boolean`], which
+    /// is what keeps the bare spelling working: these keys were flags before
+    /// they took a severity, `lint { alt }` is how every site already writes
+    /// one, and reading the argument first turned that into a hard error.
     fn level(&self, text: &str, idx: usize) -> Result<Level> {
         let span = NodeExt::span(self);
-        let value = self.arg(text, idx)?;
-        match value.as_string() {
-            Some(_) => value.one::<Severity>(text, span).map(Level::named),
-            None => self.boolean(text, idx).map(Level::flag),
+        match self.get(idx) {
+            Some(value) if value.as_string().is_some() => {
+                value.one::<Severity>(text, span).map(Level::named)
+            }
+            _ => self.boolean(text, idx).map(Level::flag),
         }
     }
 
