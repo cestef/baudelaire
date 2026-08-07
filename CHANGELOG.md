@@ -10,7 +10,7 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [0.0.13] - 2026-08-07
 
 ### Upgrading
 
@@ -514,6 +514,13 @@ chores are visible in the git history and change nothing for a site.
   The link survives `fingerprint`: the served name is hashed before the
   `sourceMappingURL` comment is appended, so the comment cannot change the name
   it points at, and the map is named after the file it maps, hash included.
+
+### Fixed
+
+- **A page's prose drops what a reader never sees**, which is what the search
+  index and a full-content feed are built from: `<script>`, `<style>`, and
+  anything marked `aria-hidden="true"`. A theme's decorative markup used to be
+  indexed as prose, and a heading's self link landed in the index as a stray `#`.
 
 ## [0.0.12] - 2026-08-06
 
@@ -2529,7 +2536,7 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.12...HEAD
+[0.0.13]: https://github.com/cestef/baudelaire/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/cestef/baudelaire/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/cestef/baudelaire/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/cestef/baudelaire/compare/v0.0.9...v0.0.10
