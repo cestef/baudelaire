@@ -29,11 +29,17 @@ struct Rule<'a> {
     /// The page that declared it; absent for a config pair, which is exactly
     /// the case this exists for and so has no source file to name.
     source: Option<&'a PathBuf>,
+    /// What the rule file tells the host to answer with.
+    ///
+    /// A page's own `redirect` is always permanent: the page moved, and the
+    /// old URL is not coming back. Only a config line can say otherwise, which
+    /// is why the status lives there and not in frontmatter.
+    status: u16,
 }
 
 impl Processor for Redirects {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        let mut rules: Vec<(String, String)> = Vec::new();
+        let mut rules: Vec<(String, String, u16)> = Vec::new();
         // A rule file the site publishes itself wins over a generated one, and
         // silently: `static/` is the escape hatch. Asking first is what keeps
         // that from meaning "no redirects at all", since choosing rules turns
@@ -59,7 +65,7 @@ impl Processor for Redirects {
             // gate has already said so, once, before the build got here.
             if crate::config::Config::wildcard(&rule.old) {
                 if rules_wanted {
-                    rules.push((site.config.prefixed(&rule.old), rule.target));
+                    rules.push((site.config.prefixed(&rule.old), rule.target, rule.status));
                     patterns += 1;
                 }
                 continue;
@@ -83,7 +89,7 @@ impl Processor for Redirects {
             // serve a static file in preference to a redirect rule, so the stub
             // would win at the old path and the 301 would never fire.
             if rules_wanted {
-                rules.push((site.config.prefixed(&rule.old), rule.target));
+                rules.push((site.config.prefixed(&rule.old), rule.target, rule.status));
             } else {
                 let strings = Strings::new(site.config, rule.lang);
                 out.file(
@@ -124,6 +130,7 @@ impl Redirects {
                 target: site.config.prefixed(&page.permalink),
                 lang: &page.lang,
                 source: Some(&page.source),
+                status: crate::config::RedirectConfig::PERMANENT,
             })
         });
         // A config pair is literal on both sides: nobody copied it per
@@ -132,11 +139,12 @@ impl Redirects {
         // target passes through `prefixed` all the same, since a site under a
         // subdirectory still has to forward within it, and an absolute URL to
         // another host is left alone by that.
-        let config = site.config.redirect.iter().map(|(old, new)| Rule {
+        let config = site.config.redirect.iter().map(|(old, rule)| Rule {
             old: old.clone(),
-            target: site.config.prefixed(new),
+            target: site.config.prefixed(&rule.target),
             lang: &site.config.lang,
             source: None,
+            status: rule.status,
         });
         pages.chain(config)
     }
@@ -145,21 +153,26 @@ impl Redirects {
     /// directory. One name, since both hosts spell it the same.
     const RULES: &'static str = "_redirects";
 
-    /// The rule file's body: `<old> <new> 301` per line, in the order the pages
-    /// claimed their old paths.
+    /// The rule file's body: `<old> <new> <status>` per line, in the order the
+    /// pages claimed their old paths.
     ///
-    /// A permanent redirect, because that is what these are: a page moved and
-    /// the old URL is not coming back. The meta-refresh stub this replaces
-    /// could only ever be a client-side round trip, which passes link equity
-    /// worse than a real 301 and costs a page load to do it.
+    /// Permanent unless a config line says otherwise, because that is what these
+    /// mostly are. The meta-refresh stub this replaces could only ever be a
+    /// client-side round trip, which passes link equity worse than a real 301
+    /// and costs a page load to do it.
     ///
     /// Both paths are written as *fields*, not as text: the line is read by
     /// splitting on spaces, so a path carrying one would put the status where
-    /// the host looks for the target and leave the rule pointing at `301`.
-    fn rules(rules: &[(String, String)]) -> String {
+    /// the host looks for the target and leave the rule pointing at a path.
+    fn rules(rules: &[(String, String, u16)]) -> String {
         let mut body = Lines::default();
-        for (old, new) in rules {
-            body.line().word(old).lit(" ").word(new).lit(" 301");
+        for (old, new, status) in rules {
+            body.line()
+                .word(old)
+                .lit(" ")
+                .word(new)
+                .lit(" ")
+                .word(status.to_string());
         }
         body.finish()
     }
@@ -249,8 +262,22 @@ mod tests {
     /// that forwards to `301`.
     #[test]
     fn a_rule_keeps_each_path_to_one_field() {
-        let rules = [("/old path/".to_owned(), "/new/".to_owned())];
+        let rules = [("/old path/".to_owned(), "/new/".to_owned(), 301)];
         assert_eq!(Redirects::rules(&rules), "/oldpath/ /new/ 301\n");
+    }
+
+    /// The status is the rule's own, so a temporary diversion says so where a
+    /// host reads it.
+    #[test]
+    fn a_rule_writes_the_status_it_carries() {
+        let rules = [
+            ("/moved/".to_owned(), "/new/".to_owned(), 301),
+            ("/temp/".to_owned(), "/elsewhere/".to_owned(), 302),
+        ];
+        assert_eq!(
+            Redirects::rules(&rules),
+            "/moved/ /new/ 301\n/temp/ /elsewhere/ 302\n"
+        );
     }
 
     #[test]

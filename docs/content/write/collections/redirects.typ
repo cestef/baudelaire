@@ -68,6 +68,25 @@ Every declared old path becomes one rule, pointing at the page that claimed it:
   The stubs are *replaced*, not joined. Both hosts serve a static file in preference to a redirect rule, so a stub left at the old path would win and the 301 would never fire.
 ]
 
+=== A move that is not permanent
+
+`301` is the default because that is what most of these are: the page moved and the old URL is not coming back. A diversion that *is* coming back says so:
+
+```kdl
+redirect {
+  "/moved/" "/new/"
+  "/beta/" "/preview/" status=302
+}
+```
+
+`status` takes anything in the redirect class, `300` to `399`. Anything else is refused: `200` and `404` are different features under the same file name, and `500` is a typo.
+
+#callout(kind: "warn")[
+  A `status` only reaches a host through `generate { redirects }`. A stub is a meta refresh: it forwards a browser and tells a crawler nothing about *how* the page moved. Setting one without the rule file is reported, and the stub is still written, so the old path keeps working.
+]
+
+Frontmatter `redirect` carries no status. A page declaring one still exists, and the old path pointing at it is a permanent move by construction.
+
 === Whole families of paths
 
 An old path carrying a `*` matches a family of URLs rather than one. Whatever the host reads on the destination side (`:splat` on Netlify and Cloudflare Pages) is passed through untouched:

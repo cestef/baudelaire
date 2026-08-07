@@ -1,6 +1,6 @@
 //! What a URL becomes: style, base path, permalinks, and the files behind them.
 
-use super::parse;
+use super::{code, parse};
 use crate::config::Config;
 /// `url` is what every absolute URL the site emits is built by concatenation
 /// onto, so a value that is not one produced `<loc>example.com/a/</loc>` in the
@@ -281,5 +281,46 @@ fn a_dist_beside_the_sources_is_accepted() {
             .paths
             .swallowed(root),
         None
+    );
+}
+
+/// A redirect is a line, not a pair: the target is its one positional and the
+/// status an attribute, so every pair a site already wrote keeps its meaning.
+#[test]
+fn a_redirect_carries_its_own_status() {
+    let cfg =
+        parse("redirect {\n  \"/moved/\" \"/new/\"\n  \"/temp/\" \"/elsewhere/\" status=302\n}");
+    let [(first, moved), (second, temp)] = cfg.redirect.as_slice() else {
+        panic!("two redirects, got {:?}", cfg.redirect);
+    };
+    assert_eq!(first, "/moved/");
+    assert_eq!(moved.target, "/new/");
+    assert_eq!(moved.status, 301, "permanent unless it says otherwise");
+    assert!(!moved.needs_rules());
+
+    assert_eq!(second, "/temp/");
+    assert_eq!(temp.target, "/elsewhere/");
+    assert_eq!(temp.status, 302);
+    assert!(temp.needs_rules(), "a stub cannot say 302");
+}
+
+#[test]
+fn err_a_redirect_status_outside_the_class_is_refused() {
+    // Not a redirect at all, and a typo respectively.
+    for text in [
+        "redirect {\n  \"/a/\" \"/b/\" status=200\n}",
+        "redirect {\n  \"/a/\" \"/b/\" status=3012\n}",
+    ] {
+        assert_eq!(code(text), "baudelaire::config::out_of_range", "{text}");
+    }
+}
+
+/// One old path forwards to one place. Two lines claiming it is a config typo,
+/// named where every other repeated id is.
+#[test]
+fn err_a_repeated_old_path_is_refused() {
+    assert_eq!(
+        code("redirect {\n  \"/a/\" \"/b/\"\n  \"/a/\" \"/c/\"\n}"),
+        "baudelaire::config::duplicate_id"
     );
 }

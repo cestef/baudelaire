@@ -324,6 +324,19 @@ const INERT: &[Inert] = &[
         effect: "the pattern is dropped, since a wildcard cannot be an HTML stub",
         help: "turn on `generate { redirects }`, or write the old paths out one by one",
     },
+    // A status other than the default is a claim only the rule file carries: an
+    // HTML stub is a meta refresh, which forwards a browser and tells a crawler
+    // nothing about *how* the page moved. Without the file the redirect still
+    // works and still says 301, which is the wrong answer to a question the
+    // author took the trouble to answer.
+    Inert {
+        setting: "a `redirect` naming a `status`",
+        asked: |config| config.redirect.iter().any(|(_, rule)| rule.needs_rules()),
+        needs: "generate { redirects }",
+        met: |config| config.generate.redirects,
+        effect: "the HTML stub forwards the browser, and no host is told the status",
+        help: "turn on `generate { redirects }`, or drop the `status` and let it be a permanent move",
+    },
     // The policy is written into `_headers` and nowhere else: it is a header,
     // and a static build has no other way to send one. Without that file the
     // whole block is a paragraph of config that produces nothing.

@@ -74,6 +74,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A redirect names the status it forwards with:**
+
+  ```kdl
+  redirect {
+    "/moved/" "/new/"
+    "/beta/" "/preview/" status=302
+  }
+  ```
+
+  `301` remains the default, and every pair a site already wrote keeps its
+  spelling: the target is still the line's one positional and `status` is an
+  attribute beside it. Anything outside `300`-`399` is refused. The status only
+  reaches a host through `generate { redirects }`, and setting one without it is
+  reported as inert rather than silently written as a 301.
+
+  Two old paths that were the same now fail the build as a duplicate id, where
+  the second used to overwrite the first at emit time.
+
 - **A lint rule carries its own severity**, so `strict` is a default rather than
   an override:
 

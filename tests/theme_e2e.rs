@@ -218,7 +218,12 @@ fn a_theme_may_still_ask_for_the_rule_files() {
 
     assert!(config.generate.headers.enabled);
     assert!(config.generate.redirects);
-    assert_eq!(config.redirect, [("/old/".to_owned(), "/new/".to_owned())]);
+    let [(old, rule)] = config.redirect.as_slice() else {
+        panic!("one redirect, got {:?}", config.redirect);
+    };
+    assert_eq!(old, "/old/");
+    assert_eq!(rule.target, "/new/");
+    assert_eq!(rule.status, 301);
 }
 
 /// A theme naming a directory that is not there fails at load, naming the

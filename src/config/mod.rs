@@ -27,6 +27,7 @@ pub mod paths;
 pub mod permalink;
 pub mod profile;
 pub mod prune;
+pub mod redirect;
 pub mod reference;
 pub mod schema;
 pub mod security;
@@ -41,8 +42,8 @@ use std::path::{Path, PathBuf};
 
 use kdl::{KdlDocument, KdlNode};
 
-use crate::config::dispatch::Kind::{Block as Nested, Items, Overlay, Table, Text, Url};
-use crate::config::dispatch::{Block, Section};
+use crate::config::dispatch::Kind::{Block as Nested, Items, Lines, Overlay, Table, Text, Url};
+use crate::config::dispatch::{Attributed, Block, Section};
 use crate::config::lang::Rtl;
 use crate::config::node::NodeExt;
 use crate::content::listing::Titlecase;
@@ -97,6 +98,7 @@ pub use navigation::standalone::{Router, StandaloneConfig};
 pub use paths::{Paths, Rooted};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use prune::PruneConfig;
+pub use redirect::RedirectConfig;
 pub use schema::{FieldSchema, FieldType, TypeError, Words};
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
@@ -158,7 +160,7 @@ pub struct Config {
     /// paginated `page/1/` another generator wrote, a renamed term listing, a
     /// section that is gone. Neither a generated index nor a deleted page has
     /// frontmatter to declare anything in, so the claim has to live here.
-    pub redirect: Vec<(String, String)>,
+    pub redirect: Vec<(String, RedirectConfig)>,
     /// Post-render linting of the built pages: accessibility and structure
     /// rules over the typed DOM, and per-page weight budgets.
     pub lint: LintConfig,
@@ -1106,10 +1108,10 @@ impl Section for Config {
         ),
         (
             "redirect",
-            Table,
+            Lines(RedirectConfig::rows),
             "Old paths no page owns, each forwarded to where its content moved.",
             |c, n, t| {
-                c.redirect = n.pairs(t)?;
+                c.redirect = n.unique(t, "redirect", RedirectConfig::item)?;
                 Ok(())
             },
         ),
