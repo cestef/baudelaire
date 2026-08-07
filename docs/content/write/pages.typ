@@ -154,7 +154,7 @@ html {
   align: (left, left, left),
   table.header([Key], [Default], [Does]),
   [`levels`], [every level], [The heading levels that get an `id`, as `1` to `6`.],
-  [`link`], [none], [The text of a link back to the heading, e.g. `#`.],
+  [`link`], [none], [The text of a link back to the heading, e.g. `#`. Empty is the same as none, which is how a site takes back a theme's.],
   [`place`], [`after`], [Which side of the heading's text that link sits on.],
 )
 

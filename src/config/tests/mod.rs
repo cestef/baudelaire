@@ -327,6 +327,11 @@ fn anchors_keep_the_flag_and_gain_a_block() {
     assert!(anchors.covers(2) && anchors.covers(3));
     assert!(!anchors.covers(1) && !anchors.covers(4));
     assert!(default.covers(1) && default.covers(6));
+
+    // An empty text is no link rather than an empty one, which is also the only
+    // spelling that takes back a `link` a theme's own config already set.
+    let cleared = parse("html {\n  anchors {\n    link \"\"\n  }\n}");
+    assert_eq!(cleared.html.anchors.link, None);
 }
 
 /// There are six heading levels, so `levels 0` and `levels 7` are typos that

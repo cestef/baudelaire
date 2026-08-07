@@ -92,9 +92,15 @@ impl Section for AnchorConfig {
         (
             "link",
             Text,
-            "The text of a link back to each heading, e.g. `#`. Unset, no link is emitted.",
+            "The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted.",
             |c, n, t| {
-                c.link = Some(n.string(t, 0)?);
+                // An empty text is no link, not an empty one: an `<a>` with
+                // nothing in it is a target no reader can click, on every
+                // heading of every page. It is also the only way to say *off*
+                // once a theme's own config has said `link "#"`, since `fill`
+                // fills in place and this key takes a string.
+                let text = n.string(t, 0)?;
+                c.link = (!text.is_empty()).then_some(text);
                 Ok(())
             },
         ),

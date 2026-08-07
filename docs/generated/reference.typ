@@ -102,7 +102,7 @@
   (path: "html.meta.image", key: "image", shape: "text", doc: "The preview image for a page that names none and gets no generated card.", depth: 2, section: false),
   (path: "html.anchors", key: "anchors", shape: "block", doc: "Give every heading an `id`, and optionally a link back to it. On by default; `#false` turns it off.", depth: 1, section: true),
   (path: "html.anchors.levels", key: "levels", shape: "number ..", doc: "The heading levels that get an id, as `1` to `6`. Unset, every level does.", depth: 2, section: false),
-  (path: "html.anchors.link", key: "link", shape: "text", doc: "The text of a link back to each heading, e.g. `#`. Unset, no link is emitted.", depth: 2, section: false),
+  (path: "html.anchors.link", key: "link", shape: "text", doc: "The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted.", depth: 2, section: false),
   (path: "html.anchors.place", key: "place", shape: "after | before", doc: "Which side of the heading's text that link sits on.", depth: 2, section: false),
   (path: "html.region", key: "region", shape: "block", doc: "Which part of a rendered page is its prose.", depth: 1, section: true),
   (path: "html.region.element", key: "element", shape: "text", doc: "The element whose contents are the page's prose, by tag name. A page without one counts whole.", depth: 2, section: false),
