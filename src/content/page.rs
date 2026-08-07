@@ -342,6 +342,25 @@ impl Page {
         )
     }
 
+    /// Two pages in a collection's or a taxonomy's declared order.
+    ///
+    /// The single comparator, because two listings of the same pages ordering
+    /// them differently is a bug a reader sees: a term page used to sort by
+    /// title unconditionally while the collection index beside it honoured
+    /// `sort`, so the same posts came in two orders on one site.
+    ///
+    /// Ties break on source path, so pages sharing a key (or lacking one) keep a
+    /// stable order across machines rather than inheriting directory order.
+    pub fn compare(sort: crate::config::SortKey, a: &Self, b: &Self) -> std::cmp::Ordering {
+        use crate::config::SortKey;
+        match sort {
+            SortKey::Order => a.frontmatter.order.cmp(&b.frontmatter.order),
+            SortKey::Date => a.frontmatter.date.cmp(&b.frontmatter.date),
+            SortKey::Title => a.frontmatter.title.cmp(&b.frontmatter.title),
+        }
+        .then_with(|| a.source.cmp(&b.source))
+    }
+
     /// Whether this page gets a generated social card.
     ///
     /// Three conditions, in one place because the renderer, the `og:image` tag,

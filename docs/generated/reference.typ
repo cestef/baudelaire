@@ -43,6 +43,8 @@
   (path: "content.taxonomies.listing", key: "listing", shape: "flag", doc: "Generate a page per term, and an index of the terms.", depth: 2, section: false),
   (path: "content.taxonomies.template", key: "template", shape: "text", doc: "The layout those listings render through.", depth: 2, section: false),
   (path: "content.taxonomies.paginate", key: "paginate", shape: "number", doc: "Pages per term listing.", depth: 2, section: false),
+  (path: "content.taxonomies.sort", key: "sort", shape: "order | date | title", doc: "What a term's members are ordered by. Defaults to `title`, since a term spans collections.", depth: 2, section: false),
+  (path: "content.taxonomies.reverse", key: "reverse", shape: "flag", doc: "Reverse that order, for the newest-first a dated term listing wants.", depth: 2, section: false),
   (path: "content.taxonomies.prefix", key: "prefix", shape: "text", doc: "The path segment before a term page's number, as in `/tags/rust/page/2/`.", depth: 2, section: false),
   (path: "content.reading", key: "reading", shape: "block", doc: "How a page's reading estimate is measured.", depth: 1, section: true),
   (path: "content.reading.wpm", key: "wpm", shape: "number", doc: "Words a reader gets through in a minute, for `page.reading.minutes`.", depth: 2, section: false),

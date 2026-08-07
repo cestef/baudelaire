@@ -56,6 +56,22 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A taxonomy orders its term listings**, with the keys a collection already
+  has:
+
+  ```kdl
+  content {
+    taxonomies {
+      tags listing=#true sort="date" reverse=#true
+    }
+  }
+  ```
+
+  A term page sorted by title unconditionally while the collection index beside
+  it honoured `sort`, so the same posts came in two orders on one site. Both now
+  read one comparator. The default stays `title`, since a term spans collections
+  and `order` is a number each collection assigns for itself.
+
 - **The reading rate is configurable, and a language may state its own.**
 
   ```kdl

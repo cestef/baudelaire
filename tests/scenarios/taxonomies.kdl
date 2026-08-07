@@ -180,3 +180,81 @@ scenario "a taxonomy term without paginate stays one page" {
     absent "tags/rust/page/2/index.html"
   }
 }
+
+// A term page used to sort by title unconditionally while the collection index
+// beside it honoured `sort`, so the same posts came in two orders on one site.
+// A taxonomy now declares its own, read by the same comparator.
+scenario "a taxonomy orders its term listings by date, newest first" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags listing=#true sort="date" reverse=#true template="tag.typ"
+        }
+      }
+      """#
+    "templates/tag.typ" #"""
+      #let tag(page, body) = html.elem("main", [
+        #for e in page.frontmatter.entries [ #html.elem("span", e.label) ]
+      ])
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", date: "2026-01-01", tags: ("intro",),)
+      body
+      """#
+    "content/posts/z.typ" #"""
+      #let frontmatter = (title: "Zulu", date: "2026-06-01", tags: ("intro",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    // By title it would be Alpha then Zulu; by date reversed it is Zulu first.
+    file "tags/intro/index.html" {
+      contains "<span>Zulu</span> <span>Alpha</span>"
+    }
+  }
+}
+
+// And the default is unchanged: title, because a term spans collections and
+// `order` is a number each collection assigns for itself.
+scenario "a taxonomy orders its term listings by title unless told otherwise" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        taxonomies {
+          tags listing=#true template="tag.typ"
+        }
+      }
+      """#
+    "templates/tag.typ" #"""
+      #let tag(page, body) = html.elem("main", [
+        #for e in page.frontmatter.entries [ #html.elem("span", e.label) ]
+      ])
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", date: "2026-01-01", tags: ("intro",),)
+      body
+      """#
+    "content/posts/z.typ" #"""
+      #let frontmatter = (title: "Zulu", date: "2026-06-01", tags: ("intro",),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "tags/intro/index.html" {
+      contains "<span>Alpha</span> <span>Zulu</span>"
+    }
+  }
+}

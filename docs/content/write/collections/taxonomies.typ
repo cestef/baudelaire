@@ -44,7 +44,24 @@ A taxonomy is one `key=value` line, not a block.
   [`template`], [str], [--], [The layout those listings render through.],
   [`paginate`], [int], [--], [Members per term page. Without it, every member sits on one.],
   [`prefix`], [str], [`page`], [The path segment before a term page's number.],
+  [`sort`], [`order` | `date` | `title`], [`title`], [What a term's members are ordered by.],
+  [`reverse`], [bool], [`#false`], [Reverse that order.],
 )
+
+`sort` and `reverse` are the collection keys, read by the same comparator, so a
+term page and a collection index listing the same posts cannot come in two
+orders. The default differs on purpose: a term spans collections, and `order` is
+a number each collection assigns for itself.
+
+A dated blog usually wants newest first:
+
+```kdl
+content {
+  taxonomies {
+    tags listing=#true sort="date" reverse=#true
+  }
+}
+```
 
 == Reading a different key
 

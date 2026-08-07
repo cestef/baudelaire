@@ -63,7 +63,7 @@ pub(crate) struct Group<'a> {
     paginate: Option<usize>,
     /// Path segment before a term page's number.
     prefix: String,
-    /// term -> member pages, sorted by term then title.
+    /// term -> member pages, each term's members in the taxonomy's own order.
     terms: BTreeMap<String, Vec<&'a Page>>,
     /// The language whose pages this group indexes; localizes every URL.
     lang: &'a str,
@@ -86,8 +86,14 @@ impl<'a> Group<'a> {
                 }
             }
         }
+        // The collection comparator, on the taxonomy's own declared order: one
+        // rule, so a term page and a collection index listing the same posts
+        // cannot come in two orders.
         for members in terms.values_mut() {
-            members.sort_by(|a, b| a.frontmatter.title.cmp(&b.frontmatter.title));
+            members.sort_by(|a, b| Page::compare(cfg.sort, a, b));
+            if cfg.reverse {
+                members.reverse();
+            }
         }
         Self {
             name,

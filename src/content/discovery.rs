@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use wax::Glob;
 use wax::prelude::*;
 
-use crate::config::{CollectionConfig, Config, Paths, SortKey};
+use crate::config::{CollectionConfig, Config, Paths};
 use crate::content::Page;
 use crate::content::cache::DiscoveryCache;
 use crate::error::{ContentError, Result};
@@ -46,18 +46,11 @@ impl Collection {
         .sorted()
     }
 
-    /// Sort by the collection's key, breaking ties on source path so that pages
-    /// sharing a key (or lacking one entirely) keep a stable order across
-    /// machines rather than inheriting directory order.
+    /// Sort by the collection's declared key, through [`Page::compare`]: the one
+    /// comparator, shared with a taxonomy's term listings.
     fn sorted(mut self) -> Self {
-        self.pages.sort_by(|a, b| {
-            match self.config.sort {
-                SortKey::Order => a.frontmatter.order.cmp(&b.frontmatter.order),
-                SortKey::Date => a.frontmatter.date.cmp(&b.frontmatter.date),
-                SortKey::Title => a.frontmatter.title.cmp(&b.frontmatter.title),
-            }
-            .then_with(|| a.source.cmp(&b.source))
-        });
+        let sort = self.config.sort;
+        self.pages.sort_by(|a, b| Page::compare(sort, a, b));
         if self.config.reverse {
             self.pages.reverse();
         }
