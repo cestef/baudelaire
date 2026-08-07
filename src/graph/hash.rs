@@ -151,75 +151,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// 18: `Outputs` carries the page's prose as a full-content feed publishes
-    /// it, absolute URLs and all. An entry written before this records none, so
-    /// a cached page would drop out of the feed body it used to be in.
-    /// 17: a page records the `#fragment` links into its own body, which the
-    /// deep-link check now resolves rather than passing through. An entry
-    /// written before this names none of them, so under the narrower rule a
-    /// cached page reads as valid however its own headings changed. The same
-    /// bump covers three changes to rendered markup that a warm entry would
-    /// otherwise keep serving: heading ids are slugged in document order, a
-    /// `srcset` candidate no longer repeats the directory the image was
-    /// authored under, and every vocabulary names the same language-aware
-    /// author.
-    /// 16: a page records the URLs its already-URL links named, and whether the
-    /// site served a page at each. An entry written before this records none, so
-    /// under the narrower rule it reads as valid however the page set changed:
-    /// a page added at a URL something already linked to would gain no backlink,
-    /// and the orphan report would call it linked from nowhere.
-    /// 15: an image extracted from a page is named by the directories it was
-    /// authored under, not by its base name alone, so two page bundles holding a
-    /// `cover.png` are two files. An entry written before this replays the flat
-    /// name from its `Outputs::images`, so a cached page would keep pointing at
-    /// `/assets/cover.png` while every fresh page wrote the namespaced one.
-    /// 14: extraction and the asset pipeline agree about images. One that
-    /// lives in the asset tree is referenced where the pipeline serves it
-    /// rather than extracted a second time, and one lifted out of a page
-    /// carries the responsive widths its `srcset` promised. An entry written
-    /// before this records the duplicate extraction and no widths, so a cached
-    /// page would keep copying source bytes over processed ones and would show
-    /// a `srcset`-less image beside a freshly rendered one that has it.
-    /// 13: a generated listing records its links too, so the orphan report can
-    /// see that a page is reachable from an index. An entry written before this
-    /// has none for a listing, so every page reachable only from one would be
-    /// reported as linked from nowhere.
-    /// 12: those recorded links keep their `#fragment`, so a backlink can say
-    /// which section it aimed at. An entry written before this recorded the page
-    /// alone, so a cached page's backlinks would be grouped under no section at
-    /// all and a template grouping by one would show them nowhere.
-    /// 11: `Outputs` carries the pages each page's own content links to, which
-    /// the site-wide link graph is assembled from. An entry written before this
-    /// records none, so a cached page would contribute no edges and the pages it
-    /// links to would lose their backlinks out of a green build.
-    /// 10: `Outputs` carries the digests of the page's inline scripts and
-    /// styles. An entry written before this records none, so a cached page
-    /// would contribute nothing to the generated policy and a browser would
-    /// refuse to run the page's own inline script.
-    /// 9: `Outputs` carries the page's lint findings and the ledger of what it
-    /// ships. An entry written before this records neither, so a cached page
-    /// would read as clean and weightless: the lint and budget gates would both
-    /// pass on the second build of a site they failed on the first.
-    /// 8: `Outputs` carries each page's heading ids and its `#fragment` links,
-    /// for the site-wide deep-link check. An entry written before this records
-    /// neither, so a cached page would look like it exposes no headings at all
-    /// and every link into it would be reported as dangling.
-    /// 7: embedded asset bytes became ordinary per-page dependencies, so the
-    /// whole-tree `embeds` hash left the manifest fingerprint. An entry written
-    /// before this lists no embedded file among its deps.
-    /// 6: the responsive variant manifest and the processed-asset URL map both
-    /// left the manifest fingerprint, for per-page `Entry::srcsets` and
-    /// `Entry::assets`. An entry written before this records neither, so under
-    /// the new narrower rules it would read as valid however those changed.
-    /// 5: `Entry::deps` now covers what a page's social card compile read, and
-    /// the card template's hash left the manifest fingerprint with it. An entry
-    /// written before this records neither, so its card is validated against
-    /// nothing at all and would be served stale for the life of the cache.
-    /// 4: `Outputs` carries the page's head/body fragments for the single-file
-    /// export. 3: `Entry` groups the render pass's results under `outputs`,
-    /// which now also carries the page's broken links. 2: `Entry::deps` values
-    /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 18;
+    /// The cache layout this binary writes and trusts. Bump it whenever a
+    /// manifest or entry means something new without looking different, and
+    /// whenever the same inputs start rendering different markup: a warm entry
+    /// reads as valid under either change, and would be served as it stands.
+    /// What each bump was for is in `CHANGELOG.md`, under `Upgrading`.
+    const SCHEMA: u32 = 19;
 
     pub fn current() -> Self {
         Self {

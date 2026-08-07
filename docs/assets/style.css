@@ -1574,18 +1574,18 @@ ul.listing {
 }
 
 /* ---- Syntax highlighting ------------------------------------------------- */
-/* Typst bakes highlight colors inline (no class hook), so we match the exact
-   hex it emits from our .tmTheme and remap each to a themeable variable,
-   making code adapt to light/dark like everything else. */
+/* `html { highlight }` classes a code block's tokens instead of colouring them
+   inline, so the palette lives here and adapts to light/dark like everything
+   else. Seven variables for twenty-odd tokens: the ones a reader has to tell
+   apart get a colour of their own, and the rest join whichever is closest. */
 :root {
   --sx-comment: #8a837a;
   --sx-string: #4e7a3a;
   --sx-number: #a15c1e;
   --sx-keyword: #a12a5e;
-  --sx-node: #8a2846;
-  --sx-prop: #2f6f9f;
+  --sx-function: #8a2846;
+  --sx-variable: #2f6f9f;
   --sx-type: #7a4fa0;
-  --sx-punct: #6b6560;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1594,10 +1594,9 @@ ul.listing {
     --sx-string: #a3c98a;
     --sx-number: #e0a878;
     --sx-keyword: #e58fa6;
-    --sx-node: #e9a4b7;
-    --sx-prop: #8fb8d9;
+    --sx-function: #e9a4b7;
+    --sx-variable: #8fb8d9;
     --sx-type: #c9a8e0;
-    --sx-punct: #9a9184;
   }
 }
 
@@ -1606,10 +1605,9 @@ ul.listing {
   --sx-string: #a3c98a;
   --sx-number: #e0a878;
   --sx-keyword: #e58fa6;
-  --sx-node: #e9a4b7;
-  --sx-prop: #8fb8d9;
+  --sx-function: #e9a4b7;
+  --sx-variable: #8fb8d9;
   --sx-type: #c9a8e0;
-  --sx-punct: #9a9184;
 }
 
 .sx-comment {
@@ -1617,32 +1615,55 @@ ul.listing {
   font-style: italic;
 }
 
-.sx-string {
+.sx-string,
+.sx-escape {
   color: var(--sx-string);
 }
 
-.sx-number {
+.sx-number,
+.sx-constant {
   color: var(--sx-number);
 }
 
-.sx-keyword {
+.sx-keyword,
+.sx-operator {
   color: var(--sx-keyword);
 }
 
-.sx-node {
-  color: var(--sx-node);
+.sx-function,
+.sx-tag,
+.sx-heading,
+.sx-label {
+  color: var(--sx-function);
 }
 
-.sx-prop {
-  color: var(--sx-prop);
+.sx-variable,
+.sx-parameter,
+.sx-property,
+.sx-attribute {
+  color: var(--sx-variable);
 }
 
-.sx-type {
+.sx-type,
+.sx-namespace {
   color: var(--sx-type);
 }
 
-.sx-punct {
-  color: var(--sx-punct);
+.sx-invalid {
+  color: var(--sx-keyword);
+  text-decoration: underline wavy;
+}
+
+.sx-strong {
+  font-weight: 700;
+}
+
+.sx-emph {
+  font-style: italic;
+}
+
+.sx-link {
+  text-decoration: underline;
 }
 
 /* An unbroken inline span is a promise a phone column cannot keep: at this

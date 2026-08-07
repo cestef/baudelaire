@@ -237,10 +237,10 @@ code {
   --sx-string: #9ece6a;
   --sx-number: #e0af68;
   --sx-keyword: #bb9af7;
-  --sx-node: #7dcfff;
-  --sx-prop: #c8ccd2;
+  --sx-function: #7dcfff;
+  --sx-variable: #c8ccd2;
   --sx-type: #2ac3de;
-  --sx-punct: #6d7580;
+  --sx-punctuation: #6d7580;
 }
 
 @media (prefers-color-scheme: light) {
@@ -249,10 +249,10 @@ code {
     --sx-string: #3f7d20;
     --sx-number: #9a6700;
     --sx-keyword: #7d3fa8;
-    --sx-node: #0b6a8f;
-    --sx-prop: #24282e;
+    --sx-function: #0b6a8f;
+    --sx-variable: #24282e;
     --sx-type: #0f766e;
-    --sx-punct: #6a7280;
+    --sx-punctuation: #6a7280;
   }
 }
 
@@ -260,13 +260,18 @@ code {
   color: var(--sx-comment);
   font-style: italic;
 }
-.sx-string { color: var(--sx-string); }
-.sx-number { color: var(--sx-number); }
-.sx-keyword { color: var(--sx-keyword); }
-.sx-node { color: var(--sx-node); }
-.sx-prop { color: var(--sx-prop); }
-.sx-type { color: var(--sx-type); }
-.sx-punct { color: var(--sx-punct); }
+.sx-string, .sx-escape { color: var(--sx-string); }
+.sx-number, .sx-constant { color: var(--sx-number); }
+.sx-keyword, .sx-operator { color: var(--sx-keyword); }
+.sx-function, .sx-tag, .sx-heading, .sx-label { color: var(--sx-function); }
+.sx-variable, .sx-parameter, .sx-property, .sx-attribute { color: var(--sx-variable); }
+.sx-type, .sx-namespace { color: var(--sx-type); }
+.sx-punctuation { color: var(--sx-punctuation); }
+.sx-invalid { color: var(--sx-keyword); text-decoration: underline wavy; }
+.sx-strong { font-weight: 700; }
+.sx-emph { font-style: italic; }
+.sx-link { text-decoration: underline; }
+.sx-raw { font-style: normal; }
 
 /* A terminal draws tables with rules, not boxes: dashes for the body, a solid
    line under the header, and figures in a tabular column. */

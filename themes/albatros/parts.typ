@@ -215,13 +215,6 @@
   let title = page.frontmatter.at("title", default: site-title)
   set document(title: title)
 
-  // Typst bakes highlight colours inline, which a runtime theme toggle cannot
-  // reach. `palette.tmTheme` paints sentinel hexes instead, and the
-  // `html { highlight }` block in `theme.kdl` turns each one into an `sx-*`
-  // class, so the real palette lives in `style.css`. The path is relative
-  // because a theme resolves `/` against the project when it is a directory and
-  // against the package when it is installed.
-  show raw: set raw(theme: "highlight/palette.tmTheme")
 
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")

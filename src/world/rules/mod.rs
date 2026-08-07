@@ -7,12 +7,14 @@
 //! a rule is installed at all. Adding one is an `impl` in its own module plus one
 //! line in [`Rules::install`].
 //!
-//! A rule reproduces a piece of typst's own output and has no upstream
-//! contract; see [`image`] for what it pins.
+//! Both rules reproduce a piece of typst's own output, and neither has an
+//! upstream contract; see [`image`] and [`raw`] for what each pins.
 
 mod image;
+mod raw;
 
 pub use image::MARKER;
+pub use raw::{SCOPE, TOKEN};
 
 use typst::Library;
 use typst::foundations::Target;
@@ -31,6 +33,11 @@ impl Rules {
         // default and skipped when `html.embed` inlines everything anyway.
         if config.assets.images.externalize(&config.html) {
             library.rules.replace(Target::Html, image::IMAGE_RULE);
+        }
+        // Class a code block's tokens rather than colouring them inline, so a
+        // stylesheet owns the palette.
+        if config.html.highlight.enabled {
+            library.rules.replace(Target::Html, raw::RAW_RULE);
         }
     }
 }

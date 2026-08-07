@@ -22,10 +22,10 @@
   --sx-string: #0f7b3f;
   --sx-number: #b45309;
   --sx-keyword: #b02a56;
-  --sx-node: #2f5eea;
-  --sx-prop: #1f2937;
+  --sx-function: #2f5eea;
+  --sx-variable: #1f2937;
   --sx-type: #0f766e;
-  --sx-punct: #6b7280;
+  --sx-punctuation: #6b7280;
 
   color-scheme: light;
 }
@@ -45,10 +45,10 @@
     --sx-string: #79d18b;
     --sx-number: #e8b06a;
     --sx-keyword: #ff8fae;
-    --sx-node: #8aa9ff;
-    --sx-prop: #dfe3ea;
+    --sx-function: #8aa9ff;
+    --sx-variable: #dfe3ea;
     --sx-type: #63d5c2;
-    --sx-punct: #98a1ae;
+    --sx-punctuation: #98a1ae;
 
     color-scheme: dark;
   }
@@ -68,10 +68,10 @@
   --sx-string: #79d18b;
   --sx-number: #e8b06a;
   --sx-keyword: #ff8fae;
-  --sx-node: #8aa9ff;
-  --sx-prop: #dfe3ea;
+  --sx-function: #8aa9ff;
+  --sx-variable: #dfe3ea;
   --sx-type: #63d5c2;
-  --sx-punct: #98a1ae;
+  --sx-punctuation: #98a1ae;
 
   color-scheme: dark;
 }
@@ -411,21 +411,27 @@ code {
   background: var(--raised);
 }
 
-/* Highlight palette. Typst bakes its colours inline; `html { highlight }` turns
-   each sentinel from `highlight/palette.tmTheme` into one of these classes, so
-   the colours live here and follow the toggle. */
+/* Highlight palette. Typst bakes its colours inline; `html { highlight }` classes
+   a code block's tokens instead, so the colours live here and follow the toggle.
+   Eight variables for twenty-odd tokens: the ones a reader has to tell apart get
+   a colour of their own, and the rest join whichever is closest. */
 
 .sx-comment {
   color: var(--sx-comment);
   font-style: italic;
 }
-.sx-string { color: var(--sx-string); }
-.sx-number { color: var(--sx-number); }
-.sx-keyword { color: var(--sx-keyword); }
-.sx-node { color: var(--sx-node); }
-.sx-prop { color: var(--sx-prop); }
-.sx-type { color: var(--sx-type); }
-.sx-punct { color: var(--sx-punct); }
+.sx-string, .sx-escape { color: var(--sx-string); }
+.sx-number, .sx-constant { color: var(--sx-number); }
+.sx-keyword, .sx-operator { color: var(--sx-keyword); }
+.sx-function, .sx-tag, .sx-heading, .sx-label { color: var(--sx-function); }
+.sx-variable, .sx-parameter, .sx-property, .sx-attribute { color: var(--sx-variable); }
+.sx-type, .sx-namespace { color: var(--sx-type); }
+.sx-punctuation { color: var(--sx-punctuation); }
+.sx-invalid { color: var(--sx-keyword); text-decoration: underline wavy; }
+.sx-strong { font-weight: 700; }
+.sx-emph { font-style: italic; }
+.sx-link { text-decoration: underline; }
+.sx-raw { font-style: normal; }
 
 table {
   display: block;

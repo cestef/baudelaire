@@ -181,6 +181,20 @@ typst-eval = "0.15"
 # `typst` at the same pinned version.
 typst-library = { version = "0.15", optional = true }
 typst-utils = { version = "0.15", optional = true }
+# The scope machinery typst highlights with, so `world/rules/raw.rs` can class a
+# code block's tokens rather than colour them. Features are a subset of the ones
+# typst-library asks for: cargo unions them, and a wider set here would pull a
+# second regex engine (`regex-onig`, which needs a C compiler) into typst's own
+# build.
+syntect = { version = "5.3", default-features = false, features = [
+  "parsing",
+  "regex-fancy",
+  "yaml-load",
+] }
+# Named so `#[comemo::memoize]` expands: the macro emits absolute `::comemo`
+# paths, which typst's re-export cannot satisfy. Same version the compiler
+# memoizes with, so there is one cache and one eviction clock.
+comemo = "0.5"
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }

@@ -93,6 +93,44 @@ chores are visible in the git history and change nothing for a site.
   entry written before this records none, so a cached page would drop out of the
   feed body it used to be in. Nothing to do; the rebuild happens once.
 
+- **`html { highlight }` no longer takes a table of sentinel colors**, and
+  highlighting is no longer typst's to color. The block is now a section with
+  keys of its own, and a config still naming scopes fails with an unknown key.
+
+  ```kdl
+  html {
+    highlight {
+      prefix "sx-"              // what every class starts with
+      tokens "-punctuation"     // the tokens worth markup; `-name` drops one
+      classes { keyword "kw" }  // rename one, prefix aside
+      scopes #true              // keep the grammar's own scope as `data-scope`
+    }
+  }
+  ```
+
+  What each entry named was a sentinel hex painted by a hand-written `.tmTheme`,
+  because a color was the only channel typst's inline styles left open. A code
+  block is now highlighted by baudelaire, from the grammar's own scopes, and each
+  token is classed directly. Three things follow for a site that had this set up:
+
+  - The `.tmTheme` of sentinels is dead, and so is the `show raw: set raw(theme:
+    ..)` rule that installed it. Delete both. A `syntaxes` rule naming a grammar
+    stays exactly as it was.
+  - The classes are the vocabulary's, not your palette's: `sx-function` where a
+    palette said `sx-node`, `sx-variable` for `sx-prop`, `sx-punctuation` for
+    `sx-punct`, and eighteen more. `write/highlighting` lists the set; rename in
+    your stylesheet, or rename in `classes { }` to keep the CSS you have.
+  - A theme's `font-style` and `font-weight` per scope are gone with the theme.
+    They are CSS now.
+
+  Turning the block off (`highlight #false`, or never writing it) still gets
+  typst's inline colors, which is what a site that wants its own `.tmTheme`
+  rendered as written should keep.
+
+- **One cold rebuild.** The same page and the same config render different markup
+  now, so the cache fingerprint had to move; a warm cache would otherwise keep
+  serving inline colors to a stylesheet that has moved on.
+
 - **A site that ships its own fonts rebuilds when one of them changes.** The
   faces under `typst { fonts { paths } }` are now part of the build fingerprint,
   so the first build after this upgrade is a cold one for those sites. Every

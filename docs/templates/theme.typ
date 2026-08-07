@@ -331,7 +331,6 @@
   set document(title: title)
   show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw.where(lang: "powershell"): set raw(syntaxes: "/highlight/powershell.sublime-syntax")
-  show raw: set raw(theme: "/highlight/baudelaire.tmTheme") // custom color mapping
 
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")

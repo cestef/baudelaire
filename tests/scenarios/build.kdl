@@ -357,8 +357,48 @@ scenario "highlight colours become classes a stylesheet can own" {
     "config.kdl" #"""
       site "T"
       html {
+        highlight
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```rust
+      fn main() { let x = 1; }
+      ```
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      // A grammar's own scopes, in baudelaire's vocabulary...
+      contains #"class="sx-keyword""#
+      contains #"class="sx-function""#
+      contains #"class="sx-number""#
+      // ...no colour left inline...
+      missing "style=\"color:"
+      // ...and no mark left unnamed.
+      missing "data-token"
+      missing "data-scope"
+    }
+  }
+}
+
+// Every knob of the block, on one site: what a class is called, which tokens
+// are worth markup at all, and whether the grammar's own scope rides along.
+scenario "the highlight block names the classes and narrows the markup" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
         highlight {
-          keyword "#d73948"
+          prefix "tok-"
+          tokens "-punctuation" "-operator"
+          classes {
+            keyword "kw"
+          }
+          scopes #true
         }
       }
       """#
@@ -374,15 +414,71 @@ scenario "highlight colours become classes a stylesheet can own" {
   expect {
     ok
     file "index.html" {
-      // The configured scope names the class...
+      // The prefix and the rename, both...
+      contains #"class="tok-kw""#
+      contains #"class="tok-function""#
+      // ...the scope stamp kept beside the class...
+      contains #"data-scope="#
+      // ...and a dropped token's text kept without its span.
+      missing #"tok-punctuation"#
+      missing #"tok-operator"#
+      contains "{"
+    }
+  }
+}
+
+// Inline code carries no `<pre>`, so a pass keyed on the wrapper would leave
+// every `#raw(.., lang: ..)` in a sentence marked and unnamed.
+scenario "inline code is classed like a block" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      A call to #raw("let", lang: "rust") in prose.
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
       contains #"class="sx-keyword""#
-      // ...an unnamed colour falls back to its hex, which still beats matching
-      // on a style substring...
-      contains #"class="sx-4b69c6""#
-      // ...and no highlight span keeps an inline colour.
-      missing #"<span style="color: #d73948">fn</span>"#
-      // No emptied `style=""` left behind where a colour used to be.
-      missing #"<span style class"#
+      missing "data-token"
+    }
+  }
+}
+
+// A typst code block is highlighted by typst's own parser, which names its tags
+// directly: same classes, no grammar and no scope round-trip in between.
+scenario "typst code lands in the same classes a grammar does" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ````typ
+      #let x = 1
+      = Heading
+      ````
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains #"class="sx-keyword""#
+      contains #"class="sx-number""#
+      contains #"class="sx-heading""#
     }
   }
 }

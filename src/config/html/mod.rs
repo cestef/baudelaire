@@ -5,7 +5,7 @@ pub mod highlight;
 pub mod meta;
 pub mod region;
 
-use crate::config::dispatch::Kind::{Block as Nested, Flag, Table, Texts};
+use crate::config::dispatch::Kind::{Block as Nested, Flag, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{AnchorConfig, HighlightConfig, MetaConfig, RegionConfig};
@@ -27,7 +27,7 @@ pub struct HtmlConfig {
     /// Which part of a rendered page is its prose: read by the search index and
     /// by a full-content feed, so both mean the same thing by it.
     pub region: RegionConfig,
-    /// Rewrite syntax-highlight colours as CSS classes.
+    /// Class a code block's tokens instead of colouring them inline.
     pub highlight: HighlightConfig,
     /// Emit a schema.org JSON-LD island in each page's `<head>`.
     ///
@@ -189,24 +189,9 @@ impl Section for HtmlConfig {
         ),
         (
             "highlight",
-            Table,
-            "Rewrite syntax-highlight colours to classes. Bare, it uses hex classes; a block names the scopes.",
-            |c, n, t| {
-                // The flag `Section::shorthand` would dispatch, spelled out
-                // here because the block is a free-form scope table and not a
-                // key set: a bare `highlight` turns it on, and `highlight
-                // #false` turns it off again. Off has to be sayable, because
-                // every shipped theme turns it on and a `theme.kdl` is a floor
-                // the site is meant to be able to override.
-                c.highlight.enabled = n.boolean(t, 0)?;
-                // A bare `highlight` rewrites every colour to its hex class; a block
-                // names the scopes the theme paints, so the classes read as meaning
-                // rather than as colours.
-                if n.children().is_some() {
-                    c.highlight.scopes = n.pairs(t)?;
-                }
-                Ok(())
-            },
+            Nested(HighlightConfig::rows),
+            "Class a code block's tokens (`sx-keyword`, ..) instead of colouring them inline.",
+            |c, n, t| c.highlight.fill(n, t),
         ),
     ]);
 }

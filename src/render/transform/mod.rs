@@ -142,8 +142,9 @@ pub(super) trait AttrsExt {
     /// Drop `key` if present.
     ///
     /// The counterpart to [`set`](AttrsExt::set), for a transform that moves a
-    /// value *out* of an attribute rather than changing it: emptying a `style`
-    /// leaves `style=""` in the markup, which is not the same as not having one.
+    /// value *out* of an attribute rather than changing it: emptying an
+    /// attribute leaves `key=""` in the markup, which is not the same as not
+    /// having one.
     fn remove(&mut self, key: HtmlAttr);
 }
 
@@ -423,6 +424,9 @@ impl Transforms {
             // should see the notes where they will be served, not where typst
             // left them.
             Box::new(Footnotes),
+            // Straight after the compiler's own output is in hand: the marks the
+            // raw rule left are an intermediate spelling, and no later pass
+            // should have to know they ever existed.
             Box::new(Highlight),
             // After the passes that move authored elements around, before the
             // ones that synthesize elements of our own: an element is stamped

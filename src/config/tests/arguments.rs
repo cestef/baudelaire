@@ -185,16 +185,23 @@ fn highlight_reads_the_flag_that_turns_it_off() {
             .highlight
             .enabled
     );
-    // The block still names the scopes, with the flag or without it.
-    let cfg = parse("html {\n  highlight {\n    keyword \"#e5d004\"\n  }\n}");
-    assert!(cfg.html.highlight.enabled);
-    assert_eq!(cfg.html.highlight.class("#e5d004"), "sx-keyword");
-    let cfg = parse("html {\n  highlight #false {\n    keyword \"#e5d004\"\n  }\n}");
-    assert!(
-        !cfg.html.highlight.enabled,
-        "a theme's floor is overridable"
-    );
-    assert_eq!(cfg.html.highlight.class("#e5d004"), "sx-keyword");
+}
+
+/// The scope table the key used to take is refused rather than ignored: a site
+/// still carrying one names scopes where the block now takes keys, and the key
+/// table is what says so.
+#[test]
+fn err_a_class_for_no_token_is_refused_at_the_word() {
+    let rendered = err("html {\n  highlight {\n    classes {\n      kewyord \"kw\"\n    }\n  }\n}");
+    assert!(rendered.contains("kewyord"), "{rendered}");
+    assert!(rendered.contains("keyword"), "did you mean: {rendered}");
+}
+
+#[test]
+fn err_the_retired_scope_table_says_so() {
+    let rendered = err("html {\n  highlight {\n    keyword \"#e5d004\"\n  }\n}");
+    assert!(rendered.contains("keyword"), "{rendered}");
+    assert!(rendered.contains("tokens"), "{rendered}");
 }
 
 /// The rule is arity, not prohibition: every shape a key legitimately takes has
