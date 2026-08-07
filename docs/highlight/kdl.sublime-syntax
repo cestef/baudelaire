@@ -4,8 +4,8 @@
 # Covers nodes, arguments, properties, the `#` keywords, all string forms
 # (quoted, raw, multi-line, raw multi-line), hex/octal/binary/decimal numbers,
 # type annotations, line continuations, and `//`, `/* */` (nested), and `/-`
-# (slashdash) comments. Scopes are chosen to match the sentinel theme in
-# baudelaire.tmTheme.
+# (slashdash) comments. Scopes are the conventional TextMate ones, which is what
+# `html { highlight }` reads to name a token's class.
 name: KDL
 file_extensions:
   - kdl

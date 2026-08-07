@@ -32,7 +32,7 @@ Fixed directory names, because a theme cannot know what you renamed your own `pa
   [`lib.typ`], [What a page can import from the theme.],
 )
 
-Anything else in the theme root is yours: the shipped themes keep a `parts.typ` of shared components and a `highlight/palette.tmTheme` there.
+Anything else in the theme root is yours: the shipped themes keep a `parts.typ` of shared components there.
 
 == Your file wins
 
@@ -61,7 +61,7 @@ If your theme needs a build step, say so in the README and give the block to cop
 
 == Three rules that bite theme authors
 
-- *Import siblings relatively.* `#import "../parts.typ"` resolves both when the theme is a directory and when it is an installed package. A root-absolute `/parts.typ` resolves against the *project* root in the first case and the *package* root in the second, so it cannot be right in both. The same goes for a `show raw` theme path: write `highlight/palette.tmTheme`.
+- *Import siblings relatively.* `#import "../parts.typ"` resolves both when the theme is a directory and when it is an installed package. A root-absolute `/parts.typ` resolves against the *project* root in the first case and the *package* root in the second, so it cannot be right in both. The same goes for a `show raw` grammar path: write `highlight/kdl.sublime-syntax`.
 - *`svg()` is off limits.* Its paths are project-root absolute, and a theme does not know where it sits in a project. Build icons as inline SVG elements instead, which is what `parts.typ` does in every shipped theme.
 - *Keep shared pieces out of `templates/`.* Only `templates/`, `assets/`, and `static/` are layered, so a `templates/parts.typ` can be shadowed by a project file that never meant to. At the theme root it cannot.
 
