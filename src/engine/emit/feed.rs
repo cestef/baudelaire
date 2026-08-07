@@ -282,8 +282,8 @@ impl<'a> Feed<'a> {
                         // What a reader renders in its list view. Without it
                         // that column is empty and a subscriber sees a wall of
                         // bare titles.
-                        if let Some(description) = page.frontmatter.description() {
-                            xml.leaf("description", &description);
+                        if let Some(description) = page.frontmatter.blurb() {
+                            xml.leaf("description", description);
                         }
                         for term in Self::categories(page) {
                             xml.leaf("category", term);
@@ -327,8 +327,8 @@ impl<'a> Feed<'a> {
                     if let Some(published) = &stamp.published {
                         xml.leaf("published", published);
                     }
-                    if let Some(description) = page.frontmatter.description() {
-                        xml.leaf("summary", &description);
+                    if let Some(description) = page.frontmatter.blurb() {
+                        xml.leaf("summary", description);
                     }
                     for term in Self::categories(page) {
                         xml.empty("category", &[("term", term)]);
@@ -367,7 +367,7 @@ impl<'a> Feed<'a> {
                         id: link.clone(),
                         url: link,
                         title: Some(page.title()),
-                        summary: page.frontmatter.description(),
+                        summary: page.frontmatter.blurb().map(str::to_owned),
                         date_published: stamp.published.as_deref(),
                         date_modified: stamp.updated.as_deref(),
                         tags: Self::categories(page).collect(),

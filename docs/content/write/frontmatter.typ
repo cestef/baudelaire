@@ -47,6 +47,11 @@ the block is read into the same dict, and everything below is the same walk.
   [`order`], [int], [The sort key for a `sort "order"` collection.],
   [`redirect`], [list], [One old path, or a list of them, forwarded to this page.],
   [`source`], [str], [The name of a `paths { sources }` entry whose file is this page's body. Markdown pages only.],
+  [`description`], [str], [The one-line summary in `<meta>`, the feed entry, the listing row and the announced record.],
+  [`summary`], [str], [An alias for `description`, used when there is no `description`.],
+  [`image`], [str], [The social preview image, which wins over a generated card.],
+  [`alt`], [str], [What that image shows. Empty marks it decorative.],
+  [`author`], [str], [Who wrote the page, over the site default for its language.],
 )
 
 Values are typed. A key with the wrong type stops the build with a diagnostic
@@ -111,25 +116,8 @@ a list of terms:
 With `taxonomies { tags }` configured, this page is grouped under both terms.
 See #link("collections/taxonomies.typ")[taxonomies].
 
-== Everything else
-
-Unknown keys aren't errors. They pass through as *extra* frontmatter, yours to
-read in a #link("templates.typ")[template] as `page.frontmatter.<key>` and in a
-listing as `entry.extra.<key>`.
-
-Five of them the build reads itself, for
-#link("../build/generate/meta.typ")[meta and social tags]:
-
-#table(
-  columns: 2,
-  align: (left, left),
-  table.header([Key], [Does]),
-  [`description`], [The one-line summary in `<meta>`, the feed entry, and the announced record.],
-  [`summary`], [An alias for `description`, used when there is no `description`.],
-  [`image`], [The social preview image.],
-  [`alt`], [Its alt text.],
-  [`author`], [The page's author, overriding the site default.],
-)
+The last five drive #link("../build/generate/meta.typ")[meta and social tags],
+the feeds, and what a listing row carries:
 
 ```typ
 #let frontmatter = (
@@ -140,8 +128,18 @@ Five of them the build reads itself, for
 )
 ```
 
+They read the same in a listing, as `entry.description`, `entry.image`,
+`entry.alt` and `entry.author`, so a card component draws the very image the
+`og:image` tag names.
+
+== Everything else
+
+Unknown keys aren't errors. They pass through as *extra* frontmatter, yours to
+read in a #link("templates.typ")[template] as `page.frontmatter.<key>` and in a
+listing as `entry.extra.<key>`.
+
 #callout(kind: "note")[
-  A key that is a near-miss of a recognized one (`titel`, `tag`, `redirects`) is
+  A key that is a near-miss of a recognized one (`titel`, `tag`, `descripton`) is
   treated as a typo and reported with a suggestion, not passed through.
 ]
 

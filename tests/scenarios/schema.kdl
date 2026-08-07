@@ -275,7 +275,7 @@ scenario "a nested dict is checked field by field" {
         collections {
           blog {
             schema {
-              author "dict" {
+              editor "dict" {
                 name "str"
                 email "str" optional=#true
               }
@@ -285,7 +285,7 @@ scenario "a nested dict is checked field by field" {
       }
       """#
     "content/blog/post.typ" #"""
-      #let frontmatter = (title: "P", author: (name: "A"),)
+      #let frontmatter = (title: "P", editor: (name: "A"),)
       body
       """#
   }
@@ -304,14 +304,14 @@ scenario "a field the nested dict is missing fails the build" {
         collections {
           blog {
             schema {
-              author "dict" { name "str" }
+              editor "dict" { name "str" }
             }
           }
         }
       }
       """#
     "content/blog/post.typ" #"""
-      #let frontmatter = (title: "P", author: (email: "a@example.com"),)
+      #let frontmatter = (title: "P", editor: (email: "a@example.com"),)
       body
       """#
   }
@@ -406,5 +406,52 @@ scenario "a schema constrains only its own collection" {
   expect {
     ok
     file "notes/note/index.html" { contains "note body" }
+  }
+}
+
+// The five keys the build reads for meta, feeds and listings are declared, so a
+// schema can require one and a wrong-typed value fails where it was written.
+scenario "a schema requires a declared meta key" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { description "str" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::missing" }
+  }
+}
+
+// A key the collection declares is a key the site named, so it is never read as
+// a near-miss of one baudelaire named.
+scenario "a schema-declared key is not a typo of a built-in" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { alte "str" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", alte: "x",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html" { contains "body" }
   }
 }

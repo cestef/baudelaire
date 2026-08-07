@@ -50,12 +50,19 @@ pub struct Item {
     /// `<time datetime>` wants.
     display: Option<String>,
     note: Option<String>,
-    /// The page's one-line summary, resolved once by
-    /// [`Frontmatter::description`] so a listing preview cannot disagree with
-    /// the `<meta>` tag, the feed entry and the announced record. Reading
-    /// `extra.summary` instead is how a theme silently loses the preview of
-    /// every page that spelled it `description`.
+    /// The page's one-line summary, resolved once by [`Frontmatter::blurb`] so a
+    /// listing preview cannot disagree with the `<meta>` tag, the feed entry and
+    /// the announced record.
     description: Option<String>,
+    /// The page's own social image, and what it shows: what a card component
+    /// draws. Declared keys rather than `extra` reads, so a theme is reading the
+    /// same image the `og:image` tag names.
+    image: Option<String>,
+    alt: Option<String>,
+    /// Who wrote the page, for a listing that credits its authors. The page's
+    /// own only: the site-wide default belongs to the page, not to a row of a
+    /// catalogue that may span languages.
+    author: Option<String>,
     /// The page's taxonomy terms, keyed by taxonomy (e.g. `tags`, `categories`),
     /// exposed as-is so a template picks whichever it wants, never flattened.
     taxonomies: BTreeMap<String, Vec<String>>,
@@ -73,44 +80,46 @@ impl Item {
             display: None,
             note: None,
             description: None,
+            image: None,
+            alt: None,
+            author: None,
             taxonomies: BTreeMap::new(),
             extra: Value::dict::<&str>([]),
         }
     }
 
-    /// The listing row for a page, the single page->item mapping, so every
-    /// listing (paginated index, taxonomy term) exposes the same data: link,
-    /// title, the date in both forms, the page's taxonomies, and its extra
-    /// frontmatter (summary, cover image, ..).
+    /// The listing row for a page: the single page->item mapping, so every
+    /// listing (paginated index, taxonomy term) and every catalogue exposes the
+    /// same data. One literal rather than a builder chain, because there is
+    /// exactly one caller and a new page-derived field should be one line here
+    /// rather than a setter nothing else ever calls.
     pub fn of(page: &Page, strings: &crate::content::Strings) -> Self {
-        let date = page
-            .frontmatter
-            .date
-            .map(|d| crate::content::Iso(d).to_string());
-        let display = page
-            .frontmatter
-            .date
-            .map(|d| crate::content::Localized::new(d, strings).to_string());
-        let extra = Value::dict(
-            page.frontmatter
-                .extra
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone())),
-        );
+        let fm = &page.frontmatter;
         Self {
             collection: page.collection.clone(),
             lang: page.lang.clone(),
+            date: fm.date.map(|d| crate::content::Iso(d).to_string()),
+            display: fm
+                .date
+                .map(|d| crate::content::Localized::new(d, strings).to_string()),
+            description: fm.blurb().map(str::to_owned),
+            image: fm.image.clone(),
+            alt: fm.alt.clone(),
+            author: fm.author.clone(),
+            taxonomies: fm.taxonomies.clone(),
+            // Whatever the page declared that this crate does not name: a
+            // theme's own `hero`, `weight`, `series`.
+            extra: Value::dict(
+                fm.extra
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone())),
+            ),
             ..Self::new(page.permalink.clone(), page.title())
         }
-        .dated(date)
-        .shown(display)
-        .described(page.frontmatter.description())
-        .with_taxonomies(page.frontmatter.taxonomies.clone())
-        .extra(extra)
     }
 
     /// This row as a typst [`Value`]: `(url, label, collection, lang, date,
-    /// display, note, description, taxonomies, extra)`.
+    /// display, note, description, image, alt, author, taxonomies, extra)`.
     ///
     /// The single rendering of a row, so a listing's `entries`, the
     /// `@baudelaire/pages` catalogue and its JavaScript counterpart cannot
@@ -125,6 +134,9 @@ impl Item {
             ("display", Value::opt(self.display.clone())),
             ("note", Value::opt(self.note.clone())),
             ("description", Value::opt(self.description.clone())),
+            ("image", Value::opt(self.image.clone())),
+            ("alt", Value::opt(self.alt.clone())),
+            ("author", Value::opt(self.author.clone())),
             (
                 "taxonomies",
                 Value::dict(self.taxonomies.iter().map(|(name, terms)| {
@@ -133,13 +145,6 @@ impl Item {
             ),
             ("extra", self.extra.clone()),
         ])
-    }
-
-    /// Attach the page's taxonomies, exposed to the template as
-    /// `entry.taxonomies` (a dict of `taxonomy -> (terms..)`).
-    pub fn with_taxonomies(mut self, taxonomies: BTreeMap<String, Vec<String>>) -> Self {
-        self.taxonomies = taxonomies;
-        self
     }
 
     /// A row with a trailing `(note)`.
@@ -152,33 +157,6 @@ impl Item {
             note: Some(note.into()),
             ..Self::new(url, label)
         }
-    }
-
-    /// Attach the localized rendering of the same date.
-    pub fn shown(mut self, display: Option<String>) -> Self {
-        self.display = display;
-        self
-    }
-
-    /// Attach the ISO date, shown by dated listings (e.g. a blog index).
-    pub fn dated(mut self, date: Option<String>) -> Self {
-        self.date = date;
-        self
-    }
-
-    /// Attach the page's one-line summary, exposed to the template as
-    /// `entry.description`. Built from [`Frontmatter::description`], so a page
-    /// that wrote `summary` and one that wrote `description` read the same here.
-    pub fn described(mut self, description: Option<String>) -> Self {
-        self.description = description;
-        self
-    }
-
-    /// Attach the source page's extra frontmatter, exposed to the template as
-    /// `entry.extra` so listings can render summaries, cover images, etc.
-    pub fn extra(mut self, extra: Value) -> Self {
-        self.extra = extra;
-        self
     }
 }
 

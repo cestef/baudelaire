@@ -280,8 +280,11 @@ A row is the same shape a generated listing hands its template as
   [`display`], [The same date, localized, or `none`.],
   [`note`], [A trailing annotation, or `none`.],
   [`description`], [Its one-line summary, from `description` or the `summary` alias.],
+  [`image`], [Its own social image, or `none`.],
+  [`alt`], [What that image shows, or `none`. Empty marks it decorative.],
+  [`author`], [Who wrote it, or `none`. The page's own; never the site default.],
   [`taxonomies`], [A dict of `taxonomy -> (terms..)`.],
-  [`extra`], [The page's own remaining frontmatter.],
+  [`extra`], [Frontmatter baudelaire does not name: the theme's own keys.],
 )
 
 The shape is shared on purpose: the card component a theme writes for its

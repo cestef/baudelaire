@@ -250,8 +250,8 @@ impl Card<'_> {
         let fm = &self.page.frontmatter;
         let (title, description, authored) = (
             fm.title.clone().unwrap_or_default(),
-            fm.description(),
-            fm.text("image"),
+            fm.blurb().map(str::to_owned),
+            fm.image.clone(),
         );
         // An authored image always wins; a generated card fills in for the
         // pages that have none, which is the whole point of generating them.
@@ -263,7 +263,8 @@ impl Card<'_> {
         // A generated card draws the page title, so that is a true description
         // of it. An authored image is the author's to describe.
         let alt = fm
-            .text("alt")
+            .alt
+            .clone()
             .or_else(|| (generated && image.is_some()).then(|| title.clone()))
             .filter(|alt| !alt.is_empty());
         Facts {
@@ -287,7 +288,8 @@ impl Card<'_> {
             // `<meta name="author">` and `article:author` named two different
             // people on the same page.
             author: fm
-                .text("author")
+                .author
+                .clone()
                 .or_else(|| self.config.author(&self.page.lang).map(str::to_owned)),
             terms: fm.taxonomies.values().flatten().cloned().collect(),
         }

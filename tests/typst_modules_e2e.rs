@@ -136,7 +136,7 @@ fn the_page_catalogue_is_bound_per_language() {
         #import "@baudelaire/pages:0.1.0": pages
         #let page(data, body) = [
           #for entry in pages("en") [
-            #entry.collection/#entry.label/#entry.date/#entry.extra.at("summary", default: "-")/#entry.taxonomies.at("tags", default: ()).len()/#(if entry.description == none { "-" } else { entry.description });
+            #entry.collection/#entry.label/#entry.date/#entry.extra.at("hero", default: "-")/#entry.taxonomies.at("tags", default: ()).len()/#(if entry.description == none { "-" } else { entry.description })/#entry.extra.at("summary", default: "gone");
           ]
         ]
         "#,
@@ -147,19 +147,22 @@ fn the_page_catalogue_is_bound_per_language() {
     );
     site.write(
         "content/posts/hello.typ",
-        "#let frontmatter = (\n  title: \"Hello\",\n  date: datetime(year: 2026, month: 7, day: 14),\n  tags: (\"rust\",),\n  summary: \"A summary.\",\n)\nx\n",
+        "#let frontmatter = (\n  title: \"Hello\",\n  date: datetime(year: 2026, month: 7, day: 14),\n  tags: (\"rust\",),\n  summary: \"A summary.\",\n  hero: \"cover.png\",\n)\nx\n",
     );
     site.stats();
 
     let html = site.output("index.html");
     // An undated page carries `date: none`, which prints as nothing.
-    assert!(html.contains("_root/Home//-/0/-"), "root page row: {html}");
-    // `description` is resolved from the `summary` alias, so a row shows the
-    // preview whichever spelling the page used. A template reading
-    // `extra.summary` sees only its own spelling, which is why the resolved
-    // field exists.
     assert!(
-        html.contains("posts/Hello/2026-07-14/A summary./1/A summary."),
+        html.contains("_root/Home//-/0/-/gone"),
+        "root page row: {html}"
+    );
+    // `description` is resolved from the `summary` alias, so a row shows the
+    // preview whichever spelling the page used. `summary` is a declared key, so
+    // it is *not* also in `extra`: a template reading `extra.summary` would see
+    // only its own spelling, which is why the resolved field exists.
+    assert!(
+        html.contains("posts/Hello/2026-07-14/cover.png/1/A summary./gone"),
         "post row carries date, extra, taxonomies and the resolved description: {html}"
     );
     // The taxonomy index at `/tags/` is a generated listing, so it is absent.

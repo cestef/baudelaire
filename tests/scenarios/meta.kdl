@@ -248,3 +248,58 @@ scenario "no json-ld without the key" {
     }
   }
 }
+
+// `description`, `summary`, `image`, `alt` and `author` are declared keys, so a
+// wrong-typed value is named where it was written instead of reading as absent.
+scenario "a meta key of the wrong type is refused" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hello", description: 7)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::frontmatter_field" }
+  }
+}
+
+// A near-miss of one of them is a typo, and used to pass silently into `extra`,
+// shipping a page with no description out of a green build.
+scenario "a misspelt description is reported rather than dropped" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hello", descripton: "A short summary.")
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::unknown_frontmatter_key" }
+  }
+}
+
+// But a key that merely *starts* with one is a different word, not a slip: a
+// site may still carry its own `authors` beside the built-in `author`.
+scenario "a longer key that extends a built-in passes through" {
+  files {
+    "config.kdl" #"""
+      site "S"
+      url "https://s.example"
+      """#
+    "content/post.typ" #"""
+      #let frontmatter = (title: "Hello", authors: ("A", "B"), images: ("a.png",))
+      body
+      """#
+  }
+  expect {
+    ok
+    file "post/index.html" { contains "body" }
+  }
+}

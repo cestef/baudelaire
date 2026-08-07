@@ -139,6 +139,46 @@ const FIELDS: &[(&str, Shape, Field)] = &[
             Ok(())
         },
     ),
+    (
+        "description",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.description = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
+    (
+        "summary",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.summary = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
+    (
+        "image",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.image = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
+    (
+        "alt",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.alt = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
+    (
+        "author",
+        || FieldType::Str,
+        |fm, v, at| {
+            fm.author = Some(v.string(at)?);
+            Ok(())
+        },
+    ),
 ];
 
 /// Parsed frontmatter for a single page.
@@ -201,6 +241,25 @@ pub struct Frontmatter {
     /// keeps a key that reads a file off disk from being a way for content to
     /// name any file on the machine.
     pub source: Option<String>,
+    /// The page's one-line summary, read by the head tags, the feed entry, the
+    /// listing preview and the announced record.
+    ///
+    /// Declared rather than read out of `extra` by name, which is what these
+    /// five keys used to be. A convention nothing declares is a convention
+    /// nothing can check: `descripton` was accepted in silence and the page
+    /// simply shipped without a description, out of a green build, and a
+    /// collection schema could not require one because the key was not a key.
+    pub description: Option<String>,
+    /// The alias [`Frontmatter::description`] falls back to, for the sites that
+    /// spell it this way. Its own field so both spellings are declared and the
+    /// one rule that prefers between them stays in one place.
+    pub summary: Option<String>,
+    /// The page's own social image, which always wins over a generated card.
+    pub image: Option<String>,
+    /// What that image shows. Empty marks it decorative, as it does in markup.
+    pub alt: Option<String>,
+    /// Who wrote this page, over the site's default for its language.
+    pub author: Option<String>,
     pub taxonomies: BTreeMap<String, Vec<String>>,
     pub extra: BTreeMap<String, codegen::Value>,
 }
@@ -229,22 +288,21 @@ impl Frontmatter {
         self.updated.or(self.date)
     }
 
-    /// The page's one-line summary, from `description` or its `summary` alias.
+    /// The page's one-line summary: `description`, else its `summary` alias.
     ///
-    /// One rule, because three consumers ask the same question and a reader who
+    /// One rule, because four consumers ask the same question and a reader who
     /// sees a preview in a `<meta>` tag but not in the feed would be reading a
-    /// bug: the head tags, the feed entry, and the announced record.
-    pub fn description(&self) -> Option<String> {
-        self.text("description").or_else(|| self.text("summary"))
+    /// bug: the head tags, the feed entry, the listing row, and the announced
+    /// record.
+    pub fn blurb(&self) -> Option<&str> {
+        self.description.as_deref().or(self.summary.as_deref())
     }
 
-    /// A string value from `extra` (arbitrary frontmatter), if present and a
-    /// string, e.g. `description`, `summary`, `image`, `author`.
-    pub fn text(&self, key: &str) -> Option<String> {
-        self.extra
-            .get(key)
-            .and_then(codegen::Value::as_str)
-            .map(str::to_owned)
+    /// A string value from `extra` (frontmatter this crate does not name), if
+    /// present and a string. The one reader of an undeclared key, so a theme's
+    /// own `hero` or `weight` is still available to it.
+    pub fn text(&self, key: &str) -> Option<&str> {
+        self.extra.get(key).and_then(codegen::Value::as_str)
     }
 
     /// Reject the removed `#frontmatter(..)` call form with a migration error.
@@ -323,6 +381,13 @@ impl Frontmatter {
             .iter()
             .map(|(_, t)| t.key.as_str())
             .collect();
+        // A key the collection's own schema declares is a key this site named,
+        // so it can never be a near-miss of one this crate named.
+        let declared: Vec<&str> = config
+            .schema(origin.collection)
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect();
         let mut fm = Self::default();
         for (key, val) in dict {
             let key = key.as_str();
@@ -331,6 +396,9 @@ impl Frontmatter {
                 Some((.., parse)) => parse(&mut fm, val, at)?,
                 None if taxonomies.contains(&key) => {
                     fm.taxonomies.insert(key.to_owned(), val.strings(at)?);
+                }
+                None if declared.contains(&key) => {
+                    fm.extra.insert(key.to_owned(), codegen::Value::from(val));
                 }
                 None => match Self::suggest(key, &taxonomies) {
                     Some(near) => return Err(at.unknown(&near)),
@@ -379,13 +447,32 @@ impl Frontmatter {
     /// The known key a typo'd `key` most likely meant, if it is a near-miss of
     /// one (and not itself a real extra key). Reuses the config did-you-mean
     /// over the one known-key set (built-ins plus configured taxonomies).
+    ///
+    /// Unlike the config's, this suggestion *rejects* the key rather than
+    /// merely annotating an error the caller was raising anyway, so it is held
+    /// to [`Self::extends`] as well: here a false positive is a legal key a site
+    /// can no longer use at all.
     fn suggest(key: &str, taxonomies: &[&str]) -> Option<String> {
         let known: Vec<&str> = FIELDS
             .iter()
             .map(|(name, ..)| *name)
             .chain(taxonomies.iter().copied())
             .collect();
-        Keys::of(&known).nearest(key).map(str::to_owned)
+        Keys::of(&known)
+            .nearest(key)
+            .filter(|near| !Self::extends(key, near))
+            .map(str::to_owned)
+    }
+
+    /// Whether `key` is a known key with more written after it, which makes it a
+    /// *different* word rather than a slip: `authors` beside `author`, `images`
+    /// beside `image`.
+    ///
+    /// One direction only. A key that merely *starts* a known one is still a
+    /// typo, because that is what stopping early looks like: `tag` on a site
+    /// with `tags` is the mistake the suggestion exists for.
+    fn extends(key: &str, known: &str) -> bool {
+        key.len() > known.len() && key.starts_with(known)
     }
 }
 

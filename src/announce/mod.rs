@@ -62,7 +62,7 @@ impl From<&Page> for Doc {
         Self {
             path: page.permalink.clone(),
             title: page.title().to_owned(),
-            description: fm.description(),
+            description: fm.blurb().map(str::to_owned),
             date: fm.date,
             tags: fm.taxonomies.values().flatten().cloned().collect(),
         }

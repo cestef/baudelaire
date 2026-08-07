@@ -8,9 +8,9 @@ use miette::Diagnostic;
 #[test]
 fn a_schema_dict_still_declares_its_fields_in_a_block() {
     let cfg =
-        parse(r#"content { collections { posts { schema { author "dict" { name "str" } } } } }"#);
+        parse(r#"content { collections { posts { schema { editor "dict" { name "str" } } } } }"#);
     let (key, field) = &cfg.content.collections[0].1.schema[0];
-    assert_eq!(key, "author");
+    assert_eq!(key, "editor");
     let FieldType::Dict(fields) = &field.ty else {
         panic!("the dict's own fields were not read from its block");
     };
@@ -58,7 +58,7 @@ fn schema_reads_nested_types_and_the_fields_of_a_dict() {
                 blog {
                     schema {
                         widths "list<int>"
-                        author "dict" {
+                        editor "dict" {
                             name "str"
                             email "str" optional=#true
                         }

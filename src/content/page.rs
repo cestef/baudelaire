@@ -351,7 +351,7 @@ impl Page {
     /// index, and one render per term would dominate the build).
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
         config.generate.cards.active()
-            && self.frontmatter.text("image").is_none()
+            && self.frontmatter.image.is_none()
             && !matches!(self.data, Data::Generated { .. })
     }
 

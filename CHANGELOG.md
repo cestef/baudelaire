@@ -29,6 +29,31 @@ chores are visible in the git history and change nothing for a site.
   redirects: what goes in `_headers` is then computed from the site's own
   `caching` and `csp`.
 
+### Upgrading
+
+- **`description`, `summary`, `image`, `alt` and `author` are recognized
+  frontmatter keys** rather than conventions read out of a page's extra
+  frontmatter by name. Three consequences, all of which can fail a build that
+  previously passed:
+
+  - A wrong-typed value is now an error naming the file and the field. It used to
+    read as absent, so a page shipped without a description out of a green build.
+  - A near-miss (`descripton`, `athor`) is reported as a typo instead of passing
+    silently into `extra`.
+  - A collection schema may declare them, and one declaring a different type
+    (`author "dict"`) is refused at the config line. Name a key of your own
+    (`editor`, `authors`) for a structured value.
+
+  They also leave `extra`. A template reading `page.frontmatter.description` is
+  unaffected (a `.typ` page's dict is its own binding), but a listing row that
+  read `entry.extra.summary` now reads `entry.description`, and
+  `entry.image`, `entry.alt` and `entry.author` join it on every row and in
+  `baudelaire:pages`.
+
+  A key that merely *extends* one of them is not a typo: `authors` and `images`
+  pass through as they always did. So does any key a collection's schema
+  declares.
+
 ### Added
 
 - **`typst { fonts { } }`**: the faces a build can see.
