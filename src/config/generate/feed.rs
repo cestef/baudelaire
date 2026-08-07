@@ -58,6 +58,17 @@ pub struct FeedNames {
 }
 
 impl FeedConfig {
+    /// Whether an entry carries the page's prose as well as its summary.
+    ///
+    /// The single spelling of the question, because two layers apart ask it and
+    /// must agree: the render pass decides whether to capture a page's prose at
+    /// all, and the feed emitter decides whether to write it. Were they to
+    /// disagree, a site would pay for a capture nothing reads, or worse write
+    /// feeds whose bodies are all empty.
+    pub fn full(&self) -> bool {
+        self.content == Content::Full
+    }
+
     /// This format's file name: the configured override, else the conventional
     /// one.
     ///

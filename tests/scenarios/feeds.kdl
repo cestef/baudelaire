@@ -932,6 +932,59 @@ scenario "a full feed on a page with no region carries prose, not the document" 
   }
 }
 
+// An entry travels to a reader that has no page to resolve `/posts/b/` against,
+// so a link that works on the site resolves against the aggregator's own host.
+// Every URL in a feed body is absolute, the same rule `og:image` follows.
+scenario "a full feed's body carries absolute urls" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed { formats "rss"; content "full" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        date: "2026-01-02",
+        description: "The short one.",
+      )
+      See #link("b.typ")[the other post].
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", date: "2026-01-01")
+      body
+      """#
+  }
+  build {
+    expect {
+      ok
+      pages 2
+      cached 0
+      file "rss.xml" { contains "https://s.example/posts/b/" }
+      // The page itself keeps the root-relative link a browser resolves fine:
+      // absolutizing happens on a clone, and never touches what is written.
+      file "posts/a/index.html" { contains #"href="/posts/b/""# }
+    }
+  }
+  // The body is captured off the DOM at compile time, which a cached page no
+  // longer has. It is recorded beside the page's markup and replayed, or the
+  // second build of a site would publish a feed of empty entries.
+  build {
+    expect {
+      ok
+      pages 2
+      cached 2
+      file "rss.xml" { contains "https://s.example/posts/b/" }
+    }
+  }
+}
+
 // `ignore` names the chrome a layout puts *inside* its region. It reached the
 // search index and not the feed, so a sidebar inside `<main>` travelled.
 scenario "a full feed drops the chrome inside its region" {

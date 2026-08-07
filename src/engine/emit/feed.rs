@@ -6,9 +6,8 @@ use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Site, Warn};
-use crate::config::{BaseUrl, Channel, Config, Content, FeedConfig, FeedKind, Permalink};
+use crate::config::{BaseUrl, Channel, Config, FeedConfig, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
-use crate::engine::text::{Region, Text};
 use crate::error::warning::FeedMounted;
 use crate::error::{Artifact, FeedDateError, Result};
 
@@ -45,28 +44,33 @@ impl FeedKind {
 /// Empty for a summary feed, which is what makes `Feed::body` a lookup rather
 /// than a branch: nothing is in the map, so nothing is found.
 #[derive(Default)]
-struct Bodies<'a>(std::collections::HashMap<&'a str, std::borrow::Cow<'a, str>>);
+struct Bodies<'a>(std::collections::HashMap<&'a str, &'a str>);
 
 impl<'a> Bodies<'a> {
     /// The prose of every built page, or nothing at all when the site asked for
     /// summaries.
+    ///
+    /// A lookup rather than work: the markup was captured off the typed DOM at
+    /// compile time and replayed here for a cached page just the same, so this
+    /// only indexes it by the permalink a feed entry knows the page by. Empty
+    /// for a summary feed, which is what makes [`Feed::body`] a lookup rather
+    /// than a branch: nothing is in the map, so nothing is found.
     fn of(site: &'a Site<'a>) -> Self {
-        if site.config.generate.feed.content != Content::Full {
-            return Self::default();
-        }
-        let region = Region::from(&site.config.html.region);
         Self(
             site.outputs
                 .iter()
-                .map(|out| (out.page.permalink.as_str(), Text::prose(out.html, region)))
+                .filter_map(|out| {
+                    let body = out.syndicated?;
+                    Some((out.page.permalink.as_str(), body.0.as_str()))
+                })
                 .collect(),
         )
     }
 
     /// This page's prose, or `None` when the site asked for summaries or the
     /// page was not built in this run.
-    fn get(&self, page: &Page) -> Option<&str> {
-        self.0.get(page.permalink.as_str()).map(AsRef::as_ref)
+    fn get(&self, page: &Page) -> Option<&'a str> {
+        self.0.get(page.permalink.as_str()).copied()
     }
 }
 
@@ -326,7 +330,7 @@ impl<'a> Feed<'a> {
 
     fn rss(&self, xml: &mut Xml, stamps: &[Stamps]) {
         let mut attrs: Vec<(&str, &str)> = vec![("version", "2.0")];
-        if self.names.content == Content::Full {
+        if self.names.full() {
             attrs.push(Self::CONTENT_NS);
         }
         xml.nest("rss", &attrs, |xml| {

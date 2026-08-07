@@ -60,6 +60,11 @@ around it never travel with it, and neither does anything `region { ignore }`
 names *inside* it. Scripts and stylesheets are dropped too: a reader runs
 neither, and both would arrive as text.
 
+Every URL in it is absolute. An entry is read somewhere else entirely, and a
+reader has no page to resolve `/posts/other/` against, so links, images and
+`srcset` candidates all name the full URL under the site's `url`. The page
+itself is untouched and keeps the root-relative form.
+
 A layout that emits no region at all falls back to `<body>`, never to the whole
 document. That is where a feed parts company with the search index, which counts
 a page with no region whole rather than not at all. Name a region if your pages

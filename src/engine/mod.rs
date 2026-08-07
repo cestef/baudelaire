@@ -49,7 +49,7 @@ use crate::fs;
 // post-build outputs rather than the files a build writes for tooling.
 use crate::generated::Generated as _;
 use crate::graph::{Cache, Hash, Outputs, SiteInputs};
-use crate::render::{AssetMap, Emitted, Fragments, SrcSets};
+use crate::render::{AssetMap, Emitted, Fragments, SrcSets, Syndicated};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
@@ -494,12 +494,14 @@ impl Engine {
                 page: r.page,
                 html: r.html.as_str(),
                 fragments: r.outputs.fragments.as_ref(),
+                syndicated: r.outputs.syndicated.as_ref(),
                 inline: &r.outputs.inline,
             })
             .chain(cached.iter().map(|(page, html, out)| Output {
                 page,
                 html: html.as_str(),
                 fragments: out.fragments.as_ref(),
+                syndicated: out.syndicated.as_ref(),
                 inline: &out.inline,
             }))
             .collect()
@@ -820,6 +822,25 @@ impl Engine {
             .enabled
             .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
             .transpose()?;
+        // The prose a full-content feed publishes, captured for the same reason
+        // and at the same cost: the region with the chrome gone and every URL
+        // absolute cannot be recovered from the finished page without parsing
+        // it, and only a site that asked for full entries pays the second pass.
+        let syndicated = self
+            .config
+            .generate
+            .feed
+            .full()
+            .then(|| {
+                Syndicated::capture(
+                    &doc,
+                    &options,
+                    &self.config.html.region,
+                    self.config.base().as_ref(),
+                )
+                .map_err(&serialization_failed)
+            })
+            .transpose()?;
         // A sidecar is a second, paged compile of the same page, so only a stale
         // page pays for one. A cache hit keeps the file already in `dist`.
         let (artifacts, drawn) =
@@ -871,6 +892,7 @@ impl Engine {
                 // such a page immune to the graph entirely.
                 backlinks: pass.prepare.digest(page),
                 fragments,
+                syndicated,
                 lints: rewrite.lints,
                 weight: rewrite.weight,
                 inline: rewrite.inline,

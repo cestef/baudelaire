@@ -1,13 +1,20 @@
-//! A page's markup, captured in the pieces the single-file export assembles.
+//! Pieces of a page's markup, re-serialized out of the typed DOM.
 //!
-//! The export needs each page's contents without the document wrapper
-//! typst-html always writes, and it needs them for cache-served pages too, long
-//! after the DOM is gone. Both are satisfied by re-serializing the typed DOM at
-//! compile time, so nothing ever takes a rendered page apart as text.
+//! Two consumers, with the same two needs: markup without the document wrapper
+//! typst-html always writes, and markup that survives for a cache-served page,
+//! long after the DOM is gone. [`Fragments`] is what the single-file export
+//! assembles; [`Syndicated`] is the prose a full-content feed publishes.
+//!
+//! Captured here, at compile time, rather than sliced out of the finished page,
+//! so nothing ever takes a rendered page apart as text.
 
 use serde::{Deserialize, Serialize};
 use typst::diag::SourceResult;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlOptions, HtmlTag, attr, tag};
+
+use crate::config::{BaseUrl, RegionConfig};
+
+use super::transform::ElementExt;
 
 /// The doctype [`typst_html::html`] writes ahead of any root element, and the
 /// wrapper this module serializes through. Both are strings *we* produced one
@@ -48,12 +55,12 @@ impl Fragments {
         let mut lifted = Vec::new();
         Self::lift(doc.root_mut(), &mut lifted);
         Ok(Self {
-            head: Self::markup(&doc, Self::children(&doc, tag::head), options)?,
+            head: Markup::of(&doc, Self::children(&doc, tag::head), options)?,
             resources: lifted
                 .into_iter()
-                .map(|el| Self::markup(&doc, [HtmlNode::Element(el)], options))
+                .map(|el| Markup::of(&doc, [HtmlNode::Element(el)], options))
                 .collect::<SourceResult<_>>()?,
-            body: Self::markup(&doc, Self::children(&doc, tag::body), options)?,
+            body: Markup::of(&doc, Self::children(&doc, tag::body), options)?,
         })
     }
 
@@ -104,10 +111,21 @@ impl Fragments {
             })
             .unwrap_or_default()
     }
+}
 
-    /// Serialize loose nodes by handing them to typst-html as the root of a
-    /// bare wrapper, then peeling that wrapper back off.
-    fn markup(
+/// Loose DOM nodes, re-serialized by typst-html's own pass.
+///
+/// typst-html serializes a *document*, so a piece of one is handed to it as the
+/// root of a bare `<template>` and that wrapper peeled back off. Both ends of
+/// the envelope are constants this module asked for one call earlier, so it is
+/// unwrapping its own output rather than parsing markup.
+///
+/// One owner, because both captures in this module need it and the peeling is
+/// the part that would quietly cut into real markup if the two drifted.
+struct Markup;
+
+impl Markup {
+    fn of(
         doc: &HtmlDocument,
         nodes: impl IntoIterator<Item = HtmlNode>,
         options: &HtmlOptions,
@@ -130,18 +148,108 @@ impl Fragments {
     }
 }
 
+/// One page's prose as a full-content feed publishes it: the markup of the
+/// region `html { region }` names, with the site's chrome taken out and every
+/// URL made absolute.
+///
+/// Captured from the DOM rather than sliced out of the finished page, and that
+/// is the whole point. A feed entry travels to a reader that has no page to
+/// resolve `/posts/b/` or `/assets/app.abc.css` against, so the URLs have to be
+/// rewritten, and rewriting serialized markup as a string is what the typed DOM
+/// exists to avoid. It is the same argument the social card's `og:image` is
+/// absolutized under.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Syndicated(pub String);
+
+impl Syndicated {
+    /// Capture the prose a feed carries for this page.
+    ///
+    /// The region, or `<body>` when the layout emits no such element. Never the
+    /// whole document: it begins `<!DOCTYPE html><head>`, and a layout that
+    /// names no region would otherwise publish its every `<meta>` tag as the
+    /// entry's body. The search index makes the opposite choice, because it
+    /// would rather index a page whole than not at all.
+    pub fn capture(
+        doc: &HtmlDocument,
+        options: &HtmlOptions,
+        region: &RegionConfig,
+        base: Option<&BaseUrl>,
+    ) -> SourceResult<Self> {
+        let mut doc = doc.clone();
+        let root = doc.root_mut();
+        Self::prune(root, &region.ignore);
+        root.walk(&mut |element| {
+            element.assets(|url| Some(BaseUrl::resolve(base, url)));
+        });
+        let found = HtmlTag::intern(&region.element)
+            .ok()
+            .and_then(|element| Self::find(doc.root(), element));
+        let nodes = found
+            .or_else(|| Self::find(doc.root(), tag::body))
+            .unwrap_or_else(|| doc.root().children.to_vec());
+        Markup::of(&doc, nodes, options).map(Self)
+    }
+
+    /// Whether an element is chrome rather than prose, and so goes with its
+    /// contents.
+    ///
+    /// The same three rules the search index applies to the finished text
+    /// (`Text::skipped`), stated here against the typed DOM because the two see
+    /// different things: a raw element a reader never reads, one the site named
+    /// in `region { ignore }`, and one that declares itself hidden from
+    /// assistive technology. That last covers a heading's own self link, which
+    /// says nothing the heading has not and would travel as a stray `#`.
+    fn chrome(element: &HtmlElement, ignore: &[String]) -> bool {
+        element.tag == tag::script
+            || element.tag == tag::style
+            || element
+                .attrs
+                .get(attr::aria_hidden)
+                .is_some_and(|v| v == "true")
+            || ignore
+                .iter()
+                .any(|name| element.tag.resolve().eq_ignore_ascii_case(name))
+    }
+
+    /// Drop every chrome element from the tree, depth-first.
+    fn prune(element: &mut HtmlElement, ignore: &[String]) {
+        element
+            .children
+            .retain(|node| !matches!(node, HtmlNode::Element(el) if Self::chrome(el, ignore)));
+        for node in element.children.make_mut() {
+            if let HtmlNode::Element(child) = node {
+                Self::prune(child, ignore);
+            }
+        }
+    }
+
+    /// The children of the first `which` element anywhere in the tree.
+    ///
+    /// Anywhere, not just under the root: a layout is free to put its `<main>`
+    /// inside a wrapper, and typst-html's own `<body>` is a child of the root.
+    fn find(element: &HtmlElement, which: HtmlTag) -> Option<Vec<HtmlNode>> {
+        if element.tag == which {
+            return Some(element.children.to_vec());
+        }
+        element.children.iter().find_map(|node| match node {
+            HtmlNode::Element(el) => Self::find(el, which),
+            _ => None,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Fragments;
+    use super::Markup;
 
     #[test]
     fn unwrap_peels_the_doctype_and_wrapper() {
         assert_eq!(
-            Fragments::unwrap("<!DOCTYPE html><template><p>hi</p></template>"),
+            Markup::unwrap("<!DOCTYPE html><template><p>hi</p></template>"),
             "<p>hi</p>"
         );
         assert_eq!(
-            Fragments::unwrap("<!DOCTYPE html>\n<template>\n  <p>hi</p>\n</template>\n"),
+            Markup::unwrap("<!DOCTYPE html>\n<template>\n  <p>hi</p>\n</template>\n"),
             "<p>hi</p>"
         );
     }
@@ -151,9 +259,9 @@ mod tests {
     /// with its first tag sliced off.
     #[test]
     fn unwrap_leaves_unrecognized_output_alone() {
-        assert_eq!(Fragments::unwrap("<p>hi</p>"), "<p>hi</p>");
+        assert_eq!(Markup::unwrap("<p>hi</p>"), "<p>hi</p>");
         assert_eq!(
-            Fragments::unwrap("<!DOCTYPE html><html><body>hi</body></html>"),
+            Markup::unwrap("<!DOCTYPE html><html><body>hi</body></html>"),
             "<html><body>hi</body></html>"
         );
     }

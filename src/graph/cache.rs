@@ -30,7 +30,7 @@ use crate::graph::objects::Objects;
 use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
 use crate::render::{
     AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
-    Target, UrlDeps, Weight,
+    Syndicated, Target, UrlDeps, Weight,
 };
 use crate::ui::Ui;
 
@@ -163,6 +163,15 @@ pub struct Outputs {
     /// bundled just like a freshly compiled one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fragments: Option<Fragments>,
+    /// The page's prose as a full-content feed publishes it, captured only while
+    /// `generate { feed { content "full" } }` is on.
+    ///
+    /// Stored for the same reason as `fragments`: the URLs in it are absolute
+    /// and the site's chrome is gone, neither of which can be recovered from the
+    /// rendered page without parsing it, and a cache-served page has to appear
+    /// in the feed just like a freshly compiled one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub syndicated: Option<Syndicated>,
     /// What the lint pass found on the page, and what the page ships.
     ///
     /// Stored for the same reason as `broken`: both checks run site-wide over

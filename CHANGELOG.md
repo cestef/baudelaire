@@ -88,6 +88,11 @@ chores are visible in the git history and change nothing for a site.
   all parsed green and configured only the positionals. Delete the pair; there
   was never a setting behind it.
 
+- **The cache schema moved to 18, so the first build after this upgrade is a cold
+  one.** A page now records the prose a full-content feed publishes for it. An
+  entry written before this records none, so a cached page would drop out of the
+  feed body it used to be in. Nothing to do; the rebuild happens once.
+
 - **A site that ships its own fonts rebuilds when one of them changes.** The
   faces under `typst { fonts { paths } }` are now part of the build fingerprint,
   so the first build after this upgrade is a cold one for those sites. Every
@@ -164,9 +169,10 @@ chores are visible in the git history and change nothing for a site.
   The body comes from `html { region }`, the same part of the page the search
   index reads, so neither the chrome around it nor anything `region { ignore }`
   names inside it travels. A layout that emits no region falls back to `<body>`,
-  never to the whole document. The summary is kept beside it, in the element each
-  format has for one: `content:encoded` for RSS, `<content type="html">` for
-  Atom, `content_html` for JSON Feed.
+  never to the whole document. Every URL in it is absolute, since a reader has no
+  page to resolve a root-relative one against. The summary is kept beside it, in
+  the element each format has for one: `content:encoded` for RSS,
+  `<content type="html">` for Atom, `content_html` for JSON Feed.
 
 - **A page opts out of the files a build generates about it**, with an `exclude`
   list in its frontmatter:

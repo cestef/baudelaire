@@ -37,7 +37,7 @@ use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::warning::BaseUrlMissing;
 use crate::error::{Artifact, BaseUrlRequired, Result, SerializeError};
-use crate::render::Fragments;
+use crate::render::{Fragments, Syndicated};
 use crate::ui::Ui;
 
 /// One built page: everything the render pass produced for it, whether it was
@@ -52,6 +52,9 @@ pub(super) struct Output<'a> {
     /// Its head and body markup, present only while the single-file export is
     /// on (nothing else pays to capture them).
     pub fragments: Option<&'a Fragments>,
+    /// Its prose as a feed publishes it, present only while
+    /// `generate { feed { content "full" } }` is on, for the same reason.
+    pub syndicated: Option<&'a Syndicated>,
     /// The digests of its inline scripts and styles, for the generated content
     /// security policy. Empty unless one is being generated.
     pub inline: &'a crate::render::Inline,
@@ -59,13 +62,15 @@ pub(super) struct Output<'a> {
 
 #[cfg(test)]
 impl<'a> Output<'a> {
-    /// A page and its markup, with no fragments: what a test builds when the
-    /// processor under it never looks at the single-file export's half.
+    /// A page and its markup, with neither capture: what a test builds when the
+    /// processor under it looks at neither the single-file export's half nor a
+    /// full feed's.
     pub(super) fn new(page: &'a Page, html: &'a str) -> Self {
         Self {
             page,
             html,
             fragments: None,
+            syndicated: None,
             inline: crate::render::Inline::EMPTY,
         }
     }

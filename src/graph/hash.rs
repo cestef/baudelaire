@@ -151,6 +151,9 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// 18: `Outputs` carries the page's prose as a full-content feed publishes
+    /// it, absolute URLs and all. An entry written before this records none, so
+    /// a cached page would drop out of the feed body it used to be in.
     /// 17: a page records the `#fragment` links into its own body, which the
     /// deep-link check now resolves rather than passing through. An entry
     /// written before this names none of them, so under the narrower rule a
@@ -216,7 +219,7 @@ impl Renderer {
     /// export. 3: `Entry` groups the render pass's results under `outputs`,
     /// which now also carries the page's broken links. 2: `Entry::deps` values
     /// became `Option<Hash>`, and manifest keys became project-relative.
-    const SCHEMA: u32 = 17;
+    const SCHEMA: u32 = 18;
 
     pub fn current() -> Self {
         Self {

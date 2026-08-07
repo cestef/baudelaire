@@ -21,7 +21,7 @@ mod transform;
 
 pub use asset::{AssetDeps, AssetMap};
 pub use emitted::{Emission, Emitted};
-pub use fragment::Fragments;
+pub use fragment::{Fragments, Syndicated};
 pub use inline::Inline;
 pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target, UrlDeps};
 pub use lint::{Finding, Load, Reference, Weight};
