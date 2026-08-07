@@ -42,7 +42,13 @@ reads the same region, so both mean the same thing by "the page's prose".
 Both are tag names, matched whole and case-insensitively; nesting is counted, so
 an `<article>` inside an `<article>` does not end the region early. A page with
 no such element counts whole, which is what a 404 or a landing page wants.
-`element ""` counts every page whole.
+`element ""` counts every page whole. (A feed does not share that fallback; see
+#link("feeds.typ")[feeds].)
+
+Two things are always dropped and need no naming: `<script>` and `<style>`, and
+anything marked `aria-hidden="true"`. The second is why a heading's
+#link("../../write/pages.typ")[self link] never lands in the index as a stray
+`#`, and it works for a theme's own decorative markup too.
 
 == Keys
 

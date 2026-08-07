@@ -288,20 +288,46 @@ impl Text {
     }
 
     /// The name of the element opening at `tag` whose contents are skipped
-    /// rather than indexed: a raw-text element, always, or one the site
-    /// excludes. Case-insensitive without allocating (HTML tag names are ASCII).
-    fn skipped<'a>(tag: &str, ignore: &'a [String]) -> Option<&'a str> {
+    /// rather than read: a raw-text element, always; one the site excludes; or
+    /// one marked `aria-hidden="true"`.
+    ///
+    /// That last rule is what keeps a heading's own self link
+    /// (`html { anchors { link } }`) out of the prose. It is markup this crate
+    /// injects, saying nothing a reader has not just been told by the heading
+    /// around it, and its `#` would otherwise be a word in every page's search
+    /// index and a stray character in every feed body. Honouring the attribute
+    /// rather than the class covers a theme's own decorative markup too, which
+    /// `ignore` cannot: a name matches every element that has it.
+    ///
+    /// Case-insensitive without allocating (HTML tag names are ASCII).
+    fn skipped<'a>(tag: &'a str, ignore: &[String]) -> Option<&'a str> {
         const RAW: [&str; 2] = ["script", "style"];
-        RAW.iter()
+        let name = Self::name(tag)?;
+        let excluded = RAW
+            .iter()
             .copied()
             .chain(ignore.iter().map(String::as_str))
-            .find(|name| {
-                let b = tag.as_bytes();
-                b.len() > name.len()
-                    && b[1..=name.len()].eq_ignore_ascii_case(name.as_bytes())
-                    && b.get(name.len() + 1)
-                        .is_some_and(|b| b.is_ascii_whitespace() || *b == b'>' || *b == b'/')
-            })
+            .any(|excluded| excluded.eq_ignore_ascii_case(name));
+        (excluded || Self::hidden(tag)).then_some(name)
+    }
+
+    /// The tag name of the element opening at `tag`, or `None` when what opens
+    /// there is not one: a closing tag, a comment, a doctype, a stray `<`.
+    fn name(tag: &str) -> Option<&str> {
+        let rest = tag.strip_prefix('<')?;
+        let end = rest.find(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/')?;
+        let name = rest.get(..end).filter(|name| !name.is_empty())?;
+        name.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            .then_some(name)
+    }
+
+    /// Whether the element opening at `tag` declares itself hidden from
+    /// assistive technology. Read off the open tag as written, which is this
+    /// crate's own serializer output: a lowercase name, a quoted value.
+    fn hidden(tag: &str) -> bool {
+        tag.find('>')
+            .is_some_and(|gt| tag[..gt].contains(r#"aria-hidden="true""#))
     }
 
     /// The byte offset of `</tag` at or after `from`, matched case-insensitively
@@ -672,6 +698,24 @@ mod tests {
         );
         assert!(matches!(body, std::borrow::Cow::Borrowed(_)));
         assert_eq!(body, "<nav>inner</nav><p>Real prose.</p>");
+    }
+
+    /// Markup that announces itself as hidden is not prose, in either reader.
+    /// A heading's self link is the case this exists for: it says nothing the
+    /// heading has not, so its `#` belongs in neither the index nor a feed.
+    #[test]
+    fn what_is_hidden_from_a_reader_is_hidden_from_both_readers() {
+        let html = "<main><h2 id=\"one\">One\
+                    <a class=\"anchor\" href=\"#one\" aria-hidden=\"true\" tabindex=\"-1\">#</a>\
+                    </h2><p>Some prose.</p></main>";
+        assert_eq!(text(html), "One Some prose.");
+        assert_eq!(
+            Text::prose(html, Region::default()),
+            "<h2 id=\"one\">One</h2><p>Some prose.</p>"
+        );
+        // `aria-hidden="false"` is the author saying the opposite.
+        let shown = "<main><span aria-hidden=\"false\">kept</span></main>";
+        assert_eq!(text(shown), "kept");
     }
 
     /// A script is neither prose nor markup a reader runs, and an element that
