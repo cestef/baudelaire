@@ -240,6 +240,9 @@ impl Kind {
             Self::Size => "size".to_owned(),
             Self::Time => "duration".to_owned(),
             Self::Version => "version".to_owned(),
+            // The boolean leads, because it is the spelling that was there
+            // first and the one most sites write.
+            Self::Level(names) => format!("flag | {}", names().join(" | ")),
             Self::Path => "path".to_owned(),
             Self::Url => "url".to_owned(),
             Self::Template => "template".to_owned(),

@@ -28,35 +28,42 @@ not a byte offset in generated markup.
 
 == The rules
 
-Each is a flag, on while the block is present, off by name.
+Each is on while the block is present, and off by name.
 
 #table(
-  columns: 3,
-  align: (left, left, left),
-  table.header([Key], [Type], [Does]),
-  [`headings`],
-  [flag],
-  [Reports a heading that skips a level, `h2` straight to `h4`.],
-
-  [`alt`],
-  [flag],
-  [Reports an `<img>` with no `alt` attribute at all.],
-
-  [`ids`],
-  [flag],
-  [Reports an `id` used more than once on a page.],
-
-  [`aria`],
-  [flag],
-  [Reports an unknown ARIA role or attribute, and one pointing at an id that is not there.],
+  columns: 2,
+  align: (left, left),
+  table.header([Key], [Does]),
+  [`headings`], [Reports a heading that skips a level, `h2` straight to `h4`.],
+  [`alt`], [Reports an `<img>` with no `alt` attribute at all.],
+  [`ids`], [Reports an `id` used more than once on a page.],
+  [`aria`], [Reports an unknown ARIA role or attribute, and one pointing at an id that is not there.],
 )
+
+=== How loud each one is
+
+`strict` is the default the rules follow, not an override. A rule that names its
+own severity keeps it, so a site can hold everything to `error` and still let one
+report:
 
 ```kdl
 lint {
   strict
+  headings "warn"
   alt #false
 }
 ```
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Value], [Means]),
+  [`#true`], [On, at whatever `strict` says. The spelling a rule has always taken.],
+  [`#false`], [Off. The same as `"off"`.],
+  [`"off"`], [The rule does not run.],
+  [`"warn"`], [A finding is reported and the build succeeds.],
+  [`"error"`], [A finding fails the build, whatever `strict` says.],
+)
 
 An empty `alt` is not a finding: that is how you say an image is decorative and
 the page reads the same without it. `aria-hidden="true"` and `role="presentation"`
@@ -156,6 +163,7 @@ lint {
   [`css`], [Weighs every stylesheet it loads, plus its inline `<style>` bodies.],
   [`images`], [Weighs every image it references, responsive alternatives excluded.],
   [`total`], [Weighs its whole transfer weight: markup plus everything fetched alongside it.],
+  [`strict`], [Whether going over fails the build. On by default.],
 )
 
 Every key is optional and each is checked per page. Responsive `srcset`
@@ -164,8 +172,22 @@ visitor is served one of them. An inline script counts once in `total`, as part
 of `html`, even though `js` counts it too. `js` answers how much JavaScript runs;
 `total` answers how many bytes cross the wire.
 
-Going over fails the build, unconditionally. Unlike a lint finding, a budget is a
-limit you wrote down, and a limit that only warns is a number in a config file.
+Going over fails the build. Unlike a lint finding, a budget is a limit you wrote
+down, and a limit that only warns is a number in a config file.
+
+Adopting one on a site that already has pages is the exception, and it says so:
+
+```kdl
+lint {
+  budget {
+    strict #false
+    html "50kB"
+  }
+}
+```
+
+That reports the same pages without failing, so a number can be a target before
+it is a limit.
 
 ```text
 × 1 page over budget

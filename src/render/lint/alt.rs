@@ -17,7 +17,7 @@ pub(super) struct Alt;
 
 impl Rule for Alt {
     fn enabled(&self, config: &LintConfig) -> bool {
-        config.alt
+        config.alt.on()
     }
 
     fn check(&self, page: &Page, found: &mut Findings<'_>) {

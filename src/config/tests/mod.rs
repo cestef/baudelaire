@@ -340,3 +340,55 @@ fn err_a_heading_level_that_is_not_one_is_refused() {
         assert_eq!(code(text), "baudelaire::config::out_of_range", "{text}");
     }
 }
+
+/// A lint rule takes the boolean it always did, or a severity of its own, and
+/// `strict` is the default the unnamed ones follow.
+#[test]
+fn a_lint_rule_names_its_own_severity_or_follows_strict() {
+    use crate::config::{Ruled, Severity};
+
+    let lenient = parse("lint { }");
+    assert_eq!(lenient.lint.severity(Ruled::Alt), Severity::Warn);
+
+    let strict = parse("lint {\n  strict\n}");
+    assert_eq!(strict.lint.severity(Ruled::Alt), Severity::Error);
+    assert_eq!(strict.lint.severity(Ruled::Headings), Severity::Error);
+
+    // Named, and so kept: `strict` is a default, not an override.
+    let mixed = parse("lint {\n  strict\n  headings \"warn\"\n  ids \"off\"\n}");
+    assert_eq!(mixed.lint.severity(Ruled::Alt), Severity::Error);
+    assert_eq!(mixed.lint.severity(Ruled::Headings), Severity::Warn);
+    assert_eq!(mixed.lint.severity(Ruled::Ids), Severity::Off);
+    assert!(!mixed.lint.ids.on());
+    assert!(mixed.lint.headings.on(), "a warning rule still runs");
+
+    // The flag spelling every site already wrote.
+    let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n}");
+    assert_eq!(flags.lint.severity(Ruled::Aria), Severity::Off);
+    assert_eq!(
+        flags.lint.severity(Ruled::Alt),
+        Severity::Error,
+        "`#true` is on, and `strict` says how loud"
+    );
+}
+
+#[test]
+fn err_a_severity_that_is_not_one_is_refused() {
+    assert_eq!(
+        code("lint {\n  alt \"loud\"\n}"),
+        "baudelaire::config::unknown_value"
+    );
+}
+
+/// A budget fails by default and can be turned down to a report, which a site
+/// adopting one on existing pages needs.
+#[test]
+fn a_budget_can_report_instead_of_failing() {
+    assert!(parse("lint { }").lint.budget.strict);
+    assert!(
+        !parse("lint {\n  budget {\n    strict #false\n  }\n}")
+            .lint
+            .budget
+            .strict
+    );
+}

@@ -8,6 +8,7 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::assets::targets::Version;
+use crate::config::lint::severity::{Level, Severity};
 use crate::config::url::BaseUrl;
 use crate::config::value::{Kdl, ValueExt};
 use crate::error::{ConfigError, Result};
@@ -82,6 +83,10 @@ pub(super) trait NodeExt {
     /// the [`NodeExt::size`] counterpart for the one other packed scalar the
     /// config accepts.
     fn version(&self, text: &str, idx: usize) -> Result<Version>;
+    /// A lint rule's loudness, written either as the boolean the key has always
+    /// taken (`alt #false`) or as a severity naming itself (`alt "warn"`). The
+    /// [`NodeExt::size`] shape once more: one key, two spellings, one reader.
+    fn level(&self, text: &str, idx: usize) -> Result<Level>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn base_url(&self, text: &str, idx: usize) -> Result<String>;
     /// A permalink template, or a piece of one, checked by [`Permalink::parse`]:
@@ -254,6 +259,17 @@ impl NodeExt for KdlNode {
                 .ok_or_else(|| ConfigError::bad_duration(text, written, span).into());
         }
         Ok(Duration::from_secs(self.count(text, idx)? as u64))
+    }
+
+    /// A lint rule's loudness. A boolean is "on at the site's default" or
+    /// "off"; a string names the severity and so overrides `strict`.
+    fn level(&self, text: &str, idx: usize) -> Result<Level> {
+        let span = NodeExt::span(self);
+        let value = self.arg(text, idx)?;
+        match value.as_string() {
+            Some(_) => value.one::<Severity>(text, span).map(Level::named),
+            None => self.boolean(text, idx).map(Level::flag),
+        }
     }
 
     /// A browser version. Always a string: `safari 15.4` is a *float* in KDL,

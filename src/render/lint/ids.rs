@@ -20,7 +20,7 @@ pub(super) struct Ids;
 
 impl Rule for Ids {
     fn enabled(&self, config: &LintConfig) -> bool {
-        config.ids
+        config.ids.on()
     }
 
     fn check(&self, page: &Page, found: &mut Findings<'_>) {

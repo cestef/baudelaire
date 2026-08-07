@@ -1,12 +1,13 @@
 //! `lint { }`: post-render checks over the typed DOM.
 
 pub mod budget;
+pub mod severity;
 
-use crate::config::BudgetConfig;
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::Flag;
+use crate::config::dispatch::Kind::{Flag, Level as Loud};
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
+use crate::config::{BudgetConfig, Level, Named, Severity};
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a
 /// finding is, and how many bytes a page may weigh.
@@ -19,19 +20,19 @@ pub struct LintConfig {
     /// Whether the DOM lint pass runs at all; flipped by the block's presence,
     /// and back off again by `lint #false`.
     pub enabled: bool,
-    /// Fail the build on a finding instead of warning, exactly as
+    /// The severity a rule that names none takes, exactly as
     /// [`LinkConfig::strict`](crate::config::LinkConfig::strict) does for a broken link.
     pub strict: bool,
     /// Report a heading that skips a level (`h2` straight to `h4`).
-    pub headings: bool,
+    pub headings: Level,
     /// Report an `<img>` carrying no `alt` (an empty one is a decorative image,
     /// and is fine).
-    pub alt: bool,
+    pub alt: Level,
     /// Report an `id` used more than once on one page.
-    pub ids: bool,
+    pub ids: Level,
     /// Report an unknown ARIA role or `aria-*` attribute, and one whose id
     /// reference names nothing on the page.
-    pub aria: bool,
+    pub aria: Level,
     /// How many bytes a single page may ship.
     pub budget: BudgetConfig,
 }
@@ -47,10 +48,10 @@ impl Default for LintConfig {
         Self {
             enabled: false,
             strict: false,
-            headings: true,
-            alt: true,
-            ids: true,
-            aria: true,
+            headings: Level::DEFAULT,
+            alt: Level::DEFAULT,
+            ids: Level::DEFAULT,
+            aria: Level::DEFAULT,
             budget: BudgetConfig::default(),
         }
     }
@@ -65,7 +66,7 @@ impl Section for LintConfig {
         (
             "strict",
             Flag,
-            "Fail the build on a finding instead of warning.",
+            "Fail the build on a finding instead of warning. A rule naming its own severity keeps it.",
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())
@@ -73,45 +74,73 @@ impl Section for LintConfig {
         ),
         (
             "headings",
-            Flag,
+            Loud(Severity::names),
             "Report a heading that skips a level, e.g. `h2` straight to `h4`.",
             |c, n, t| {
-                c.headings = n.boolean(t, 0)?;
+                c.headings = n.level(t, 0)?;
                 Ok(())
             },
         ),
         (
             "alt",
-            Flag,
+            Loud(Severity::names),
             "Report an image with no `alt` attribute at all (an empty one marks it decorative).",
             |c, n, t| {
-                c.alt = n.boolean(t, 0)?;
+                c.alt = n.level(t, 0)?;
                 Ok(())
             },
         ),
         (
             "ids",
-            Flag,
+            Loud(Severity::names),
             "Report an `id` used more than once on a page.",
             |c, n, t| {
-                c.ids = n.boolean(t, 0)?;
+                c.ids = n.level(t, 0)?;
                 Ok(())
             },
         ),
         (
             "aria",
-            Flag,
+            Loud(Severity::names),
             "Report an unknown ARIA role or attribute, and one referring to an id that is not there.",
             |c, n, t| {
-                c.aria = n.boolean(t, 0)?;
+                c.aria = n.level(t, 0)?;
                 Ok(())
             },
         ),
         (
             "budget",
             Nested(BudgetConfig::rows),
-            "How many bytes one page may ship. Exceeding a budget always fails the build.",
+            "How many bytes one page may ship.",
             |c, n, t| c.budget.fill(n, t),
         ),
     ]);
+}
+
+/// Which lint rule a finding came from, so a report can ask the config how loud
+/// that rule is.
+///
+/// A finding is cached with the page that produced it and its severity is not:
+/// the severity is config, and config a site can change between builds without
+/// recompiling a page. Resolving it from the rule at report time is what keeps a
+/// cache hit reporting what the *current* config asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ruled {
+    Headings,
+    Alt,
+    Ids,
+    Aria,
+}
+
+impl LintConfig {
+    /// How loud `rule` is under this config.
+    pub fn severity(&self, rule: Ruled) -> Severity {
+        let level = match rule {
+            Ruled::Headings => self.headings,
+            Ruled::Alt => self.alt,
+            Ruled::Ids => self.ids,
+            Ruled::Aria => self.aria,
+        };
+        level.severity(self.strict)
+    }
 }

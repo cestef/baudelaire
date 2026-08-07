@@ -74,6 +74,27 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A lint rule carries its own severity**, so `strict` is a default rather than
+  an override:
+
+  ```kdl
+  lint {
+    strict
+    headings "warn"
+    ids "off"
+  }
+  ```
+
+  `off`, `warn`, `error`. A rule that names none follows `strict`, which is the
+  whole of the old behaviour, and the boolean spelling still works: `#true` is on
+  at the default, `#false` is off. Until now a rule was on or off, so exempting
+  one from `strict` meant losing it.
+
+- **A budget can report instead of failing**, with
+  `lint { budget { strict #false } }`. A budget is an assertion the author wrote
+  down and still fails by default; a site adopting one on pages it already has
+  needs a number to aim at first.
+
 - **`html { meta }` is a block**, holding the two social facts a page cannot
   state for itself:
 

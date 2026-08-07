@@ -941,7 +941,7 @@ impl Engine {
         Orphans::run(&site, ui);
         if self.config.lint.enabled {
             Lints::run(&site, ui)?;
-            Budgets::run(&site)?;
+            Budgets::run(&site, ui)?;
         }
         if outbound && self.config.links.external.enabled {
             External::run(&site, ui)?;

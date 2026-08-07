@@ -199,7 +199,7 @@ impl Aria {
 
 impl Rule for Aria {
     fn enabled(&self, config: &LintConfig) -> bool {
-        config.aria
+        config.aria.on()
     }
 
     fn check(&self, page: &Page, found: &mut Findings<'_>) {

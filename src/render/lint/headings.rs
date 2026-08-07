@@ -15,7 +15,7 @@ pub(super) struct Headings;
 
 impl Rule for Headings {
     fn enabled(&self, config: &LintConfig) -> bool {
-        config.headings
+        config.headings.on()
     }
 
     fn check(&self, page: &Page, found: &mut Findings<'_>) {

@@ -8,7 +8,7 @@
 //! shipping a fatter stylesheet fails the pages that load it without any of
 //! them having changed.
 
-use crate::config::BudgetConfig;
+use crate::config::{BudgetConfig, Severity};
 use crate::error::{Flaw, Flaws, Overweight, Overweights, Result, Sources};
 use crate::render::{Emitted, Load, Weight};
 use crate::ui::{Bytes, Ui};
@@ -25,28 +25,41 @@ impl Lints {
     pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
         let root = &site.config.root;
         let mut sources = Sources::default();
-        let flaws: Vec<Flaw> = site
+        let flaws: Vec<(Severity, Flaw)> = site
             .pages
             .iter()
             .flat_map(|page| page.lints.iter().map(move |finding| (page, finding)))
             .map(|(page, finding)| {
                 let at = finding.at.as_ref();
-                Flaw::new(
+                let flaw = Flaw::new(
                     page.label.clone(),
                     finding.lint.clone(),
                     at,
                     sources.at(at, root),
-                )
+                );
+                (site.config.lint.severity(finding.lint.ruled()), flaw)
             })
             .collect();
         if flaws.is_empty() {
             return Ok(());
         }
-        if site.config.lint.strict {
-            return Err(Flaws::new(flaws).into());
+        // Split by the severity each finding's *rule* carries, so a site can
+        // keep `strict` and still let one rule warn. A finding whose rule names
+        // no severity takes `strict`, which is the whole of the old behaviour.
+        let (fatal, warned): (Vec<_>, Vec<_>) = flaws
+            .into_iter()
+            .partition(|(severity, _)| *severity == Severity::Error);
+        let unwrap = |v: Vec<(Severity, Flaw)>| v.into_iter().map(|(_, flaw)| flaw).collect();
+        // Warnings first: a build that is about to fail should still say
+        // everything it found, not only the half that failed it.
+        let warned: Vec<Flaw> = unwrap(warned);
+        if !warned.is_empty() {
+            ui.warn(Flaws::warning(warned));
         }
-        ui.warn(Flaws::warning(flaws));
-        Ok(())
+        match fatal.is_empty() {
+            true => Ok(()),
+            false => Err(Flaws::new(unwrap(fatal)).into()),
+        }
     }
 }
 
@@ -57,7 +70,7 @@ impl Lints {
 pub(in crate::engine) struct Budgets;
 
 impl Budgets {
-    pub(in crate::engine) fn run(site: &Compiled) -> Result<()> {
+    pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
         let budget = &site.config.lint.budget;
         // Nothing to weigh against, or nothing to weigh with. The second case
         // is `check`, which processes no assets: it can see what a page loads
@@ -71,15 +84,22 @@ impl Budgets {
             .iter()
             .flat_map(|page| Scale::of(page, emitted).against(budget, &page.label))
             .collect();
-        match over.is_empty() {
-            true => Ok(()),
-            false => Err(Overweights::from(over).into()),
+        if over.is_empty() {
+            return Ok(());
         }
+        if !budget.strict {
+            ui.warn(Overweights::warning(over));
+            return Ok(());
+        }
+        Err(Overweights::new(over).into())
     }
 
     /// Whether the site set any budget at all.
     fn declared(budget: &BudgetConfig) -> bool {
         let BudgetConfig {
+            // Not a budget: it says what a budget *does*, and a site setting
+            // only this has still set none.
+            strict: _,
             html,
             js,
             css,
@@ -268,7 +288,7 @@ mod tests {
             pages: &pages,
             emitted: None,
         };
-        Budgets::run(&site).unwrap();
+        Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).unwrap();
     }
 
     /// The same site, weighed: the page is over and the build fails.
@@ -283,7 +303,7 @@ mod tests {
             pages: &pages,
             emitted: Some(&emitted),
         };
-        assert!(Budgets::run(&site).is_err());
+        assert!(Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).is_err());
     }
 
     /// A site with no budget declared never weighs anything, however much it
@@ -299,7 +319,7 @@ mod tests {
             pages: &pages,
             emitted: Some(&emitted),
         };
-        Budgets::run(&site).unwrap();
+        Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).unwrap();
     }
 
     /// Strictness decides whether a finding stops the build, exactly as it does

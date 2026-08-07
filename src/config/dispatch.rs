@@ -64,6 +64,14 @@ pub enum Kind {
     Time,
     /// A browser version, `major[.minor[.patch]]`: `safari "15.4"`.
     Version,
+    /// One of a fixed set of names, or the boolean that stands for "on at the
+    /// default": `alt "warn"`, `alt #false`.
+    ///
+    /// Its own variant rather than [`Choice`](Kind::Choice) because the boolean
+    /// is half the grammar: these keys were flags first, every site already
+    /// writes them that way, and a reference that listed only the names would be
+    /// documenting a spelling change that did not happen.
+    Level(Names),
     /// A filesystem path, relative to the project root: `content "content"`.
     Path,
     /// A URL: `url "https://example.com"`.
@@ -177,6 +185,7 @@ impl Kind {
             | Self::Size
             | Self::Time
             | Self::Version
+            | Self::Level(_)
             | Self::Path
             | Self::Url
             | Self::Template

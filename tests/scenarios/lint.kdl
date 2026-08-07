@@ -372,3 +372,121 @@ scenario "a budget written in something that is not a size is a config error" {
     fails { code "baudelaire::config::bad_size" }
   }
 }
+
+// `strict` is a default, not an override: a site can hold every rule to it and
+// still let one warn. Before this a rule was on or off, so exempting one meant
+// losing it entirely.
+scenario "a rule names its own severity over the site's strict" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict #true
+        headings "warn"
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      = One
+      === Three
+      #html.elem("img", attrs: (src: "/x.png"))
+      """#
+  }
+  expect {
+    // The `alt` finding takes `strict` and fails the build; the heading skip
+    // named `warn` and does not.
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+// And with the failing rule turned down, the build passes with both still
+// reported.
+scenario "every rule warning leaves the build green" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict #true
+        headings "warn"
+        alt "warn"
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      = One
+      === Three
+      #html.elem("img", attrs: (src: "/x.png"))
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" { contains "Three" }
+  }
+}
+
+// `off` is the third state, and the boolean spelling every site already wrote
+// still means it.
+scenario "a rule turned off by name or by flag finds nothing" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict #true
+        headings "off"
+        alt #false
+        ids #false
+        aria #false
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      = One
+      === Three
+      #html.elem("img", attrs: (src: "/x.png"))
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+// A budget is an assertion the author wrote down, so it fails by default. A site
+// adopting one on an existing set of pages needs it to be a number to aim at
+// first, which it had no way to say.
+scenario "a budget can report instead of failing" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        budget {
+          strict #false
+          html 1
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      a page larger than one byte
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" { contains "larger than one byte" }
+  }
+}

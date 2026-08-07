@@ -42,6 +42,24 @@ pub enum Lint {
 }
 
 impl Lint {
+    /// The `lint { }` key this finding answers to.
+    ///
+    /// A finding is cached with the page that produced it; how loud it is is
+    /// not, because that is config a site can change between builds without
+    /// recompiling anything. Resolving the severity from the rule at report
+    /// time is what keeps a cache hit reporting what the *current* config asks.
+    pub fn ruled(&self) -> crate::config::Ruled {
+        use crate::config::Ruled;
+        match self {
+            Self::Heading { .. } => Ruled::Headings,
+            Self::Alt => Ruled::Alt,
+            Self::Id(_) => Ruled::Ids,
+            // The three ARIA shapes are one rule and one key: a site turning
+            // ARIA checking down means all of it.
+            Self::Role(_) | Self::Attr(_) | Self::Idref { .. } => Ruled::Aria,
+        }
+    }
+
     /// The diagnostic code, one per rule so a report can be grepped and a CI
     /// gate can name what it is failing on.
     fn code(&self) -> &'static str {
@@ -355,17 +373,34 @@ impl Diagnostic for Overweight {
 /// The pages that broke a weight budget. Always an error: a budget is a limit
 /// the author wrote down, not an opinion this tool holds.
 #[derive(Debug)]
-pub struct Overweights(Vec<Overweight>);
+pub struct Overweights {
+    over: Vec<Overweight>,
+    severity: Severity,
+}
 
-impl From<Vec<Overweight>> for Overweights {
-    fn from(over: Vec<Overweight>) -> Self {
-        Self(over)
+impl Overweights {
+    /// The strict form: a build-failing error, and what a budget has always
+    /// been.
+    pub fn new(over: Vec<Overweight>) -> Self {
+        Self {
+            over,
+            severity: Severity::Error,
+        }
+    }
+
+    /// The lenient form, for `lint { budget { strict #false } }`: the identical
+    /// report at warning severity.
+    pub fn warning(over: Vec<Overweight>) -> Self {
+        Self {
+            over,
+            severity: Severity::Warning,
+        }
     }
 }
 
 impl fmt::Display for Overweights {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.0.len();
+        let n = self.over.len();
         write!(f, "{n} page{} over budget", if n == 1 { "" } else { "s" })
     }
 }
@@ -378,7 +413,7 @@ impl Diagnostic for Overweights {
     }
 
     fn severity(&self) -> Option<Severity> {
-        Some(Severity::Error)
+        Some(self.severity)
     }
 
     fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
@@ -388,6 +423,6 @@ impl Diagnostic for Overweights {
     }
 
     fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
-        Some(Box::new(self.0.iter().map(|o| o as &dyn Diagnostic)))
+        Some(Box::new(self.over.iter().map(|o| o as &dyn Diagnostic)))
     }
 }
