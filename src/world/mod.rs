@@ -15,11 +15,11 @@ use typst::{
 mod context;
 mod fonts;
 pub(crate) mod generated;
-pub mod image_rule;
 #[cfg(feature = "markdown")]
 mod markdown;
 pub(crate) mod module;
 mod packages;
+pub mod rules;
 
 pub use context::{BuildContext, Mode};
 pub(crate) use packages::Registry;
@@ -123,14 +123,8 @@ impl Project {
         // rather than carrying it.
         #[cfg(feature = "markdown")]
         markdown::define(&mut library);
-        // Externalize typst-embedded images (base64 -> file reference) by
-        // overriding typst-html's native image rule. Off by default and skipped
-        // when `html.embed` inlines everything anyway.
-        if config.assets.images.externalize(&config.html) {
-            library
-                .rules
-                .replace(typst::foundations::Target::Html, image_rule::IMAGE_RULE);
-        }
+        // Whatever this site asks baudelaire to render differently from typst.
+        rules::Rules::install(&mut library, config);
 
         Ok(Self {
             lib: Arc::new(LazyHash::new(library)),

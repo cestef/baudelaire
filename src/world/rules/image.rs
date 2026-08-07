@@ -4,14 +4,12 @@
 //! `data:` URI: no file, no name, and the page carries the image bytes inline.
 //! This rule instead emits `<img src="baudelaire:asset:<vpath>">`, a marker
 //! carrying the source file's project-relative path. A later baudelaire pass
-//! ([`super::externalize`]) resolves the marker: it copies the file under the
+//! (`render::transform::externalize`) resolves the marker: it copies the file under the
 //! asset URL and rewrites `src` to the served path. Images with no source file
 //! (`image(bytes: ..)`, or a re-encoded pixel format) keep the base64 URI, since
 //! there is nothing on disk to reference.
 //!
-//! The rule is installed on the built [`typst::Library`] via
-//! `rules.replace(Target::Html, IMAGE_RULE)` (see [`crate::world`]) only when
-//! `images.extract` is on. It is a bare `fn` with no captured state, so it can
+//! The rule is installed by [`super::Rules`] only when `images.extract` is on. It is a bare `fn` with no captured state, so it can
 //! only emit markup; all IO, naming, and caching stay in baudelaire's pass.
 //!
 //! Fidelity note: typst-html's own `css` module is private, so the sizing CSS

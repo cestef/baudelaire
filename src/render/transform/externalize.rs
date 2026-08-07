@@ -1,5 +1,5 @@
 //! Resolves the `baudelaire:asset:` image markers left by
-//! [`crate::world::image_rule::IMAGE_RULE`].
+//! [`crate::world::rules`].
 //!
 //! The image show rule replaces typst's inline base64 with a marker carrying the
 //! source file's project-relative path. This transform rewrites each marked
@@ -19,7 +19,7 @@ use crate::graph::AssetName;
 use crate::render::Candidate;
 
 use super::{Cx, DocumentExt, ElementExt, Transform};
-use crate::world::image_rule::MARKER;
+use crate::world::rules::MARKER;
 
 /// A typst-embedded image lifted out to a file: the filename it is served under
 /// (relative to the asset directory), the source file to copy from, and the
