@@ -216,6 +216,17 @@ impl ConfigError {
         )
     }
 
+    /// A browser version written in something that is not one.
+    pub fn bad_version(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::BadVersion {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A count field given a negative value.
     pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
@@ -553,6 +564,15 @@ pub enum ConfigErrorKind {
         )
     )]
     BadDuration { got: String },
+
+    #[error("{} is not a browser version", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::bad_version),
+        help(
+            "a version is one to three numbers, each 0-255: `15`, `15.4`, `15.4.1`; write it as a string, since `15.10` as a number is `15.1`"
+        )
+    )]
+    BadVersion { got: String },
 
     #[error("{} is not an absolute URL", Code(.got))]
     #[diagnostic(

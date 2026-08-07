@@ -4,8 +4,8 @@
 )
 #import "/templates/theme.typ": callout
 
-Everything under `assets/` is copied to the output untouched. Three switches turn
-that copy into a build step.
+Everything under `assets/` is copied to the output untouched. A handful of
+switches turn that copy into a build step.
 
 ```kdl
 assets {
@@ -20,9 +20,14 @@ assets {
   align: (left, left, left, left),
   table.header([Key], [Type], [Default], [Does]),
   [`minify`],
-  [flag],
-  [`#false`],
-  [Minifies CSS with #link("https://lightningcss.dev")[Lightning CSS], and JavaScript as part of bundling.],
+  [block],
+  [off],
+  [Minifies CSS with #link("https://lightningcss.dev")[Lightning CSS], and JavaScript as part of bundling. See #link(<minify>)[Minifying].],
+
+  [`targets`],
+  [block],
+  [none],
+  [The oldest browsers the CSS must run on. Naming any compiles it down to them. See #link(<targets>)[Browser targets].],
 
   [`bundle`],
   [flag],
@@ -48,9 +53,75 @@ assets {
 Images sit in a nested `images` block and run on their own switches. See
 #link("images.typ")[Images].
 
+== Minifying <minify>
+
+`minify` is a block whose presence turns every kind on, so the one-line spelling
+above is the whole of it. Name a kind to take just that one back:
+
+```kdl
+assets {
+  minify {
+    js #false
+  }
+}
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Default], [Does]),
+  [`css`], [off], [Minifies stylesheets.],
+  [`js`], [off], [Minifies JavaScript. Needs `bundle`, which is what runs it.],
+)
+
 #callout(kind: "note")[
   JavaScript is only touched when `bundle` is on, because the bundler owns the
   whole JS step. `minify` alone minifies stylesheets and copies scripts verbatim.
+]
+
+== Browser targets <targets>
+
+Minifying makes a stylesheet smaller. *Compiling* it makes it work in older
+browsers, and that is a separate ask: name the oldest version of each browser the
+site supports and Lightning CSS flattens nesting, adds vendor prefixes, and
+writes fallbacks for modern colour syntaxes, each only where a named browser
+needs it.
+
+```kdl
+assets {
+  targets {
+    chrome "100"
+    firefox "100"
+    safari "15.4"
+  }
+}
+```
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Key], [Is]),
+  [`android`], [Oldest Android WebView.],
+  [`chrome`], [Oldest Chrome.],
+  [`edge`], [Oldest Edge.],
+  [`firefox`], [Oldest Firefox.],
+  [`ie`], [Oldest Internet Explorer.],
+  [`ios`], [Oldest Safari on iOS.],
+  [`opera`], [Oldest Opera.],
+  [`safari`], [Oldest Safari.],
+  [`samsung`], [Oldest Samsung Internet.],
+)
+
+A version is one to three numbers, each 0-255: `15`, `15.4`, `15.4.1`. Write it
+as a *string*. `15.10` as a KDL number is the float `15.1`, which is a different
+browser, so a number is refused rather than rounded.
+
+A browser you do not name is not a constraint. The floor is set by the ones you
+name, and naming none leaves the CSS exactly as written.
+
+#callout(kind: "note")[
+  `targets` works with `minify` off. The transform and the compaction are
+  independent: you can ship readable CSS that still runs on Safari 15.
 ]
 
 == The directory

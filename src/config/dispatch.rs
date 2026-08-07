@@ -62,6 +62,8 @@ pub enum Kind {
     Size,
     /// A length of time, with or without a unit: `fresh "7d"`, `timeout 30`.
     Time,
+    /// A browser version, `major[.minor[.patch]]`: `safari "15.4"`.
+    Version,
     /// A filesystem path, relative to the project root: `content "content"`.
     Path,
     /// A URL: `url "https://example.com"`.
@@ -174,6 +176,7 @@ impl Kind {
             | Self::Number
             | Self::Size
             | Self::Time
+            | Self::Version
             | Self::Path
             | Self::Url
             | Self::Template

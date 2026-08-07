@@ -56,6 +56,39 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`assets { targets { } }`**: the oldest browsers the CSS must run on.
+
+  ```kdl
+  assets {
+    targets {
+      chrome "100"
+      safari "15.4"
+    }
+  }
+  ```
+
+  Naming any turns Lightning CSS's transform on: nesting is flattened, vendor
+  prefixes are added, and modern colour syntaxes get fallbacks, each only where a
+  named browser needs it. Until now only its minifier ran, so a site writing CSS
+  nesting shipped it unflattened to browsers that cannot read it.
+
+  Independent of `minify`: a site can compile its CSS down and still ship it
+  readable. A version is one to three numbers, each 0-255, written as a string
+  (`15.10` as a KDL number is the float `15.1`).
+
+- **`assets { minify }` is a block**, so the two kinds are separate asks:
+
+  ```kdl
+  assets {
+    minify {
+      js #false
+    }
+  }
+  ```
+
+  `css` and `js`. The block's presence turns both on and `minify #false` turns
+  both off, so `minify #true` means what it always did.
+
 - **`typst { fonts { } }`**: the faces a build can see.
 
   ```kdl

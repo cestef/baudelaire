@@ -239,6 +239,7 @@ impl Kind {
             Self::Number => "number".to_owned(),
             Self::Size => "size".to_owned(),
             Self::Time => "duration".to_owned(),
+            Self::Version => "version".to_owned(),
             Self::Path => "path".to_owned(),
             Self::Url => "url".to_owned(),
             Self::Template => "template".to_owned(),

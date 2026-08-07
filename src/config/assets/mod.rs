@@ -1,14 +1,16 @@
 //! `assets { }`: the asset pipeline (minify, bundle, fingerprint, images).
 
 pub mod images;
+pub mod minify;
 pub mod sourcemap;
+pub mod targets;
 
 use std::path::PathBuf;
 
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{ImagesConfig, SourceMapConfig};
+use crate::config::{ImagesConfig, MinifyConfig, SourceMapConfig, TargetConfig};
 
 /// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
 ///
@@ -17,8 +19,13 @@ use crate::config::{ImagesConfig, SourceMapConfig};
 /// [`AssetConfig::bundle`] is set: the bundler owns the whole JS step.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct AssetConfig {
-    /// Minify CSS (lightningcss) and, when bundling, JavaScript (rolldown).
-    pub minify: bool,
+    /// What the pipeline minifies: stylesheets (lightningcss) and, when
+    /// bundling, JavaScript (rolldown).
+    pub minify: MinifyConfig,
+    /// The oldest browsers the stylesheets must run on. Naming any turns
+    /// lightningcss's transform on (nesting, prefixes, colour fallbacks), which
+    /// is independent of whether the output is minified.
+    pub targets: TargetConfig,
     /// Bundle JavaScript entry points through rolldown (resolves imports and
     /// tree-shakes). Required for any JavaScript processing.
     pub bundle: bool,
@@ -46,10 +53,18 @@ pub struct AssetConfig {
 /// The `assets { .. }` section: the pipeline applied to `paths { assets }`.
 impl Section for AssetConfig {
     const RULES: Block<Self> = Block(&[
-        ("minify", Flag, "Minify CSS and JavaScript.", |c, n, t| {
-            c.minify = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "minify",
+            Nested(MinifyConfig::rows),
+            "What is minified. Its presence turns every kind on; `#false` turns them off again.",
+            |c, n, t| c.minify.fill(n, t),
+        ),
+        (
+            "targets",
+            Nested(TargetConfig::rows),
+            "The oldest browser versions the stylesheets must run on. Naming any compiles the CSS down to them.",
+            |c, n, t| c.targets.fill(n, t),
+        ),
         (
             "bundle",
             Flag,

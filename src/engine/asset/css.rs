@@ -1,14 +1,16 @@
-//! The stylesheet handler: minify with lightningcss and rewrite `url()` /
-//! `@import` references to the fingerprinted names of the assets they point at.
+//! The stylesheet handler: compile and minify with lightningcss, and rewrite
+//! `url()` / `@import` references to the fingerprinted names of the assets they
+//! point at.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
 use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
+use lightningcss::targets::{Browsers, Targets};
 use parcel_sourcemap::SourceMap;
 
-use crate::config::{Config, SourceMaps};
+use crate::config::{Config, SourceMaps, TargetConfig};
 use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::{AssetMap, Tail};
@@ -43,6 +45,29 @@ impl Handler for Stylesheet {
     }
 }
 
+/// The config's browser floor as lightningcss reads it.
+///
+/// Here rather than in `config`, which must not name a type from a crate a
+/// feature can switch off: the config states the versions, this states what
+/// lightningcss calls them. `ios` is `ios_saf` there, which is the one name that
+/// does not survive the trip unchanged.
+impl From<&TargetConfig> for Browsers {
+    fn from(targets: &TargetConfig) -> Self {
+        let version = |v: Option<crate::config::Version>| v.map(|v| v.0);
+        Self {
+            android: version(targets.android),
+            chrome: version(targets.chrome),
+            edge: version(targets.edge),
+            firefox: version(targets.firefox),
+            ie: version(targets.ie),
+            ios_saf: version(targets.ios),
+            opera: version(targets.opera),
+            safari: version(targets.safari),
+            samsung: version(targets.samsung),
+        }
+    }
+}
+
 impl Stylesheet {
     /// The one test for "this is a stylesheet", used both to claim a file and to
     /// decide which of a sheet's references are sheets themselves: two spellings
@@ -52,20 +77,30 @@ impl Stylesheet {
         path.ext().eq_ignore_ascii_case("css")
     }
 
-    /// Minify (when enabled) and rewrite the sheet's references so it still
-    /// points at its assets after they are content-hashed. Copied verbatim when
-    /// neither minify nor fingerprint is on.
+    /// Compile the sheet down to the site's browsers, minify it when enabled, and
+    /// rewrite its references so it still points at its assets after they are
+    /// content-hashed. Copied verbatim when none of those is asked for.
     fn transform(file: &Path, rel: &Path, map: &AssetMap, ctx: &Ctx) -> Result<Produced> {
-        let wanted = ctx.config.assets.sourcemap.styles.wanted();
-        if !ctx.config.assets.minify && !ctx.config.assets.fingerprint && !wanted {
+        let assets = &ctx.config.assets;
+        let wanted = assets.sourcemap.styles.wanted();
+        let targets = Targets::from(Browsers::from(&assets.targets));
+        // Compiling for named browsers is a transform, not a minification: a
+        // site may want its nesting flattened and its output still readable.
+        let compile = assets.minify.css || assets.targets.any();
+        if !compile && !assets.fingerprint && !wanted {
             return Ok(Produced::bytes(fs::read(file)?));
         }
         let code = fs::read_to_string(file)?;
         let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
             .map_err(|e| AssetError::css(file.display(), e))?;
-        if ctx.config.assets.minify {
+        if compile {
+            // The pass that downlevels: nesting, prefixes and colour fallbacks
+            // are decided here, against the targets, whatever the printer does.
             sheet
-                .minify(MinifyOptions::default())
+                .minify(MinifyOptions {
+                    targets,
+                    ..MinifyOptions::default()
+                })
                 .map_err(|e| AssetError::css(file.display(), e))?;
         }
         // The sheet's own text travels inside the map, because the sheet itself
@@ -78,12 +113,13 @@ impl Stylesheet {
             sm
         });
         // Only fingerprinting renames assets, so only then analyze `url()`s.
-        let analyze = ctx.config.assets.fingerprint;
+        let analyze = assets.fingerprint;
         let printed = sheet
             .to_css(PrinterOptions {
-                minify: ctx.config.assets.minify,
+                minify: assets.minify.css,
                 source_map: sm.as_mut(),
                 analyze_dependencies: analyze.then(DependencyOptions::default),
+                targets,
                 ..PrinterOptions::default()
             })
             .map_err(|e| AssetError::css(file.display(), e))?;

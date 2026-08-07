@@ -62,8 +62,22 @@ const GATES: &[Gate] = &[
         cargo: "css",
         compiled: cfg!(feature = "css"),
         setting: "assets { minify }",
-        asked: |config| config.assets.minify,
+        // The stylesheet half: the JavaScript half is the bundler's, which has
+        // its own row and its own feature.
+        asked: |config| config.assets.minify.css,
         effect: "stylesheets are copied unminified",
+        rewrites: false,
+    },
+    // lightningcss is also what compiles a sheet down to named browsers, and
+    // without it the nesting a site wrote reaches a browser that cannot read it.
+    // Its own row rather than sharing `minify`'s, because the two are separate
+    // asks and a site may make either one alone.
+    Gate {
+        cargo: "css",
+        compiled: cfg!(feature = "css"),
+        setting: "assets { targets }",
+        asked: |config| config.assets.targets.any(),
+        effect: "stylesheets are copied as written, un-downlevelled and unprefixed",
         rewrites: false,
     },
     Gate {

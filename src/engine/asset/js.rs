@@ -95,7 +95,7 @@ impl Js {
         Ok(Self {
             runtime,
             cwd,
-            minify: cx.config.assets.minify,
+            minify: cx.config.assets.minify.js,
             sourcemap: cx.config.assets.sourcemap.scripts,
             tsconfig: cx
                 .config

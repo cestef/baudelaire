@@ -33,6 +33,9 @@ const SWITCHES: &[(&str, Reads)] = &[
         c.generate.pdf.pages.enabled
     }),
     ("links {\n  external @\n}", |c| c.links.external.enabled),
+    // Reads `css` for the whole: the switch sets every kind, so any one of
+    // them answers whether it was thrown.
+    ("assets {\n  minify @\n}", |c| c.assets.minify.css),
     ("navigation {\n  spa @\n}", |c| c.navigation.spa.enabled),
     ("navigation {\n  standalone @\n}", |c| {
         c.navigation.standalone.enabled

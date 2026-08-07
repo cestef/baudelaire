@@ -584,3 +584,114 @@ scenario "the line sets every kind and the block narrows one" {
     absent "assets/app.css.map"
   }
 }
+
+// Naming a browser floor turns lightningcss's *transform* on: nesting is
+// flattened for a browser that cannot read it. Independent of minification, so
+// the output here is still readable.
+scenario "targets compile css down to the browsers named" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        targets {
+          chrome "80"
+          safari "13.1"
+        }
+      }
+      """#
+    "assets/style.css" #"""
+      .card {
+        color: red;
+        & .title {
+          color: blue;
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" {
+      // The nested rule is lifted out, because Chrome 80 has no nesting.
+      contains ".card .title"
+      // and the output is not minified: `targets` is not `minify`.
+      contains "\n"
+    }
+  }
+}
+
+// Without a floor there is nothing to compile down to, so a sheet the browsers
+// can read is left as it was written.
+scenario "css is left as written when no browser is named" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      """#
+    "assets/style.css" #"""
+      .card {
+        & .title {
+          color: blue;
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" { contains "& .title" }
+  }
+}
+
+// The two halves of `minify` are separate asks: a site may want small
+// stylesheets and readable scripts.
+scenario "minify names the kinds it applies to" {
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        minify {
+          js #false
+        }
+      }
+      """#
+    "assets/style.css" #"""
+      /* a comment */
+      body {
+        color: red;
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    // The block's presence still turns css on; only js was taken back.
+    file "assets/style.css" { contains "body{color:red}" }
+  }
+}

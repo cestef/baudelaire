@@ -7,6 +7,7 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
+use crate::config::assets::targets::Version;
 use crate::config::url::BaseUrl;
 use crate::config::value::{Kdl, ValueExt};
 use crate::error::{ConfigError, Result};
@@ -45,7 +46,7 @@ impl Loopback {
 /// of them it reads as arbitrary:
 ///
 /// - A list that **replaces** what the key holds ([`words`](NodeExt::words),
-///   [`widths`](NodeExt::widths), [`mapped`](NodeExt::mapped)) reads a bare node
+///   [`bounds`](NodeExt::bounds), [`mapped`](NodeExt::mapped)) reads a bare node
 ///   as the *empty list*. That is the one spelling for clearing a list, and a
 ///   profile needs it: config lists replace wholesale, so a profile that could
 ///   not write the empty one could never undo an inherited one. Omitting the key
@@ -77,6 +78,10 @@ pub(super) trait NodeExt {
     /// (`timeout 30`) or as a string carrying a unit (`fresh "7d"`). The
     /// [`NodeExt::size`] counterpart, reading the same two spellings.
     fn duration(&self, text: &str, idx: usize) -> Result<Duration>;
+    /// A browser version, `major[.minor[.patch]]`, read by [`Version::parse`]:
+    /// the [`NodeExt::size`] counterpart for the one other packed scalar the
+    /// config accepts.
+    fn version(&self, text: &str, idx: usize) -> Result<Version>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     fn base_url(&self, text: &str, idx: usize) -> Result<String>;
     /// A permalink template, or a piece of one, checked by [`Permalink::parse`]:
@@ -249,6 +254,15 @@ impl NodeExt for KdlNode {
                 .ok_or_else(|| ConfigError::bad_duration(text, written, span).into());
         }
         Ok(Duration::from_secs(self.count(text, idx)? as u64))
+    }
+
+    /// A browser version. Always a string: `safari 15.4` is a *float* in KDL,
+    /// and `15.10` would round-trip as `15.1`.
+    fn version(&self, text: &str, idx: usize) -> Result<Version> {
+        let span = NodeExt::span(self);
+        let written = self.string(text, idx)?;
+        Version::parse(&written)
+            .ok_or_else(|| ConfigError::bad_version(text, &written, span).into())
     }
 
     /// A base-URL argument, required to be `https://` unless it names the

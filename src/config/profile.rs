@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(responsive.quality, 55, "overridden four levels down");
         assert_eq!(responsive.widths, vec![320, 640], "sibling list inherited");
         assert!(!dev.assets.images.lazy, "sibling section inherited");
-        assert!(dev.assets.minify, "grandparent sibling inherited");
+        assert!(dev.assets.minify.css, "grandparent sibling inherited");
     }
 
     #[test]
