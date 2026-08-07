@@ -111,10 +111,11 @@ scenario "no search index without configured formats" {
   }
 }
 
-// The indexed region: which element a page's prose lives in, and what to drop
+// The prose region: which element a page's prose lives in, and what to drop
 // from inside it. A layout that is not the default one has to be able to say so,
-// or its search matches every page's chrome.
-scenario "the indexed region and the elements dropped from it are the site's to name" {
+// or its search matches every page's chrome. It sits under `html` because it is
+// a fact about the markup, and the search index is only one of its readers.
+scenario "the prose region and the elements dropped from it are the site's to name" {
   files {
     "config.kdl" #"""
       site "T"
@@ -123,11 +124,15 @@ scenario "the indexed region and the elements dropped from it are the site's to 
         dist "public"
         templates "templates"
       }
+      html {
+        region {
+          element "article"
+          ignore "nav"
+        }
+      }
       generate {
         search {
           formats "json"
-          region "article"
-          ignore "nav"
         }
       }
       """#

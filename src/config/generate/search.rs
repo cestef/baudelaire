@@ -1,7 +1,7 @@
 //! `generate { search { } }`: client-side search indexes.
 
 use crate::config::Named;
-use crate::config::dispatch::Kind::{Choices, Flag, Number, Text, Texts};
+use crate::config::dispatch::Kind::{Choices, Flag, Number, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
@@ -12,12 +12,6 @@ pub struct SearchConfig {
     pub formats: Vec<SearchFormat>,
     /// Page fields included in each indexed document.
     pub fields: Vec<SearchField>,
-    /// The element whose contents are indexed, by tag name. A page without one
-    /// is indexed whole.
-    pub region: String,
-    /// Elements dropped from the indexed region wherever they occur in it, by
-    /// tag name: the chrome a layout puts *inside* its content region.
-    pub ignore: Vec<String>,
     /// Tokens excluded from the inverted index.
     pub stopwords: Vec<String>,
     /// Minimum token length kept in the inverted index.
@@ -96,8 +90,6 @@ impl Default for SearchConfig {
             // The landmark a page's own prose lives in. Indexing the whole
             // document instead puts every page's navigation in every document,
             // which is the fastest way to make a small site's search useless.
-            region: "main".into(),
-            ignore: Vec::new(),
             stopwords: Vec::new(),
             min_length: 2,
             ui: false,
@@ -122,25 +114,6 @@ impl Section for SearchConfig {
             "Which parts of a page go into the index, one word each.",
             |c, n, t| {
                 c.fields = n.mapped::<SearchField>(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "region",
-            Text,
-            "The element whose contents are indexed, by tag name. \
-             A page without one is indexed whole.",
-            |c, n, t| {
-                c.region = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "ignore",
-            Texts,
-            "Elements to leave out of the indexed region, by tag name, one word each.",
-            |c, n, t| {
-                c.ignore = n.words(t)?;
                 Ok(())
             },
         ),

@@ -54,10 +54,10 @@ impl Region<'_> {
     pub const MAIN: &'static str = "main";
 }
 
-impl<'a> From<&'a crate::config::SearchConfig> for Region<'a> {
-    fn from(config: &'a crate::config::SearchConfig) -> Self {
+impl<'a> From<&'a crate::config::RegionConfig> for Region<'a> {
+    fn from(config: &'a crate::config::RegionConfig) -> Self {
         Self {
-            element: &config.region,
+            element: &config.element,
             ignore: &config.ignore,
         }
     }

@@ -31,6 +31,24 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+- **`generate { search { region } }` and its `ignore` moved to
+  `html { region { element } }`** and `html { region { ignore } }`. The old
+  spelling is an unknown key and fails the build.
+
+  ```kdl
+  html {
+    region {
+      element "article"
+      ignore "nav" "aside"
+    }
+  }
+  ```
+
+  Which element holds a page's prose is a fact about the markup a site emits, not
+  about the search index: a full-content feed asks the same question, and under
+  the old spelling it would have had to read the search block or ask again under
+  a second name.
+
 - **`description`, `summary`, `image`, `alt` and `author` are recognized
   frontmatter keys** rather than conventions read out of a page's extra
   frontmatter by name. Three consequences, all of which can fail a build that

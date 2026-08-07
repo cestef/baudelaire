@@ -83,7 +83,7 @@ impl Corpus {
     /// does after compiling.
     fn build(site: &Site, config: &SearchConfig, lang: &str) -> Self {
         let has = |field| config.fields.contains(&field);
-        let region = Region::from(config);
+        let region = Region::from(&site.config.html.region);
         let mut documents: Vec<Document> = site
             .outputs
             .par_iter()

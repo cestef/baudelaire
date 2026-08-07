@@ -27,19 +27,22 @@ A layout that binds its prose to something else names it, and one that keeps
 chrome *inside* that region lists what to drop:
 
 ```kdl
-generate {
-  search {
-    formats "json"
-    region "article"      // the element whose contents are indexed
+html {
+  region {
+    element "article"     // the element whose contents are the page's prose
     ignore "nav" "aside"  // dropped wherever they appear inside it
   }
 }
 ```
 
+That lives under `html` and not under `search`, because it is a fact about the
+markup the site emits: the #link("feeds.typ")[feed] carrying each entry in full
+reads the same region, so both mean the same thing by "the page's prose".
+
 Both are tag names, matched whole and case-insensitively; nesting is counted, so
 an `<article>` inside an `<article>` does not end the region early. A page with
-no such element is indexed whole, which is what a 404 or a landing page wants.
-`region ""` indexes every page whole.
+no such element counts whole, which is what a 404 or a landing page wants.
+`element ""` counts every page whole.
 
 == Keys
 
@@ -49,8 +52,6 @@ no such element is indexed whole, which is what a 404 or a landing page wants.
   table.header([Key], [Type], [Default], [Does]),
   [`formats`], [`json` | `inverted`], [--], [Which index files to write. Naming none turns search off.],
   [`fields`], [`title` | `body` | `tags`], [all three], [What of each page goes into its document.],
-  [`region`], [str], [`main`], [The element whose contents are indexed. Empty indexes the whole page.],
-  [`ignore`], [str ..], [--], [Elements dropped from the region wherever they occur in it.],
   [`stopwords`], [str ..], [--], [Words left out of the `inverted` index.],
   [`minimum`], [int], [`2`], [The shortest word the `inverted` index keeps.],
   [`ui`], [bool], [`#false`], [Also emit the self-mounting palette script.],

@@ -2,11 +2,12 @@
 
 pub mod anchors;
 pub mod highlight;
+pub mod region;
 
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Table, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{AnchorConfig, HighlightConfig};
+use crate::config::{AnchorConfig, HighlightConfig, RegionConfig};
 use crate::error::ConfigError;
 
 /// HTML output options.
@@ -22,6 +23,9 @@ pub struct HtmlConfig {
     /// Deep-linkable headings: a slug `id` where one is missing, and the link
     /// back to it.
     pub anchors: AnchorConfig,
+    /// Which part of a rendered page is its prose: read by the search index and
+    /// by a full-content feed, so both mean the same thing by it.
+    pub region: RegionConfig,
     /// Rewrite syntax-highlight colours as CSS classes.
     pub highlight: HighlightConfig,
     /// Emit a schema.org JSON-LD island in each page's `<head>`.
@@ -96,6 +100,7 @@ impl Default for HtmlConfig {
             embed: false,
             meta: true,
             anchors: AnchorConfig::default(),
+            region: RegionConfig::default(),
             highlight: HighlightConfig::default(),
             // opt-in: structured data is a claim about the page, not a restating
             // of what it already says.
@@ -138,6 +143,12 @@ impl Section for HtmlConfig {
             Nested(AnchorConfig::rows),
             "Give every heading an `id`, and optionally a link back to it. On by default; `#false` turns it off.",
             |c, n, t| c.anchors.fill(n, t),
+        ),
+        (
+            "region",
+            Nested(RegionConfig::rows),
+            "Which part of a rendered page is its prose.",
+            |c, n, t| c.region.fill(n, t),
         ),
         (
             "jsonld",
