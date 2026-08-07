@@ -146,7 +146,7 @@ impl<'a> DiscoveryCache<'a> {
         // markdown is microseconds, and the compile cache still covers the page
         // through its wrapper fingerprint.
         #[cfg(feature = "markdown")]
-        if path.extension().is_some_and(|e| e == "md") {
+        if path.extension().is_some_and(|e| e == Config::MARKDOWN) {
             return Self::load_markdown(collection, path, config);
         }
         // Fast path: unchanged source and dependencies reuse the stored
@@ -247,6 +247,15 @@ impl<'a> DiscoveryCache<'a> {
         Ok((frontmatter, data(std::sync::Arc::new(sourcemap)), body))
     }
 
+    /// The dialects a declared source can be a body in, by the extension that
+    /// names each. The single table the check and the error's help both read, so
+    /// the message cannot list a set the build does not have.
+    ///
+    /// Gated with its one reader: `source` replaces a *markdown* page's body,
+    /// and a binary without that feature has no such page to give one to.
+    #[cfg(feature = "markdown")]
+    const READERS: &'static [&'static str] = &[Config::MARKDOWN];
+
     /// The file a page's `source` names, read: its display name and its text.
     ///
     /// The name is resolved against `paths { sources { } }` and nowhere else, so
@@ -277,6 +286,15 @@ impl<'a> DiscoveryCache<'a> {
         let declared = config.paths.source(name).ok_or_else(|| {
             crate::error::ContentError::unknown_source(path, name, &config.paths.declared())
         })?;
+        // The reader follows the *file*, not the page that names it. Everything
+        // below used to lower the text as markdown whatever it came from, so a
+        // file of another kind came out as prose with its own syntax in it, on a
+        // green build.
+        if !Self::READERS.contains(&declared.extension().and_then(|e| e.to_str()).unwrap_or("")) {
+            return Err(
+                crate::error::ContentError::source_unreadable(name, declared, Self::READERS).into(),
+            );
+        }
         let file = config.root.join(declared);
         let text = Self::decode(&crate::fs::read(&file)?)
             .ok_or_else(|| crate::error::ContentError::non_utf8_source(&file))?;

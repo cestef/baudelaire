@@ -354,6 +354,15 @@ impl Config {
     /// [`scratch`]: Config::scratch
     pub const SCRATCH: &'static str = ".baudelaire";
 
+    /// The extension of a typst page, and of a markdown one.
+    ///
+    /// Written once because four things ask: what [`sources`](Config::sources)
+    /// counts as a page, which loader a page goes to, whether a `source` may
+    /// replace its body, and whether a declared source is the markdown that
+    /// `source` reads.
+    pub const TYPST: &'static str = "typ";
+    pub const MARKDOWN: &'static str = "md";
+
     /// The not-found page's output file. Flat at the dist root, the name
     /// static hosts serve for unmatched URLs, and what the dev server falls
     /// back to; single source for both.
@@ -457,8 +466,8 @@ impl Config {
         let markdown = self.content.markdown.enabled;
         #[cfg(not(feature = "markdown"))]
         let markdown = false;
-        std::iter::once("typ")
-            .chain(markdown.then_some("md"))
+        std::iter::once(Self::TYPST)
+            .chain(markdown.then_some(Self::MARKDOWN))
             .collect()
     }
 

@@ -140,6 +140,20 @@ pub enum ContentError {
     )]
     SourceAndBody { path: String },
 
+    /// A `source` naming a file of a kind nothing here can read as a body.
+    ///
+    /// The reader used to be the *page's* rather than the file's: a sourced body
+    /// was lowered as markdown whatever it was, so a file of another kind came
+    /// out as prose with its own syntax in it and the build stayed green.
+    #[error("source {} names {}, which is not a body this build can read", Code(.name), Text(.path))]
+    #[diagnostic(code(baudelaire::content::source_unreadable))]
+    SourceUnreadable {
+        name: String,
+        path: String,
+        #[help]
+        help: String,
+    },
+
     /// A `.typ` page carrying a `source`.
     #[error("{} is a typst page, so its {} would replace what typst compiles", Text(.path), Code("source"))]
     #[diagnostic(
@@ -335,6 +349,24 @@ impl ContentError {
                 "declare it under `languages`, or use one of: {}",
                 known.join(", ")
             ),
+        }
+    }
+
+    /// A page naming a declared source of a kind no reader claims. Named by the
+    /// key rather than by the page: the declaration is what has to change, and
+    /// it is in the config, which the page cannot see. The help lists the
+    /// extensions there are readers for, out of the table that dispatches them,
+    /// so it cannot name a set the build does not have.
+    pub fn source_unreadable(name: &str, path: &std::path::Path, readable: &[&str]) -> Self {
+        let kinds = readable
+            .iter()
+            .map(|ext| format!(".{ext}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Self::SourceUnreadable {
+            name: name.to_owned(),
+            path: path.display().to_string(),
+            help: markup!("a source is read as the dialect its extension names: {}", kinds),
         }
     }
 

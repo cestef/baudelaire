@@ -20,6 +20,13 @@ chores are visible in the git history and change nothing for a site.
   stylesheet had not caught up saw unstyled code and no reason for it. The
   warning names the way out (`highlight #false`, for typst's inline colours).
 
+### Fixed
+
+- **A `source` naming a file no reader claims is refused**, instead of being
+  lowered as markdown anyway. `sources { notes "../notes.rst" }` came out as
+  prose with its own syntax in it, on a green build: the reader was the page's,
+  not the file's, and nothing looked at the extension.
+
 ## [0.0.13] - 2026-08-07
 
 ### Upgrading

@@ -157,6 +157,39 @@ scenario "a sourced page may not also have a body" {
   }
 }
 
+// The body is lowered by the dialect the declared file names, and a file that
+// names none is refused. It used to be lowered as markdown whatever it was, so
+// a file of another kind came out as prose with its own syntax in it, on a
+// green build.
+scenario "a source of a kind nothing reads is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          notes "notes/notes.rst"
+        }
+      }
+      """#
+    "notes/notes.rst" #"""
+      Not prose
+      ========
+      """#
+    "content/page.md" #"""
+      ;;;
+      title "Page"
+      source "notes"
+      ;;;
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::source_unreadable" }
+  }
+}
+
 // A `.typ` page's body is the module its frontmatter was read out of, and typst
 // has `include`, which reads a file and is tracked as a dependency of the page.
 scenario "a typst page is refused a source" {

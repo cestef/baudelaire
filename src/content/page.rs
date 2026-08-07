@@ -168,7 +168,7 @@ impl Page {
         // frontmatter was just read out of, and typst's own `include` already
         // reads a file and is tracked as that page's dependency. Checked here
         // rather than in the loader so it holds whichever cache path answered.
-        if frontmatter.source.is_some() && path.extension().is_none_or(|e| e != "md") {
+        if frontmatter.source.is_some() && path.extension().is_none_or(|e| e != Config::MARKDOWN) {
             return Err(ContentError::source_on_typst(path).into());
         }
         // Reject a name that is not text before decoding it. `Stem::of` falls
