@@ -379,6 +379,33 @@ fn a_declared_source_outside_the_project_is_watched() {
     assert!(body.contains("Later "), "rebuilt page: {body}");
 }
 
+/// The same declaration, but the file is not there when the session starts:
+/// the build fails, the server stays up, and creating the file has to be what
+/// fixes it. A path that does not resolve spells differently from the same path
+/// once it does, so this is the case a lexical fallback loses.
+#[cfg(feature = "markdown")]
+#[test]
+fn a_declared_source_created_after_the_session_starts_is_watched() {
+    let t = Site::new();
+    t.write(
+        "site/config.kdl",
+        "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n  sources {\n    notes \"../notes.md\"\n  }\n}\nserve { open #false; }",
+    );
+    t.write(
+        "site/content/page.md",
+        ";;;\ntitle \"Page\"\nsource \"notes\"\n;;;\n",
+    );
+    let srv = Serve::start(&t, &["--root", "site"]);
+    let (code, _) = srv.get("/page/");
+    assert_ne!(code, 200, "the sourced file is missing: the build must fail");
+
+    let pushed = awaits_reload(&srv, || t.write("notes.md", "Arrived.\n"));
+    assert!(pushed, "creating a declared source pushed no reload");
+    let (code, body) = srv.get("/page/");
+    assert_eq!(code, 200, "{body}");
+    assert!(body.contains("Arrived."), "rebuilt page: {body}");
+}
+
 /// The same hole in `templates/`: a template's own data file.
 ///
 /// Identical to the tracked-`data/` case above except for where the file sits,

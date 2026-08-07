@@ -38,6 +38,10 @@ chores are visible in the git history and change nothing for a site.
   is invalidated by an edit to it, and a fault inside it is reported against that
   file.
 
+- **An `svg()` may name a declared source**, so an icon shared with another
+  project inlines like one in the asset tree. The marker the call leaves is
+  resolved against the project root, which the mounted path is not under.
+
 - **A markdown page's `source` may name a `.typ` file**, which becomes the
   page's body without being lowered: the reader follows the file, not the page.
 

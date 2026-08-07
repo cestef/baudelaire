@@ -326,11 +326,17 @@ under. A page writes a *name*; `paths { sources }` is the only place a path is
 written, so a page can reach a declared file and nothing else.
 
 ```typ
-#import "@baudelaire/sources:0.1.0": changelog, data
+#import "@baudelaire/sources:0.1.0": changelog, data, logo
+#import "@baudelaire/html:0.1.0": svg
 
 #include changelog          // a `.typ` source is a body
 #let counts = json(data)    // any other kind is data
+#svg(logo)                  // including an icon to inline
 ```
+
+A name is bound as written, so it has to be one Typst can bind: a letter or `_`
+first, then letters, digits, `_` or `-`. Declaring one twice is refused rather
+than resolved twice over.
 
 The module is empty on a site that declares nothing, and importing a name that
 was never declared is an import error rather than a `none`.

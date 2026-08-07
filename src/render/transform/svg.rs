@@ -91,6 +91,7 @@ impl Transform for Svg {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let marker = *MARKER;
         let root = cx.root;
+        let sources = &cx.config.paths.sources;
         // Findings are gathered during the walk and recorded after it: the walk
         // borrows the DOM mutably, so `cx` cannot be written inside it.
         let mut read = Vec::new();
@@ -100,7 +101,7 @@ impl Transform for Svg {
                 return;
             };
             element.attrs.0.retain(|(key, _)| *key != marker);
-            match Self::inline(element, &path, root) {
+            match Self::inline(element, &path, root, sources) {
                 Ok(source) => read.push(source),
                 Err(why) => failed.push(why),
             }
@@ -117,8 +118,13 @@ impl Svg {
     /// The file's root attributes fill in under the caller's, so a template can
     /// override `width`, `fill` or `stroke` at the call site while everything
     /// it did not mention comes through as authored.
-    fn inline(element: &mut HtmlElement, path: &str, root: &Path) -> Result<PathBuf, SvgError> {
-        let source = Self::locate(path, root)?;
+    fn inline(
+        element: &mut HtmlElement,
+        path: &str,
+        root: &Path,
+        sources: &[(String, PathBuf)],
+    ) -> Result<PathBuf, SvgError> {
+        let source = Self::locate(path, root, sources)?;
         let text =
             crate::fs::read_to_string(&source).map_err(|why| SvgError::unreadable(path, why))?;
         let parsed = roxmltree::Document::parse_with_options(&text, Icon::options())
@@ -169,10 +175,16 @@ impl Svg {
 
     /// The project file a marker names.
     ///
-    /// Project-absolute, then [`Contained`]: the path comes from template text
-    /// rather than from typst's own resolution, so it is the one place a marker
-    /// could otherwise reach outside the project.
-    fn locate(path: &str, root: &Path) -> Result<PathBuf, SvgError> {
+    /// A declared source first, then project-absolute and [`Contained`]: the
+    /// path comes from template text rather than from typst's own resolution, so
+    /// it is the one place a marker could otherwise reach outside the project.
+    fn locate(path: &str, root: &Path, sources: &[(String, PathBuf)]) -> Result<PathBuf, SvgError> {
+        // A declared source is the one path a marker may name that is not a
+        // project file: it is served under the mount and lives wherever the
+        // config said, which is outside the project as often as not.
+        if let Some(file) = crate::world::module::Sources::real(path, sources, root) {
+            return Ok(file);
+        }
         let rel = path
             .strip_prefix('/')
             .and_then(Contained::new)
@@ -356,7 +368,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     fn locate(path: &str, root: &Path) -> Result<PathBuf, crate::error::SvgError> {
-        Svg::locate(path, root)
+        Svg::locate(path, root, &[])
     }
 
     fn executable(url: &str) -> bool {

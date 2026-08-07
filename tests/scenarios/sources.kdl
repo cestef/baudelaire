@@ -254,6 +254,41 @@ scenario "a page takes its body from a declared typst source" {
   }
 }
 
+// The mount is for every reader, not only `include`: an icon declared as a
+// source inlines like one in the project, which is what the module's own doc
+// claims and what a shared brand directory above the project needs.
+scenario "an svg from a declared source is inlined" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          logo "brand/logo.svg"
+        }
+      }
+      """#
+    "brand/logo.svg" #"""
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>
+      """#
+    "content/page.typ" #"""
+      #import "@baudelaire/sources:0.1.0": logo
+      #import "@baudelaire/html:0.1.0": svg
+      #let frontmatter = (title: "Page",)
+
+      #svg(logo)
+      """#
+  }
+  expect {
+    ok
+    file "page/index.html" {
+      contains "<svg"
+      contains "<rect"
+    }
+  }
+}
+
 // The other half of the mount: a typst page reaches a declared file by name,
 // which is what `include` cannot do for a file outside the project root.
 scenario "a typst page reads a declared source by name" {

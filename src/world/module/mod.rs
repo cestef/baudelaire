@@ -421,6 +421,24 @@ impl Sources {
         }
     }
 
+    /// The real file a mounted virtual path names, or `None` when the path is
+    /// not one.
+    ///
+    /// For a reader that resolves a path itself rather than through the
+    /// compiler: the marker `svg()` leaves carries the path as typst spelled it,
+    /// and by the time [`crate::render`] sees it nothing has opened the file.
+    /// Here rather than there so the spelling has one owner.
+    pub(crate) fn real(vpath: &str, sources: &[(String, PathBuf)], root: &Path) -> Option<PathBuf> {
+        let key = vpath
+            .strip_prefix('/')?
+            .strip_prefix(&Self::prefix())?
+            .strip_prefix('/')?;
+        sources
+            .iter()
+            .find(|(name, path)| Self::key(name, path) == key)
+            .map(|(_, path)| root.join(path))
+    }
+
     /// The real file `id` names, or `None` when it names nothing under the
     /// mount. The single test both serving and path resolution ask, so the
     /// mount cannot serve one file and resolve another.
