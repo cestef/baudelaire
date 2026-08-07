@@ -45,7 +45,7 @@ impl FeedKind {
 /// Empty for a summary feed, which is what makes `Feed::body` a lookup rather
 /// than a branch: nothing is in the map, so nothing is found.
 #[derive(Default)]
-struct Bodies<'a>(std::collections::HashMap<&'a str, &'a str>);
+struct Bodies<'a>(std::collections::HashMap<&'a str, std::borrow::Cow<'a, str>>);
 
 impl<'a> Bodies<'a> {
     /// The prose of every built page, or nothing at all when the site asked for
@@ -58,20 +58,15 @@ impl<'a> Bodies<'a> {
         Self(
             site.outputs
                 .iter()
-                .map(|out| {
-                    (
-                        out.page.permalink.as_str(),
-                        Text::region(out.html, region.element),
-                    )
-                })
+                .map(|out| (out.page.permalink.as_str(), Text::prose(out.html, region)))
                 .collect(),
         )
     }
 
     /// This page's prose, or `None` when the site asked for summaries or the
     /// page was not built in this run.
-    fn get(&self, page: &Page) -> Option<&'a str> {
-        self.0.get(page.permalink.as_str()).copied()
+    fn get(&self, page: &Page) -> Option<&str> {
+        self.0.get(page.permalink.as_str()).map(AsRef::as_ref)
     }
 }
 

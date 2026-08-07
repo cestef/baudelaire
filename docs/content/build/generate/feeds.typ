@@ -55,8 +55,15 @@ generate {
 ```
 
 The body is taken from `html { region }`, the same part of the page the
-#link("search.typ")[search index] reads, so the header, sidebar and footer around
-it never travel with it.
+#link("search.typ")[search index] reads, so the header, sidebar and footer
+around it never travel with it, and neither does anything `region { ignore }`
+names *inside* it. Scripts and stylesheets are dropped too: a reader runs
+neither, and both would arrive as text.
+
+A layout that emits no region at all falls back to `<body>`, never to the whole
+document. That is where a feed parts company with the search index, which counts
+a page with no region whole rather than not at all. Name a region if your pages
+carry chrome, or every entry carries it too.
 
 The summary is not replaced. Each format has a place for both, and a reader's
 list view wants the short one:

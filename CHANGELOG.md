@@ -142,9 +142,11 @@ chores are visible in the git history and change nothing for a site.
   ```
 
   The body comes from `html { region }`, the same part of the page the search
-  index reads, so the chrome around it never travels. The summary is kept beside
-  it, in the element each format has for one: `content:encoded` for RSS,
-  `<content type="html">` for Atom, `content_html` for JSON Feed.
+  index reads, so neither the chrome around it nor anything `region { ignore }`
+  names inside it travels. A layout that emits no region falls back to `<body>`,
+  never to the whole document. The summary is kept beside it, in the element each
+  format has for one: `content:encoded` for RSS, `<content type="html">` for
+  Atom, `content_html` for JSON Feed.
 
 - **A page opts out of the files a build generates about it**, with an `exclude`
   list in its frontmatter:

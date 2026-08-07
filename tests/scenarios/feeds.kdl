@@ -893,6 +893,89 @@ scenario "a full feed carries each entry's prose beside its summary" {
   }
 }
 
+// The region a feed reads may not be there at all: a site with no template
+// emits no `<main>`. The search index counts such a page whole, which is right
+// for an index and catastrophic for a feed, whose entries would each become the
+// whole document. The body narrows to `<body>` instead.
+scenario "a full feed on a page with no region carries prose, not the document" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed { formats "rss"; content "full" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        date: "2026-01-02",
+        description: "The short one.",
+      )
+      real prose
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      contains "<content:encoded>"
+      contains "real prose"
+      // Neither the doctype nor anything out of the generated `<head>`.
+      missing "DOCTYPE"
+      missing "charset"
+      missing "og:title"
+    }
+  }
+}
+
+// `ignore` names the chrome a layout puts *inside* its region. It reached the
+// search index and not the feed, so a sidebar inside `<main>` travelled.
+scenario "a full feed drops the chrome inside its region" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html {
+        region { element "main"; ignore "nav" }
+      }
+      generate {
+        feed { formats "rss"; content "full" }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(data, body) = html.elem("main", {
+        html.elem("nav")[sidebar chrome]
+        body
+      })
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        date: "2026-01-02",
+        description: "The short one.",
+        template: "page.typ",
+      )
+      real prose
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      contains "real prose"
+      missing "sidebar chrome"
+    }
+  }
+}
+
 // And the default is unchanged: the summary alone, with no namespace declared
 // for a body that is not there.
 scenario "a summary feed carries no body" {

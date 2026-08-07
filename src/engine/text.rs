@@ -13,6 +13,8 @@
 //! relevance collapses. A layout that names its content region something else,
 //! or that puts chrome *inside* it, says so in config rather than losing.
 
+use std::borrow::Cow;
+
 /// The predefined HTML/XML entities as `(char, name)`, read when decoding
 /// `&name;` back to its character during extraction. Escaping the other way is
 /// the markup builder's job (`engine/xml.rs`), so there is one escaping surface.
@@ -70,29 +72,93 @@ impl Text {
         Self::scan(Self::region(html, region.element), region.ignore)
     }
 
+    /// The page's prose as *markup*, for a feed that carries each entry in full:
+    /// the region, with the elements the site calls chrome removed from inside
+    /// it.
+    ///
+    /// Falls back to `<body>` rather than to the whole document, which is where
+    /// this parts company with [`Text::region`]. A document begins
+    /// `<!DOCTYPE html><head>`, and a layout that names no region would
+    /// otherwise publish its every `<meta>` tag as the entry's body. `<body>` is
+    /// the widest thing that is still prose, and typst-html always emits one.
+    ///
+    /// `<script>` and `<style>` go the way of an ignored element, since a feed
+    /// reader runs neither and both would travel as text.
+    pub fn prose<'a>(html: &'a str, region: Region<'_>) -> Cow<'a, str> {
+        let inner = Self::found(html, region.element)
+            .or_else(|| Self::found(html, "body"))
+            .unwrap_or(html);
+        Self::stripped(inner, region.ignore)
+    }
+
+    /// `html` with every element [`Text::skipped`] names removed, contents and
+    /// all. Borrowed when there was nothing to remove, which is the common case:
+    /// a page whose region holds no chrome copies no bytes.
+    ///
+    /// An element that never closes is left alone rather than swallowing the
+    /// rest of the document, the same call [`Text::scan`] makes.
+    fn stripped<'a>(html: &'a str, ignore: &[String]) -> Cow<'a, str> {
+        let mut out: Option<String> = None;
+        // Where the run not yet copied into `out` begins.
+        let mut kept = 0;
+        let mut i = 0;
+        while let Some(next) = html[i..].find('<') {
+            let at = i + next;
+            let Some(tag) = Self::skipped(&html[at..], ignore) else {
+                i = at + 1;
+                continue;
+            };
+            let Some(close) = Self::closing(html, at + 1 + tag.len(), tag) else {
+                i = at + 1;
+                continue;
+            };
+            let end = match html[close..].find('>') {
+                Some(gt) => close + gt + 1,
+                None => html.len(),
+            };
+            out.get_or_insert_with(String::new)
+                .push_str(&html[kept..at]);
+            kept = end;
+            i = end;
+        }
+        match out {
+            Some(mut out) => {
+                out.push_str(&html[kept..]);
+                Cow::Owned(out)
+            }
+            None => Cow::Borrowed(html),
+        }
+    }
+
     /// The inner HTML of the first `element`, or the whole document when there
     /// is none. Keeps a consumer focused on primary content, and leaves a page
     /// that does not have the region counted whole rather than not at all: a 404
     /// page or a bare feed page is prose too.
     ///
-    /// Public because it has two readers: the search index strips it to text,
-    /// and a full-content feed carries the markup as it stands.
+    /// That fallback is right for the search index and wrong for a feed, which
+    /// is why [`Text::prose`] does not share it.
     pub fn region<'a>(html: &'a str, element: &str) -> &'a str {
-        // A region named as nothing is every element there is.
+        Self::found(html, element).unwrap_or(html)
+    }
+
+    /// The inner HTML of the first `element`, or `None` when the document holds
+    /// no such element. A name that is empty is every element there is, and so
+    /// is the whole document.
+    ///
+    /// Split out because the two readers want opposite things from a miss: the
+    /// search index would rather index a page whole than not at all, and a feed
+    /// would rather narrow than publish a `<head>`.
+    fn found<'a>(html: &'a str, element: &str) -> Option<&'a str> {
         if element.is_empty() {
-            return html;
+            return Some(html);
         }
-        let Some(open) = Self::opening(html, 0, element) else {
-            return html;
-        };
-        let Some(gt) = html[open..].find('>') else {
-            return html;
-        };
+        let open = Self::opening(html, 0, element)?;
+        let gt = html[open..].find('>')?;
         let start = open + gt + 1;
-        match Self::closing(html, start, element) {
+        Some(match Self::closing(html, start, element) {
             Some(end) => &html[start..end],
             None => &html[start..],
-        }
+        })
     }
 
     /// Where `<element` opens at or after `from`, as a whole tag name: `<mainly>`
@@ -549,5 +615,78 @@ mod tests {
         assert_eq!(Reading::markdown("prose\n```\nnever closed\n").words, 1);
         // Two backticks are inline code, not a fence: the line is prose.
         assert_eq!(Reading::markdown("`` a b ``\n").words, 2);
+    }
+
+    /// The document a page is: what a full feed slices its entry bodies out of.
+    const PAGE: &str = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head>\
+                        <body><nav>chrome</nav><main><nav>inner</nav>\
+                        <p>Real prose.</p></main></body></html>";
+
+    /// A feed body is the region and nothing around it. The search index reads
+    /// a page with no region whole; a feed must not, or every entry is the
+    /// document, `<head>` and all.
+    #[test]
+    fn a_feed_body_narrows_where_the_search_index_widens() {
+        let region = Region {
+            element: "article",
+            ignore: &[],
+        };
+        assert!(
+            Text::region(PAGE, "article").starts_with("<!DOCTYPE"),
+            "the index counts a page with no region whole"
+        );
+        let body = Text::prose(PAGE, region);
+        assert!(!body.contains("<!DOCTYPE"), "{body}");
+        assert!(!body.contains("charset"), "{body}");
+        assert!(body.contains("Real prose."), "{body}");
+        // The fallback is `<body>`, so the layout's own chrome is still there:
+        // narrowing it is what `ignore` is for.
+        assert!(body.contains("chrome"), "{body}");
+    }
+
+    /// `ignore` names the chrome a layout puts *inside* its region, so it has to
+    /// reach the markup a feed carries and not only the text an index reads.
+    #[test]
+    fn a_feed_body_drops_the_elements_the_site_calls_chrome() {
+        let ignore = ["nav".to_owned()];
+        let body = Text::prose(
+            PAGE,
+            Region {
+                element: "main",
+                ignore: &ignore,
+            },
+        );
+        assert_eq!(body, "<p>Real prose.</p>");
+    }
+
+    /// Nothing to drop copies nothing: the common case stays a borrow of the
+    /// page that is already in memory.
+    #[test]
+    fn a_region_holding_no_chrome_is_not_copied() {
+        let body = Text::prose(
+            PAGE,
+            Region {
+                element: "main",
+                ignore: &[],
+            },
+        );
+        assert!(matches!(body, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(body, "<nav>inner</nav><p>Real prose.</p>");
+    }
+
+    /// A script is neither prose nor markup a reader runs, and an element that
+    /// never closes is left alone rather than swallowing the rest of the page.
+    #[test]
+    fn a_feed_body_drops_scripts_and_keeps_an_unclosed_element() {
+        let html = "<main><p>a</p><script>go()</script><br><p>b</p></main>";
+        let ignore = ["br".to_owned()];
+        let body = Text::prose(
+            html,
+            Region {
+                element: "main",
+                ignore: &ignore,
+            },
+        );
+        assert_eq!(body, "<p>a</p><br><p>b</p>");
     }
 }
