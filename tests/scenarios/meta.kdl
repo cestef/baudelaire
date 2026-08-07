@@ -434,6 +434,9 @@ scenario "the site states the social facts a page cannot" {
       contains #"property="og:image" content="https://s.example/og.png""#
       // An image means a large card.
       contains #"content="summary_large_image""#
+      // One picture stands in for every page, so the page's title does not
+      // describe it. Only a generated card, which draws that title, does.
+      missing "og:image:alt"
     }
     // A page's own always wins: a floor is not an override.
     file "own/index.html" {

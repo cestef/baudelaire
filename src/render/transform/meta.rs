@@ -257,20 +257,25 @@ impl Card<'_> {
         // pages that have none, which is the whole point of generating them.
         // Resolved before the struct literal because resolution records an
         // asset dependency, and so needs `self` mutably.
-        let generated = authored.is_none();
+        let card = match authored {
+            Some(_) => None,
+            None => self.generated_card(),
+        };
         // The page's own, else the card the build drew it, else the site's
         // floor. Last because it is a floor: a site image on a page that has one
         // of its own would preview the wrong thing.
         let image = authored
-            .or_else(|| self.generated_card())
+            .or_else(|| card.clone())
             .or_else(|| self.config.html.meta.image.clone());
         let image = image.map(|src| self.absolute(&src));
         // A generated card draws the page title, so that is a true description
-        // of it. An authored image is the author's to describe.
+        // of it. An authored image is the author's to describe, and the site's
+        // floor image shows whatever it shows: it is one picture standing in for
+        // every page, so a page title describes it only by coincidence.
         let alt = fm
             .alt
             .clone()
-            .or_else(|| (generated && image.is_some()).then(|| title.clone()))
+            .or_else(|| card.is_some().then(|| title.clone()))
             .filter(|alt| !alt.is_empty());
         Facts {
             title,

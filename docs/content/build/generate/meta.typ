@@ -41,6 +41,9 @@ html {
 `image` is a floor, not an override: a page's own `image` wins, and so does a
 #link("cards.typ")[generated card]. It is resolved and made absolute the same
 way an authored one is, so `/og.png` becomes a full URL under the site's `url`.
+It carries no `og:image:alt`, because one picture standing in for every page is
+not described by any one page's title. A page that wants an alt names its own
+`image` and its own `alt`.
 
 #callout(kind: "note")[
   typst-html owns the document `<head>`, so these tags can't be written in a
