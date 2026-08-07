@@ -618,7 +618,7 @@ pub enum ConfigErrorKind {
     #[diagnostic(
         code(baudelaire::config::not_an_identifier),
         help(
-            "a declared source is bound under its name in `@baudelaire/sources`, so the name has to be a typst identifier: a letter or `_` first, then letters, digits, `_` or `-`"
+            "a declared source is bound under its name in `@baudelaire/sources`, so the name has to be a typst identifier: a letter or `_` first, then letters, digits, `_` or `-`, and not one of typst's own keywords (`none`, `auto`, `let`, `set`, `show`, `context`, `in`, `as`, ..)"
         )
     )]
     NotAnIdentifier { name: String },

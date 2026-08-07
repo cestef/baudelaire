@@ -58,6 +58,15 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A frontmatter key spelled like a typst keyword no longer breaks every
+  template.** `in`, `as`, `set`, `show`, `context` and `none` all pass typst's
+  character rule for an identifier and are only then reclassified, so one such
+  key was written bare into the site-wide `@baudelaire/pages` table and into a
+  markdown page's wrapper. What followed was a parse error naming a generated
+  file and no page, and every template importing that table failed with it. A
+  key is now quoted unless typst's own parser reads it back as an identifier,
+  which is also the set the declared-source name check was meant to refuse.
+
 - **A declared source name must be one a page can import, and may be declared
   once.** Both were silent: a name typst cannot bind (`"my file"`) broke the
   generated `@baudelaire/sources` module at the first import, inside a file

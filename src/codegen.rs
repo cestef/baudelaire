@@ -258,7 +258,7 @@ impl Format for TypstFmt {
     }
 
     fn key(key: &str, out: &mut String) {
-        if typst::syntax::is_ident(key) {
+        if bindable(key) {
             out.push_str(key);
         } else {
             let _ = write!(out, "{}", Str(key));
@@ -399,6 +399,35 @@ pub(crate) fn ident(s: &str) -> bool {
     let mut chars = s.chars();
     let head = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$');
     head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+/// Whether `s` is a Typst identifier: a name a `#let` can bind, and a dict key
+/// that can be written bare.
+///
+/// [`typst::syntax::is_ident`] is *not* that question, which is the trap this
+/// exists to close. It is the lexer's character rule, so it answers `true` for
+/// every keyword (`none`, `auto`, `in`, `as`, `let`, `set`, `show`, `context`,
+/// ..): those do lex as identifiers and are then reclassified into their own
+/// kinds, so `(in: "series")` is a parse error and `#let none = ..` fails the
+/// module it was written into. Both failures land inside generated source, so
+/// they name a file the author has never opened.
+///
+/// The keyword set belongs to Typst and is derived rather than restated: `s`
+/// is an identifier exactly when parsing it as code yields one `Ident` leaf
+/// spelling it back. Restating the list here would be a second copy of it, and
+/// the one that goes stale on a Typst bump.
+pub(crate) fn bindable(s: &str) -> bool {
+    if !typst::syntax::is_ident(s) {
+        return false;
+    }
+    let code = typst::syntax::parse_code(s);
+    let mut nodes = code.children();
+    match (nodes.next(), nodes.next()) {
+        (Some(node), None) => {
+            node.kind() == typst::syntax::SyntaxKind::Ident && node.leaf_text() == s
+        }
+        _ => false,
+    }
 }
 
 /// Displays a Typst import binding one item under a local alias:
@@ -672,6 +701,31 @@ mod tests {
         let v = Value::dict([("a b", Value::Int(1))]);
         assert_eq!(Typst(&v).to_string(), "(\"a b\": 1)");
         assert_eq!(Js(&v).to_string(), "{\"a b\": 1}");
+    }
+
+    /// A keyword lexes as an identifier and is then reclassified, so the
+    /// character rule alone would write `(in: ..)` into a generated table and
+    /// fail every template that imports it. The dict is the site-wide one, so
+    /// one page's frontmatter key would take the whole build down.
+    #[test]
+    fn quotes_keys_that_are_typst_keywords() {
+        for key in ["in", "as", "let", "set", "show", "context", "none", "auto"] {
+            let v = Value::dict([(key, Value::Int(1))]);
+            assert_eq!(Typst(&v).to_string(), format!("(\"{key}\": 1)"));
+        }
+    }
+
+    /// The predicate is derived from Typst's own parser rather than from a
+    /// restated keyword list, so this pins both halves: what it refuses, and
+    /// that it still admits an ordinary name.
+    #[test]
+    fn a_bindable_name_is_an_identifier_that_is_not_a_keyword() {
+        for name in ["title", "_x", "a-b", "x2", "élan"] {
+            assert!(super::bindable(name), "{name} is a typst identifier");
+        }
+        for name in ["in", "none", "true", "a b", "2col", "", "a.b"] {
+            assert!(!super::bindable(name), "{name} is not one typst can bind");
+        }
     }
 
     #[test]

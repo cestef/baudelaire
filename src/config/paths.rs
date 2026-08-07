@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::codegen::bindable;
 use crate::config::dispatch::Kind::Path as Directory;
 use crate::config::dispatch::Kind::Table;
 use crate::config::dispatch::{Block, Section};
@@ -189,7 +190,7 @@ impl Section for Paths {
                 for entry in n.block(t)?.nodes() {
                     let name = entry.name().value();
                     let span = NodeExt::span(entry);
-                    if !typst::syntax::is_ident(name) {
+                    if !bindable(name) {
                         return Err(ConfigError::not_an_identifier(t, name, span).into());
                     }
                     if seen.iter().any(|declared| declared == name) {
