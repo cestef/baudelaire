@@ -174,7 +174,7 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         || FieldType::List(Box::new(FieldType::Str)),
         |fm, v, at| {
             use crate::config::Named;
-            let valid = Generated::names().join(", ");
+            let valid = Generated::names();
             for (index, name) in v.strings(at)?.into_iter().enumerate() {
                 let generated =
                     Generated::of(&name).ok_or_else(|| at.nth(index).name(&name, &valid))?;

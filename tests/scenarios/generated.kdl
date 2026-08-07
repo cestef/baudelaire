@@ -231,7 +231,8 @@ scenario "a page declines the files a build generates about it" {
 }
 
 // A name the key does not answer to is the author's mistake, named as one with
-// the list of names that work.
+// the same did-you-mean an unknown config key gets: `Keys::help` owns that
+// shape for every name set in the project.
 scenario "an unknown exclusion is refused" {
   files {
     "config.kdl" #"""

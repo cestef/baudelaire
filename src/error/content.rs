@@ -241,20 +241,24 @@ impl ContentError {
     /// Distinct from [`ContentError::frontmatter_field`], which is about the
     /// value's *shape*: here the shape is right and the word is not one this
     /// crate answers to, so the help is the list of words that are.
+    ///
+    /// `help` arrives as *authored markup* from
+    /// [`Keys::help`](crate::config::dispatch::Keys::help), which owns this
+    /// shape for every name set in the project.
     pub fn frontmatter_name(
         path: &std::path::Path,
         source: &str,
         span: Option<SourceSpan>,
         key: &str,
         got: &str,
-        valid: &str,
+        help: &str,
     ) -> Self {
         let (page, span) = Self::located(path, source, span);
         Self::FrontmatterName {
             path: path.display().to_string(),
             key: key.to_owned(),
             got: got.to_owned(),
-            help: markup!("valid names: {}", valid),
+            help: help.to_owned(),
             page,
             span,
         }

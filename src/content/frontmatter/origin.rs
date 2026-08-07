@@ -261,16 +261,18 @@ impl<'a> At<'a> {
 
     /// A name this key does not answer to, underlined where it was written.
     ///
-    /// `valid` is the list of names it does, built by the caller from the very
-    /// table that parses them.
-    pub(super) fn name(self, got: &str, valid: &str) -> BaudelaireErrorKind {
+    /// `valid` is the set of names it does, taken from the very table that
+    /// parses them. The help comes from [`Keys::help`], the one owner of this
+    /// shape, so a frontmatter name gets the did-you-mean and the per-name code
+    /// spans a config key already got, rather than a comma-separated wall.
+    pub(super) fn name(self, got: &str, valid: &[&str]) -> BaudelaireErrorKind {
         ContentError::frontmatter_name(
             self.origin.path,
             self.origin.text(),
             self.span(),
             self.key,
             got,
-            valid,
+            &crate::config::dispatch::Keys::of(valid).help(got, "names"),
         )
         .into()
     }
