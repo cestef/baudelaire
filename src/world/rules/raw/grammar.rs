@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use syntect::easy::ScopeRegionIterator;
 use syntect::parsing::{ParseState, ScopeStack, SyntaxDefinition, SyntaxSet, SyntaxSetBuilder};
-use typst::diag::SourceResult;
+use typst::diag::{SourceResult, warning};
 use typst::ecow::EcoString;
 use typst::engine::Engine;
 use typst::foundations::{Bytes, Packed, Smart, StyleChain};
 use typst::loading::Load;
-use typst::syntax::{LinkedNode, Spanned, Tag, split_newlines};
+use typst::syntax::{LinkedNode, Span, Spanned, Tag, split_newlines};
 use typst::text::{RAW_SYNTAXES, RawElem};
 
 use crate::config::Token;
@@ -101,10 +101,24 @@ impl Grammar {
         engine: &mut Engine,
         styles: StyleChain,
     ) -> SourceResult<Self> {
-        // `theme: none` is an author saying "do not highlight this block". The
-        // theme means nothing else here, since no colour of it reaches the page.
-        if matches!(elem.theme.get_ref(styles), Smart::Custom(None)) {
-            return Ok(Self::Plain);
+        match elem.theme.get_ref(styles) {
+            // `theme: none` is an author saying "do not highlight this block",
+            // and it means that in either mode.
+            Smart::Custom(None) => return Ok(Self::Plain),
+            // A theme, on the other hand, is a palette this mode has nowhere to
+            // put: its colours are discarded, and silence would leave a site
+            // whose stylesheet has moved on looking merely unstyled. Detached,
+            // so the sink's own deduplication collapses one code block per
+            // warning into one page per warning; the page is named by the
+            // bridge that renders it.
+            Smart::Custom(Some(_)) => engine.sink.warn(warning!(
+                Span::detached(),
+                "the `raw` theme is ignored while `html {{ highlight }}` is on";
+                hint: "a token's colour is a CSS class now: style `.sx-keyword` \
+                       and its siblings, or write `highlight #false` to go back \
+                       to typst's inline colours"
+            )),
+            Smart::Auto => {}
         }
 
         let lang = elem

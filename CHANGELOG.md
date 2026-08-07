@@ -10,6 +10,16 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **A `raw` theme set while `html { highlight }` is on now warns**, once per
+  page, instead of being discarded in silence. Classes mode has nowhere to put a
+  palette, so the theme is loaded, validated, and then thrown away; a site whose
+  stylesheet had not caught up saw unstyled code and no reason for it. The
+  warning names the way out (`highlight #false`, for typst's inline colours).
+
 ## [0.0.13] - 2026-08-07
 
 ### Upgrading
@@ -2536,6 +2546,7 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.13...HEAD
 [0.0.13]: https://github.com/cestef/baudelaire/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/cestef/baudelaire/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/cestef/baudelaire/compare/v0.0.10...v0.0.11

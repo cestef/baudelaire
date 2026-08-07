@@ -43,7 +43,7 @@ The palette then lives in your stylesheet, where the toggle can reach it:
 [data-theme=dark] { --sx-keyword: #e58fa6; }  /* dark  */
 ```
 
-The `theme` a `show raw` rule sets is not read at all in this mode, and neither are the bold and italic a `.tmTheme` puts on a scope: styling is the stylesheet's, whole.
+The `theme` a `show raw` rule sets is not read at all in this mode, and neither are the bold and italic a `.tmTheme` puts on a scope: styling is the stylesheet's, whole. A page that sets one anyway is told once that it is being ignored, since a discarded palette otherwise looks like code that simply came out unstyled.
 
 == The vocabulary
 

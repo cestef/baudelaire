@@ -88,6 +88,74 @@ fn compile_error_reports_with_context() {
 }
 
 #[test]
+fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
+    // The one silent failure the classes mode has: a `.tmTheme` is still loaded
+    // and validated, and then every colour in it is discarded. A site whose
+    // stylesheet has not caught up sees unstyled code and no reason for it.
+    let site = Site::new();
+    site.write(
+        "config.kdl",
+        r#"
+            site "Test"
+            html { highlight }
+            paths {
+                content "content"
+                dist "public"
+            }
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\n\
+         #show raw: set raw(theme: \"/palette.tmTheme\")\n\
+         ```rust\nlet x = 1;\n```\n",
+    );
+    site.write("palette.tmTheme", THEME);
+
+    let out = site.run(&["build"]);
+    assert!(
+        out.status.success(),
+        "a warning, not a failure: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("theme is ignored"), "no warning: {stderr}");
+    assert!(stderr.contains("highlight #false"), "no way out: {stderr}");
+    // Once for the page, not once per code block.
+    assert_eq!(
+        stderr.matches("theme is ignored").count(),
+        1,
+        "warned more than once: {stderr}"
+    );
+    // And the block is still classed, from the grammar's scopes.
+    assert!(site.read("public/index.html").contains("sx-keyword"));
+}
+
+/// A `.tmTheme` with one rule, which is all that has to parse for typst to
+/// accept it as a theme.
+const THEME: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>One rule</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>scope</key>
+      <string>keyword</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#ff0000</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+"#;
+
+#[test]
 fn error_in_a_bound_template_renders_against_the_template_file() {
     // A span reaching into another file (here a template, whose text differs in
     // length from the page's) must resolve against that file: never overrun the
