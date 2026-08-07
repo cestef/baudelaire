@@ -193,9 +193,7 @@ impl Kind {
             | Self::Table
             | Self::Tables => Arity::Args(1),
             // A list written on one line, however long.
-            Self::Choices(_) | Self::Toggled(..) | Self::Toggles | Self::Texts | Self::Numbers => {
-                Arity::Every
-            }
+            Self::Choices(_) | Self::Texts | Self::Numbers | Self::Toggles => Arity::Every,
             // A block of author-named children -- blocks, attribute lines, or a
             // profile overlay -- so the line opening it says nothing at all.
             // `Lines` is here and not below with `Line`: the entries
@@ -208,7 +206,14 @@ impl Kind {
             // rest, and [`Section::shorthand`] hands them to the key it stands
             // for -- and a single attribute line is read entry by entry by
             // [`Attrs::apply`], which refuses the ones it does not know.
-            Self::Block(_) | Self::Line(_) => Arity::Elsewhere,
+            //
+            // `Toggled` is here for the same reason one level down:
+            // [`NodeExt::toggled`] reads every entry itself, refuses a
+            // `key=value` in the grammar it does take, and resolves each name,
+            // so checking it here first would replace that message with a worse
+            // one. Its sibling `Toggles` (`typst { features }`, an open set) is
+            // *not*: that reader takes the positionals and drops the rest.
+            Self::Block(_) | Self::Line(_) | Self::Toggled(..) => Arity::Elsewhere,
         }
     }
 }
@@ -248,29 +253,42 @@ impl Arity {
             return Ok(());
         }
         let name = node.name().value();
-        // A list key is the one shape that cannot be told to move the pair one
-        // nesting level in: it has no block to move it into, and `extensions {
-        // tables #false }` is not a line this config language has. Its own
-        // reader already refuses a `key=value` with a message shaped like the
-        // values it does take (`NodeExt::toggled`), so it is left to speak.
-        // Everything else here either opens a block or stands in front of one.
-        if !matches!(self, Self::Every) {
-            for entry in node.entries() {
-                let Some(key) = entry.name().map(KdlIdentifier::value) else {
-                    continue;
-                };
-                // The help writes the line the author meant, which is the same
-                // pair one nesting level in -- and through `Kdl`, so it is a
-                // line that parses.
-                return Err(ConfigError::unexpected_attribute(
+        // Every shape checked here, list keys included. A list key used to be
+        // exempt on the grounds that its own reader refuses a `key=value`, which
+        // is true of [`NodeExt::toggled`] alone: `words`, `bounds` and `mapped`
+        // filter named entries *out*, so `widths 480 960 foo=1` configured two
+        // widths and reported nothing. The two keys that reader serves now say
+        // so, as [`Arity::Elsewhere`].
+        for entry in node.entries() {
+            let Some(key) = entry.name().map(KdlIdentifier::value) else {
+                continue;
+            };
+            let span = EntryExt::span(entry);
+            return Err(match self {
+                // A list key has no block to move the pair into, and
+                // `widths { foo 1 }` is not a line this config language has, so
+                // there is nothing better to suggest than what the author wrote
+                // back: the pair is simply not one of the values. The same
+                // message [`NodeExt::toggled`] gives for the same mistake.
+                Self::Every => ConfigError::unexpected_argument(
+                    text,
+                    &format!("{key}={}", Kdl(entry.value())),
+                    name,
+                    span,
+                )
+                .into(),
+                // Everything else opens a block or stands in front of one, so
+                // the help writes the line the author meant: the same pair one
+                // nesting level in, through `Kdl` so that it parses.
+                _ => ConfigError::unexpected_attribute(
                     text,
                     key,
                     name,
                     &format!("{name} {{ {key} {} }}", Kdl(entry.value())),
-                    EntryExt::span(entry),
+                    span,
                 )
-                .into());
-            }
+                .into(),
+            });
         }
         // Positionals are counted among themselves: a named entry left for
         // someone else to refuse must not shift the index of the ones after it.

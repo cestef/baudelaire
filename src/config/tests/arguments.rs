@@ -114,6 +114,61 @@ fn err_a_key_value_on_a_node_keyed_line_shows_the_block_spelling() {
     }
 }
 
+/// A list key has no block to move a `key=value` into, so it is refused as the
+/// value it is not, rather than helped towards a line that does not parse.
+///
+/// These were exempt from the check on the grounds that their reader refuses a
+/// pair itself. Only `toggled` does: `words`, `bounds` and `mapped` filtered
+/// named entries out, so the pair configured nothing and reported nothing --
+/// exactly what this layer exists to prevent.
+#[test]
+fn err_a_key_value_on_a_list_key_is_refused() {
+    for (config, node) in [
+        (
+            "assets {\n  images {\n    responsive {\n      widths 480 960 foo=1\n    }\n  }\n}",
+            "widths",
+        ),
+        (
+            "links {\n  external {\n    accept 401 foo=1\n  }\n}",
+            "accept",
+        ),
+        (
+            "html {\n  anchors {\n    levels 2 3 four=9\n  }\n}",
+            "levels",
+        ),
+        (
+            "generate {\n  search {\n    stopwords \"a\" the=\"b\"\n  }\n}",
+            "stopwords",
+        ),
+    ] {
+        let rendered = err(config);
+        assert!(
+            rendered.contains("unexpected argument"),
+            "{config}: {rendered}"
+        );
+        assert!(rendered.contains(node), "{config}: {rendered}");
+    }
+}
+
+/// `typst { features }` is an open set with a reader of its own, and it dropped
+/// a pair as quietly as the rest.
+#[test]
+fn err_a_key_value_among_typst_features_is_refused() {
+    let rendered = err("typst {\n  features \"math\" pdf=#true\n}");
+    assert!(rendered.contains("unexpected argument"), "{rendered}");
+    assert!(rendered.contains("pdf=#true"), "{rendered}");
+}
+
+/// The one list whose reader owns its whole line keeps its own message, which
+/// names the grammar it does take rather than the one it does not.
+#[test]
+fn a_toggled_list_speaks_for_itself() {
+    let rendered =
+        err("content {\n  markdown {\n    extensions \"tables\" footnotes=#true\n  }\n}");
+    assert!(rendered.contains("unexpected argument"), "{rendered}");
+    assert!(rendered.contains("footnotes=#true"), "{rendered}");
+}
+
 /// Every shipped theme turns highlighting on and `highlight { enabled }` is not
 /// a key, so until the flag was read there was no spelling at all that turned it
 /// back off.

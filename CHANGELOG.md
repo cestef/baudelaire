@@ -83,6 +83,11 @@ chores are visible in the git history and change nothing for a site.
 
   The documented spelling, `"/old/" "/new/"`, is untouched.
 
+- **A `key=value` written on a list key is now refused.** `widths 480 960 foo=1`,
+  `accept 401 foo=1`, `stopwords "a" the="b"` and `features "math" pdf=#true`
+  all parsed green and configured only the positionals. Delete the pair; there
+  was never a setting behind it.
+
 - **A site that ships its own fonts rebuilds when one of them changes.** The
   faces under `typst { fonts { paths } }` are now part of the build fingerprint,
   so the first build after this upgrade is a cold one for those sites. Every
