@@ -168,8 +168,10 @@ source "changelog"
 ```
 
 That is the whole page: a `source` and a body of its own is an error, since one
-of the two would have to be dropped. The file is read as markdown under its own
-name, so a fault in it is reported where the prose is.
+of the two would have to be dropped. The file is read as the dialect its
+extension names, and under its own name, so a fault in it is reported where the
+prose is. A `.md` is lowered like any other markdown; a `.typ` is a file the
+compiler opens itself. Anything else is refused rather than read as prose.
 
 #callout(kind: "note")[
   A page names a *name*, never a path, and `paths { sources }` is the only place
@@ -179,9 +181,21 @@ name, so a fault in it is reported where the prose is.
   which is the case this exists for, and that is the config's call to make.
 ]
 
-Typst pages have no need of it: `#include` reads a file already, and typst tracks
-it as a dependency of the page. A `source` on a `.typ` page is refused rather
-than ignored.
+A `source` on a `.typ` page is refused: a typst page reaches a declared file by
+importing it instead, which is the same names by the same rule.
+
+```typ
+#import "@baudelaire/sources:0.1.0": changelog, data
+
+#include changelog          // a `.typ` source is a body
+#let counts = json(data)    // any other kind is data
+```
+
+That import is the reason the declaration is worth having for typst pages at all.
+`#include "../CHANGELOG.typ"` cannot be written: typst refuses a path outside its
+root, and outside the root is where these files live. Each declared file is
+mounted under a project path, so the compiler opens it, tracks it as a dependency
+of the pages that read it, and reports faults inside it against the file itself.
 
 == A worked example
 

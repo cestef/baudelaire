@@ -157,6 +157,85 @@ scenario "a sourced page may not also have a body" {
   }
 }
 
+// A typst source is not lowered at all: it is mounted where the compiler can
+// open it, so the page's body is one `include` and the file's own spans, its
+// dependency on the page, and its imports are typst's to handle.
+scenario "a page takes its body from a declared typst source" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          notes "notes/notes.typ"
+        }
+      }
+      """#
+    "notes/notes.typ" #"""
+      = Notes
+
+      Written elsewhere.
+      """#
+    "content/page.md" #"""
+      ;;;
+      title "Page"
+      source "notes"
+      ;;;
+      """#
+  }
+  expect {
+    ok
+    file "page/index.html" {
+      contains "Written elsewhere."
+      // Rendered as typst, not as prose about typst: the heading is one.
+      contains #"<h2 id="notes">Notes</h2>"#
+    }
+    // An input, never an output.
+    absent "notes/notes/index.html"
+  }
+}
+
+// The other half of the mount: a typst page reaches a declared file by name,
+// which is what `include` cannot do for a file outside the project root.
+scenario "a typst page reads a declared source by name" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        sources {
+          notes "notes/notes.typ"
+          data "notes/data.json"
+        }
+      }
+      """#
+    "notes/notes.typ" #"""
+      Included by name.
+      """#
+    "notes/data.json" #"""
+      { "count": 7 }
+      """#
+    "content/page.typ" #"""
+      #import "@baudelaire/sources:0.1.0": notes, data
+      #let frontmatter = (title: "Page",)
+
+      #include notes
+
+      Count: #json(data).count
+      """#
+  }
+  expect {
+    ok
+    file "page/index.html" {
+      contains "Included by name."
+      contains "Count: 7"
+    }
+  }
+}
+
 // The body is lowered by the dialect the declared file names, and a file that
 // names none is refused. It used to be lowered as markdown whatever it was, so
 // a file of another kind came out as prose with its own syntax in it, on a

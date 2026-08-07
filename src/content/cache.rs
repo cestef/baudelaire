@@ -30,6 +30,28 @@ use crate::world::Project;
 /// The on-disk discovery manifest, beside the compile cache's `manifest.json`.
 const MANIFEST: &str = "discovery.json";
 
+/// What a page's `source` resolved to.
+///
+/// One variant per body dialect, and the reader follows the *file*: a page names
+/// a declared file and gets whatever that file is, rather than whatever the page
+/// itself is written in. `DiscoveryCache::READERS` is the extension each answers
+/// to.
+#[cfg(feature = "markdown")]
+enum Sourced {
+    /// Markdown, read here and lowered under its own name, so a fault in it is
+    /// reported where the prose is rather than against the stub that named it.
+    Markdown { named: String, text: String },
+    /// Typst, which the compiler opens itself through the mount
+    /// [`crate::world::module::Sources`] installs. The page's body is the one
+    /// `include` that names it, so the file's own spans, its dependency on the
+    /// page, and everything else that follows from typst opening a file are had
+    /// for free. Nothing of it is read here but the reading estimate.
+    Typst {
+        include: String,
+        reading: crate::engine::text::Reading,
+    },
+}
+
 /// One page's cached frontmatter and the fingerprints that validate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
@@ -228,9 +250,22 @@ impl<'a> DiscoveryCache<'a> {
         // that file's text under that file's name: a fault the lowering finds is
         // reported where the prose is, not against the stub that named it.
         let sourced = Self::sourced(&frontmatter, &document, path, config)?;
+        // A typst source is not lowered at all: it is a file the compiler opens,
+        // and the page's body is the one line that names it.
+        if let Some(Sourced::Typst { include, reading }) = &sourced {
+            let sourcemap = crate::content::SourceMap::new(text.clone(), include.len(), Vec::new());
+            let data = Data::Lowered {
+                dict,
+                sourcemap: std::sync::Arc::new(sourcemap),
+                reading: *reading,
+            };
+            return Ok((frontmatter, data, include.clone()));
+        }
         let (document, text, named) = match &sourced {
-            Some((path, text)) => (Document::whole(text), text.as_str(), path.clone()),
-            None => (document, text.as_str(), named),
+            Some(Sourced::Markdown { named, text }) => {
+                (Document::whole(text), text.as_str(), named.clone())
+            }
+            _ => (document, text.as_str(), named),
         };
 
         // Measured here, on the body the author wrote: what the lowering
@@ -254,7 +289,7 @@ impl<'a> DiscoveryCache<'a> {
     /// Gated with its one reader: `source` replaces a *markdown* page's body,
     /// and a binary without that feature has no such page to give one to.
     #[cfg(feature = "markdown")]
-    const READERS: &'static [&'static str] = &[Config::MARKDOWN];
+    const READERS: &'static [&'static str] = &[Config::MARKDOWN, Config::TYPST];
 
     /// The file a page's `source` names, read: its display name and its text.
     ///
@@ -276,7 +311,7 @@ impl<'a> DiscoveryCache<'a> {
         document: &crate::content::markdown::Document<'_>,
         path: &Path,
         config: &Config,
-    ) -> Result<Option<(String, String)>> {
+    ) -> Result<Option<Sourced>> {
         let Some(name) = &frontmatter.source else {
             return Ok(None);
         };
@@ -291,14 +326,36 @@ impl<'a> DiscoveryCache<'a> {
         // file of another kind came out as prose with its own syntax in it, on a
         // green build.
         if !Self::READERS.contains(&declared.extension().and_then(|e| e.to_str()).unwrap_or("")) {
-            return Err(
-                crate::error::ContentError::source_unreadable(name, declared, Self::READERS).into(),
-            );
+            return Err(crate::error::ContentError::source_unreadable(
+                name,
+                declared,
+                Self::READERS,
+            )
+            .into());
         }
         let file = config.root.join(declared);
         let text = Self::decode(&crate::fs::read(&file)?)
             .ok_or_else(|| crate::error::ContentError::non_utf8_source(&file))?;
-        Ok(Some((file.display().to_string(), text)))
+        Ok(Some(match declared.extension().and_then(|e| e.to_str()) {
+            // Typst: the compiler opens it through the mount, so the body is one
+            // `include` and every span inside the file is typst's own. The text
+            // read just above is used for the reading estimate and nothing else.
+            Some(Config::TYPST) => Sourced::Typst {
+                include: format!(
+                    "#include {}",
+                    crate::codegen::Typst(&crate::codegen::Value::str(
+                        crate::world::module::Sources::vpath(name, declared)
+                    ))
+                ),
+                reading: crate::engine::text::Reading::of(&text),
+            },
+            // Markdown: lowered here, under its own name, so a fault in it is
+            // reported where the prose is.
+            _ => Sourced::Markdown {
+                named: file.display().to_string(),
+                text,
+            },
+        }))
     }
 
     /// The previous entry for `path` if it is still valid, its source and every

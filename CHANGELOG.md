@@ -20,6 +20,27 @@ chores are visible in the git history and change nothing for a site.
   stylesheet had not caught up saw unstyled code and no reason for it. The
   warning names the way out (`highlight #false`, for typst's inline colours).
 
+- **A declared source is a file typst can open**, through
+  `@baudelaire/sources`. Each `paths { sources }` entry is mounted under a
+  project path and bound to its name, so a typst page reaches one the same way a
+  markdown page does:
+
+  ```typ
+  #import "@baudelaire/sources:0.1.0": changelog, data
+
+  #include changelog          // a `.typ` source is a body
+  #let counts = json(data)    // any other kind is data
+  ```
+
+  `#include "../CHANGELOG.typ"` cannot be written, because typst refuses a path
+  outside its root and outside the root is the case the feature exists for. The
+  compiler opens the mounted path itself, so a page depending on a declared file
+  is invalidated by an edit to it, and a fault inside it is reported against that
+  file.
+
+- **A markdown page's `source` may name a `.typ` file**, which becomes the
+  page's body without being lowered: the reader follows the file, not the page.
+
 ### Fixed
 
 - **A `source` naming a file no reader claims is refused**, instead of being

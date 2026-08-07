@@ -23,6 +23,7 @@ disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
   [`@baudelaire/sections`], [`sections(lang)`], [The site's content tree.],
   [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
   [`@baudelaire/markdown`], [`md`], [Markdown rendered inside a Typst page.],
+  [`@baudelaire/sources`], [one per declaration], [The files `paths { sources }` declared.],
 )
 
 They are the Typst counterpart of the #link("js-modules.typ")[`baudelaire:*`
@@ -317,6 +318,30 @@ being collected is the one thing it cannot do: the catalogue is built from the
 frontmatter of every page, this one included, so at that moment it reads empty.
 Deriving a `title`, a `slug`, or a `date` from `pages()` gets you nothing;
 showing a count, a list, or a grid in the body works.
+
+== sources
+
+One binding per `paths { sources }` entry, holding the path that file is served
+under. A page writes a *name*; `paths { sources }` is the only place a path is
+written, so a page can reach a declared file and nothing else.
+
+```typ
+#import "@baudelaire/sources:0.1.0": changelog, data
+
+#include changelog          // a `.typ` source is a body
+#let counts = json(data)    // any other kind is data
+```
+
+The module is empty on a site that declares nothing, and importing a name that
+was never declared is an import error rather than a `none`.
+
+This is the only way to reach a file outside the project: `#include
+"../CHANGELOG.typ"` cannot be written, because typst refuses a path outside its
+root. Each declared file is mounted under a project path instead, so the
+compiler opens it, tracks it as a dependency of the pages that read it, and
+reports a fault inside it against the file itself. See
+#link("../write/markdown.typ")[markdown pages] for the frontmatter `source` key,
+which is the same declaration from the other side.
 
 == markdown
 

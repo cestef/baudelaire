@@ -366,7 +366,10 @@ impl ContentError {
         Self::SourceUnreadable {
             name: name.to_owned(),
             path: path.display().to_string(),
-            help: markup!("a source is read as the dialect its extension names: {}", kinds),
+            help: markup!(
+                "a source is read as the dialect its extension names: {}",
+                kinds
+            ),
         }
     }
 

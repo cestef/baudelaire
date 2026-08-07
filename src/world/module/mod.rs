@@ -86,6 +86,10 @@ pub(super) struct ModuleCx<'a> {
     /// that reads it: a binary that cannot lower markdown serves none.
     #[cfg(feature = "markdown")]
     pub markdown: &'a crate::config::MarkdownConfig,
+    /// The files `paths { sources }` declared, so `@baudelaire/sources` binds
+    /// each name to the path it is served under. The same list the mount is
+    /// built from, so a name a page can import is a name the store can answer.
+    pub sources: &'a [(String, std::path::PathBuf)],
 }
 
 /// One provider of an `@baudelaire/*` Typst module: a set of generated
@@ -122,6 +126,7 @@ fn builtin() -> Vec<Box<dyn Module>> {
     vec![
         Box::new(builtin::Html),
         Box::new(builtin::Site),
+        Box::new(builtin::Sources),
         #[cfg(feature = "markdown")]
         Box::new(builtin::Markdown),
     ]
@@ -366,12 +371,79 @@ impl Mount {
     }
 }
 
+/// The files `paths { sources }` declared, served under a project path.
+///
+/// A declared file may sit anywhere, including outside the project, and typst
+/// cannot open a path outside its root. Mounting each one under a project path
+/// is what puts it back in reach: a page imports the *name*
+/// (`@baudelaire/sources`), typst opens the mounted path, and everything that
+/// follows from the compiler opening a file follows here too -- spans inside it,
+/// and a per-page dependency on the real file.
+///
+/// Keyed by the whole path under the prefix rather than by a segment, so a name
+/// with a `/` in it is served rather than silently missing.
+pub(crate) struct Sources {
+    files: BTreeMap<String, PathBuf>,
+}
+
+impl Sources {
+    /// The mount point as typst spells a path: project-rooted, no leading
+    /// slash, so it can be matched against a file id and written into a binding.
+    pub(crate) fn prefix() -> String {
+        format!("{}/{}", crate::config::Config::SCRATCH, "sources")
+    }
+
+    /// What a declared source is served as under the prefix: the name it was
+    /// declared under, carrying the real file's extension, so that whatever
+    /// reads it (`include`, `read`, `image`) sees the kind of file it is.
+    fn key(name: &str, path: &Path) -> String {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) => format!("{name}.{ext}"),
+            None => name.to_owned(),
+        }
+    }
+
+    /// The virtual path a declared source is served at, as an import spells it.
+    /// The one spelling: the binding a page imports and the id the store answers
+    /// are this same string.
+    pub(crate) fn vpath(name: &str, path: &Path) -> String {
+        format!("/{}/{}", Self::prefix(), Self::key(name, path))
+    }
+
+    /// Build the mount from what the config declared, against `root` so a
+    /// relative declaration means the same thing here as everywhere else.
+    fn new(sources: &[(String, PathBuf)], root: &Path) -> Self {
+        Self {
+            files: sources
+                .iter()
+                .map(|(name, path)| (Self::key(name, path), root.join(path)))
+                .collect(),
+        }
+    }
+
+    /// The real file `id` names, or `None` when it names nothing under the
+    /// mount. The single test both serving and path resolution ask, so the
+    /// mount cannot serve one file and resolve another.
+    fn file(&self, id: FileId) -> Option<&Path> {
+        if id.root() != &VirtualRoot::Project {
+            return None;
+        }
+        let rest = id
+            .vpath()
+            .get_without_slash()
+            .strip_prefix(&Self::prefix())?
+            .strip_prefix('/')?;
+        self.files.get(rest).map(PathBuf::as_path)
+    }
+}
+
 /// The project's file loader: generated `@baudelaire/*` modules first, a
-/// mounted package theme next, and everything else from the filesystem through
-/// typst-kit's own loader.
+/// mounted package theme next, the declared sources after that, and everything
+/// else from the filesystem through typst-kit's own loader.
 pub(super) struct Files {
     modules: Modules,
     theme: Option<Mount>,
+    sources: Sources,
     system: SystemFiles,
 }
 
@@ -382,6 +454,7 @@ impl Files {
         project: FsRoot,
         packages: SystemPackages,
         theme: Option<(String, PathBuf)>,
+        sources: &[(String, PathBuf)],
     ) -> Self {
         Self {
             modules: Modules::new(cx, root),
@@ -389,6 +462,7 @@ impl Files {
                 prefix,
                 root: FsRoot::new(root),
             }),
+            sources: Sources::new(sources, root),
             system: SystemFiles::new(project, packages),
         }
     }
@@ -421,6 +495,12 @@ impl Files {
         if let Some((root, vpath)) = self.mounted(id) {
             return root.resolve(&vpath);
         }
+        // A declared source resolves to the file the config named, wherever it
+        // is: that is the path a page depending on it is tracked against, and
+        // the whole point of the mount is that typst cannot name it itself.
+        if let Some(path) = self.sources.file(id) {
+            return Ok(path.to_path_buf());
+        }
         self.system.resolve(id)
     }
 
@@ -441,10 +521,15 @@ impl FileLoader for Files {
         if let Some(spec) = Modules::owner(&id) {
             return self.modules.load(spec, id.vpath());
         }
-        match self.mounted(id) {
-            Some((root, vpath)) => root.load(&vpath),
-            None => self.system.load(id),
+        if let Some((root, vpath)) = self.mounted(id) {
+            return root.load(&vpath);
         }
+        if let Some(path) = self.sources.file(id) {
+            return crate::fs::read(path)
+                .map(Bytes::new)
+                .map_err(|_| FileError::NotFound(path.to_path_buf()));
+        }
+        self.system.load(id)
     }
 }
 
@@ -452,6 +537,40 @@ impl FileLoader for Files {
 mod tests {
     use super::*;
     use typst::syntax::{RootedPath, package::PackageSpec};
+
+    /// A declared source answers under its own name plus the real file's
+    /// extension, and the store answers the very path the binding hands a page.
+    #[test]
+    fn a_source_is_served_at_the_path_it_is_bound_to() {
+        let declared = vec![
+            ("changelog".to_owned(), PathBuf::from("../CHANGELOG.md")),
+            ("notes".to_owned(), PathBuf::from("notes")),
+        ];
+        let sources = Sources::new(&declared, Path::new("/project"));
+        let id = |path: &str| {
+            FileId::new(RootedPath::new(
+                VirtualRoot::Project,
+                VirtualPath::new(path).expect("a valid vpath"),
+            ))
+        };
+
+        let vpath = Sources::vpath("changelog", Path::new("../CHANGELOG.md"));
+        assert_eq!(vpath, "/.baudelaire/sources/changelog.md");
+        assert_eq!(
+            sources.file(id(&vpath)),
+            Some(Path::new("/project/../CHANGELOG.md")),
+            "the binding names what the store serves"
+        );
+        // A file with no extension keeps the bare name.
+        assert_eq!(
+            sources.file(id("/.baudelaire/sources/notes")),
+            Some(Path::new("/project/notes"))
+        );
+        // And nothing else is under the mount.
+        assert_eq!(sources.file(id("/.baudelaire/sources/other.md")), None);
+        assert_eq!(sources.file(id("/.baudelaire/sourced/changelog.md")), None);
+        assert_eq!(sources.file(id("/CHANGELOG.md")), None);
+    }
 
     /// A mounted theme answers for the files under it and for nothing else: a
     /// sibling that merely starts with the same letters is the project's own.
@@ -502,6 +621,7 @@ mod tests {
                 context: &Value::None,
                 #[cfg(feature = "markdown")]
                 markdown: &crate::config::MarkdownConfig::default(),
+                sources: &[],
             },
             Path::new("."),
         );

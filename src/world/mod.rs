@@ -134,6 +134,7 @@ impl Project {
                     context: &tree,
                     #[cfg(feature = "markdown")]
                     markdown: &config.content.markdown,
+                    sources: &config.paths.sources,
                 },
                 &project_root,
                 FsRoot::new(project_root.clone()),
@@ -141,6 +142,7 @@ impl Project {
                 theme
                     .and_then(crate::theme::Theme::mount)
                     .map(|(prefix, root)| (prefix, root.to_path_buf())),
+                &config.paths.sources,
             )))),
             root: project_root,
             now,

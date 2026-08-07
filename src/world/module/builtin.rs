@@ -53,6 +53,38 @@ impl Module for Html {
 /// module-level note on why nothing volatile may be baked in.
 pub(super) struct Site;
 
+/// `@baudelaire/sources`: the files `paths { sources }` declared, each bound to
+/// the path it is served under.
+///
+/// The binding half of [`super::Sources`], which serves the bytes. A page writes
+/// a *name* and never a path, which is the whole security model of the feature:
+/// content can reach a declared file and nothing else.
+///
+/// ```typ
+/// #import "@baudelaire/sources": notes
+/// #include notes            // a `.typ` source is a body
+/// #json(notes)              // any other kind is data
+/// ```
+pub(super) struct Sources;
+
+impl Module for Sources {
+    fn name(&self) -> &'static str {
+        "sources"
+    }
+
+    fn bindings(&self, cx: &ModuleCx) -> Vec<(String, Value)> {
+        cx.sources
+            .iter()
+            .map(|(name, path)| (name.clone(), Value::str(super::Sources::vpath(name, path))))
+            .collect()
+    }
+
+    /// Nothing hand-written: the bindings are the module.
+    fn body(&self) -> &'static str {
+        ""
+    }
+}
+
 /// `@baudelaire/markdown`: `md()`, which renders a chunk of markdown inside a
 /// Typst page.
 ///

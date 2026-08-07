@@ -107,6 +107,7 @@ impl Packages {
                     context: &tree,
                     #[cfg(feature = "markdown")]
                     markdown: &config.content.markdown,
+                    sources: &config.paths.sources,
                 },
                 &root,
             ),
