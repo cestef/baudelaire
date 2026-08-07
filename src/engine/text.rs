@@ -71,10 +71,13 @@ impl Text {
     }
 
     /// The inner HTML of the first `element`, or the whole document when there
-    /// is none. Keeps indexing focused on primary content, and a page that does
-    /// not have the region indexed whole rather than not at all: a 404 page or a
-    /// bare feed page is prose too.
-    fn region<'a>(html: &'a str, element: &str) -> &'a str {
+    /// is none. Keeps a consumer focused on primary content, and leaves a page
+    /// that does not have the region counted whole rather than not at all: a 404
+    /// page or a bare feed page is prose too.
+    ///
+    /// Public because it has two readers: the search index strips it to text,
+    /// and a full-content feed carries the markup as it stands.
+    pub fn region<'a>(html: &'a str, element: &str) -> &'a str {
         // A region named as nothing is every element there is.
         if element.is_empty() {
             return html;

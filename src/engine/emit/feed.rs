@@ -6,8 +6,9 @@ use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Site, Warn};
-use crate::config::{BaseUrl, Channel, Config, FeedConfig, FeedKind, Permalink};
+use crate::config::{BaseUrl, Channel, Config, Content, FeedConfig, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
+use crate::engine::text::{Region, Text};
 use crate::error::warning::FeedMounted;
 use crate::error::{Artifact, FeedDateError, Result};
 
@@ -34,6 +35,46 @@ impl FeedKind {
     }
 }
 
+/// Each page's prose, as the markup a full-content feed carries.
+///
+/// Built once per run and keyed by permalink, because every feed a site writes
+/// draws from the same pages: a site feed, one per collection and one per term
+/// all list the same posts, and slicing each page's region again per feed is the
+/// same work three times.
+///
+/// Empty for a summary feed, which is what makes `Feed::body` a lookup rather
+/// than a branch: nothing is in the map, so nothing is found.
+#[derive(Default)]
+struct Bodies<'a>(std::collections::HashMap<&'a str, &'a str>);
+
+impl<'a> Bodies<'a> {
+    /// The prose of every built page, or nothing at all when the site asked for
+    /// summaries.
+    fn of(site: &'a Site<'a>) -> Self {
+        if site.config.generate.feed.content != Content::Full {
+            return Self::default();
+        }
+        let region = Region::from(&site.config.html.region);
+        Self(
+            site.outputs
+                .iter()
+                .map(|out| {
+                    (
+                        out.page.permalink.as_str(),
+                        Text::region(out.html, region.element),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// This page's prose, or `None` when the site asked for summaries or the
+    /// page was not built in this run.
+    fn get(&self, page: &Page) -> Option<&'a str> {
+        self.0.get(page.permalink.as_str()).copied()
+    }
+}
+
 /// Emits a syndication feed file per configured format, of the most recent
 /// dated pages. Requires a base `url` for the absolute links feeds mandate.
 pub(super) struct Feeds;
@@ -45,6 +86,7 @@ impl Processor for Feeds {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base = site.base("feeds")?;
+        let bodies = Bodies::of(site);
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
@@ -63,12 +105,13 @@ impl Processor for Feeds {
                 &dated,
                 &scope,
                 &site.config.generate.feed,
+                &bodies,
             );
             Self::emit(site, out, &feed)?;
         }
-        Self::collections(site, out, &base)?;
+        Self::collections(site, out, &base, &bodies)?;
         if site.config.generate.feed.terms {
-            Self::terms(site, out, &base)?;
+            Self::terms(site, out, &base, &bodies)?;
         }
         Ok(())
     }
@@ -83,7 +126,7 @@ impl Feeds {
     /// all is [`Config::channel`]: the same answer the `<head>` tag advertising
     /// it is built from, so a page can never point at a file this pass declined
     /// to write, nor name it something else.
-    fn collections(site: &Site, out: &mut dyn Emit, base: &BaseUrl) -> Result<()> {
+    fn collections(site: &Site, out: &mut dyn Emit, base: &BaseUrl, bodies: &Bodies) -> Result<()> {
         for (id, collection) in &site.config.content.collections {
             // The `paginate` half is what `engine::gate` warns about, and the
             // warning states that no feed is written: it has to be true here or
@@ -124,6 +167,7 @@ impl Feeds {
                         &dated,
                         &channel.scope,
                         &site.config.generate.feed,
+                        bodies,
                     ),
                 )?;
             }
@@ -137,7 +181,7 @@ impl Feeds {
     /// Terms come from the same grouping that generated those listings, so a
     /// term always has its feed at its own URL and neither can disagree with the
     /// other about which pages belong to it.
-    fn terms(site: &Site, out: &mut dyn Emit, base: &BaseUrl) -> Result<()> {
+    fn terms(site: &Site, out: &mut dyn Emit, base: &BaseUrl, bodies: &Bodies) -> Result<()> {
         for group in Taxonomy::groups(site.config, site.pages) {
             let lang = group.lang();
             for term in group.resolve()? {
@@ -159,6 +203,7 @@ impl Feeds {
                         &dated,
                         scope,
                         &site.config.generate.feed,
+                        bodies,
                     ),
                 )?;
             }
@@ -201,6 +246,8 @@ struct Feed<'a> {
     /// The `feed { }` config, for what each format's file is called: the id a
     /// feed writes about itself has to be the file it is served from.
     names: &'a FeedConfig,
+    /// Each page's prose, when the site asked its feeds to carry it.
+    bodies: &'a Bodies<'a>,
 }
 
 impl<'a> Feed<'a> {
@@ -211,6 +258,7 @@ impl<'a> Feed<'a> {
         items: &'a [&'a Page],
         scope: &'a str,
         names: &'a FeedConfig,
+        bodies: &'a Bodies<'a>,
     ) -> Self {
         Self {
             base,
@@ -219,7 +267,15 @@ impl<'a> Feed<'a> {
             items,
             scope,
             names,
+            bodies,
         }
+    }
+
+    /// This page's prose as a feed entry carries it, or `None` for a summary
+    /// feed. The one reader of [`Bodies`], so the three formats cannot disagree
+    /// about which pages have a body.
+    fn body(&self, page: &Page) -> Option<&'a str> {
+        self.bodies.get(page)
     }
 
     /// The feed's own blurb: the configured description, else its title.
@@ -267,8 +323,18 @@ impl<'a> Feed<'a> {
         self.base.join(&page.permalink)
     }
 
+    /// The namespace `content:encoded` lives in, declared on `<rss>` whenever a
+    /// full feed is written: an undeclared prefix is not well-formed XML, and
+    /// several readers drop the whole document over it.
+    const CONTENT_NS: (&'static str, &'static str) =
+        ("xmlns:content", "http://purl.org/rss/1.0/modules/content/");
+
     fn rss(&self, xml: &mut Xml, stamps: &[Stamps]) {
-        xml.nest("rss", &[("version", "2.0")], |xml| {
+        let mut attrs: Vec<(&str, &str)> = vec![("version", "2.0")];
+        if self.names.content == Content::Full {
+            attrs.push(Self::CONTENT_NS);
+        }
+        xml.nest("rss", &attrs, |xml| {
             xml.nest("channel", &[], |xml| {
                 xml.leaf("title", self.title);
                 xml.leaf("link", &self.home());
@@ -284,6 +350,12 @@ impl<'a> Feed<'a> {
                         // bare titles.
                         if let Some(description) = page.frontmatter.blurb() {
                             xml.leaf("description", description);
+                        }
+                        // Beside the summary, never instead of it: a list view
+                        // wants the short one, and `description` is where every
+                        // reader looks for it.
+                        if let Some(body) = self.body(page) {
+                            xml.leaf("content:encoded", body);
                         }
                         for term in Self::categories(page) {
                             xml.leaf("category", term);
@@ -330,6 +402,9 @@ impl<'a> Feed<'a> {
                     if let Some(description) = page.frontmatter.blurb() {
                         xml.leaf("summary", description);
                     }
+                    if let Some(body) = self.body(page) {
+                        xml.tagged("content", &[("type", "html")], body);
+                    }
                     for term in Self::categories(page) {
                         xml.empty("category", &[("term", term)]);
                     }
@@ -368,6 +443,7 @@ impl<'a> Feed<'a> {
                         url: link,
                         title: Some(page.title()),
                         summary: page.frontmatter.blurb().map(str::to_owned),
+                        content_html: self.body(page),
                         date_published: stamp.published.as_deref(),
                         date_modified: stamp.updated.as_deref(),
                         tags: Self::categories(page).collect(),
@@ -446,6 +522,10 @@ struct JsonItem<'a> {
     title: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<String>,
+    /// The entry's prose, when the site asked its feeds to carry it. JSON Feed
+    /// names it `content_html`, beside `summary` rather than instead of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_html: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     date_published: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -1,8 +1,9 @@
 //! `generate { feed { } }`: syndication feeds and their file names.
 
-use crate::config::dispatch::Kind::{Block as Nested, Choices, Flag, Number, Path};
+use crate::config::dispatch::Kind::{Block as Nested, Choice, Choices, Flag, Number, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::value::ValueExt;
 use crate::config::{BaseUrl, Named, Permalink};
 
 /// Syndication feeds.
@@ -12,6 +13,8 @@ pub struct FeedConfig {
     pub formats: Vec<FeedKind>,
     /// Maximum items in a feed.
     pub limit: usize,
+    /// How much of each page an entry carries.
+    pub content: Content,
     /// Also emit a feed per taxonomy term, beside that term's listing page
     /// (`/tags/rust/rss.xml`), so a reader can follow one tag rather than the
     /// whole site. Follows the term pages, so it needs `listing` on the
@@ -22,6 +25,28 @@ pub struct FeedConfig {
     /// redirect stub cannot rescue, since a reader fetches the file and never
     /// renders the meta refresh.
     pub names: FeedNames,
+}
+
+/// How much of a page a feed entry carries.
+///
+/// A feed used to carry the one-line `description` and nothing else, so a reader
+/// that renders entries in place had nothing to render and every subscriber had
+/// to open the site. The summary is not dropped when the body joins it: both
+/// have a place in all three formats, and a list view wants the short one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Content {
+    /// The page's `description` alone.
+    #[default]
+    Summary,
+    /// Its rendered prose as well, taken from `html { region }`: the same part
+    /// of the page the search index reads, so a feed never carries the site
+    /// chrome around it.
+    Full,
+}
+
+impl Named for Content {
+    const NAMES: &'static [(&'static str, Self)] =
+        &[("summary", Self::Summary), ("full", Self::Full)];
 }
 
 /// Per-format file name overrides for [`FeedConfig`].
@@ -108,6 +133,7 @@ impl Default for FeedConfig {
             // opt-in like search: no feed until a format is named
             formats: Vec::new(),
             limit: 20,
+            content: Content::default(),
             // off by default: one more file per term per format multiplies the
             // output of a heavily tagged site
             terms: false,
@@ -134,6 +160,15 @@ impl Section for FeedConfig {
             "How many of the newest pages a feed carries.",
             |c, n, t| {
                 c.limit = n.count(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "content",
+            Choice(Content::names),
+            "How much of each page an entry carries: its summary, or its prose as well.",
+            |c, n, t| {
+                c.content = n.arg(t, 0)?.one::<Content>(t, NodeExt::span(n))?;
                 Ok(())
             },
         ),

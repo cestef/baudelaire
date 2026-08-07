@@ -34,9 +34,47 @@ posts.
   table.header([Key], [Type], [Default], [Does]),
   [`formats`], [`rss` | `atom` | `json`], [--], [Which feed files to write. Naming none turns feeds off.],
   [`limit`], [int], [`20`], [How many of the newest dated pages a feed carries.],
+  [`content`], [`summary` | `full`], [`summary`], [How much of each page an entry carries. See #link(<content>)[Full entries].],
   [`terms`], [bool], [`#false`], [Also write a feed beside every taxonomy term listing.],
   [`names`], [block], [--], [What each format's file is called, one key per format.],
 )
+
+=== Full entries <content>
+
+By default an entry carries the page's one-line `description` and nothing else,
+so a reader that renders entries in place has nothing to render and every
+subscriber has to open the site. `content "full"` sends the prose too:
+
+```kdl
+generate {
+  feed {
+    formats "rss" "atom"
+    content "full"
+  }
+}
+```
+
+The body is taken from `html { region }`, the same part of the page the
+#link("search.typ")[search index] reads, so the header, sidebar and footer around
+it never travel with it.
+
+The summary is not replaced. Each format has a place for both, and a reader's
+list view wants the short one:
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Format], [Summary], [Body]),
+  [RSS], [`<description>`], [`<content:encoded>`],
+  [Atom], [`<summary>`], [`<content type="html">`],
+  [JSON Feed], [`summary`], [`content_html`],
+)
+
+#callout(kind: "warn")[
+  A full feed publishes the whole post. That is the point for a personal blog and
+  is not always what a site wants: an aggregator that reprints it is reprinting
+  all of it, and readers may never arrive.
+]
 
 === Keeping an old feed URL
 

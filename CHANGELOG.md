@@ -74,6 +74,22 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A feed can carry each entry in full**, not just its one-line summary:
+
+  ```kdl
+  generate {
+    feed {
+      formats "rss" "atom"
+      content "full"
+    }
+  }
+  ```
+
+  The body comes from `html { region }`, the same part of the page the search
+  index reads, so the chrome around it never travels. The summary is kept beside
+  it, in the element each format has for one: `content:encoded` for RSS,
+  `<content type="html">` for Atom, `content_html` for JSON Feed.
+
 - **A page opts out of the files a build generates about it**, with an `exclude`
   list in its frontmatter:
 

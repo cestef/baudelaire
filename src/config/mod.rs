@@ -70,7 +70,7 @@ pub use deploy::s3::S3Config;
 pub use deploy::ssh::SshConfig;
 pub use generate::GenerateConfig;
 pub use generate::cards::CardsConfig;
-pub use generate::feed::{FeedConfig, FeedKind, FeedNames};
+pub use generate::feed::{Content, FeedConfig, FeedKind, FeedNames};
 pub use generate::headers::HeadersConfig;
 pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};

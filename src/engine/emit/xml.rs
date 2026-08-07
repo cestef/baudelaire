@@ -89,7 +89,14 @@ impl Xml {
 
     /// Write a `<name>text</name>` leaf.
     pub(super) fn leaf(&mut self, name: &str, text: &str) {
-        self.write(Event::Start(Self::start(name, &[])));
+        self.tagged(name, &[], text);
+    }
+
+    /// [`Xml::leaf`] with attributes on the opening tag: `<content type="html">`
+    /// and the like. The one writer of a text element, so escaping and the
+    /// illegal-character rule are stated once.
+    pub(super) fn tagged(&mut self, name: &str, attrs: &[(&str, &str)], text: &str) {
+        self.write(Event::Start(Self::start(name, attrs)));
         let text = Self::legal(text);
         self.write(Event::Text(BytesText::new(&text)));
         self.write(Event::End(BytesEnd::new(name.to_owned())));

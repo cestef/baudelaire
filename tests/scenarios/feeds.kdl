@@ -826,3 +826,107 @@ scenario "a feed is written, advertised and identified under its configured name
     file "atom.xml" { contains "<id>https://example.com/atom.xml</id>" }
   }
 }
+
+// A feed carried the one-line summary and nothing else, so a reader that renders
+// entries in place had nothing to render. `content "full"` adds the page's
+// prose, taken from `html { region }`: the same part of the page the search
+// index reads, so the site chrome around it never travels.
+scenario "a full feed carries each entry's prose beside its summary" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      generate {
+        feed {
+          formats "rss" "atom" "json"
+          content "full"
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(data, body) = {
+        html.elem("header")[site chrome]
+        html.elem("main", body)
+        html.elem("footer")[footer chrome]
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        date: "2026-01-02",
+        description: "The short one.",
+        template: "page.typ",
+      )
+      real prose
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      // Escaped markup in `content:encoded`, with its namespace declared.
+      contains "xmlns:content=\"http://purl.org/rss/1.0/modules/content/\""
+      contains "<content:encoded>"
+      contains "real prose"
+      // The summary is not replaced by it.
+      contains "<description>The short one.</description>"
+      // Chrome outside the region never travels.
+      missing "site chrome"
+      missing "footer chrome"
+    }
+    file "atom.xml" {
+      contains "<content type=\"html\">"
+      contains "real prose"
+      contains "<summary>The short one.</summary>"
+      missing "footer chrome"
+    }
+    file "feed.json" {
+      contains "content_html"
+      contains "real prose"
+      contains "The short one."
+      missing "footer chrome"
+    }
+  }
+}
+
+// And the default is unchanged: the summary alone, with no namespace declared
+// for a body that is not there.
+scenario "a summary feed carries no body" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://s.example"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        feed { formats "rss" "json" }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        date: "2026-01-02",
+        description: "The short one.",
+      )
+      real prose
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      contains "<description>The short one.</description>"
+      missing "content:encoded"
+      missing "real prose"
+    }
+    file "feed.json" {
+      missing "content_html"
+      missing "real prose"
+    }
+  }
+}

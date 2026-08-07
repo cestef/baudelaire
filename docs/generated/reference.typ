@@ -172,6 +172,7 @@
   (path: "generate.feed", key: "feed", shape: "block", doc: "Write syndication feeds.", depth: 1, section: true),
   (path: "generate.feed.formats", key: "formats", shape: "(rss | atom | json) ..", doc: "Which feed formats to write, one word each.", depth: 2, section: false),
   (path: "generate.feed.limit", key: "limit", shape: "number", doc: "How many of the newest pages a feed carries.", depth: 2, section: false),
+  (path: "generate.feed.content", key: "content", shape: "summary | full", doc: "How much of each page an entry carries: its summary, or its prose as well.", depth: 2, section: false),
   (path: "generate.feed.terms", key: "terms", shape: "flag", doc: "Also write a feed per taxonomy term.", depth: 2, section: false),
   (path: "generate.feed.names", key: "names", shape: "block", doc: "What each format's file is called, if not the conventional name.", depth: 2, section: true),
   (path: "generate.feed.names.rss", key: "rss", shape: "path", doc: "The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.", depth: 3, section: false),
