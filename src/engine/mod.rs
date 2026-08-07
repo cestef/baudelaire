@@ -48,7 +48,7 @@ use crate::fs;
 // The trait only: this module has a `Generated` of its own, naming the
 // post-build outputs rather than the files a build writes for tooling.
 use crate::generated::Generated as _;
-use crate::graph::{Cache, Hash, Outputs, RenderInputs};
+use crate::graph::{Cache, Hash, Outputs, SiteInputs};
 use crate::render::{AssetMap, Emitted, Fragments, SrcSets};
 use crate::theme::Theme;
 use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
@@ -382,13 +382,12 @@ impl Engine {
     /// Load the build cache, keyed on every site-wide input the per-page
     /// dependency tracker cannot see.
     fn cache(&self, pass: &Pass, planned: &Planned, ui: &Ui) -> Result<Cache> {
-        // render-side cache inputs: asset renames, the link map, the responsive
-        let render = RenderInputs {
+        let inputs = SiteInputs {
             modules: self.project.modules(),
         };
         Cache::load(
             &self.config,
-            &render,
+            &inputs,
             planned.tracked.clone(),
             pass.renderer.maps(),
             self.project.root(),

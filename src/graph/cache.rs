@@ -220,17 +220,18 @@ struct Compiled {
     deps: BTreeMap<PathBuf, Option<Hash>>,
 }
 
-/// The one render-side input still fingerprinted whole, because nothing narrows
-/// it to the pages it affects: the generated Typst modules. See
-/// [`crate::world::module`] for why hashing them together costs nothing.
+/// What a build reads that no page records reading, and so is fingerprinted
+/// whole: nothing narrows either of these to the pages it affects.
 ///
-/// Everything that used to sit beside it is now tracked per page and so
-/// invalidates only the pages it reaches: link resolution via [`Entry::links`],
-/// the responsive variant manifest via [`Entry::srcsets`], the processed-asset
-/// URL map via [`Entry::assets`], and the social card and every inlined or
-/// embedded file through the page's own [`Entry::deps`].
+/// Everything that used to sit here is now tracked per page and so invalidates
+/// only the pages it reaches: link resolution via [`Entry::links`], the
+/// responsive variant manifest via [`Entry::srcsets`], the processed-asset URL
+/// map via [`Entry::assets`], and the social card and every inlined or embedded
+/// file through the page's own [`Entry::deps`]. What is left over is what typst
+/// itself cannot see: a module served from memory has no path, and a font is
+/// resolved by name out of a store rather than opened as a file.
 #[derive(std::hash::Hash)]
-pub struct RenderInputs {
+pub struct SiteInputs {
     /// A content hash of the generated `@baudelaire/*` Typst modules.
     ///
     /// A page *does* import these, but they exist only in memory, so they
@@ -320,7 +321,7 @@ impl Cache {
     /// blobs are fetched lazily on a hit.
     pub fn load(
         config: &Config,
-        render: &RenderInputs,
+        inputs: &SiteInputs,
         roots: Vec<(String, Value)>,
         maps: RenderMaps<'_>,
         root: &Path,
@@ -345,7 +346,7 @@ impl Cache {
             // absent manifest is the normal first-build case, stay silent.
             Err(_) => Manifest::default(),
         };
-        let fingerprint = Hash::of(&(config, render, Renderer::current()));
+        let fingerprint = Hash::of(&(config, inputs, Renderer::current()));
         let root = crate::fs::canonical(root);
         Ok(Self {
             objects: Objects::new(&dir),
@@ -693,7 +694,7 @@ impl Cache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cache, GENERATED, RenderInputs};
+    use super::{Cache, GENERATED, SiteInputs};
     use crate::config::Config;
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use crate::graph::Hash;
@@ -722,12 +723,12 @@ mod tests {
     fn cache(root: &Path) -> Cache {
         let mut config = Config::default();
         config.cache.dir = root.join(".cache");
-        let render = RenderInputs {
+        let inputs = SiteInputs {
             modules: Hash::of_bytes(b""),
         };
         Cache::load(
             &config,
-            &render,
+            &inputs,
             Vec::new(),
             RenderMaps {
                 links: &LinkMap::default(),
