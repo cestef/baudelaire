@@ -573,10 +573,14 @@ impl Overrides for BuildOverrides {
 }
 
 impl CommonOverrides {
-    /// The `--base-url` value parser: a base that is absolute, by the same rule
-    /// the config's own `url` answers to. On the flags it validates rather than
-    /// loose beside them, so the rule has one home and one caller.
-    fn absolute(value: &str) -> std::result::Result<String, String> {
+    /// The value parser for every flag that takes a site base: a URL that is
+    /// absolute, by the same rule the config's own `url` answers to.
+    ///
+    /// `pub(super)` because `init --url` writes the very config key this
+    /// validates and did not answer to it: `init --url example.com` exited 0
+    /// and wrote a project whose first build fails, naming a line the scaffold
+    /// had just written rather than the flag that put it there.
+    pub(super) fn absolute(value: &str) -> std::result::Result<String, String> {
         match crate::config::BaseUrl::absolute(value) {
             true => Ok(value.to_owned()),
             false => {
@@ -821,6 +825,19 @@ mod tests {
                 "https://preview.example"
             ])
             .is_ok()
+        );
+    }
+
+    /// ...and so must `init --url`, which writes that very config key. It did
+    /// not: `init --url example.com` exited 0 and left a project whose first
+    /// build fails, naming a line the scaffold had just written rather than the
+    /// flag that put it there.
+    #[test]
+    fn the_scaffolded_url_answers_to_the_same_rule() {
+        use clap::Parser;
+        assert!(Cli::try_parse_from(["baudelaire", "init", "--url", "example.com"]).is_err());
+        assert!(
+            Cli::try_parse_from(["baudelaire", "init", "--url", "https://example.com"]).is_ok()
         );
     }
 

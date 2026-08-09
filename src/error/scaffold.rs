@@ -41,6 +41,20 @@ pub enum ScaffoldError {
     /// can: every `paths { }` entry resolves against the working directory
     /// rather than against the config file, so a config nested a directory down
     /// would name a content tree outside the project.
+    /// The base URL a scaffold was given, or answered with, that the config it
+    /// writes would refuse.
+    ///
+    /// `--url` answers to the value parser every base-taking flag does; an
+    /// interactive answer reaches the same config key by another road, and a
+    /// scaffold that writes a `url` the first build rejects is a project that
+    /// has never worked.
+    #[error("{} is not an absolute URL", Code(.url))]
+    #[diagnostic(
+        code(baudelaire::scaffold::relative_url),
+        help("write the scheme too, e.g. `https://example.com`")
+    )]
+    RelativeUrl { url: String },
+
     #[error("{} names a path, not a filename", Code(.path))]
     #[diagnostic(
         code(baudelaire::scaffold::config_path),

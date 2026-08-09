@@ -376,6 +376,12 @@ impl Details {
         };
         let author = ask("Author", &git, args.author.as_ref())?;
         let url = ask("Base URL", "https://example.com", args.url.as_ref())?;
+        // `--url` answers to the same rule through its value parser; an
+        // interactive answer reaches this config key by another road and used
+        // to reach it unchecked.
+        if !crate::config::BaseUrl::absolute(&url) {
+            return Err(crate::error::ScaffoldError::RelativeUrl { url }.into());
+        }
 
         Ok((
             target,

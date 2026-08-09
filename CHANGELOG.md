@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`init --url` is held to the rule `--base-url` is.** `init --url
+  example.com` exited 0 and wrote a project whose first build fails, naming a
+  line the scaffold had just written rather than the flag that put it there. An
+  interactive answer is checked too.
+
 - **A KDL frontmatter key declared twice is refused.** Two nodes of one name
   collapsed into the last of them without a word; TOML already refused the same
   page. YAML still takes the last one, because saphyr collapses the repeat while

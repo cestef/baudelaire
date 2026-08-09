@@ -37,7 +37,7 @@ pub struct InitArgs {
     pub author: Option<String>,
 
     /// Canonical base URL (default: prompted).
-    #[arg(long, help_heading = group::PROJECT)]
+    #[arg(long, help_heading = group::PROJECT, value_parser = super::CommonOverrides::absolute)]
     pub url: Option<String>,
 
     /// Default language code.
