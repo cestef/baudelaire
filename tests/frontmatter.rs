@@ -241,3 +241,30 @@ fn export_anywhere_in_the_module_counts() {
     let fm = extract("Some intro.\n\n#let frontmatter = (title: \"X\")\n");
     assert_eq!(fm.title.as_deref(), Some("X"));
 }
+
+/// The message reads `must be {expected}, but is {got}`, and the article
+/// belongs to the noun. It used to be a bare `a` baked into the template, which
+/// produced `is a integer`, and where the caller passed a phrase carrying its
+/// own it produced `is a a string that is not an ISO day`.
+#[test]
+fn a_type_mismatch_reads_as_one_sentence() {
+    for (frontmatter, want) in [
+        (
+            "(title: \"P\", date: \"yesterday\")",
+            "must be a date, but is a string that is not an ISO day",
+        ),
+        ("(title: 3)", "must be a string, but is an integer"),
+        (
+            "(title: \"P\", draft: 7)",
+            "must be a boolean, but is an integer",
+        ),
+    ] {
+        let site = Site::with("site \"A\"\n");
+        site.write(
+            "content/a.typ",
+            &format!("#let frontmatter = {frontmatter}\nx\n"),
+        );
+        let err = site.build_error().to_string();
+        assert!(err.contains(want), "wanted `{want}`, got: {err}");
+    }
+}

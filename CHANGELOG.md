@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A frontmatter type mismatch reads as one sentence.** The article was baked
+  into the message as a bare `a`, so an integer was reported as `is a integer`,
+  and the one caller that passed a phrase carrying its own produced `is a a
+  string that is not an ISO day`.
+
 - **`html { embed }` no longer inlines the social card.** Every URL a `<meta>`
   carries is for somebody who is not reading the page: `og:image` is handed to
   a scraper, and a `data:` URI is nothing it can fetch. Embedding one silently

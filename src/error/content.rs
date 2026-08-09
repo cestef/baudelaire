@@ -45,7 +45,7 @@ pub enum ContentError {
     },
 
     #[error(
-        "frontmatter {} in {} must be {expected}, but is a {got}",
+        "frontmatter {} in {} must be {expected}, but is {got}",
         Code(.key),
         Text(.path)
     )]
@@ -254,7 +254,7 @@ impl ContentError {
         span: Option<SourceSpan>,
         key: &str,
         expected: &'static str,
-        got: &'static str,
+        got: &str,
         help: Option<&'static str>,
     ) -> Self {
         let (page, span) = Self::located(path, source, span);

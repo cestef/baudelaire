@@ -569,20 +569,20 @@ impl ValueExt for Value {
 
     fn string(&self, at: At<'_>) -> Result<String> {
         self.str()
-            .ok_or_else(|| at.field(FieldType::Str.words().article, self.kind(), None))
+            .ok_or_else(|| at.field(FieldType::Str.words().article, &self.kind(), None))
     }
 
     fn boolean(&self, at: At<'_>) -> Result<bool> {
         match self {
             Self::Bool(b) => Ok(*b),
-            _ => Err(at.field(FieldType::Bool.words().article, self.kind(), None)),
+            _ => Err(at.field(FieldType::Bool.words().article, &self.kind(), None)),
         }
     }
 
     fn integer(&self, at: At<'_>) -> Result<i64> {
         match self {
             Self::Int(i) => Ok(*i),
-            _ => Err(at.field(FieldType::Int.words().article, self.kind(), None)),
+            _ => Err(at.field(FieldType::Int.words().article, &self.kind(), None)),
         }
     }
 
@@ -605,7 +605,7 @@ impl ValueExt for Value {
                 }),
             _ => Err(at.field(
                 FieldType::Date.words().article,
-                self.kind(),
+                &self.kind(),
                 Some("write dates as `\"2024-01-01\"` or `datetime(year: 2024, month: 1, day: 1)`"),
             )),
         }
@@ -615,18 +615,31 @@ impl ValueExt for Value {
         // a wrong-typed *element* is an error too, never silently dropped,
         // same as every scalar accessor here, and underlined where it sits
         // rather than under the whole list.
-        let wrong = |at: At<'_>, kind| at.field(FieldType::Str.words().list, kind, None);
+        let wrong = |at: At<'_>, kind: &str| at.field(FieldType::Str.words().list, kind, None);
         match self {
             Self::Array(arr) => arr
                 .iter()
                 .enumerate()
-                .map(|(i, v)| v.str().ok_or_else(|| wrong(at.nth(i), v.kind())))
+                .map(|(i, v)| v.str().ok_or_else(|| wrong(at.nth(i), &v.kind())))
                 .collect(),
-            _ => Err(wrong(at, self.kind())),
+            _ => Err(wrong(at, &self.kind())),
         }
     }
 
-    fn kind(&self) -> &'static str {
-        self.ty().long_name()
+    /// What this value is, with the article that reads before it: `a string`,
+    /// `an integer`.
+    ///
+    /// The article travels with the noun because the message reads
+    /// `but is {got}`. It used to be a bare `a` baked into the template, which
+    /// produced `a integer`, and where a caller passed a phrase that carried
+    /// its own (the date branch below), `is a a string that is not an ISO
+    /// day`.
+    fn kind(&self) -> String {
+        let name = self.ty().long_name();
+        let article = match name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            true => "an",
+            false => "a",
+        };
+        format!("{article} {name}")
     }
 }

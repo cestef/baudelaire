@@ -249,7 +249,7 @@ impl<'a> At<'a> {
     pub(super) fn field(
         self,
         expected: &'static str,
-        got: &'static str,
+        got: &str,
         help: Option<&'static str>,
     ) -> BaudelaireErrorKind {
         ContentError::frontmatter_field(

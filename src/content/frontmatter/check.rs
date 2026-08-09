@@ -15,8 +15,9 @@ pub(super) trait ValueExt {
     fn integer(&self, at: At<'_>) -> Result<i64>;
     fn date(&self, at: At<'_>) -> Result<time::Date>;
     fn strings(&self, at: At<'_>) -> Result<Vec<String>>;
-    /// This value's typst type name, for error messages.
-    fn kind(&self) -> &'static str;
+    /// This value's typst type name with the article that reads before it
+    /// (`a string`, `an integer`), for error messages.
+    fn kind(&self) -> String;
 }
 
 /// One step from the frontmatter dict down to the value a diagnostic is about:
@@ -53,7 +54,8 @@ pub(super) enum Fault {
     Mismatch {
         path: Vec<Step>,
         want: FieldType,
-        got: &'static str,
+        /// What was there, with its article: see [`Fields::kind`].
+        got: String,
     },
 }
 
