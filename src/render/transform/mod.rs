@@ -28,6 +28,8 @@ mod svg;
 
 pub use externalize::ImageRef;
 
+use std::sync::LazyLock;
+
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
 use crate::config::Config;
@@ -102,6 +104,11 @@ pub(super) struct Cx<'a> {
 /// parses its candidate list, and `content` by [`URL_META`], which is not
 /// unconditional.
 const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster];
+
+/// `svg`, interned once rather than per element: typst-html's `tag` module
+/// names the HTML vocabulary, and this one is SVG's root.
+static SVG: LazyLock<HtmlTag> =
+    LazyLock::new(|| HtmlTag::intern("svg").expect("svg is a valid tag name"));
 
 /// OpenGraph names its tags with `property` where the HTML spec uses `name`.
 /// typst-html has no constant for it, since it is RDFa rather than HTML. Here
@@ -183,7 +190,21 @@ pub(super) trait ElementExt {
     /// or a footnote marker got a scrambled `id`. Ids are the site's deep-link
     /// surface and the fragment check reads the same set, so a *correct*
     /// `#link("page.typ#the-fast-way")` failed the build.
+    /// Descendants whose text a reader does not read are skipped, which the
+    /// same walk did not do: an inlined `svg()` icon carries the file's own
+    /// `<title>`, so `= #svg("/star.svg") The fast way` slugged to
+    /// `a-gold-starthe-fast-way`. The element the call is made *on* is never
+    /// skipped, because the digest and weight passes ask a `<script>` for its
+    /// own body.
     fn text(&self) -> String;
+    /// Whether this element carries no text a reader reads: a script or style
+    /// body, or something declaring itself hidden from assistive technology.
+    ///
+    /// One rule, asked by [`text`](ElementExt::text) when it decides whether to
+    /// descend and by [`Syndicated::chrome`](crate::render::Syndicated) when it
+    /// decides what travels in a feed. Both used to state their own, and only
+    /// one of them was right.
+    fn silent(&self) -> bool;
     /// This element's heading level, `1`..`6`, or `None` for anything that is
     /// not a heading.
     fn heading(&self) -> Option<u8>;
@@ -235,11 +256,26 @@ impl ElementExt for HtmlElement {
         while let Some(node) = stack.pop() {
             match node {
                 HtmlNode::Text(text, _) => out.push_str(text),
+                // Descend, unless what is inside is not text a reader reads
+                // here. An inlined icon is the case that matters: `svg()`
+                // splices the file's own `<title>` and `<desc>` into the DOM,
+                // and a heading carrying one slugged its id from the icon's
+                // description as well as its own words.
+                HtmlNode::Element(child) if child.silent() || child.tag == *SVG => {}
                 HtmlNode::Element(child) => stack.extend(child.children.iter().rev()),
                 _ => {}
             }
         }
         out
+    }
+
+    fn silent(&self) -> bool {
+        self.tag == tag::script
+            || self.tag == tag::style
+            || self
+                .attrs
+                .get(attr::aria_hidden)
+                .is_some_and(|hidden| hidden == "true")
     }
 
     fn heading(&self) -> Option<u8> {
@@ -502,6 +538,33 @@ mod tests {
         );
 
         assert_eq!(heading.text(), "The fast way to a slug");
+    }
+
+    /// `= #svg("/star.svg") The fast way`, once the icon has been inlined.
+    ///
+    /// `svg()` splices the file verbatim, `<title>` and all, and that title is
+    /// an accessible name for the icon rather than words in the heading. Read
+    /// as heading text it produced `id="a-gold-starthe-fast-way"`: an id no
+    /// correct deep link can name, and one the fragment check then reads back
+    /// as the truth. The same goes for a `<script>` a heading somehow carries
+    /// and for anything marked `aria-hidden`, the heading's own self link
+    /// among them.
+    #[test]
+    fn text_does_not_read_what_a_reader_does_not() {
+        let svg = HtmlTag::intern("svg").expect("svg");
+        let title = HtmlTag::intern("title").expect("title");
+        let mut hidden = element(tag::span, vec![text("#")]);
+        hidden.attrs.push(super::attr::aria_hidden, "true");
+        let heading = element(
+            tag::h1,
+            vec![
+                element(svg, vec![element(title, vec![text("A gold star")]).into()]).into(),
+                text("The fast way"),
+                hidden.into(),
+            ],
+        );
+
+        assert_eq!(heading.text(), "The fast way");
     }
 
     /// Nesting is followed at the point it occurs, however deep, and an element

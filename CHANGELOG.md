@@ -80,6 +80,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A heading anchor is slugged from the text a reader reads.** An inlined
+  `svg()` icon splices the file's own `<title>` into the DOM, and the heading
+  read it as its own words: `= #svg("/star.svg") The fast way` published
+  `id="a-gold-starthe-fast-way"`. A `<script>` or `<style>` body and anything
+  marked `aria-hidden` were read the same way. All four are now skipped, by the
+  same rule that already decided what travels in a feed.
+
 - **A page whose markup replaced the document root is refused, not ignored.**
   typst-html owns `<html>`, `<head>` and `<body>`, and hands back the author's
   root verbatim when a page's markup is a single `<html>` element, generating no

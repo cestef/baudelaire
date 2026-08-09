@@ -200,12 +200,7 @@ impl Syndicated {
     /// assistive technology. That last covers a heading's own self link, which
     /// says nothing the heading has not and would travel as a stray `#`.
     fn chrome(element: &HtmlElement, ignore: &[String]) -> bool {
-        element.tag == tag::script
-            || element.tag == tag::style
-            || element
-                .attrs
-                .get(attr::aria_hidden)
-                .is_some_and(|v| v == "true")
+        element.silent()
             || ignore
                 .iter()
                 .any(|name| element.tag.resolve().eq_ignore_ascii_case(name))
