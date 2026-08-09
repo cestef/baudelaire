@@ -77,6 +77,128 @@ const DEPTH: usize = 128;
 static MARKER: LazyLock<HtmlAttr> =
     LazyLock::new(|| HtmlAttr::intern(Html::MARKER).expect("marker is a valid attribute name"));
 
+/// The ids an inlined icon defines, and the one rule for renaming them and
+/// everything that points at them.
+///
+/// An icon's ids are the file's own private names: an editor writes `id="a"`
+/// and refers to it as `url(#a)`, so two icons drawn in Illustrator or Figma
+/// and dropped on one page both define `a`. `url(#a)` then resolves to
+/// whichever came first and the second icon paints with the first's gradient,
+/// mask or clip path. Exactly the collision [`Svg::confine`] already prevents
+/// for an inlined `<style>`, and keyed the same way: by the file's path, so the
+/// same icon used twice scopes the same way and two different files never
+/// collide.
+struct Ids<'a> {
+    /// The suffix appended to each name, the icon's own scope.
+    scope: &'a str,
+    /// The ids this icon defines, longest first so a rewrite of `#ab` is never
+    /// matched as `#a` followed by a stray `b`.
+    names: Vec<String>,
+}
+
+impl<'a> Ids<'a> {
+    /// The ids the file defines, which is every id on a *descendant*.
+    ///
+    /// Not the root's: by the time this runs the root carries the caller's
+    /// attributes as well as the file's, so an `id` there may be one the page
+    /// wrote (`svg(id: "logo")`) and is not the file's to rename.
+    fn of(element: &HtmlElement, scope: &'a str) -> Self {
+        let mut names: Vec<String> = Vec::new();
+        for child in &element.children {
+            if let HtmlNode::Element(child) = child {
+                child.visit(&mut |node| {
+                    if let Some(id) = node.attrs.get(typst_html::attr::id) {
+                        names.push(id.to_string());
+                    }
+                });
+            }
+        }
+        names.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        names.dedup();
+        Self { scope, names }
+    }
+
+    /// Rename every id the file defines, and rewrite every reference to one.
+    ///
+    /// References are found by value rather than by attribute name: SVG points
+    /// at an id from `fill`, `stroke`, `clip-path`, `mask`, `filter`, the three
+    /// `marker-*`, `href` and more, and a list of those here would be a second
+    /// place to keep them. Only a name this icon actually defines is rewritten,
+    /// so nothing else in the document can be caught by it.
+    fn apply(&self, element: &mut HtmlElement) {
+        if self.names.is_empty() {
+            return;
+        }
+        // The root's own `id` is the caller's; only what it points at is the
+        // file's.
+        for (key, value) in element.attrs.0.make_mut() {
+            if *key != typst_html::attr::id {
+                *value = self.referenced(value).into();
+            }
+        }
+        for child in element.children.make_mut() {
+            if let HtmlNode::Element(child) = child {
+                child.walk(&mut |node| self.rewrite(node));
+            }
+        }
+    }
+
+    /// One descendant: its `id`, everything it points at, and a stylesheet it
+    /// carries.
+    fn rewrite(&self, node: &mut HtmlElement) {
+        for (key, value) in node.attrs.0.make_mut() {
+            *value = match *key == typst_html::attr::id {
+                true => self.renamed(value).into(),
+                false => self.referenced(value).into(),
+            };
+        }
+        if node.tag == tag::style {
+            for child in node.children.make_mut() {
+                if let HtmlNode::Text(css, _) = child {
+                    *css = self.referenced(css).into();
+                }
+            }
+        }
+    }
+
+    /// `name` under this icon's scope, or unchanged if the icon does not define
+    /// it (an id typst or a template put there is not the file's to rename).
+    fn renamed(&self, name: &str) -> String {
+        match self.names.iter().any(|defined| defined == name) {
+            true => format!("{name}-{}", self.scope),
+            false => name.to_owned(),
+        }
+    }
+
+    /// `value` with every `#name` naming one of this icon's ids renamed.
+    ///
+    /// A `#` followed by one of the names, and then by anything that cannot
+    /// continue an identifier: that covers `url(#a)`, a bare `href="#a"`, and a
+    /// `#a { }` selector in the icon's own stylesheet, without knowing which of
+    /// the three it is looking at.
+    fn referenced(&self, value: &str) -> String {
+        let mut out = value.to_owned();
+        for name in &self.names {
+            let mut from = 0;
+            while let Some(at) = out[from..].find(&format!("#{name}")) {
+                let at = from + at;
+                let after = at + 1 + name.len();
+                let continues = out[after..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '-' || c == '_');
+                if continues {
+                    from = after;
+                    continue;
+                }
+                out.replace_range(after..after, &format!("-{}", self.scope));
+                from = after + 1 + self.scope.len();
+            }
+        }
+        out
+    }
+}
+
 /// The [`Transform`] that turns marked `<svg>` elements into inline DOM.
 pub(super) struct Svg;
 
@@ -155,6 +277,7 @@ impl Svg {
     /// A file with no stylesheet gains no attribute and pays nothing.
     fn confine(element: &mut HtmlElement, path: &str) {
         let id = Hash::of_bytes(path.as_bytes()).short(SCOPE_LEN);
+        Ids::of(element, &id).apply(element);
         let scoped = Scoped::attribute(SCOPE, &id);
         let mut found = false;
         element.walk(&mut |node| {

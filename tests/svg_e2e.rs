@@ -64,12 +64,18 @@ fn a_hand_written_icon_round_trips() {
 #[test]
 fn an_inkscape_export_drops_editor_namespaces() {
     let html = inline("inkscape.svg", "");
+    // The id is scoped to the file (see the collision test below); what this
+    // pins is that the `<use>` beside it still names the same path.
+    let path = scoped(&html, "p1");
     assert!(
-        html.contains(r#"<path d="M1 1h22v22H1Z" id="p1">"#),
+        html.contains(&format!(r#"<path d="M1 1h22v22H1Z" id="{path}">"#)),
         "{html}"
     );
     // `xlink:href` is SVG 1.1's spelling of what SVG 2 calls `href`.
-    assert!(html.contains(r##"<use href="#p1" x="2">"##), "{html}");
+    assert!(
+        html.contains(&format!(r##"<use href="#{path}" x="2">"##)),
+        "{html}"
+    );
     for gone in [
         "sodipodi",
         "inkscape",
@@ -114,21 +120,43 @@ fn an_illustrator_export_keeps_its_stylesheet() {
 #[test]
 fn gradients_and_filters_keep_their_camel_case() {
     let html = inline("gradient.svg", "");
-    assert!(
-        html.contains(r#"<linearGradient id="g" gradientUnits="userSpaceOnUse""#),
-        "{html}"
-    );
-    assert!(html.contains(r#"<clipPath id="c">"#), "{html}");
+    assert!(html.contains(r#"gradientUnits="userSpaceOnUse""#), "{html}");
     assert!(
         html.contains(r#"<feGaussianBlur stdDeviation="2">"#),
         "{html}"
     );
-    assert!(html.contains(r#"fill="url(#g)""#), "{html}");
-    assert!(html.contains(r#"clip-path="url(#c)""#), "{html}");
     assert!(
         html.contains(r##"<stop offset="0" stop-color="#f00">"##),
         "{html}"
     );
+    // The file's ids are scoped to it (see the collision test below), so what
+    // is pinned here is that each reference still names the definition beside
+    // it rather than the name the file wrote.
+    let clip = scoped(&html, "c");
+    assert!(
+        html.contains(&format!(r#"clip-path="url(#{clip})""#)),
+        "{html}"
+    );
+    let gradient = scoped(&html, "g");
+    assert!(
+        html.contains(&format!(r#"fill="url(#{gradient})""#)),
+        "{html}"
+    );
+}
+
+/// The scoped spelling of the id the file wrote as `name`.
+///
+/// An inlined icon's ids are suffixed with a hash of its path, so a test that
+/// wants to follow a reference asks for the name as served rather than as
+/// written.
+fn scoped(html: &str, name: &str) -> String {
+    let open = format!("id=\"{name}");
+    let at = html
+        .find(&open)
+        .unwrap_or_else(|| panic!("no id starting {name}: {html}"));
+    let rest = &html[at + open.len() - name.len()..];
+    let end = rest.find('"').expect("id is quoted");
+    rest[..end].to_owned()
 }
 
 /// Text content, entities and non-ASCII survive a parse-and-rebuild: entities
@@ -153,7 +181,7 @@ fn text_entities_and_unicode_survive() {
 #[test]
 fn deeply_nested_groups_are_kept() {
     let html = inline("nested.svg", "");
-    assert!(html.contains(r#"id="deep""#), "{html}");
+    assert!(html.contains(r#"id="deep-"#), "{html}");
     assert_eq!(
         html.matches("<g>").count(),
         5,
@@ -339,4 +367,53 @@ fn at_rules_are_confined_only_where_they_hold_selectors() {
         html.contains("animation: spin 1s linear infinite"),
         "{html}"
     );
+}
+
+/// Two icons drawn in the same editor both define `id="g"` and both point at it
+/// with `url(#g)`. Spliced verbatim, the page held two elements with one id,
+/// `url(#g)` resolved to whichever came first, and the second icon painted with
+/// the first's gradient and clip path. The ids are the file's own private
+/// names, so each is scoped to its file exactly as an inlined `<style>` already
+/// is, and every reference follows.
+#[test]
+fn two_icons_defining_one_id_do_not_collide() {
+    let site = Site::with("site \"T\"\n");
+    for fixture in ["gradient.svg", "gradient-2.svg"] {
+        let body = std::fs::read_to_string(format!("tests/fixtures/svg/{fixture}"))
+            .unwrap_or_else(|e| panic!("fixture {fixture}: {e}"));
+        site.write(&format!("icons/{fixture}"), &body);
+    }
+    site.write(
+        "templates/page.typ",
+        "#import \"@baudelaire/html:0.1.0\": svg\n\
+         #let page(data, body) = {\n\
+           svg(\"/icons/gradient.svg\")\n\
+           svg(\"/icons/gradient-2.svg\")\n\
+         }\n",
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHi.\n",
+    );
+    site.stats();
+    let html = site.output("index.html");
+
+    // Neither file's names survive unscoped, so nothing can collide with the
+    // other's or with an id the page itself wrote.
+    assert!(!html.contains(r#"id="g""#), "{html}");
+    assert!(!html.contains("url(#g)"), "{html}");
+
+    // Two distinct definitions, and each icon's `fill` names its own.
+    let ids: Vec<&str> = html
+        .match_indices("<linearGradient id=\"")
+        .map(|(at, open)| {
+            let rest = &html[at + open.len()..];
+            &rest[..rest.find('"').expect("id is quoted")]
+        })
+        .collect();
+    assert_eq!(ids.len(), 2, "{html}");
+    assert_ne!(ids[0], ids[1], "two icons, two gradients: {html}");
+    for id in &ids {
+        assert!(html.contains(&format!(r#"fill="url(#{id})""#)), "{html}");
+    }
 }

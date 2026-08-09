@@ -88,6 +88,14 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **Two inlined icons defining the same id no longer collide.** An icon's ids
+  are the file's own private names, and an editor writes `id="a"` and refers to
+  it as `url(#a)`, so two icons exported from Illustrator or Figma and used on
+  one page both defined `a`. The reference then resolved to whichever came
+  first and the second icon painted with the first's gradient, mask or clip
+  path. Each file's ids are now scoped to it, and every reference follows, by
+  the same path hash that already scopes an inlined `<style>`.
+
 - **A heading anchor is slugged from the text a reader reads.** An inlined
   `svg()` icon splices the file's own `<title>` into the DOM, and the heading
   read it as its own words: `= #svg("/star.svg") The fast way` published

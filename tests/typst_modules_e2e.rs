@@ -355,7 +355,8 @@ fn camel_case_svg_tags_inline() {
     site.stats();
 
     let html = site.output("index.html");
-    assert!(html.contains(r#"<linearGradient id="g">"#), "{html}");
+    // The id is scoped to the file it came from, so what this pins is the tag.
+    assert!(html.contains(r#"<linearGradient id="g-"#), "{html}");
     assert!(
         html.contains(r#"<feGaussianBlur stdDeviation="2">"#),
         "{html}"
