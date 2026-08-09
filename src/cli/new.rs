@@ -86,7 +86,12 @@ impl NewArgs {
         // A bundle is a directory holding an `index.typ` (the collection's
         // configured index name), so images and data can sit beside the page.
         if self.bundle {
-            path.set_extension("");
+            // Only a `.typ` suffix is an extension to drop here. `set_extension("")`
+            // cuts at the last dot whatever follows it, so `new -b posts/v1.2`
+            // asked for a bundle called `v1.2` and got one called `v1`.
+            if path.extension().is_some_and(|e| e == Config::TYPST) {
+                path.set_extension("");
+            }
             return path.join(format!("{}.typ", config.bundle_index()));
         }
         if path.extension().is_none_or(|e| e != Config::TYPST) {

@@ -124,6 +124,33 @@ fn new_bundle_creates_index_in_a_directory() {
     );
 }
 
+/// A bundle's name is a directory name, and a directory may hold a dot.
+/// Stripping "the extension" cut at the last one whatever followed it, so
+/// `new -b posts/v1.2` asked for `v1.2` and silently got `v1`.
+#[test]
+fn new_bundle_keeps_a_dot_in_its_name() {
+    let t = Site::new();
+    t.write("config.kdl", "site \"T\"\n");
+    let out = t.run(&["new", "posts/v1.2", "--bundle"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        t.exists("content/posts/v1.2/index.typ"),
+        "bundle kept its dot"
+    );
+    assert!(
+        !t.exists("content/posts/v1/index.typ"),
+        "truncated at the dot"
+    );
+    // ...and a `.typ` suffix is still the one thing dropped.
+    let out = t.run(&["new", "posts/other.typ", "--bundle"]);
+    assert!(out.status.success());
+    assert!(t.exists("content/posts/other/index.typ"));
+}
+
 #[test]
 fn new_refuses_existing_file() {
     let t = Site::new();

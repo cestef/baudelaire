@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`new --bundle` keeps a dot in the name it was given.** A bundle is a
+  directory, and stripping "the extension" cut at the last dot whatever
+  followed it, so `new -b posts/v1.2` asked for `v1.2` and silently got `v1`. A
+  `.typ` suffix is still dropped.
+
 - **`init --url` is held to the rule `--base-url` is.** `init --url
   example.com` exited 0 and wrote a project whose first build fails, naming a
   line the scaffold had just written rather than the flag that put it there. An
