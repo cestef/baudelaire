@@ -110,6 +110,16 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`llms.txt` writes links a Markdown reader can follow.** Both halves of
+  `[text](url)` were written raw, so a page titled `A [draft] note` produced a
+  link that parses as something else, or as nothing. The root collection is no
+  longer written as a `## _root` heading either: those pages belong to no
+  section, so they lead with none.
+
+- **`_headers` no longer ends in a rule with no headers under it.** The derived
+  catch-all is empty on a site with neither `caching` nor a policy, and the file
+  ended with a bare `/*`.
+
 - **A declared source the build cannot read says why.** Every failure on the
   mount came back as "file not found", naming a path that in the common cases
   is right there: a directory named as a source, or a file the process may not

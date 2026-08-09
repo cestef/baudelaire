@@ -84,6 +84,12 @@ impl Line<'_> {
         self
     }
 
+    /// A value inside a Markdown inline link, either half of it. See [`Link`].
+    pub(super) fn linked(&mut self, value: impl fmt::Display) -> &mut Self {
+        let _ = write!(self.0, "{}", Link(&value.to_string()));
+        self
+    }
+
     /// A value in a space-separated field, which loses its whitespace as well:
     /// a `_redirects` rule is three fields on one line, so a path carrying a
     /// space is read as a rule with a target of `301` and no status at all.
@@ -116,6 +122,27 @@ impl fmt::Display for Plain<'_> {
             .chars()
             .filter(|c| !c.is_control())
             .try_for_each(|c| f.write_char(c))
+    }
+}
+
+/// Displays a value inside a Markdown inline link: [`Plain`], with the four
+/// delimiters that would end the link early escaped.
+///
+/// `llms.txt` is Markdown, and both halves of `[text](url)` are site values. A
+/// page titled `A [draft] note` wrote `- [A [draft] note](/x/)`, which a reader
+/// parses as a different link or as none; a permalink may carry a paren, which
+/// `Percent` leaves literal because a URL is allowed one.
+struct Link<'a>(&'a str);
+
+impl fmt::Display for Link<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for c in self.0.chars().filter(|c| !c.is_control()) {
+            if matches!(c, '[' | ']' | '(' | ')' | '\\') {
+                f.write_char('\\')?;
+            }
+            f.write_char(c)?;
+        }
+        Ok(())
     }
 }
 

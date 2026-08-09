@@ -8,7 +8,7 @@
 use super::line::Lines;
 use super::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
-use crate::content::Page;
+use crate::content::{Page, ROOT};
 use crate::error::Result;
 use crate::error::warning::BaseUrlMissing;
 
@@ -60,15 +60,22 @@ impl Processor for Llms {
             }
             for (collection, pages) in Self::sections(&pages) {
                 md.blank();
-                md.line().lit("## ").value(collection);
-                md.blank();
+                // The root collection is a real id a site can configure, but it
+                // is not a section *name*: `## _root` was an internal sentinel
+                // in a document written to be read. Its pages belong to no
+                // section, so they are listed with no heading at all, ahead of
+                // the ones that do.
+                if collection != ROOT {
+                    md.line().lit("## ").value(collection);
+                    md.blank();
+                }
                 for page in pages {
                     let link = BaseUrl::resolve(base.as_ref(), &page.permalink);
                     md.line()
                         .lit("- [")
-                        .value(page.title())
+                        .linked(page.title())
                         .lit("](")
-                        .value(link)
+                        .linked(link)
                         .lit(")");
                 }
             }
@@ -99,6 +106,9 @@ impl Llms {
                 None => sections.push((name, vec![page])),
             }
         }
+        // The unsectioned pages lead, since they are written without a heading
+        // and a heading-less list after a `##` would read as part of it.
+        sections.sort_by_key(|(name, _)| *name != ROOT);
         sections
     }
 }
@@ -155,6 +165,16 @@ mod tests {
         let md = index(&[page("a", "A"), page("b", "B")]);
         assert!(md.contains("\n## posts\n\n- ["), "{md}");
         assert!(md.ends_with("- [A](/a/)\n- [B](/b/)\n"), "{md}");
+    }
+
+    /// Both halves of `[text](url)` are site values, and both used to be written
+    /// raw: a title carrying a bracket wrote `- [A [draft] note](/x/)`, which a
+    /// reader parses as a different link or as none, and a permalink may carry a
+    /// paren because a URL is allowed one.
+    #[test]
+    fn a_link_cannot_be_ended_early_by_either_half() {
+        let md = index(&[page("a", "A [draft] note")]);
+        assert!(md.contains(r"- [A \[draft\] note](/a/)"), "{md}");
     }
 
     /// A title carrying a line break used to end its bullet early and leave the

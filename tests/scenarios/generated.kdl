@@ -333,3 +333,42 @@ scenario "a status that is not a redirect is refused" {
     fails { code "baudelaire::config::out_of_range" }
   }
 }
+
+// `llms.txt` is Markdown written for a reader that is not a browser. The root
+// collection is a real id a site can configure, but it is not a section *name*:
+// `## _root` put an internal sentinel in the middle of a document meant to be
+// read. Those pages belong to no section, so they lead with no heading at all.
+scenario "the root collection is not a section heading in llms.txt" {
+  files {
+    "config.kdl" #"""
+      site "L"
+      url "https://host.test"
+      generate {
+        llms #true
+      }
+      content {
+        collections {
+          posts { glob "posts/**" }
+        }
+      }
+      """#
+    "content/top.typ" #"""
+      #let frontmatter = (title: "Top")
+      x
+      """#
+    "content/posts/p.typ" #"""
+      #let frontmatter = (title: "Sectioned")
+      x
+      """#
+  }
+  expect {
+    ok
+    file "llms.txt" {
+      contains "## posts"
+      missing "_root"
+      // The unsectioned page leads, so its bullet is not read as part of the
+      // section above it.
+      order "- [Top]" "## posts" "- [Sectioned]"
+    }
+  }
+}

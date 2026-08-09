@@ -89,6 +89,13 @@ impl Headers {
     /// rules name their own headers; the derived ones pass a literal that
     /// happens to satisfy the same signature.
     fn rule(body: &mut Lines, pattern: &str, headers: &[(impl fmt::Display, impl fmt::Display)]) {
+        // A record with no headers under it says nothing, and the derived
+        // catch-all is empty on any site with neither `caching` nor a policy:
+        // `_headers` then ended in a bare `/*` and a blank line, which is a
+        // rule a host parses and a reader has to work out means nothing.
+        if headers.is_empty() {
+            return;
+        }
         body.line().value(pattern);
         for (name, value) in headers {
             body.line().lit("  ").pair(name, value);
