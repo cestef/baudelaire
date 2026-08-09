@@ -88,6 +88,15 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **A frontmatter `date` may carry a time of day.** `date =
+  2024-01-01T10:00:00Z`, which is what Hugo's default archetype writes and what
+  TOML and YAML both parse as a native timestamp, failed the build: the reader
+  was exactly `YYYY-MM-DD`. A typst page's `datetime(..)` had always been
+  accepted and truncated to its day, so one rule differed by dialect, and three
+  doc comments promised the paste would work. The time is now validated and
+  dropped, and the literal day is taken, so a timestamp late enough to fall on
+  the next day in UTC is still the day its author wrote.
+
 - **An advertised feed is written even with nothing dated in it.** Every page
   carries `<link rel="alternate">` for the site-wide feed and for its own
   collection's, built from the config alone, while the writer skipped a feed

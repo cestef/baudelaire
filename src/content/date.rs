@@ -25,13 +25,28 @@ impl fmt::Display for Iso {
 /// markdown page writes `date "2026-07-15"` in KDL, which has no date literal;
 /// a typst page may write the same string rather than `datetime(..)`.
 ///
-/// Strict on purpose: exactly `YYYY-MM-DD`, the form [`Iso`] emits. Anything
-/// looser would make a plain string that merely resembles a date silently
-/// become one.
+/// Strict on purpose: `YYYY-MM-DD`, the form [`Iso`] emits, optionally followed
+/// by a time of day. Anything looser would make a plain string that merely
+/// resembles a date silently become one.
+///
+/// The time is validated and then dropped, because a page is dated to a day:
+/// this is what a typst page's `datetime(..)` has always done, and reading it
+/// only there made one rule differ by dialect. A pasted Hugo or Zola post
+/// writes `date = 2024-01-01T10:00:00Z`, which every doc comment here promised
+/// would parse and which failed the build instead. The literal day is taken,
+/// offset and all, so a timestamp late enough to fall on the next day in UTC is
+/// still the day its author wrote.
 impl std::str::FromStr for Iso {
     type Err = ();
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let (text, time) = match text.split_once(['T', ' ']) {
+            Some((day, time)) => (day, Some(time)),
+            None => (text, None),
+        };
+        if time.is_some_and(|time| !Self::is_time(time)) {
+            return Err(());
+        }
         let [year, month, day] =
             <[&str; 3]>::try_from(text.split('-').collect::<Vec<_>>()).map_err(|_| ())?;
         if (year.len(), month.len(), day.len()) != (4, 2, 2) {
@@ -45,6 +60,22 @@ impl std::str::FromStr for Iso {
         )
         .map(Self)
         .map_err(|_| ())
+    }
+}
+
+impl Iso {
+    /// Whether `text` is a time of day, with an optional fraction and an
+    /// optional zone: `10:00`, `10:00:00`, `10:00:00.5`, `10:00:00Z`,
+    /// `10:00:00+02:00`.
+    ///
+    /// Shape only, since the value is dropped: what it has to rule out is prose
+    /// that happens to follow a date (`2026-01-01 was a good day`), which is the
+    /// case the strictness above exists for.
+    fn is_time(text: &str) -> bool {
+        let mut chars = text.chars();
+        let hours = matches!((chars.next(), chars.next(), chars.next()),
+            (Some(a), Some(b), Some(':')) if a.is_ascii_digit() && b.is_ascii_digit());
+        hours && chars.all(|c| c.is_ascii_digit() || matches!(c, ':' | '.' | '+' | '-' | 'Z' | 'z'))
     }
 }
 
@@ -174,5 +205,43 @@ mod tests {
             Localized::new(date(2026, 7, 5), &strings).to_string(),
             "2026/05"
         );
+    }
+
+    /// A pasted Hugo or Zola post writes its date with a time of day, in every
+    /// dialect that has a date literal and in the strings the others write. It
+    /// was refused outright, while a typst page's `datetime(..)` had always
+    /// been accepted and truncated: one rule that differed by dialect, and
+    /// three doc comments promising the paste would work.
+    #[test]
+    fn a_day_may_carry_a_time_of_day() {
+        for text in [
+            "2024-01-01",
+            "2024-01-01T10:00:00Z",
+            "2024-01-01T10:00:00",
+            "2024-01-01 10:00:00",
+            "2024-01-01T10:00",
+            "2024-01-01T10:00:00.5",
+            "2024-01-01T23:00:00-05:00",
+        ] {
+            let parsed: Iso = text.parse().unwrap_or_else(|()| panic!("{text}"));
+            // The literal day, offset and all: a timestamp late enough to fall
+            // on the next day in UTC is still the day its author wrote.
+            assert_eq!(parsed.to_string(), "2024-01-01", "{text}");
+        }
+    }
+
+    /// And the strictness the truncation must not cost: a string that merely
+    /// starts with something date-shaped is still not a date.
+    #[test]
+    fn prose_after_a_day_is_not_a_time() {
+        for text in [
+            "2024-01-01 was a good day",
+            "2024-01-01Tomorrow",
+            "2024-01-01 ",
+            "2024-1-01",
+            "not a date",
+        ] {
+            assert!(text.parse::<Iso>().is_err(), "{text}");
+        }
     }
 }
