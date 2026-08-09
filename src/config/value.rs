@@ -216,6 +216,17 @@ pub(super) trait ValueExt {
     /// Its own reader and not [`ValueExt::one`] because a type is a shape rather
     /// than a name: the set it is drawn from is infinite.
     fn ty(&self, text: &str, span: SourceSpan) -> Result<FieldType>;
+    /// A permalink template, or a piece of one, checked by `Permalink::parse`:
+    /// the attribute-value counterpart of
+    /// [`NodeExt::template`](super::node::NodeExt::template), which owns the
+    /// rule and states why it exists.
+    ///
+    /// Its own reader because a key that is part of a URL is written both ways:
+    /// `paginate { prefix ".." }` is a node and is refused, while
+    /// `taxonomies { tags prefix=".." }` is an attribute and read as a plain
+    /// string, so the identical mistake built green and published
+    /// `href="/tags/x/../2/"` against a file at `/tags/x/2/`.
+    fn template(&self, text: &str, span: SourceSpan) -> Result<String>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
     /// straight through to client JS (`baudelaire:config`). Strings expand
     /// `${VAR}` like every other config string; a non-finite float is an error.
@@ -230,6 +241,14 @@ impl ValueExt for KdlValue {
             Some(s) => Env::expand(s)
                 .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into()),
             None => Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
+        }
+    }
+
+    fn template(&self, text: &str, span: SourceSpan) -> Result<String> {
+        let raw = self.as_str(text, span)?;
+        match crate::config::permalink::Permalink::parse(&raw) {
+            Err(why) => Err(ConfigError::at(text, why.into(), span).into()),
+            Ok(_) => Ok(raw),
         }
     }
 

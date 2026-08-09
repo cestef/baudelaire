@@ -136,7 +136,7 @@ impl Attributed for TaxonomyConfig {
             Text,
             "The path segment before a term page's number, as in `/tags/rust/page/2/`.",
             |c, v, t, s| {
-                c.prefix = v.as_str(t, s)?;
+                c.prefix = v.template(t, s)?;
                 Ok(())
             },
         ),

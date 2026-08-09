@@ -259,3 +259,25 @@ fn the_old_draft_spelling_is_refused_with_a_suggestion() {
     let rendered = format!("{:?}", miette::Report::from(err));
     assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
 }
+
+/// A key that is part of a URL is held to the permalink rule whichever way it
+/// is written. `paginate { prefix ".." }` is a node and was refused; a
+/// taxonomy's `prefix` is an *attribute*, read as a plain string, so the
+/// identical mistake built green and published `href="/tags/x/../2/"` against a
+/// file that landed at `/tags/x/2/`.
+#[test]
+fn a_taxonomy_prefix_is_a_permalink_piece_like_its_sibling() {
+    for kdl in [
+        "content {\n  taxonomies {\n    tags prefix=\"..\"\n  }\n}",
+        "content {\n  collections {\n    posts {\n      paginate {\n        prefix \"..\"\n      }\n    }\n  }\n}",
+    ] {
+        let err = Config::parse(kdl)
+            .expect_err("`..` escapes the output directory")
+            .to_string();
+        assert!(err.contains(".."), "{kdl}: {err}");
+    }
+    // An ordinary segment still parses, both ways.
+    let config = Config::parse("content {\n  taxonomies {\n    tags prefix=\"seite\"\n  }\n}")
+        .expect("an ordinary prefix");
+    assert_eq!(config.content.taxonomies[0].1.prefix, "seite");
+}

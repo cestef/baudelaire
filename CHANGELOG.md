@@ -88,6 +88,13 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **A taxonomy's `prefix` is held to the permalink rule its sibling is.** A key
+  that forms part of a URL is written both ways, and only the node spelling was
+  checked: `paginate { prefix ".." }` was a hard error while
+  `taxonomies { tags prefix=".." }` built green and published
+  `href="/tags/x/../2/"` against a file that landed at `/tags/x/2/`. The
+  attribute spelling now answers to the same reader.
+
 - **A directory watched twice keeps the deeper of the two modes.** A declared
   source living inside a source tree made that tree's directory reach the
   watcher's list twice, recursively as a tree and then non-recursively as the
