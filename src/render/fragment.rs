@@ -179,7 +179,9 @@ impl Syndicated {
         let root = doc.root_mut();
         Self::prune(root, &region.ignore);
         root.walk(&mut |element| {
-            element.assets(|url| Some(BaseUrl::resolve(base, url)));
+            // `rebase`, not `resolve`: this is the finished page, so the base
+            // path is already on every root-relative URL.
+            element.assets(|url| Some(BaseUrl::rebase(base, url)));
         });
         let found = HtmlTag::intern(&region.element)
             .ok()

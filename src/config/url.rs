@@ -72,6 +72,45 @@ impl BaseUrl {
             _ => path.to_owned(),
         }
     }
+
+    /// The path component of a configured `url`, trailing slash normalized away
+    /// (`https://host/docs/` -> `/docs`); empty for a root-hosted site.
+    ///
+    /// The algebra, not the config: [`Config::base_path`](super::Config::base_path)
+    /// is this, read off the same string, and the two spellings had to agree
+    /// because one prefixes a page's URLs and the other absolutizes them.
+    pub fn path(url: &str) -> &str {
+        let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+        rest.find('/')
+            .map_or("", |slash| rest[slash..].trim_end_matches('/'))
+    }
+
+    /// The scheme and host, without the site's own path component.
+    ///
+    /// What absolutizes a URL that already carries the base path. A permalink
+    /// does not (`/posts/a/`), so every emitter joins it to the whole base; the
+    /// markup a feed captures does, because it is the finished page, shifted
+    /// under the base path by the transform that runs last. Joining that to the
+    /// whole base spelled it twice, and a subpath-hosted site published a feed
+    /// whose every link and image was `https://host/docs/docs/...`.
+    pub fn origin(&self) -> &str {
+        let path = Self::path(&self.0);
+        match path.is_empty() {
+            true => &self.0,
+            false => self.0.strip_suffix(path).unwrap_or(&self.0),
+        }
+    }
+
+    /// [`resolve`](Self::resolve) against the origin alone, for markup whose
+    /// paths the base-path transform has already prefixed.
+    pub fn rebase(base: Option<&Self>, path: &str) -> String {
+        match base {
+            Some(base) if path.starts_with('/') => {
+                format!("{}{}", base.origin(), Percent::encode(path))
+            }
+            _ => path.to_owned(),
+        }
+    }
 }
 
 impl std::fmt::Display for BaseUrl {
@@ -199,4 +238,53 @@ impl UrlStyle {
     /// The extension a flat URL names its file with, and the single spelling of
     /// the HTML extension every path rule derives from.
     pub(crate) const PAGE: &'static str = ".html";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BaseUrl;
+
+    /// The two halves of a configured `url`, which two callers had each been
+    /// splitting for themselves.
+    #[test]
+    fn a_base_splits_into_an_origin_and_a_path() {
+        for (url, origin, path) in [
+            ("https://host.test/docs", "https://host.test", "/docs"),
+            ("https://host.test/docs/", "https://host.test", "/docs"),
+            ("https://host.test", "https://host.test", ""),
+            ("https://host.test/", "https://host.test", ""),
+            ("https://host.test/a/b", "https://host.test", "/a/b"),
+        ] {
+            assert_eq!(BaseUrl::path(url), path, "path of {url}");
+            assert_eq!(BaseUrl::new(url).origin(), origin, "origin of {url}");
+        }
+    }
+
+    /// A permalink carries no base path, so it joins the whole base. Markup a
+    /// feed captures is the finished page, whose URLs the base-path transform
+    /// has already prefixed, so it joins the origin alone: joining the whole
+    /// base spelled the path twice and every link in the entry 404'd.
+    #[test]
+    fn a_prefixed_path_is_absolutised_against_the_origin_alone() {
+        let base = BaseUrl::new("https://host.test/docs");
+        assert_eq!(
+            BaseUrl::resolve(Some(&base), "/posts/b/"),
+            "https://host.test/docs/posts/b/"
+        );
+        assert_eq!(
+            BaseUrl::rebase(Some(&base), "/docs/posts/b/"),
+            "https://host.test/docs/posts/b/"
+        );
+        // With no base path the two are the same question.
+        let root = BaseUrl::new("https://host.test");
+        assert_eq!(
+            BaseUrl::rebase(Some(&root), "/posts/b/"),
+            BaseUrl::resolve(Some(&root), "/posts/b/")
+        );
+        // An external URL is nobody's to rewrite.
+        assert_eq!(
+            BaseUrl::rebase(Some(&base), "https://elsewhere.test/x"),
+            "https://elsewhere.test/x"
+        );
+    }
 }

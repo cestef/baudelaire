@@ -588,11 +588,7 @@ impl Config {
     /// Every on-page root-absolute URL is prefixed with it so the site works
     /// under a subdirectory, leaving the on-disk layout unchanged.
     pub fn base_path(&self) -> &str {
-        self.url.as_deref().map_or("", |url| {
-            let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
-            rest.find('/')
-                .map_or("", |slash| rest[slash..].trim_end_matches('/'))
-        })
+        self.url.as_deref().map_or("", BaseUrl::path)
     }
 
     /// Prefix a root-absolute site path with the [`base_path`](Self::base_path).

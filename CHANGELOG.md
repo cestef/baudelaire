@@ -80,6 +80,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A subpath-hosted site's full-content feed no longer spells the base path
+  twice.** A `content "full"` entry carries the finished page, whose URLs the
+  base-path transform has already shifted under the site's own path; making
+  them absolute joined that path a second time, so every link and image in
+  every entry of a site at `https://host/docs` pointed at `/docs/docs/...`. The
+  entry's own `<link>` is built from the permalink, which carries no prefix,
+  and was always right.
+
 - **A heading anchor is slugged from the text a reader reads.** An inlined
   `svg()` icon splices the file's own `<title>` into the DOM, and the heading
   read it as its own words: `= #svg("/star.svg") The fast way` published

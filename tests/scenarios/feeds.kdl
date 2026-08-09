@@ -1066,3 +1066,41 @@ scenario "a summary feed carries no body" {
     }
   }
 }
+
+// A full-content entry carries the finished page, whose URLs the base-path
+// transform has already shifted under the site's own path. Absolutising those
+// against the whole base spelled the path twice, so every link and image inside
+// every entry of a subpath-hosted site's feed pointed at `/docs/docs/...` and
+// 404'd. The entry's own `<link>` is built from the permalink, which carries no
+// prefix, and was always right: the two are different questions.
+scenario "a full-content entry's urls carry the base path once" {
+  files {
+    "config.kdl" #"""
+      site "F"
+      url "https://host.test/docs"
+      content {
+        collections {
+          posts { glob "posts/**" }
+        }
+      }
+      generate {
+        feed {
+          formats rss
+          content "full"
+        }
+      }
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", date: "2026-01-01")
+      See #link("/other/")[other].
+      """#
+  }
+  expect {
+    ok
+    file "rss.xml" {
+      contains "https://host.test/docs/posts/b/"
+      contains "https://host.test/docs/other/"
+      missing "/docs/docs/"
+    }
+  }
+}
