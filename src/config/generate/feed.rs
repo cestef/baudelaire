@@ -242,3 +242,30 @@ impl Section for FeedNames {
         ),
     ]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{FeedNames, Named as _};
+    use crate::config::FeedKind;
+    use crate::config::dispatch::Section;
+
+    /// A format's spelling reaches four places: [`FeedKind::NAMES`], the
+    /// `FeedNames` field holding its override, the match in
+    /// [`FeedConfig::file`], and the `Section` row that lets a site write the
+    /// override. The compiler forces the first three (both matches are
+    /// exhaustive), and nothing forces the fourth: a format could exist,
+    /// be written, and be impossible to rename.
+    ///
+    /// Cheaper than folding `FeedNames` into a map keyed by the enum, which
+    /// would trade a per-key documented reference entry, and its path
+    /// containment check, for the removal of a coincidence.
+    #[test]
+    fn every_format_can_be_renamed() {
+        for (name, _) in FeedKind::NAMES {
+            assert!(
+                FeedNames::RULES.0.iter().any(|(key, ..)| key == name),
+                "`generate {{ feed {{ names }} }}` has no `{name}` key, so that format's file cannot be renamed"
+            );
+        }
+    }
+}
