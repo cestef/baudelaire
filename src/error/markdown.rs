@@ -54,6 +54,27 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
+    /// A frontmatter key declared twice at the same level.
+    ///
+    /// TOML refuses this itself; YAML and KDL both took the last one and said
+    /// nothing, so a page that set `title` twice published one of them and gave
+    /// the author no reason to think the other had been read. One rule for the
+    /// three dialects, since which of them a page is written in is a fence, not
+    /// a difference in what a page may say.
+    #[error("frontmatter {} in {} is declared twice", Code(.key), Text(.path))]
+    #[diagnostic(
+        code(baudelaire::markdown::duplicate_key),
+        help("the later one wins, which is unlikely to be what was meant; delete one")
+    )]
+    DuplicateKey {
+        path: String,
+        key: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("already declared above")]
+        span: SourceSpan,
+    },
+
     /// A KDL frontmatter key written as both a value and a dictionary.
     ///
     /// The reader takes the four shapes KDL itself distinguishes: a bare flag,

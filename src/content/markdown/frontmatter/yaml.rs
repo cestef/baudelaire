@@ -93,6 +93,12 @@ impl<'a> Reader<'a> {
     /// An entry is recorded from its key to the end of its value, so a fault in
     /// `title` underlines `title: A page` and not one half of it.
     fn fields(&mut self, mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>, at: &[String]) -> Dict {
+        // No duplicate check, unlike the other two dialects: saphyr collapses a
+        // repeated key while loading, so by the time this walks the mapping
+        // there is one entry and no way to tell it was written twice. TOML
+        // refuses such a page and KDL now does too; YAML takes the last one in
+        // silence, and closing that would mean re-scanning the block outside
+        // the parser that just read it.
         mapping
             .iter()
             .map(|(key, value)| {

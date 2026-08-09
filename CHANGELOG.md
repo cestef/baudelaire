@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A KDL frontmatter key declared twice is refused.** Two nodes of one name
+  collapsed into the last of them without a word; TOML already refused the same
+  page. YAML still takes the last one, because saphyr collapses the repeat while
+  loading and nothing downstream can see it happened.
+
 - **A KDL frontmatter key written as both a value and a dictionary is
   refused.** `author "cstef" role="editor"` is none of the four shapes the
   reader takes, and it resolved to the dictionary with the argument dropped in

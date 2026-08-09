@@ -40,6 +40,15 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
     // Collected on the way down rather than returned from it: the walk builds a
     // value per node and has nowhere to put a `Result` without threading one
     // through every arm of it.
+    if let Some((key, span)) = reader.duplicate {
+        return Err(MarkdownError::DuplicateKey {
+            path: path.to_owned(),
+            key,
+            src: miette::NamedSource::new(path, source.to_owned()),
+            span: (span.start, span.end - span.start).into(),
+        }
+        .into());
+    }
     if let Some((key, span)) = reader.ambiguous {
         return Err(MarkdownError::AmbiguousNode {
             path: path.to_owned(),
@@ -64,6 +73,8 @@ struct Reader {
     /// The first key written as both a value and a dictionary, and the argument
     /// that would have been dropped. See [`Reader::read`].
     ambiguous: Option<(String, std::ops::Range<usize>)>,
+    /// The first key declared twice at one level, and where the second one is.
+    duplicate: Option<(String, std::ops::Range<usize>)>,
 }
 
 impl Reader {
@@ -73,6 +84,7 @@ impl Reader {
             offset,
             spans: Spans::default(),
             ambiguous: None,
+            duplicate: None,
         };
         // The block itself, so a field the page never wrote underlines the
         // block rather than nothing.
@@ -90,10 +102,19 @@ impl Reader {
     /// Every node of a document as a `(key, value)` pair, recording where each
     /// was written on the way down.
     fn fields(&mut self, doc: &KdlDocument, at: &[String]) -> Dict {
+        let mut seen: Vec<&str> = Vec::new();
         doc.nodes()
             .iter()
             .map(|node| {
                 let key = node.name().value();
+                // `collect` into a dict keeps the last of two, silently. TOML
+                // refuses the same page outright, and which dialect a page is
+                // written in is a fence rather than a difference in what it may
+                // say.
+                if seen.contains(&key) && self.duplicate.is_none() {
+                    self.duplicate = Some((key.to_owned(), self.shift(node.name().span())));
+                }
+                seen.push(key);
                 let path = Spans::path(at, key);
                 let span = self.shift(node.span());
                 self.spans.insert(path.clone(), span);
@@ -297,5 +318,19 @@ mod tests {
         assert!(parse(named, 0, "a.md", named).is_ok());
         let block = "author { name \"cstef\" }\n";
         assert!(parse(block, 0, "a.md", block).is_ok());
+    }
+
+    /// Two nodes of one name collapse into the last of them when the dict is
+    /// built, silently. TOML refuses the same page outright, and which dialect
+    /// a page is written in is a fence rather than a difference in what it may
+    /// say. (YAML is the one that still takes the last: saphyr collapses the
+    /// repeat while loading, so nothing downstream can see it happened.)
+    #[test]
+    fn a_key_declared_twice_is_refused() {
+        let text = "title \"A\"\ntitle \"B\"\n";
+        assert!(parse(text, 0, "a.md", text).is_err());
+        // Nesting is per level: the same name inside a block is a different key.
+        let nested = "title \"A\"\nauthor { title \"B\" }\n";
+        assert!(parse(nested, 0, "a.md", nested).is_ok());
     }
 }
