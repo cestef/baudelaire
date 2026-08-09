@@ -110,6 +110,12 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`generate { robots { disallow } }` carries the base path.** A crawler
+  reads `Disallow:` against the host, so on a site served at `/docs` a rule
+  written `/drafts/` named a path that does not exist and left the one it meant
+  crawlable. The `Sitemap:` line in the same file, and `_headers` and
+  `_redirects`, were already prefixed.
+
 - **An Atom feed names its author and its own URL.** `<author>` is mandatory
   on a feed unless every entry carries one (RFC 4287 4.1.1) and validators
   enforce it; the site already declared an author, and the cards and PDF

@@ -31,7 +31,13 @@ impl Processor for Robots {
             body.line().lit("Disallow:");
         } else {
             for path in &site.config.generate.robots.disallow {
-                body.line().field("Disallow", path);
+                // Under the base path, like every other root-absolute URL the
+                // build emits. A crawler reads `Disallow: /drafts/` against the
+                // *host*, so on a site served at `/docs` the rule named a path
+                // that does not exist and the one it meant stayed crawlable.
+                // The `Sitemap:` line beside it, and `_headers` and
+                // `_redirects`, have always been prefixed.
+                body.line().field("Disallow", site.config.prefixed(path));
             }
         }
         if site.config.generate.sitemap
@@ -93,6 +99,17 @@ mod tests {
     fn each_disallowed_path_is_a_rule() {
         let out = body(&config(&["/a/", "/b/"]));
         assert_eq!(out, "User-agent: *\nDisallow: /a/\nDisallow: /b/\n");
+    }
+
+    /// A crawler reads `Disallow:` against the host, so a site served under a
+    /// path has to say so: `/drafts/` on a site at `/docs` named a path that
+    /// does not exist, and left the one it meant crawlable. The `Sitemap:` line
+    /// in the same file has always been absolute.
+    #[test]
+    fn a_disallowed_path_carries_the_base_path() {
+        let mut config = config(&["/drafts/"]);
+        config.url = Some("https://host.test/docs".to_owned());
+        assert_eq!(body(&config), "User-agent: *\nDisallow: /docs/drafts/\n");
     }
 
     /// A path carrying a line break used to end its rule early and leave the
