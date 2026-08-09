@@ -110,11 +110,11 @@ scenario "a list template with no paginate yields one index holding everything" 
       }
       """#
     "templates/list.typ" #"""
-      #let list(page, body) = html.elem("html", html.elem("body", {
+      #let list(page, body) = html.elem("body", {
         for entry in page.frontmatter.entries {
           html.elem("a", attrs: (href: entry.url), entry.label)
         }
-      }))
+      })
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "P0", slug: "a",)

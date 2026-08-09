@@ -424,7 +424,7 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     );
     site.write(
         "templates/post.typ",
-        "#let post(page, body) = html.elem(\"html\", html.elem(\"body\", page.frontmatter.title))\n",
+        "#let post(page, body) = html.elem(\"body\", page.frontmatter.title)\n",
     );
     site.write("titles.typ", "#let title = \"FIRST\"");
     site.write(

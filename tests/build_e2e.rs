@@ -205,7 +205,7 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
     // Padding pushes the erroring span past the length of the short page source.
     site.write(
         "templates/page.typ",
-        "#let pad = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n#let page(meta, body) = html.elem(\"html\", html.elem(\"body\", { body; nope_undefined }))\n",
+        "#let pad = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n#let page(meta, body) = html.elem(\"body\", { body; nope_undefined })\n",
     );
     site.write(
         "content/pages/a.typ",

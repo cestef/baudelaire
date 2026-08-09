@@ -75,11 +75,11 @@ scenario "prev and next siblings reach the template" {
       """#
     // Render `page.nav` prev/next as rel-tagged links.
     "templates/post.typ" #"""
-      #let post(page, body) = html.elem("html", html.elem("body", {
+      #let post(page, body) = html.elem("body", {
         body
         if page.nav.prev != none { html.elem("a", attrs: (rel: "prev", href: page.nav.prev.url), page.nav.prev.title) }
         if page.nav.next != none { html.elem("a", attrs: (rel: "next", href: page.nav.next.url), page.nav.next.title) }
-      }))
+      })
       """#
     // Default collection sort is `order`; three pages in a known sequence.
     "content/posts/a.typ" #"""
@@ -129,14 +129,14 @@ scenario "sections expose the ordered page set, not filesystem order" {
     // Every section id and its pages' titles, in order, as a flat trail.
     "templates/page.typ" #"""
       #import "@baudelaire/sections:0.1.0": sections
-      #let page(page, body) = html.elem("html", html.elem("body", {
+      #let page(page, body) = html.elem("body", {
         body
         for section in sections(page.lang) {
           for entry in section.pages {
             html.elem("span", attrs: (class: "nav"), section.id + ":" + entry.title)
           }
         }
-      }))
+      })
       """#
     "content/guide/b.typ" #"""
       #let frontmatter = (title: "Second", order: 2,)
@@ -172,7 +172,7 @@ scenario "a subdirectory becomes a nested child section" {
     // Each section's id + direct-page titles, then one level of children.
     "templates/page.typ" #"""
       #import "@baudelaire/sections:0.1.0": sections
-      #let page(page, body) = html.elem("html", html.elem("body", {
+      #let page(page, body) = html.elem("body", {
         for s in sections(page.lang) {
           html.elem("span", "S:" + s.id)
           for p in s.pages { html.elem("span", "P:" + s.id + "/" + p.title) }
@@ -181,7 +181,7 @@ scenario "a subdirectory becomes a nested child section" {
             for p in c.pages { html.elem("span", "P:" + c.id + "/" + p.title) }
           }
         }
-      }))
+      })
       """#
     "content/guide/intro.typ" #"""
       #let frontmatter = (title: "Intro", order: 1,)
@@ -240,11 +240,11 @@ scenario "a template can render a reading estimate" {
       }
       """#
     "templates/post.typ" #"""
-      #let post(page, body) = html.elem("html", html.elem("body", {
+      #let post(page, body) = html.elem("body", {
         html.elem("p", "words=" + str(page.reading.words))
         html.elem("p", "minutes=" + str(page.reading.minutes))
         body
-      }))
+      })
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -281,10 +281,10 @@ scenario "a language sets the rate its reading estimate is measured at" {
       }
       """#
     "templates/post.typ" #"""
-      #let post(page, body) = html.elem("html", html.elem("body", {
+      #let post(page, body) = html.elem("body", {
         html.elem("p", page.lang + "=" + str(page.reading.minutes))
         body
-      }))
+      })
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -327,17 +327,17 @@ scenario "a page and a listing carry a localized date" {
       }
       """#
     "templates/post.typ" #"""
-      #let post(page, body) = html.elem("html", html.elem("body", {
+      #let post(page, body) = html.elem("body", {
         html.elem("time", attrs: (datetime: page.date.iso), page.date.display)
         body
-      }))
+      })
       """#
     "templates/index.typ" #"""
-      #let index(page, body) = html.elem("html", html.elem("body", {
+      #let index(page, body) = html.elem("body", {
         for entry in page.frontmatter.entries {
           html.elem("li", entry.display)
         }
-      }))
+      })
       """#
     "content/posts/a.fr.typ" #"""
       #let frontmatter = (title: "Bonjour", date: datetime(year: 2026, month: 7, day: 30),)
@@ -416,6 +416,66 @@ scenario "a page carries its own url, collection and colocated files" {
     file "posts/plain/index.html" {
       contains "at:/posts/plain/"
       missing "hero:"
+    }
+  }
+}
+
+// typst-html owns `<html>`, `<head>` and `<body>`: when a page's markup is a
+// single `<html>` element the compiler hands that root back verbatim and
+// generates no head. Every transform that appends to one (the charset, the
+// title, og and canonical tags, verification links, speculation rules) looks it
+// up, finds nothing, and does nothing, so the page shipped with none of them
+// and the build reported success. A document with no declared encoding is a
+// rendering bug in the browser, and no later pass can repair it, so this is
+// refused per page rather than warned about once.
+scenario "a template that emits the document root is refused" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/whole.typ" #"""
+      #let whole(page, body) = html.elem("html", html.elem("body", body))
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Hi", template: "whole.typ",)
+      Hello body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::template::owns_root" }
+  }
+}
+
+// ...and a `<body>` root is not the same thing: typst keeps its generated head
+// and only skips wrapping the body, so nothing is lost and nothing is refused.
+scenario "a template that emits only a body keeps its generated head" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/torso.typ" #"""
+      #let torso(page, body) = html.elem("body", body)
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Hi", template: "torso.typ",)
+      Hello body
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains "<head>"
+      contains #"<meta charset="utf-8">"#
     }
   }
 }

@@ -196,10 +196,10 @@ scenario "retitling a page invalidates the sibling whose pager names it" {
       content { collections { posts { template "post.typ" } } }
       """#
     "templates/post.typ" #"""
-      #let post(page, body) = html.elem("html", html.elem("body", {
+      #let post(page, body) = html.elem("body", {
         body
         if page.nav.next != none { html.elem("a", attrs: (href: page.nav.next.url), page.nav.next.title) }
-      }))
+      })
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "A", order: 1,)

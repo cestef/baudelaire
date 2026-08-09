@@ -34,7 +34,7 @@ use typst_html::HtmlDocument;
 use crate::config::Config;
 use crate::content::Page;
 
-use crate::render::transform::{Cx, Transforms};
+use crate::render::transform::{Cx, DocumentExt, Transforms};
 
 /// A raw `href`/`src` split at its `#fragment` / `?query` boundary: the one
 /// parsing rule for URL tails, shared by link and asset resolution.
@@ -223,6 +223,20 @@ impl Renderer {
             found: Rewrite::default(),
             extracted: std::collections::BTreeMap::new(),
         };
+        // Before the transforms, because three of them append to the head and
+        // each would otherwise find nothing and quietly do nothing. typst-html
+        // owns the document root, so a page with no `<head>` is a page whose own
+        // markup replaced it; the charset and the title went with it, and no
+        // later pass can put them back.
+        if doc.head().is_none() {
+            // Spelled as the project spells it: `page.source` is absolute, and a
+            // diagnostic naming a build directory is one the author cannot match
+            // against anything they wrote.
+            let named = page.source.strip_prefix(&self.root).unwrap_or(&page.source);
+            cx.found
+                .invalid
+                .push(crate::error::TemplateOwnsRoot::new(named.display()).into());
+        }
         self.transforms.apply(doc, &mut cx);
         // After the transforms, deliberately: a rule judges the markup as it
         // will be served, footnotes moved and icons inlined, and a page whose

@@ -16,11 +16,11 @@ scenario "the not-found page is skipped by its neighbours' pagers" {
       """#
     // Render `page.nav` prev/next as rel-tagged links.
     "templates/page.typ" #"""
-      #let page(page, body) = html.elem("html", html.elem("body", {
+      #let page(page, body) = html.elem("body", {
         body
         if page.nav.prev != none { html.elem("a", attrs: (rel: "prev", href: page.nav.prev.url), page.nav.prev.title) }
         if page.nav.next != none { html.elem("a", attrs: (rel: "next", href: page.nav.next.url), page.nav.next.title) }
-      }))
+      })
       """#
     // Ties on the default `order` sort break on source path, which puts
     // `404.typ` ahead of `index.typ`.

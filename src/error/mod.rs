@@ -65,7 +65,7 @@ pub use schema::SchemaError;
 pub use serialize::{Artifact, SerializeError};
 pub use serve::ServeError;
 pub use svg::SvgError;
-pub use template::TemplateMissing;
+pub use template::{TemplateMissing, TemplateOwnsRoot};
 pub use theme::ThemeError;
 pub use typ::TypstSourceDiagnostic;
 
@@ -129,6 +129,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Template(#[from] crate::error::template::TemplateMissing),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    TemplateRoot(#[from] crate::error::template::TemplateOwnsRoot),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

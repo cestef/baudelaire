@@ -58,6 +58,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+- **A template that emits `<html>` now fails the build instead of silently
+  shipping a page with no `<head>`.** If yours does, drop the `<html>` and
+  `<body>` wrappers and return the page's contents; typst-html supplies all
+  three. The shipped templates and the starters never emitted them.
+
 - **A theme archive that unpacks past 256 MiB, or holds more than 10,000
   files, now fails `theme add`.** Previously only the compressed size was
   capped. A theme within these is unaffected; the shipped ones weigh about
@@ -74,6 +79,16 @@ chores are visible in the git history and change nothing for a site.
   normal; nothing to do.
 
 ### Fixed
+
+- **A page whose markup replaced the document root is refused, not ignored.**
+  typst-html owns `<html>`, `<head>` and `<body>`, and hands back the author's
+  root verbatim when a page's markup is a single `<html>` element, generating no
+  head at all. All three transforms that append to one looked it up, found
+  nothing, and did nothing, so the page shipped with no charset, no `<title>`,
+  and none of its og, canonical or verification tags, on a build that reported
+  success. A missing encoding declaration is a rendering bug in the browser and
+  no later pass can repair it, so the page is now refused by name. A `<body>`
+  root is unaffected: typst keeps its generated head and only skips wrapping.
 
 - **A build with no bundler no longer publishes TypeScript.** `assets
   { bundle }` says the site wants a build step; whether the binary has one is a
