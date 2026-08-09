@@ -107,10 +107,18 @@ impl Grammar {
             Smart::Custom(None) => return Ok(Self::Plain),
             // A theme, on the other hand, is a palette this mode has nowhere to
             // put: its colours are discarded, and silence would leave a site
-            // whose stylesheet has moved on looking merely unstyled. Detached,
-            // so the sink's own deduplication collapses one code block per
-            // warning into one page per warning; the page is named by the
-            // bridge that renders it.
+            // whose stylesheet has moved on looking merely unstyled.
+            //
+            // Detached deliberately, and it names no file: with no span there
+            // is no label, and miette prints no source header for a diagnostic
+            // that labels nothing. That is the trade, not an oversight -- an
+            // earlier comment here claimed the bridge would name the page, and
+            // it cannot. What it buys is that every block on every page renders
+            // one identical warning, which the reporter collapses into a single
+            // line for the whole site. The theme is set by one `set` rule, so
+            // there is one thing to change and the help names it; pointing at
+            // an arbitrary code block instead would be one warning per block
+            // and no better an answer.
             Smart::Custom(Some(_)) => engine.sink.warn(warning!(
                 Span::detached(),
                 "the `raw` theme is ignored while `html {{ highlight }}` is on";
