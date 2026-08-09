@@ -41,8 +41,11 @@
 //! closing delimiter, so bodies need no escaping.
 //!
 //! Failure is matched on the miette diagnostic *code*, never on message text, so
-//! rewording an error does not break a scenario. The same holds for `warns`, and
-//! for `unwarned "baudelaire::x"`, which claims a code was *not* reported.
+//! rewording an error does not break a scenario. The same holds for `warns`, for
+//! `advises`, and for `unwarned "baudelaire::x"`, which claims a code was *not*
+//! reported. `warns` and `advises` are separate claims because advice never
+//! counts against a build: the two say different things about what the run
+//! decided.
 //!
 //! ## Shared setup
 //!
@@ -766,6 +769,10 @@ struct Expect {
     /// Warning codes the run must have reported. Extra warnings are allowed:
     /// a case names the one it is about, not every one the build may add.
     warns: Vec<String>,
+    /// Advice codes the run must have reported. Its own claim rather than part
+    /// of `warns`, because advice never counts against a build: the two say
+    /// different things about what the run decided.
+    advises: Vec<String>,
     /// Diagnostic codes that must *not* be reported: the claim that a check
     /// stayed quiet about a page, which is as much a part of what a report means
     /// as the pages it does name.
@@ -781,6 +788,7 @@ impl Expect {
             pages: None,
             cached: None,
             warns: Vec::new(),
+            advises: Vec::new(),
             unwarned: Vec::new(),
             outputs: Vec::new(),
             absent: Vec::new(),
@@ -792,6 +800,7 @@ impl Expect {
                 "file" => expect.outputs.push(Output::parse(child)?),
                 "absent" => expect.absent.push(string_arg(child)?),
                 "warns" => expect.warns.push(string_arg(child)?),
+                "advises" => expect.advises.push(string_arg(child)?),
                 "unwarned" => expect.unwarned.push(string_arg(child)?),
                 "pages" | "cached" => {
                     let count = number(child, "n")
@@ -827,6 +836,15 @@ impl Expect {
                 failures.push(match reported.is_empty() {
                     true => format!("expected warning `{want}`, but nothing warned"),
                     false => format!("expected warning `{want}`, got: {}", reported.join(", ")),
+                });
+            }
+        }
+        let advised = run.advice();
+        for want in &self.advises {
+            if !advised.iter().any(|got| got == want) {
+                failures.push(match advised.is_empty() {
+                    true => format!("expected advice `{want}`, but nothing advised"),
+                    false => format!("expected advice `{want}`, got: {}", advised.join(", ")),
                 });
             }
         }

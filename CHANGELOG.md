@@ -88,6 +88,14 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **A page left out of the build says so.** A draft, a future-dated page and an
+  expired one were all filtered out in silence: three pages in and one page out
+  read as `built 1 page`, with the strings `draft` and `expired` nowhere in the
+  output at any verbosity, so an author's only signal was a 404 in production.
+  For `expiry`, which no flag brings back, that was the only signal there could
+  ever be. The build now reports what it held back and why, as advice, so it
+  never counts against `--strict`.
+
 - **A frontmatter `date` may carry a time of day.** `date =
   2024-01-01T10:00:00Z`, which is what Hugo's default archetype writes and what
   TOML and YAML both parse as a native timestamp, failed the build: the reader

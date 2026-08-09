@@ -27,7 +27,7 @@ pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
 pub use discovery::{Collection, ROOT, discover};
 pub use frontmatter::{Frontmatter, Generated, Origin};
-pub use page::{Data, Page, PageId, Sibling, Siblings};
+pub use page::{Data, Page, PageId, Sibling, Siblings, Withheld};
 pub use pagination::Pagination;
 pub use section::Section;
 pub use slug::Slug;
@@ -40,11 +40,71 @@ use crate::error::{ContentError, Result};
 use crate::ui::markup;
 use crate::world::Project;
 
+/// How many pages discovery found that the build left out, by reason.
+///
+/// Counted rather than merely filtered, because a page that is not published is
+/// something an author has to be told about. Three pages in and one page out
+/// was a silent `built 2 pages`, with the strings `draft` and `expired` nowhere
+/// in the output at any verbosity.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Held {
+    pub drafts: usize,
+    pub future: usize,
+    pub expired: usize,
+}
+
+impl Held {
+    /// Tally what `collections` holds back under `config`.
+    fn of(collections: &[discovery::Collection], config: &Config) -> Self {
+        let (drafts, future) = (config.content.drafts.build, config.content.future);
+        let mut held = Self::default();
+        for page in collections.iter().flat_map(|c| c.pages.iter()) {
+            match page.withheld(drafts, future) {
+                Some(Withheld::Draft) => held.drafts += 1,
+                Some(Withheld::Future) => held.future += 1,
+                Some(Withheld::Expired) => held.expired += 1,
+                None => {}
+            }
+        }
+        held
+    }
+
+    /// Whether anything was held back at all.
+    pub fn any(self) -> bool {
+        self.drafts + self.future + self.expired > 0
+    }
+}
+
+/// `2 drafts, 1 expired`: only the reasons that apply, each with its count, so
+/// the line reads as a sentence in the diagnostic that carries it.
+impl std::fmt::Display for Held {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let counts = [
+            (self.drafts, "draft", "drafts"),
+            (self.future, "future-dated page", "future-dated pages"),
+            (self.expired, "expired page", "expired pages"),
+        ];
+        let mut first = true;
+        for (count, one, many) in counts {
+            if count == 0 {
+                continue;
+            }
+            if !std::mem::take(&mut first) {
+                f.write_str(", ")?;
+            }
+            let noun = if count == 1 { one } else { many };
+            write!(f, "{count} {noun}")?;
+        }
+        Ok(())
+    }
+}
+
 /// The site's full page set: eligible content pages plus generated taxonomy and
 /// paginated index pages, with permalink collisions rejected. The single entry
 /// point the engine calls: all page-set assembly lives here, not in the engine.
-pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
+pub fn plan(config: &Config, project: &Project) -> Result<(Vec<Page>, Held)> {
     let collections = discover(config, project)?;
+    let held = Held::of(&collections, config);
     // Within each collection, the eligible pages sit in the collection's sort
     // order; adjacent ones become each other's prev/next siblings (a blog's
     // older/newer links). Computed per collection so navigation never crosses a
@@ -85,7 +145,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Vec<Page>> {
     pages.extend(generated);
     Page::relate(&mut pages, config);
     Claim::unique(&pages, config)?;
-    Ok(pages)
+    Ok((pages, held))
 }
 
 /// One claim on an output file, and where it came from, the single accounting

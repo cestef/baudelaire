@@ -96,6 +96,22 @@ pub struct Translation {
     pub title: String,
 }
 
+/// Why a page discovery found is not in the build.
+///
+/// Named rather than folded into a boolean because the build reports it: the
+/// three are different situations, and the two that a flag brings back read
+/// very differently from the one that nothing does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Withheld {
+    /// `draft: true`, and `content { drafts { build } }` is off.
+    Draft,
+    /// A `date` in the future, and `content { future }` is off.
+    Future,
+    /// An `expiry` that has passed. No flag brings this one back: an expired
+    /// page was dated out of the site on purpose.
+    Expired,
+}
+
 /// Stable identifier for a page within the site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PageId(pub String);
@@ -585,12 +601,30 @@ impl Page {
     /// Whether this page builds under the current draft/future config, the
     /// one eligibility predicate, shared by the engine and page generators.
     pub fn eligible(&self, config: &Config) -> bool {
-        !self.skipped(config.content.drafts.build, config.content.future)
+        self.withheld(config.content.drafts.build, config.content.future)
+            .is_none()
     }
 
     /// Whether this page should be skipped given draft/future flags.
     pub fn skipped(&self, drafts: bool, future: bool) -> bool {
-        (self.frontmatter.draft && !drafts) || (self.is_future() && !future) || self.is_expired()
+        self.withheld(drafts, future).is_some()
+    }
+
+    /// Why this page is not published, or `None` when it is.
+    ///
+    /// The reason and the decision are one answer, because the build has to
+    /// report it: three pages in and one page out used to be a silent
+    /// `built 1 page`, with the strings `draft` and `expired` nowhere in the
+    /// output at any verbosity. An author's only signal was a 404 in
+    /// production, and for `expiry`, which no flag brings back, that is the
+    /// only signal there could ever be.
+    pub fn withheld(&self, drafts: bool, future: bool) -> Option<Withheld> {
+        match self {
+            _ if self.frontmatter.draft && !drafts => Some(Withheld::Draft),
+            _ if self.is_future() && !future => Some(Withheld::Future),
+            _ if self.is_expired() => Some(Withheld::Expired),
+            _ => None,
+        }
     }
 
     fn is_future(&self) -> bool {

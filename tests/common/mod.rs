@@ -224,12 +224,22 @@ impl Run {
 
     /// The codes of every diagnostic this run reported at warning severity.
     /// Advice is collected alongside them and deliberately excluded: it never
-    /// counts against a build, so a claim about it would be a different claim.
+    /// counts against a build, so a claim about it is a different claim, made
+    /// with [`Run::advice`].
     pub fn warnings(&self) -> Vec<&str> {
+        self.codes("warning")
+    }
+
+    /// The codes of every diagnostic this run reported as advice.
+    pub fn advice(&self) -> Vec<&str> {
+        self.codes("advice")
+    }
+
+    fn codes(&self, severity: &str) -> Vec<&str> {
         self.report
             .diagnostics
             .iter()
-            .filter(|d| d.severity == "warning")
+            .filter(|d| d.severity == severity)
             .filter_map(|d| d.code.as_deref())
             .collect()
     }

@@ -159,7 +159,7 @@ impl Engine {
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let statics = self.stage()?;
-        let planned = self.planned("planned build")?;
+        let planned = self.planned("planned build", ui)?;
         let warned = ui.warnings();
         // What this binary cannot do that the site asked for. Reported per build
         // rather than per process: the dev server rebuilds in place, and the
@@ -339,9 +339,15 @@ impl Engine {
 
     /// Plan the pages this pass covers, alongside the tracked value trees every
     /// consumer of them borrows. `what` names the pass in the trace line.
-    fn planned(&self, what: &'static str) -> Result<Planned> {
-        let pages = plan(&self.config, &self.project)?;
+    /// `ui` is here so a page discovery found and the build left out is
+    /// reported once, beside the other build-shaped advice, rather than
+    /// vanishing into a page count nobody can reconcile.
+    fn planned(&self, what: &'static str, ui: &Ui) -> Result<Planned> {
+        let (pages, held) = plan(&self.config, &self.project)?;
         debug!(pages = pages.len(), site = self.config.label(), "{what}");
+        if held.any() {
+            ui.advice(crate::error::warning::PagesHeld(held));
+        }
         Ok(Planned {
             pages,
             tracked: self.project.tracked(),
@@ -652,7 +658,7 @@ impl Engine {
     /// Compile every page and report diagnostics without writing any output.
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        let planned = self.planned("planned check")?;
+        let planned = self.planned("planned check", ui)?;
         // Nothing is written, so nothing was fingerprinted: the render pass has
         // no asset renames to apply and no variants to offer.
         let pass = Pass::new(

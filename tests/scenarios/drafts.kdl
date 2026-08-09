@@ -93,3 +93,38 @@ scenario "the draft suffix is stripped from the slug when drafts build" {
     absent "posts/wip.draft/index.html"
   }
 }
+
+// A page discovery found and the build left out is something an author has to
+// be told about. Three pages in and one page out was a silent `built 2 pages`,
+// with the strings `draft` and `expired` nowhere in the output at any
+// verbosity, so the only signal was a 404 in production; for `expiry`, which no
+// flag brings back, that was the only signal there could ever be. Advice rather
+// than a warning: leaving a draft out is what a draft is for, and it must not
+// count against `--strict`.
+scenario "a page left out of the build says so" {
+  files {
+    "config.kdl" #"""
+      site "H"
+      url "https://x.test"
+      """#
+    "content/live.typ" #"""
+      #let frontmatter = (title: "Live")
+      out
+      """#
+    "content/d.typ" #"""
+      #let frontmatter = (title: "D", draft: true)
+      d
+      """#
+    "content/e.typ" #"""
+      #let frontmatter = (title: "E", expiry: "2020-01-01")
+      e
+      """#
+  }
+  expect {
+    ok
+    advises "baudelaire::content::held"
+    absent "d/index.html"
+    absent "e/index.html"
+    file "live/index.html"
+  }
+}

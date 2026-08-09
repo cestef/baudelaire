@@ -63,6 +63,26 @@ pub struct CleanDefaults {
 )]
 pub struct PruneEmpty;
 
+/// Pages discovery found that the build left out.
+///
+/// Advice, not a warning: leaving a draft out is what a draft is for, and a
+/// build that says so on every run should not be counted against `--strict`.
+/// But it has to *say* so. Three pages in and one page out was a silent
+/// `built 2 pages`, with the strings `draft` and `expired` nowhere in the
+/// output at any verbosity, so an author's only signal was a 404 in
+/// production; for `expiry`, which no flag brings back, that was the only
+/// signal there could ever be.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} not published", .0)]
+#[diagnostic(
+    code(baudelaire::content::held),
+    severity(advice),
+    help(
+        "drafts build with `content {{ drafts {{ build #true }} }}` and future-dated pages with `content {{ future #true }}`; an expired one is out for good"
+    )
+)]
+pub struct PagesHeld(pub crate::content::Held);
+
 /// `new` could not read the existing content, and scaffolded without it.
 ///
 /// The inference is a convenience: the next `order` in an ordered collection
