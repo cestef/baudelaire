@@ -1,5 +1,6 @@
 //! Where a page's frontmatter came from, and how a key inside it is located.
 
+use super::Frontmatter;
 use super::check::Step;
 use crate::error::{BaudelaireErrorKind, ContentError};
 use miette::SourceSpan;
@@ -195,7 +196,7 @@ impl<'a> Origin<'a> {
                 .kind()
                 .bindings()
                 .iter()
-                .any(|ident| ident.get() == "frontmatter")
+                .any(|ident| ident.get() == Frontmatter::EXPORT)
         {
             return Some(binding);
         }

@@ -23,6 +23,7 @@ use crate::world::Project;
 
 use super::paged::Paged;
 use super::prepare::Prepare;
+use crate::content::Frontmatter;
 
 /// What one bundle binds: the pages, in order, and where the result goes.
 ///
@@ -164,8 +165,12 @@ impl<'a> Bundle<'a> {
             let (frontmatter, body) = match &page.data {
                 Data::Export => {
                     let alias = format!("__fm{i}");
-                    writeln!(imports, "{}", Import::new(&vpath, "frontmatter", &alias))
-                        .expect("writing to a String cannot fail");
+                    writeln!(
+                        imports,
+                        "{}",
+                        Import::new(&vpath, Frontmatter::EXPORT, &alias)
+                    )
+                    .expect("writing to a String cannot fail");
                     (alias, format!("include {}", Str(&vpath)))
                 }
                 // A markdown page has a file, but not one the compiler could

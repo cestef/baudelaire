@@ -320,6 +320,21 @@ pub struct Frontmatter {
 }
 
 impl Frontmatter {
+    /// The name a page binds its frontmatter under, and every reader looks up.
+    ///
+    /// Six sites spelled it as a literal, across five files: the two that ask
+    /// whether a page declares one, the one that reports where it came from,
+    /// and the three that generate the `#import` a wrapper opens with. It is
+    /// the crate's whole contract with an author's `.typ` file, so renaming or
+    /// aliasing it meant grepping for a string. [`SOURCE`](Frontmatter::SOURCE)
+    /// beside it, a *sub*-key of the same dict, already had the const.
+    pub(crate) const EXPORT: &'static str = "frontmatter";
+
+    /// The local alias a generated wrapper imports [`EXPORT`](Frontmatter::EXPORT)
+    /// under. `__`-prefixed so nothing a page or a template binds can shadow
+    /// it; spelled here so the import and the call that reads it cannot drift.
+    pub(crate) const ALIAS: &'static str = "__data";
+
     /// The key naming a declared source. Spelled once: the table above parses
     /// it, and whoever resolves what it names underlines it from a module away.
     pub(crate) const SOURCE: &'static str = "source";
@@ -397,7 +412,7 @@ impl Frontmatter {
             .find(|e| !matches!(e, Expr::Space(_) | Expr::Parbreak(_) | Expr::Linebreak(_)))
             .is_some_and(|first| match first {
                 Expr::FuncCall(call) => {
-                    matches!(call.callee(), Expr::Ident(ident) if ident.get() == "frontmatter")
+                    matches!(call.callee(), Expr::Ident(ident) if ident.get() == Self::EXPORT)
                 }
                 _ => false,
             })
@@ -420,7 +435,7 @@ impl Frontmatter {
     /// collection whose schema applies; `config` supplies the taxonomy keys to
     /// recognize.
     pub fn extract(module: &Module, origin: &Origin, config: &Config) -> Result<Option<Self>> {
-        let Some(binding) = module.scope().get("frontmatter") else {
+        let Some(binding) = module.scope().get(Self::EXPORT) else {
             // A collection requiring fields is not satisfied by declaring no
             // frontmatter at all: the emptiest page is exactly the one the
             // schema exists to catch.

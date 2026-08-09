@@ -23,6 +23,7 @@ use crate::error::Result;
 
 use super::paged::Laid;
 use super::sidecar::{Cx, Sidecar};
+use crate::content::Frontmatter;
 
 /// The social-card sidecar.
 pub(in crate::engine) struct Card;
@@ -157,8 +158,12 @@ impl fmt::Display for Template {
         writeln!(f, "{}", Import::new(&self.import, &self.func, "__card"))?;
         let extra = match &self.frontmatter {
             Some(page) => {
-                writeln!(f, "{}", Import::new(page, "frontmatter", "__data"))?;
-                "__data"
+                writeln!(
+                    f,
+                    "{}",
+                    Import::new(page, Frontmatter::EXPORT, Frontmatter::ALIAS)
+                )?;
+                Frontmatter::ALIAS
             }
             None => "(:)",
         };
