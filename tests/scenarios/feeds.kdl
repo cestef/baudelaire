@@ -302,7 +302,7 @@ scenario "a collection feed is written per language" {
 }
 
 // A feed with nothing dated writes no file, so nothing may advertise one.
-scenario "an undated collection advertises no feed it does not have" {
+scenario "an undated collection's advertised feed is still written" {
   files {
     "config.kdl" #"""
       site "T"
@@ -326,12 +326,14 @@ scenario "an undated collection advertises no feed it does not have" {
   }
   expect {
     ok
-    absent "docs/rss.xml"
-    // Known gap, pinned so it is a decision rather than a surprise: the tag is
-    // written from the config, which cannot know the collection turned out to
-    // have nothing dated in it. Asking the page set here would tie every page's
-    // cache identity to every other page's dates.
+    // The tag is written from the config, which cannot know the collection
+    // turned out to have nothing dated in it, and asking the page set there
+    // would tie every page's cache identity to every other page's dates. So
+    // the file follows the tag rather than the other way round: an advertised
+    // feed is written whether or not it has entries, and a reader who follows
+    // the link gets an empty feed instead of a 404.
     file "docs/a/index.html" { contains "/docs/rss.xml" }
+    file "docs/rss.xml" { contains "<rss" }
   }
 }
 
@@ -1101,6 +1103,39 @@ scenario "a full-content entry's urls carry the base path once" {
       contains "https://host.test/docs/posts/b/"
       contains "https://host.test/docs/other/"
       missing "/docs/docs/"
+    }
+  }
+}
+
+// Every page carries `<link rel="alternate">` for the site-wide feed and for
+// its own collection's, built from the config alone. The writer skipped a feed
+// with nothing *dated* in it, so an undated site, or a collection with no dated
+// posts, shipped a tag pointing at an `rss.xml` that was never written: a 404
+// for every reader who followed it, out of a green build. An advertised feed is
+// now written whether or not it has entries.
+scenario "an advertised feed is written even with nothing dated in it" {
+  files {
+    "config.kdl" #"""
+      site "U"
+      url "https://host.test"
+      generate {
+        feed {
+          formats rss
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A")
+      no date here
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains #"href="https://host.test/rss.xml""#
+    }
+    file "rss.xml" {
+      contains "<title>U</title>"
     }
   }
 }

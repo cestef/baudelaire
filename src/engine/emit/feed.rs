@@ -106,7 +106,7 @@ impl Processor for Feeds {
                 &site.config.generate.feed,
                 &bodies,
             );
-            Self::emit(site, out, &feed)?;
+            Self::emit(site, out, &feed, Empty::Written)?;
         }
         Self::collections(site, out, &base, &bodies)?;
         if site.config.generate.feed.terms {
@@ -168,6 +168,7 @@ impl Feeds {
                         &site.config.generate.feed,
                         bodies,
                     ),
+                    Empty::Written,
                 )?;
             }
         }
@@ -204,6 +205,7 @@ impl Feeds {
                         &site.config.generate.feed,
                         bodies,
                     ),
+                    Empty::Skipped,
                 )?;
             }
         }
@@ -211,10 +213,8 @@ impl Feeds {
     }
 
     /// Write a feed in every configured format, beside the page it belongs to.
-    /// A feed with nothing dated in it produces no files at all, rather than a
-    /// valid but empty one.
-    fn emit(site: &Site, out: &mut dyn Emit, feed: &Feed) -> Result<()> {
-        if feed.is_empty() {
+    fn emit(site: &Site, out: &mut dyn Emit, feed: &Feed, empty: Empty) -> Result<()> {
+        if feed.is_empty() && empty == Empty::Skipped {
             return Ok(());
         }
         for kind in &site.config.generate.feed.formats {
@@ -224,6 +224,23 @@ impl Feeds {
         }
         Ok(())
     }
+}
+
+/// Whether a feed with nothing dated in it is still written.
+///
+/// The two answers are not a preference: they follow from whether anything
+/// points at the file. A page carries `<link rel="alternate">` for the
+/// site-wide feed and for its own collection's, built from the config alone, so
+/// skipping those left every page of an undated site advertising a `rss.xml`
+/// the build had declined to write. Nothing points at a term's feed but the
+/// term listing beside it, so an empty one there is a file per term that no
+/// reader would ever open.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Empty {
+    /// Written anyway, because a page advertises it.
+    Written,
+    /// Skipped, because nothing does.
+    Skipped,
 }
 
 /// Renders a feed of the given items (already selected, newest-first) with

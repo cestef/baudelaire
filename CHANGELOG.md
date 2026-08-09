@@ -88,6 +88,16 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **An advertised feed is written even with nothing dated in it.** Every page
+  carries `<link rel="alternate">` for the site-wide feed and for its own
+  collection's, built from the config alone, while the writer skipped a feed
+  with no dated entries. An undated site, or a collection with no dated posts,
+  therefore shipped a tag pointing at an `rss.xml` that was never written: a
+  404 for every reader who followed it, out of a green build. The file now
+  follows the tag, since the tag cannot follow the file without tying every
+  page's cache identity to every other page's dates. A taxonomy term's feed,
+  which nothing advertises, is still skipped when empty.
+
 - **A taxonomy's `prefix` is held to the permalink rule its sibling is.** A key
   that forms part of a URL is written both ways, and only the node spelling was
   checked: `paginate { prefix ".." }` was a hard error while
