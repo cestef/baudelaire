@@ -1343,3 +1343,43 @@ scenario "md refuses a content block" {
     fails { code "baudelaire::typst::compile" }
   }
 }
+
+// The highlighter and the lowerer each decided for themselves which info-string
+// tags name typst, and disagreed: the highlighter took `typ` and `typst`, the
+// lowerer only `typ`. So ` ```typst eval ` was highlighted as typst and then
+// silently *shown* rather than run, which is the one failure an author cannot
+// tell from a typo in their own code.
+scenario "either spelling of the typst fence tag runs under eval" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "F"
+      url "https://x.test"
+      content {
+        markdown {
+          eval #true
+        }
+      }
+      """#
+    "content/f.md" #"""
+      ---
+      title: F
+      ---
+
+      ```typst eval
+      #emph[ran]
+      ```
+
+      ```typ eval
+      #emph[also]
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "f/index.html" {
+      contains "<em>ran</em>"
+      contains "<em>also</em>"
+    }
+  }
+}

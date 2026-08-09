@@ -16,6 +16,7 @@ use std::path::Path;
 use typst::syntax::{FileId, Source, Span, VirtualRoot};
 use typst::{World, WorldExt};
 
+use crate::config::Config;
 use crate::content::{Page, Rebased};
 use crate::world::{PageWorld, Wrapper};
 
@@ -103,7 +104,8 @@ impl<'a> Origins<'a> {
         Self::file(span).is_some_and(|id| {
             let file = Path::new(id.vpath().get_without_slash());
             file.starts_with(dir)
-                && (file.extension().is_some_and(|ext| ext == "typ") || self.inlined(id, page))
+                && (file.extension().is_some_and(|ext| ext == Config::TYPST)
+                    || self.inlined(id, page))
         })
     }
 

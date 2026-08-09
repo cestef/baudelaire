@@ -47,6 +47,16 @@ use grammar::Grammar;
 /// The mark naming the vocabulary entry a span's text resolved to, read and
 /// removed by the transform that names it. Written here, so the two halves of
 /// the pipeline cannot drift apart on the attribute they meet at.
+/// The info-string tags naming typst *markup*, which is what a fence body is.
+///
+/// Crate-visible because two subsystems ask the same question for different
+/// purposes: [`Grammar::of`] decides how a fenced block is highlighted, and the
+/// markdown lowerer's `Fence` decides whether `eval` runs it. They spelled
+/// their own answers and disagreed, this one taking `typst` and that one only
+/// `typ`, so ` ```typst eval ` was highlighted as typst and then silently
+/// shown instead of run.
+pub const TYPST: &[&str] = &["typ", "typst"];
+
 pub const TOKEN: HtmlAttr = HtmlAttr::constant("data-token");
 
 /// The mark naming the grammar's own scope, kept in the output only when

@@ -32,6 +32,7 @@ use typst::syntax::{
 
 use super::Hash;
 use crate::codegen::Value;
+use crate::config::Config;
 use crate::graph::Deps;
 use crate::world::Project;
 
@@ -330,7 +331,7 @@ impl<'a> Analyzer<'a> {
     pub fn reads(&self, source: &Source, deps: &Deps) -> Reads {
         let mut out = self.roots.reads(source);
         for path in deps.files() {
-            if path.extension().is_some_and(|ext| ext == "typ") {
+            if path.extension().is_some_and(|ext| ext == Config::TYPST) {
                 out.extend(self.file(path).iter().cloned());
             }
         }

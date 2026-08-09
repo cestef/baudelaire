@@ -255,8 +255,10 @@ impl PageSource {
     /// highlights the snippet. Anything unrecognized is left untagged rather
     /// than guessed: a wrong tag highlights the line as the wrong language,
     /// which reads worse than no highlighting at all.
-    const LANGUAGES: &'static [(&'static str, &'static str)] =
-        &[("typ", "Typst"), ("md", "Markdown")];
+    const LANGUAGES: &'static [(&'static str, &'static str)] = &[
+        (crate::config::Config::TYPST, "Typst"),
+        (crate::config::Config::MARKDOWN, "Markdown"),
+    ];
 
     /// The language `name` is written in, by its extension.
     fn language(name: &str) -> Option<&'static str> {

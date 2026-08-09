@@ -17,10 +17,14 @@ impl Fence {
     /// The parameter that makes a fence run. Named once.
     pub(super) const EVAL: &'static str = "eval";
 
-    /// The language a fence has to claim before that parameter means anything.
-    /// Named beside it because the two are one rule, and half a rule spelled as
-    /// a literal is how the halves drift apart.
-    pub(super) const TYPST: &'static str = "typ";
+    /// The languages a fence has to claim before that parameter means anything,
+    /// which is the set the highlighter reads as typst markup.
+    ///
+    /// Read from [`crate::world::rules::TYPST`] rather than spelled here: the two halves of
+    /// one rule did drift apart, this one taking `typ` alone while the
+    /// highlighter took `typst` as well, so ` ```typst eval ` was highlighted
+    /// as typst and then silently shown instead of run.
+    pub(super) const TYPST: &'static [&'static str] = crate::world::rules::TYPST;
 
     pub(super) fn parse(info: &str) -> Self {
         let mut words = info.split_whitespace();
@@ -41,7 +45,12 @@ impl Fence {
     /// asked, the language is Typst (`sh eval` would otherwise emit a shell
     /// script as Typst source), and the site permits it at all.
     pub(super) fn runs(&self, config: &MarkdownConfig) -> bool {
-        config.eval && self.eval && self.lang.as_deref() == Some(Self::TYPST)
+        config.eval
+            && self.eval
+            && self
+                .lang
+                .as_deref()
+                .is_some_and(|lang| Self::TYPST.contains(&lang))
     }
 }
 

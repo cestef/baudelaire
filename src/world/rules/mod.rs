@@ -14,7 +14,7 @@ mod image;
 mod raw;
 
 pub use image::MARKER;
-pub use raw::{SCOPE, TOKEN};
+pub use raw::{SCOPE, TOKEN, TYPST};
 
 use typst::Library;
 use typst::foundations::Target;

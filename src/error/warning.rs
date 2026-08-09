@@ -593,7 +593,7 @@ pub struct FeedMounted {
     help(
         "write {}, which publishes as {}",
         Code("content/404.typ"),
-        Code("404.html")
+        Code(crate::config::Config::NOT_FOUND)
     )
 )]
 pub struct NotFoundMissing;

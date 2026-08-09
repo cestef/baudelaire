@@ -89,7 +89,7 @@ impl NewArgs {
             path.set_extension("");
             return path.join(format!("{}.typ", config.bundle_index()));
         }
-        if path.extension().is_none_or(|e| e != "typ") {
+        if path.extension().is_none_or(|e| e != Config::TYPST) {
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())

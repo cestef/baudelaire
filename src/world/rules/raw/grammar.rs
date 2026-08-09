@@ -128,7 +128,7 @@ impl Grammar {
             .map_or_else(|| EcoString::from("txt"), EcoString::to_lowercase);
 
         match lang.as_str() {
-            "typ" | "typst" => return Ok(Self::Typst(Mode::Markup)),
+            tag if super::TYPST.contains(&tag) => return Ok(Self::Typst(Mode::Markup)),
             "typc" => return Ok(Self::Typst(Mode::Code)),
             "typm" => return Ok(Self::Typst(Mode::Math)),
             _ => {}

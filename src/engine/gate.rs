@@ -425,7 +425,7 @@ impl Gate {
                 .files()
                 .unwrap_or_default()
                 .iter()
-                .any(|path| path.extension().is_some_and(|ext| ext == "md"))
+                .any(|path| path.extension().is_some_and(|ext| ext == Config::MARKDOWN))
     }
 
     /// Walk the table once against a site's config: name every capability it

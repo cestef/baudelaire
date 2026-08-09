@@ -88,6 +88,11 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **` ```typst eval ` runs, like ` ```typ eval ` always did.** The highlighter
+  and the markdown lowerer each decided for themselves which fence tags name
+  typst and disagreed, so a block tagged `typst` was highlighted as typst and
+  then silently shown rather than run.
+
 - **A page left out of the build says so.** A draft, a future-dated page and an
   expired one were all filtered out in silence: three pages in and one page out
   read as `built 1 page`, with the strings `draft` and `expired` nowhere in the
