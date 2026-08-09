@@ -37,6 +37,18 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
             })?;
     let mut reader = Reader::new(&doc, offset);
     let dict = reader.fields(&doc, &[]);
+    // Collected on the way down rather than returned from it: the walk builds a
+    // value per node and has nowhere to put a `Result` without threading one
+    // through every arm of it.
+    if let Some((key, span)) = reader.ambiguous {
+        return Err(MarkdownError::AmbiguousNode {
+            path: path.to_owned(),
+            key,
+            src: miette::NamedSource::new(path, source.to_owned()),
+            span: (span.start, span.end - span.start).into(),
+        }
+        .into());
+    }
     Ok(Block {
         dict,
         spans: reader.spans,
@@ -49,6 +61,9 @@ struct Reader {
     /// so no step of the walk can hand back one measured against the block.
     offset: usize,
     spans: Spans,
+    /// The first key written as both a value and a dictionary, and the argument
+    /// that would have been dropped. See [`Reader::read`].
+    ambiguous: Option<(String, std::ops::Range<usize>)>,
 }
 
 impl Reader {
@@ -57,6 +72,7 @@ impl Reader {
         let mut reader = Self {
             offset,
             spans: Spans::default(),
+            ambiguous: None,
         };
         // The block itself, so a field the page never wrote underlines the
         // block rather than nothing.
@@ -110,6 +126,15 @@ impl Reader {
         let children = node.children().map(|doc| self.fields(doc, at));
 
         if !named.is_empty() || children.is_some() {
+            // A node carrying an argument *and* fields is none of the four
+            // shapes below, and resolving it to the dictionary dropped the
+            // argument without a word. Recorded rather than resolved: whichever
+            // way it were read, half of what the author wrote would be ignored.
+            if let Some(arg) = node.entries().iter().find(|e| e.name().is_none())
+                && self.ambiguous.is_none()
+            {
+                self.ambiguous = Some((node.name().value().to_owned(), self.shift(arg.span())));
+            }
             let mut dict: Dict = named.into_iter().collect();
             // A block and `key=value` entries on one node are both fields of it,
             // so they land in one dict rather than the block silently winning.
@@ -257,5 +282,20 @@ mod tests {
     #[test]
     fn a_block_that_is_not_kdl_is_an_error() {
         assert!(parse("title \"unclosed\n", 0, "a.md", "title \"unclosed\n").is_err());
+    }
+
+    /// A node carrying an argument *and* fields is none of the four shapes the
+    /// reader takes, and resolving it to the dictionary dropped the argument
+    /// without a word.
+    #[test]
+    fn a_node_that_is_both_a_value_and_a_dictionary_is_refused() {
+        let text = "author \"cstef\" role=\"editor\"\n";
+        assert!(parse(text, 0, "a.md", text).is_err());
+        // Either shape alone is still read.
+        assert!(parse("author \"cstef\"\n", 0, "a.md", "author \"cstef\"\n").is_ok());
+        let named = "author role=\"editor\"\n";
+        assert!(parse(named, 0, "a.md", named).is_ok());
+        let block = "author { name \"cstef\" }\n";
+        assert!(parse(block, 0, "a.md", block).is_ok());
     }
 }

@@ -54,6 +54,30 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
+    /// A KDL frontmatter key written as both a value and a dictionary.
+    ///
+    /// The reader takes the four shapes KDL itself distinguishes: a bare flag,
+    /// one argument, several arguments, and a block or `key=value` entries.
+    /// A node carrying both an argument and a named entry is none of them, and
+    /// it used to resolve to the dictionary with the arguments dropped in
+    /// silence.
+    #[error("frontmatter {} in {} is written as both a value and a dictionary", Code(.key), Text(.path))]
+    #[diagnostic(
+        code(baudelaire::markdown::ambiguous_node),
+        help(
+            "a key holds either a value (`author \"cstef\"`) or fields (`author role=\"editor\"`, or a \
+             block), not both; move the argument into a field of its own"
+        )
+    )]
+    AmbiguousNode {
+        path: String,
+        key: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("this argument would be dropped")]
+        span: SourceSpan,
+    },
+
     #[error("frontmatter in {} is not valid {}", Text(.path), Text(.dialect))]
     #[diagnostic(code(baudelaire::markdown::frontmatter))]
     Frontmatter {

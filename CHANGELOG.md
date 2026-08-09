@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A KDL frontmatter key written as both a value and a dictionary is
+  refused.** `author "cstef" role="editor"` is none of the four shapes the
+  reader takes, and it resolved to the dictionary with the argument dropped in
+  silence. Either shape alone still reads as it did.
+
 - **A frontmatter fence may carry trailing whitespace.** `--- ` on the closing
   line reported the block as never closed; on the opening line it made the whole
   file body, silently, and served the frontmatter as prose.
