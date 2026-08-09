@@ -30,6 +30,42 @@ scenario "embed inlines a local asset as a data uri" {
   }
 }
 
+// ...but not a URL that exists for somebody else to fetch. `og:image` is
+// handed to a scraper as a URL, and a `data:` URI is nothing it can fetch, so
+// inlining one silently cost the site the social card whose whole purpose is to
+// be retrieved from elsewhere.
+scenario "embed leaves a social card as a url a scraper can fetch" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://host.test"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      html {
+        embed #true
+        meta {
+          image "/assets/card.png"
+        }
+      }
+      """#
+    "assets/card.png" png="2x2"
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains #"content="https://host.test/assets/card.png""#
+      missing #"og:image" content="data:"#
+    }
+  }
+}
+
 scenario "minify compacts css" {
   requires "css"
   files {

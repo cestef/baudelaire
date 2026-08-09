@@ -7,13 +7,13 @@
 
 use std::path::PathBuf;
 
-use typst_html::HtmlDocument;
+use typst_html::{HtmlDocument, tag};
 
 use crate::config::Config;
 use crate::digest::Base64;
 use crate::mime::Mime;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Transform};
 use crate::render::{AssetDeps, AssetMap};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
@@ -26,7 +26,19 @@ impl Transform for Embed {
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let mut inliner = Inliner::new(cx.config, cx.assets);
-        doc.assets(|value| inliner.inline(value));
+        doc.walk(|element| {
+            // Every URL a `<meta>` carries is for somebody who is not reading
+            // this page: `og:image` and `twitter:image` are fetched by a
+            // scraper that was handed the *URL*, and a `data:` URI is nothing
+            // it can fetch. Inlining one silently cost the site its social
+            // card, which is the one artifact whose whole purpose is to be
+            // retrieved from elsewhere. Everything else a page loads for itself
+            // is exactly what `embed` is for.
+            if element.tag == tag::meta {
+                return;
+            }
+            element.assets(|value| inliner.inline(value));
+        });
         // The inliner resolves through the same map the fingerprint transform
         // does, so what it looked up is a dependency of this page too, and the
         // files whose bytes it inlined are dependencies in the ordinary sense.

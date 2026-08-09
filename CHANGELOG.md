@@ -110,6 +110,12 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`html { embed }` no longer inlines the social card.** Every URL a `<meta>`
+  carries is for somebody who is not reading the page: `og:image` is handed to
+  a scraper, and a `data:` URI is nothing it can fetch. Embedding one silently
+  cost the site the one artifact whose whole purpose is to be retrieved from
+  elsewhere.
+
 - **`generate { robots { disallow } }` carries the base path.** A crawler
   reads `Disallow:` against the host, so on a site served at `/docs` a rule
   written `/drafts/` named a path that does not exist and left the one it meant
