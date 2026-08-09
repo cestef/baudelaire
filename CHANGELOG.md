@@ -56,7 +56,28 @@ chores are visible in the git history and change nothing for a site.
 - **A markdown page's `source` may name a `.typ` file**, which becomes the
   page's body without being lowered: the reader follows the file, not the page.
 
+### Upgrading
+
+- **The first build after this release re-reads every page's frontmatter.** The
+  discovery cache's validity now covers two more inputs (see below), so every
+  manifest written before it is discarded once. One slower build, then back to
+  normal; nothing to do.
+
 ### Fixed
+
+- **A frontmatter that reads a generated module, or a declared source, is no
+  longer frozen at what it first saw.** The discovery cache decides whether a
+  page's frontmatter may be reused, and a frontmatter is produced by
+  *evaluating* the page. Two things that evaluation can reach were invisible to
+  it: a generated `@baudelaire/*` module, which is served from memory and so
+  can never be one of the page's file dependencies, and which file a declared
+  source names, which is not written into either the module or the page. So
+  renaming the site with `#import "@baudelaire/site": title` in a frontmatter,
+  or re-pointing `paths { sources }` at a different file, left the body
+  re-evaluated and the frontmatter stale: one page emitting two different
+  titles, a stale listing, a stale feed, and, where the frontmatter set `slug`,
+  a page published at a URL the rest of the build no longer agreed on. All of
+  it on a green build.
 
 - **An image marker may not name a path outside the project.** The marker an
   `#image` leaves behind is resolved by the build rather than by typst, joined

@@ -129,12 +129,13 @@ impl<'a> DiscoveryCache<'a> {
     /// because [`Roots`] borrows them, exactly as the compile side's
     /// [`Pass`](crate::engine) holds them for its own analyzer.
     pub fn load(config: &Config, project: &'a Project, tracked: &'a [(String, Value)]) -> Self {
-        let salt = Self::salt(config);
+        let salt = Self::salt(config, project.modules());
         let dir = config.cache.dir.clone();
         let prev = std::fs::read(dir.join(MANIFEST))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Manifest>(&bytes).ok())
-            // a manifest built under different taxonomy config can't be trusted.
+            // a manifest built under different config, or against different
+            // generated modules, can't be trusted.
             .filter(|m| m.salt.as_ref() == Some(&salt))
             .unwrap_or_default();
         Self {
@@ -468,7 +469,33 @@ impl<'a> DiscoveryCache<'a> {
     /// extraction: without the schemas, tightening one would leave every
     /// unchanged page passing under the old one, and without the globs, moving
     /// a page into a stricter collection by editing only the config would too.
-    fn salt(config: &Config) -> Hash {
+    ///
+    /// The last two terms are both "what a frontmatter *evaluation* can read
+    /// that no per-page probe will ever see it read", which is the same
+    /// question [`SiteInputs`](crate::graph::SiteInputs) answers for the
+    /// compile cache. A frontmatter is produced by evaluating the page's typst
+    /// module, so anything that evaluation reaches is an input to the cached
+    /// value:
+    ///
+    /// - the generated `@baudelaire/*` modules, by content. One is served from
+    ///   memory and resolves to no path, so it can never appear in an
+    ///   [`Entry`]'s dependencies. Without this,
+    ///   `#import "@baudelaire/site": title` in a frontmatter froze at whatever
+    ///   the site was called when the page was first cached: the body
+    ///   re-evaluated and the frontmatter did not, so one page emitted two
+    ///   titles, and a stale `slug` published at a URL the rest of the build no
+    ///   longer agreed on.
+    ///
+    /// - `paths`, for the declared-source mount. A source's virtual path is
+    ///   `/<prefix>/<name>.<ext>`, so re-pointing a name at another file of the
+    ///   same kind leaves both the module *and* every page's source byte for
+    ///   byte identical. The real file is what lands in `deps`, and the old one
+    ///   is still there and still unchanged, so every entry reads as valid
+    ///   while every frontmatter is derived from a file the config no longer
+    ///   names. Taken whole rather than as `paths.sources` alone: this is the
+    ///   second hole of exactly this shape found in this salt, and a `paths`
+    ///   edit is a rare enough thing to re-derive frontmatter over.
+    fn salt(config: &Config, modules: Hash) -> Hash {
         let keys: Vec<&str> = config
             .content
             .taxonomies
@@ -481,7 +508,7 @@ impl<'a> DiscoveryCache<'a> {
             .iter()
             .map(|(id, c)| (id, &c.glob, &c.schema))
             .collect();
-        Hash::of(&(keys, schemas, Renderer::current()))
+        Hash::of(&(keys, schemas, &config.paths, modules, Renderer::current()))
     }
 }
 
@@ -516,7 +543,10 @@ mod tests {
     #[test]
     fn the_salt_covers_the_schemas_and_the_globs_that_select_their_pages() {
         let salt = |text: &str| {
-            DiscoveryCache::salt(&crate::config::Config::parse(text).expect("should parse"))
+            DiscoveryCache::salt(
+                &crate::config::Config::parse(text).expect("should parse"),
+                crate::graph::Hash::of_bytes(b""),
+            )
         };
         let none = salt("content { collections { blog { sort \"date\" } } }");
         let required = salt("content { collections { blog { schema { hero \"str\" } } } }");
@@ -535,5 +565,34 @@ mod tests {
             salt("content { collections { blog { sort \"date\" } } }"),
             salt("content { collections { blog { sort \"title\"; reverse #true } } }")
         );
+    }
+
+    /// A frontmatter is produced by evaluating the page's typst module, which
+    /// may import a generated `@baudelaire/*` one. Those are served from memory
+    /// and resolve to no path, so no page can ever record one as a dependency
+    /// and only the salt can notice one changed.
+    #[test]
+    fn the_salt_covers_the_generated_modules() {
+        let config = crate::config::Config::parse("site \"s\"").expect("should parse");
+        assert_ne!(
+            DiscoveryCache::salt(&config, crate::graph::Hash::of_bytes(b"one")),
+            DiscoveryCache::salt(&config, crate::graph::Hash::of_bytes(b"two"))
+        );
+    }
+
+    /// Re-pointing a declared source at another file of the same kind changes
+    /// neither the generated module (the mount path carries the name and the
+    /// extension, not the target) nor any page's bytes, and leaves the old
+    /// file on disk unchanged. Only the salt is left to notice.
+    #[test]
+    fn the_salt_covers_which_file_a_declared_source_names() {
+        let salt = |path: &str| {
+            let text = format!("paths {{ sources {{ meta \"{path}\" }} }}");
+            DiscoveryCache::salt(
+                &crate::config::Config::parse(&text).expect("should parse"),
+                crate::graph::Hash::of_bytes(b""),
+            )
+        };
+        assert_ne!(salt("data/a.json"), salt("data/b.json"));
     }
 }
