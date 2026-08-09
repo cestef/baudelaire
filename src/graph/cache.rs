@@ -604,20 +604,33 @@ impl Cache {
     /// cache checks, the page stayed a hit, and `dist` kept serving the image
     /// the old helper drew. The union is what the page depends on, since a
     /// repair reads a subset of what the full compile did.
+    ///
+    /// Both compile-side records are unioned, for one reason. `deps` is the
+    /// files, `meta` the injected values (`git.hash`, the build date), and a
+    /// sidecar reads both: a card template stamping the commit recorded that
+    /// read only on the full compile, so a repaired page dropped it and kept
+    /// drawing the *previous* commit's card for as long as nothing else
+    /// invalidated it. The render-side records (`links`, `urls`, `srcsets`,
+    /// `assets`) are not unioned and must not be: a repair re-renders the whole
+    /// page, so what it saw is the complete set and an inherited entry would
+    /// pin a probe the page no longer makes.
     pub fn relink(&mut self, compiled: Recorded<'_>) {
         let key = self.key(compiled.page);
         let inherited = self
             .next
             .pages
             .get(&key)
-            .map(|entry| entry.deps.clone())
+            .map(|entry| (entry.deps.clone(), entry.meta.clone()))
             .unwrap_or_default();
         self.record(compiled);
         if let Some(entry) = self.next.pages.get_mut(&key) {
-            // The fresh hashes win where both saw a file: same build, same
+            // The fresh hashes win where both saw a thing: same build, same
             // digests, but the repair's are the ones it actually read.
-            let fresh = std::mem::replace(&mut entry.deps, inherited);
+            let (deps, meta) = inherited;
+            let fresh = std::mem::replace(&mut entry.deps, deps);
             entry.deps.extend(fresh);
+            let fresh = std::mem::replace(&mut entry.meta, meta);
+            entry.meta.extend(fresh);
         }
     }
 
