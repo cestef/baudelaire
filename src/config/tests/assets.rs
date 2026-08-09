@@ -8,14 +8,14 @@ use crate::config::{Config, Version};
 #[test]
 fn minify_keeps_the_flag_it_used_to_be() {
     let off = Config::default().assets.minify;
-    assert!(!off.css && !off.js);
+    assert!(!off.css() && !off.js());
 
     for text in ["assets {\n  minify\n}", "assets {\n  minify #true\n}"] {
         let on = parse(text).assets.minify;
-        assert!(on.css && on.js, "{text}");
+        assert!(on.css() && on.js(), "{text}");
     }
     let back = parse("assets {\n  minify #false\n}").assets.minify;
-    assert!(!back.css && !back.js);
+    assert!(!back.css() && !back.js());
 }
 
 /// And the point of the block: the two are separate asks, so a site can keep
@@ -25,14 +25,36 @@ fn minify_names_one_kind_without_losing_the_other() {
     let one = parse("assets {\n  minify {\n    js #false\n  }\n}")
         .assets
         .minify;
-    assert!(one.css, "the block's presence still turns css on");
-    assert!(!one.js);
+    assert!(one.css(), "the block's presence still turns css on");
+    assert!(!one.js());
 
     let neither = parse("assets {\n  minify #false {\n    css #true\n  }\n}")
         .assets
         .minify;
-    assert!(neither.css, "the block reads behind the flag");
-    assert!(!neither.js);
+    assert!(neither.css(), "the block reads behind the flag");
+    assert!(!neither.js());
+}
+
+/// A profile naming one kind must not answer for the other.
+///
+/// `Section::fill` runs a section's switch on *every* mention, and this switch
+/// used to write both content flags, so an overlay that said only `css` turned
+/// `js` back on: the site asked for readable scripts, the profile said nothing
+/// about scripts, and the build shipped them mangled. Fill-in-place is the
+/// whole contract of a profile overlay.
+#[test]
+fn a_profile_naming_one_kind_leaves_the_other_alone() {
+    let config = parse(
+        "assets {\n  minify {\n    js #false\n  }\n}\n\
+         profiles {\n  dev {\n    assets {\n      minify {\n        css #true\n      }\n    }\n  }\n}",
+    )
+    .with_profile("dev")
+    .expect("profile applies");
+    assert!(config.assets.minify.css());
+    assert!(
+        !config.assets.minify.js(),
+        "the profile said nothing about js"
+    );
 }
 
 #[test]

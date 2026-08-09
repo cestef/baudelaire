@@ -88,6 +88,14 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **A profile naming one half of `assets { minify }` no longer turns the other
+  on.** A section's switch runs on every mention, and this one wrote both
+  content flags rather than a gate beside them, so a site asking for
+  `minify { js #false }` and a profile adding `minify { css #true }` got its
+  scripts mangled after all. A kind the author has named now keeps its answer,
+  so a second mention says only what it names. Every spelling means what it did,
+  `minify #false { css #true }` included.
+
 - **Two inlined icons defining the same id no longer collide.** An icon's ids
   are the file's own private names, and an editor writes `id="a"` and refers to
   it as `url(#a)`, so two icons exported from Illustrator or Figma and used on

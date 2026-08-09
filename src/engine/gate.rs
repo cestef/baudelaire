@@ -64,7 +64,7 @@ const GATES: &[Gate] = &[
         setting: "assets { minify }",
         // The stylesheet half: the JavaScript half is the bundler's, which has
         // its own row and its own feature.
-        asked: |config| config.assets.minify.css,
+        asked: |config| config.assets.minify.css(),
         effect: "stylesheets are copied unminified",
         rewrites: false,
     },

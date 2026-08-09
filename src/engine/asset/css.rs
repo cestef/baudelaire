@@ -86,7 +86,7 @@ impl Stylesheet {
         let targets = Targets::from(Browsers::from(&assets.targets));
         // Compiling for named browsers is a transform, not a minification: a
         // site may want its nesting flattened and its output still readable.
-        let compile = assets.minify.css || assets.targets.any();
+        let compile = assets.minify.css() || assets.targets.any();
         if !compile && !assets.fingerprint && !wanted {
             return Ok(Produced::bytes(fs::read(file)?));
         }
@@ -116,7 +116,7 @@ impl Stylesheet {
         let analyze = assets.fingerprint;
         let printed = sheet
             .to_css(PrinterOptions {
-                minify: assets.minify.css,
+                minify: assets.minify.css(),
                 source_map: sm.as_mut(),
                 analyze_dependencies: analyze.then(DependencyOptions::default),
                 targets,

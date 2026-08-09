@@ -12,33 +12,55 @@ use crate::config::node::NodeExt;
 /// stylesheets and readable, un-mangled scripts had to choose.
 #[derive(Debug, Clone, Copy, Hash, Default)]
 pub struct MinifyConfig {
-    /// Minify stylesheets (lightningcss).
-    pub css: bool,
-    /// Minify JavaScript. Read by the bundler, so it needs `assets { bundle }`:
-    /// without it scripts are copied verbatim and nothing minifies them.
-    pub js: bool,
+    /// What the block's presence turns on, and `minify #false` takes back off:
+    /// the answer for a kind the block does not name.
+    ///
+    /// A gate beside two *optional* flags, rather than the switch writing the
+    /// flags directly, which was this section's alone among the switchable
+    /// ones. That is exactly what broke: [`Section::fill`] runs the switch on
+    /// *every* mention, so a profile naming one half re-enabled the other.
+    /// `assets { minify { js #false } }` with a profile adding
+    /// `minify { css #true }` minified JavaScript after all, which is a
+    /// fill-in-place violation and the one thing a profile overlay must never
+    /// do. A kind the author has named keeps its answer, so re-running the
+    /// switch says nothing about it.
+    enabled: bool,
+    /// Minify stylesheets (lightningcss), or `None` to follow the switch.
+    css: Option<bool>,
+    /// Minify JavaScript, or `None` to follow the switch. Read by the bundler,
+    /// so it needs `assets { bundle }`: without it scripts are copied verbatim
+    /// and nothing minifies them.
+    js: Option<bool>,
 }
 
 impl MinifyConfig {
+    /// Whether stylesheets are minified.
+    pub fn css(self) -> bool {
+        self.css.unwrap_or(self.enabled)
+    }
+
+    /// Whether JavaScript is minified. Still needs a bundler to do it; see
+    /// [`AssetConfig::bundling`](crate::config::AssetConfig::bundling).
+    pub fn js(self) -> bool {
+        self.js.unwrap_or(self.enabled)
+    }
+
     /// Whether anything is minified at all: what a gate asks before reporting a
     /// capability this binary lacks.
     pub fn any(self) -> bool {
-        self.css || self.js
+        self.css() || self.js()
     }
 }
 
-/// The block's presence turns every kind on, and `minify #false` takes them all
-/// back off: the same switch every section has, so the one-flag spelling a site
+/// The block's presence turns minification on, and `minify #false` takes it back
+/// off: the same switch every section has, so the one-flag spelling a site
 /// already wrote keeps meaning what it did.
 impl Section for MinifyConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| {
-        c.css = on;
-        c.js = on;
-    });
+    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 
     const RULES: Block<Self> = Block(&[
         ("css", Flag, "Minify stylesheets.", |c, n, t| {
-            c.css = n.boolean(t, 0)?;
+            c.css = Some(n.boolean(t, 0)?);
             Ok(())
         }),
         (
@@ -46,7 +68,7 @@ impl Section for MinifyConfig {
             Flag,
             "Minify JavaScript. Needs `assets { bundle }`, which is what runs it.",
             |c, n, t| {
-                c.js = n.boolean(t, 0)?;
+                c.js = Some(n.boolean(t, 0)?);
                 Ok(())
             },
         ),
