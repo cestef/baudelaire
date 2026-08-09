@@ -174,7 +174,7 @@ impl<'a> DiscoveryCache<'a> {
         // markdown is microseconds, and the compile cache still covers the page
         // through its wrapper fingerprint.
         #[cfg(feature = "markdown")]
-        if path.extension().is_some_and(|e| e == Config::MARKDOWN) {
+        if Config::has_ext(path, Config::MARKDOWN) {
             return Self::load_markdown(collection, path, config);
         }
         // Fast path: unchanged source and dependencies reuse the stored

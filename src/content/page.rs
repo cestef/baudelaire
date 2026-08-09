@@ -184,7 +184,7 @@ impl Page {
         // frontmatter was just read out of, and typst's own `include` already
         // reads a file and is tracked as that page's dependency. Checked here
         // rather than in the loader so it holds whichever cache path answered.
-        if frontmatter.source.is_some() && path.extension().is_none_or(|e| e != Config::MARKDOWN) {
+        if frontmatter.source.is_some() && !Config::has_ext(path, Config::MARKDOWN) {
             // The page is parsed again to underline the key: this is a terminal
             // error, so the cost is one parse the build was about to stop
             // paying anything at all, and the store has the file already.

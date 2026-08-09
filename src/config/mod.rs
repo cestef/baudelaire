@@ -361,6 +361,22 @@ impl Config {
     /// [`scratch`]: Config::scratch
     pub const SCRATCH: &'static str = ".baudelaire";
 
+    /// Whether `path` carries `ext`, compared without case.
+    ///
+    /// One question, asked wherever a file's kind decides what happens to it:
+    /// whether discovery claims it as a page, which reader loads it, whether a
+    /// `source` may replace its body, and whether the feature gate thinks the
+    /// site has markdown in it. Case-insensitive because the asset pipeline
+    /// already is (every handler lowercases before it claims a file), and the
+    /// two halves of one build disagreeing meant a `README.MD` was an asset
+    /// there and not a page here: copied to `dist` verbatim, absent from the
+    /// site, and diagnosed nowhere.
+    pub fn has_ext(path: &Path, ext: &str) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+    }
+
     /// The extension of a typst page, and of a markdown one.
     ///
     /// Written once because four things ask: what [`sources`](Config::sources)

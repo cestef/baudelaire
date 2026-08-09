@@ -134,9 +134,14 @@ impl Ctx<'_> {
 /// Path knowledge the pipeline and its handlers share: how a file's kind is
 /// read off its name, and how a suffix is spliced into that name.
 pub(super) trait PathExt {
-    /// The lowercase-comparable extension, or `""` when there is none. Read by
-    /// the css/js/image handlers to claim a file, and by [`Private`] to tell a
+    /// The extension as written, or `""` when there is none. Read by the
+    /// css/js/image handlers to claim a file, and by [`Private`] to tell a
     /// build input from an artifact, which every flavor does.
+    ///
+    /// Every caller lowercases before comparing, which is why the content side
+    /// asks [`Config::has_ext`](crate::config::Config::has_ext) rather than
+    /// this: the two used to disagree, and a `README.MD` was an asset here and
+    /// not a page there.
     fn ext(&self) -> &str;
 
     /// The same path with `suffix` appended to the file stem, the extension

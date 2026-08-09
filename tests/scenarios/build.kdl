@@ -504,3 +504,47 @@ scenario "without the block, highlighting is left exactly as typst emits it" {
     }
   }
 }
+
+// The asset pipeline lowercases before it claims a file; the content side
+// compared as written. So the two halves of one build disagreed about
+// `README.MD`: an asset there, not a page here, copied to `dist` verbatim,
+// absent from the site, and diagnosed nowhere.
+scenario "a page's kind is its extension whatever case it was saved in" {
+  files {
+    "config.kdl" #"""
+      site "C"
+      url "https://x.test"
+      """#
+    "content/CAPS.TYP" #"""
+      #let frontmatter = (title: "Caps")
+      x
+      """#
+  }
+  expect {
+    ok
+    pages 1
+    file "caps/index.html" { contains "Caps" }
+  }
+}
+
+scenario "a markdown page's kind is its extension whatever case it was saved in" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "C"
+      url "https://x.test"
+      """#
+    "content/SHOUTY.MD" #"""
+      ---
+      title: Shouty
+      ---
+
+      body
+      """#
+  }
+  expect {
+    ok
+    pages 1
+    file "shouty/index.html" { contains "Shouty" }
+  }
+}

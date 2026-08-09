@@ -104,8 +104,7 @@ impl<'a> Origins<'a> {
         Self::file(span).is_some_and(|id| {
             let file = Path::new(id.vpath().get_without_slash());
             file.starts_with(dir)
-                && (file.extension().is_some_and(|ext| ext == Config::TYPST)
-                    || self.inlined(id, page))
+                && (Config::has_ext(file, Config::TYPST) || self.inlined(id, page))
         })
     }
 

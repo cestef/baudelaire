@@ -110,6 +110,12 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A file's kind is its extension whatever case it was saved in.** The asset
+  pipeline lowercases before claiming a file and the content side compared as
+  written, so the two halves of one build disagreed about `README.MD`: an asset
+  there, not a page here, copied to `dist` verbatim, absent from the site, and
+  diagnosed nowhere.
+
 - **`llms.txt` writes links a Markdown reader can follow.** Both halves of
   `[text](url)` were written raw, so a page titled `A [draft] note` produced a
   link that parses as something else, or as nothing. The root collection is no

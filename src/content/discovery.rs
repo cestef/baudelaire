@@ -163,13 +163,7 @@ impl<'a> Discovery<'a> {
             .skipping(hidden)
             .files()?
             .into_iter()
-            .filter(|path| {
-                !hidden(path)
-                    && path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .is_some_and(|e| sources.contains(&e))
-            })
+            .filter(|path| !hidden(path) && sources.iter().any(|ext| Config::has_ext(path, ext)))
             .collect())
     }
 

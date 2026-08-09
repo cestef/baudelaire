@@ -89,12 +89,12 @@ impl NewArgs {
             // Only a `.typ` suffix is an extension to drop here. `set_extension("")`
             // cuts at the last dot whatever follows it, so `new -b posts/v1.2`
             // asked for a bundle called `v1.2` and got one called `v1`.
-            if path.extension().is_some_and(|e| e == Config::TYPST) {
+            if Config::has_ext(&path, Config::TYPST) {
                 path.set_extension("");
             }
             return path.join(format!("{}.typ", config.bundle_index()));
         }
-        if path.extension().is_none_or(|e| e != Config::TYPST) {
+        if !Config::has_ext(&path, Config::TYPST) {
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
