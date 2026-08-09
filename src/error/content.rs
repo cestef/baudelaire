@@ -378,8 +378,9 @@ impl ContentError {
     /// extensions there are readers for, out of the table that dispatches them,
     /// so it cannot name a set the build does not have.
     pub fn source_unreadable(
+        page: &std::path::Path,
         name: &str,
-        path: &std::path::Path,
+        declared: &std::path::Path,
         readable: &[&str],
         source: &str,
         span: Option<SourceSpan>,
@@ -389,10 +390,15 @@ impl ContentError {
             .map(|ext| format!(".{ext}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let (page, span) = Self::located(path, source, span);
+        // The *page*, because `source` is the page's text: labelling that
+        // snippet with the declared file's path printed the page's frontmatter
+        // under the name of a file containing none of it. The three sibling
+        // refusals from the same commit all pass the page; this one call site
+        // passed what it was complaining about instead.
+        let (page, span) = Self::located(page, source, span);
         Self::SourceUnreadable {
             name: name.to_owned(),
-            path: path.display().to_string(),
+            path: declared.display().to_string(),
             help: markup!(
                 "a source is read as the dialect its extension names: {}",
                 kinds

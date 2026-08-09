@@ -124,6 +124,39 @@ fn a_source_refusal_underlines_the_key() {
     );
 }
 
+/// ...and the refusal for a source of a kind nothing reads underlines the page
+/// too. It passed the *declared file's* path as the label's name while handing
+/// over the *page's* text, so miette printed the page's frontmatter under the
+/// name of a file containing none of it. The three sibling refusals from the
+/// same change all pass the page; this one call site did not.
+#[cfg(feature = "markdown")]
+#[test]
+fn an_unreadable_source_underlines_the_page_that_named_it() {
+    let site = Site::with(
+        r#"
+            site "Test"
+            paths {
+                content "content"
+                dist "public"
+                sources { notes "notes/n.rst" }
+            }
+        "#,
+    );
+    site.write("notes/n.rst", "notes\n");
+    site.write("content/p.md", "---\ntitle: P\nsource: notes\n---\n");
+
+    let out = site.run(&["build"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("source_unreadable"), "{stderr}");
+    // The page, at the key's own line -- not the file the key names.
+    assert!(stderr.contains("p.md:3"), "no page label: {stderr}");
+    assert!(
+        !stderr.contains("[notes/n.rst"),
+        "labelled with the declared file: {stderr}"
+    );
+}
+
 #[test]
 fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
     // The one silent failure the classes mode has: a `.tmTheme` is still loaded

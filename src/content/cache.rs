@@ -379,6 +379,7 @@ impl<'a> DiscoveryCache<'a> {
             .map(|(_, read)| read)
             .ok_or_else(|| {
                 crate::error::ContentError::source_unreadable(
+                    path,
                     name,
                     declared,
                     &Self::readable(),
