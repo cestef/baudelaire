@@ -157,6 +157,45 @@ fn an_unreadable_source_underlines_the_page_that_named_it() {
     );
 }
 
+/// A declared source the build cannot read says why. Every failure on the mount
+/// came back as typst's `NotFound`, naming a path that in the common cases is
+/// right there: a directory named as a source, or a file the process may not
+/// open, reported "file not found" about something the author can see.
+#[test]
+fn an_unreadable_declared_source_reports_the_real_reason() {
+    let site = Site::with(
+        r#"
+            site "Test"
+            paths {
+                content "content"
+                dist "public"
+                sources { notes "shared/adir.typ" }
+            }
+        "#,
+    );
+    // A directory where a file was declared: the one case that needs no
+    // permission games to reach, and `chmod` is not portable anyway.
+    site.write("shared/adir.typ/keep.txt", "x\n");
+    site.write(
+        "content/p.typ",
+        "#import \"@baudelaire/sources:0.1.0\": notes\n\
+         #let frontmatter = (title: \"P\",)\n\
+         #include notes\n",
+    );
+
+    let out = site.run(&["build"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("directory"),
+        "reported something other than the real reason: {stderr}"
+    );
+    assert!(
+        !stderr.contains("file not found"),
+        "still reporting not-found: {stderr}"
+    );
+}
+
 #[test]
 fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
     // The one silent failure the classes mode has: a `.tmTheme` is still loaded

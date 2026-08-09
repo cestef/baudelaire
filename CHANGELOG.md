@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A declared source the build cannot read says why.** Every failure on the
+  mount came back as "file not found", naming a path that in the common cases
+  is right there: a directory named as a source, or a file the process may not
+  open.
+
 - **`deploy --json` and `announce --json` report what they built.** Both build
   the site before sending it and recorded none of it, so the object came back
   with no `pages` and no `cached`: "this command built nothing", rather than

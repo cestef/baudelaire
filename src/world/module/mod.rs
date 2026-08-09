@@ -565,9 +565,14 @@ impl FileLoader for Files {
             return root.load(&vpath);
         }
         if let Some(path) = self.sources.file(id) {
-            return crate::fs::read(path)
+            // Every failure used to come back as `NotFound`, naming a path that
+            // in the common cases is right there: a source the build cannot
+            // read for permissions, or one that turned out to be a directory,
+            // reported "file not found" about a file the author can see.
+            // `from_io` is typst's own mapping and answers for all of them.
+            return std::fs::read(path)
                 .map(Bytes::new)
-                .map_err(|_| FileError::NotFound(path.to_path_buf()));
+                .map_err(|why| FileError::from_io(why, path));
         }
         self.system.load(id)
     }
