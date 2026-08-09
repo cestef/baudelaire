@@ -172,17 +172,17 @@ pub struct Diagnostics {
 }
 
 impl Diagnostics {
-    fn of(note: &Note) -> Self {
+    fn of(diagnostic: &dyn Diagnostic) -> Self {
         Self {
-            code: note.0.code().map(|c| c.to_string()),
-            severity: match note.0.severity().unwrap_or(Severity::Error) {
+            code: diagnostic.code().map(|c| c.to_string()),
+            severity: match diagnostic.severity().unwrap_or(Severity::Error) {
                 Severity::Advice => "advice",
                 Severity::Warning => "warning",
                 Severity::Error => "error",
             },
             // The plain rendering, not the styled one: a JSON consumer wants the
             // text, and markup delimiters are this terminal's business.
-            message: Markup::new(&note.0.to_string(), false).to_string(),
+            message: Markup::new(&diagnostic.to_string(), false).to_string(),
         }
     }
 }
@@ -265,6 +265,20 @@ impl Ui {
     /// are different claims.
     pub fn built(&self, pages: usize, cached: usize) {
         self.state.lock().built = Some((pages, cached));
+    }
+
+    /// Record the failure that ended this run, for the machine-readable report
+    /// alone.
+    ///
+    /// Collected rather than reported, because a fatal error is rendered by
+    /// `main` through this same reporter and queueing it here would print it
+    /// twice. Without this the one run a `--json` consumer most needs to
+    /// understand, the one that failed, came out as `ok: false` with an empty
+    /// `diagnostics` array and nothing on stdout to say why: every *warning*
+    /// passes through [`warn`](Ui::warn) and is collected, and the error that
+    /// actually stopped the build passed through neither.
+    pub fn failed(&self, error: &dyn Diagnostic) {
+        self.state.lock().collected.push(Diagnostics::of(error));
     }
 
     /// The machine-readable record of this run.
@@ -439,7 +453,7 @@ impl Ui {
         let mut s = self.state.lock();
         let note = Note(warning);
         s.warned += usize::from(note.is_warning());
-        s.collected.push(Diagnostics::of(&note));
+        s.collected.push(Diagnostics::of(&*note.0));
         s.notes.push(note);
     }
 

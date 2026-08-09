@@ -88,6 +88,12 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **`--json` reports the error that failed the run.** A failure came out as
+  `ok: false` with an empty `diagnostics` array: warnings pass through the
+  reporter and are collected, and the error that actually stopped the build
+  passed through neither, so the one run a CI consumer most needs to understand
+  was the one it could learn nothing from.
+
 - **A profile naming one half of `assets { minify }` no longer turns the other
   on.** A section's switch runs on every mention, and this one wrote both
   content flags rather than a gate beside them, so a site asking for

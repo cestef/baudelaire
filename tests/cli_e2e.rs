@@ -430,6 +430,38 @@ fn strict_passes_a_run_that_did_not_warn() {
     );
 }
 
+/// The run a `--json` consumer most needs to understand is the one that failed,
+/// and that was the one it could learn nothing from: every *warning* passes
+/// through `Ui::warn` and is collected, while the error that actually stopped
+/// the build passed through neither, so a failure was `ok: false` with an empty
+/// `diagnostics` array and nothing on stdout to say why.
+#[test]
+fn json_reports_the_error_that_failed_the_run() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\npaths {\n  content \"nope\"\n  dist \"public\"\n}\n",
+    );
+    let config = sb.path("config.kdl");
+    let out = sb.run(&["-c", config.to_str().unwrap(), "--json", "build"]);
+    assert!(!out.status.success(), "the build should have failed");
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout should be one JSON object");
+    assert_eq!(report["ok"], false);
+    let fatal = report["diagnostics"]
+        .as_array()
+        .expect("diagnostics array")
+        .iter()
+        .find(|d| d["severity"] == "error")
+        .unwrap_or_else(|| panic!("no error diagnostic in {report}"));
+    assert_eq!(fatal["code"], "baudelaire::fs::read_directory");
+    assert!(
+        fatal["message"].as_str().is_some_and(|m| !m.is_empty()),
+        "{report}"
+    );
+}
+
 /// `--json` is the only thing that ever writes to stdout, so a CI job can read
 /// the run as data instead of scraping styled prose off stderr.
 #[test]

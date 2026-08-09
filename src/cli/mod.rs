@@ -643,6 +643,9 @@ impl Cli {
         // prose on stderr. Not at all for a command whose own document owns
         // stdout: see [`Command::owns_stdout`].
         if self.global.json && !self.command.as_ref().is_some_and(Command::owns_stdout) {
+            if let Err(error) = &outcome {
+                ui.failed(error);
+            }
             ui.summary(outcome.is_ok()).emit();
         }
         ui.flush();
