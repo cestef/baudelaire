@@ -49,7 +49,12 @@ impl PublishArgs {
     /// arrived a full build late.
     pub(super) fn send(&self, ui: &Ui, config: &Config, destination: &Destination) -> Result<()> {
         destination.check(config)?;
-        Engine::new(config.clone(), Mode::Build)?.build(ui)?;
+        let stats = Engine::new(config.clone(), Mode::Build)?.build(ui)?;
+        // The same record `build` and `check` keep. A publishing command builds
+        // the site it is about to send, and reported none of it: `--json` came
+        // back with no `pages` and no `cached`, which reads as "this command
+        // built nothing" rather than "this command did not say".
+        ui.built(stats.pages, stats.cached);
         let tty = Tty;
         let options = Options {
             dry_run: self.dry_run,

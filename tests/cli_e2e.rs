@@ -430,6 +430,33 @@ fn strict_passes_a_run_that_did_not_warn() {
     );
 }
 
+/// A publishing command builds the site it is about to send, and reported none
+/// of it: `--json` came back with no `pages` and no `cached`, which reads as
+/// "this command built nothing" rather than "this command did not say".
+#[test]
+fn json_counts_the_pages_a_publishing_command_built() {
+    let sb = Site::new();
+    sb.write(
+        "config.kdl",
+        "site \"T\"\nurl \"https://x.test\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
+         deploy {\n  ssh {\n    host \"h\"\n    path \"/tmp/nowhere\"\n  }\n}\n",
+    );
+    sb.write("content/p.typ", "#let frontmatter = (title: \"P\",)\nx");
+    let config = sb.path("config.kdl");
+    let out = sb.run(&[
+        "-c",
+        config.to_str().unwrap(),
+        "--json",
+        "deploy",
+        "--dry-run",
+    ]);
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout should be one JSON object");
+    assert_eq!(report["pages"], 1, "{report}");
+    assert_eq!(report["cached"], 0, "{report}");
+}
+
 /// The run a `--json` consumer most needs to understand is the one that failed,
 /// and that was the one it could learn nothing from: every *warning* passes
 /// through `Ui::warn` and is collected, while the error that actually stopped

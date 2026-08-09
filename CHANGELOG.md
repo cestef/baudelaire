@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`deploy --json` and `announce --json` report what they built.** Both build
+  the site before sending it and recorded none of it, so the object came back
+  with no `pages` and no `cached`: "this command built nothing", rather than
+  "this command did not say".
+
 - **`serve -q` still says where the server is listening.** The address line was
   suppressed with the rest of the banner, and `--port 0` asks the OS for a free
   port, so the address a caller had to connect to appeared nowhere at all. `-q`
