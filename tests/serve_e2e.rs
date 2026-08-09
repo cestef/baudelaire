@@ -748,3 +748,61 @@ fn the_open_endpoint_says_when_no_editor_is_configured() {
     assert_eq!(code, 501, "{body}");
     assert!(body.contains("editor"), "unhelpful refusal: {body}");
 }
+
+/// `-q` still says where the server is listening.
+///
+/// The arrow lines are suppressed below the default level, and this one is not
+/// a decoration: `--port 0` asks the OS for a free port, so with the line gone
+/// the address a caller has to connect to appeared nowhere at all -- and `-q`
+/// is exactly what a script wrapping the server passes.
+#[test]
+fn a_quiet_server_still_names_the_address_it_bound() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        r#"
+            site "Quiet"
+            paths {
+                content "content"
+                dist "public"
+            }
+            serve { open #false; }
+        "#,
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nbody",
+    );
+
+    // Spawned here rather than through `Serve`, which picks its own port and
+    // does not capture stderr: the point is what a `--port 0` run prints.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_baudelaire"))
+        .current_dir(&t.root)
+        .args(["-q", "serve", "--port", "0", "--no-open", "--no-watch"])
+        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()
+        .expect("serve");
+
+    let reader = BufReader::new(child.stderr.take().expect("piped stderr"));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in reader.lines().map_while(Result::ok) {
+            if line.contains("http://127.0.0.1:") {
+                let _ = tx.send(line);
+                return;
+            }
+        }
+    });
+    let line = rx.recv_timeout(Duration::from_secs(10));
+    let _ = child.kill();
+    let _ = child.wait();
+    let line = line.expect("no address line under `-q`");
+    // A real port, not the `0` that was asked for.
+    let port: u16 = line
+        .rsplit_once("127.0.0.1:")
+        .and_then(|(_, rest)| rest.split(['/', ' ']).next())
+        .and_then(|p| p.trim().parse().ok())
+        .unwrap_or_else(|| panic!("no port in `{line}`"));
+    assert!(port > 0, "{line}");
+}

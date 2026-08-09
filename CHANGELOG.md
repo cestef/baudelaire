@@ -110,6 +110,11 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **`serve -q` still says where the server is listening.** The address line was
+  suppressed with the rest of the banner, and `--port 0` asks the OS for a free
+  port, so the address a caller had to connect to appeared nowhere at all. `-q`
+  is exactly what a script wrapping the server passes.
+
 - **`new --bundle` keeps a dot in the name it was given.** A bundle is a
   directory, and stripping "the extension" cut at the last dot whatever
   followed it, so `new -b posts/v1.2` asked for `v1.2` and silently got `v1`. A

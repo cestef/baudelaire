@@ -110,7 +110,9 @@ impl<'a> Dev<'a> {
         };
 
         self.ui.blank();
-        self.ui.arrow(
+        // Kept at `-q`: `--port 0` picks a free port, so this line is the only
+        // place the address a caller must connect to appears.
+        self.ui.arrow_kept(
             "local",
             format!("http://{addr}{}/", self.config.base_path())
                 .cyan()

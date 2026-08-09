@@ -386,8 +386,24 @@ impl Ui {
     /// A vite-style pointer line: `➜ local  http://..`. Labels align across
     /// consecutive arrows (padded to the widest expected label).
     pub fn arrow(&self, label: &str, value: impl Display) {
+        self.arrow_inner(label, value, Level::Default);
+    }
+
+    /// The same line, shown at every level but [`Level::Silent`], like
+    /// [`done`](Ui::done).
+    ///
+    /// For the one arrow a quiet run still has to carry: the address the dev
+    /// server bound. `serve --port 0` asks the OS for a free port, so with this
+    /// line suppressed the port a caller has to connect to was not in the
+    /// output at all, and `-q` is exactly what a script wrapping the server
+    /// passes.
+    pub fn arrow_kept(&self, label: &str, value: impl Display) {
+        self.arrow_inner(label, value, Level::Quiet);
+    }
+
+    fn arrow_inner(&self, label: &str, value: impl Display, least: Level) {
         let mut s = self.state.lock();
-        if s.level < Level::Default {
+        if s.level < least {
             return;
         }
         // pad before styling: a width applied to the styled value would count
