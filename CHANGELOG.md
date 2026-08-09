@@ -110,6 +110,12 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **An Atom feed names its author and its own URL.** `<author>` is mandatory
+  on a feed unless every entry carries one (RFC 4287 4.1.1) and validators
+  enforce it; the site already declared an author, and the cards and PDF
+  bundles already stamped it. `<link rel="self">` joins it, so an aggregator
+  handed the bytes can find its way back to them.
+
 - **An advertised feed is written even with nothing dated in it.** Every page
   carries `<link rel="alternate">` for the site-wide feed and for its own
   collection's, built from the config alone, while the writer skipped a feed

@@ -1139,3 +1139,35 @@ scenario "an advertised feed is written even with nothing dated in it" {
     }
   }
 }
+
+// RFC 4287 4.1.1 makes `<author>` mandatory on a feed unless every entry
+// carries one, and no entry does; validators enforce it. The site already
+// declares an author, and the cards and PDF bundles already stamp it, so the
+// one artifact specified to need it was the one leaving it out. `rel="self"` is
+// the other half: where the feed is served, so an aggregator handed the bytes
+// can find its way back to them.
+scenario "an atom feed names its author and its own url" {
+  files {
+    "config.kdl" #"""
+      site "A"
+      url "https://host.test"
+      author "Ada"
+      generate {
+        feed {
+          formats atom
+        }
+      }
+      """#
+    "content/p.typ" #"""
+      #let frontmatter = (title: "P", date: "2026-01-01")
+      x
+      """#
+  }
+  expect {
+    ok
+    file "atom.xml" {
+      contains "<name>Ada</name>"
+      contains #"<link rel="self" href="https://host.test/atom.xml"/>"#
+    }
+  }
+}

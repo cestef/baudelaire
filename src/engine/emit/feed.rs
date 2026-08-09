@@ -74,6 +74,25 @@ impl<'a> Bodies<'a> {
     }
 }
 
+/// What every feed on one site shares.
+///
+/// Grouped because each of the four is identical at all three call sites and
+/// was passed through by hand: the site-wide feed, the per-collection ones and
+/// the per-term ones differ only in what they are called, what they list and
+/// where they sit.
+#[derive(Clone, Copy)]
+struct Shared<'a> {
+    /// Where the site is served, for the absolute links every format mandates.
+    base: &'a BaseUrl,
+    /// The `feed { }` config, for what each format's file is called: the id a
+    /// feed writes about itself has to be the file it is served from.
+    names: &'a FeedConfig,
+    /// Each page's prose, when the site asked its feeds to carry it.
+    bodies: &'a Bodies<'a>,
+    /// The site's `author`, for Atom's mandatory `<author>`.
+    author: Option<&'a str>,
+}
+
 /// Emits a syndication feed file per configured format, of the most recent
 /// dated pages. Requires a base `url` for the absolute links feeds mandate.
 pub(super) struct Feeds;
@@ -86,6 +105,12 @@ impl Processor for Feeds {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base = site.base("feeds")?;
         let bodies = Bodies::of(site);
+        let shared = Shared {
+            base: &base,
+            names: &site.config.generate.feed,
+            bodies: &bodies,
+            author: site.config.author.as_deref(),
+        };
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
@@ -98,19 +123,17 @@ impl Processor for Feeds {
             );
             let scope = site.config.scope(lang, "");
             let feed = Feed::new(
-                &base,
+                shared,
                 site.config.title(lang),
                 site.config.description(lang),
                 &dated,
                 &scope,
-                &site.config.generate.feed,
-                &bodies,
             );
             Self::emit(site, out, &feed, Empty::Written)?;
         }
-        Self::collections(site, out, &base, &bodies)?;
+        Self::collections(site, out, shared)?;
         if site.config.generate.feed.terms {
-            Self::terms(site, out, &base, &bodies)?;
+            Self::terms(site, out, shared)?;
         }
         Ok(())
     }
@@ -125,7 +148,7 @@ impl Feeds {
     /// all is [`Config::channel`]: the same answer the `<head>` tag advertising
     /// it is built from, so a page can never point at a file this pass declined
     /// to write, nor name it something else.
-    fn collections(site: &Site, out: &mut dyn Emit, base: &BaseUrl, bodies: &Bodies) -> Result<()> {
+    fn collections(site: &Site, out: &mut dyn Emit, shared: Shared<'_>) -> Result<()> {
         for (id, collection) in &site.config.content.collections {
             // The `paginate` half is what `engine::gate` warns about, and the
             // warning states that no feed is written: it has to be true here or
@@ -160,13 +183,11 @@ impl Feeds {
                     site,
                     out,
                     &Feed::new(
-                        base,
+                        shared,
                         &channel.title,
                         site.config.description(lang),
                         &dated,
                         &channel.scope,
-                        &site.config.generate.feed,
-                        bodies,
                     ),
                     Empty::Written,
                 )?;
@@ -181,7 +202,7 @@ impl Feeds {
     /// Terms come from the same grouping that generated those listings, so a
     /// term always has its feed at its own URL and neither can disagree with the
     /// other about which pages belong to it.
-    fn terms(site: &Site, out: &mut dyn Emit, base: &BaseUrl, bodies: &Bodies) -> Result<()> {
+    fn terms(site: &Site, out: &mut dyn Emit, shared: Shared<'_>) -> Result<()> {
         for group in Taxonomy::groups(site.config, site.pages) {
             let lang = group.lang();
             for term in group.resolve()? {
@@ -196,15 +217,7 @@ impl Feeds {
                 Self::emit(
                     site,
                     out,
-                    &Feed::new(
-                        base,
-                        &title,
-                        site.config.description(lang),
-                        &dated,
-                        scope,
-                        &site.config.generate.feed,
-                        bodies,
-                    ),
+                    &Feed::new(shared, &title, site.config.description(lang), &dated, scope),
                     Empty::Skipped,
                 )?;
             }
@@ -246,7 +259,8 @@ enum Empty {
 /// Renders a feed of the given items (already selected, newest-first) with
 /// absolute links under `base`.
 struct Feed<'a> {
-    base: &'a BaseUrl,
+    /// What every feed on this site shares.
+    site: Shared<'a>,
     title: &'a str,
     /// What the site is, from `description` in the feed's own language. RSS
     /// makes the channel element mandatory, so unset it falls back to the
@@ -259,31 +273,22 @@ struct Feed<'a> {
     /// Atom requires a unique feed id, so to an aggregator `/rss.xml` and
     /// `/fr/rss.xml` were one feed with two sets of entries.
     scope: &'a str,
-    /// The `feed { }` config, for what each format's file is called: the id a
-    /// feed writes about itself has to be the file it is served from.
-    names: &'a FeedConfig,
-    /// Each page's prose, when the site asked its feeds to carry it.
-    bodies: &'a Bodies<'a>,
 }
 
 impl<'a> Feed<'a> {
     fn new(
-        base: &'a BaseUrl,
+        site: Shared<'a>,
         title: &'a str,
         description: Option<&'a str>,
         items: &'a [&'a Page],
         scope: &'a str,
-        names: &'a FeedConfig,
-        bodies: &'a Bodies<'a>,
     ) -> Self {
         Self {
-            base,
+            site,
             title,
             description,
             items,
             scope,
-            names,
-            bodies,
         }
     }
 
@@ -291,7 +296,7 @@ impl<'a> Feed<'a> {
     /// feed. The one reader of [`Bodies`], so the three formats cannot disagree
     /// about which pages have a body.
     fn body(&self, page: &Page) -> Option<&'a str> {
-        self.bodies.get(page)
+        self.site.bodies.get(page)
     }
 
     /// The feed's own blurb: the configured description, else its title.
@@ -327,16 +332,16 @@ impl<'a> Feed<'a> {
     /// scope is empty, and which [`Permalink::join`] already reads as "no
     /// segment" rather than as a bare separator).
     fn home(&self) -> String {
-        self.base.join(Permalink::join(&[self.scope]))
+        self.site.base.join(Permalink::join(&[self.scope]))
     }
 
     /// This feed's own absolute URL, its stable identity.
     fn url(&self, kind: FeedKind) -> String {
-        self.names.url(kind, self.base, self.scope)
+        self.site.names.url(kind, self.site.base, self.scope)
     }
 
     fn link(&self, page: &Page) -> String {
-        self.base.join(&page.permalink)
+        self.site.base.join(&page.permalink)
     }
 
     /// The namespace `content:encoded` lives in, declared on `<rss>` whenever a
@@ -347,7 +352,7 @@ impl<'a> Feed<'a> {
 
     fn rss(&self, xml: &mut Xml, stamps: &[Stamps]) {
         let mut attrs: Vec<(&str, &str)> = vec![("version", "2.0")];
-        if self.names.full() {
+        if self.site.names.full() {
             attrs.push(Self::CONTENT_NS);
         }
         xml.nest("rss", &attrs, |xml| {
@@ -397,6 +402,17 @@ impl<'a> Feed<'a> {
             }
             xml.leaf("id", &self.url(FeedKind::Atom));
             xml.empty("link", &[("href", &self.home())]);
+            // `rel="self"`: where this feed is served, which is how an
+            // aggregator that was handed the bytes finds its way back to them.
+            xml.empty(
+                "link",
+                &[("rel", "self"), ("href", &self.url(FeedKind::Atom))],
+            );
+            // Mandatory on the feed unless every entry carries one, and no
+            // entry does: RFC 4287 4.1.1, and validators enforce it.
+            if let Some(author) = self.site.author {
+                xml.nest("author", &[], |xml| xml.leaf("name", author));
+            }
             if let Some(updated) = updated {
                 xml.leaf("updated", updated);
             }
