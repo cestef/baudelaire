@@ -200,16 +200,15 @@ impl Filter {
     }
 
     /// The source trees a session always watches, in the configured (relative)
-    /// spelling. THE single list of them: the watcher, the relevance test and
-    /// the startup banner all read it, so no two of them can disagree.
+    /// spelling: the watcher, the relevance test and the startup banner all
+    /// read this, so no two of them can disagree.
+    ///
+    /// Derived from [`Paths::trees`], which is where the four names live, so a
+    /// new `paths` entry reaches the watcher by being added there. Three lists
+    /// of these four spelled themselves out, two of them claiming to be the
+    /// only one.
     pub(super) fn roots(config: &Config) -> [&Path; 4] {
-        let paths = &config.paths;
-        [
-            &paths.content,
-            &paths.templates,
-            &paths.assets,
-            &paths.r#static,
-        ]
+        config.paths.trees().map(|(_, dir)| dir)
     }
 
     /// Whether a directory can be watched at all: notify refuses one that is

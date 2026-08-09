@@ -301,14 +301,14 @@ impl Engine {
     /// same list, which is what lets the watcher tell "nothing new" from "watch
     /// something else" without re-registering on every build.
     fn outside(&self, files: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
-        let paths = &self.config.paths;
-        let watched = [
-            &paths.content,
-            &paths.templates,
-            &paths.assets,
-            &paths.r#static,
-        ]
-        .map(crate::fs::canonical);
+        // The same four `Paths::trees` names, so a new `paths` entry is not a
+        // tree the dev server re-registers a watch on because this list forgot
+        // it.
+        let watched = self
+            .config
+            .paths
+            .trees()
+            .map(|(_, dir)| crate::fs::canonical(dir));
         let mut dirs: Vec<PathBuf> = files
             .filter_map(|file| file.parent().map(std::path::Path::to_path_buf))
             .map(|dir| crate::fs::canonicalize(&dir).unwrap_or(dir))

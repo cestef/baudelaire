@@ -45,17 +45,27 @@ pub struct Paths {
 
 impl Paths {
     /// Every configured directory the build *reads*, paired with the key that
-    /// names it. The single list of what [`dist`](Paths::dist) must stay clear
-    /// of, walked by both the containment guard ([`swallowed`]) and the prune
-    /// sweep, so a new `paths` entry is covered by adding it here alone.
+    /// names it. THE list of the source trees, so a new `paths` entry is
+    /// covered by adding it here alone.
+    ///
+    /// Four things read it: what [`dist`](Paths::dist) must stay clear of
+    /// ([`swallowed`]), the prune sweep, the trees the dev server watches
+    /// ([`Filter::roots`]), and the trees it therefore need not watch a second
+    /// time ([`Engine::outside`]). The last two used to spell the four names
+    /// out again, and two of the three lists each claimed to be the only one.
+    ///
+    /// The order is the order a reader meets them, which is what the dev
+    /// server's startup banner lists.
     ///
     /// [`swallowed`]: Paths::swallowed
+    /// [`Filter::roots`]: crate::cli::serve::watch::Filter
+    /// [`Engine::outside`]: crate::engine::Engine
     pub fn trees(&self) -> [(&'static str, &Path); 4] {
         [
             ("content", &self.content),
+            ("templates", &self.templates),
             ("assets", &self.assets),
             ("static", &self.r#static),
-            ("templates", &self.templates),
         ]
     }
 
