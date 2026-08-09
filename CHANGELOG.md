@@ -110,6 +110,10 @@ chores are visible in the git history and change nothing for a site.
   dropped, and the literal day is taken, so a timestamp late enough to fall on
   the next day in UTC is still the day its author wrote.
 
+- **A frontmatter fence may carry trailing whitespace.** `--- ` on the closing
+  line reported the block as never closed; on the opening line it made the whole
+  file body, silently, and served the frontmatter as prose.
+
 - **A frontmatter type mismatch reads as one sentence.** The article was baked
   into the message as a bare `a`, so an integer was reported as `is a integer`,
   and the one caller that passed a phrase carrying its own produced `is a a

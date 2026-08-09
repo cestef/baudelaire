@@ -75,7 +75,7 @@ impl<'a> Document<'a> {
             return Ok(bare(source));
         };
         let fence = opened.open;
-        let rest = &trimmed[fence.len()..];
+        let rest = Self::blank(&trimmed[fence.len()..]);
         // A fence opens a block only on a line of its own; anything else on that
         // line is a thematic break or a setext heading, and the file is body.
         let Some(rest) = rest
@@ -92,7 +92,7 @@ impl<'a> Document<'a> {
         // generator does with it.
         let closing = |rest: &str, i: usize| {
             let before = &rest[..i];
-            let after = &rest[i + fence.len()..];
+            let after = Self::blank(&rest[i + fence.len()..]);
             (before.is_empty() || before.ends_with('\n'))
                 && (after.is_empty() || after.starts_with('\n') || after.starts_with("\r\n"))
         };
@@ -114,7 +114,7 @@ impl<'a> Document<'a> {
                     .into(),
             })?;
 
-        let after = &rest[end + fence.len()..];
+        let after = Self::blank(&rest[end + fence.len()..]);
         let body = after
             .strip_prefix('\n')
             .or_else(|| after.strip_prefix("\r\n"))
@@ -126,6 +126,17 @@ impl<'a> Document<'a> {
             offset: start,
             body_offset: source.len() - body.len(),
         })
+    }
+
+    /// `text` with the horizontal whitespace at its front removed.
+    ///
+    /// What may sit between a fence and the end of its line. An editor that
+    /// trims nothing, or an author who caught the space bar, leaves `--- `, and
+    /// requiring the newline immediately made that block "never closed" -- or,
+    /// on the *opening* fence, made the whole file body with no diagnostic at
+    /// all, which is the same slip with a worse outcome.
+    fn blank(text: &str) -> &str {
+        text.trim_start_matches([' ', '\t'])
     }
 
     /// The width of the line ending immediately before `at`: 2 for CRLF, 1 for
@@ -174,6 +185,23 @@ mod tests {
             assert_eq!(doc.frontmatter, Some("title = 1\n"), "`{open}`");
             assert_eq!(doc.body, "Body.\n", "`{open}`");
         }
+    }
+
+    /// A fence is alone on its line whether or not the line was trimmed. An
+    /// editor that strips nothing, or an author who caught the space bar,
+    /// leaves `--- `: on the closing fence that made the block "never closed",
+    /// and on the opening one it made the whole file body, silently, with the
+    /// frontmatter served as prose.
+    #[test]
+    fn a_fence_may_carry_trailing_whitespace() {
+        let doc = Document::split("--- \ntitle: A\n---\t\n# Heading\n", "a.md").expect("split");
+        assert_eq!(doc.frontmatter, Some("title: A\n"));
+        assert_eq!(doc.body, "# Heading\n");
+        // ...and the offsets still name the same bytes of the file.
+        let source = "+++ \ntitle = \"A\"\n+++ \nBody.\n";
+        let doc = Document::split(source, "a.md").expect("split");
+        assert_eq!(&source[doc.offset..doc.offset + 12], "title = \"A\"\n");
+        assert_eq!(&source[doc.body_offset..], "Body.\n");
     }
 
     /// The offsets are what every span a dialect records is shifted by, so a
