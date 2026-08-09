@@ -88,6 +88,13 @@ chores are visible in the git history and change nothing for a site.
   entry's own `<link>` is built from the permalink, which carries no prefix,
   and was always right.
 
+- **A directory watched twice keeps the deeper of the two modes.** A declared
+  source living inside a source tree made that tree's directory reach the
+  watcher's list twice, recursively as a tree and then non-recursively as the
+  file's parent. Linux ignores the second registration; macOS's fsevent backend
+  overwrites the recursion flag with it, so every edit below the top level of
+  that tree stopped rebuilding, silently, for the rest of the session.
+
 - **`--json` reports the error that failed the run.** A failure came out as
   `ok: false` with an empty `diagnostics` array: warnings pass through the
   reporter and are collected, and the error that actually stopped the build

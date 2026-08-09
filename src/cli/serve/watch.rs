@@ -96,7 +96,10 @@ impl Filter {
         // sibling of it.
         let cache = Self::absolute(&base, Path::new(crate::config::Config::SCRATCH));
         let trees = Self::roots(config).map(|dir| Self::absolute(&base, dir));
-        let mut watches: Vec<_> = trees.iter().map(|dir| (dir.clone(), Recursive)).collect();
+        let mut watches: Vec<(PathBuf, notify::RecursiveMode)> = Vec::new();
+        for dir in &trees {
+            Self::observe(&mut watches, dir.clone(), Recursive);
+        }
         // Watch the config file via its parent directory, non-recursively:
         // editors commonly save by rename-over, which drops a watch pinned to
         // the file itself. A bare `config.kdl` has an empty parent, meaning
@@ -105,7 +108,7 @@ impl Filter {
             Some(dir) if !dir.as_os_str().is_empty() => Self::absolute(&base, dir),
             _ => base.clone(),
         };
-        watches.push((config_dir, NonRecursive));
+        Self::observe(&mut watches, config_dir, NonRecursive);
         let config_file = Self::absolute(&base, config_path);
         let include = Self::compile(&config.serve.include)?;
         // Watch the literal prefix directory of each include glob (e.g. `data/`
@@ -113,7 +116,7 @@ impl Filter {
         for glob in &include {
             let (prefix, _) = glob.clone().partition();
             if !prefix.as_os_str().is_empty() {
-                watches.push((Self::absolute(&base, &prefix), Recursive));
+                Self::observe(&mut watches, Self::absolute(&base, &prefix), Recursive);
             }
         }
         // Every file `paths { sources { } }` declares, watched through its own
@@ -129,7 +132,7 @@ impl Filter {
             .collect();
         for file in &sourced {
             if let Some(dir) = file.parent() {
-                watches.push((dir.to_path_buf(), NonRecursive));
+                Self::observe(&mut watches, dir.to_path_buf(), NonRecursive);
             }
         }
         let exclude = Self::compile(&config.serve.exclude)?;
@@ -155,11 +158,45 @@ impl Filter {
     /// the build already proved it depends on.
     pub(super) fn watching(mut self, dirs: &[PathBuf]) -> Self {
         for dir in dirs {
-            self.watches
-                .push((dir.clone(), notify::RecursiveMode::Recursive));
+            Self::observe(
+                &mut self.watches,
+                dir.clone(),
+                notify::RecursiveMode::Recursive,
+            );
         }
         self.tracked = dirs.to_vec();
         self
+    }
+
+    /// Record one directory to watch, keeping the deeper mode when it is
+    /// already recorded.
+    ///
+    /// A directory reaches this list from four places, and two of them ask for
+    /// different things: a source tree is watched recursively, while the config
+    /// file and each declared source are watched through their parent
+    /// directory and only need that one level. A declared source sitting
+    /// *inside* a source tree therefore recorded the content directory twice,
+    /// recursive and then not.
+    ///
+    /// On Linux the second registration is harmless. On macOS it is not:
+    /// notify's fsevent backend keys its watches by path and overwrites the
+    /// recursion flag, so the non-recursive one wins and every edit below the
+    /// top level of that tree stops rebuilding, silently, for the rest of the
+    /// session. Deduplicating to the stronger mode is what the two callers
+    /// between them meant.
+    fn observe(
+        watches: &mut Vec<(PathBuf, notify::RecursiveMode)>,
+        dir: PathBuf,
+        mode: notify::RecursiveMode,
+    ) {
+        match watches.iter_mut().find(|(at, _)| *at == dir) {
+            Some((_, recorded)) => {
+                if mode == notify::RecursiveMode::Recursive {
+                    *recorded = mode;
+                }
+            }
+            None => watches.push((dir, mode)),
+        }
     }
 
     /// The source trees a session always watches, in the configured (relative)
@@ -372,6 +409,43 @@ mod tests {
         assert!(filter.is_config(Path::new("/proj/config.kdl")));
         assert!(!filter.is_config(Path::new("/proj/other.kdl")));
     }
+    /// A declared source inside a source tree makes that tree's directory
+    /// reach the watch list twice, recursively as a tree and then
+    /// non-recursively as the file's parent. Linux ignores the second
+    /// registration; macOS's fsevent backend overwrites the recursion flag with
+    /// it, and every nested edit stops rebuilding for the session. One entry
+    /// per directory, at the deeper of the two modes.
+    #[test]
+    fn a_directory_watched_twice_keeps_the_deeper_mode() {
+        let mut config = Config::default();
+        config.paths.sources = vec![("notes".to_owned(), PathBuf::from("content/notes/n.typ"))];
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+
+        let content: Vec<_> = filter
+            .watches()
+            .iter()
+            .filter(|(dir, _)| dir == Path::new("/proj/content"))
+            .collect();
+        assert_eq!(content.len(), 1, "{:?}", filter.watches());
+        assert_eq!(
+            content[0].1,
+            notify::RecursiveMode::Recursive,
+            "the tree's own mode has to win: {:?}",
+            filter.watches()
+        );
+        // The source's own directory, which is not a tree, still gets its
+        // watch.
+        assert!(
+            filter
+                .watches()
+                .iter()
+                .any(|(dir, _)| dir == Path::new("/proj/content/notes")),
+            "{:?}",
+            filter.watches()
+        );
+    }
+
     /// Watch roots are registered resolved and absolute, in the same form
     /// `is_relevant` compares against: a watcher reports events under the path
     /// it was given, so the two must agree by construction.
