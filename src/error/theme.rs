@@ -166,8 +166,9 @@ pub enum ThemeError {
         code(baudelaire::theme::governs),
         help(
             "a theme supplies templates, assets and their defaults; where a site's files live, \
-             what its build runs and where it publishes are the site's own. Drop the block from \
-             the theme, and write it in the project's own config"
+             what its build runs, where it publishes, and what a visitor's browser is told to \
+             trust are the site's own. Drop the block from the theme, and write it in the \
+             project's own config"
         )
     )]
     Governs { path: String, section: String },

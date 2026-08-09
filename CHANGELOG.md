@@ -58,12 +58,30 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+- **A theme that sets `serve`, `typst` or `security` now fails the build.**
+  These joined the sections only a site may declare (below). If a theme you
+  maintain sets one, move it into the project's own `config.kdl`; a theme that
+  sets none is unaffected, as all four bundled themes are.
+
 - **The first build after this release re-reads every page's frontmatter.** The
   discovery cache's validity now covers two more inputs (see below), so every
   manifest written before it is discarded once. One slower build, then back to
   normal; nothing to do.
 
 ### Fixed
+
+- **A fetched theme may no longer set `serve`, `typst` or `security`.** Three
+  sections that read like presentation and are not, on the wrong side of a
+  boundary the config already draws: a package theme is downloaded at build
+  time, so its `theme.kdl` need never appear in the site's repository at all.
+  `serve { editor }` is a command line the dev server runs on the author's
+  machine when a preview element is alt-clicked, so a theme could execute
+  anything as the author during an ordinary `serve`. `typst { registry }`
+  redirects package downloads, and they land in the machine-global typst cache
+  keyed only on name and version, so one theme's mirror was then served to
+  every other project on the machine and to `typst` itself. `security` is the
+  policy a visitor's browser enforces, down to where violation reports are
+  posted and where the page may connect.
 
 - **A frontmatter that reads a generated module, or a declared source, is no
   longer frozen at what it first saw.** The discovery cache decides whether a

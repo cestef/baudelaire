@@ -258,15 +258,28 @@ impl Config {
     /// built is the project's, so the project's root is passed in rather than
     /// taken from the parse.
     ///
-    /// The second is anything that decides what the machine does. A theme is
-    /// *fetched*: a package theme is downloaded at build time, so its
-    /// `theme.kdl` need never appear in the site's repository, and a section of
-    /// it naming a command or a destination would be an instruction the site
-    /// never wrote and cannot read. [`HooksConfig`] runs each entry through a
-    /// shell, `deploy` and `announce` say where the built site goes and with
-    /// which credentials, `paths` decides which trees the build reads and which
-    /// it prunes, and `profiles` is raw KDL that can carry any of them. Every
-    /// one of those is refused rather than dropped, so a theme author finds out
+    /// The second is anything that decides what the machine does, or what the
+    /// browser trusts in the site's name. A theme is *fetched*: a package theme
+    /// is downloaded at build time, so its `theme.kdl` need never appear in the
+    /// site's repository, and a section of it naming a command or a destination
+    /// would be an instruction the site never wrote and cannot read.
+    /// [`HooksConfig`] runs each entry through a shell, `deploy` and `announce`
+    /// say where the built site goes and with which credentials, `paths`
+    /// decides which trees the build reads and which it prunes, and `profiles`
+    /// is raw KDL that can carry any of them.
+    ///
+    /// So do three that read like presentation and are not. `serve { editor }`
+    /// is a command line the dev server runs on the author's machine when a
+    /// preview element is alt-clicked, which is arbitrary execution as the
+    /// author from installing a theme. `typst { registry }` redirects package
+    /// downloads, and they land in the *machine-global* typst cache keyed only
+    /// on name and version, so one theme's mirror is then served to every other
+    /// project on the machine and to the plain `typst` CLI. `security` is the
+    /// policy the browser enforces: a `csp { report }` collects violation
+    /// reports from every visitor in the site's name, and the fetch directives
+    /// beside it decide where the page may connect and submit.
+    ///
+    /// Every one is refused rather than dropped, so a theme author finds out
     /// their block does nothing instead of shipping one that silently never
     /// applies.
     fn floor(at: &Path, root: PathBuf) -> Result<Self> {
@@ -385,23 +398,30 @@ impl Config {
     /// parses it and the guard refusing one *inside* a profile.
     pub(crate) const PROFILES: &'static str = "profiles";
 
-    /// The four other keys named twice: once by their row in the `RULES` table
+    /// The seven other keys named twice: once by their row in the `RULES` table
     /// below, once by `OWNED`. Spelled once each so the table and the guard
     /// cannot drift apart.
     const PATHS: &'static str = "paths";
     const HOOKS: &'static str = "hooks";
     const ANNOUNCE: &'static str = "announce";
     const DEPLOY: &'static str = "deploy";
+    const SERVE: &'static str = "serve";
+    /// Suffixed because [`Config::TYPST`] is already the *extension* `typ`.
+    const TYPST_SECTION: &'static str = "typst";
+    const SECURITY: &'static str = "security";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
     /// may not carry: see `Config::floor`, which is the only thing that reads
     /// this and the only place the reason is written.
-    const OWNED: [&'static str; 5] = [
+    const OWNED: [&'static str; 8] = [
         Self::PATHS,
         Self::HOOKS,
         Self::ANNOUNCE,
         Self::DEPLOY,
         Self::PROFILES,
+        Self::SERVE,
+        Self::TYPST_SECTION,
+        Self::SECURITY,
     ];
 
     /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the

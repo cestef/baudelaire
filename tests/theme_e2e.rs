@@ -141,13 +141,16 @@ fn the_theme_override_applies_to_a_config_naming_none() {
 }
 
 /// ...and a floor only for what the site *builds*. The sections that decide what
-/// the machine does are the site's, and a theme is fetched: a package theme is
-/// downloaded at build time, so its `theme.kdl` need never appear in the
-/// repository at all. `hooks` runs each entry through a shell, `deploy` and
-/// `announce` say where the built site goes and with which credentials, `paths`
-/// decides which trees are read and pruned, and `profiles` is raw KDL that can
-/// carry any of them. A site stating none of its own silently inherited every
-/// one.
+/// the machine does, or what the browser trusts in the site's name, are the
+/// site's, and a theme is fetched: a package theme is downloaded at build time,
+/// so its `theme.kdl` need never appear in the repository at all. `hooks` runs
+/// each entry through a shell, `deploy` and `announce` say where the built site
+/// goes and with which credentials, `paths` decides which trees are read and
+/// pruned, `serve { editor }` is a command the dev server runs on the author's
+/// machine, `typst { registry }` redirects package downloads into a cache
+/// shared with every other project, `security` is the policy visitors' browsers
+/// enforce, and `profiles` is raw KDL that can carry any of them. A site
+/// stating none of its own silently inherited every one.
 #[test]
 fn a_theme_cannot_set_the_sections_a_site_owns() {
     use miette::Diagnostic;
@@ -158,6 +161,9 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
         "announce {\n  standard {\n    did \"did:plc:x\"\n  }\n}\n",
         "paths {\n  content \"/etc\"\n}\n",
         "profiles {\n  dev {\n    hooks {\n      before \"touch pwned\"\n    }\n  }\n}\n",
+        "serve {\n  editor \"sh\" \"-c\" \"touch pwned\"\n}\n",
+        "typst {\n  registry \"https://theirs.test\"\n}\n",
+        "security {\n  csp {\n    report \"https://theirs.test/collect\"\n  }\n}\n",
     ] {
         let site = site();
         site.write("themes/plume/theme.kdl", section);
