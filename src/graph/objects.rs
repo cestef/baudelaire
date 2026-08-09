@@ -15,15 +15,13 @@ use rayon::prelude::*;
 use crate::error::Result;
 use crate::graph::Hash;
 
-/// Subdirectory holding content-addressed HTML blobs.
-const OBJECTS: &str = "objects";
-
-/// Digits of a blob's hex digest used as its shard directory.
-const SHARD: usize = 2;
-
 /// The blob store under one cache directory.
 pub(super) struct Objects {
-    dir: PathBuf,
+    /// The cache directory the store sits under. The `objects/` segment and
+    /// the shard beneath it are [`Hash::object`]'s to add, so this store and
+    /// the processed-asset memo lay their blobs out the same way by
+    /// construction.
+    root: PathBuf,
     /// Blobs found on disk not matching their own content address, to be
     /// rewritten by [`Objects::write`] rather than left broken forever.
     corrupt: HashSet<Hash>,
@@ -34,7 +32,7 @@ impl Objects {
     /// write asks for it.
     pub(super) fn new(cache: &Path) -> Self {
         Self {
-            dir: cache.join(OBJECTS),
+            root: cache.to_path_buf(),
             corrupt: HashSet::new(),
         }
     }
@@ -82,7 +80,7 @@ impl Objects {
     /// regenerable, so a housekeeping failure never fails a build.
     pub(super) fn prune(&self, live: &HashSet<Hash>) {
         let live: HashSet<String> = live.iter().map(Hash::hex).collect();
-        let Ok(shards) = fs::read_dir(&self.dir) else {
+        let Ok(shards) = fs::read_dir(self.root.join(Hash::OBJECTS)) else {
             return;
         };
         for shard in shards.flatten() {
@@ -118,11 +116,9 @@ impl Objects {
         self.corrupt.contains(blob) || !self.path(blob).exists()
     }
 
-    /// Absolute path of a blob, sharded by hash prefix to keep any one
-    /// directory small.
+    /// Absolute path of a blob. The layout is [`Hash::object`]'s, shared with
+    /// the processed-asset memo so the two stores cannot disagree about it.
     fn path(&self, blob: &Hash) -> PathBuf {
-        let hex = blob.hex();
-        let (shard, _) = hex.split_at(SHARD.min(hex.len()));
-        self.dir.join(shard).join(hex)
+        blob.object(&self.root)
     }
 }

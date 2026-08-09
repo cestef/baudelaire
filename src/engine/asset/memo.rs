@@ -133,15 +133,12 @@ impl Memo {
         self.dir.join(format!("{}.json", key.hex()))
     }
 
-    /// Content-addressed blob path, sharded by hash prefix like the page store.
+    /// Content-addressed blob path. The layout is [`Hash::object`]'s, shared
+    /// with the page store: the constant, the split and the directory name were
+    /// spelled here too, and two stores that disagree about layout are a
+    /// `clean` that walks one and not the other.
     fn object(&self, blob: &Hash) -> PathBuf {
-        // 2 hex digits: 256 directories, so even a site with tens of thousands
-        // of processed assets keeps every directory small enough that a listing
-        // stays cheap on every filesystem. The page store shards the same way.
-        const SHARD: usize = 2;
-        let hex = blob.hex();
-        let (shard, _) = hex.split_at(SHARD.min(hex.len()));
-        self.dir.join("objects").join(shard).join(hex)
+        blob.object(&self.dir)
     }
 
     /// A blob's bytes, verified against the name that claims their hash so a

@@ -31,6 +31,29 @@ impl Hash {
         hex
     }
 
+    /// Digits of a digest used as its shard directory: 256 of them, so even a
+    /// site with tens of thousands of objects keeps every directory small
+    /// enough that a listing stays cheap on every filesystem.
+    const SHARD: usize = 2;
+
+    /// The directory name holding content-addressed blobs, under whichever
+    /// store's own directory.
+    pub const OBJECTS: &'static str = "objects";
+
+    /// This digest's blob path under `dir`: `<dir>/objects/ab/abcdef..`.
+    ///
+    /// THE layout, because two stores use it and must agree: the page store
+    /// ([`crate::graph::Objects`]) and the processed-asset memo
+    /// (`engine::asset::memo`). Each had its own copy of the constant, the
+    /// split and the directory name, and the second one's comment admitted as
+    /// much. Two stores that disagree about layout are a `clean` that walks one
+    /// and not the other.
+    pub fn object(&self, dir: &Path) -> PathBuf {
+        let hex = self.hex();
+        let (shard, _) = hex.split_at(Self::SHARD.min(hex.len()));
+        dir.join(Self::OBJECTS).join(shard).join(&hex)
+    }
+
     /// Hash a file's bytes, or `None` if it can't be read.
     pub fn of_file(path: &Path) -> Option<Self> {
         Some(Self::of_bytes(&std::fs::read(path).ok()?))
