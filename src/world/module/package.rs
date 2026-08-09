@@ -76,7 +76,7 @@ impl Packages {
     /// One machine-global copy of those is one project's data shown to every
     /// other project's editor.
     pub fn project() -> PathBuf {
-        Config::scratch("generated").join("packages")
+        Config::scratch(crate::config::Scratch::Generated).join("packages")
     }
 
     /// The directory typst resolves a non-`preview` package from with nothing

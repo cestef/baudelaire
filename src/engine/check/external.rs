@@ -250,7 +250,10 @@ impl Verified {
     /// Where the record lives: under the scratch directory, so `clean` wipes it
     /// and nothing here is ever mistaken for build output.
     fn path(config: &Config) -> PathBuf {
-        config.root.join(Config::scratch("links")).join("seen.json")
+        config
+            .root
+            .join(Config::scratch(crate::config::Scratch::Links))
+            .join("seen.json")
     }
 
     /// Load the previous run's record. Unreadable or corrupt is not an error:

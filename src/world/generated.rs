@@ -54,7 +54,7 @@ impl Table {
     /// The same path for a module named directly, which the registry needs to
     /// serve a file-backed module before any [`Table`] exists.
     pub(crate) fn of(module: &str) -> PathBuf {
-        Config::scratch("generated").join(format!("{module}.typ"))
+        Config::scratch(crate::config::Scratch::Generated).join(format!("{module}.typ"))
     }
 
     /// The table with nothing in it: what a module reads as before a build has

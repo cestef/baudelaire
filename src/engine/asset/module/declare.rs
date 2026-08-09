@@ -31,7 +31,7 @@ impl Declarations {
     /// gitignored, swept by `clean`, and outside every root `serve` watches, so
     /// writing it cannot retrigger the build that wrote it.
     pub fn path() -> PathBuf {
-        Config::scratch("generated").join("baudelaire.d.ts")
+        Config::scratch(crate::config::Scratch::Generated).join("baudelaire.d.ts")
     }
 
     /// The header the file opens with: it is generated state, and a reader who

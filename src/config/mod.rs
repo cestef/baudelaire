@@ -352,13 +352,7 @@ impl Config {
     }
 
     /// Root of all machine-local, regenerable build state, one subdirectory per
-    /// subsystem:
-    ///
-    /// ```text
-    /// .baudelaire/
-    ///   cache/    incremental build cache: loss forces a full rebuild
-    ///   announce/  per-backend announce skip-cache: loss forces idempotent re-sends
-    /// ```
+    /// subsystem. [`Scratch`] names them and says what each holds.
     ///
     /// Everything here is derivable, never authored: it is gitignored, wiped by
     /// `clean`, and safe to delete at any time. Single source for the location so
@@ -427,8 +421,8 @@ impl Config {
     /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the
     /// one builder every subsystem uses to locate its local state under
     /// [`SCRATCH`](Config::SCRATCH).
-    pub fn scratch(sub: &str) -> PathBuf {
-        PathBuf::from(Self::SCRATCH).join(sub)
+    pub fn scratch(sub: Scratch) -> PathBuf {
+        PathBuf::from(Self::SCRATCH).join(sub.dir())
     }
 
     /// Human-readable site label for CLI output.
@@ -1031,6 +1025,39 @@ impl Config {
     /// (see [`Config::with_profile`]).
     pub(crate) fn overlay(&mut self, text: &str, node: &KdlNode) -> Result<()> {
         self.apply(std::slice::from_ref(node), text)
+    }
+}
+
+/// One subdirectory of [`Config::SCRATCH`], and what lives in it.
+///
+/// A type rather than a string, because the layout was prose in one doc comment
+/// and a literal at each of eight call sites, and the prose had already gone
+/// stale: it named `cache/` and `announce/` while `generated/` and `links/` had
+/// been added without it. The set is now the type, so a new one cannot be
+/// created without appearing here, and `clean` cannot miss one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scratch {
+    /// Incremental build cache: loss forces a full rebuild.
+    Cache,
+    /// Per-backend announce skip-cache: loss forces idempotent re-sends.
+    Announce,
+    /// Generated typst modules, their declaration file, and the package mount:
+    /// loss is rebuilt on the next compile.
+    Generated,
+    /// What the external-link check has already seen: loss re-requests every
+    /// outbound URL.
+    Links,
+}
+
+impl Scratch {
+    /// The directory name.
+    pub const fn dir(self) -> &'static str {
+        match self {
+            Self::Cache => "cache",
+            Self::Announce => "announce",
+            Self::Generated => "generated",
+            Self::Links => "links",
+        }
     }
 }
 

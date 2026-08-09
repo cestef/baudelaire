@@ -33,7 +33,7 @@ impl std::hash::Hash for CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            dir: Config::scratch("cache"),
+            dir: Config::scratch(crate::config::Scratch::Cache),
             incremental: true,
         }
     }

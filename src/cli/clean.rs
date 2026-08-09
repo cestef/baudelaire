@@ -58,7 +58,7 @@ const CLEAN_TARGETS: &[CleanTarget] = &[
     },
     CleanTarget {
         selected: |a| a.announce,
-        dirs: |_| vec![Config::scratch("announce")],
+        dirs: |_| vec![Config::scratch(crate::config::Scratch::Announce)],
     },
 ];
 impl CleanArgs {

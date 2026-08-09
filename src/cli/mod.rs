@@ -987,7 +987,7 @@ mod tests {
         );
         assert_eq!(
             args(false, false, true).targets(&config),
-            vec![Config::scratch("announce")]
+            vec![Config::scratch(crate::config::Scratch::Announce)]
         );
         assert_eq!(
             args(true, false, false).targets(&config),

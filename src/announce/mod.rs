@@ -172,7 +172,7 @@ impl SkipCache {
     }
 
     fn path(backend: &str) -> PathBuf {
-        Config::scratch("announce").join(format!("{backend}.json"))
+        Config::scratch(crate::config::Scratch::Announce).join(format!("{backend}.json"))
     }
 }
 

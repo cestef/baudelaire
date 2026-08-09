@@ -403,11 +403,22 @@ pub(crate) struct Sources {
     files: BTreeMap<String, PathBuf>,
 }
 
+/// The mount point as typst spells a path: project-rooted, no leading slash,
+/// so it can be matched against a file id and written into a binding.
+///
+/// Built once. It was rebuilt by `format!` on every file lookup, and every
+/// mounted read goes through one.
+static PREFIX: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{}/{}", crate::config::Config::SCRATCH, Sources::MOUNT));
+
 impl Sources {
-    /// The mount point as typst spells a path: project-rooted, no leading
-    /// slash, so it can be matched against a file id and written into a binding.
-    pub(crate) fn prefix() -> String {
-        format!("{}/{}", crate::config::Config::SCRATCH, "sources")
+    /// The directory declared sources are mounted under, beside the theme's own
+    /// (`Theme::MOUNT`). Named rather than spelled inline, as that one is.
+    const MOUNT: &'static str = "sources";
+
+    /// The mount point; see [`PREFIX`].
+    pub(crate) fn prefix() -> &'static str {
+        &PREFIX
     }
 
     /// What a declared source is served as under the prefix: the name it was
@@ -448,7 +459,7 @@ impl Sources {
     pub(crate) fn real(vpath: &str, sources: &[(String, PathBuf)], root: &Path) -> Option<PathBuf> {
         let key = vpath
             .strip_prefix('/')?
-            .strip_prefix(&Self::prefix())?
+            .strip_prefix(Self::prefix())?
             .strip_prefix('/')?;
         sources
             .iter()
@@ -461,7 +472,7 @@ impl Sources {
     /// mount cannot serve one file and resolve another.
     fn file(&self, id: FileId) -> Option<&Path> {
         self.files
-            .get(Prefix(&Self::prefix()).strips(&id)?)
+            .get(Prefix(Self::prefix()).strips(&id)?)
             .map(PathBuf::as_path)
     }
 }
