@@ -22,6 +22,61 @@ use crate::remote::{Http, Status};
 /// An archive fetched over http.
 pub struct Archive;
 
+/// What an archive is still allowed to cost, counted down as it unpacks.
+///
+/// THE ceiling on unpacking, and deliberately not one per format, for the same
+/// reason [`Archive::inside`] is not: the zip branch and the tar branch each
+/// read an entry to the end, and a rule written twice is a rule one branch
+/// ends up without.
+///
+/// [`Archive::LIMIT`] bounds what is *downloaded*, which says nothing about
+/// what those bytes expand to. Gzip and deflate both reach roughly a thousand
+/// to one on a repeated byte, so a 1 MiB archive comfortably inside that
+/// ceiling unpacked to over a gigabyte, held it all in memory, and wrote it to
+/// disk. Two counters close it: one on the total unpacked size, one on the
+/// number of entries, since many tiny files compress just as well as one large
+/// one.
+struct Budget {
+    /// Bytes of unpacked content still allowed.
+    bytes: u64,
+    /// Entries still allowed.
+    entries: usize,
+}
+
+impl Default for Budget {
+    fn default() -> Self {
+        Self {
+            bytes: Archive::UNPACKED,
+            entries: Archive::ENTRIES,
+        }
+    }
+}
+
+impl Budget {
+    /// Read one entry to its end, or fail if it would spend more than is left.
+    ///
+    /// The read itself is capped, not just checked afterwards: reading a
+    /// gigabyte into memory and *then* refusing it is the failure this exists
+    /// to prevent. One byte past what remains is read, so an entry that exactly
+    /// fits is told apart from one that ran over.
+    fn read(&mut self, url: &str, from: impl Read) -> Result<Vec<u8>> {
+        self.entries = self
+            .entries
+            .checked_sub(1)
+            .ok_or_else(|| ThemeError::crowded(url, Archive::ENTRIES))?;
+        let mut bytes = Vec::new();
+        from.take(self.bytes + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|why| ThemeError::unpack(url, why))?;
+        let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        self.bytes = self
+            .bytes
+            .checked_sub(read)
+            .ok_or_else(|| ThemeError::unpacked(url, Archive::UNPACKED))?;
+        Ok(bytes)
+    }
+}
+
 /// What an archive holds: its files, and the one directory they were all
 /// inside if they shared one.
 pub(super) type Contents = (Option<String>, BTreeMap<PathBuf, Vec<u8>>);
@@ -32,13 +87,20 @@ impl Archive {
     /// that fetch a repository.
     const SUFFIXES: [&'static str; 3] = [".tar.gz", ".tgz", ".zip"];
 
-    /// What a theme may weigh, compressed and in total.
+    /// What a theme may weigh on the wire, compressed.
     ///
     /// A ceiling, not a guess: this reads a remote stream into memory, and
     /// without a limit a hostile (or merely wrong) URL decides how much of it
     /// to use. The shipped themes are ~60 KiB each, so this is three orders of
-    /// magnitude of room.
+    /// magnitude of room. What those bytes expand to is [`Budget`]'s question,
+    /// not this one.
     const LIMIT: u64 = 64 * 1024 * 1024;
+
+    /// What a theme may weigh once unpacked, and in how many files. See
+    /// [`Budget`], which is the only thing that reads either: [`Archive::LIMIT`]
+    /// bounds the download, and these bound what it expands to.
+    const UNPACKED: u64 = 256 * 1024 * 1024;
+    const ENTRIES: usize = 10_000;
 
     /// The files an archive at `url` holds, and the wrapper directory they
     /// were inside, if they shared one.
@@ -125,6 +187,7 @@ impl Archive {
 
     fn tar(url: &str, bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
         let mut entries = BTreeMap::new();
+        let mut budget = Budget::default();
         let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(bytes));
         for entry in archive
             .entries()
@@ -139,17 +202,14 @@ impl Archive {
                 .map_err(|why| ThemeError::unpack(url, why))?
                 .into_owned();
             let path = Self::inside(url, &named)?;
-            let mut bytes = Vec::new();
-            entry
-                .read_to_end(&mut bytes)
-                .map_err(|why| ThemeError::unpack(url, why))?;
-            entries.insert(path, bytes);
+            entries.insert(path, budget.read(url, &mut entry)?);
         }
         Ok(entries)
     }
 
     fn zip(url: &str, bytes: Vec<u8>) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
         let mut entries = BTreeMap::new();
+        let mut budget = Budget::default();
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
             .map_err(|why| ThemeError::unpack(url, why))?;
         for index in 0..archive.len() {
@@ -164,11 +224,7 @@ impl Archive {
             // of the question, and two readings of one question is what left
             // the other branch without an answer at all.
             let path = Self::inside(url, Path::new(entry.name()))?;
-            let mut bytes = Vec::new();
-            entry
-                .read_to_end(&mut bytes)
-                .map_err(|why| ThemeError::unpack(url, why))?;
-            entries.insert(path, bytes);
+            entries.insert(path, budget.read(url, &mut entry)?);
         }
         Ok(entries)
     }
@@ -447,5 +503,46 @@ mod tests {
             Archive::names("https://x.dev/plume.tar.gz", None).expect("named"),
             "plume"
         );
+    }
+
+    /// The unpacking ceiling, exercised on [`Budget`] itself rather than
+    /// through a real bomb: the point of the guard is that a 256 MiB entry is
+    /// never read into memory, so a test that builds one to prove it would be
+    /// doing the very thing the guard prevents.
+    ///
+    /// One byte past what remains is read, so an entry that exactly fills the
+    /// budget is accepted and the next byte is not.
+    #[test]
+    fn an_entry_may_not_unpack_past_what_is_left() {
+        let mut budget = Budget {
+            bytes: 4,
+            entries: 8,
+        };
+        assert_eq!(
+            budget
+                .read("https://x.dev/t.zip", &b"abcd"[..])
+                .expect("fits"),
+            b"abcd"
+        );
+        assert!(matches!(
+            budget.read("https://x.dev/t.zip", &b"e"[..]),
+            Err(BaudelaireErrorKind::Theme(ThemeError::Unpacked { .. }))
+        ));
+    }
+
+    /// And the other half: many tiny entries cost nothing to compress, so the
+    /// byte ceiling alone would let an archive of a million empty files
+    /// through.
+    #[test]
+    fn an_archive_may_not_hold_more_entries_than_a_theme_has() {
+        let mut budget = Budget {
+            bytes: 1024,
+            entries: 1,
+        };
+        budget.read("https://x.dev/t.zip", &b""[..]).expect("first");
+        assert!(matches!(
+            budget.read("https://x.dev/t.zip", &b""[..]),
+            Err(BaudelaireErrorKind::Theme(ThemeError::Crowded { .. }))
+        ));
     }
 }

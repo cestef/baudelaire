@@ -58,6 +58,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Upgrading
 
+- **A theme archive that unpacks past 256 MiB, or holds more than 10,000
+  files, now fails `theme add`.** Previously only the compressed size was
+  capped. A theme within these is unaffected; the shipped ones weigh about
+  60 KiB each.
+
 - **A theme that sets `serve`, `typst` or `security` now fails the build.**
   These joined the sections only a site may declare (below). If a theme you
   maintain sets one, move it into the project's own `config.kdl`; a theme that
@@ -69,6 +74,15 @@ chores are visible in the git history and change nothing for a site.
   normal; nothing to do.
 
 ### Fixed
+
+- **An archive is refused before it fills the disk.** Only the *compressed*
+  size of a fetched theme was capped, and gzip and deflate both reach roughly a
+  thousand to one on a repeated byte, so a 1 MiB archive well inside that
+  ceiling unpacked to over a gigabyte, held it in memory, and wrote it out. The
+  unpacked size and the entry count are now counted down as the archive is
+  read, and an entry is capped as it is read rather than measured after the
+  fact. One ceiling for both formats, beside the containment check that is
+  already shared for the same reason.
 
 - **A fetched theme may no longer set `serve`, `typst` or `security`.** Three
   sections that read like presentation and are not, on the wrong side of a

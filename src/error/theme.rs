@@ -141,6 +141,29 @@ pub enum ThemeError {
     )]
     Oversize { url: String, limit: u64 },
 
+    /// The compressed ceiling says nothing about what the bytes expand to. A
+    /// gzip stream of one repeated byte reaches roughly a thousand to one, so
+    /// an archive well inside [`ThemeError::Oversize`] unpacked into gigabytes
+    /// of memory and then onto the disk.
+    #[error("the archive at {} unpacks to more than the {} a theme may weigh", Code(.url), Code(Bytes(*limit)))]
+    #[diagnostic(
+        code(baudelaire::theme::unpacked),
+        help(
+            "nothing was written; the archive is small but its contents are not, which is a \
+             compression bomb rather than a theme"
+        )
+    )]
+    Unpacked { url: String, limit: u64 },
+
+    /// The other half of the same ceiling: a great many tiny entries cost
+    /// nothing to compress and are just as effective.
+    #[error("the archive at {} holds more than the {limit} files a theme may have", Code(.url))]
+    #[diagnostic(
+        code(baudelaire::theme::crowded),
+        help("nothing was written; the shipped themes hold a few dozen files each")
+    )]
+    Crowded { url: String, limit: usize },
+
     #[error("the archive at {} names a file outside itself: {}", Code(.url), Code(.entry))]
     #[diagnostic(
         code(baudelaire::theme::escapes),
@@ -223,6 +246,22 @@ impl ThemeError {
     /// theme and not a theme.
     pub fn oversize(url: &str, limit: u64) -> Self {
         Self::Oversize {
+            url: url.to_owned(),
+            limit,
+        }
+    }
+
+    /// The entries unpacked past the ceiling, so the archive is a bomb.
+    pub fn unpacked(url: &str, limit: u64) -> Self {
+        Self::Unpacked {
+            url: url.to_owned(),
+            limit,
+        }
+    }
+
+    /// The archive holds more entries than a theme plausibly has.
+    pub fn crowded(url: &str, limit: usize) -> Self {
+        Self::Crowded {
             url: url.to_owned(),
             limit,
         }
