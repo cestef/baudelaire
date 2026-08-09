@@ -51,6 +51,23 @@ pub struct AssetConfig {
 }
 
 /// The `assets { .. }` section: the pipeline applied to `paths { assets }`.
+impl AssetConfig {
+    /// Whether JavaScript is actually bundled: configured *and* compiled in.
+    ///
+    /// The same shape as [`CardsConfig::active`](crate::config::CardsConfig::active),
+    /// and for the same reason. A binary built without the `js` feature has no
+    /// bundler, so a site that asks for one gets its scripts copied verbatim.
+    /// Reading the raw flag instead meant a slim build treated a `.ts` file as
+    /// an *input* to a build step that does not exist: nothing claimed it,
+    /// nothing transformed it, and it was published as TypeScript under its own
+    /// name while every page went on referencing the `.js` that was never
+    /// written. [`crate::engine::gate`] warns about the gap; this is what
+    /// closes it.
+    pub fn bundling(&self) -> bool {
+        self.bundle && cfg!(feature = "js")
+    }
+}
+
 impl Section for AssetConfig {
     const RULES: Block<Self> = Block(&[
         (

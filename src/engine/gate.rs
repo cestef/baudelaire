@@ -107,7 +107,7 @@ const GATES: &[Gate] = &[
         compiled: cfg!(feature = "js"),
         setting: "assets { bundle }",
         asked: |config| config.assets.bundle,
-        effect: "JavaScript is copied verbatim, its imports unresolved and its output unminified",
+        effect: "JavaScript is copied verbatim with its imports unresolved, and TypeScript is not published at all",
         rewrites: false,
     },
     Gate {
@@ -214,6 +214,10 @@ const INERT: &[Inert] = &[
         setting: "assets { tsconfig }",
         asked: |config| config.assets.tsconfig.is_some(),
         needs: "assets { bundle }",
+        // The raw flag, not `bundling()`: this row is for a setting the *site*
+        // left inert. A binary with no bundler is the `js` row's business, and
+        // answering here too would fire both for one cause, with a help telling
+        // the author to turn on the setting they already turned on.
         met: |config| config.assets.bundle,
         effect: "TypeScript and JSX are copied verbatim, untransformed",
         help: "turn on `assets { bundle }`, or drop the `tsconfig` path",

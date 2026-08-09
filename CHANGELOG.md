@@ -75,6 +75,15 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A build with no bundler no longer publishes TypeScript.** `assets
+  { bundle }` says the site wants a build step; whether the binary has one is a
+  second question, and the pipeline asked only the first. On the `slim` flavor,
+  which drops the `js` feature, a `.ts` file was therefore treated as the input
+  to a step that does not exist: nothing claimed it, and it was published under
+  its own name, comments and type annotations intact, while every page went on
+  referencing the `.js` that was never written. Bundling now asks whether this
+  binary can bundle, the way cards and PDFs already do.
+
 - **An archive is refused before it fills the disk.** Only the *compressed*
   size of a fetched theme was capped, and gzip and deflate both reach roughly a
   thousand to one on a repeated byte, so a 1 MiB archive well inside that

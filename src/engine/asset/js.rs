@@ -40,7 +40,7 @@ pub(super) struct Script;
 
 impl Handler for Script {
     fn claims(&self, file: &Path, config: &Config) -> bool {
-        config.assets.bundle && SCRIPTS.contains(&file.ext().to_ascii_lowercase().as_str())
+        config.assets.bundling() && SCRIPTS.contains(&file.ext().to_ascii_lowercase().as_str())
     }
 
     fn phase(&self) -> Phase {

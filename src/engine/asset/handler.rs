@@ -57,7 +57,7 @@ impl Private {
         Self::partial(rel)
             || Self::declaration(rel)
             || Self::SOURCES.contains(&ext.as_str())
-            || (!config.assets.bundle && Self::UNBUNDLED.contains(&ext.as_str()))
+            || (!config.assets.bundling() && Self::UNBUNDLED.contains(&ext.as_str()))
     }
 
     /// A file whose name starts with `_` is imported by a neighbour, never

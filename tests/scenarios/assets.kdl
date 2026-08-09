@@ -695,3 +695,37 @@ scenario "minify names the kinds it applies to" {
     file "assets/style.css" { contains "body{color:red}" }
   }
 }
+
+// `assets { bundle }` says the site wants a build step; whether this binary has
+// one is a second question, and the pipeline used to ask only the first. On a
+// binary without the bundler that meant a `.ts` file was treated as the input
+// to a step that does not exist: nothing claimed it, so it was published as
+// TypeScript under its own name while every page went on referencing the `.js`
+// that was never written. Unpublished is the only honest answer; the feature
+// gate warns separately about why.
+scenario "a typescript source is never published, whatever the flavor" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        assets "assets"
+      }
+      assets {
+        bundle #true
+      }
+      """#
+    "assets/main.ts" #"""
+      const x: number = 1;
+      export {};
+      """#
+    "content/index.typ" #"""
+      = Hi
+      """#
+  }
+  expect {
+    ok
+    absent "assets/main.ts"
+  }
+}
