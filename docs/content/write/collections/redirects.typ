@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Redirects",
-  order: 12,
+  order: 13,
 )
 #import "/templates/theme.typ": callout
 

@@ -114,3 +114,7 @@ a merged one. See #link("../i18n.typ")[multiple languages].
 
 A term can also carry its own feed, with `generate { feed { terms #true } }`;
 see #link("../../build/generate/feeds.typ")[feeds and sitemap].
+
+Terms can be more than words. Point a taxonomy at a registry and each term is a
+person, a series, an organization the build knows other things about: see
+#link("entities.typ")[authors and other entities].

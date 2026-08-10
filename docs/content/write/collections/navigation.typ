@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Prev / next links",
-  order: 11,
+  order: 12,
 )
 #import "/templates/theme.typ": callout
 
