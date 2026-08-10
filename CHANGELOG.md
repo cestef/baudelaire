@@ -10,6 +10,53 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **A taxonomy's terms can be things the build knows about**, rather than words.
+  `content { entities { } }` declares a registry -- `people`, `series`,
+  `organizations`, whatever a site has -- and a taxonomy resolves its terms
+  against one:
+
+  ```kdl
+  content {
+    entities {
+      people {
+        shape "person"
+        sources {
+          pages "content/people"
+          data "data/people.kdl"
+          inline {
+            zoe { name "Zoe"; url "https://zoe.example" }
+          }
+        }
+      }
+    }
+    taxonomies {
+      authors entities="people" listing=#true
+    }
+  }
+  ```
+
+  Nothing in the mechanism is about people. A registry declares what its
+  entities carry (`shape "person"`, or its own `fields { }`, typed by the same
+  language a collection's `schema` speaks) and which field answers each question
+  a renderer asks (`slots display=".." image=".."`), so a `series` registry
+  binding `display` to `title` and `image` to `cover` renders through the same
+  code.
+
+  Sources are read in the order they are written and a later one *fills* what an
+  earlier one left out, so a checked-in roster can carry contact details while
+  profile pages carry the prose. An `alias` is a second name that resolves to one
+  entity, and a name reaching two of them fails the build.
+
+  A registry with a source is a roster, so a term nobody declared is a typo and
+  fails the build with the near id suggested, underlined where the page wrote it.
+  `unknown "warn"` reports it instead, and `unknown "synthesize"` takes the term
+  as written -- which is what a site that declares no registry at all has always
+  done, and still does.
+
 ## [0.0.14] - 2026-08-10
 
 ### Added

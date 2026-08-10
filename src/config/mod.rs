@@ -63,6 +63,10 @@ pub use caching::CacheControl;
 pub use content::ContentConfig;
 pub use content::collection::{CollectionConfig, PaginateConfig, SortKey};
 pub use content::drafts::DraftConfig;
+pub use content::entities::source::{
+    DataSource, Declared, InlineSource, PagesSource, SourceConfig, SourcesConfig,
+};
+pub use content::entities::{RegistryConfig, Shape, Slots, Unknown};
 pub use content::markdown::{Extension, MarkdownConfig, RawHtml};
 pub use content::reading::ReadingConfig;
 pub use content::taxonomy::TaxonomyConfig;

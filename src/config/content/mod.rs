@@ -2,6 +2,7 @@
 
 pub mod collection;
 pub mod drafts;
+pub mod entities;
 pub mod markdown;
 pub mod reading;
 pub mod taxonomy;
@@ -9,7 +10,9 @@ pub mod taxonomy;
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Lines, Text};
 use crate::config::dispatch::{Attributed, Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, TaxonomyConfig};
+use crate::config::{
+    CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, RegistryConfig, TaxonomyConfig,
+};
 use crate::error::{ConfigError, ConfigErrorKind};
 
 /// What the content tree holds and how it is read. The directory itself is
@@ -30,6 +33,8 @@ pub struct ContentConfig {
     pub collections: Vec<(String, CollectionConfig)>,
     /// Taxonomy definitions.
     pub taxonomies: Vec<(String, TaxonomyConfig)>,
+    /// The registries a taxonomy's terms resolve into, keyed by id.
+    pub entities: Vec<(String, RegistryConfig)>,
     /// How markdown pages are read.
     pub markdown: MarkdownConfig,
     /// How a page's reading estimate is measured.
@@ -44,6 +49,7 @@ impl Default for ContentConfig {
             drafts: DraftConfig::default(),
             collections: Vec::default(),
             taxonomies: Vec::default(),
+            entities: Vec::default(),
             markdown: MarkdownConfig::default(),
             reading: ReadingConfig::default(),
         }
@@ -110,6 +116,15 @@ impl Section for ContentConfig {
             "One line per taxonomy, each named by its id.",
             |c, n, t| {
                 c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
+                Ok(())
+            },
+        ),
+        (
+            "entities",
+            Items(RegistryConfig::rows),
+            "One block per registry, each named by its id: what its entities carry and where they come from.",
+            |c, n, t| {
+                c.entities = n.unique(t, "registry", RegistryConfig::item)?;
                 Ok(())
             },
         ),

@@ -343,13 +343,23 @@ impl Engine {
     /// reported once, beside the other build-shaped advice, rather than
     /// vanishing into a page count nobody can reconcile.
     fn planned(&self, what: &'static str, ui: &Ui) -> Result<Planned> {
-        let (pages, held) = plan(&self.config, &self.project)?;
-        debug!(pages = pages.len(), site = self.config.label(), "{what}");
-        if held.any() {
-            ui.advice(crate::error::warning::PagesHeld(held));
+        let planned = plan(&self.config, &self.project)?;
+        debug!(
+            pages = planned.pages.len(),
+            site = self.config.label(),
+            "{what}"
+        );
+        if planned.held.any() {
+            ui.advice(crate::error::warning::PagesHeld(planned.held));
         }
+        // Every term that names an entity, held to the registry it names. Here
+        // rather than in the plan because two of the three policies report
+        // instead of failing, and reporting is what the `Ui` is for.
+        planned
+            .entities
+            .check(&self.config, &self.project, &planned.pages, ui)?;
         Ok(Planned {
-            pages,
+            pages: planned.pages,
             tracked: self.project.tracked(),
         })
     }

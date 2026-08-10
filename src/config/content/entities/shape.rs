@@ -1,0 +1,122 @@
+//! `content { entities { <id> { shape } } }`: a field set and its slots, named.
+//!
+//! A shape is a row in a table, never a type in the code: what makes `person`
+//! ship with the crate is that somebody wrote its fields down here, and a site
+//! declaring its own `fields { }` and `slots` is doing exactly what the row
+//! does. Nothing downstream branches on which shape a registry named.
+
+use super::slots::Slots;
+use crate::config::{FieldSchema, FieldType, Named};
+
+/// A named field set a registry can take instead of declaring its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Shape {
+    /// A human: what an `authors` registry almost always holds.
+    Person,
+    /// A company, a publisher, a band.
+    Organization,
+}
+
+impl Named for Shape {
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("person", Self::Person),
+        ("organization", Self::Organization),
+    ];
+}
+
+/// One field a shape declares: its key, and what it holds. As a constructor
+/// rather than a value, for the same reason the frontmatter table carries one:
+/// [`FieldType`] owns the types it wraps, which no constant can build.
+type Field = (&'static str, fn() -> FieldType);
+
+/// The `person` fields, and the slots that read them.
+const PERSON: &[Field] = &[
+    ("name", || FieldType::Str),
+    ("url", || FieldType::Str),
+    ("avatar", || FieldType::Str),
+    ("email", || FieldType::Str),
+    ("socials", || FieldType::Dict(Vec::new())),
+];
+
+/// The `organization` fields. Deliberately smaller: what a publisher line and a
+/// `sameAs` need, and nothing that would only ever be true of a person.
+const ORGANIZATION: &[Field] = &[
+    ("name", || FieldType::Str),
+    ("url", || FieldType::Str),
+    ("logo", || FieldType::Str),
+];
+
+impl Shape {
+    /// The fields this shape declares, every one of them optional.
+    ///
+    /// A shape types a field, it does not require one: a profile page carrying
+    /// its name as its `title` would otherwise have to repeat it, and a roster
+    /// half-filled while a site is being written would fail the build. A site
+    /// that *wants* a field required declares it itself, in `fields { }`, where
+    /// requiredness is what declaring a field means.
+    pub fn fields(self) -> Vec<(String, FieldSchema)> {
+        self.table()
+            .iter()
+            .map(|&(key, ty)| {
+                (
+                    key.to_owned(),
+                    FieldSchema {
+                        ty: ty(),
+                        optional: true,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// The slots this shape fills, which a registry's own `slots` line
+    /// overrides one at a time.
+    pub fn slots(self) -> Slots {
+        let field = |name: &str| Some(name.to_owned());
+        match self {
+            Self::Person => Slots {
+                display: field("name"),
+                url: field("url"),
+                image: field("avatar"),
+                email: field("email"),
+                same_as: field("socials"),
+            },
+            Self::Organization => Slots {
+                display: field("name"),
+                url: field("url"),
+                image: field("logo"),
+                email: None,
+                same_as: None,
+            },
+        }
+    }
+
+    /// This shape's field table.
+    fn table(self) -> &'static [Field] {
+        match self {
+            Self::Person => PERSON,
+            Self::Organization => ORGANIZATION,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Shape;
+    use crate::config::Named;
+
+    /// Every slot a shape fills has to name a field that shape declares, or the
+    /// registry it seeds fails its own check the moment a site names the shape.
+    #[test]
+    fn every_shape_fills_slots_from_its_own_fields() {
+        for (name, shape) in Shape::NAMES {
+            let fields = shape.fields();
+            for (slot, field) in shape.slots().filled() {
+                assert!(
+                    fields.iter().any(|(key, _)| key == field),
+                    "the `{name}` shape fills `{slot}` from `{field}`, which it does not declare"
+                );
+            }
+        }
+    }
+}

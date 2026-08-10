@@ -648,6 +648,25 @@ pub enum ConfigErrorKind {
         builtin: String,
     },
 
+    /// A registry slot naming a field its entities do not declare.
+    ///
+    /// Refused at the block that wrote it, because where a renderer reads the
+    /// slot the answer is merely "no value": every entity would render without
+    /// its picture out of a green build, and nothing would say why.
+    #[error(
+        "the {} slot of the {} registry names {}, which its entities do not declare",
+        Code(.slot),
+        Code(.registry),
+        Code(.field)
+    )]
+    #[diagnostic(code(baudelaire::config::entity_slot), help("{help}"))]
+    EntitySlot {
+        slot: &'static str,
+        registry: String,
+        field: String,
+        help: String,
+    },
+
     /// A schema field given a block of fields, whose type ends in no dictionary
     /// for them to belong to.
     #[error("schema field {} is {declared}, so it has no fields", Code(.key))]

@@ -13,6 +13,13 @@ use crate::error::{ConfigError, Result};
 pub struct TaxonomyConfig {
     /// Frontmatter key to read terms from.
     pub key: String,
+    /// The `content { entities { } }` registry this taxonomy's terms are ids
+    /// in, if they are ids at all.
+    ///
+    /// A taxonomy naming one is a *reference*: `rust` under `tags` is a word,
+    /// while `zoe` under `authors` is somebody the site knows other things
+    /// about. `None` is the plain taxonomy every site already has.
+    pub entities: Option<String>,
     /// Generate a page per term, plus one listing every term appears on.
     pub listing: bool,
     /// Template for the generated taxonomy index + term pages.
@@ -42,6 +49,9 @@ impl From<String> for TaxonomyConfig {
     fn from(id: String) -> Self {
         Self {
             key: id,
+            // a taxonomy is a set of words until a site says its terms name
+            // something the build knows more about
+            entities: None,
             // opt-in: term pages and their index are extra output
             listing: false,
             template: None,
@@ -77,6 +87,15 @@ impl Attributed for TaxonomyConfig {
             "The frontmatter field its terms are read from. Defaults to the taxonomy's own id.",
             |c, v, t, s| {
                 c.key = v.as_str(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "entities",
+            Text,
+            "The `content { entities { } }` registry its terms are ids in.",
+            |c, v, t, s| {
+                c.entities = Some(v.as_str(t, s)?);
                 Ok(())
             },
         ),

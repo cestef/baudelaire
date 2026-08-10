@@ -120,6 +120,16 @@ impl PageId {
     pub fn new(collection: &str, slug: &str) -> Self {
         Self(format!("{collection}/{slug}"))
     }
+
+    /// The slug half, which is the page's own name within its collection.
+    ///
+    /// Spelled here rather than at the one call site, so the shape of the id is
+    /// known in exactly the place that builds it.
+    pub fn slug(&self) -> &str {
+        self.0
+            .rsplit_once('/')
+            .map_or(self.0.as_str(), |(_, slug)| slug)
+    }
 }
 
 impl std::fmt::Display for PageId {

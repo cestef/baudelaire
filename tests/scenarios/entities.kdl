@@ -1,0 +1,427 @@
+// Entity registries: who a term names, where that is declared, and what a
+// reference to somebody nobody declared means.
+
+scenario "a term resolving against a registry builds" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources {
+              inline {
+                zoe { name "Zoe"; url "https://zoe.example" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people" listing=#true
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    file "authors/zoe/index.html"
+  }
+}
+
+scenario "a term nothing in the registry answers to fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            sources {
+              inline {
+                zoe { name "Zoe" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoo",),)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::unresolved" }
+  }
+}
+
+scenario "a registry that asks to be warned reports the term and builds" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            unknown "warn"
+            sources {
+              inline {
+                zoe { name "Zoe" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoo",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::entity::unresolved"
+  }
+}
+
+scenario "a registry with no source at all takes every term as written" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people { shape "person" }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("anybody",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::entity::unresolved"
+  }
+}
+
+scenario "an alias is a second name for the same entity" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            sources {
+              inline {
+                zoe { name "Zoe"; alias "zoe-q" "quill" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("quill",),)
+      a
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "one alias reaching two entities fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            sources {
+              inline {
+                zoe { name "Zoe"; alias "quill" }
+                ada { name "Ada"; alias "quill" }
+              }
+            }
+          }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::alias" }
+  }
+}
+
+scenario "an entity that is not the shape its registry declares fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            fields {
+              name "str"
+              url "str" optional=#true
+            }
+            sources {
+              inline {
+                zoe { name 42 }
+              }
+            }
+          }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::field" }
+  }
+}
+
+scenario "an entity missing a field its registry requires fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            fields {
+              name "str"
+            }
+            sources {
+              inline {
+                zoe { url "https://zoe.example" }
+              }
+            }
+          }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::missing_field" }
+  }
+}
+
+scenario "a taxonomy naming a registry nobody declared fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::no_registry" }
+  }
+}
+
+scenario "a slot naming a field the registry does not declare fails at the config" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            fields { name "str" }
+            slots image="protrait"
+          }
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::entity_slot" }
+  }
+}
+
+scenario "profile pages are a registry's entities" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe", url: "https://zoe.example",)
+      Writes things.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    file "people/zoe/index.html" { contains "Writes things." }
+  }
+}
+
+scenario "a page crediting somebody no profile page declares fails the build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      Writes things.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("ada",),)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::entity::unresolved" }
+  }
+}
+
+scenario "a roster file declares entities the way the config block does" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources { data "data/people.kdl" }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "data/people.kdl" #"""
+      zoe {
+        name "Zoe"
+        url "https://zoe.example"
+      }
+      ada {
+        name "Ada"
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("ada",),)
+      a
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "a later source fills what an earlier one left out" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            fields {
+              name "str"
+              email "str"
+            }
+            sources {
+              pages "content/people"
+              data "data/people.kdl"
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people"
+        }
+      }
+      """#
+    "data/people.kdl" #"""
+      zoe {
+        name "Not this one"
+        email "zoe@example.com"
+      }
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      Writes things.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+  }
+}

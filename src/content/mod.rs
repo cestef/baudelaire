@@ -9,6 +9,7 @@
 pub mod cache;
 pub mod date;
 pub mod discovery;
+pub mod entities;
 pub mod frontmatter;
 mod generate;
 pub mod listing;
@@ -26,6 +27,7 @@ pub mod taxonomy;
 pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
 pub use discovery::{Collection, ROOT, discover};
+pub use entities::{Entity, Registries, Registry};
 pub use frontmatter::{Frontmatter, Generated, Origin};
 pub use page::{Data, Page, PageId, Sibling, Siblings, Withheld};
 pub use pagination::Pagination;
@@ -102,7 +104,7 @@ impl std::fmt::Display for Held {
 /// The site's full page set: eligible content pages plus generated taxonomy and
 /// paginated index pages, with permalink collisions rejected. The single entry
 /// point the engine calls: all page-set assembly lives here, not in the engine.
-pub fn plan(config: &Config, project: &Project) -> Result<(Vec<Page>, Held)> {
+pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
     let collections = discover(config, project)?;
     let held = Held::of(&collections, config);
     // Within each collection, the eligible pages sit in the collection's sort
@@ -135,6 +137,11 @@ pub fn plan(config: &Config, project: &Project) -> Result<(Vec<Page>, Held)> {
             pages.extend(rest.into_iter().cloned());
         }
     }
+    // The registries every reference resolves against, built from the content
+    // snapshot before anything derives pages from it: a `pages` source draws
+    // its entities from pages the plan has already read, and a generated
+    // listing is never one of them.
+    let entities = Registries::build(config, project, &pages)?;
     // Synthetic pages (taxonomy indexes, paginated listings) derive from the
     // content snapshot above; each generator runs against the same `pages`.
     let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
@@ -145,7 +152,23 @@ pub fn plan(config: &Config, project: &Project) -> Result<(Vec<Page>, Held)> {
     pages.extend(generated);
     Page::relate(&mut pages, config);
     Claim::unique(&pages, config)?;
-    Ok((pages, held))
+    Ok(Plan {
+        pages,
+        held,
+        entities,
+    })
+}
+
+/// What planning produced: the pages a build renders, what it left out, and the
+/// entity registries every one of them resolves references against.
+///
+/// A struct rather than a tuple, because the registries are a third thing the
+/// engine carries the length of a build and a two-tuple was already one thing
+/// too many to read at the call site.
+pub struct Plan {
+    pub pages: Vec<Page>,
+    pub held: Held,
+    pub entities: Registries,
 }
 
 /// One claim on an output file, and where it came from, the single accounting

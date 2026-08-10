@@ -24,6 +24,7 @@ pub mod cli;
 pub mod config;
 pub mod content;
 pub mod deploy;
+pub mod entity;
 pub mod fs;
 pub mod hook;
 pub mod image;
@@ -52,6 +53,7 @@ pub use card::CardError;
 pub use config::{ConfigError, ConfigErrorKind};
 pub use content::ContentError;
 pub use deploy::DeployError;
+pub use entity::EntityError;
 pub use fs::{FsError, Op};
 pub use hook::{HookError, Phase as HookPhase};
 pub use image::ImageError;
@@ -153,6 +155,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Content(Box<crate::error::ContentError>),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Entity(Box<crate::error::EntityError>),
 
     #[cfg(feature = "markdown")]
     #[error(transparent)]
@@ -365,6 +371,21 @@ impl FeedDateError {
             date: date.into(),
             standard,
             source,
+        }
+    }
+}
+
+impl BaudelaireErrorKind {
+    /// Name the file a config diagnostic points into, for the config texts that
+    /// are not `config.kdl`: a roster read as a file of its own is parsed by
+    /// the same reader and has to report itself under its own name.
+    ///
+    /// Everything else passes through: an error that already knows where it
+    /// came from must not be relabelled by whoever happens to be holding it.
+    pub fn named(self, path: &std::path::Path) -> Self {
+        match self {
+            Self::Config(error) => Self::Config(Box::new(error.named(path))),
+            other => other,
         }
     }
 }

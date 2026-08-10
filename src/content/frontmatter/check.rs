@@ -27,7 +27,7 @@ pub(super) trait ValueExt {
 /// the message uses (`authors.1.email`) and the walk that finds its span in the
 /// page source.
 #[derive(Debug, Clone)]
-pub(super) enum Step {
+pub(crate) enum Step {
     Key(String),
     Index(usize),
 }
@@ -46,7 +46,7 @@ impl std::fmt::Display for Step {
 /// The check stops at the first fault, so a page fixes one thing at a time
 /// rather than reading a list of consequences of the same mistake.
 #[derive(Debug)]
-pub(super) enum Fault {
+pub(crate) enum Fault {
     Missing {
         path: Vec<Step>,
         want: FieldType,
@@ -61,19 +61,19 @@ pub(super) enum Fault {
 
 impl Fault {
     /// The steps to the value at fault.
-    pub(super) fn path(&self) -> &[Step] {
+    pub(crate) fn path(&self) -> &[Step] {
         let (Self::Missing { path, .. } | Self::Mismatch { path, .. }) = self;
         path
     }
 
     /// The steps to whatever holds it: where a missing field would go.
-    pub(super) fn parent(&self) -> &[Step] {
+    pub(crate) fn parent(&self) -> &[Step] {
         self.path().split_last().map_or(&[], |(_, rest)| rest)
     }
 
     /// How a diagnostic names the field: dotted, so a nested one is located
     /// without the message having to describe the nesting.
-    pub(super) fn key(&self) -> String {
+    pub(crate) fn key(&self) -> String {
         self.path()
             .iter()
             .map(Step::to_string)
@@ -86,15 +86,15 @@ impl Fault {
 /// dictionary names the field it happened at rather than the top-level one it
 /// happened under.
 #[derive(Default)]
-pub(super) struct Check {
-    pub(super) path: Vec<Step>,
+pub(crate) struct Check {
+    pub(crate) path: Vec<Step>,
 }
 
 impl Check {
     /// Every field a schema declares, against the dictionary that should carry
     /// them. Keys the schema does not name are not the schema's business, so
     /// extra frontmatter passes through as it always has.
-    pub(super) fn dict(&mut self, schema: &[(String, FieldSchema)], dict: &Dict) -> Option<Fault> {
+    pub(crate) fn dict(&mut self, schema: &[(String, FieldSchema)], dict: &Dict) -> Option<Fault> {
         for (key, field) in schema {
             self.path.push(Step::Key(key.clone()));
             let fault = match dict.get(key.as_str()) {

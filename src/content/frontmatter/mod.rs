@@ -1,4 +1,4 @@
-pub(super) mod check;
+pub(crate) mod check;
 pub mod origin;
 
 use crate::config::PermalinkCtx;

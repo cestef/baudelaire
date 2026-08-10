@@ -125,7 +125,7 @@ impl<'a> Origin<'a> {
     }
 
     /// Walk a typst dict literal.
-    pub(super) fn in_typst(source: &Source, path: &[Step]) -> Option<SourceSpan> {
+    pub(crate) fn in_typst(source: &Source, path: &[Step]) -> Option<SourceSpan> {
         let binding = Self::binding(source.root())?;
         let mut node = binding.to_untyped();
         let mut reached = 0;
@@ -161,7 +161,7 @@ impl<'a> Origin<'a> {
     /// of these rather than one walk per language, and the rule is
     /// [`Spans::of`]'s: the deepest prefix of `path` the author actually wrote.
     #[cfg(feature = "markdown")]
-    pub(super) fn in_block(
+    pub(crate) fn in_block(
         spans: &crate::content::markdown::Spans,
         path: &[Step],
     ) -> Option<SourceSpan> {
@@ -201,6 +201,69 @@ impl<'a> Origin<'a> {
             return Some(binding);
         }
         node.children().find_map(Self::binding)
+    }
+}
+
+/// A page's frontmatter, re-read for the sake of a diagnostic.
+///
+/// [`Origin`] borrows what it points into, which suits the reader that already
+/// holds the page open. Everything that finds a fault *later* -- the entity
+/// registries, resolving a term long after discovery closed the file -- has only
+/// a path, so this owns what it needs and answers the same question.
+///
+/// Built only on the failing path. A green build never opens a page for this.
+pub(crate) enum Located {
+    /// A typst page: the same parse the compiler holds, walked as a syntax tree.
+    Typst(Source),
+    /// A markdown page: its frontmatter block, re-split, with the span map its
+    /// dialect recorded while parsing.
+    #[cfg(feature = "markdown")]
+    Block {
+        text: String,
+        spans: crate::content::markdown::Spans,
+    },
+}
+
+impl Located {
+    /// Re-read `path` far enough to locate a value inside its frontmatter.
+    ///
+    /// `None` when the page cannot be read or its frontmatter cannot be parsed
+    /// at all, which leaves the diagnostic snippet-less rather than failing a
+    /// second time while reporting the first failure.
+    pub(crate) fn of(path: &Path, project: &crate::world::Project) -> Option<Self> {
+        #[cfg(feature = "markdown")]
+        if crate::config::Config::has_ext(path, crate::config::Config::MARKDOWN) {
+            use crate::content::markdown::Document;
+
+            let text = String::from_utf8(crate::fs::read(path).ok()?).ok()?;
+            let named = path.display().to_string();
+            let spans = Document::split(&text, &named)
+                .ok()?
+                .block(&named, &text)
+                .ok()?
+                .spans;
+            return Some(Self::Block { text, spans });
+        }
+        Some(Self::Typst(project.source(path).ok()?))
+    }
+
+    /// The text a diagnostic renders its snippet from.
+    pub(crate) fn text(&self) -> &str {
+        match self {
+            Self::Typst(source) => source.text(),
+            #[cfg(feature = "markdown")]
+            Self::Block { text, .. } => text,
+        }
+    }
+
+    /// Where the value `path` names sits, by the same walk [`Origin::span`]
+    /// does: as deep as the page literally spelled it out.
+    pub(crate) fn span(&self, path: &[Step]) -> Option<SourceSpan> {
+        match self {
+            Self::Typst(source) => Origin::in_typst(source, path),
+            #[cfg(feature = "markdown")]
+            Self::Block { spans, .. } => Origin::in_block(spans, path),
+        }
     }
 }
 
