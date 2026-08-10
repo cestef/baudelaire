@@ -97,6 +97,14 @@ pub(in crate::engine) struct Context<'a> {
     /// wrapper text is the page's fingerprint, so an author who gains a URL
     /// rebuilds exactly the pages that credit them.
     pub credits: &'a str,
+    /// The pages that name this one as an entity, as an array literal of the
+    /// same rows a listing carries. Exposed as `page.members`, empty for a page
+    /// nothing names.
+    ///
+    /// What makes a profile page an archive: the bio is the page's own body,
+    /// and this is everything credited to it. Wrapper text, so a post that
+    /// starts crediting somebody rebuilds that person's page and no other.
+    pub members: &'a str,
     /// The page's date in both forms as a dict literal,
     /// `(iso: "2026-07-30", display: "30 juillet 2026")`, or `none` when the
     /// page carries no date. Exposed as `page.date`: typst's own
@@ -118,6 +126,7 @@ impl Context<'_> {
             data: _,
             taxonomies,
             credits,
+            members,
             nav,
             lang,
             translations,
@@ -130,7 +139,7 @@ impl Context<'_> {
             assets,
         } = self;
         format!(
-            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, credits: {credits}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date}, url: {}, collection: {}, assets: {assets})",
+            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, credits: {credits}, members: {members}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date}, url: {}, collection: {}, assets: {assets})",
             Str(lang),
             Str(url),
             Str(collection)
@@ -233,6 +242,7 @@ mod tests {
                 data: Bind::Import,
                 taxonomies: "(tags: (\"a\",))",
                 credits: "(author: ((name: \"Zoe\"),))",
+                members: "()",
                 nav: "(prev: none, next: none)",
                 lang: "en",
                 translations: "()",
@@ -251,7 +261,7 @@ mod tests {
             out,
             "#import \"/templates/post.typ\": post as __layout\n\
              #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), credits: (author: ((name: \"Zoe\"),)), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
+             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), credits: (author: ((name: \"Zoe\"),)), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
              #include \"/content/posts/a.typ\""
         );
     }
@@ -266,6 +276,7 @@ mod tests {
                 data: Bind::Literal("(title: \"X\")"),
                 taxonomies: "(:)",
                 credits: "(:)",
+                members: "()",
                 nav: "(prev: none, next: none)",
                 lang: "en",
                 translations: "()",
@@ -283,7 +294,7 @@ mod tests {
         assert_eq!(
             out,
             "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), credits: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
+             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), credits: (:), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
              listing body"
         );
     }
@@ -298,6 +309,7 @@ mod tests {
                 data: Bind::Literal("(:)"),
                 taxonomies: "(:)",
                 credits: "(:)",
+                members: "()",
                 nav: "(prev: none, next: none)",
                 lang: "en",
                 translations: "()",
@@ -327,6 +339,7 @@ mod tests {
                 data: Bind::Literal("(t: 1)"),
                 taxonomies: "(:)",
                 credits: "(:)",
+                members: "()",
                 nav: "(prev: none, next: none)",
                 lang: "en",
                 translations: "()",
@@ -344,7 +357,7 @@ mod tests {
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
             out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), credits: (:), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)"
+                "__layout((frontmatter: (t: 1), taxonomies: (:), credits: (:), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)"
             ),
             "{out}"
         );

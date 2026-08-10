@@ -148,6 +148,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
     // content snapshot above; each generator runs against the same `pages`.
     let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
         config,
+        entities: &entities,
         pages: &pages,
         collections: &collections,
     })?;

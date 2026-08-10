@@ -597,3 +597,92 @@ scenario "a site with no registry keeps the byline it always had" {
     }
   }
 }
+
+scenario "a described term is the profile page, which lists what credits it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        collections { people { template "profile.typ" } }
+        entities {
+          people {
+            shape "person"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author" listing=#true describe=#true
+        }
+      }
+      """#
+    "templates/profile.typ" #"""
+      #let profile(page, body) = html.elem("main", {
+        body
+        for one in page.members {
+          html.elem("a", attrs: (href: one.url, class: "wrote"), one.label)
+        }
+      })
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      Writes things.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b",)
+      b
+      """#
+  }
+  expect {
+    ok
+    // One page for one person: the profile keeps its own URL, and no listing
+    // is generated beside it.
+    file "people/zoe/index.html" {
+      contains "Writes things."
+      contains #"class="wrote""#
+      contains "Alpha"
+      missing "Beta"
+    }
+    // ..and the term index points at it rather than at a page that is not there.
+    file "authors/index.html" { contains #"href="/people/zoe/""# }
+  }
+}
+
+scenario "an undescribed term still gets its generated listing" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            unknown "synthesize"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author" listing=#true describe=#true
+        }
+      }
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      Writes things.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe", "ada"),)
+      a
+      """#
+  }
+  expect {
+    ok
+    // `ada` is nobody's page, so the term is generated as any other term is.
+    file "authors/ada/index.html" { contains "Alpha" }
+    file "people/zoe/index.html"
+  }
+}

@@ -210,7 +210,7 @@ impl Feeds {
     /// term always has its feed at its own URL and neither can disagree with the
     /// other about which pages belong to it.
     fn terms(site: &Site, out: &mut dyn Emit, shared: Shared<'_>) -> Result<()> {
-        for group in Taxonomy::groups(site.config, site.pages) {
+        for group in Taxonomy::groups(site.config, site.entities, site.pages) {
             let lang = group.lang();
             for term in group.resolve()? {
                 let dated = Page::newest(

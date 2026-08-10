@@ -30,6 +30,15 @@ pub struct TaxonomyConfig {
     pub entities: Option<String>,
     /// Generate a page per term, plus one listing every term appears on.
     pub listing: bool,
+    /// Let a term that names an entity written as a *page* be described by that
+    /// page, instead of generating a listing of its own.
+    ///
+    /// An author's archive is a listing with a body: a bio, and the posts under
+    /// it. Rather than emit a second page beside the profile and leave a site
+    /// with two URLs for one person, the profile page *is* the term page: it
+    /// keeps its own permalink, the term index links to it, and it is handed
+    /// the term's members as `page.members`.
+    pub describe: bool,
     /// Template for the generated taxonomy index + term pages.
     pub template: Option<String>,
     /// Members per term page. `None` puts every member on one page, which is
@@ -63,6 +72,9 @@ impl From<String> for TaxonomyConfig {
             credit: None,
             // opt-in: term pages and their index are extra output
             listing: false,
+            // opt-in, and only meaningful with `entities`: a term is described
+            // by a page only where a page declared it in the first place
+            describe: false,
             template: None,
             // un-paginated until asked, like a collection with no `paginate`
             paginate: None,
@@ -123,6 +135,15 @@ impl Attributed for TaxonomyConfig {
             "Generate a page per term, and an index of the terms.",
             |c, v, t, s| {
                 c.listing = v.boolean(t, s)?;
+                Ok(())
+            },
+        ),
+        (
+            "describe",
+            Flag,
+            "Let a term written as a profile page be described by it, instead of generating a listing beside it.",
+            |c, v, t, s| {
+                c.describe = v.boolean(t, s)?;
                 Ok(())
             },
         ),

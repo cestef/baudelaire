@@ -49,6 +49,12 @@ pub(in crate::engine) struct Prepare<'a> {
     config: &'a Config,
     /// The entity registries a page's credited references resolve against.
     entities: &'a Registries,
+    /// For a page that *declares* an entity, the pages that name it: an
+    /// author's own archive, handed to their profile as `page.members`.
+    ///
+    /// Built once for the whole set rather than searched per page, which would
+    /// be one walk of every page's references per page.
+    members: BTreeMap<PathBuf, Vec<Value>>,
     project: &'a Project,
     theme: Option<&'a Theme>,
     pages: &'a [Page],
@@ -82,6 +88,7 @@ impl<'a> Prepare<'a> {
         let base = Self {
             config,
             entities,
+            members: Self::members(config, entities, pages),
             project,
             theme,
             pages,
@@ -123,6 +130,51 @@ impl<'a> Prepare<'a> {
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn config(&self) -> &Config {
         self.config
+    }
+
+    /// Which pages name each entity that was declared by a page.
+    ///
+    /// Keyed by the profile's source path, since that is what a registry can
+    /// name an entity by, and the rows are the very [`Item`] shape every
+    /// listing hands a template: a profile renders its archive with the card
+    /// component a collection index already uses.
+    ///
+    /// Only terms whose taxonomy lets a page describe them: a taxonomy that
+    /// generates its own term listings has already put the members there, and
+    /// handing them to the profile as well would tie its cache identity to
+    /// pages it does not display.
+    fn members(
+        config: &'a Config,
+        entities: &'a Registries,
+        pages: &'a [Page],
+    ) -> BTreeMap<PathBuf, Vec<Value>> {
+        let described: Vec<&str> = config
+            .content
+            .taxonomies
+            .iter()
+            .filter(|(_, cfg)| cfg.describe)
+            .filter_map(|(_, cfg)| cfg.entities.as_deref())
+            .collect();
+        if described.is_empty() {
+            return BTreeMap::new();
+        }
+        let mut members: BTreeMap<PathBuf, Vec<Value>> = BTreeMap::new();
+        for page in pages.iter().filter(|page| page.listed(config)) {
+            let strings = Strings::new(config, &page.lang);
+            for reference in entities.references(config, page) {
+                if !described.contains(&reference.registry.id()) {
+                    continue;
+                }
+                let Some(profile) = reference.registry.page(reference.term) else {
+                    continue;
+                };
+                members
+                    .entry(crate::fs::resolved(profile))
+                    .or_default()
+                    .push(crate::content::listing::Item::of(page, &strings).value());
+            }
+        }
+        members
     }
 
     /// The files templates import, ready to write: the section tree and the
@@ -247,6 +299,18 @@ impl<'a> Prepare<'a> {
         // nothing here needs a cache probe of its own.
         let (byline, _) = Byline::of(self.entities, self.config, page);
         let credits = Typst(&Value::from(&byline.or_site(self.config, page))).to_string();
+        // The pages that name this one as an entity: an author's archive, on
+        // the author's own page. Wrapper text like `nav`, and part of the
+        // page's fingerprint for the same reason: it is what the page shows,
+        // so a post that starts crediting them rebuilds their page and no
+        // other.
+        let members = Typst(&Value::array(
+            self.members
+                .get(&crate::fs::resolved(&page.source))
+                .cloned()
+                .unwrap_or_default(),
+        ))
+        .to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
         // refingerprints this page and rebuilds it: the cache stays correct.
@@ -279,6 +343,7 @@ impl<'a> Prepare<'a> {
             data: bind,
             taxonomies: &taxonomies,
             credits: &credits,
+            members: &members,
             nav: &nav,
             lang: &page.lang,
             translations: &translations,

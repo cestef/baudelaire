@@ -102,6 +102,34 @@ chores are visible in the git history and change nothing for a site.
   the pages that credit it, and a bundled document (a PDF, a card) reads the
   same byline the page does.
 
+- **A profile page can be the term page.** `describe=#true` on a taxonomy whose
+  terms are entities means a term written as a page is *that* page: no listing
+  is generated beside it, the term index links to the profile's own permalink,
+  and the profile is handed the pages that credit it as `page.members`, in the
+  same row shape every listing carries.
+
+  ```kdl
+  content {
+    entities {
+      people { shape "person"; sources { pages "content/people" } }
+    }
+    taxonomies {
+      authors entities="people" credit="author" listing=#true describe=#true
+    }
+  }
+  ```
+
+  ```typ
+  #let profile(page, body) = {
+    body                                   // the bio, as authored
+    for one in page.members [ #link(one.url)[#one.label] ]
+  }
+  ```
+
+  One URL for one person, so every link already written to the profile still
+  reaches it. A term nobody wrote a page for is generated as any other term is,
+  and a per-term feed follows the term wherever it lives.
+
 ### Upgrading
 
 - **`Renderer::SCHEMA` moves to 20**: the first build after upgrading recompiles

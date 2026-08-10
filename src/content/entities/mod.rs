@@ -263,6 +263,18 @@ impl Registry {
             .or_else(|| self.aliases.get(&id).and_then(|id| self.entities.get(id)))
     }
 
+    /// The page that declared the entity a term names, if a page did.
+    ///
+    /// What makes a term describable: an entity written as a profile page has
+    /// a page of its own to be the term's, while one written in a roster has
+    /// only fields.
+    pub fn page(&self, term: &str) -> Option<&std::path::Path> {
+        match self.get(term)?.from() {
+            Provenance::Page { path } => Some(path),
+            Provenance::Roster { .. } => None,
+        }
+    }
+
     /// Every entity, in id order.
     pub fn entities(&self) -> impl Iterator<Item = &Entity> {
         self.entities.values()

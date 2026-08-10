@@ -43,6 +43,7 @@
   (path: "content.taxonomies.entities", key: "entities", shape: "text", doc: "The `content { entities { } }` registry its terms are ids in.", depth: 2, section: false),
   (path: "content.taxonomies.credit", key: "credit", shape: "author | editor | translator | contributor | illustrator | reviewer | publisher", doc: "What a page claims about the entities it names here, for the surfaces that can spell it.", depth: 2, section: false),
   (path: "content.taxonomies.listing", key: "listing", shape: "flag", doc: "Generate a page per term, and an index of the terms.", depth: 2, section: false),
+  (path: "content.taxonomies.describe", key: "describe", shape: "flag", doc: "Let a term written as a profile page be described by it, instead of generating a listing beside it.", depth: 2, section: false),
   (path: "content.taxonomies.template", key: "template", shape: "text", doc: "The layout those listings render through.", depth: 2, section: false),
   (path: "content.taxonomies.paginate", key: "paginate", shape: "number", doc: "Pages per term listing.", depth: 2, section: false),
   (path: "content.taxonomies.sort", key: "sort", shape: "order | date | title", doc: "What a term's members are ordered by. Defaults to `title`, since a term spans collections.", depth: 2, section: false),

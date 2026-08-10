@@ -16,6 +16,9 @@ use crate::error::Result;
 /// source collections.
 pub(super) struct PlanCtx<'a> {
     pub config: &'a Config,
+    /// The entity registries, so a generator can tell a term that names
+    /// somebody from one that names a word.
+    pub entities: &'a crate::content::Registries,
     pub pages: &'a [Page],
     pub collections: &'a [Collection],
 }
