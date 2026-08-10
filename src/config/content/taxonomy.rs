@@ -4,10 +4,12 @@ use kdl::KdlNode;
 
 use crate::config::dispatch::Kind::{Choice, Flag, Number, Text};
 use crate::config::dispatch::{Attributed, Attrs};
+use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 use crate::config::{Named, SortKey};
 use crate::content::Credit;
-use crate::error::{ConfigError, Result};
+use crate::error::{ConfigError, ConfigErrorKind, Result};
+use crate::ui::markup;
 
 /// Taxonomy definition.
 #[derive(Debug, Clone, Hash)]
@@ -96,7 +98,41 @@ impl TaxonomyConfig {
         let id = node.name().value().to_owned();
         let mut taxonomy = Self::from(id.clone());
         taxonomy.read(node, text)?;
+        taxonomy.check(&id, node, text)?;
         Ok((id, taxonomy))
+    }
+
+    /// Refuse a key that only means something beside another.
+    ///
+    /// `credit` says what a page claims about entities, so without `entities`
+    /// there is nothing to claim it about; `describe` hands a term to the page
+    /// that declared it, which takes both a registry to declare it in and the
+    /// `listing` that puts a term index in front of it. Each parses, and each
+    /// would otherwise configure nothing at all.
+    fn check(&self, id: &str, node: &KdlNode, text: &str) -> Result<()> {
+        let entities = self.entities.is_some();
+        let required = [
+            (self.credit.is_some(), "credit", "entities", entities),
+            (self.describe, "describe", "entities", entities),
+            (self.describe, "describe", "listing", self.listing),
+        ];
+        for (written, key, needs, satisfied) in required {
+            if !written || satisfied {
+                continue;
+            }
+            return Err(ConfigError::at(
+                text,
+                ConfigErrorKind::TaxonomyRequires {
+                    taxonomy: id.to_owned(),
+                    key,
+                    needs,
+                    help: markup!("write `{} {}=..` beside it, or drop `{}`", id, needs, key),
+                },
+                NodeExt::span(node),
+            )
+            .into());
+        }
+        Ok(())
     }
 }
 

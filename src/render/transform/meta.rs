@@ -31,8 +31,7 @@ impl Transform for Meta {
         // The site's own author is the floor here: `<meta name="author">` on a
         // page that names nobody is the site's, which is what it has always
         // been.
-        let (byline, _) = Byline::of(cx.entities, cx.config, cx.page);
-        let byline = byline.or_site(cx.config, cx.page);
+        let byline = Byline::of(cx.entities, cx.config, cx.page).or_site(cx.config, cx.page);
         let mut card = Card {
             config: cx.config,
             page: cx.page,
@@ -67,7 +66,7 @@ struct Card<'a> {
 }
 
 /// What a page says about itself, resolved once and then spelled three ways.
-struct Facts<'a> {
+struct Facts {
     title: String,
     description: Option<String>,
     /// Already fingerprinted and absolutized, since a social image is read by a
@@ -85,9 +84,10 @@ struct Facts<'a> {
     published: Option<String>,
     modified: Option<String>,
     /// Who the page credits, by role, already resolved through each registry's
-    /// slots. Every vocabulary below reads this one answer: two resolutions are
-    /// two chances to disagree, and these two did.
-    byline: &'a Byline,
+    /// slots and with every picture named at the URL it is served from. Every
+    /// vocabulary below reads this one answer: two resolutions are two chances
+    /// to disagree, and these two did.
+    byline: Byline,
     /// Every taxonomy term the page carries, flattened: an `article:tag` does
     /// not distinguish which taxonomy a term came from.
     terms: Vec<String>,
@@ -129,7 +129,7 @@ impl Card<'_> {
     /// Built from the same [`Facts`] the meta tags are, so the two cannot claim
     /// different things about one page. An `Article` where the page is dated,
     /// a `WebPage` otherwise, which is the same split `og:type` makes.
-    fn jsonld(facts: &Facts<'_>) -> HtmlNode {
+    fn jsonld(facts: &Facts) -> HtmlNode {
         let mut fields: Vec<(&str, serde_json::Value)> = vec![
             ("@context", "https://schema.org".into()),
             (
@@ -283,7 +283,7 @@ impl Card<'_> {
     /// What every vocabulary below says the same thing about, resolved once:
     /// each of the three spells these out differently, and a value computed per
     /// group is a value that can disagree between them.
-    fn facts<'b>(&mut self, byline: &'b Byline) -> Facts<'b> {
+    fn facts(&mut self, byline: &Byline) -> Facts {
         let fm = &self.page.frontmatter;
         let (title, description, authored) = (
             fm.title.clone().unwrap_or_default(),
@@ -334,7 +334,11 @@ impl Card<'_> {
             // and the language-aware one where the document tag was written, so
             // `<meta name="author">` and `article:author` named two different
             // people on the same page.
-            byline,
+            // An entity's avatar goes through the very resolution the page's own
+            // image does. Written raw it was the one image in the document a
+            // crawler could not fetch: unfingerprinted, and relative in a
+            // vocabulary that is only ever read from somewhere else.
+            byline: byline.clone().images(|src| self.absolute(src)),
             terms: fm.taxonomies.values().flatten().cloned().collect(),
         }
     }
@@ -344,7 +348,7 @@ impl Card<'_> {
     /// Reads [`Facts`] like every other vocabulary rather than resolving the
     /// author a second time: two resolutions are two chances to disagree, and
     /// these two did.
-    fn document(facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
+    fn document(facts: &Facts, tags: &mut Vec<HtmlNode>) {
         if let Some(description) = &facts.description {
             tags.push(Self::named("description", description));
         }
@@ -371,7 +375,7 @@ impl Card<'_> {
     }
 
     /// The OpenGraph tags, which is what a link preview reads.
-    fn opengraph(&self, facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
+    fn opengraph(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
         tags.push(Self::property("og:type", facts.kind));
         if !facts.title.is_empty() {
             tags.push(Self::property("og:title", &facts.title));
@@ -423,7 +427,7 @@ impl Card<'_> {
 
     /// The Twitter card tags, which only restate what OpenGraph already said,
     /// bar the card size an image implies and the account the site names.
-    fn twitter(&self, facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
+    fn twitter(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
         // Whose site this is. Nothing on the page says it, so without the
         // config a card attributes the link to whoever posted it and to nobody
         // else.
@@ -596,7 +600,7 @@ mod tests {
     }
 
     /// The facts of a page that says nothing but its byline and its kind.
-    fn facts<'a>(byline: &'a Byline, kind: &'static str) -> Facts<'a> {
+    fn facts(byline: &Byline, kind: &'static str) -> Facts {
         Facts {
             title: "T".into(),
             description: None,
@@ -606,7 +610,7 @@ mod tests {
             kind,
             published: None,
             modified: None,
-            byline,
+            byline: byline.clone(),
             terms: Vec::new(),
         }
     }
@@ -635,7 +639,7 @@ mod tests {
     }
 
     /// The JSON-LD island a page carries, parsed back.
-    fn island(facts: &Facts<'_>) -> serde_json::Value {
+    fn island(facts: &Facts) -> serde_json::Value {
         let HtmlNode::Element(el) = Card::jsonld(facts) else {
             panic!("the island is an element")
         };

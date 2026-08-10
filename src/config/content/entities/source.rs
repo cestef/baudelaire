@@ -24,12 +24,6 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::error::{ConfigError, Result};
 
-/// A span as the byte range it covers: what a declaration stores, so that the
-/// config it lives in stays hashable.
-fn range(span: SourceSpan) -> Range<usize> {
-    span.offset()..span.offset() + span.len()
-}
-
 /// One entity as a roster declares it: an id, the fields written under it, and
 /// where each of them sits.
 ///
@@ -55,6 +49,12 @@ impl Declared {
     /// The noun a duplicate id is reported as, in either roster.
     const NOUN: &'static str = "entity";
 
+    /// A span as the byte range it covers: what a declaration stores, so that
+    /// the config it lives in stays hashable.
+    fn range(span: SourceSpan) -> Range<usize> {
+        span.offset()..span.offset() + span.len()
+    }
+
     /// One `zoe { name "Zoe" }` node.
     fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let id = node.name().value().to_owned();
@@ -63,14 +63,19 @@ impl Declared {
             .block(text)?
             .nodes()
             .iter()
-            .map(|field| (field.name().value().to_owned(), range(NodeExt::span(field))))
+            .map(|field| {
+                (
+                    field.name().value().to_owned(),
+                    Self::range(NodeExt::span(field)),
+                )
+            })
             .collect();
         Ok((
             id.clone(),
             Self {
                 id,
                 fields,
-                at: range(NodeExt::span(node)),
+                at: Self::range(NodeExt::span(node)),
                 spans,
             },
         ))

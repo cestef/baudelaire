@@ -27,9 +27,7 @@ pub mod taxonomy;
 pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
 pub use discovery::{Collection, ROOT, discover};
-pub use entities::{
-    Attribution, Byline, Credit, Entity, EntityDeps, Registries, Registry, Resolved,
-};
+pub use entities::{Attribution, Byline, Credit, Entity, Registries, Registry, Resolved};
 pub use frontmatter::{Frontmatter, Generated, Origin};
 pub use page::{Data, Page, PageId, Sibling, Siblings, Withheld};
 pub use pagination::Pagination;

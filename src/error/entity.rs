@@ -222,9 +222,12 @@ impl Unresolved {
     ) -> Self {
         let (src, span) = Snippet::parts(snippet);
         Self {
+            // A registry whose sources have produced nothing yet is a roster
+            // waiting to be written, not a typo: there is no near name to
+            // suggest, so the help says what would make the term resolve.
             help: match known.is_empty() {
                 true => markup!(
-                    "the `{}` registry declares no entities: give it a source, or `unknown \"synthesize\"` to take the term as written",
+                    "the `{}` registry holds no entities yet: declare this one, or set `unknown \"synthesize\"` to take the term as written",
                     registry
                 ),
                 false => Keys::of(known).help(term, "ids"),

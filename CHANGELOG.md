@@ -49,7 +49,14 @@ chores are visible in the git history and change nothing for a site.
   Sources are read in the order they are written and a later one *fills* what an
   earlier one left out, so a checked-in roster can carry contact details while
   profile pages carry the prose. An `alias` is a second name that resolves to one
-  entity, and a name reaching two of them fails the build.
+  entity -- in a byline and in a term listing alike, so two spellings never split
+  one person across two term pages -- and a name reaching two entities fails the
+  build.
+
+  An entity has an edition per language, exactly as any other page does: a
+  `content/people/zoe.fr.typ` beside `zoe.typ` is the same person, and a French
+  page's byline reads the French edition with the base fields filling in
+  whatever it left out.
 
   A registry with a source is a roster, so a term nobody declared is a typo and
   fails the build with the near id suggested, underlined where the page wrote it.
@@ -99,8 +106,9 @@ chores are visible in the git history and change nothing for a site.
   ```
 
   It is part of the page's wrapper, so an entity that changes rebuilds exactly
-  the pages that credit it, and a bundled document (a PDF, a card) reads the
-  same byline the page does.
+  the pages that credit it, and a bundled document reads the same byline the
+  page does. A social card's `author` is the page's byline too, rather than the
+  site's one name.
 
 - **A profile page can be the term page.** `describe=#true` on a taxonomy whose
   terms are entities means a term written as a page is *that* page: no listing

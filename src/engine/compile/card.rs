@@ -18,6 +18,7 @@ use typst::syntax::RootedPath;
 
 use crate::codegen::{Import, Typst, Value};
 use crate::config::Config;
+use crate::content::entities::{Credit, Vocabulary};
 use crate::content::{Data, Iso, Page};
 use crate::error::Result;
 
@@ -45,12 +46,7 @@ impl Sidecar for Card {
     /// and ignores the layout bindings [`Cx`] also carries.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
         let template = &cx.config.generate.cards.template;
-        Ok(Self::module(
-            cx.config,
-            page,
-            rooted,
-            &cx.prepare.dir(template),
-        ))
+        Ok(Self::module(cx, page, rooted, &cx.prepare.dir(template)))
     }
 
     fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>> {
@@ -98,7 +94,8 @@ impl Card {
     /// template is: it derived its own from `config.paths.templates`, which
     /// looked only at the project and so failed on a theme's `card.typ` after
     /// `verify` had accepted it, with typst's own `file not found`.
-    fn module(config: &Config, page: &Page, rooted: &RootedPath, dir: &str) -> String {
+    fn module(cx: &Cx<'_>, page: &Page, rooted: &RootedPath, dir: &str) -> String {
+        let config = cx.config;
         Template {
             import: format!("{dir}/{}", config.generate.cards.template),
             func: std::path::Path::new(&config.generate.cards.template)
@@ -108,7 +105,7 @@ impl Card {
                 .to_owned(),
             width: config.generate.cards.width,
             height: config.generate.cards.height,
-            data: Typst(&Self::data(config, page)).to_string(),
+            data: Typst(&Self::data(cx, page)).to_string(),
             frontmatter: matches!(page.data, Data::Export)
                 .then(|| format!("/{}", rooted.vpath().get_without_slash())),
         }
@@ -118,14 +115,23 @@ impl Card {
     /// What the template is handed. Deliberately flat and small: a card shows a
     /// title, maybe a date and a site name, and nothing a card can render is
     /// worth invalidating every card over.
-    fn data(config: &Config, page: &Page) -> Value {
+    fn data(cx: &Cx<'_>, page: &Page) -> Value {
+        let config = cx.config;
         Value::dict([
             ("title", Value::str(page.title())),
             ("url", Value::str(&page.permalink)),
             ("lang", Value::str(&page.lang)),
             ("collection", Value::str(&page.collection)),
             ("site", Value::str(config.title(&page.lang))),
-            ("author", Value::opt(config.author(&page.lang))),
+            // Whom the page credits, under the name this surface spells the
+            // role by, rather than the site's one author: a card is a byline
+            // for the page it draws.
+            (
+                Credit::Author
+                    .spelling(Vocabulary::Document)
+                    .unwrap_or("author"),
+                Value::opt(cx.prepare.byline(page).line(Credit::Author)),
+            ),
             (
                 "date",
                 Value::opt(page.frontmatter.date.map(|d| Iso(d).to_string())),

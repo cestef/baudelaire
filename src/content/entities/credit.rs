@@ -14,7 +14,6 @@
 
 use crate::config::{Config, Named, Slots};
 use crate::content::{Page, entities::Registries};
-use crate::graph::Hash;
 
 use super::{Entity, Registry};
 
@@ -125,15 +124,19 @@ pub struct Resolved<'a> {
     pub term: &'a str,
     entity: Option<&'a Entity>,
     slots: &'a Slots,
+    /// The language of the page that named it, so an entity written as a
+    /// profile answers in the language the page is written in.
+    lang: &'a str,
     /// What the registry says this kind of thing *is*, for the one vocabulary
     /// that types its objects.
     kind: &'static str,
 }
 
 impl<'a> Resolved<'a> {
-    fn new(registry: &'a Registry, term: &'a str) -> Self {
+    fn new(registry: &'a Registry, term: &'a str, lang: &'a str) -> Self {
         Self {
             term,
+            lang,
             entity: registry.get(term),
             slots: registry.slots(),
             kind: registry.shape().map_or(KIND, crate::config::Shape::schema),
@@ -145,6 +148,7 @@ impl<'a> Resolved<'a> {
     pub fn bare(term: &'a str, slots: &'a Slots) -> Self {
         Self {
             term,
+            lang: Entity::BASE,
             entity: None,
             slots,
             kind: KIND,
@@ -209,29 +213,19 @@ impl<'a> Resolved<'a> {
         }
     }
 
-    /// Whether the registry actually holds this one.
-    pub fn known(&self) -> bool {
-        self.entity.is_some()
-    }
-
-    /// The id the site knows it by, which is the term when nothing does.
-    pub fn id(&self) -> &str {
-        self.entity.map_or(self.term, Entity::id)
-    }
-
     /// A field, by name.
     pub fn field(&self, key: &str) -> Option<&'a crate::codegen::Value> {
-        self.entity?.field(key)
+        self.entity?.field(key, self.lang)
     }
 
     /// Everything the registry holds about it, as a dict.
     pub fn fields(&self) -> crate::codegen::Value {
         crate::codegen::Value::dict(
             self.entity
-                .map(Entity::fields)
+                .map(|entity| entity.fields(self.lang))
                 .unwrap_or_default()
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone())),
+                .into_iter()
+                .map(|(key, value)| ((*key).to_owned(), value.clone())),
         )
     }
 
@@ -343,27 +337,21 @@ impl Byline {
     /// to say falls back to it, while an Atom entry does not, since the feed
     /// already carries the site's author and repeating it on every entry would
     /// claim the site wrote each post. [`Byline::or_site`] adds it.
-    pub fn of(registries: &Registries, config: &Config, page: &Page) -> (Self, EntityDeps) {
-        let mut roles: Vec<(Credit, Vec<Attribution>)> = Vec::new();
-        let mut probed = EntityDeps::new();
+    pub fn of(registries: &Registries, config: &Config, page: &Page) -> Self {
+        let mut byline = Self::default();
         for reference in registries.references(config, page) {
-            // Recorded for every reference, credited or not: a page that names
-            // a series it belongs to renders that too, and must rebuild when
-            // the series is renamed.
-            probed.insert(
-                format!("{}/{}", reference.registry.id(), reference.term),
-                reference.entity().map(Entity::digest),
-            );
             let Some(credit) = reference.credit else {
                 continue;
             };
-            let attribution = Attribution::from(&Resolved::new(reference.registry, reference.term));
-            match roles.iter_mut().find(|(role, _)| *role == credit) {
-                Some((_, named)) => named.push(attribution),
-                None => roles.push((credit, vec![attribution])),
-            }
+            byline.push(
+                credit,
+                vec![Attribution::from(&Resolved::new(
+                    reference.registry,
+                    reference.term,
+                    &page.lang,
+                ))],
+            );
         }
-        let mut byline = Self(roles);
         // The name a page has always been able to give, whatever registries
         // exist. Only where it credits no author through a taxonomy, so a
         // roster always wins.
@@ -372,7 +360,7 @@ impl Byline {
         {
             byline.push(Credit::Author, vec![Self::bare(name)]);
         }
-        (byline, probed)
+        byline
     }
 
     /// Fill in the site's own `author` for this page's language, where the page
@@ -394,6 +382,22 @@ impl Byline {
     fn bare(name: &str) -> Attribution {
         let slots = Slots::default();
         Attribution::from(&Resolved::bare(name, &slots))
+    }
+
+    /// The same byline with every picture rewritten by `resolve`.
+    ///
+    /// An entity's image is an asset like any other: it has to be named at the
+    /// URL the pipeline serves it from, and made absolute for the vocabularies
+    /// a crawler reads. The rewrite belongs to whoever owns that resolution, so
+    /// it is handed in rather than reached for.
+    #[must_use]
+    pub fn images(mut self, mut resolve: impl FnMut(&str) -> String) -> Self {
+        for (_, credited) in &mut self.0 {
+            for one in credited.iter_mut() {
+                one.image = one.image.as_deref().map(&mut resolve);
+            }
+        }
+        self
     }
 
     /// Credit `role` to `named`, keeping roles in declaration order.
@@ -446,10 +450,40 @@ impl Byline {
     }
 }
 
-/// What a page's references resolved to, keyed `registry/term`.
-///
-/// A `None` is load-bearing: it records that the page asked about somebody the
-/// registry did not hold, so the roster gaining them later rebuilds the page
-/// that credits them. Recording only the hits is how a green build serves a
-/// byline that no longer matches the roster.
-pub type EntityDeps = std::collections::BTreeMap<String, Option<Hash>>;
+#[cfg(test)]
+mod tests {
+    use super::{Credit, SPELLINGS, Vocabulary};
+    use crate::config::Named;
+
+    /// A role no surface can spell renders nowhere, silently. The table is the
+    /// only thing standing between a new variant and that, so it is held to
+    /// [`Credit::NAMES`] rather than to a reader's memory.
+    #[test]
+    fn every_role_has_a_row_and_says_something_somewhere() {
+        for (name, credit) in Credit::NAMES {
+            let row = SPELLINGS
+                .iter()
+                .find(|(role, _)| role == credit)
+                .unwrap_or_else(|| panic!("`{name}` has no row in the spelling table"));
+            assert!(
+                !row.1.is_empty(),
+                "`{name}` is spelled by no vocabulary at all"
+            );
+            assert!(
+                credit.spelling(Vocabulary::JsonLd).is_some(),
+                "`{name}` is not spelled by the one vocabulary that can say every role"
+            );
+        }
+    }
+
+    /// The two person constructs Atom has, and no third: a role written into a
+    /// feed under an element RFC 4287 does not define is not Atom.
+    #[test]
+    fn atom_spells_only_the_two_roles_it_has() {
+        let atom: Vec<&str> = Credit::NAMES
+            .iter()
+            .filter_map(|(_, credit)| credit.spelling(Vocabulary::Atom))
+            .collect();
+        assert_eq!(atom, ["author", "contributor"]);
+    }
+}

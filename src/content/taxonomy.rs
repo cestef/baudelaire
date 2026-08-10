@@ -74,10 +74,12 @@ pub(crate) struct Group<'a> {
     pages: &'a [Page],
     /// The language whose pages this group indexes; localizes every URL.
     lang: &'a str,
-    /// The registry this taxonomy's terms are ids in, when they are, and only
-    /// while the taxonomy lets a term be described by the page that declared
-    /// it: what turns a generated listing into an author's own page.
-    describes: Option<&'a Registry>,
+    /// The registry this taxonomy's terms are ids in, when they are: what makes
+    /// two spellings of one person one term.
+    registry: Option<&'a Registry>,
+    /// Whether a term written as a page is that page, rather than a listing
+    /// generated beside it.
+    describe: bool,
     config: &'a Config,
 }
 
@@ -90,11 +92,17 @@ impl<'a> Group<'a> {
         lang: &'a str,
         config: &'a Config,
     ) -> Self {
+        let registry = cfg.entities.as_deref().and_then(|id| entities.get(id));
         let mut terms: BTreeMap<String, Vec<&Page>> = BTreeMap::new();
         for page in pages.iter().filter(|p| p.lang == lang && p.listed(config)) {
             if let Some(values) = page.frontmatter.taxonomies.get(&cfg.key) {
                 for term in values {
-                    terms.entry(term.clone()).or_default().push(page);
+                    // Grouped by what the term *names*, not by how it was
+                    // spelled: an alias is a second name for one entity, so a
+                    // page writing it belongs on that entity's term and not on
+                    // a second one of its own.
+                    let term = registry.map_or(term.as_str(), |r| r.canonical(term));
+                    terms.entry(term.to_owned()).or_default().push(page);
                 }
             }
         }
@@ -109,10 +117,8 @@ impl<'a> Group<'a> {
         }
         Self {
             name,
-            describes: cfg
-                .describe
-                .then(|| cfg.entities.as_deref().and_then(|id| entities.get(id)))
-                .flatten(),
+            registry,
+            describe: cfg.describe,
             template: cfg.template.clone(),
             paginate: cfg.paginate,
             prefix: cfg.prefix.clone(),
@@ -189,7 +195,10 @@ impl<'a> Group<'a> {
     /// generated as an ordinary listing rather than pointing a reader at a page
     /// they cannot read.
     fn described(&self, term: &str) -> Option<&'a Page> {
-        let path = crate::fs::resolved(self.describes?.page(term)?);
+        if !self.describe {
+            return None;
+        }
+        let path = crate::fs::resolved(self.registry?.page(term, self.lang)?);
         self.pages
             .iter()
             .find(|page| page.lang == self.lang && crate::fs::resolved(&page.source) == path)

@@ -72,12 +72,20 @@ const BUILTIN: &[Builtin] = &[
 /// could give it.
 impl Source for PagesSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
-        let dir = cx.project.root().join(&self.dir);
+        let dir = crate::fs::resolved(cx.project.root().join(&self.dir));
+        // The default language's edition first, so its fields are the ones a
+        // merge keeps. A profile has an edition per language and the two are
+        // one entity; without an order, whose name a byline carried was
+        // whichever edition discovery happened to read first.
+        let mut profiles: Vec<&Page> = cx
+            .pages
+            .iter()
+            .filter(|page| page.authored())
+            .filter(|page| crate::fs::resolved(&page.source).starts_with(&dir))
+            .collect();
+        profiles.sort_by_key(|page| (page.lang != cx.config.lang, page.source.clone()));
         let mut out = Vec::new();
-        for page in cx.pages.iter().filter(|page| page.authored()) {
-            if !crate::fs::canonical(&page.source).starts_with(&dir) {
-                continue;
-            }
+        for page in profiles {
             let fm = &page.frontmatter;
             let mut fields: Vec<(String, Value)> = BUILTIN
                 .iter()
@@ -86,12 +94,14 @@ impl Source for PagesSource {
             for (key, value) in &fm.extra {
                 fields.push((key.clone(), value.clone()));
             }
-            out.push(Entity::new(
+            out.push(Entity::authored(
                 page.id.slug(),
                 fields,
                 Provenance::Page {
                     path: page.source.clone(),
                 },
+                &page.lang,
+                page.source.clone(),
             )?);
         }
         Ok(out)
@@ -101,15 +111,19 @@ impl Source for PagesSource {
 /// Entities are the nodes of a KDL roster file.
 ///
 /// Read through [`Project::source`], so the file is opened by the same store
-/// every other build input goes through and the dev server watches it without
-/// being told to.
+/// every other build input goes through.
+///
+/// The dev server does *not* watch it on its own: a roster is read once at plan
+/// time and so lands in no page's dependency set, and the watcher registers the
+/// four `paths` trees plus whatever those dependencies name. A site editing its
+/// roster under `serve` names it in `serve { include }`.
 impl Source for DataSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
         let path: PathBuf = cx.project.root().join(&self.path);
         let source = cx.project.source(&path)?;
         let text = source.text();
         let declarations = Declared::document(text).map_err(|e| e.named(&path))?;
-        roster(declarations, "data", &self.path.display().to_string(), text)
+        Provenance::entities(declarations, "data", &self.path.display().to_string(), text)
     }
 }
 
@@ -117,7 +131,7 @@ impl Source for DataSource {
 /// of its own would be ceremony.
 impl Source for InlineSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
-        roster(
+        Provenance::entities(
             self.entities.clone(),
             "inline",
             Config::FILE,
@@ -126,33 +140,44 @@ impl Source for InlineSource {
     }
 }
 
-/// The two KDL rosters' shared tail: what a declaration becomes.
+/// What a KDL roster's declarations become, for the two sources that read one.
 ///
-/// Both keep the text they were read from, so a fault found while the registry
-/// is assembled -- long after either file was closed -- still underlines the
-/// node that wrote it.
-fn roster(
-    entities: Vec<Declared>,
-    source: &'static str,
-    at: &str,
-    text: &str,
-) -> Result<Vec<Entity>> {
-    let text: Arc<str> = Arc::from(text);
-    entities
-        .into_iter()
-        .map(|entity| {
-            let from = Provenance::Roster {
-                source,
-                at: at.to_owned(),
-                text: Arc::clone(&text),
-                entity: entity.at.into(),
-                fields: entity
-                    .spans
-                    .into_iter()
-                    .map(|(key, at)| (key, at.into()))
-                    .collect(),
-            };
-            Entity::new(&entity.id, entity.fields, from)
-        })
-        .collect()
+/// On [`Provenance`] because that is what it produces: every entity keeps the
+/// text it was read from, so a fault found while the registry is assembled --
+/// long after either file was closed -- still underlines the node that wrote it.
+trait Roster {
+    fn entities(
+        declared: Vec<Declared>,
+        source: &'static str,
+        at: &str,
+        text: &str,
+    ) -> Result<Vec<Entity>>;
+}
+
+impl Roster for Provenance {
+    fn entities(
+        declared: Vec<Declared>,
+        source: &'static str,
+        at: &str,
+        text: &str,
+    ) -> Result<Vec<Entity>> {
+        let text: Arc<str> = Arc::from(text);
+        declared
+            .into_iter()
+            .map(|entity| {
+                let from = Self::Roster {
+                    source,
+                    at: at.to_owned(),
+                    text: Arc::clone(&text),
+                    entity: entity.at.into(),
+                    fields: entity
+                        .spans
+                        .into_iter()
+                        .map(|(key, at)| (key, at.into()))
+                        .collect(),
+                };
+                Entity::new(&entity.id, entity.fields, from)
+            })
+            .collect()
+    }
 }

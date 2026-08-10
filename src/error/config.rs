@@ -648,6 +648,20 @@ pub enum ConfigErrorKind {
         builtin: String,
     },
 
+    /// A taxonomy key that only means something beside another one.
+    ///
+    /// Refused rather than ignored: every one of these parses, configures
+    /// nothing, and leaves a site waiting for output that no code path can
+    /// produce.
+    #[error("the {} taxonomy writes {} without {}", Code(.taxonomy), Code(.key), Code(.needs))]
+    #[diagnostic(code(baudelaire::config::taxonomy_requires), help("{help}"))]
+    TaxonomyRequires {
+        taxonomy: String,
+        key: &'static str,
+        needs: &'static str,
+        help: String,
+    },
+
     /// A registry slot naming a field its entities do not declare.
     ///
     /// Refused at the block that wrote it, because where a renderer reads the

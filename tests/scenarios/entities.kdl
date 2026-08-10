@@ -686,3 +686,260 @@ scenario "an undescribed term still gets its generated listing" {
     file "people/zoe/index.html"
   }
 }
+
+scenario "an alias groups onto the entity it names, not beside it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources {
+              inline {
+                zoe { name "Zoe"; alias "zq" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author" listing=#true
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", authors: ("zq",),)
+      b
+      """#
+  }
+  expect {
+    ok
+    // One person, one term page, both posts on it.
+    file "authors/zoe/index.html" {
+      contains "Alpha"
+      contains "Beta"
+    }
+    file "authors/index.html" { count #"href="/authors/zoe/"# 1 }
+    absent "authors/zq/index.html"
+  }
+}
+
+scenario "a profile has an edition per language, and each describes its own" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      lang "en"
+      languages { fr { name "Français" } }
+      paths { content "content"; dist "public" }
+      content {
+        collections { people { template "profile.typ" } }
+        entities {
+          people {
+            shape "person"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author" listing=#true describe=#true
+        }
+      }
+      """#
+    "templates/profile.typ" #"""
+      #let profile(page, body) = html.elem("main", {
+        body
+        for one in page.members { html.elem("a", attrs: (href: one.url), one.label) }
+      })
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      Writes things.
+      """#
+    "content/people/zoe.fr.typ" #"""
+      #let frontmatter = (title: "Zoé",)
+      Écrit des choses.
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+    "content/posts/a.fr.typ" #"""
+      #let frontmatter = (title: "Alpha en français", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    // Each edition describes its own language's term and lists its own posts.
+    file "people/zoe/index.html" {
+      contains "Writes things."
+      contains "Alpha"
+      missing "Alpha en français"
+    }
+    file "fr/people/zoe/index.html" {
+      contains "Écrit des choses."
+      contains "Alpha en français"
+    }
+    // ..and the byline on each post is that language's name for one person.
+    file "fr/posts/a/index.html" { contains #"<meta name="author" content="Zoé">"# }
+    file "posts/a/index.html" { contains #"<meta name="author" content="Zoe">"# }
+  }
+}
+
+scenario "a taxonomy key that only means something beside another is refused" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        taxonomies {
+          authors credit="author"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::taxonomy_requires" }
+  }
+}
+
+scenario "a described profile lists its members in the taxonomy's own order" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        collections { people { template "profile.typ" } }
+        entities {
+          people {
+            shape "person"
+            sources { pages "content/people" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author" listing=#true describe=#true sort="date" reverse=#true
+        }
+      }
+      """#
+    "templates/profile.typ" #"""
+      #let profile(page, body) = html.elem("main", {
+        for one in page.members { html.elem("p", one.label) }
+      })
+      """#
+    "content/people/zoe.typ" #"""
+      #let frontmatter = (title: "Zoe",)
+      bio
+      """#
+    "content/posts/old.typ" #"""
+      #let frontmatter = (title: "Older", slug: "old", date: "2020-01-01", authors: ("zoe",),)
+      a
+      """#
+    "content/posts/new.typ" #"""
+      #let frontmatter = (title: "Newer", slug: "new", date: "2026-01-01", authors: ("zoe",),)
+      b
+      """#
+  }
+  expect {
+    ok
+    file "people/zoe/index.html" { order "Newer" "Older" }
+  }
+}
+
+scenario "editing the roster rebuilds the pages that credit whoever changed" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources { data "data/people.kdl" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author"
+        }
+      }
+      """#
+    "data/people.kdl" #"""
+      zoe { name "Zoe" }
+      ada { name "Ada" }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", authors: ("ada",),)
+      b
+      """#
+  }
+  build { }
+  build {
+    files {
+      "data/people.kdl" #"""
+        zoe { name "Zoe Quill" }
+        ada { name "Ada" }
+        """#
+    }
+    expect {
+      ok
+      // Only zoe's page: a roster is not a file any page reads, so what keeps
+      // this honest is the byline sitting in each page's own fingerprint.
+      pages 2
+      cached 1
+      file "posts/a/index.html" { contains #"content="Zoe Quill""# }
+    }
+  }
+}
+
+scenario "a page with no template still rebuilds when its byline changes" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources { data "data/people.kdl" }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author"
+        }
+      }
+      """#
+    "data/people.kdl" #"""
+      zoe { name "Zoe" }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  build { }
+  build {
+    files {
+      "data/people.kdl" #"""
+        zoe { name "Zoe Quill" }
+        """#
+    }
+    expect {
+      ok
+      cached 0
+      // The head tags are written by the render pass, which a cache hit skips:
+      // without the byline in the fingerprint this page kept the old name.
+      file "posts/a/index.html" { contains #"content="Zoe Quill""# }
+    }
+  }
+}

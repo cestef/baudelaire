@@ -128,3 +128,26 @@ impl Attributed for Slots {
         ),
     ]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Slots;
+    use crate::config::dispatch::Attributed;
+
+    /// Every slot [`Slots::filled`] reports has to be a key the block accepts:
+    /// that name goes into the diagnostic for a slot naming an undeclared
+    /// field, and a name the config would refuse is advice nobody can take.
+    #[test]
+    fn every_reported_slot_is_a_key_the_block_takes() {
+        let filled = Slots {
+            display: Some("a".into()),
+            url: Some("b".into()),
+            image: Some("c".into()),
+            email: Some("d".into()),
+            same_as: Some("e".into()),
+        };
+        let keys: Vec<&str> = Slots::rows().into_iter().map(|row| row.key).collect();
+        let reported: Vec<&str> = filled.filled().into_iter().map(|(slot, _)| slot).collect();
+        assert_eq!(reported, keys);
+    }
+}

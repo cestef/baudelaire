@@ -26,7 +26,7 @@ use crate::error::{EntityError, Result, entity::Unresolved};
 use crate::ui::Ui;
 use crate::world::Project;
 
-pub use credit::{Attribution, Byline, Credit, EntityDeps, Resolved, Vocabulary};
+pub use credit::{Attribution, Byline, Credit, Resolved, Vocabulary};
 pub use provenance::{Provenance, Snippet};
 use source::SourceCtx;
 
@@ -37,6 +37,23 @@ pub struct Entity {
     aliases: Vec<String>,
     fields: Vec<(String, Value)>,
     from: Provenance,
+    /// The fields each language's edition declares, over the base ones.
+    ///
+    /// One entity, several editions: a profile page has an edition per language
+    /// exactly as any other page does, and a French post credits the same
+    /// person an English one does. Without this the merge kept one edition's
+    /// name and every language rendered it, so a French byline read `Zoe` while
+    /// the page beside it read `Zoé`.
+    editions: BTreeMap<String, Vec<(String, Value)>>,
+    /// The page that declares this entity, per language.
+    ///
+    /// A map and not one path, because a profile has an edition per language
+    /// exactly as any other page does, and the two editions are one entity: a
+    /// French post credits the same person an English one does. Which page
+    /// *describes* a term is therefore a question with one answer per language,
+    /// and asking it without one silently answered every language with the
+    /// first edition read.
+    pages: BTreeMap<String, std::path::PathBuf>,
 }
 
 impl Entity {
@@ -50,7 +67,34 @@ impl Entity {
 
     /// An entity built from what a source read: an already-slugged id, and the
     /// fields under it, with the aliases lifted out.
-    pub fn new(id: &str, mut fields: Vec<(String, Value)>, from: Provenance) -> Result<Self> {
+    pub fn new(id: &str, fields: Vec<(String, Value)>, from: Provenance) -> Result<Self> {
+        Self::declared(id, fields, from, BTreeMap::new(), BTreeMap::new())
+    }
+
+    /// An entity a page declared, in that page's own language.
+    pub fn authored(
+        id: &str,
+        fields: Vec<(String, Value)>,
+        from: Provenance,
+        lang: &str,
+        page: std::path::PathBuf,
+    ) -> Result<Self> {
+        Self::declared(
+            id,
+            fields.clone(),
+            from,
+            BTreeMap::from([(lang.to_owned(), fields)]),
+            BTreeMap::from([(lang.to_owned(), page)]),
+        )
+    }
+
+    fn declared(
+        id: &str,
+        mut fields: Vec<(String, Value)>,
+        from: Provenance,
+        editions: BTreeMap<String, Vec<(String, Value)>>,
+        pages: BTreeMap<String, std::path::PathBuf>,
+    ) -> Result<Self> {
         let aliases = match fields.iter().position(|(key, _)| key == Self::ALIAS) {
             Some(at) => Self::names(fields.remove(at).1),
             None => Vec::new(),
@@ -64,6 +108,8 @@ impl Entity {
             aliases,
             fields,
             from,
+            editions,
+            pages,
         })
     }
 
@@ -79,27 +125,35 @@ impl Entity {
         &self.from
     }
 
-    /// One field, by name.
-    pub fn field(&self, key: &str) -> Option<&Value> {
+    /// One field, by name, as `lang` declares it.
+    ///
+    /// The language's own edition wins, and falls back to the base fields for
+    /// anything it did not declare: a French profile that writes only a name
+    /// still carries the homepage the roster gave it.
+    pub fn field(&self, key: &str, lang: &str) -> Option<&Value> {
+        Self::look(self.editions.get(lang), key).or_else(|| Self::look(Some(&self.fields), key))
+    }
+
+    /// Every field as `lang` declares it, the edition's over the base ones, in
+    /// the order each was first declared.
+    pub fn fields(&self, lang: &str) -> Vec<(&str, &Value)> {
+        let edition = self.editions.get(lang);
         self.fields
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .chain(edition.into_iter().flatten().map(|(key, _)| key.as_str()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|key| Some((key, self.field(key, lang)?)))
+            .collect()
+    }
+
+    /// One field of one set.
+    fn look<'a>(fields: Option<&'a Vec<(String, Value)>>, key: &str) -> Option<&'a Value> {
+        fields?
             .iter()
             .find(|(name, _)| name == key)
             .map(|(_, value)| value)
-    }
-
-    /// Every field, in the order its first source declared it.
-    pub fn fields(&self) -> &[(String, Value)] {
-        &self.fields
-    }
-
-    /// What this entity says, as a digest: its id, its other names, and its
-    /// fields.
-    ///
-    /// Not where it was declared. Moving an entity from a roster file into the
-    /// config changes nothing a page renders, so it must not rebuild the pages
-    /// that credit it.
-    pub fn digest(&self) -> crate::graph::Hash {
-        crate::graph::Hash::of(&(&self.id, &self.aliases, &self.fields))
     }
 
     /// Fill from a source read later: what `self` already carries wins, and
@@ -110,8 +164,16 @@ impl Entity {
     /// the name, and declaring one does not silently drop the other.
     fn fill(&mut self, other: Self) {
         for (key, value) in other.fields {
-            if self.field(&key).is_none() {
+            if Self::look(Some(&self.fields), &key).is_none() {
                 self.fields.push((key, value));
+            }
+        }
+        for (lang, fields) in other.editions {
+            let edition = self.editions.entry(lang).or_default();
+            for (key, value) in fields {
+                if Self::look(Some(edition), &key).is_none() {
+                    edition.push((key, value));
+                }
             }
         }
         for alias in other.aliases {
@@ -119,6 +181,30 @@ impl Entity {
                 self.aliases.push(alias);
             }
         }
+        // Every language's page, not just the first read: a later source may be
+        // the one that declares the French edition, and which source came first
+        // must not decide whether a term has a page in a given language.
+        for (lang, page) in other.pages {
+            self.pages.entry(lang).or_insert(page);
+        }
+    }
+
+    /// The language whose edition a lookup reads when there is no edition for
+    /// the language asked about: the base fields, as every source but `pages`
+    /// declares them.
+    ///
+    /// Not a real language code, and it cannot be one: a source that is not a
+    /// page has no language at all.
+    pub const BASE: &'static str = "";
+
+    /// Every language this entity has an edition for.
+    pub fn langs(&self) -> impl Iterator<Item = &str> {
+        self.editions.keys().map(String::as_str)
+    }
+
+    /// The page that declares this entity in `lang`, if one does.
+    pub fn page(&self, lang: &str) -> Option<&std::path::Path> {
+        self.pages.get(lang).map(std::path::PathBuf::as_path)
     }
 
     /// A string list value, however it was written: one name or several.
@@ -189,10 +275,28 @@ impl Registry {
             return Ok(());
         }
         for entity in self.entities.values() {
+            // Every edition, not just the base: a French profile that omits a
+            // field the registry requires is as broken as an English one, and
+            // it is the edition a French page renders.
+            for lang in entity.langs() {
+                let dict = entity
+                    .fields(lang)
+                    .into_iter()
+                    .map(|(key, value)| (key.into(), value.into()))
+                    .collect();
+                if let Some(fault) = Check::default().dict(&config.fields, &dict) {
+                    let steps = match &fault {
+                        Fault::Missing { .. } => fault.parent(),
+                        Fault::Mismatch { .. } => fault.path(),
+                    };
+                    let snippet = entity.from().snippet(project, steps);
+                    return Err(EntityError::field(&self.id, entity, &fault, snippet).into());
+                }
+            }
             let dict = entity
-                .fields()
-                .iter()
-                .map(|(key, value)| (key.as_str().into(), value.into()))
+                .fields(Entity::BASE)
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
                 .collect();
             if let Some(fault) = Check::default().dict(&config.fields, &dict) {
                 // The same rule a page's schema failure follows: a mismatch
@@ -263,21 +367,24 @@ impl Registry {
             .or_else(|| self.aliases.get(&id).and_then(|id| self.entities.get(id)))
     }
 
-    /// The page that declared the entity a term names, if a page did.
+    /// The page that declares the entity a term names, in `lang`.
     ///
-    /// What makes a term describable: an entity written as a profile page has
-    /// a page of its own to be the term's, while one written in a roster has
-    /// only fields.
-    pub fn page(&self, term: &str) -> Option<&std::path::Path> {
-        match self.get(term)?.from() {
-            Provenance::Page { path } => Some(path),
-            Provenance::Roster { .. } => None,
-        }
+    /// What makes a term describable: an entity written as a profile page has a
+    /// page of its own to be the term's, while one written in a roster has only
+    /// fields. Per language, so a French term is described by the French
+    /// edition or by nothing.
+    pub fn page(&self, term: &str, lang: &str) -> Option<&std::path::Path> {
+        self.get(term)?.page(lang)
     }
 
-    /// Every entity, in id order.
-    pub fn entities(&self) -> impl Iterator<Item = &Entity> {
-        self.entities.values()
+    /// The id `term` resolves to: its own, or the entity an alias reaches.
+    ///
+    /// What every consumer that *groups* by term has to call first. Grouping on
+    /// the raw string splits one person across two terms the moment a page
+    /// spells them by an alias, which is two term pages, two feeds and two rows
+    /// in the index for one entity.
+    pub fn canonical<'a>(&'a self, term: &'a str) -> &'a str {
+        self.get(term).map_or(term, Entity::id)
     }
 
     /// Every name that resolves here, ids and aliases alike: what a
@@ -347,17 +454,6 @@ impl Registries {
     /// One registry, by id.
     pub fn get(&self, id: &str) -> Option<&Registry> {
         self.0.get(id)
-    }
-
-    /// What the entity a probe named says now, `None` when nothing answers it.
-    ///
-    /// The read half of [`EntityDeps`](credit::EntityDeps): the cache records
-    /// what a page consulted, and asks this whether it still says the same
-    /// thing. Keyed by the term rather than by the resolved id, because an
-    /// alias that stops resolving has to invalidate the page that used it.
-    pub fn digest(&self, key: &str) -> Option<crate::graph::Hash> {
-        let (registry, term) = key.split_once('/')?;
-        self.get(registry)?.get(term).map(Entity::digest)
     }
 
     /// Resolve every reference every page writes, under each registry's own

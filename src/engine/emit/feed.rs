@@ -406,7 +406,7 @@ impl<'a> Feed<'a> {
     /// carries that, and repeating it on every entry would claim the site wrote
     /// each post rather than merely publishing it.
     fn people(&self, xml: &mut Xml, page: &Page) {
-        let (byline, _) = crate::content::Byline::of(self.site.entities, self.site.config, page);
+        let byline = crate::content::Byline::of(self.site.entities, self.site.config, page);
         for (role, credited) in byline.roles() {
             let Some(element) = role.spelling(crate::content::entities::Vocabulary::Atom) else {
                 continue;

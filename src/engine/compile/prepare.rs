@@ -132,46 +132,47 @@ impl<'a> Prepare<'a> {
         self.config
     }
 
-    /// Which pages name each entity that was declared by a page.
+    /// Who `page` credits, with the site's own author as the floor.
     ///
-    /// Keyed by the profile's source path, since that is what a registry can
-    /// name an entity by, and the rows are the very [`Item`] shape every
-    /// listing hands a template: a profile renders its archive with the card
-    /// component a collection index already uses.
+    /// The one resolution, so the wrapper, the card and the fingerprint above
+    /// all carry the same byline: a second one is a second chance to disagree
+    /// about who wrote the page.
+    pub(in crate::engine) fn byline(&self, page: &Page) -> Byline {
+        Byline::of(self.entities, self.config, page).or_site(self.config, page)
+    }
+
+    /// Which pages each described term holds, keyed by the profile page that
+    /// describes it.
     ///
-    /// Only terms whose taxonomy lets a page describe them: a taxonomy that
-    /// generates its own term listings has already put the members there, and
-    /// handing them to the profile as well would tie its cache identity to
-    /// pages it does not display.
+    /// Drawn from [`Taxonomy::groups`], the single grouping rule behind term
+    /// pages and term feeds, so a profile's archive is the very list the
+    /// generated listing would have held: the same members, canonicalized
+    /// through the registry, in the taxonomy's own `sort` and `reverse`. A
+    /// second walk here would be a second answer to "what is under this term".
+    ///
+    /// A term whose slug is empty or collides is an error the plan already
+    /// raised, before any of this runs, so a group that will not resolve
+    /// contributes nothing rather than failing a second time.
     fn members(
         config: &'a Config,
         entities: &'a Registries,
         pages: &'a [Page],
     ) -> BTreeMap<PathBuf, Vec<Value>> {
-        let described: Vec<&str> = config
-            .content
-            .taxonomies
-            .iter()
-            .filter(|(_, cfg)| cfg.describe)
-            .filter_map(|(_, cfg)| cfg.entities.as_deref())
-            .collect();
-        if described.is_empty() {
-            return BTreeMap::new();
-        }
         let mut members: BTreeMap<PathBuf, Vec<Value>> = BTreeMap::new();
-        for page in pages.iter().filter(|page| page.listed(config)) {
-            let strings = Strings::new(config, &page.lang);
-            for reference in entities.references(config, page) {
-                if !described.contains(&reference.registry.id()) {
-                    continue;
-                }
-                let Some(profile) = reference.registry.page(reference.term) else {
+        for group in crate::content::Taxonomy::groups(config, entities, pages) {
+            let strings = Strings::new(config, group.lang());
+            for term in group.resolve().unwrap_or_default() {
+                let Some(profile) = term.described else {
                     continue;
                 };
                 members
-                    .entry(crate::fs::resolved(profile))
+                    .entry(crate::fs::resolved(&profile.source))
                     .or_default()
-                    .push(crate::content::listing::Item::of(page, &strings).value());
+                    .extend(
+                        term.members.iter().map(|member| {
+                            crate::content::listing::Item::of(member, &strings).value()
+                        }),
+                    );
             }
         }
         members
@@ -207,7 +208,13 @@ impl<'a> Prepare<'a> {
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
-            let fingerprint = Hash::of_bytes(text.as_bytes());
+            // A page with no template has no wrapper, so the byline that every
+            // page's fingerprint otherwise carries is not in this text at all --
+            // and the render pass still writes it into the head tags. Mixed in
+            // here, since a roster is read at plan time and is in no page's
+            // dependency set: without it, renaming an author left every
+            // templateless page serving the old name out of a green build.
+            let fingerprint = Hash::of(&(&text, Value::from(&self.byline(page))));
             return Ok((FileId::new(rooted), text, fingerprint));
         };
         let id = match &page.data {
@@ -297,8 +304,7 @@ impl<'a> Prepare<'a> {
         // names only what this page names, so an entity that changes
         // refingerprints exactly the pages that credit it. That is also why
         // nothing here needs a cache probe of its own.
-        let (byline, _) = Byline::of(self.entities, self.config, page);
-        let credits = Typst(&Value::from(&byline.or_site(self.config, page))).to_string();
+        let credits = Typst(&Value::from(&self.byline(page))).to_string();
         // The pages that name this one as an entity: an author's archive, on
         // the author's own page. Wrapper text like `nav`, and part of the
         // page's fingerprint for the same reason: it is what the page shows,
