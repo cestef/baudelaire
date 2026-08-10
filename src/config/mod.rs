@@ -85,6 +85,7 @@ pub use generate::search::{SearchConfig, SearchField, SearchFormat};
 pub use hooks::HooksConfig;
 pub use html::anchors::{AnchorConfig, Place};
 pub use html::highlight::{HighlightConfig, Token};
+pub use html::math::{MathConfig, MathStyles};
 pub use html::meta::MetaConfig;
 pub use html::region::RegionConfig;
 pub use html::{Footnotes, HtmlConfig};

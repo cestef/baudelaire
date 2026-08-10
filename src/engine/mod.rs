@@ -205,7 +205,10 @@ impl Engine {
             #[cfg(feature = "js")]
             modules.ctx(&planned.pages),
         );
-        let processed = assets.process()?;
+        let mut processed = assets.process()?;
+        // Taken out before the rest is handed to the pass: these are written
+        // after the pages, once they have said which of them they reference.
+        let deferred = std::mem::take(&mut processed.deferred);
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let mut emitted = processed.emitted;
@@ -242,6 +245,10 @@ impl Engine {
         // nothing. Nothing here reads the pages, so the order is free.
         let images = self.images(&rendered, &cached, ui)?;
         emitted.absorb(images.emitted());
+        // Beside the images and for the same reason: the asset tree is
+        // regenerated every build, so an asset the build provides itself is
+        // written now that the pages have said which of them they point at.
+        let owned = assets.requested(&deferred, &Self::owned(&rendered, &cached))?;
         self.validate(&rendered, &cached, Some(&emitted), false, ui)?;
         let outputs = Self::outputs(&rendered, &cached);
         Self::write(&outputs)?;
@@ -272,11 +279,12 @@ impl Engine {
         Summary {
             pages: total,
             cached: cached.len(),
-            assets: asset_count + images.count(),
+            assets: asset_count + images.count() + owned.count,
             statics: statics.count,
             generated: generated.count,
             bytes: page_bytes
                 + asset_bytes
+                + owned.bytes
                 + images.bytes()
                 + generated.bytes
                 + statics.bytes
@@ -505,6 +513,18 @@ impl Engine {
                 .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
             ui,
         )
+    }
+
+    /// The build's own assets that any page points at, rendered and cache-served
+    /// alike. A page served from cache references the same files it did when it
+    /// was compiled, and the asset tree it references was thrown away.
+    fn owned(rendered: &[Rendered], cached: &[Reused]) -> std::collections::BTreeSet<String> {
+        rendered
+            .iter()
+            .flat_map(|r| &r.outputs.owned)
+            .chain(cached.iter().flat_map(|(_, _, out)| &out.owned))
+            .cloned()
+            .collect()
     }
 
     /// Pair every page, rendered and cache-served alike, with what the render
@@ -908,6 +928,7 @@ impl Engine {
             assets: rewrite.assets,
             outputs: Outputs {
                 images: rewrite.images,
+                owned: rewrite.owned,
                 broken: rewrite.broken,
                 anchors: rewrite.anchors,
                 deep: rewrite.deep,

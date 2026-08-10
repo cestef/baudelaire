@@ -16,6 +16,7 @@ mod highlight;
 mod image;
 mod integrity;
 mod lang;
+mod math;
 mod meta;
 mod outbound;
 mod rewrite;
@@ -48,6 +49,7 @@ use highlight::Highlight;
 use image::Images;
 use integrity::Integrity;
 use lang::Lang;
+use math::Math;
 use meta::Meta;
 use outbound::Outbound;
 use rewrite::Links;
@@ -472,6 +474,11 @@ impl Transforms {
             // a location at all.
             Box::new(Spans),
             Box::new(Meta),
+            // With the other passes that write into `<head>`, and before the
+            // ones that rewrite references: the `<link>` it leaves is spelled as
+            // an author would spell it, so fingerprinting, embedding and the
+            // base path all reach it without knowing it was synthesized.
+            Box::new(Math),
             Box::new(Speculation),
             Box::new(Outbound),
             #[cfg(feature = "announce")]

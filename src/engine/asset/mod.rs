@@ -23,8 +23,10 @@ mod js;
 pub(in crate::engine) mod memo;
 #[cfg(feature = "js")]
 mod module;
+mod owned;
 mod sourcemap;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
@@ -70,6 +72,25 @@ pub struct Processed {
     pub emitted: Emitted,
     pub count: usize,
     pub bytes: u64,
+    /// The [`Owned`] assets this build named but has not written; see
+    /// [`Assets::generated`].
+    pub deferred: Vec<Deferred>,
+}
+
+/// An asset the build provides itself, named and digested but not yet on disk.
+///
+/// Reserved during [`Assets::process`] so a page can link it and be stamped with
+/// its digest, and written by [`Assets::requested`] only if a page did. An
+/// unwritten one costs a map entry and nothing else, which is the point: a site
+/// with no equation on any page must not ship a stylesheet for equations.
+pub struct Deferred {
+    /// Path relative to the asset root: how a page names it, and the key a
+    /// render pass records when it asks for one.
+    rel: PathBuf,
+    /// The fingerprinted path it is served from, settled here because the bytes
+    /// are settled here.
+    dst: PathBuf,
+    bytes: std::borrow::Cow<'static, [u8]>,
 }
 
 /// One file's rendered outputs, held until the serial emit pass writes them.
@@ -177,6 +198,7 @@ impl<'a> Assets<'a> {
             .into_iter()
             .filter(|file| !Private::covers(&file.rel, self.config))
             .collect();
+        self.generated(&sources, &mut out);
         if sources.is_empty() {
             return Ok(out);
         }
@@ -222,6 +244,64 @@ impl<'a> Assets<'a> {
                     ..self.ctx()
                 };
                 self.phase(Phase::Bundle, &handlers, &mut buckets, &ctx, &mut out)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Name every [`Owned`] asset this build serves, beneath the layers a site
+    /// and its theme provide.
+    ///
+    /// The override rule is the layer stack's, stated here once rather than in
+    /// each impl: a tree holding its own file at that path keeps it, exactly as
+    /// it would override one a theme shipped. From there the two are
+    /// indistinguishable, which is the whole reason the name is settled here: a
+    /// page links the authored spelling either way, and the fingerprint pass
+    /// rewrites it through the same map entry.
+    ///
+    /// Named, digested, and *not* written. Whether a page wants one is not
+    /// knowable before the pages have rendered, and an owned asset is not the
+    /// site's own file: nobody put it in the tree, so nobody would wonder why
+    /// `dist` holds a stylesheet no page asks for. [`Assets::requested`] writes
+    /// the ones that were asked for, once that is known.
+    fn generated(&self, sources: &[Layered], out: &mut Processed) {
+        let ctx = self.ctx();
+        for asset in owned::builtin() {
+            let rel = Path::new(asset.rel());
+            if !asset.enabled(self.config) || sources.iter().any(|file| file.rel == rel) {
+                continue;
+            }
+            let bytes = asset.bytes(self.config);
+            let dst = self.fingerprint(rel, &bytes);
+            // Unconditionally mapped, even when fingerprinting leaves the name
+            // alone: the entry is what makes the reference *resolve*, and a page
+            // records which owned assets it asked for by the same key.
+            out.map.insert(ctx.url(rel), ctx.url(&dst));
+            out.emitted.insert(ctx.url(&dst), &bytes, self.config.sri());
+            out.deferred.push(Deferred {
+                rel: rel.to_path_buf(),
+                dst,
+                bytes,
+            });
+        }
+    }
+
+    /// Write the [`Deferred`] assets the rendered pages asked for, keyed by the
+    /// path relative to the asset root that both sides name them by.
+    ///
+    /// Runs where the externalized images are written, and for the same reason:
+    /// the asset tree is regenerated every build, so a page served from cache
+    /// has to keep its file alive just as a freshly compiled one does.
+    pub fn requested(&self, deferred: &[Deferred], wanted: &BTreeSet<String>) -> Result<Processed> {
+        let mut out = Processed {
+            map: AssetMap::new(self.prefix.clone()),
+            emitted: Emitted::new(self.config.base_path().to_owned()),
+            ..Processed::default()
+        };
+        let ctx = self.ctx();
+        for asset in deferred {
+            if wanted.contains(&asset.rel.to_string_lossy().replace('\\', "/")) {
+                self.write(&ctx, &asset.rel, &asset.dst, &asset.bytes, &mut out)?;
             }
         }
         Ok(out)

@@ -1,0 +1,173 @@
+// The stylesheet typst's MathML output depends on: where it is served from,
+// which pages point at it, and what `html { math { styles } }` moves.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      """#
+    "content/eq.typ" #"""
+      #let frontmatter = (title: "Equation", slug: "eq",)
+      Pythagoras: $ a^2 + b^2 = c^2 $
+      """#
+    "content/prose.typ" #"""
+      #let frontmatter = (title: "Prose", slug: "prose",)
+      No equation here.
+      """#
+  }
+}
+
+scenario "a page with an equation links the served stylesheet instead of inlining it" {
+  expect {
+    ok
+    file "eq/index.html" {
+      // The MathML itself is typst's and stays in the page.
+      contains "<math"
+      contains #"<link rel="stylesheet" href="/assets/math.css">"#
+      // The rules it needs are a file now, not a block on every page.
+      missing "mtable.right-align"
+    }
+    file "assets/math.css" { contains "mtable.right-align" }
+  }
+}
+
+// The block is only injected where typst found an equation, so the link has to
+// follow it: a prose page pointing at a math stylesheet is a request for
+// nothing.
+scenario "a page with no equation is given no stylesheet" {
+  expect {
+    ok
+    file "prose/index.html" { missing "math.css" }
+  }
+}
+
+// The `<link>` is spelled as an author would spell it and pushed before the
+// passes that rewrite references, so it is renamed like any other: nothing
+// downstream has to know the build synthesized it.
+scenario "the link is fingerprinted and base-pathed like an authored one" {
+  // Fingerprinting needs the stylesheet rewriter to fix `url()` references, so
+  // `Gate` turns it off for the whole build without it.
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com/docs/"
+      paths { content "content"; dist "public" }
+      assets { fingerprint #true }
+      """#
+  }
+  expect {
+    ok
+    file "eq/index.html" { capture "sheet" #"/docs/assets/(math\.[0-9a-f]+\.css)"# }
+    file "assets/{sheet}" { contains "mtable.right-align" }
+  }
+}
+
+// `styles "inline"` is what every page got before the stylesheet existed, and
+// what a site wanting no second request keeps. Nothing is written and nothing
+// is moved.
+scenario "styles inline leaves typst's block where it put it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      html { math { styles "inline" } }
+      """#
+  }
+  expect {
+    ok
+    file "eq/index.html" { contains "mtable.right-align" }
+    absent "assets/math.css"
+  }
+}
+
+// `styles "none"` is for a theme whose own stylesheet already states the rules:
+// the block goes, and nothing replaces it.
+scenario "styles none drops the block and serves nothing" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      html { math { styles "none" } }
+      """#
+  }
+  expect {
+    ok
+    file "eq/index.html" {
+      contains "<math"
+      missing "mtable.right-align"
+      missing "math.css"
+    }
+    absent "assets/math.css"
+  }
+}
+
+// The asset tree is regenerated every build, so a page served from cache has to
+// keep its stylesheet alive exactly as it keeps an externalized image alive.
+// The page records what it asked for, and the record survives the cache.
+scenario "a cached rebuild still writes the stylesheet its pages point at" {
+  build { expect { ok; pages 2; cached 0 } }
+  build {
+    expect {
+      ok
+      pages 2
+      cached 2
+      file "assets/math.css" { contains "mtable.right-align" }
+      file "eq/index.html" { contains "/assets/math.css" }
+    }
+  }
+}
+
+// `html { embed }` makes a page self-contained by inlining what it references.
+// For these rules the self-contained form is the block typst already wrote, so
+// the file is neither served nor linked: inlining it would be the same page
+// after a round trip, plus a file in `dist` that nothing points at.
+scenario "embed keeps the rules inline rather than serving a file to inline" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      html { embed #true }
+      """#
+  }
+  expect {
+    ok
+    file "eq/index.html" {
+      contains "mtable.right-align"
+      missing "math.css"
+    }
+    absent "assets/math.css"
+  }
+}
+
+// The stylesheet is an asset like any other, so a site's own file at that path
+// wins the way it wins against a theme's.
+scenario "a site's own math.css replaces the one the build ships" {
+  files {
+    "assets/math.css" #"""
+      math { color: rebeccapurple }
+      """#
+  }
+  expect {
+    ok
+    file "assets/math.css" {
+      contains "rebeccapurple"
+      missing "mtable.right-align"
+    }
+  }
+}
+
+// The pin is the whole mechanism: the pass removes a `<style>` only when its
+// text is exactly what typst injects, so a typst release that edits one
+// declaration leaves the block in the page. That is the safe failure, and this
+// is what makes it a loud one.
+scenario "typst's injected stylesheet still matches the pinned copy" {
+  expect {
+    ok
+    file "eq/index.html" {
+      missing "/* Alignment */"
+      missing "<style>"
+    }
+  }
+}

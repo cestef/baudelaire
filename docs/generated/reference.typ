@@ -126,6 +126,8 @@
   (path: "html.region", key: "region", shape: "block", doc: "Which part of a rendered page is its prose.", depth: 1, section: true),
   (path: "html.region.element", key: "element", shape: "text", doc: "The element whose contents are the page's prose, by tag name. A page without one counts whole.", depth: 2, section: false),
   (path: "html.region.ignore", key: "ignore", shape: "text ..", doc: "Elements to leave out of it, by tag name, one word each.", depth: 2, section: false),
+  (path: "html.math", key: "math", shape: "block", doc: "Where the CSS that typst's MathML output depends on lives.", depth: 1, section: true),
+  (path: "html.math.styles", key: "styles", shape: "link | inline | none", doc: "Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.", depth: 2, section: false),
   (path: "html.jsonld", key: "jsonld", shape: "flag", doc: "Emit JSON-LD structured data for each page.", depth: 1, section: false),
   (path: "html.spans", key: "spans", shape: "flag", doc: "Stamp each element with the source span it came from, so `serve` can open it.", depth: 1, section: false),
   (path: "html.footnotes", key: "footnotes", shape: "text ..", doc: "The elements a page's footnotes belong inside, most specific first.", depth: 1, section: false),

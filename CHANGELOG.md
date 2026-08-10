@@ -138,6 +138,28 @@ chores are visible in the git history and change nothing for a site.
   reaches it. A term nobody wrote a page for is generated as any other term is,
   and a per-term feed follows the term wherever it lives.
 
+- **The CSS a page's equations need is a file, not a block in every page.**
+  typst's HTML export writes the rules its MathML relies on into the `<head>` of
+  every page holding an equation: the same ~1.5 KB again on each of them,
+  uncacheable. A build now serves them once, as `/assets/math.css`, linked only
+  from the pages that have an equation:
+
+  ```kdl
+  html {
+    math {
+      styles "link"    // link (default) | inline | none
+    }
+  }
+  ```
+
+  `inline` keeps typst's block where it was, for a site that would rather have no
+  second request. `none` drops it and serves nothing, for a theme whose own
+  stylesheet already states the rules. The file is an asset like any other:
+  fingerprinted, digested for `integrity`, inlined by `html { embed }`, and
+  replaced wholesale by a site or theme that ships its own `assets/math.css`.
+
+  A site with no equation on any page gets no file and no link.
+
 ### Upgrading
 
 - **`Renderer::SCHEMA` moves to 20**: the first build after upgrading recompiles

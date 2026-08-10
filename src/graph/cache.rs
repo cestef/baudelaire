@@ -118,6 +118,12 @@ pub struct Outputs {
     /// Images the page externalized out of the DOM. Re-copied into `dist` on a
     /// cache hit, since the asset directory is regenerated every build.
     pub images: Vec<ImageRef>,
+    /// The assets the build provides itself that the page asked for. Stored for
+    /// the same reason as `images`, and written on a cache hit for the same one:
+    /// the page's markup points at a file the regenerated asset tree would not
+    /// otherwise hold.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub owned: std::collections::BTreeSet<String>,
     /// Raw targets of the broken internal links the page produced.
     ///
     /// Stored so the link check sees a cached page too. Feeding it only

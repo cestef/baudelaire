@@ -2,13 +2,14 @@
 
 pub mod anchors;
 pub mod highlight;
+pub mod math;
 pub mod meta;
 pub mod region;
 
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{AnchorConfig, HighlightConfig, MetaConfig, RegionConfig};
+use crate::config::{AnchorConfig, HighlightConfig, MathConfig, MetaConfig, RegionConfig};
 use crate::error::ConfigError;
 
 /// HTML output options.
@@ -29,6 +30,8 @@ pub struct HtmlConfig {
     pub region: RegionConfig,
     /// Class a code block's tokens instead of colouring them inline.
     pub highlight: HighlightConfig,
+    /// Where the CSS that typst's MathML output depends on lives.
+    pub math: MathConfig,
     /// Emit a schema.org JSON-LD island in each page's `<head>`.
     ///
     /// Opt-in, unlike the meta tags beside it: those restate facts the page
@@ -103,6 +106,7 @@ impl Default for HtmlConfig {
             anchors: AnchorConfig::default(),
             region: RegionConfig::default(),
             highlight: HighlightConfig::default(),
+            math: MathConfig::default(),
             // opt-in: structured data is a claim about the page, not a restating
             // of what it already says.
             jsonld: false,
@@ -147,6 +151,12 @@ impl Section for HtmlConfig {
             Nested(RegionConfig::rows),
             "Which part of a rendered page is its prose.",
             |c, n, t| c.region.fill(n, t),
+        ),
+        (
+            "math",
+            Nested(MathConfig::rows),
+            "Where the CSS that typst's MathML output depends on lives.",
+            |c, n, t| c.math.fill(n, t),
         ),
         (
             "jsonld",

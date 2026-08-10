@@ -14,6 +14,7 @@ mod fragment;
 mod inline;
 mod links;
 mod lint;
+mod math;
 mod origin;
 mod scope;
 mod srcset;
@@ -25,6 +26,7 @@ pub use fragment::{Fragments, Syndicated};
 pub use inline::Inline;
 pub use links::{Backlink, Backlinks, LinkDeps, LinkMap, Outbound, Target, UrlDeps};
 pub use lint::{Finding, Load, Reference, Weight};
+pub use math::MathSheet;
 pub use origin::Site;
 pub use srcset::{Candidate, SrcSetDeps, SrcSets};
 pub use transform::ImageRef;
@@ -110,6 +112,15 @@ pub struct Rewrite {
     pub outbound: Outbound,
     /// Images lifted out of the DOM, for the engine to copy into `dist`.
     pub images: Vec<ImageRef>,
+    /// The assets the build provides itself that this page asked for, by the
+    /// path each is known by under the asset root (`math.css`).
+    ///
+    /// The pipeline names and digests every one of them before a page renders,
+    /// but cannot know which are wanted until the pages exist, so it writes none
+    /// of them. This is that answer, and it travels with the page for the same
+    /// reason [`images`](Self::images) does: the asset tree is rebuilt every
+    /// build, so a page served from cache still has to keep its file alive.
+    pub owned: std::collections::BTreeSet<String>,
     /// Outbound `http(s)` link targets the page carries, collected only when
     /// external checking is on.
     pub external: Vec<String>,
