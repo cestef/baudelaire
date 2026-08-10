@@ -13,7 +13,6 @@ use miette::{NamedSource, SourceSpan};
 
 use crate::content::frontmatter::check::Step;
 use crate::content::frontmatter::origin::Located;
-use crate::ui::markup;
 use crate::world::Project;
 
 /// A file to render a snippet from, and the span in it to underline.
@@ -56,11 +55,23 @@ pub enum Provenance {
 }
 
 impl Provenance {
-    /// How a message names this: "`data` in data/people.kdl".
-    pub fn label(&self) -> String {
+    /// The source that declared it, spelled as its config key.
+    ///
+    /// Two accessors rather than one assembled phrase: a diagnostic escapes
+    /// what it interpolates, so a label that arrived carrying its own markup
+    /// would render its delimiters as text.
+    pub fn source(&self) -> &'static str {
         match self {
-            Self::Page { path } => markup!("`pages` in {}", &path.display().to_string()),
-            Self::Roster { source, at, .. } => markup!("`{}` in {}", source, at),
+            Self::Page { .. } => "pages",
+            Self::Roster { source, .. } => source,
+        }
+    }
+
+    /// The file it was written in.
+    pub fn at(&self) -> String {
+        match self {
+            Self::Page { path } => path.display().to_string(),
+            Self::Roster { at, .. } => at.clone(),
         }
     }
 

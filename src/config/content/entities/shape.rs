@@ -35,7 +35,11 @@ const PERSON: &[Field] = &[
     ("url", || FieldType::Str),
     ("avatar", || FieldType::Str),
     ("email", || FieldType::Str),
-    ("socials", || FieldType::Dict(Vec::new())),
+    // Deliberately unconstrained. The slot that reads it takes a list of URLs
+    // or a dictionary of platform to URL, and the two roster dialects cannot
+    // both write both: a typst profile page can spell a dict, a KDL roster
+    // spells a list. Typing it either way would refuse the other.
+    ("socials", || FieldType::Any),
 ];
 
 /// The `organization` fields. Deliberately smaller: what a publisher line and a
@@ -88,6 +92,19 @@ impl Shape {
                 email: None,
                 same_as: None,
             },
+        }
+    }
+
+    /// What schema.org calls this kind of thing, for the one vocabulary that
+    /// types its objects.
+    ///
+    /// A column of the shape table rather than a slot, because it is not a
+    /// field an entity carries: it is what the entity *is*, which is exactly
+    /// what naming a shape says.
+    pub fn schema(self) -> &'static str {
+        match self {
+            Self::Person => "Person",
+            Self::Organization => "Organization",
         }
     }
 

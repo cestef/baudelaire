@@ -353,6 +353,7 @@ mod tests {
     fn export(config: &Config, built: &Built) -> Recorder {
         let outputs = built.outputs();
         let site = Site {
+            entities: crate::content::Registries::none(),
             config,
             pages: &[],
             outputs: &outputs,

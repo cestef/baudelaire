@@ -57,6 +57,57 @@ chores are visible in the git history and change nothing for a site.
   as written -- which is what a site that declares no registry at all has always
   done, and still does.
 
+- **A page's byline is everyone it credits, everywhere it is named.** A taxonomy
+  says what a page claims about the entities it names:
+
+  ```kdl
+  taxonomies {
+    authors     entities="people" credit="author"
+    translators entities="people" credit="translator"
+  }
+  ```
+
+  Every surface then spells that role its own way, or stays quiet where its
+  vocabulary has no word for it:
+
+  | role | `<meta name>` | OpenGraph | JSON-LD | Atom |
+  | --- | --- | --- | --- | --- |
+  | author | `author` | `article:author` | `author` | `<author>` |
+  | contributor | - | - | `contributor` | `<contributor>` |
+  | translator | - | - | `translator` | - |
+  | editor, illustrator, reviewer, publisher | - | - | yes | - |
+
+  Concretely: a co-authored page carries one `<meta name="author">` per author
+  rather than one name; `article:author` carries the profile URL where the
+  entity has one, which is what OpenGraph asks for; `<link rel="author">` is
+  emitted for the first author with a URL; the JSON-LD island types each person
+  from its registry's shape and carries `url`, `image`, `email` and `sameAs`.
+
+- **A feed entry names its own people.** `<author>` on an Atom entry carries the
+  page's byline with `<uri>` and `<email>` beside the name, instead of every
+  entry being anonymous under one feed-level author. The feed still declares the
+  site's own author, which is what makes it valid Atom.
+
+- **`page.credits` reaches every template**, keyed by role, each entity carrying
+  its slot answers (`name`, `url`, `image`, `email`, `same-as`) and its own
+  fields under `fields`:
+
+  ```typ
+  #for one in page.credits.at("author", default: ()) [
+    #link(one.url)[#one.name] #one.fields.pronouns
+  ]
+  ```
+
+  It is part of the page's wrapper, so an entity that changes rebuilds exactly
+  the pages that credit it, and a bundled document (a PDF, a card) reads the
+  same byline the page does.
+
+### Upgrading
+
+- **`Renderer::SCHEMA` moves to 20**: the first build after upgrading recompiles
+  every page. The head tags a page carries changed shape, and a manifest written
+  before this would have served the old ones from cache.
+
 ## [0.0.14] - 2026-08-10
 
 ### Added

@@ -6,6 +6,7 @@ use crate::config::dispatch::Kind::{Choice, Flag, Number, Text};
 use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::value::ValueExt;
 use crate::config::{Named, SortKey};
+use crate::content::Credit;
 use crate::error::{ConfigError, Result};
 
 /// Taxonomy definition.
@@ -13,6 +14,13 @@ use crate::error::{ConfigError, Result};
 pub struct TaxonomyConfig {
     /// Frontmatter key to read terms from.
     pub key: String,
+    /// What a page claims about the entities it names here: `authors` credits
+    /// them with writing it, `translators` with translating it.
+    ///
+    /// Only meaningful with `entities`, and only read by the surfaces that can
+    /// spell the role. A taxonomy naming a registry without a credit is a
+    /// reference and claims nothing, which is what `part-of="series"` is.
+    pub credit: Option<Credit>,
     /// The `content { entities { } }` registry this taxonomy's terms are ids
     /// in, if they are ids at all.
     ///
@@ -52,6 +60,7 @@ impl From<String> for TaxonomyConfig {
             // a taxonomy is a set of words until a site says its terms name
             // something the build knows more about
             entities: None,
+            credit: None,
             // opt-in: term pages and their index are extra output
             listing: false,
             template: None,
@@ -96,6 +105,15 @@ impl Attributed for TaxonomyConfig {
             "The `content { entities { } }` registry its terms are ids in.",
             |c, v, t, s| {
                 c.entities = Some(v.as_str(t, s)?);
+                Ok(())
+            },
+        ),
+        (
+            "credit",
+            Choice(Credit::names),
+            "What a page claims about the entities it names here, for the surfaces that can spell it.",
+            |c, v, t, s| {
+                c.credit = Some(v.one::<Credit>(t, s)?);
                 Ok(())
             },
         ),

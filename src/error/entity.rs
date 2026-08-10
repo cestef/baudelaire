@@ -145,14 +145,15 @@ impl EntityError {
     ) -> Self {
         let (src, span) = Snippet::parts(snippet);
         let (registry, id, key) = (registry.to_owned(), entity.id().to_owned(), fault.key());
-        let declared = entity.from().label();
+        let (source, at) = (entity.from().source(), entity.from().at());
         match fault {
             Fault::Missing { want, .. } => Self::MissingField {
                 help: markup!(
-                    "add it where the entity is declared ({}), as `{} {}`, or declare the field `optional=#true`",
-                    &declared,
+                    "add `{} {}` where `{}` declares it, in {}, or declare the field `optional=#true`",
                     &key,
-                    &want.example()
+                    &want.example(),
+                    source,
+                    &at
                 ),
                 want: want.article(),
                 registry,
@@ -162,7 +163,7 @@ impl EntityError {
                 span,
             },
             Fault::Mismatch { want, got, .. } => Self::Field {
-                help: markup!("declared by {}", &declared),
+                help: markup!("declared by `{}`, in {}", source, &at),
                 want: want.article(),
                 got: got.clone(),
                 registry,

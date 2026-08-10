@@ -189,7 +189,7 @@ impl Engine {
         // Built before the asset pipeline, whose `baudelaire:*` JS modules serve
         // the section trees it holds, and after it in [`Pass`], which renders
         // against what the pipeline produced.
-        let prepare = self.prepare(&planned.pages)?;
+        let prepare = self.prepare(&planned)?;
         // Before any compile: a template nothing supplies is one diagnostic
         // naming what asked for it, rather than the compiler's own missing-file
         // report against a generated wrapper, once per page.
@@ -259,7 +259,7 @@ impl Engine {
         // failure leaves `dist` exactly as the previous build left it.
         assets.publish()?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
-        let generated = self.generate(&planned.pages, &outputs, &statics, ui)?;
+        let generated = self.generate(&planned, &outputs, &statics, ui)?;
         self.sweep(ui, &outputs, &statics, &generated, &bundled)?;
         // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
@@ -360,6 +360,7 @@ impl Engine {
             .check(&self.config, &self.project, &planned.pages, ui)?;
         Ok(Planned {
             pages: planned.pages,
+            entities: planned.entities,
             tracked: self.project.tracked(),
         })
     }
@@ -379,8 +380,14 @@ impl Engine {
     /// opposite deadline: nothing in the build reads them back, but writing
     /// them here is what keeps an editor's types following the config instead
     /// of the last time someone ran `baudelaire mirror`.
-    fn prepare<'a>(&'a self, pages: &'a [Page]) -> Result<Prepare<'a>> {
-        let prepare = Prepare::new(&self.config, &self.project, self.theme.as_ref(), pages);
+    fn prepare<'a>(&'a self, planned: &'a Planned) -> Result<Prepare<'a>> {
+        let prepare = Prepare::new(
+            &self.config,
+            &self.project,
+            self.theme.as_ref(),
+            &planned.pages,
+            &planned.entities,
+        );
         let root = self.project.root();
         for table in prepare.generated() {
             table.write(root)?;
@@ -589,14 +596,15 @@ impl Engine {
     /// Run the post-build processors over the finished site.
     fn generate(
         &self,
-        pages: &[Page],
+        planned: &Planned,
         outputs: &[Output],
         statics: &Copied,
         ui: &Ui,
     ) -> Result<Generated> {
         let site = Site {
             config: &self.config,
-            pages,
+            pages: &planned.pages,
+            entities: &planned.entities,
             outputs,
         };
         let mut emitter = Emitter::new(ui, statics.paths.iter().cloned());
@@ -674,7 +682,7 @@ impl Engine {
         let pass = Pass::new(
             self,
             &planned,
-            self.prepare(&planned.pages)?,
+            self.prepare(&planned)?,
             AssetMap::new(self.config.asset_prefix()),
             SrcSets::default(),
             Emitted::default(),
@@ -1025,6 +1033,9 @@ impl Engine {
 /// borrows of both, and no struct can borrow from itself.
 struct Planned {
     pages: Vec<Page>,
+    /// The entity registries every page's references resolve against, built
+    /// once per plan and borrowed by the renderer and the emitters.
+    entities: crate::content::Registries,
     /// The injected values whose per-page reads drive fine-grained metadata
     /// invalidation: the analyzer records them from each page's syntax, the
     /// cache re-hashes them to decide reuse. One owned copy backs the cache; the

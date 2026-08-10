@@ -449,6 +449,7 @@ mod tests {
         let config = Config::default();
         let corpus = |outputs: &[Output]| {
             let site = Site {
+                entities: crate::content::Registries::none(),
                 config: &config,
                 pages: &[],
                 outputs,

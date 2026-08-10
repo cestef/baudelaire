@@ -93,6 +93,7 @@ mod tests {
     fn client_closes_over_the_configured_selector_and_policy() {
         let config = config();
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &[],
             outputs: &[],

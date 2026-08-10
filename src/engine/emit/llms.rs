@@ -146,6 +146,7 @@ mod tests {
         let mut config = Config::default();
         config.generate.llms.enabled = true;
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages,
             outputs: &[],

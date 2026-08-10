@@ -63,6 +63,8 @@ use svg::Svg;
 pub(super) struct Cx<'a> {
     pub config: &'a Config,
     pub page: &'a Page,
+    /// The entity registries, so a transform can resolve who a page credits.
+    pub entities: &'a crate::content::Registries,
     pub links: &'a LinkMap,
     /// Processed-asset URL map, consumed by the fingerprint and meta transforms.
     pub assets: &'a AssetMap,

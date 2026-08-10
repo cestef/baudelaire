@@ -242,6 +242,7 @@ mod tests {
             page("content/b.typ", "/b/", &["/old/"]),
         ];
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &pages,
             outputs: &[],
@@ -288,6 +289,7 @@ mod tests {
             page("content/b.typ", "/b/", &["/old-b/"]),
         ];
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &pages,
             outputs: &[],
@@ -309,6 +311,7 @@ mod tests {
         )
         .expect("should parse");
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &[],
             outputs: &[],
@@ -331,6 +334,7 @@ mod tests {
         let config =
             Config::parse("redirect {\n  \"/latest/*\" \"/:splat\"\n}\n").expect("should parse");
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &[],
             outputs: &[],

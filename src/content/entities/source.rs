@@ -120,7 +120,7 @@ impl Source for InlineSource {
         roster(
             self.entities.clone(),
             "inline",
-            cx.config.label(),
+            Config::FILE,
             &cx.config.source,
         )
     }

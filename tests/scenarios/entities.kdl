@@ -425,3 +425,175 @@ scenario "a later source fills what an earlier one left out" {
     ok
   }
 }
+
+scenario "the head names every credited author, and links the one with a page" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths { content "content"; dist "public" }
+      html { jsonld #true }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources {
+              inline {
+                zoe {
+                  name "Zoe"
+                  url "https://zoe.example"
+                  socials "https://social.example/@zoe"
+                }
+                ada { name "Ada Lovelace" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author"
+          translators entities="people" credit="translator"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (
+        title: "Alpha",
+        slug: "a",
+        date: "2026-01-01",
+        authors: ("zoe", "ada"),
+        translators: ("ada",),
+      )
+      a
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains #"<meta name="author" content="Zoe">"#
+      contains #"<meta name="author" content="Ada Lovelace">"#
+      contains #"<link rel="author" href="https://zoe.example">"#
+      // OpenGraph takes a profile URL where there is one, the name where
+      // there is not.
+      contains #"content="https://zoe.example""#
+      contains #"property="article:author""#
+      // Only the JSON island can say who translated it.
+      contains "\"translator\":[{\"@type\":\"Person\",\"name\":\"Ada Lovelace\"}]"
+      contains "\"sameAs\":[\"https://social.example/@zoe\"]"
+    }
+  }
+}
+
+scenario "a feed entry names the people its page credits" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      author "The Site"
+      paths { content "content"; dist "public" }
+      generate { feed { formats "atom" } }
+      content {
+        entities {
+          people {
+            shape "person"
+            sources {
+              inline {
+                zoe { name "Zoe"; url "https://zoe.example"; email "zoe@example.com" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author"
+        }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", date: "2026-01-01", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    file "atom.xml" {
+      contains "<name>Zoe</name>"
+      contains "<uri>https://zoe.example</uri>"
+      contains "<email>zoe@example.com</email>"
+      // ..and the feed still carries the site's own author, which is what
+      // makes it valid Atom.
+      contains "<name>The Site</name>"
+    }
+  }
+}
+
+scenario "a template reads the byline off the page" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      content {
+        collections { posts { template "post.typ" } }
+        entities {
+          people {
+            shape "person"
+            sources {
+              inline {
+                zoe { name "Zoe"; url "https://zoe.example"; pronouns "they/them" }
+              }
+            }
+          }
+        }
+        taxonomies {
+          authors entities="people" credit="author"
+        }
+      }
+      """#
+    "templates/post.typ" #"""
+      #let post(page, body) = html.elem("main", {
+        for one in page.credits.at("author", default: ()) {
+          html.elem("a", attrs: (href: one.url, class: "byline"), one.name)
+          html.elem("span", one.fields.pronouns)
+        }
+        body
+      })
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a", authors: ("zoe",),)
+      a
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" {
+      contains #"class="byline""#
+      contains "Zoe"
+      contains "they/them"
+    }
+  }
+}
+
+scenario "a site with no registry keeps the byline it always had" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      author "Camille"
+      paths { content "content"; dist "public" }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      a
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "Beta", slug: "b", author: "Zoe",)
+      b
+      """#
+  }
+  expect {
+    ok
+    file "posts/a/index.html" { contains #"<meta name="author" content="Camille">"# }
+    // The page's own always wins over the site's floor.
+    file "posts/b/index.html" {
+      contains #"<meta name="author" content="Zoe">"#
+      missing "Camille"
+    }
+  }
+}

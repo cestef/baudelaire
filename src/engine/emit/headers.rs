@@ -117,6 +117,7 @@ mod tests {
     /// The `_headers` body a config produces.
     fn body(config: &Config) -> String {
         let site = Site {
+            entities: crate::content::Registries::none(),
             config,
             pages: &[],
             outputs: &[],

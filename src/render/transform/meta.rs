@@ -13,6 +13,7 @@
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{BaseUrl, Config, ManifestConfig};
+use crate::content::entities::{Attribution, Byline, Credit, Vocabulary};
 use crate::content::{Iso, Page};
 
 use super::{Cx, DocumentExt, PROPERTY, Transform};
@@ -27,13 +28,18 @@ impl Transform for Meta {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
+        // The site's own author is the floor here: `<meta name="author">` on a
+        // page that names nobody is the site's, which is what it has always
+        // been.
+        let (byline, _) = Byline::of(cx.entities, cx.config, cx.page);
+        let byline = byline.or_site(cx.config, cx.page);
         let mut card = Card {
             config: cx.config,
             page: cx.page,
             assets: cx.assets,
             probed: AssetDeps::new(),
         };
-        let tags = card.tags();
+        let tags = card.tags(&byline);
         // The card image resolves through the asset map, so this page depends
         // on where that image is served from.
         cx.found.assets.extend(card.probed);
@@ -61,7 +67,7 @@ struct Card<'a> {
 }
 
 /// What a page says about itself, resolved once and then spelled three ways.
-struct Facts {
+struct Facts<'a> {
     title: String,
     description: Option<String>,
     /// Already fingerprinted and absolutized, since a social image is read by a
@@ -78,8 +84,10 @@ struct Facts {
     /// `article:*` and JSON-LD both read them, so they are resolved once.
     published: Option<String>,
     modified: Option<String>,
-    /// The page's author, else the site's.
-    author: Option<String>,
+    /// Who the page credits, by role, already resolved through each registry's
+    /// slots. Every vocabulary below reads this one answer: two resolutions are
+    /// two chances to disagree, and these two did.
+    byline: &'a Byline,
     /// Every taxonomy term the page carries, flattened: an `article:tag` does
     /// not distinguish which taxonomy a term came from.
     terms: Vec<String>,
@@ -97,8 +105,8 @@ impl Card<'_> {
 
     /// Every tag this page carries, in emission order: the plain document meta,
     /// then OpenGraph, then the Twitter card, then the link relations.
-    fn tags(&mut self) -> Vec<HtmlNode> {
-        let facts = self.facts();
+    fn tags(&mut self, byline: &Byline) -> Vec<HtmlNode> {
+        let facts = self.facts(byline);
         let mut tags = Vec::new();
         Self::document(&facts, &mut tags);
         self.opengraph(&facts, &mut tags);
@@ -121,7 +129,7 @@ impl Card<'_> {
     /// Built from the same [`Facts`] the meta tags are, so the two cannot claim
     /// different things about one page. An `Article` where the page is dated,
     /// a `WebPage` otherwise, which is the same split `og:type` makes.
-    fn jsonld(facts: &Facts) -> HtmlNode {
+    fn jsonld(facts: &Facts<'_>) -> HtmlNode {
         let mut fields: Vec<(&str, serde_json::Value)> = vec![
             ("@context", "https://schema.org".into()),
             (
@@ -145,11 +153,15 @@ impl Card<'_> {
                 fields.push((key, value.into()));
             }
         }
-        if let Some(author) = &facts.author {
-            fields.push((
-                "author",
-                serde_json::json!({ "@type": "Person", "name": author }),
-            ));
+        // Every role the island can spell, as an array of typed objects: the
+        // one vocabulary rich enough to say who translated a page, and the only
+        // one that can carry a link to them.
+        for (role, credited) in facts.byline.roles() {
+            let Some(property) = role.spelling(Vocabulary::JsonLd) else {
+                continue;
+            };
+            let people: Vec<serde_json::Value> = credited.iter().map(Self::person).collect();
+            fields.push((property, people.into()));
         }
         if !facts.terms.is_empty() {
             fields.push(("keywords", facts.terms.clone().into()));
@@ -175,6 +187,31 @@ impl Card<'_> {
         el.children
             .push(HtmlNode::Text(json.into(), typst::syntax::Span::detached()));
         el.into()
+    }
+
+    /// One credited entity as schema.org describes it.
+    ///
+    /// Typed from the registry's shape, so an `organizations` registry is an
+    /// `Organization` rather than a person with a logo. `sameAs` is what the
+    /// vocabulary calls "the same thing, elsewhere", which is exactly what a
+    /// socials field holds.
+    fn person(credited: &Attribution) -> serde_json::Value {
+        let mut object = serde_json::Map::new();
+        object.insert("@type".into(), credited.kind.into());
+        object.insert("name".into(), credited.display.clone().into());
+        for (key, value) in [
+            ("url", credited.url.as_deref()),
+            ("image", credited.image.as_deref()),
+            ("email", credited.email.as_deref()),
+        ] {
+            if let Some(value) = value {
+                object.insert(key.to_owned(), value.into());
+            }
+        }
+        if !credited.same_as.is_empty() {
+            object.insert("sameAs".into(), credited.same_as.clone().into());
+        }
+        object.into()
     }
 
     /// The feed autodiscovery links: one per configured format, pointing at the
@@ -246,7 +283,7 @@ impl Card<'_> {
     /// What every vocabulary below says the same thing about, resolved once:
     /// each of the three spells these out differently, and a value computed per
     /// group is a value that can disagree between them.
-    fn facts(&mut self) -> Facts {
+    fn facts<'b>(&mut self, byline: &'b Byline) -> Facts<'b> {
         let fm = &self.page.frontmatter;
         let (title, description, authored) = (
             fm.title.clone().unwrap_or_default(),
@@ -297,10 +334,7 @@ impl Card<'_> {
             // and the language-aware one where the document tag was written, so
             // `<meta name="author">` and `article:author` named two different
             // people on the same page.
-            author: fm
-                .author
-                .clone()
-                .or_else(|| self.config.author(&self.page.lang).map(str::to_owned)),
+            byline,
             terms: fm.taxonomies.values().flatten().cloned().collect(),
         }
     }
@@ -310,17 +344,34 @@ impl Card<'_> {
     /// Reads [`Facts`] like every other vocabulary rather than resolving the
     /// author a second time: two resolutions are two chances to disagree, and
     /// these two did.
-    fn document(facts: &Facts, tags: &mut Vec<HtmlNode>) {
+    fn document(facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
         if let Some(description) = &facts.description {
             tags.push(Self::named("description", description));
         }
-        if let Some(author) = &facts.author {
-            tags.push(Self::named("author", author));
+        let Some(name) = Credit::Author.spelling(Vocabulary::Meta) else {
+            return;
+        };
+        // One tag per credited author. The document vocabulary has no way to
+        // relate two of them, so a co-authored page repeats the tag rather than
+        // joining the names into a string no consumer can split back.
+        for author in facts.byline.authors() {
+            tags.push(Self::named(name, &author.display));
+        }
+        // Where an author has a page of their own, say so: `rel="author"` is
+        // how a reader-mode or a feed reader finds the person rather than the
+        // string. Only the first, since the relation is singular.
+        if let Some(url) = facts.byline.authors().iter().find_map(|a| a.url.as_deref()) {
+            tags.push(
+                HtmlElement::new(tag::link)
+                    .with_attr(attr::rel, "author")
+                    .with_attr(attr::href, url)
+                    .into(),
+            );
         }
     }
 
     /// The OpenGraph tags, which is what a link preview reads.
-    fn opengraph(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+    fn opengraph(&self, facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
         tags.push(Self::property("og:type", facts.kind));
         if !facts.title.is_empty() {
             tags.push(Self::property("og:title", &facts.title));
@@ -350,9 +401,17 @@ impl Card<'_> {
             for (property, value) in [
                 ("article:published_time", facts.published.as_deref()),
                 ("article:modified_time", facts.modified.as_deref()),
-                ("article:author", facts.author.as_deref()),
             ] {
                 if let Some(value) = value {
+                    tags.push(Self::property(property, value));
+                }
+            }
+            // OpenGraph wants a profile URL here and takes a name where there
+            // is none, which is all a site without a roster ever had. One per
+            // author: the vocabulary repeats the property rather than joining.
+            if let Some(property) = Credit::Author.spelling(Vocabulary::OpenGraph) {
+                for author in facts.byline.authors() {
+                    let value = author.url.as_deref().unwrap_or(&author.display);
                     tags.push(Self::property(property, value));
                 }
             }
@@ -364,7 +423,7 @@ impl Card<'_> {
 
     /// The Twitter card tags, which only restate what OpenGraph already said,
     /// bar the card size an image implies and the account the site names.
-    fn twitter(&self, facts: &Facts, tags: &mut Vec<HtmlNode>) {
+    fn twitter(&self, facts: &Facts<'_>, tags: &mut Vec<HtmlNode>) {
         // Whose site this is. Nothing on the page says it, so without the
         // config a card attributes the link to whoever posted it and to nobody
         // else.
@@ -512,7 +571,79 @@ impl Card<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::Card;
+    use super::{Attribution, Byline, Card, Credit, Facts};
+    use typst_html::{HtmlNode, attr};
+
+    /// One credited entity: a name, and whatever of the optional halves the
+    /// case is about.
+    fn credited(display: &str, url: Option<&str>, same_as: Vec<&str>) -> Attribution {
+        Attribution {
+            display: display.into(),
+            url: url.map(str::to_owned),
+            image: None,
+            email: None,
+            same_as: same_as.into_iter().map(str::to_owned).collect(),
+            kind: "Person",
+            fields: crate::codegen::Value::None,
+        }
+    }
+
+    /// A byline crediting `authors` and nothing else.
+    fn byline(authors: Vec<Attribution>) -> Byline {
+        let mut byline = Byline::default();
+        byline.push(Credit::Author, authors);
+        byline
+    }
+
+    /// The facts of a page that says nothing but its byline and its kind.
+    fn facts<'a>(byline: &'a Byline, kind: &'static str) -> Facts<'a> {
+        Facts {
+            title: "T".into(),
+            description: None,
+            image: None,
+            alt: None,
+            canonical: None,
+            kind,
+            published: None,
+            modified: None,
+            byline,
+            terms: Vec::new(),
+        }
+    }
+
+    /// The `content` of every `<meta name="..">` tag of one name, in order.
+    fn named(tags: &[HtmlNode], name: &str) -> Vec<String> {
+        tags.iter()
+            .filter_map(|node| match node {
+                HtmlNode::Element(el) => Some(el),
+                _ => None,
+            })
+            .filter(|el| el.attrs.get(attr::name).is_some_and(|it| it == name))
+            .filter_map(|el| el.attrs.get(attr::content).map(ToString::to_string))
+            .collect()
+    }
+
+    /// The `href` of the one `<link rel="..">` of a relation.
+    fn rel(tags: &[HtmlNode], relation: &str) -> Option<String> {
+        tags.iter()
+            .filter_map(|node| match node {
+                HtmlNode::Element(el) => Some(el),
+                _ => None,
+            })
+            .find(|el| el.attrs.get(attr::rel).is_some_and(|it| it == relation))
+            .and_then(|el| el.attrs.get(attr::href).map(ToString::to_string))
+    }
+
+    /// The JSON-LD island a page carries, parsed back.
+    fn island(facts: &Facts<'_>) -> serde_json::Value {
+        let HtmlNode::Element(el) = Card::jsonld(facts) else {
+            panic!("the island is an element")
+        };
+        let HtmlNode::Text(json, _) = &el.children[0] else {
+            panic!("the island holds its object as text")
+        };
+        serde_json::from_str(json).expect("valid JSON")
+    }
 
     #[test]
     fn locale_uses_the_opengraph_separator() {
@@ -529,48 +660,59 @@ mod tests {
         assert_eq!(Card::locale("fr"), "fr");
     }
 
-    /// Every vocabulary reads one resolved author. The document tag resolved
-    /// its own, language-aware, while [`super::Facts`] resolved the bare
-    /// site-wide field: on a site with `languages { fr { author .. } }` the two
-    /// named different people on the same page.
+    /// One resolved byline, spelled by every vocabulary. The document tag used
+    /// to resolve its own author, language-aware, while [`super::Facts`]
+    /// resolved the bare site-wide field: on a site with
+    /// `languages { fr { author .. } }` the two named different people on the
+    /// same page.
     #[test]
-    fn the_document_author_is_the_one_the_facts_resolved() {
-        let facts = super::Facts {
-            title: "T".into(),
-            description: None,
-            image: None,
-            alt: None,
-            canonical: None,
-            kind: "article",
-            published: None,
-            modified: None,
-            author: Some("Camille".into()),
-            terms: Vec::new(),
-        };
+    fn the_document_tags_name_every_credited_author() {
+        let byline = byline(vec![
+            credited("Camille", Some("https://camille.example"), Vec::new()),
+            credited("Zoe", None, Vec::new()),
+        ]);
+        let facts = facts(&byline, "article");
         let mut tags = Vec::new();
 
         Card::document(&facts, &mut tags);
 
+        // One `<meta name="author">` each, and one `rel="author"` for the one
+        // that has a page of their own.
+        assert_eq!(named(&tags, "author"), ["Camille", "Zoe"]);
         assert_eq!(
-            tags.len(),
-            1,
-            "a description-less page tags only its author"
+            rel(&tags, "author").as_deref(),
+            Some("https://camille.example")
         );
-        let typst_html::HtmlNode::Element(el) = &tags[0] else {
-            panic!("expected an element")
-        };
+    }
+
+    /// The schema.org island is the only vocabulary that can say a role other
+    /// than author, and the only one that can carry a link to the person.
+    #[test]
+    fn the_json_island_types_every_role_it_can_spell() {
+        let mut byline = byline(vec![credited(
+            "Camille",
+            Some("https://camille.example"),
+            vec!["https://social.example/@camille"],
+        )]);
+        byline.push(
+            Credit::Translator,
+            vec![Attribution {
+                kind: "Organization",
+                ..credited("Zoe", None, Vec::new())
+            }],
+        );
+        let json = island(&facts(&byline, "article"));
+
+        assert_eq!(json["author"][0]["@type"], "Person");
+        assert_eq!(json["author"][0]["name"], "Camille");
+        assert_eq!(json["author"][0]["url"], "https://camille.example");
         assert_eq!(
-            el.attrs
-                .get(typst_html::attr::name)
-                .map(typst::ecow::EcoString::as_str),
-            Some("author")
+            json["author"][0]["sameAs"][0],
+            "https://social.example/@camille"
         );
-        assert_eq!(
-            el.attrs
-                .get(typst_html::attr::content)
-                .map(typst::ecow::EcoString::as_str),
-            Some("Camille")
-        );
+        // A role the island can spell but no other vocabulary can.
+        assert_eq!(json["translator"][0]["name"], "Zoe");
+        assert_eq!(json["translator"][0]["@type"], "Organization");
     }
 
     /// A title carrying `</script>` would close the island early and spill the
@@ -581,18 +723,10 @@ mod tests {
     /// character.
     #[test]
     fn a_title_cannot_close_the_json_island() {
-        let facts = super::Facts {
-            title: "Escaping </script> in typst".into(),
-            description: Some("A comment opener, <!--<script, is the other way in".into()),
-            image: None,
-            alt: None,
-            canonical: None,
-            kind: "website",
-            published: None,
-            modified: None,
-            author: None,
-            terms: Vec::new(),
-        };
+        let byline = Byline::default();
+        let mut facts = facts(&byline, "website");
+        facts.title = "Escaping </script> in typst".into();
+        facts.description = Some("A comment opener, <!--<script, is the other way in".into());
         let node = Card::jsonld(&facts);
         let typst_html::HtmlNode::Element(el) = node else {
             panic!("expected an element")

@@ -21,7 +21,9 @@ use typst::syntax::{FileId, RootedPath};
 
 use crate::codegen::{Typst, Value};
 use crate::config::Config;
-use crate::content::{Data, Iso, Localized, Page, Section, Sibling, Siblings, Strings};
+use crate::content::{
+    Byline, Data, Iso, Localized, Page, Registries, Section, Sibling, Siblings, Strings,
+};
 use crate::error::{Result, TemplateMissing};
 use crate::graph::Hash;
 use crate::render::Backlinks;
@@ -45,6 +47,8 @@ pub(in crate::engine) type Prepared = (FileId, String, Hash);
 /// page.
 pub(in crate::engine) struct Prepare<'a> {
     config: &'a Config,
+    /// The entity registries a page's credited references resolve against.
+    entities: &'a Registries,
     project: &'a Project,
     theme: Option<&'a Theme>,
     pages: &'a [Page],
@@ -73,9 +77,11 @@ impl<'a> Prepare<'a> {
         project: &'a Project,
         theme: Option<&'a Theme>,
         pages: &'a [Page],
+        entities: &'a Registries,
     ) -> Self {
         let base = Self {
             config,
+            entities,
             project,
             theme,
             pages,
@@ -234,6 +240,13 @@ impl<'a> Prepare<'a> {
     /// each assembling its own and drifting.
     fn with<T>(&self, page: &Page, backlinks: &Backlinks, f: impl FnOnce(Context<'_>) -> T) -> T {
         let taxonomies = Typst(&page.taxonomies()).to_string();
+        // Who the page credits, resolved through the registries. Part of the
+        // wrapper text, like `nav` and `assets` and for the same reason: it
+        // names only what this page names, so an entity that changes
+        // refingerprints exactly the pages that credit it. That is also why
+        // nothing here needs a cache probe of its own.
+        let (byline, _) = Byline::of(self.entities, self.config, page);
+        let credits = Typst(&Value::from(&byline.or_site(self.config, page))).to_string();
         // prev/next sibling links, exposed to the template as `page.nav`. Part of
         // the wrapper text, so a neighbour's addition, removal, or retitling
         // refingerprints this page and rebuilds it: the cache stays correct.
@@ -265,6 +278,7 @@ impl<'a> Prepare<'a> {
         f(Context {
             data: bind,
             taxonomies: &taxonomies,
+            credits: &credits,
             nav: &nav,
             lang: &page.lang,
             translations: &translations,

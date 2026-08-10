@@ -82,6 +82,8 @@ impl<'a> Bodies<'a> {
 /// where they sit.
 #[derive(Clone, Copy)]
 struct Shared<'a> {
+    /// The site's config, for resolving a page's byline.
+    config: &'a Config,
     /// Where the site is served, for the absolute links every format mandates.
     base: &'a BaseUrl,
     /// The `feed { }` config, for what each format's file is called: the id a
@@ -89,8 +91,11 @@ struct Shared<'a> {
     names: &'a FeedConfig,
     /// Each page's prose, when the site asked its feeds to carry it.
     bodies: &'a Bodies<'a>,
-    /// The site's `author`, for Atom's mandatory `<author>`.
+    /// The site's own `author`, for Atom's mandatory feed-level `<author>`.
     author: Option<&'a str>,
+    /// Everything the site knows about who is behind a page, so an entry names
+    /// its own people rather than the site's one name.
+    entities: &'a crate::content::Registries,
 }
 
 /// Emits a syndication feed file per configured format, of the most recent
@@ -106,10 +111,12 @@ impl Processor for Feeds {
         let base = site.base("feeds")?;
         let bodies = Bodies::of(site);
         let shared = Shared {
+            config: site.config,
             base: &base,
             names: &site.config.generate.feed,
             bodies: &bodies,
             author: site.config.author.as_deref(),
+            entities: site.entities,
         };
         // One feed set per language: the default at `/rss.xml`, others under
         // `/{code}/rss.xml`, each listing only its language's recent posts.
@@ -392,6 +399,32 @@ impl<'a> Feed<'a> {
         });
     }
 
+    /// The people one entry credits, as Atom writes a person: a name, and the
+    /// two optional children it allows beside it.
+    ///
+    /// Falls back to nothing rather than to the site's author: the feed already
+    /// carries that, and repeating it on every entry would claim the site wrote
+    /// each post rather than merely publishing it.
+    fn people(&self, xml: &mut Xml, page: &Page) {
+        let (byline, _) = crate::content::Byline::of(self.site.entities, self.site.config, page);
+        for (role, credited) in byline.roles() {
+            let Some(element) = role.spelling(crate::content::entities::Vocabulary::Atom) else {
+                continue;
+            };
+            for one in credited {
+                xml.nest(element, &[], |xml| {
+                    xml.leaf("name", &one.display);
+                    if let Some(url) = &one.url {
+                        xml.leaf("uri", url);
+                    }
+                    if let Some(email) = &one.email {
+                        xml.leaf("email", email);
+                    }
+                });
+            }
+        }
+    }
+
     fn atom(&self, xml: &mut Xml, stamps: &[Stamps]) {
         // Items are newest-first, so the first dated one dates the feed.
         let updated = stamps.iter().find_map(Stamps::latest);
@@ -431,6 +464,11 @@ impl<'a> Feed<'a> {
                     if let Some(published) = &stamp.published {
                         xml.leaf("published", published);
                     }
+                    // Whom this entry is by, in the two person constructs Atom
+                    // has (RFC 4287 4.2.1). A role it cannot spell is not
+                    // written: the vocabulary has no field for a translator,
+                    // and inventing one would not be Atom.
+                    self.people(xml, page);
                     if let Some(description) = page.frontmatter.blurb() {
                         xml.leaf("summary", description);
                     }

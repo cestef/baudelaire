@@ -41,6 +41,7 @@
   (path: "content.taxonomies", key: "taxonomies", shape: "named lines", doc: "One line per taxonomy, each named by its id.", depth: 1, section: true),
   (path: "content.taxonomies.key", key: "key", shape: "text", doc: "The frontmatter field its terms are read from. Defaults to the taxonomy's own id.", depth: 2, section: false),
   (path: "content.taxonomies.entities", key: "entities", shape: "text", doc: "The `content { entities { } }` registry its terms are ids in.", depth: 2, section: false),
+  (path: "content.taxonomies.credit", key: "credit", shape: "author | editor | translator | contributor | illustrator | reviewer | publisher", doc: "What a page claims about the entities it names here, for the surfaces that can spell it.", depth: 2, section: false),
   (path: "content.taxonomies.listing", key: "listing", shape: "flag", doc: "Generate a page per term, and an index of the terms.", depth: 2, section: false),
   (path: "content.taxonomies.template", key: "template", shape: "text", doc: "The layout those listings render through.", depth: 2, section: false),
   (path: "content.taxonomies.paginate", key: "paginate", shape: "number", doc: "Pages per term listing.", depth: 2, section: false),

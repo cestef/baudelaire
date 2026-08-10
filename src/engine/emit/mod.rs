@@ -80,6 +80,9 @@ impl<'a> Output<'a> {
 pub(super) struct Site<'a> {
     pub config: &'a Config,
     pub pages: &'a [Page],
+    /// The entity registries, so a feed entry names the people the page
+    /// credits rather than the site's one `author`.
+    pub entities: &'a crate::content::Registries,
     /// Every built page (cached and freshly compiled alike), for processors
     /// that derive from what the render pass produced.
     pub outputs: &'a [Output<'a>],
@@ -364,6 +367,7 @@ mod tests {
     fn registry_runs_only_enabled_processors_in_order() {
         let config = Config::default();
         let site = Site {
+            entities: crate::content::Registries::none(),
             config: &config,
             pages: &[],
             outputs: &[],

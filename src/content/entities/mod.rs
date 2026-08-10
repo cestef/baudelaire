@@ -12,6 +12,7 @@
 //! *asks* is a taxonomy naming a registry, so the terms of `authors` are people
 //! while the terms of `tags` stay words.
 
+pub mod credit;
 pub mod provenance;
 pub mod source;
 
@@ -25,6 +26,7 @@ use crate::error::{EntityError, Result, entity::Unresolved};
 use crate::ui::Ui;
 use crate::world::Project;
 
+pub use credit::{Attribution, Byline, Credit, EntityDeps, Resolved, Vocabulary};
 pub use provenance::{Provenance, Snippet};
 use source::SourceCtx;
 
@@ -90,6 +92,16 @@ impl Entity {
         &self.fields
     }
 
+    /// What this entity says, as a digest: its id, its other names, and its
+    /// fields.
+    ///
+    /// Not where it was declared. Moving an entity from a roster file into the
+    /// config changes nothing a page renders, so it must not rebuild the pages
+    /// that credit it.
+    pub fn digest(&self) -> crate::graph::Hash {
+        crate::graph::Hash::of(&(&self.id, &self.aliases, &self.fields))
+    }
+
     /// Fill from a source read later: what `self` already carries wins, and
     /// what it lacks is taken.
     ///
@@ -130,6 +142,7 @@ impl Entity {
 #[derive(Debug, Clone)]
 pub struct Registry {
     id: String,
+    shape: Option<crate::config::Shape>,
     slots: Slots,
     unknown: Unknown,
     /// Entities by id, in id order so every walk of a registry is stable.
@@ -154,6 +167,7 @@ impl Registry {
         }
         let mut registry = Self {
             id: id.to_owned(),
+            shape: config.shape,
             slots: config.slots.clone(),
             unknown: config.unknown(),
             entities,
@@ -230,6 +244,12 @@ impl Registry {
         &self.slots
     }
 
+    /// The named field set this registry took, if it took one: what says
+    /// whether its entities are people or something else.
+    pub fn shape(&self) -> Option<crate::config::Shape> {
+        self.shape
+    }
+
     /// What a reference nobody declared means here.
     pub fn unknown(&self) -> Unknown {
         self.unknown
@@ -300,9 +320,32 @@ impl Registries {
         Ok(())
     }
 
+    /// The empty set: a site that declared no registry, and what a consumer
+    /// assembled outside a plan reads.
+    ///
+    /// Borrowed rather than constructed, because every reader holds a
+    /// reference: the alternative is each of them owning an empty map of its
+    /// own for the life of the build.
+    pub fn none() -> &'static Self {
+        static NONE: std::sync::LazyLock<Registries> =
+            std::sync::LazyLock::new(Registries::default);
+        &NONE
+    }
+
     /// One registry, by id.
     pub fn get(&self, id: &str) -> Option<&Registry> {
         self.0.get(id)
+    }
+
+    /// What the entity a probe named says now, `None` when nothing answers it.
+    ///
+    /// The read half of [`EntityDeps`](credit::EntityDeps): the cache records
+    /// what a page consulted, and asks this whether it still says the same
+    /// thing. Keyed by the term rather than by the resolved id, because an
+    /// alias that stops resolving has to invalidate the page that used it.
+    pub fn digest(&self, key: &str) -> Option<crate::graph::Hash> {
+        let (registry, term) = key.split_once('/')?;
+        self.get(registry)?.get(term).map(Entity::digest)
     }
 
     /// Resolve every reference every page writes, under each registry's own
@@ -368,6 +411,7 @@ impl Registries {
                             index,
                             registry,
                             term,
+                            credit: cfg.credit,
                         }),
                 )
             })
@@ -388,6 +432,9 @@ pub struct Reference<'a> {
     pub registry: &'a Registry,
     /// The term, as the page wrote it.
     pub term: &'a str,
+    /// What the page claims about it, if the taxonomy says: `zoe` under
+    /// `authors` wrote the page, while `rust` under `tags` claims nothing.
+    pub credit: Option<Credit>,
 }
 
 impl Reference<'_> {

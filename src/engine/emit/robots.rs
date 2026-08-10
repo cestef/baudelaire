@@ -67,6 +67,7 @@ mod tests {
     /// The `robots.txt` a config produces.
     fn body(config: &Config) -> String {
         let site = Site {
+            entities: crate::content::Registries::none(),
             config,
             pages: &[],
             outputs: &[],

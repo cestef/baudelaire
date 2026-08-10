@@ -59,6 +59,9 @@ impl<'a> Tail<'a> {
 /// then shared read-only across the parallel compile pool.
 pub struct Renderer {
     links: LinkMap,
+    /// The entity registries every page's references resolve against, so a
+    /// byline is drawn from the same roster the plan validated.
+    entities: crate::content::Registries,
     assets: AssetMap,
     srcsets: SrcSets,
     /// What this build emitted, so a reference can be stamped with the digest
@@ -162,22 +165,48 @@ pub struct RenderMaps<'a> {
     pub assets: &'a AssetMap,
 }
 
+/// What a renderer is built from: everything site-wide a page is rendered
+/// against.
+///
+/// A parameter object rather than a row of positional arguments, the same shape
+/// [`crate::graph::Recorded`] takes and for the same reason: a new site-wide
+/// input is one field here and one line at the call site, instead of a wider
+/// signature every caller has to re-spell in the right order.
+pub struct Inputs<'a> {
+    /// Every page the build will render, for the link map.
+    pub pages: &'a [Page],
+    /// The entity registries a page's credited references resolve against.
+    pub entities: crate::content::Registries,
+    /// The processed-asset URL map every reference is rewritten through.
+    pub assets: AssetMap,
+    /// The responsive width variants each image matched.
+    pub srcsets: SrcSets,
+    /// What this build emitted, so a reference can be stamped with a digest.
+    pub emitted: Emitted,
+    /// The typst project root absolute link paths resolve against.
+    pub root: &'a std::path::Path,
+    /// The content tree as the compiler spells it.
+    pub content: std::path::PathBuf,
+    /// The extensions a page may be written in, for the link map.
+    pub sources: Vec<&'static str>,
+}
+
 impl Renderer {
-    /// Build a renderer that resolves links across `pages` and rewrites asset
-    /// references through `assets` (the processed-asset URL map), adding a
-    /// `srcset` to each image with variants recorded in `srcsets`. `root` is the
-    /// typst project root absolute link paths resolve against.
-    pub fn new(
-        pages: &[Page],
-        assets: AssetMap,
-        srcsets: SrcSets,
-        emitted: Emitted,
-        root: &std::path::Path,
-        content: std::path::PathBuf,
-        sources: Vec<&'static str>,
-    ) -> Self {
+    /// Build a renderer over one build's site-wide inputs.
+    pub fn new(inputs: Inputs<'_>) -> Self {
+        let Inputs {
+            pages,
+            entities,
+            assets,
+            srcsets,
+            emitted,
+            root,
+            content,
+            sources,
+        } = inputs;
         Self {
             links: LinkMap::new(pages, root, sources),
+            entities,
             content,
             assets,
             srcsets,
@@ -213,6 +242,7 @@ impl Renderer {
         let mut cx = Cx {
             config,
             page,
+            entities: &self.entities,
             links: &self.links,
             assets: &self.assets,
             srcsets: &self.srcsets,

@@ -179,7 +179,7 @@ impl Renderer {
     /// whenever the same inputs start rendering different markup: a warm entry
     /// reads as valid under either change, and would be served as it stands.
     /// What each bump was for is in `CHANGELOG.md`, under `Upgrading`.
-    const SCHEMA: u32 = 19;
+    const SCHEMA: u32 = 20;
 
     pub fn current() -> Self {
         Self {
