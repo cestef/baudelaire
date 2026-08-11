@@ -233,9 +233,10 @@ impl FieldType {
                     .filter(|(_, field)| !field.optional)
                     .map(|(key, field)| format!("{key}: {}", field.ty.example()))
                     .collect();
-                match required.is_empty() {
-                    true => "(:)".to_owned(),
-                    false => format!("({})", required.join(", ")),
+                if required.is_empty() {
+                    "(:)".to_owned()
+                } else {
+                    format!("({})", required.join(", "))
                 }
             }
         }

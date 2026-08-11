@@ -110,9 +110,10 @@ impl Theme {
     /// through the package store. Anything else is a directory inside the
     /// project, which is how a theme is developed before it is published.
     fn resolve(theme: &str, project: &Path, registry: Option<&str>) -> Result<Self> {
-        match theme.starts_with('@') {
-            true => Self::package(theme, registry),
-            false => Self::directory(theme, project),
+        if theme.starts_with('@') {
+            Self::package(theme, registry)
+        } else {
+            Self::directory(theme, project)
         }
     }
 

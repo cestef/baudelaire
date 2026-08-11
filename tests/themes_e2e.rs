@@ -28,11 +28,10 @@ fn copy(from: &Path, to: &Path) {
     for entry in fs::read_dir(from).expect("read theme dir") {
         let entry = entry.expect("dir entry");
         let (source, target) = (entry.path(), to.join(entry.file_name()));
-        match entry.file_type().expect("file type").is_dir() {
-            true => copy(&source, &target),
-            false => {
-                fs::copy(&source, &target).expect("copy");
-            }
+        if entry.file_type().expect("file type").is_dir() {
+            copy(&source, &target);
+        } else {
+            fs::copy(&source, &target).expect("copy");
         }
     }
 }

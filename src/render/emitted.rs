@@ -71,9 +71,10 @@ impl Emitted {
     /// never saw, a reference that is simply wrong.
     pub fn at(&self, url: &str) -> Option<&Emission> {
         let path = url.split(['?', '#']).next().unwrap_or(url);
-        let path = match self.base.is_empty() {
-            true => path,
-            false => path.strip_prefix(self.base.as_str()).unwrap_or(path),
+        let path = if self.base.is_empty() {
+            path
+        } else {
+            path.strip_prefix(self.base.as_str()).unwrap_or(path)
         };
         self.files.get(path)
     }

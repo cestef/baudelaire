@@ -143,10 +143,7 @@ impl<'a> Document<'a> {
     /// LF. What stepping back over the opening fence's newline costs, which is
     /// not a constant on a file written on Windows.
     fn newline_before(source: &str, at: usize) -> usize {
-        match source[..at].ends_with("\r\n") {
-            true => 2,
-            false => 1,
-        }
+        if source[..at].ends_with("\r\n") { 2 } else { 1 }
     }
 
     /// The block this document declares, read in its own dialect. An absent

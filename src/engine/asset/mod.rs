@@ -363,31 +363,18 @@ impl<'a> Assets<'a> {
         out: &mut Processed,
     ) -> Result<()> {
         let files = handler.order(files, ctx);
-        match handler.pure() {
-            // A pure handler's output is decided by the file's own bytes, so its
-            // files are independent: the expensive half (re-encoding an image)
-            // runs across the pool, and the writes and map inserts follow in
-            // order, single-threaded.
-            true => {
-                let rendered: Vec<Render> = files
-                    .par_iter()
-                    .map(|file| self.render(handler, file, ctx, &out.map))
-                    .collect::<Result<_>>()?;
-                for render in rendered {
-                    self.finish(handler, render, ctx, out)?;
-                }
+        if handler.pure() {
+            let rendered: Vec<Render> = files
+                .par_iter()
+                .map(|file| self.render(handler, file, ctx, &out.map))
+                .collect::<Result<_>>()?;
+            for render in rendered {
+                self.finish(handler, render, ctx, out)?;
             }
-            // An impure one reads the map, which is what `Handler::render`
-            // promises holds every asset processed so far. Each file's insert has
-            // to land before the next one renders, or a handler whose files
-            // reference each other sees none of them: a stylesheet's `@import`
-            // resolved to nothing however carefully `order` had sorted it, and
-            // fell back to the unhashed name it was written with.
-            false => {
-                for file in &files {
-                    let render = self.render(handler, file, ctx, &out.map)?;
-                    self.finish(handler, render, ctx, out)?;
-                }
+        } else {
+            for file in &files {
+                let render = self.render(handler, file, ctx, &out.map)?;
+                self.finish(handler, render, ctx, out)?;
             }
         }
         Ok(())
@@ -446,9 +433,10 @@ impl<'a> Assets<'a> {
         // Render against the source path (stylesheets resolve their relative
         // references from it), emit under the served one.
         let served = handler.rename(&rel);
-        let key = match handler.pure() {
-            true => Some(self.memo.key(&fs::read(file)?, &rel)),
-            false => None,
+        let key = if handler.pure() {
+            Some(self.memo.key(&fs::read(file)?, &rel))
+        } else {
+            None
         };
         if let Some((primary, variants)) = key.as_ref().and_then(|key| self.memo.get(key)) {
             return Ok(Render {
@@ -510,10 +498,10 @@ impl<'a> Assets<'a> {
             self.write(ctx, rel, &dst, &bytes, out)?;
             return Ok(dst);
         }
-        let bytes = match posture.linked() {
-            true => SourceMap::linked(bytes, &dst),
-            // Hidden: the map is written and the asset says nothing about it.
-            false => bytes,
+        let bytes = if posture.linked() {
+            SourceMap::linked(bytes, &dst)
+        } else {
+            bytes
         };
         self.write(ctx, rel, &dst, &bytes, out)?;
         let at = SourceMap::beside(&dst);
@@ -559,9 +547,10 @@ impl<'a> Assets<'a> {
     /// The digest and the splice are [`AssetName`]'s, shared with the render
     /// pass so an externalized image is named like any other asset.
     fn fingerprint(&self, rel: &Path, bytes: &[u8]) -> PathBuf {
-        match self.config.assets.fingerprint {
-            true => rel.suffixed(&AssetName::digest(bytes)),
-            false => rel.to_path_buf(),
+        if self.config.assets.fingerprint {
+            rel.suffixed(&AssetName::digest(bytes))
+        } else {
+            rel.to_path_buf()
         }
     }
 }

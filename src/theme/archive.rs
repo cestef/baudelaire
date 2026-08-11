@@ -148,9 +148,10 @@ impl Archive {
     /// hitting the ceiling is a failure that names it rather than a silent
     /// shortening.
     fn whole(url: &str, bytes: Vec<u8>) -> Result<Vec<u8>> {
-        match u64::try_from(bytes.len()).is_ok_and(|read| read <= Self::LIMIT) {
-            true => Ok(bytes),
-            false => Err(ThemeError::oversize(url, Self::LIMIT).into()),
+        if u64::try_from(bytes.len()).is_ok_and(|read| read <= Self::LIMIT) {
+            Ok(bytes)
+        } else {
+            Err(ThemeError::oversize(url, Self::LIMIT).into())
         }
     }
 
@@ -158,9 +159,10 @@ impl Archive {
     fn unpack(url: &str, bytes: Vec<u8>) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
         // The suffix, not the bytes: an archive is claimed by its spelling in
         // the first place, so it is read by the same test it was claimed by.
-        match url.to_ascii_lowercase().ends_with(".zip") {
-            true => Self::zip(url, bytes),
-            false => Self::tar(url, &bytes),
+        if url.to_ascii_lowercase().ends_with(".zip") {
+            Self::zip(url, bytes)
+        } else {
+            Self::tar(url, &bytes)
         }
     }
 
@@ -275,9 +277,10 @@ impl Archive {
                 .to_owned()
         });
         let names = Contained::new(&name).is_some_and(|rel| rel.path().components().count() == 1);
-        match names {
-            true => Ok(name),
-            false => Err(ThemeError::unnamed(url).into()),
+        if names {
+            Ok(name)
+        } else {
+            Err(ThemeError::unnamed(url).into())
         }
     }
 }

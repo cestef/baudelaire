@@ -147,9 +147,10 @@ impl<'a> Ids<'a> {
     /// carries.
     fn rewrite(&self, node: &mut HtmlElement) {
         for (key, value) in node.attrs.0.make_mut() {
-            *value = match *key == typst_html::attr::id {
-                true => self.renamed(value).into(),
-                false => self.referenced(value).into(),
+            *value = if *key == typst_html::attr::id {
+                self.renamed(value).into()
+            } else {
+                self.referenced(value).into()
             };
         }
         if node.tag == tag::style {
@@ -164,9 +165,10 @@ impl<'a> Ids<'a> {
     /// `name` under this icon's scope, or unchanged if the icon does not define
     /// it (an id typst or a template put there is not the file's to rename).
     fn renamed(&self, name: &str) -> String {
-        match self.names.iter().any(|defined| defined == name) {
-            true => format!("{name}-{}", self.scope),
-            false => name.to_owned(),
+        if self.names.iter().any(|defined| defined == name) {
+            format!("{name}-{}", self.scope)
+        } else {
+            name.to_owned()
         }
     }
 

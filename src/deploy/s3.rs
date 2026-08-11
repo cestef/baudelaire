@@ -91,9 +91,10 @@ impl S3 {
     /// `/`, and every request under it is signed against an authority nobody
     /// meant. Checked once, before a client exists.
     pub(super) fn check(config: &S3Config) -> Result<()> {
-        match config.bucket.trim().is_empty() {
-            true => Err(DeployError::required(Required::S3Bucket).into()),
-            false => Ok(()),
+        if config.bucket.trim().is_empty() {
+            Err(DeployError::required(Required::S3Bucket).into())
+        } else {
+            Ok(())
         }
     }
 
@@ -248,9 +249,10 @@ impl Bucket {
                 // it only travels on once `Listed` has admitted it; one it
                 // refuses is recorded, because a key nothing here can name is
                 // still a key sitting in the bucket.
-                match Listed::try_from(key.as_str()).is_ok() {
-                    true => out.admit(self.relative(key), etag),
-                    false => out.refuse(key),
+                if Listed::try_from(key.as_str()).is_ok() {
+                    out.admit(self.relative(key), etag);
+                } else {
+                    out.refuse(key);
                 }
             }
             match listing.next {
@@ -288,9 +290,10 @@ impl Bucket {
 
     /// A signed GET returning the response body as a string (listings).
     fn send(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Result<String> {
-        let url = match query.is_empty() {
-            true => self.url(uri),
-            false => format!("{}?{query}", self.url(uri)),
+        let url = if query.is_empty() {
+            self.url(uri)
+        } else {
+            format!("{}?{query}", self.url(uri))
         };
         let auth = self.authorize(method, uri, query, body);
         let mut response = self

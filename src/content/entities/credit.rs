@@ -437,15 +437,16 @@ impl Byline {
     /// single string: a PDF info dict, a card byline.
     pub fn line(&self, role: Credit) -> Option<String> {
         let named = self.get(role);
-        match named.is_empty() {
-            true => None,
-            false => Some(
+        if named.is_empty() {
+            None
+        } else {
+            Some(
                 named
                     .iter()
                     .map(|one| one.display.as_str())
                     .collect::<Vec<_>>()
                     .join(", "),
-            ),
+            )
         }
     }
 }

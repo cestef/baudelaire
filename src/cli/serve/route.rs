@@ -93,9 +93,10 @@ impl Route {
             dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
             base: config.base_path().to_owned(),
             open: Open::new(config),
-            langs: match config.multilingual() {
-                true => config.langs().iter().map(|c| (*c).to_owned()).collect(),
-                false => Vec::new(),
+            langs: if config.multilingual() {
+                config.langs().iter().map(|c| (*c).to_owned()).collect()
+            } else {
+                Vec::new()
             },
         }
     }

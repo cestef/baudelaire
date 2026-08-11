@@ -51,9 +51,10 @@ impl MathStyles {
     /// whether to name the file, and the render pass whether to link it. Two
     /// readings of `styles` would be two chances to disagree.
     pub fn of(html: &super::HtmlConfig) -> Self {
-        match html.embed && html.math.styles == Self::Link {
-            true => Self::Inline,
-            false => html.math.styles,
+        if html.embed && html.math.styles == Self::Link {
+            Self::Inline
+        } else {
+            html.math.styles
         }
     }
 

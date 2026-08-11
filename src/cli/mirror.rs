@@ -79,9 +79,10 @@ impl MirrorArgs {
     /// build` failed on the same project. No project at all stays silent, since
     /// there is nothing there to have got wrong.
     fn config(&self, cx: &Cx) -> Config {
-        let verb = match self.uninstall {
-            true => "removing modules for",
-            false => "mirroring modules for",
+        let verb = if self.uninstall {
+            "removing modules for"
+        } else {
+            "mirroring modules for"
         };
         match cx.announced(verb) {
             Ok(config) => config,

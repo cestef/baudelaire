@@ -29,9 +29,10 @@ impl Search {
     /// The format the bare specifier serves: inverted only when that is the
     /// sole configured format, else the flat client (it has snippets).
     fn default(cx: &ModuleCx) -> SearchFormat {
-        match cx.config.generate.search.formats == [SearchFormat::Inverted] {
-            true => SearchFormat::Inverted,
-            false => SearchFormat::Json,
+        if cx.config.generate.search.formats == [SearchFormat::Inverted] {
+            SearchFormat::Inverted
+        } else {
+            SearchFormat::Json
         }
     }
 }

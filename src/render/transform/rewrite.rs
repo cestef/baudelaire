@@ -119,9 +119,10 @@ impl Links {
             return None;
         }
         let target = Target::from(format!("{permalink}{raw}"));
-        match target.fragment().is_some() {
-            true => Some(target),
-            false => None,
+        if target.fragment().is_some() {
+            Some(target)
+        } else {
+            None
         }
     }
 }

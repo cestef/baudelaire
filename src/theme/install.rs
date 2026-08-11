@@ -152,9 +152,10 @@ impl Lock {
                 State::Edited => force,
                 State::Gone | State::Added | State::Yours => false,
             };
-            match remove {
-                true => crate::fs::remove_file(dir.join(&file.rel))?,
-                false => kept |= file.state == State::Edited,
+            if remove {
+                crate::fs::remove_file(dir.join(&file.rel))?;
+            } else {
+                kept |= file.state == State::Edited;
             }
         }
         if !kept {
@@ -273,9 +274,10 @@ impl Fetched {
                 .filter(|rel| !lock.claims(rel))
                 .map(|rel| Tracked {
                     rel: rel.to_path_buf(),
-                    state: match dir.join(rel).exists() {
-                        true => State::Yours,
-                        false => State::Added,
+                    state: if dir.join(rel).exists() {
+                        State::Yours
+                    } else {
+                        State::Added
                     },
                 }),
         );
@@ -323,9 +325,10 @@ impl Fetched {
             origin: Some(self.origin.clone()),
             // What wrote the files that are here. A run that wrote none leaves
             // the record describing the baudelaire that did.
-            baudelaire: match written.is_empty() {
-                true => previous.map_or_else(|| crate::VERSION.to_owned(), |lock| lock.baudelaire),
-                false => crate::VERSION.to_owned(),
+            baudelaire: if written.is_empty() {
+                previous.map_or_else(|| crate::VERSION.to_owned(), |lock| lock.baudelaire)
+            } else {
+                crate::VERSION.to_owned()
             },
             files,
         };

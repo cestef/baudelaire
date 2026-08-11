@@ -78,9 +78,10 @@ impl RegistryConfig {
     /// reference is taken at face value, which is what a site that never
     /// declared a registry has always done with `author "Camille"`.
     pub fn unknown(&self) -> Unknown {
-        let default = match self.sources.is_empty() {
-            true => Unknown::Synthesize,
-            false => Unknown::Error,
+        let default = if self.sources.is_empty() {
+            Unknown::Synthesize
+        } else {
+            Unknown::Error
         };
         self.unknown.unwrap_or(default)
     }

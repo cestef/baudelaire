@@ -39,9 +39,10 @@ impl CacheControl {
             return None;
         }
         let immutable = hashed && key.trim_start_matches('/').starts_with(prefix);
-        Some(match immutable {
-            true => &self.immutable,
-            false => &self.default,
+        Some(if immutable {
+            &self.immutable
+        } else {
+            &self.default
         })
     }
 }

@@ -29,9 +29,10 @@ impl Loopback {
             .rsplit_once('@')
             .map_or(authority, |(_, host)| host);
         let host = host.rsplit_once(':').map_or(host, |(head, port)| {
-            match port.chars().all(|c| c.is_ascii_digit()) {
-                true => head,
-                false => host,
+            if port.chars().all(|c| c.is_ascii_digit()) {
+                head
+            } else {
+                host
             }
         });
         matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")
@@ -319,9 +320,10 @@ impl NodeExt for KdlNode {
                 .components()
                 .any(|c| matches!(c, std::path::Component::ParentDir))
             || path.file_name().is_none();
-        match escapes {
-            true => Err(ConfigError::not_an_asset_path(text, &value, NodeExt::span(self)).into()),
-            false => Ok(path),
+        if escapes {
+            Err(ConfigError::not_an_asset_path(text, &value, NodeExt::span(self)).into())
+        } else {
+            Ok(path)
         }
     }
 
@@ -355,9 +357,10 @@ impl NodeExt for KdlNode {
     /// site served over plain http is the author's business.
     fn base_url(&self, text: &str, idx: usize) -> Result<String> {
         let value = self.string(text, idx)?;
-        match BaseUrl::absolute(&value) {
-            true => Ok(value),
-            false => Err(ConfigError::not_absolute_url(text, &value, NodeExt::span(self)).into()),
+        if BaseUrl::absolute(&value) {
+            Ok(value)
+        } else {
+            Err(ConfigError::not_absolute_url(text, &value, NodeExt::span(self)).into())
         }
     }
 
@@ -449,9 +452,10 @@ impl NodeExt for KdlNode {
                 // in order, and the optional `+` is dropped. This list is an
                 // *open* set forwarded to typst, which is why it stays strings
                 // rather than going through `toggled`.
-                Ok(match toggle.add {
-                    true => toggle.name.to_owned(),
-                    false => format!("-{}", toggle.name),
+                Ok(if toggle.add {
+                    toggle.name.to_owned()
+                } else {
+                    format!("-{}", toggle.name)
                 })
             })
             .collect()

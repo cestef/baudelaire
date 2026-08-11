@@ -104,9 +104,10 @@ impl<'a> Dev<'a> {
         // and an edit saved between that promise and the registration would
         // have reached nobody. After the build, because the set of directories
         // to watch includes the ones the build turned out to read.
-        let watching = match self.config.serve.watch {
-            true => Some(self.establish()?),
-            false => None,
+        let watching = if self.config.serve.watch {
+            Some(self.establish()?)
+        } else {
+            None
         };
 
         self.ui.blank();
@@ -120,15 +121,13 @@ impl<'a> Dev<'a> {
         );
         self.ui.arrow(
             "watching",
-            match self.config.serve.watch {
-                // Wrap the watched roots to the terminal, aligned under the
-                // arrow's value column, so a long list flows onto extra lines
-                // instead of running off-screen.
-                true => crate::ui::Wrap::new(&self.watched(), crate::ui::ARROW_VALUE_COLUMN)
+            if self.config.serve.watch {
+                crate::ui::Wrap::new(&self.watched(), crate::ui::ARROW_VALUE_COLUMN)
                     .to_string()
                     .dimmed()
-                    .to_string(),
-                false => "off (--no-watch)".dimmed().to_string(),
+                    .to_string()
+            } else {
+                "off (--no-watch)".dimmed().to_string()
             },
         );
         self.ui.blank();

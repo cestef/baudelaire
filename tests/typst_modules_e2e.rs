@@ -267,9 +267,10 @@ fn an_unknown_module_suggests_the_nearest() {
     assert!(err.contains("did you mean `html`?"), "{err}");
     // `markdown` is served only by a binary that can lower markdown, so the
     // list it appears in is the one the running flavor actually serves.
-    let valid = match cfg!(feature = "markdown") {
-        true => "valid modules: `html`, `markdown`, `pages`, `sections`, `site`",
-        false => "valid modules: `html`, `pages`, `sections`, `site`",
+    let valid = if cfg!(feature = "markdown") {
+        "valid modules: `html`, `markdown`, `pages`, `sections`, `site`"
+    } else {
+        "valid modules: `html`, `pages`, `sections`, `site`"
     };
     assert!(err.contains(valid), "{err}");
 }

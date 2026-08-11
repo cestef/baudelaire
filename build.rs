@@ -20,9 +20,10 @@ impl Probe {
     /// not a repository (a crates.io build, a vendored source tree).
     fn git(args: &[&str]) -> Option<String> {
         let out = Command::new("git").args(args).output().ok()?;
-        match out.status.success() {
-            true => Some(String::from_utf8(out.stdout).ok()?.trim().to_owned()),
-            false => None,
+        if out.status.success() {
+            Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
+        } else {
+            None
         }
     }
 
@@ -34,9 +35,10 @@ impl Probe {
         let Some(hash) = Self::git(&["rev-parse", "--short=12", "HEAD"]) else {
             return "unknown".to_owned();
         };
-        match Self::git(&["status", "--porcelain"]).is_some_and(|s| !s.is_empty()) {
-            true => format!("{hash}-dirty"),
-            false => hash,
+        if Self::git(&["status", "--porcelain"]).is_some_and(|s| !s.is_empty()) {
+            format!("{hash}-dirty")
+        } else {
+            hash
         }
     }
 

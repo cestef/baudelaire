@@ -93,9 +93,10 @@ pub(super) struct Destination {
 impl Destination {
     /// Refuse a run that has nowhere to go, before anything is built.
     fn check(&self, config: &Config) -> Result<()> {
-        match (self.named)(config) {
-            true => Ok(()),
-            false => Err((self.unconfigured)()),
+        if (self.named)(config) {
+            Ok(())
+        } else {
+            Err((self.unconfigured)())
         }
     }
 }

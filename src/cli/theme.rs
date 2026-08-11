@@ -455,12 +455,13 @@ impl ThemeUpdateArgs {
         ));
         // A file baudelaire wrote and you changed, and one that was here before
         // it ever ran, are kept for the same reason and reported together.
-        let kept: Vec<_> = match self.force {
-            true => Vec::new(),
-            false => tracked
+        let kept: Vec<_> = if self.force {
+            Vec::new()
+        } else {
+            tracked
                 .iter()
                 .filter(|file| matches!(file.state, State::Edited | State::Yours))
-                .collect(),
+                .collect()
         };
         Vendored::kept(
             cx,

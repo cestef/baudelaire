@@ -498,9 +498,10 @@ impl Color {
             let Some(tail) = arg.strip_prefix("--color") else {
                 continue;
             };
-            let value = match tail.is_empty() {
-                true => args.next(),
-                false => tail.strip_prefix('='),
+            let value = if tail.is_empty() {
+                args.next()
+            } else {
+                tail.strip_prefix('=')
             };
             if let Some(color) = value.and_then(Self::named) {
                 chosen = Some(color);
@@ -581,11 +582,10 @@ impl CommonOverrides {
     /// and wrote a project whose first build fails, naming a line the scaffold
     /// had just written rather than the flag that put it there.
     pub(super) fn absolute(value: &str) -> std::result::Result<String, String> {
-        match crate::config::BaseUrl::absolute(value) {
-            true => Ok(value.to_owned()),
-            false => {
-                Err("not an absolute URL: write the scheme too, e.g. `https://example.com`".into())
-            }
+        if crate::config::BaseUrl::absolute(value) {
+            Ok(value.to_owned())
+        } else {
+            Err("not an absolute URL: write the scheme too, e.g. `https://example.com`".into())
         }
     }
 }
@@ -638,9 +638,12 @@ impl Cli {
         // `--strict` fails *behind* the warnings that explain it rather than in
         // front of them.
         let warned = ui.warnings();
-        let outcome = result.and_then(|()| match self.global.strict && warned > 0 {
-            true => Err(StrictWarnings { count: warned }.into()),
-            false => Ok(()),
+        let outcome = result.and_then(|()| {
+            if self.global.strict && warned > 0 {
+                Err(StrictWarnings { count: warned }.into())
+            } else {
+                Ok(())
+            }
         });
         // Built while the diagnostics are still collected, and written before
         // the flush, so the JSON object lands on stdout uninterleaved with the

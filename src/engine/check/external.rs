@@ -113,9 +113,10 @@ impl External {
         if !unreachable.is_empty() {
             ui.warn(UnreachableLinks::from(unreachable));
         }
-        match dead.is_empty() {
-            true => Ok(()),
-            false => Err(DeadLinks::from(dead).into()),
+        if dead.is_empty() {
+            Ok(())
+        } else {
+            Err(DeadLinks::from(dead).into())
         }
     }
 
@@ -219,9 +220,10 @@ impl Probe {
         match result {
             Ok(response) => {
                 let status = response.status().as_u16();
-                match policy.alive(status) {
-                    true => Self::Alive(status),
-                    false => Self::Status(status),
+                if policy.alive(status) {
+                    Self::Alive(status)
+                } else {
+                    Self::Status(status)
                 }
             }
             Err(e) => Self::Unreachable(e.to_string()),

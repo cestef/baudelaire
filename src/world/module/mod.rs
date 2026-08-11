@@ -360,9 +360,10 @@ impl Prefix<'_> {
             return None;
         }
         let rest = id.vpath().get_without_slash().strip_prefix(self.0)?;
-        match rest.is_empty() {
-            true => Some(rest),
-            false => rest.strip_prefix('/'),
+        if rest.is_empty() {
+            Some(rest)
+        } else {
+            rest.strip_prefix('/')
         }
     }
 }

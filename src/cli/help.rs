@@ -121,9 +121,10 @@ impl Display for About<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", Heading("About:"))?;
         for line in self.0.lines() {
-            match line.is_empty() {
-                true => writeln!(f)?,
-                false => writeln!(f, "  {line}")?,
+            if line.is_empty() {
+                writeln!(f)?;
+            } else {
+                writeln!(f, "  {line}")?;
             }
         }
         Ok(())

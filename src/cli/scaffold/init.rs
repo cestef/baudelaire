@@ -55,12 +55,13 @@ impl Init {
             if args.no_sample && file.sample() {
                 continue;
             }
-            let (rel, body) = match file.is_config() {
-                true => (
+            let (rel, body) = if file.is_config() {
+                (
                     config.clone(),
                     Details::config(&file.body, start.theme.as_deref(), &extras),
-                ),
-                false => (file.rel, file.body),
+                )
+            } else {
+                (file.rel, file.body)
             };
             scaffold = scaffold.file(rel, body);
         }

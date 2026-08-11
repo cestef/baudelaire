@@ -133,9 +133,10 @@ impl Xml {
     /// `text` with every character XML 1.0 refuses to carry removed, borrowed
     /// unchanged in the ordinary case where there are none.
     fn legal(text: &str) -> Cow<'_, str> {
-        match text.contains(Self::forbidden) {
-            false => Cow::Borrowed(text),
-            true => Cow::Owned(text.chars().filter(|c| !Self::forbidden(*c)).collect()),
+        if text.contains(Self::forbidden) {
+            Cow::Owned(text.chars().filter(|c| !Self::forbidden(*c)).collect())
+        } else {
+            Cow::Borrowed(text)
         }
     }
 

@@ -71,11 +71,10 @@ impl Dts {
     pub(crate) fn module(&self, specifier: &str) -> String {
         let mut out = format!("declare module \"{specifier}\" {{\n");
         for line in self.body.lines() {
-            match line.is_empty() {
-                true => out.push('\n'),
-                false => {
-                    let _ = writeln!(out, "  {line}");
-                }
+            if line.is_empty() {
+                out.push('\n');
+            } else {
+                let _ = writeln!(out, "  {line}");
             }
         }
         out.push_str("}\n");

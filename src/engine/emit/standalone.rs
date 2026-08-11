@@ -90,9 +90,10 @@ impl<'a> Route<'a> {
             .collect();
         Swap {
             title: self.page.title(),
-            html: match own.is_empty() {
-                true => Cow::Borrowed(self.fragments.body.as_str()),
-                false => Cow::Owned(own.concat() + &self.fragments.body),
+            html: if own.is_empty() {
+                Cow::Borrowed(self.fragments.body.as_str())
+            } else {
+                Cow::Owned(own.concat() + &self.fragments.body)
             },
         }
     }

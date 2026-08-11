@@ -93,9 +93,10 @@ impl Reference {
     /// whole document again, for ever.
     fn walk(rows: super::dispatch::Rows, prefix: &str, depth: usize, out: &mut Vec<Entry>) {
         for row in rows() {
-            let path = match prefix.is_empty() {
-                true => row.key.to_owned(),
-                false => format!("{prefix}.{}", row.key),
+            let path = if prefix.is_empty() {
+                row.key.to_owned()
+            } else {
+                format!("{prefix}.{}", row.key)
             };
             let nested = match row.kind {
                 Kind::Block(rows) | Kind::Items(rows) | Kind::Line(rows) | Kind::Lines(rows) => {
@@ -264,9 +265,12 @@ impl Kind {
                 let on = on();
                 let names: Vec<String> = names()
                     .into_iter()
-                    .map(|name| match on.contains(&name) {
-                        true => format!("{name}*"),
-                        false => name.to_owned(),
+                    .map(|name| {
+                        if on.contains(&name) {
+                            format!("{name}*")
+                        } else {
+                            name.to_owned()
+                        }
                     })
                     .collect();
                 format!("[-]({}) ..", names.join(" | "))

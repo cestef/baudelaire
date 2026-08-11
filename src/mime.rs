@@ -70,9 +70,10 @@ impl Mime {
     pub fn header(self) -> String {
         let charset =
             self.0.starts_with("text/") || self.0 == "application/xml" || self.0.ends_with("+xml");
-        match charset {
-            true => format!("{}; charset=utf-8", self.0),
-            false => self.0.to_owned(),
+        if charset {
+            format!("{}; charset=utf-8", self.0)
+        } else {
+            self.0.to_owned()
         }
     }
 

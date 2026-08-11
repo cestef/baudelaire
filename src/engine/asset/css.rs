@@ -110,9 +110,10 @@ impl Stylesheet {
     /// as it lies when it is already a stylesheet.
     #[cfg(feature = "sass")]
     fn source(file: &Path, ctx: &Ctx) -> Result<String> {
-        match Sass::claims(file) {
-            true => Sass::compile(file, ctx),
-            false => fs::read_to_string(file),
+        if Sass::claims(file) {
+            Sass::compile(file, ctx)
+        } else {
+            fs::read_to_string(file)
         }
     }
 

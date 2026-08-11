@@ -65,9 +65,10 @@ impl ManifestConfig {
     /// absolute, so a manifest is reachable without a configured site `url`.
     pub fn url(config: &Config, lang: &str) -> String {
         let scope = config.scope(lang, "");
-        let path = match scope.is_empty() {
-            true => format!("/{}", Self::FILE),
-            false => format!("/{scope}/{}", Self::FILE),
+        let path = if scope.is_empty() {
+            format!("/{}", Self::FILE)
+        } else {
+            format!("/{scope}/{}", Self::FILE)
         };
         config.prefixed(&path)
     }

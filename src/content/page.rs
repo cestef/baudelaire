@@ -61,10 +61,7 @@ impl Data {
     /// Which of the two file-backed shapes a typst page has, by whether its
     /// module exported a `frontmatter`.
     pub(crate) fn of(export: bool) -> Self {
-        match export {
-            true => Self::Export,
-            false => Self::Empty,
-        }
+        if export { Self::Export } else { Self::Empty }
     }
 }
 
@@ -709,9 +706,10 @@ impl Page {
             let segments: Vec<&str> = named.split('/').filter(|s| !s.is_empty()).collect();
             // A path naming a file keeps its name; one naming a directory gets
             // the trailing slash every other permalink carries.
-            let url = match Config::names_a_file(named) {
-                true => format!("/{}", segments.join("/")),
-                false => Permalink::join(&segments),
+            let url = if Config::names_a_file(named) {
+                format!("/{}", segments.join("/"))
+            } else {
+                Permalink::join(&segments)
             };
             return config.localize(lang, &url);
         }

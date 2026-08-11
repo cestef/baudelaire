@@ -43,10 +43,7 @@ impl Level {
     /// "on", which is what the key has always meant, and `strict` decides how
     /// loud that is.
     pub fn flag(on: bool) -> Self {
-        match on {
-            true => Self::DEFAULT,
-            false => Self::OFF,
-        }
+        if on { Self::DEFAULT } else { Self::OFF }
     }
 
     /// A rule that names its own severity.
@@ -64,9 +61,10 @@ impl Level {
     /// named one keeps it, which is the point: `strict` is a default, not an
     /// override.
     pub fn severity(self, strict: bool) -> Severity {
-        self.0.unwrap_or(match strict {
-            true => Severity::Error,
-            false => Severity::Warn,
+        self.0.unwrap_or(if strict {
+            Severity::Error
+        } else {
+            Severity::Warn
         })
     }
 }

@@ -95,9 +95,10 @@ impl BaseUrl {
     /// whose every link and image was `https://host/docs/docs/...`.
     pub fn origin(&self) -> &str {
         let path = Self::path(&self.0);
-        match path.is_empty() {
-            true => &self.0,
-            false => self.0.strip_suffix(path).unwrap_or(&self.0),
+        if path.is_empty() {
+            &self.0
+        } else {
+            self.0.strip_suffix(path).unwrap_or(&self.0)
         }
     }
 
@@ -137,10 +138,7 @@ impl std::fmt::Display for Basename<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let stem = self.0.trim_matches('/');
         let stem = stem.strip_suffix(".html").unwrap_or(stem);
-        f.write_str(match stem.is_empty() {
-            true => "index",
-            false => stem,
-        })
+        f.write_str(if stem.is_empty() { "index" } else { stem })
     }
 }
 
@@ -161,11 +159,10 @@ impl Percent {
                 i += 3;
                 continue;
             }
-            match Self::literal(byte) {
-                true => out.push(byte as char),
-                false => {
-                    let _ = write!(out, "%{byte:02X}");
-                }
+            if Self::literal(byte) {
+                out.push(byte as char);
+            } else {
+                let _ = write!(out, "%{byte:02X}");
             }
             i += 1;
         }

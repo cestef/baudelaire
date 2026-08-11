@@ -54,9 +54,10 @@ impl<'a> Policy<'a> {
 
     /// The header this policy is served under: enforcing, or reporting only.
     pub(super) fn header(&self) -> &'static str {
-        match self.config.enforce {
-            true => "Content-Security-Policy",
-            false => "Content-Security-Policy-Report-Only",
+        if self.config.enforce {
+            "Content-Security-Policy"
+        } else {
+            "Content-Security-Policy-Report-Only"
         }
     }
 
@@ -109,9 +110,10 @@ impl<'a> Policy<'a> {
         // match somewhere the syntax otherwise never looks. It is still an
         // allowlist of exact strings this build produced, and the alternative
         // is `'unsafe-inline'`, which allows every inline style there could be.
-        let unsafe_hashes: &[&str] = match self.digests.attrs.is_empty() {
-            true => &[],
-            false => &["'unsafe-hashes'"],
+        let unsafe_hashes: &[&str] = if self.digests.attrs.is_empty() {
+            &[]
+        } else {
+            &["'unsafe-hashes'"]
         };
         let styles = &self.digests.styles | &self.digests.attrs;
         push(

@@ -321,9 +321,10 @@ impl Card<'_> {
             alt,
             canonical: self.url(),
             // A dated page is an article; everything else is a plain website page.
-            kind: match fm.date.is_some() {
-                true => "article",
-                false => "website",
+            kind: if fm.date.is_some() {
+                "article"
+            } else {
+                "website"
             },
             published: fm.date.map(|d| Iso(d).to_string()),
             // Only when it actually moved: `modified` falls back to the publish
@@ -436,9 +437,10 @@ impl Card<'_> {
         }
         tags.push(Self::named(
             "twitter:card",
-            match facts.image.is_some() {
-                true => "summary_large_image",
-                false => "summary",
+            if facts.image.is_some() {
+                "summary_large_image"
+            } else {
+                "summary"
             },
         ));
         if !facts.title.is_empty() {

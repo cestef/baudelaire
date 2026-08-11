@@ -130,9 +130,10 @@ impl Structural {
 
     /// How an unset variable resolves on this thread right now.
     fn mode() -> Unset {
-        match STRUCTURAL.get() {
-            true => Unset::Stands,
-            false => Unset::Fails,
+        if STRUCTURAL.get() {
+            Unset::Stands
+        } else {
+            Unset::Fails
         }
     }
 }

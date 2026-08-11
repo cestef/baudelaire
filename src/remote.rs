@@ -127,9 +127,10 @@ pub trait Interaction {
         }
         // The `?` is the prompt's, added here: what callers pass is the action
         // itself, so it reads correctly in a diagnostic too.
-        Ok(match self.confirm(&format!("{action}?"))? {
-            true => Consent::Granted,
-            false => Consent::Refused,
+        Ok(if self.confirm(&format!("{action}?"))? {
+            Consent::Granted
+        } else {
+            Consent::Refused
         })
     }
 }

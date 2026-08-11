@@ -366,9 +366,10 @@ impl<'a> Writer<'a> {
             }
             Event::TaskListMarker(done) => {
                 let symbol = Value::Raw(
-                    match *done {
-                        true => "sym.ballot.check",
-                        false => "sym.ballot",
+                    if *done {
+                        "sym.ballot.check"
+                    } else {
+                        "sym.ballot"
                     }
                     .to_owned(),
                 );

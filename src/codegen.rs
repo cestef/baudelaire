@@ -351,9 +351,10 @@ impl fmt::Display for Ts<'_> {
                     if i > 0 {
                         f.write_str("; ")?;
                     }
-                    match ident(key) {
-                        true => f.write_str(key)?,
-                        false => write!(f, "{}", JsonStr(key))?,
+                    if ident(key) {
+                        f.write_str(key)?;
+                    } else {
+                        write!(f, "{}", JsonStr(key))?;
                     }
                     write!(f, ": {}", Self(value))?;
                 }
@@ -638,9 +639,10 @@ impl fmt::Display for Open<'_> {
             Bracket::Items => {
                 f.write_char('(')?;
                 self.0.arguments(f)?;
-                match self.0.args.is_empty() {
-                    true => Ok(()),
-                    false => f.write_str(", "),
+                if self.0.args.is_empty() {
+                    Ok(())
+                } else {
+                    f.write_str(", ")
                 }
             }
         }

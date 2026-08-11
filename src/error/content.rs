@@ -418,15 +418,16 @@ impl ContentError {
         source: &str,
         span: Option<SourceSpan>,
     ) -> Self {
-        let help = match declared.is_empty() {
-            true => markup!(
+        let help = if declared.is_empty() {
+            markup!(
                 "declare it: `paths {{ sources {{ {} \"../FILE.md\" }} }}`",
                 name
-            ),
-            false => markup!(
+            )
+        } else {
+            markup!(
                 "declare it under `paths {{ sources }}`, or use one of: {}",
                 declared.join(", ")
-            ),
+            )
         };
         let (page, span) = Self::located(path, source, span);
         Self::UnknownSource {

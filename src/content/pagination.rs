@@ -98,9 +98,10 @@ impl<'a> Paged<'a> {
 
     /// The internal page slug (its id within the section, not a URL).
     pub(crate) fn slug(&self, number: usize) -> String {
-        let word = match self.prefix.is_empty() {
-            true => Self::WORD,
-            false => self.prefix,
+        let word = if self.prefix.is_empty() {
+            Self::WORD
+        } else {
+            self.prefix
         };
         match (number, self.slug) {
             (1, "") => Listing::INDEX.to_owned(),

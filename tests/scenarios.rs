@@ -176,9 +176,10 @@ impl Bindings {
             let value = self.0.get(name).ok_or_else(|| {
                 format!(
                     "`{{{name}}}` is not bound; captured so far: {}",
-                    match self.0.is_empty() {
-                        true => "nothing".to_owned(),
-                        false => self.0.keys().cloned().collect::<Vec<_>>().join(", "),
+                    if self.0.is_empty() {
+                        "nothing".to_owned()
+                    } else {
+                        self.0.keys().cloned().collect::<Vec<_>>().join(", ")
                     }
                 )
             })?;
@@ -398,9 +399,10 @@ impl Claim {
                     }
                 };
                 let (min, max) = (bound("min")?, bound("max")?);
-                match min.is_none() && max.is_none() {
-                    true => Err("`size` needs a `min=` or a `max=`".into()),
-                    false => Ok(Self::Size { min, max }),
+                if min.is_none() && max.is_none() {
+                    Err("`size` needs a `min=` or a `max=`".into())
+                } else {
+                    Ok(Self::Size { min, max })
                 }
             }
             "identical" => Ok(Self::Identical(one()?)),
@@ -655,9 +657,8 @@ impl Output {
             Err(complaint) => return into.push(format!("{}: {complaint}", self.path)),
         };
         let pattern = Pattern(path);
-        let path = match pattern.wild() {
-            false => pattern.0,
-            true => match pattern.find(dist).as_slice() {
+        let path = if pattern.wild() {
+            match pattern.find(dist).as_slice() {
                 [only] => only.clone(),
                 [] => return into.push(format!("{}: nothing matches", pattern.0)),
                 many => {
@@ -668,7 +669,9 @@ impl Output {
                         many.join(", ")
                     ));
                 }
-            },
+            }
+        } else {
+            pattern.0
         };
         let full = dist.join(&path);
         if !full.exists() {
@@ -833,18 +836,20 @@ impl Expect {
         let reported = run.warnings();
         for want in &self.warns {
             if !reported.iter().any(|got| got == want) {
-                failures.push(match reported.is_empty() {
-                    true => format!("expected warning `{want}`, but nothing warned"),
-                    false => format!("expected warning `{want}`, got: {}", reported.join(", ")),
+                failures.push(if reported.is_empty() {
+                    format!("expected warning `{want}`, but nothing warned")
+                } else {
+                    format!("expected warning `{want}`, got: {}", reported.join(", "))
                 });
             }
         }
         let advised = run.advice();
         for want in &self.advises {
             if !advised.iter().any(|got| got == want) {
-                failures.push(match advised.is_empty() {
-                    true => format!("expected advice `{want}`, but nothing advised"),
-                    false => format!("expected advice `{want}`, got: {}", advised.join(", ")),
+                failures.push(if advised.is_empty() {
+                    format!("expected advice `{want}`, but nothing advised")
+                } else {
+                    format!("expected advice `{want}`, got: {}", advised.join(", "))
                 });
             }
         }
@@ -876,10 +881,13 @@ impl Expect {
                     continue;
                 }
                 Ok(pattern) if pattern.wild() => pattern.find(dist),
-                Ok(pattern) => match dist.join(&pattern.0).exists() {
-                    true => vec![pattern.0],
-                    false => Vec::new(),
-                },
+                Ok(pattern) => {
+                    if dist.join(&pattern.0).exists() {
+                        vec![pattern.0]
+                    } else {
+                        Vec::new()
+                    }
+                }
             };
             if !found.is_empty() {
                 failures.push(format!("{}: built, but expected absent", found.join(", ")));
@@ -994,9 +1002,10 @@ impl Step {
         }
         for path in &self.removes {
             let full = site.path(path);
-            let removed = match full.is_dir() {
-                true => std::fs::remove_dir_all(&full),
-                false => std::fs::remove_file(&full),
+            let removed = if full.is_dir() {
+                std::fs::remove_dir_all(&full)
+            } else {
+                std::fs::remove_file(&full)
             };
             if let Err(e) = removed {
                 return vec![format!("cannot remove `{path}`: {e}")];

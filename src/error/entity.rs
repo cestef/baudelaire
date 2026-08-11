@@ -178,12 +178,13 @@ impl EntityError {
     /// A taxonomy naming a registry that does not exist.
     pub fn no_registry(taxonomy: &str, registry: &str, known: &[&str]) -> Self {
         Self::NoRegistry {
-            help: match known.is_empty() {
-                true => markup!(
+            help: if known.is_empty() {
+                markup!(
                     "declare it: `content {{ entities {{ {} {{ .. }} }} }}`",
                     registry
-                ),
-                false => Keys::of(known).help(registry, "registries"),
+                )
+            } else {
+                Keys::of(known).help(registry, "registries")
             },
             taxonomy: taxonomy.to_owned(),
             registry: registry.to_owned(),
@@ -225,12 +226,13 @@ impl Unresolved {
             // A registry whose sources have produced nothing yet is a roster
             // waiting to be written, not a typo: there is no near name to
             // suggest, so the help says what would make the term resolve.
-            help: match known.is_empty() {
-                true => markup!(
+            help: if known.is_empty() {
+                markup!(
                     "the `{}` registry holds no entities yet: declare this one, or set `unknown \"synthesize\"` to take the term as written",
                     registry
-                ),
-                false => Keys::of(known).help(term, "ids"),
+                )
+            } else {
+                Keys::of(known).help(term, "ids")
             },
             registry: registry.to_owned(),
             taxonomy: taxonomy.to_owned(),

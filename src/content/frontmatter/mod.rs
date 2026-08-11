@@ -393,9 +393,10 @@ impl Frontmatter {
     /// evaluates (`frontmatter` is undefined), and "unknown variable" would
     /// say nothing about the new syntax.
     pub fn check(source: &Source, path: &Path) -> Result<()> {
-        match Self::legacy_call(source) {
-            true => Err(ContentError::frontmatter_call(path).into()),
-            false => Ok(()),
+        if Self::legacy_call(source) {
+            Err(ContentError::frontmatter_call(path).into())
+        } else {
+            Ok(())
         }
     }
 
@@ -636,9 +637,10 @@ impl ValueExt for Value {
     /// day`.
     fn kind(&self) -> String {
         let name = self.ty().long_name();
-        let article = match name.starts_with(['a', 'e', 'i', 'o', 'u']) {
-            true => "an",
-            false => "a",
+        let article = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            "an"
+        } else {
+            "a"
         };
         format!("{article} {name}")
     }

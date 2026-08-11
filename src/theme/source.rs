@@ -206,11 +206,12 @@ impl Origin {
         if let Some(origin) = builtin().iter().find_map(|source| source.parse(spec)) {
             return Ok(origin);
         }
-        match spec.contains(['/', ':', '@', '.']) {
-            true => Err(ThemeError::unsupported(spec.to_owned()).into()),
-            false => Err(super::Bundled::find(spec)
+        if spec.contains(['/', ':', '@', '.']) {
+            Err(ThemeError::unsupported(spec.to_owned()).into())
+        } else {
+            Err(super::Bundled::find(spec)
                 .err()
-                .unwrap_or_else(|| ThemeError::unsupported(spec.to_owned()).into())),
+                .unwrap_or_else(|| ThemeError::unsupported(spec.to_owned()).into()))
         }
     }
 }

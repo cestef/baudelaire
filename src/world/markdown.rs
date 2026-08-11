@@ -89,13 +89,13 @@ fn markdown(source: Spanned<Value>) -> Result<String, EcoString> {
 /// wrapper sitting beside it, so its parent directory is the page's own.
 fn read(engine: &Engine, path: &str) -> Result<String, EcoString> {
     let main = engine.world.main();
-    let vpath = match path.starts_with('/') {
-        true => VirtualPath::new(path),
-        false => main
-            .vpath()
+    let vpath = if path.starts_with('/') {
+        VirtualPath::new(path)
+    } else {
+        main.vpath()
             .parent()
             .ok_or_else(|| EcoString::from("the page has no directory to resolve against"))?
-            .join(path),
+            .join(path)
     }
     .map_err(|error| eco_format!("{path} is not a usable path: {error}"))?;
     let id = FileId::new(RootedPath::new(main.root().clone(), vpath));

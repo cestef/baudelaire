@@ -42,16 +42,17 @@ impl Target for Typst {
         // into an editor's settings, where there is no cwd to be relative to.
         // Through `resolved`, since the directory is computed before it is
         // written and `canonical` would hand back the relative path unchanged.
-        let setup = match mirror.global {
-            true => Vec::new(),
-            false => vec![Setup {
+        let setup = if mirror.global {
+            Vec::new()
+        } else {
+            vec![Setup {
                 tool: "typst",
                 value: format!(
                     "--package-path {}",
                     Paths(&crate::fs::resolved(&base).display().to_string())
                 ),
                 hint: Some("or TYPST_PACKAGE_PATH; tinymist takes it in typstExtraArgs"),
-            }],
+            }]
         };
         Ok(Mirrored {
             base,

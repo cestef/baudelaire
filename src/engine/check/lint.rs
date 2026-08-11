@@ -56,9 +56,10 @@ impl Lints {
         if !warned.is_empty() {
             ui.warn(Flaws::warning(warned));
         }
-        match fatal.is_empty() {
-            true => Ok(()),
-            false => Err(Flaws::new(unwrap(fatal)).into()),
+        if fatal.is_empty() {
+            Ok(())
+        } else {
+            Err(Flaws::new(unwrap(fatal)).into())
         }
     }
 }

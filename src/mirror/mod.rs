@@ -313,9 +313,10 @@ impl<'a> Mirror<'a> {
         if !path.exists() {
             return Ok(false);
         }
-        match path.is_dir() {
-            true => crate::fs::remove_dir_all(path)?,
-            false => crate::fs::remove_file(path)?,
+        if path.is_dir() {
+            crate::fs::remove_dir_all(path)?;
+        } else {
+            crate::fs::remove_file(path)?;
         }
         Ok(true)
     }
