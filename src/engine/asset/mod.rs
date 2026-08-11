@@ -23,7 +23,6 @@ mod js;
 pub(in crate::engine) mod memo;
 #[cfg(feature = "js")]
 mod module;
-mod owned;
 #[cfg(feature = "sass")]
 mod sass;
 mod sourcemap;
@@ -40,6 +39,7 @@ use crate::graph::AssetName;
 use rayon::prelude::*;
 
 use crate::engine::layers::{Layered, Layers};
+use crate::owned;
 use crate::render::{AssetMap, Emitted, SrcSets};
 use crate::theme::Theme;
 use memo::Memo;
@@ -200,7 +200,7 @@ impl<'a> Assets<'a> {
             .into_iter()
             .filter(|file| !Private::covers(&file.rel, self.config))
             .collect();
-        self.generated(&sources, &mut out);
+        self.generated(&sources, &mut out)?;
         if sources.is_empty() {
             return Ok(out);
         }
@@ -261,31 +261,46 @@ impl<'a> Assets<'a> {
     /// page links the authored spelling either way, and the fingerprint pass
     /// rewrites it through the same map entry.
     ///
-    /// Named, digested, and *not* written. Whether a page wants one is not
-    /// knowable before the pages have rendered, and an owned asset is not the
-    /// site's own file: nobody put it in the tree, so nobody would wonder why
-    /// `dist` holds a stylesheet no page asks for. [`Assets::requested`] writes
-    /// the ones that were asked for, once that is known.
-    fn generated(&self, sources: &[Layered], out: &mut Processed) {
+    /// Named, digested, and mostly *not* written. Whether a page wants one is
+    /// not knowable before the pages have rendered, and an owned asset is not
+    /// the site's own file: nobody put it in the tree, so nobody would wonder
+    /// why `dist` holds a stylesheet no page asks for. [`Assets::requested`]
+    /// writes the ones that were asked for, once that is known.
+    ///
+    /// [`Owned::always`] is the exception, and reads the other way round: an
+    /// asset the config asked for by name is written here, because the site
+    /// already answered the only question there was.
+    fn generated(&self, sources: &[Layered], out: &mut Processed) -> Result<()> {
         let ctx = self.ctx();
         for asset in owned::builtin() {
-            let rel = Path::new(asset.rel());
-            if !asset.enabled(self.config) || sources.iter().any(|file| file.rel == rel) {
+            let rel = asset.rel(self.config);
+            if !asset.serves(self.config) || sources.iter().any(|file| file.rel == rel) {
                 continue;
             }
-            let bytes = asset.bytes(self.config);
+            let bytes = asset.bytes(self.config)?;
             let dst = self.fingerprint(rel, &bytes);
             // Unconditionally mapped, even when fingerprinting leaves the name
             // alone: the entry is what makes the reference *resolve*, and a page
             // records which owned assets it asked for by the same key.
             out.map.insert(ctx.url(rel), ctx.url(&dst));
             out.emitted.insert(ctx.url(&dst), &bytes, self.config.sri());
+            // `html { embed }` inlines what a page references by reading the
+            // file back, so an asset that is only reserved is one the embed
+            // pass finds missing and leaves as a link: a page that promised to
+            // carry its own stylesheet, pointing at a file instead. Written now
+            // for that build, which is what every asset the site itself wrote
+            // already is by this point.
+            if self.config.html.embed {
+                self.write(&ctx, rel, &dst, &bytes, out)?;
+                continue;
+            }
             out.deferred.push(Deferred {
                 rel: rel.to_path_buf(),
                 dst,
                 bytes,
             });
         }
+        Ok(())
     }
 
     /// Write the [`Deferred`] assets the rendered pages asked for, keyed by the

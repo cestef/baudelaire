@@ -88,6 +88,9 @@ pub(super) trait NodeExt {
     /// [`NodeExt::size`] shape once more: one key, two spellings, one reader.
     fn level(&self, text: &str, idx: usize) -> Result<Level>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
+    /// The path a generated asset is served from, relative to the asset root
+    /// and staying inside it.
+    fn asset(&self, text: &str, idx: usize) -> Result<std::path::PathBuf>;
     fn base_url(&self, text: &str, idx: usize) -> Result<String>;
     /// A permalink template, or a piece of one, checked by [`Permalink::parse`]:
     /// an unknown placeholder, an unterminated `{`, and any `..` segment are
@@ -299,6 +302,27 @@ impl NodeExt for KdlNode {
         };
         Version::parse(&written)
             .ok_or_else(|| ConfigError::bad_version(text, &written, span).into())
+    }
+
+    /// A generated asset's served path: relative to the asset root, and inside
+    /// it.
+    ///
+    /// Checked here rather than where the file is written, because by then the
+    /// same string has already been linked from every page that carries the
+    /// asset: what is rejected is a path the two halves of the build would read
+    /// differently, and the config is the one place both of them read.
+    fn asset(&self, text: &str, idx: usize) -> Result<std::path::PathBuf> {
+        let value = self.string(text, idx)?;
+        let path = std::path::PathBuf::from(&value);
+        let escapes = path.is_absolute()
+            || path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            || path.file_name().is_none();
+        match escapes {
+            true => Err(ConfigError::not_an_asset_path(text, &value, NodeExt::span(self)).into()),
+            false => Ok(path),
+        }
     }
 
     /// A base-URL argument, required to be `https://` unless it names the

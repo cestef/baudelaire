@@ -244,6 +244,7 @@ impl Kind {
             // first and the one most sites write.
             Self::Level(names) => format!("flag | {}", names().join(" | ")),
             Self::Path => "path".to_owned(),
+            Self::Asset => "asset path".to_owned(),
             Self::Url => "url".to_owned(),
             Self::Template => "template".to_owned(),
             Self::Texts => "text ..".to_owned(),

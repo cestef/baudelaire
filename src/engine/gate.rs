@@ -124,6 +124,14 @@ const GATES: &[Gate] = &[
         rewrites: false,
     },
     Gate {
+        cargo: "tailwind",
+        compiled: cfg!(feature = "tailwind"),
+        setting: "assets { tailwind }",
+        asked: |config| config.assets.tailwind.enabled,
+        effect: "no utility stylesheet is generated, and the pages that link one get no rules for the classes they carry",
+        rewrites: false,
+    },
+    Gate {
         cargo: "images",
         compiled: cfg!(feature = "images"),
         setting: "assets { images { optimize } }",

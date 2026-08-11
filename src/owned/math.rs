@@ -25,18 +25,13 @@
 pub struct MathSheet;
 
 impl MathSheet {
-    /// Path relative to the asset root. A site or theme shipping its own
-    /// `math.css` replaces this file whole, the way it replaces any other asset
-    /// a theme beneath it provides.
-    pub const REL: &'static str = "math.css";
-
     /// The rules typst-html injects, pinned verbatim.
     ///
     /// Kept as CSS rather than a Rust string so a re-cut after a typst bump is a
     /// diff of a stylesheet and nothing else.
     const TYPST: &'static str = include_str!("math/typst.css");
 
-    /// The bytes served at [`REL`](Self::REL).
+    /// The bytes served at the configured path.
     ///
     /// Only typst's rules for now. The equation numbering layout and the math
     /// `@font-face` land here too, which is the whole reason this is a file.

@@ -1,18 +1,22 @@
-//! Takes typst's inline equation styles out of a page's `<head>` and points it
-//! at the served stylesheet instead.
+//! Takes typst's inline equation styles out of a page's `<head>`, and says the
+//! page wants the served stylesheet instead.
 //!
 //! What the block is, why it can only be reached from here, and how it is
 //! recognised are all on [`MathSheet`].
+//!
+//! The `<link>` itself is [`Sheets`](super::sheets)': every owned asset is
+//! linked by that one pass. What is left here is the half only this pass can
+//! answer, which is *whether this page had an equation at all*.
 
-use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
+use typst_html::{HtmlDocument, HtmlNode, tag};
 
 use crate::config::{Config, MathStyles};
-use crate::render::MathSheet;
+use crate::owned::{MathSheet, Owned};
 
 use super::{Cx, DocumentExt, ElementExt, Transform};
 
-/// The [`Transform`] that swaps typst's inline equation styles for a link to the
-/// served stylesheet.
+/// The [`Transform`] that takes typst's inline equation styles out and asks for
+/// the served stylesheet in their place.
 pub(super) struct Math;
 
 impl Transform for Math {
@@ -37,11 +41,16 @@ impl Transform for Math {
             return;
         }
         if MathStyles::of(&cx.config.html).served() {
-            head.children.push(Self::link(cx.config));
-            // What tells the pipeline to actually write the file it named: it
-            // reserved one before any page existed, and only a page can say
-            // whether the site has an equation in it.
-            cx.found.owned.insert(MathSheet::REL.to_owned());
+            // The request, which `Sheets` turns into the `<link>` and the
+            // pipeline into the file: it reserved one before any page existed,
+            // and only this pass can say whether the site has an equation in it.
+            // Keyed by the served path, which is what every other side of this
+            // reads it by.
+            cx.found.owned.insert(
+                Owned::rel(&MathSheet, cx.config)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
         }
     }
 }
@@ -61,25 +70,13 @@ impl Math {
             && element.attrs.0.is_empty()
             && MathSheet::injected(&element.text())
     }
-
-    /// The `<link>` to the served stylesheet, spelled as an authored reference
-    /// would be: the fingerprint, embed and base-path passes run after this one
-    /// and reach it the same way they reach a template's own.
-    fn link(config: &Config) -> HtmlNode {
-        HtmlElement::new(tag::link)
-            .with_attr(attr::rel, "stylesheet")
-            .with_attr(
-                attr::href,
-                config.asset_url(std::path::Path::new(MathSheet::REL)),
-            )
-            .into()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use typst::syntax::Span;
+    use typst_html::{HtmlElement, attr};
 
     fn style(text: &str) -> HtmlNode {
         let mut element = HtmlElement::new(tag::style);

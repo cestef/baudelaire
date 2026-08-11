@@ -20,6 +20,7 @@ mod math;
 mod meta;
 mod outbound;
 mod rewrite;
+mod sheets;
 mod sources;
 mod spans;
 mod speculation;
@@ -53,6 +54,7 @@ use math::Math;
 use meta::Meta;
 use outbound::Outbound;
 use rewrite::Links;
+use sheets::Sheets;
 use sources::Sources;
 use spans::Spans;
 use speculation::Speculation;
@@ -479,6 +481,12 @@ impl Transforms {
             // an author would spell it, so fingerprinting, embedding and the
             // base path all reach it without knowing it was synthesized.
             Box::new(Math),
+            // After every pass that can ask for an owned asset, and before the
+            // ones that rewrite references: the `<link>`s it leaves are spelled
+            // as an author would spell them, so fingerprinting, embedding and
+            // the base path all reach them without knowing they were
+            // synthesized.
+            Box::new(Sheets),
             Box::new(Speculation),
             Box::new(Outbound),
             #[cfg(feature = "announce")]

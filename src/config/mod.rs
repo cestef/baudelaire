@@ -57,6 +57,7 @@ pub use assets::images::optimize::{JpegConfig, OptimizeConfig, PngConfig, PngStr
 pub use assets::images::responsive::ResponsiveConfig;
 pub use assets::minify::MinifyConfig;
 pub use assets::sourcemap::{SourceMapConfig, SourceMaps};
+pub use assets::tailwind::TailwindConfig;
 pub use assets::targets::{TargetConfig, Version};
 pub use cache::CacheConfig;
 pub use caching::CacheControl;

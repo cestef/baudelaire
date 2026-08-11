@@ -154,9 +154,10 @@ chores are visible in the git history and change nothing for a site.
 
   `inline` keeps typst's block where it was, for a site that would rather have no
   second request. `none` drops it and serves nothing, for a theme whose own
-  stylesheet already states the rules. The file is an asset like any other:
-  fingerprinted, digested for `integrity`, inlined by `html { embed }`, and
-  replaced wholesale by a site or theme that ships its own `assets/math.css`.
+  stylesheet already states the rules. `path` moves the file: it defaults to
+  `math.css` and is relative to the asset root. The file is an asset like any
+  other: fingerprinted, digested for `integrity`, inlined by `html { embed }`,
+  and replaced wholesale by a site or theme that ships its own file at that path.
 
   A site with no equation on any page gets no file and no link.
 
@@ -181,6 +182,35 @@ chores are visible in the git history and change nothing for a site.
 
   The compiler is the `sass` cargo feature, on in the default (`full`) flavor.
   A binary without it leaves a Sass source where it lies, and says so.
+
+- **A Tailwind-compatible utility stylesheet, generated from the classes the site
+  actually writes.** No Node, no `node_modules`, no watcher: the sheet is built
+  in-process with [encre-css](https://gitlab.com/encre-org/encre-css) and served
+  at `/assets/tailwind.css`, fingerprinted and minified like any other asset.
+
+  ```kdl
+  assets {
+    tailwind { }
+  }
+  ```
+
+  ```typ
+  #html.elem("p", attrs: (class: "flex gap-2"), [hello])
+  ```
+
+  No template names the file: the build writes the `<link>` on every page, the
+  way it already does for the equation stylesheet, and what it writes is an
+  ordinary reference that fingerprinting, `embed` and the base path all reach.
+
+  The content and template trees are read to find class names (`.typ` and `.md`
+  files, the two languages a page can be written in). `scan` names other trees or
+  files, `config` points at an encre-css TOML for the theme, safelist and
+  shortcuts, `preflight #false` drops the reset rules, and `path` moves the sheet
+  (`tailwind.css` by default, relative to the asset root). A site or theme
+  shipping its own file at that path keeps it.
+
+  The generator is the `tailwind` cargo feature, on in the default (`full`)
+  flavor.
 
 ### Upgrading
 

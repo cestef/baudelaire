@@ -3,6 +3,7 @@
 pub mod images;
 pub mod minify;
 pub mod sourcemap;
+pub mod tailwind;
 pub mod targets;
 
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use std::path::PathBuf;
 use crate::config::dispatch::Kind::{Block as Nested, Flag, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{ImagesConfig, MinifyConfig, SourceMapConfig, TargetConfig};
+use crate::config::{ImagesConfig, MinifyConfig, SourceMapConfig, TailwindConfig, TargetConfig};
 
 /// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
 ///
@@ -48,6 +49,8 @@ pub struct AssetConfig {
     /// Image handling (lazy loading, extraction, optimization, responsive
     /// variants), for both pipeline assets and typst-embedded rasters.
     pub images: ImagesConfig,
+    /// The generated utility stylesheet, off unless the block is written.
+    pub tailwind: TailwindConfig,
 }
 
 /// The `assets { .. }` section: the pipeline applied to `paths { assets }`.
@@ -120,6 +123,12 @@ impl Section for AssetConfig {
             Nested(ImagesConfig::rows),
             "Image markup and build-time processing.",
             |c, n, t| c.images.fill(n, t),
+        ),
+        (
+            "tailwind",
+            Nested(TailwindConfig::rows),
+            "A utility stylesheet generated from the class names the site is written with. Its presence turns it on.",
+            |c, n, t| c.tailwind.fill(n, t),
         ),
     ]);
 }

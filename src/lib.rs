@@ -15,6 +15,7 @@ pub mod generated;
 pub mod graph;
 pub mod mime;
 pub mod mirror;
+pub mod owned;
 pub mod remote;
 pub mod render;
 pub mod theme;

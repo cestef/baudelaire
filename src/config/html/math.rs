@@ -1,7 +1,9 @@
 //! `html { math { } }`: how a page carries the rules its MathML needs.
 
+use std::path::PathBuf;
+
 use crate::config::Named;
-use crate::config::dispatch::Kind::Choice;
+use crate::config::dispatch::Kind::{Asset, Choice};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
@@ -69,20 +71,48 @@ impl MathStyles {
 }
 
 /// Math output options.
-#[derive(Debug, Clone, Default, Hash)]
+#[derive(Debug, Clone, Hash)]
 pub struct MathConfig {
     /// Where the MathML rules live.
     pub styles: MathStyles,
+    /// The path the stylesheet is served from, relative to the asset root.
+    ///
+    /// The name is the site's, not this crate's: it is written under
+    /// `paths { assets }`, linked from every page that needs it, and replaced
+    /// whole by a site or theme shipping its own file at the same path. A theme
+    /// that keeps its stylesheets in one directory moves this there rather than
+    /// living with a file at the asset root.
+    pub path: PathBuf,
+}
+
+impl Default for MathConfig {
+    fn default() -> Self {
+        Self {
+            styles: MathStyles::default(),
+            path: PathBuf::from("math.css"),
+        }
+    }
 }
 
 impl Section for MathConfig {
-    const RULES: Block<Self> = Block(&[(
-        "styles",
-        Choice(MathStyles::names),
-        "Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.",
-        |c, n, t| {
-            c.styles = n.arg(t, 0)?.one::<MathStyles>(t, NodeExt::span(n))?;
-            Ok(())
-        },
-    )]);
+    const RULES: Block<Self> = Block(&[
+        (
+            "styles",
+            Choice(MathStyles::names),
+            "Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.",
+            |c, n, t| {
+                c.styles = n.arg(t, 0)?.one::<MathStyles>(t, NodeExt::span(n))?;
+                Ok(())
+            },
+        ),
+        (
+            "path",
+            Asset,
+            "Where the stylesheet is served from, relative to the asset root.",
+            |c, n, t| {
+                c.path = n.asset(t, 0)?;
+                Ok(())
+            },
+        ),
+    ]);
 }

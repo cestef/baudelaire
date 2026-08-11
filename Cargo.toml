@@ -64,7 +64,7 @@ pkg-fmt = "zip"
 bin-dir = "baudelaire.exe"
 
 [features]
-default = ["embedded-fonts", "js", "css", "sass", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
+default = ["embedded-fonts", "js", "css", "sass", "tailwind", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -108,6 +108,16 @@ css = ["dep:lightningcss", "dep:parcel_sourcemap"]
 # downlevel and `url()` rewriting. A flavor with one and not the other would be
 # a second copy of that handler for a build nobody ships.
 sass = ["dep:grass", "css"]
+
+# The generated utility stylesheet, via encre-css: a Tailwind-compatible
+# generator that reads the class names the site was written with and writes the
+# rules for exactly those. ~1 MiB, and four crates nothing else here needs.
+# Off means an `assets { tailwind { } }` block warns and writes no sheet.
+#
+# Standing alone rather than on `css`, because it produces a file rather than
+# transforming one: the sheet is an asset the build owns, and what happens to it
+# afterwards is whatever the rest of the pipeline is compiled to do.
+tailwind = ["dep:encre-css"]
 
 # Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
 # EXIF-orientation baking (image), plus responsive width variants. Off means
@@ -259,6 +269,7 @@ parcel_sourcemap = { version = "2.1.1", features = ["json"], optional = true }
 grass = { version = "0.13.4", default-features = false, features = [
     "random",
 ], optional = true }
+encre-css = { version = "0.20.1", optional = true }
 rolldown = { version = "1", optional = true }
 # Wanted by two independent capabilities: `js` (rolldown drives an async
 # bundler) and `ssh` (russh is async). The feature list is the union of what

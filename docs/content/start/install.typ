@@ -113,6 +113,8 @@ What `slim` leaves out:
     are copied verbatim.],
   [`sass`], [A `.scss` or `.sass` file under the asset tree warns and is left
     where it lies, so nothing is published from it.],
+  [`tailwind`], [`assets { tailwind }` warns and no utility stylesheet is
+    generated.],
   [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and
     PNG/JPEG assets are copied unchanged.],
   [`cards`], [`generate { cards }` warns and renders no card.],

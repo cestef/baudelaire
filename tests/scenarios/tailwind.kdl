@@ -1,0 +1,219 @@
+// The generated utility stylesheet: the class names the site was written with,
+// and only those. Nothing in a template names the file: the build links it, the
+// way it links the equation stylesheet.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { } }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #html.elem("p", attrs: (class: "flex gap-2"), [hello])
+      """#
+  }
+}
+
+scenario "the sheet carries the classes the pages use and nothing else" {
+  requires "tailwind"
+  expect {
+    ok
+    file "assets/tailwind.css" {
+      contains ".flex"
+      contains "display: flex"
+      contains ".gap-2"
+      // A class no page wrote gets no rule: that is the whole bargain of a
+      // utility sheet generated on demand.
+      missing ".gap-96"
+    }
+    // The page is linked to it without having asked, which is what makes the
+    // filename nobody's business but the build's.
+    file "a/index.html" {
+      contains "<link rel=\"stylesheet\" href=\"/assets/tailwind.css\">"
+    }
+  }
+}
+
+// Turning the block off is what stops it: the site asked by writing it.
+scenario "no block means no sheet and no link" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      """#
+  }
+  expect {
+    ok
+    absent "assets/tailwind.css"
+    file "a/index.html" {
+      missing "tailwind.css"
+    }
+  }
+}
+
+// The injected link is spelled as an authored one, so every pass after it
+// reaches it: the hashed name lands in the page and the file is written under
+// it.
+scenario "the injected link is fingerprinted like any other" {
+  requires "tailwind"
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { fingerprint #true; tailwind { } }
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      capture "css" #"/assets/(tailwind\.[0-9a-f]+\.css)"#
+      missing "href=\"/assets/tailwind.css\""
+    }
+    file "assets/{css}" {
+      contains ".flex"
+    }
+    absent "assets/tailwind.css"
+  }
+}
+
+// The site's own file at that path wins, which is the override rule every owned
+// asset follows.
+scenario "a site shipping its own tailwind.css keeps it" {
+  requires "tailwind"
+  files {
+    "assets/tailwind.css" #"""
+      .mine{color:red}
+      """#
+  }
+  expect {
+    ok
+    file "assets/tailwind.css" {
+      contains ".mine"
+      missing "display: flex"
+    }
+    // Still linked: the page gets whatever is served at that path.
+    file "a/index.html" {
+      contains "/assets/tailwind.css"
+    }
+  }
+}
+
+// `preflight #false` drops the reset rules and leaves the utilities.
+scenario "preflight can be turned off" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { preflight #false } }
+      """#
+  }
+  expect {
+    ok
+    file "assets/tailwind.css" {
+      contains ".flex"
+      missing "box-sizing"
+    }
+  }
+}
+
+// The served path is the site's: the file is written there, the link names it,
+// and both halves agree because they read the one setting.
+scenario "the sheet is served from the path the site names" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { path "css/utilities.css" } }
+      """#
+  }
+  expect {
+    ok
+    file "assets/css/utilities.css" {
+      contains ".flex"
+    }
+    file "a/index.html" {
+      contains "/assets/css/utilities.css"
+    }
+    absent "assets/tailwind.css"
+  }
+}
+
+// A path that leaves the asset tree is refused where it is written, not where
+// it is used: by then every page has already been linked to it.
+scenario "a served path that escapes the asset tree is refused" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { path "../escape.css" } }
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::not_an_asset_path" }
+  }
+}
+
+// The generated sheet is an asset like any other, so `security { sri }` covers
+// the link the build wrote just as it covers one an author wrote.
+scenario "the injected link carries integrity when the site asks" {
+  requires "tailwind"
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { fingerprint #true; tailwind { } }
+      security { sri #true }
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "integrity=\"sha384-"
+    }
+  }
+}
+
+// `html { embed }` inlines what a page references, the generated sheet with it:
+// the page ends up self-contained and nothing is left pointing at a file.
+scenario "the sheet is inlined when the site embeds its assets" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { } }
+      html { embed #true }
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "data:text/css;base64,"
+      missing "href=\"/assets/tailwind.css\""
+    }
+  }
+}
+
+// A pinned config that is not there is a build failure naming the file, not a
+// sheet quietly generated from the defaults.
+scenario "a missing utility config fails the build" {
+  requires "tailwind"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { tailwind { config "tailwind.toml" } }
+      """#
+  }
+  expect {
+    fails { code "baudelaire::asset::tailwind" }
+  }
+}

@@ -274,6 +274,22 @@ impl ConfigError {
         )
     }
 
+    /// A generated asset's served path that leaves the tree it is written in.
+    ///
+    /// Both halves of the build read this one string: the pipeline writes the
+    /// file under `paths { assets }`, and the render pass links a page to the
+    /// same name. An absolute path or one climbing out with `..` makes those two
+    /// disagree, and the page ends up naming a URL nothing was written to.
+    pub fn not_an_asset_path(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::NotAnAssetPath {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A repeated entry within a list-valued node (e.g. `formats rss rss`).
     pub fn duplicate_entry(source: &str, name: &str, scope: &str, span: SourceSpan) -> Self {
         Self::at(
@@ -622,6 +638,17 @@ pub enum ConfigErrorKind {
         )
     )]
     NotAnIdentifier { name: String },
+
+    #[error("{} is not a path a generated asset can be served from", Code(.got))]
+    #[diagnostic(
+        code(baudelaire::config::not_an_asset_path),
+        help(
+            "it is written under `paths {{ assets }}` and linked from a page by the same name, so it is relative and stays inside the tree: {} or {}",
+            Code("utilities.css"),
+            Code("css/utilities.css")
+        )
+    )]
+    NotAnAssetPath { got: String },
 
     #[error("paginate must be at least 1, got {got}")]
     #[diagnostic(code(baudelaire::config::paginate_too_small))]

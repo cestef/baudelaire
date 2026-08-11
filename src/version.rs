@@ -50,6 +50,7 @@ impl Version {
         ("pdf", cfg!(feature = "pdf")),
         ("sass", cfg!(feature = "sass")),
         ("ssh", cfg!(feature = "ssh")),
+        ("tailwind", cfg!(feature = "tailwind")),
         ("themes", cfg!(feature = "themes")),
     ];
 

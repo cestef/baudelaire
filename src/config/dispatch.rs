@@ -74,6 +74,16 @@ pub enum Kind {
     Level(Names),
     /// A filesystem path, relative to the project root: `content "content"`.
     Path,
+    /// A path a generated asset is served from, relative to the asset root:
+    /// `path "css/utilities.css"`.
+    ///
+    /// Its own kind rather than [`Path`](Kind::Path) because the two are
+    /// relative to different roots and only one of them can escape somewhere
+    /// that matters: a generated asset is written under `paths { assets }` and
+    /// linked from a page by the same string, so an absolute one would name a
+    /// URL the build never wrote and a `..` would write outside the tree the
+    /// pipeline owns.
+    Asset,
     /// A URL: `url "https://example.com"`.
     Url,
     /// A permalink template: `permalink "/{slug}/"`.
@@ -187,6 +197,7 @@ impl Kind {
             | Self::Version
             | Self::Level(_)
             | Self::Path
+            | Self::Asset
             | Self::Url
             | Self::Template
             | Self::Choice(_)

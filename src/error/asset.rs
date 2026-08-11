@@ -10,7 +10,12 @@ use thiserror::Error;
 
 // Every variant here is gated, so the `slim` flavor has no message to build.
 // `sass` is not named: it enables `css`, so a build that has it has this.
-#[cfg(any(feature = "css", feature = "js", feature = "images"))]
+#[cfg(any(
+    feature = "css",
+    feature = "js",
+    feature = "images",
+    feature = "tailwind"
+))]
 use crate::ui::{Code, Text};
 
 /// A failure while processing a static asset (minify or bundle).
@@ -36,6 +41,20 @@ pub enum AssetError {
     #[error("failed to compile Sass asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::sass))]
     Sass {
+        path: String,
+        /// The tool's own message, escaped: it is foreign text, not markup this
+        /// crate wrote.
+        #[help]
+        detail: Text<String>,
+    },
+
+    /// The encre-css configuration a site pinned could not be read or parsed.
+    /// The generator itself cannot fail: a class name it does not know is not
+    /// one, and it writes no rule for it.
+    #[cfg(feature = "tailwind")]
+    #[error("failed to read the utility stylesheet config {}", Code(.path))]
+    #[diagnostic(code(baudelaire::asset::tailwind))]
+    Tailwind {
         path: String,
         /// The tool's own message, escaped: it is foreign text, not markup this
         /// crate wrote.
@@ -111,6 +130,14 @@ impl AssetError {
     #[cfg(feature = "sass")]
     pub fn sass(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Sass {
+            path: path.to_string(),
+            detail: Text(detail.to_string()),
+        }
+    }
+
+    #[cfg(feature = "tailwind")]
+    pub fn tailwind(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
+        Self::Tailwind {
             path: path.to_string(),
             detail: Text(detail.to_string()),
         }
