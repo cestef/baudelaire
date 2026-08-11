@@ -33,7 +33,7 @@ Read #link("urls.typ")[keeping your URLs] before you touch permalinks.
   [`_layouts/`], [`templates/`], [Liquid becomes Typst functions.],
   [`_includes/`], [any `.typ` file you import], [No magic directory.],
   [`_data/`], [any directory], [Read with `yaml()`, `json()`, `csv()`.],
-  [`_sass/`], [`assets/`], [No Sass step; run one from `hooks { before }`.],
+  [`_sass/`], [`assets/`], [Sass compiles here too.],
   [`assets/`], [`assets/`], [Bundled, minified and fingerprinted here.],
   [`_site/`], [`dist/`], [Renamed with `paths { dist }`.],
 )
@@ -62,7 +62,7 @@ Read #link("urls.typ")[keeping your URLs] before you touch permalinks.
   [`exclude`], [collection globs, or keep the file out of `content/`],
   [`markdown`, `kramdown`], [`content { markdown { extensions } }`. Kramdown's typographic quotes are `extensions "smart"`, which is off until asked for.],
   [`highlighter`], [`html { highlight }`, which maps compiler colours to classes],
-  [`sass`], [none; `hooks { before }`],
+  [`sass`], [always on: a `.scss` under `paths { assets }` is compiled],
   [`theme`, `remote_theme`], [`theme`, pointing at a directory],
 )
 
@@ -316,7 +316,7 @@ you now need a workflow that runs baudelaire; see
 
 == Order of work
 
-+ `baudelaire init` beside the old site, then copy the asset tree across. Sass keeps working through `hooks { before "sass --load-path=sass assets/style.scss assets/style.css" }`, but move the `.scss` out of `paths { assets }` first: anything in that tree is published, sources included.
++ `baudelaire init` beside the old site, then copy the asset tree across, `_sass/` included. A `.scss` under `paths { assets }` is compiled and published as `.css`, and a partial keeps its leading `_`.
 + Copy `_posts/` into `content/posts/` unchanged - the YAML blocks parse as they are - then rename the keys from the table above. Rename the dated filenames, or give each a `slug`, then set the collection's `permalink` to the old shape.
 + Rewrite the layouts that section needs, starting with the shell.
 + Replace each plugin with its switch from the table above.

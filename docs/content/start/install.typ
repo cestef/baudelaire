@@ -111,6 +111,8 @@ What `slim` leaves out:
   [`js`], [`assets { bundle }` warns and `.js` files are copied verbatim.],
   [`css`], [`assets { minify }` and `assets { targets }` warn, and `.css` files
     are copied verbatim.],
+  [`sass`], [A `.scss` or `.sass` file under the asset tree warns and is left
+    where it lies, so nothing is published from it.],
   [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and
     PNG/JPEG assets are copied unchanged.],
   [`cards`], [`generate { cards }` warns and renders no card.],

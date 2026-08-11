@@ -1,0 +1,135 @@
+// Sass sources under the asset tree: compiled, published as CSS, and carried
+// on through everything a hand-written stylesheet gets.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+}
+
+scenario "a scss source is compiled and served as css" {
+  requires "sass"
+  files {
+    "assets/style.scss" #"""
+      $brand: #ff0000;
+      .card {
+        color: $brand;
+        .title { font-weight: bold }
+      }
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" {
+      // Nesting flattened and the variable substituted: this is grass having
+      // run, not the file having been copied.
+      contains ".card .title"
+      // Untouched by lightningcss: `minify` is off here, so what lands is what
+      // grass wrote.
+      contains "#ff0000"
+      missing "$brand"
+    }
+    // The source is an input, and an input is never published.
+    absent "assets/style.scss"
+  }
+}
+
+// The indented syntax is the same capability, and grass picks it off the
+// extension: a `.sass` file copied verbatim would reach the browser as CSS it
+// cannot parse at all.
+scenario "the indented sass syntax is compiled too" {
+  requires "sass"
+  files {
+    "assets/style.sass" #"""
+      .card
+        color: red
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" {
+      contains ".card"
+      contains "{"
+    }
+    absent "assets/style.sass"
+  }
+}
+
+// A partial is Sass's own convention and the pipeline's: `_` means imported by
+// a neighbour, never served.
+scenario "a partial is used by its importer and published by nobody" {
+  requires "sass"
+  files {
+    "assets/_vars.scss" #"""
+      $brand: #00ff00;
+      """#
+    "assets/style.scss" #"""
+      @use "vars";
+      .card { color: vars.$brand }
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.css" {
+      contains "#00ff00"
+    }
+    absent "assets/_vars.scss"
+    absent "assets/_vars.css"
+  }
+}
+
+// The compiled sheet is a stylesheet like any other, so the `url()` it emits is
+// rewritten to the image's hashed name and the sheet's own name is hashed in
+// turn.
+scenario "a compiled sheet is fingerprinted and its references rewritten" {
+  requires "sass"
+  requires "css"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      assets { fingerprint #true; minify #true }
+      """#
+    "assets/bg.png" png="8x8"
+    "assets/style.scss" #"""
+      .card { background: url(bg.png) }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      #html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.scss"))
+      """#
+  }
+  expect {
+    ok
+    // The page names the source, since that is the file the author put there,
+    // and the map answers with the compiled, hashed name.
+    file "a/index.html" {
+      capture "css" #"/assets/(style\.[0-9a-f]+\.css)"#
+    }
+    file "assets/{css}" {
+      capture "bg" #"/assets/(bg\.[0-9a-f]+\.png)"#
+      missing "url(bg.png)"
+    }
+    file "assets/{bg}"
+  }
+}
+
+// A Sass failure is its own diagnostic, naming the file that would not compile.
+scenario "a broken sass source fails the build with a sass error" {
+  requires "sass"
+  files {
+    "assets/style.scss" #"""
+      .card { color: $nope }
+      """#
+  }
+  expect {
+    fails { code "baudelaire::asset::sass" }
+  }
+}

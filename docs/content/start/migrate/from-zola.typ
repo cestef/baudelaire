@@ -30,7 +30,7 @@ the shortcodes, the internal links and the config; the templates are a rewrite.
   [`content/blog/hello/index.md`], [the same], [A page bundle is a directory with an `index.md` in it.],
   [`templates/*.html`], [`templates/*.typ`], [Tera becomes Typst functions.],
   [`templates/shortcodes/`], [any `.typ` file you import], [No registry.],
-  [`sass/`], [`assets/`], [No Sass step; see below.],
+  [`sass/`], [`assets/`], [Sass compiles here too; see below.],
   [`static/`], [`static/`], [Copied verbatim, same as Zola.],
   [`themes/blow`], [`theme "themes/blow"`], [Different format; a theme is not portable.],
   [`public/`], [`public/`], [The same default; rename it with `paths { dist }`.],
@@ -60,7 +60,7 @@ the shortcodes, the internal links and the config; the templates are a rewrite.
   [`taxonomies = [{ name = "tags" }]`], [`content { taxonomies { tags listing=#true } }`],
   [`generate_feeds`, `feed_filenames`], [`generate { feed { formats "atom" } }`],
   [`build_search_index`], [`generate { search { } }`],
-  [`compile_sass`], [none; run Sass from `hooks { before }`],
+  [`compile_sass`], [always on: a `.scss` under `paths { assets }` is compiled],
   [`minify_html`], [none],
   [`[markdown] highlight_code`], [always on; `html { highlight }` maps the colours to classes],
   [`[markdown] smart_punctuation`], [`content { markdown { extensions "smart" } }`, off by default as it is there],
@@ -336,7 +336,7 @@ An HTML comment is dropped either way: it has nothing to lose.
 
 == Order of work
 
-+ `baudelaire init` beside the old site, then copy `static/` across and keep `sass/` where it is, compiled by a `hooks { before "sass sass/style.scss assets/style.css" }` line. Keep the `.scss` sources out of `paths { assets }`, or they are published beside the CSS.
++ `baudelaire init` beside the old site, then copy `static/` across and move `sass/` into `assets/`. The `.scss` files are compiled where they lie and published as `.css`; partials keep their leading `_` and are published by nobody.
 + Copy `content/` across as it stands, `+++` blocks included, and delete the `_index.md` files.
 + Rename the frontmatter keys that moved: `weight` to `order`, `aliases` to `redirect`, and lift `[taxonomies]` to the top level. Nothing fails if you miss one, so this is a grep over the tree, not a build.
 + Port `config.toml` to `config.kdl`, one block at a time. An unknown key fails the build with a suggestion, so this converges fast.

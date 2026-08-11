@@ -103,6 +103,19 @@ const GATES: &[Gate] = &[
         rewrites: false,
     },
     Gate {
+        cargo: "sass",
+        compiled: cfg!(feature = "sass"),
+        // A filesystem probe, like markdown's and for the same reason: a Sass
+        // source asks for nothing, it is a file. Without the compiler such a
+        // file is a build input the pipeline steps over, so a site whose only
+        // stylesheet is `app.scss` ships no stylesheet at all -- silently, and
+        // out of a green build.
+        setting: "a `.scss` or `.sass` file under the asset tree",
+        asked: Gate::sass,
+        effect: "Sass sources are left where they lie, and no stylesheet is written from them",
+        rewrites: false,
+    },
+    Gate {
         cargo: "js",
         compiled: cfg!(feature = "js"),
         setting: "assets { bundle }",
@@ -426,6 +439,21 @@ impl Gate {
                 .unwrap_or_default()
                 .iter()
                 .any(|path| Config::has_ext(path, Config::MARKDOWN))
+    }
+
+    /// Whether this site has a Sass source to lose.
+    ///
+    /// A probe of the asset tree, for the reason [`Gate::markdown`] probes the
+    /// content tree: nothing in the config asks for Sass, a file does. It costs
+    /// one walk, and only in a binary that cannot compile one, since
+    /// [`Gate::resolve`] tests `compiled` first. The theme's tree is not walked:
+    /// a theme states the binary it needs, and this answers for the site.
+    fn sass(config: &Config) -> bool {
+        crate::fs::Walk::new(&config.paths.assets)
+            .files()
+            .unwrap_or_default()
+            .iter()
+            .any(|path| Config::SASS.iter().any(|ext| Config::has_ext(path, ext)))
     }
 
     /// Walk the table once against a site's config: name every capability it

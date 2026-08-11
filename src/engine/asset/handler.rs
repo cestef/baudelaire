@@ -29,11 +29,17 @@ use super::js::{Js, Script};
 /// consumes, and the files a convention marks import-only.
 ///
 /// The asset tree is both an input tree and an output tree, and nothing in a
-/// file's extension says which. A `.scss` is a source, a `.ts` is a source
-/// unless something bundles it, and `_partial.css` is a fragment its neighbour
-/// imports. All three used to be copied verbatim to `dist`, so a site shipped
-/// its own TypeScript (unrunnable in a browser, and carrying whatever the
-/// comments said) beside the CSS its Sass produced.
+/// file's extension says which. A `.ts` is a source unless something bundles it,
+/// a `.scss` is a source this build compiles itself, and `_partial.css` is a
+/// fragment its neighbour imports. All three used to be copied verbatim to
+/// `dist`, so a site shipped its own TypeScript (unrunnable in a browser, and
+/// carrying whatever the comments said) beside the JavaScript built from it.
+///
+/// Only what this build *knows* is listed. A file some other toolchain reads is
+/// not a kind the pipeline has an opinion about: it is copied like any other
+/// file, and the `_` convention below is how a site keeps one out of the output.
+/// Naming such extensions here would be this crate claiming knowledge of tools
+/// it does not run, and going stale the moment one of them moved.
 ///
 /// One rule for the whole tree rather than a `claims` arm per handler: an
 /// exclusion is not a kind, and the JS handler's own `_name` convention only
@@ -43,10 +49,6 @@ use super::js::{Js, Script};
 pub(super) struct Private;
 
 impl Private {
-    /// Extensions no browser can use, whatever the config says: a preprocessor
-    /// reads them and writes something else.
-    const SOURCES: &'static [&'static str] = &["scss", "sass", "less", "styl"];
-
     /// Script sources that need a build step to run at all, so publishing one
     /// serves a file the browser rejects.
     const UNBUNDLED: &'static [&'static str] = &["ts", "mts", "cts", "tsx", "jsx"];
@@ -56,8 +58,16 @@ impl Private {
         let ext = rel.ext().to_ascii_lowercase();
         Self::partial(rel)
             || Self::declaration(rel)
-            || Self::SOURCES.contains(&ext.as_str())
+            || Self::uncompiled(&ext)
             || (!config.assets.bundling() && Self::UNBUNDLED.contains(&ext.as_str()))
+    }
+
+    /// A Sass source in a binary with no Sass compiler: the one input this
+    /// build recognizes and cannot turn into anything. Publishing it would
+    /// serve a file no browser can read, under a name a page is linking to as
+    /// though it were CSS.
+    fn uncompiled(ext: &str) -> bool {
+        !cfg!(feature = "sass") && Config::SASS.contains(&ext)
     }
 
     /// A file whose name starts with `_` is imported by a neighbour, never
@@ -100,6 +110,12 @@ pub(super) struct Ctx<'a> {
     /// and by [`Ctx::url`], which is what keeps a served asset URL to one
     /// derivation whatever flavor this is.
     pub config: &'a Config,
+    /// The asset roots as a search path, strongest first: where the Sass
+    /// compiler resolves a `@use` that names no file it can see from the
+    /// importing sheet. Owned rather than borrowed because the stack is
+    /// reversed to build it, and a build has at most two of them.
+    #[cfg(feature = "sass")]
+    pub roots: Vec<PathBuf>,
     #[cfg(feature = "js")]
     pub bundler: Option<&'a Js>,
 }

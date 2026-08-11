@@ -24,6 +24,8 @@ pub(in crate::engine) mod memo;
 #[cfg(feature = "js")]
 mod module;
 mod owned;
+#[cfg(feature = "sass")]
+mod sass;
 mod sourcemap;
 
 use std::collections::BTreeSet;
@@ -330,6 +332,8 @@ impl<'a> Assets<'a> {
     fn ctx(&self) -> Ctx<'_> {
         Ctx {
             config: self.config,
+            #[cfg(feature = "sass")]
+            roots: self.sources.search(),
             #[cfg(feature = "js")]
             bundler: None,
         }

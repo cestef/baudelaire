@@ -48,6 +48,7 @@ impl Version {
         ("js", cfg!(feature = "js")),
         ("markdown", cfg!(feature = "markdown")),
         ("pdf", cfg!(feature = "pdf")),
+        ("sass", cfg!(feature = "sass")),
         ("ssh", cfg!(feature = "ssh")),
         ("themes", cfg!(feature = "themes")),
     ];

@@ -64,7 +64,7 @@ pkg-fmt = "zip"
 bin-dir = "baudelaire.exe"
 
 [features]
-default = ["embedded-fonts", "js", "css", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
+default = ["embedded-fonts", "js", "css", "sass", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -97,6 +97,17 @@ js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
 # verbatim. It also forces `assets { fingerprint }` off, since a verbatim sheet
 # keeps naming its assets by their pre-hash filenames: see `Gate::rewrites`.
 css = ["dep:lightningcss", "dep:parcel_sourcemap"]
+
+# Sass compilation via grass: a `.scss` or `.sass` file under the asset tree is
+# a stylesheet, compiled and then carried on through everything a `.css` file
+# gets. ~700 KiB. Off means a Sass source is what it was before this existed, a
+# build input the pipeline leaves where it lies and publishes nothing from.
+#
+# It enables `css` rather than standing beside it, because what the compiler
+# emits *is* a stylesheet: it goes to the same handler, for the same minify,
+# downlevel and `url()` rewriting. A flavor with one and not the other would be
+# a second copy of that handler for a build nobody ships.
+sass = ["dep:grass", "css"]
 
 # Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
 # EXIF-orientation baking (image), plus responsive width variants. Off means
@@ -241,6 +252,13 @@ lightningcss = { version = "1.0.0-alpha.71", default-features = false, features 
 # type, so the stylesheet handler names it directly. Same version lightningcss
 # resolves, so the two share one copy.
 parcel_sourcemap = { version = "2.1.1", features = ["json"], optional = true }
+# `default-features = false` drops `commandline`, which is grass's own binary
+# and the clap it wants. `random` is kept: `math.random()` and `unique-id()` are
+# ordinary Sass builtins, and without it a sheet that calls one fails with
+# `Undefined function`, which names nothing the author could act on.
+grass = { version = "0.13.4", default-features = false, features = [
+    "random",
+], optional = true }
 rolldown = { version = "1", optional = true }
 # Wanted by two independent capabilities: `js` (rolldown drives an async
 # bundler) and `ssh` (russh is async). The feature list is the union of what

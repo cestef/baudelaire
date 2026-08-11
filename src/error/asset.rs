@@ -9,6 +9,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 // Every variant here is gated, so the `slim` flavor has no message to build.
+// `sass` is not named: it enables `css`, so a build that has it has this.
 #[cfg(any(feature = "css", feature = "js", feature = "images"))]
 use crate::ui::{Code, Text};
 
@@ -20,6 +21,21 @@ pub enum AssetError {
     #[error("failed to minify CSS asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::css))]
     Css {
+        path: String,
+        /// The tool's own message, escaped: it is foreign text, not markup this
+        /// crate wrote.
+        #[help]
+        detail: Text<String>,
+    },
+
+    /// grass could not compile the Sass source. Its own class rather than
+    /// [`AssetError::Css`]'s, because the file that failed is not CSS and the
+    /// message quotes Sass syntax: folding the two would name a stylesheet the
+    /// author never wrote.
+    #[cfg(feature = "sass")]
+    #[error("failed to compile Sass asset {}", Code(.path))]
+    #[diagnostic(code(baudelaire::asset::sass))]
+    Sass {
         path: String,
         /// The tool's own message, escaped: it is foreign text, not markup this
         /// crate wrote.
@@ -87,6 +103,14 @@ impl AssetError {
     #[cfg(feature = "css")]
     pub fn css(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
         Self::Css {
+            path: path.to_string(),
+            detail: Text(detail.to_string()),
+        }
+    }
+
+    #[cfg(feature = "sass")]
+    pub fn sass(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
+        Self::Sass {
             path: path.to_string(),
             detail: Text(detail.to_string()),
         }

@@ -72,7 +72,7 @@ page you already wrote.
   [Feeds, sitemap], [built in], [built in], [built in], [plugin], [integration],
   [Search index], [built in], [built in], [by hand], [plugin], [plugin],
   [Multiple languages], [built in], [built in], [built in], [plugin], [built in],
-  [CSS], [minified], [Sass], [Sass, PostCSS], [plugin], [Vite],
+  [CSS], [Sass, minified], [Sass], [Sass, PostCSS], [plugin], [Vite],
   [JS bundling], [rolldown], [none], [esbuild], [plugin], [Vite],
   [Fingerprint + SRI], [built in], [cachebust], [built in], [plugin], [built in],
   [Image variants], [built in], [built in], [built in], [plugin], [built in],
@@ -122,8 +122,9 @@ registry, and no plugin API. Typst's own package registry is available to pages
 and templates, which covers a lot of the gap for content but nothing for the
 build.
 
-*Sass.* `assets { minify }` runs the CSS through Lightning CSS. There is no Sass
-or PostCSS step; run one from `hooks { before }` if you want it.
+*PostCSS.* Sass compiles in the build and `assets { minify }` runs the result
+through Lightning CSS. There is no PostCSS step; run one from `hooks { before }`
+if you want it.
 
 *HTML minification.* `html { pretty }` controls indentation, not size. Nothing
 strips the markup.

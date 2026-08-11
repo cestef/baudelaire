@@ -1,9 +1,13 @@
 //! The stylesheet handler: compile and minify with lightningcss, and rewrite
 //! `url()` / `@import` references to the fingerprinted names of the assets they
 //! point at.
+//!
+//! A Sass source is a stylesheet that needs one step in front of all that; see
+//! [`Sass`](super::sass::Sass) for why it is a step here and not a handler of
+//! its own.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lightningcss::dependencies::{Dependency, DependencyOptions};
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
@@ -15,6 +19,8 @@ use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::{AssetMap, Tail};
 
+#[cfg(feature = "sass")]
+use super::sass::Sass;
 use super::{Ctx, Handler, PathExt, Phase, Produced};
 use crate::engine::layers::Layered;
 
@@ -26,6 +32,10 @@ pub(super) struct Stylesheet;
 impl Handler for Stylesheet {
     fn claims(&self, file: &Path, _config: &Config) -> bool {
         Self::claimed(file)
+    }
+
+    fn rename(&self, rel: &Path) -> PathBuf {
+        Self::served(rel)
     }
 
     fn phase(&self) -> Phase {
@@ -73,8 +83,42 @@ impl Stylesheet {
     /// decide which of a sheet's references are sheets themselves: two spellings
     /// of it drifted apart the moment one grew a case or a suffix the other
     /// lacked.
+    ///
+    /// A Sass source is one of these, not a kind of its own: what it compiles to
+    /// is a stylesheet, and everything downstream of the compile is what any
+    /// other stylesheet gets.
     fn claimed(path: &Path) -> bool {
+        #[cfg(feature = "sass")]
+        if Sass::claims(path) {
+            return true;
+        }
         path.ext().eq_ignore_ascii_case("css")
+    }
+
+    /// The path a claimed file is served from. Only a compiled source moves:
+    /// `app.scss` holds CSS once this handler is done with it, and a browser
+    /// reads a stylesheet by the MIME type its name earns.
+    fn served(rel: &Path) -> PathBuf {
+        #[cfg(feature = "sass")]
+        if Sass::claims(rel) {
+            return Sass::served(rel);
+        }
+        rel.to_path_buf()
+    }
+
+    /// The CSS text of a claimed file: compiled when it is a Sass source, read
+    /// as it lies when it is already a stylesheet.
+    #[cfg(feature = "sass")]
+    fn source(file: &Path, ctx: &Ctx) -> Result<String> {
+        match Sass::claims(file) {
+            true => Sass::compile(file, ctx),
+            false => fs::read_to_string(file),
+        }
+    }
+
+    #[cfg(not(feature = "sass"))]
+    fn source(file: &Path, _ctx: &Ctx) -> Result<String> {
+        fs::read_to_string(file)
     }
 
     /// Compile the sheet down to the site's browsers, minify it when enabled, and
@@ -87,10 +131,19 @@ impl Stylesheet {
         // Compiling for named browsers is a transform, not a minification: a
         // site may want its nesting flattened and its output still readable.
         let compile = assets.minify.css() || assets.targets.any();
-        if !compile && !assets.fingerprint && !wanted {
+        // A file that is already CSS and has nothing asked of it is bytes: read
+        // and written without ever being text, so a sheet in some other encoding
+        // survives a build that was not going to touch it anyway.
+        let preprocessed = rel != Self::served(rel);
+        if !compile && !assets.fingerprint && !wanted && !preprocessed {
             return Ok(Produced::bytes(fs::read(file)?));
         }
-        let code = fs::read_to_string(file)?;
+        let code = Self::source(file, ctx)?;
+        // The same for a compiled source: nothing downstream wants it, so its
+        // CSS goes out as the compiler wrote it.
+        if !compile && !assets.fingerprint && !wanted {
+            return Ok(Produced::bytes(code.into_bytes()));
+        }
         let mut sheet = StyleSheet::parse(&code, ParserOptions::default())
             .map_err(|e| AssetError::css(file.display(), e))?;
         if compile {
@@ -108,7 +161,12 @@ impl Stylesheet {
         // into the file the map belongs to.
         let mut sm = wanted.then(|| {
             let mut sm = SourceMap::new("/");
-            let source = sm.add_source(&rel.to_string_lossy());
+            // Named for what the text *is*, which for a compiled source is the
+            // CSS it became and not the Sass it was written as. grass emits no
+            // map of its own, so there is nothing to chain back to the author's
+            // file, and naming it would point every mapping at a line that says
+            // something else.
+            let source = sm.add_source(&Self::served(rel).to_string_lossy());
             let _ = sm.set_source_content(source as usize, &code);
             sm
         });
@@ -231,7 +289,11 @@ impl Stylesheet {
         if !ctx.config.assets.fingerprint || files.len() < 2 {
             return files;
         }
-        let key_of = |file: &Layered| ctx.url(&file.rel);
+        // Keyed by what each sheet is *served* as, because that is the only name
+        // another sheet can reference: nobody writes `@import "app.scss"` into
+        // CSS, and a compiled source that keyed itself by its authored name
+        // matched no importer and sorted as though it had none.
+        let key_of = |file: &Layered| ctx.url(&Self::served(&file.rel));
         let all: BTreeSet<String> = files.iter().map(key_of).collect();
         let mut remaining: Vec<(Layered, Vec<String>)> = files
             .into_iter()
@@ -262,11 +324,17 @@ impl Stylesheet {
         ordered
     }
 
-    /// The asset-map keys of stylesheets referenced by `file`. Unreadable or
-    /// unparseable input yields no deps: the error surfaces in `transform`.
+    /// The asset-map keys of stylesheets referenced by `file`. Unreadable,
+    /// uncompilable or unparseable input yields no deps: the error surfaces in
+    /// `transform`.
+    ///
+    /// A Sass source is compiled here as well as there, because what it
+    /// references is decided by what it compiled *to*: a `@use` is resolved
+    /// away by the compiler and is nobody's dependency, while the `url()` it
+    /// emitted is one. Only a fingerprinting build ever asks.
     fn deps(file: &Layered, ctx: &Ctx) -> Vec<String> {
         let rel = file.rel.as_path();
-        let Ok(code) = fs::read_to_string(&file.path) else {
+        let Ok(code) = Self::source(&file.path, ctx) else {
             return Vec::new();
         };
         let Ok(sheet) = StyleSheet::parse(&code, ParserOptions::default()) else {
@@ -288,7 +356,12 @@ impl Stylesheet {
                     Dependency::Import(dep) => dep.url,
                 };
                 let key = Self::key(rel, &url, ctx)?;
-                Self::claimed(Path::new(&key)).then_some(key)
+                // Through `served` for the same reason `order` keys by it: a
+                // reference written to the source name and one written to the
+                // served name are the same edge, and only one of the two can be
+                // the key.
+                Self::claimed(Path::new(&key))
+                    .then(|| Self::served(Path::new(&key)).to_string_lossy().into_owned())
             })
             .collect()
     }

@@ -391,6 +391,14 @@ impl Config {
     pub const TYPST: &'static str = "typ";
     pub const MARKDOWN: &'static str = "md";
 
+    /// The extensions of a Sass source, SCSS and the indented syntax.
+    ///
+    /// Here rather than beside the compiler that reads them, because a build
+    /// without that compiler still has to recognize one: the asset pipeline to
+    /// know it is an input and not a file to publish, and the feature gate to
+    /// say that this binary would have compiled it.
+    pub const SASS: &'static [&'static str] = &["scss", "sass"];
+
     /// The not-found page's output file. Flat at the dist root, the name
     /// static hosts serve for unmatched URLs, and what the dev server falls
     /// back to; single source for both.

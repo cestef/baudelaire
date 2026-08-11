@@ -160,6 +160,28 @@ chores are visible in the git history and change nothing for a site.
 
   A site with no equation on any page gets no file and no link.
 
+- **Sass compiles in the build**, with no host toolchain and no `hooks { before }`
+  line. A `.scss` or `.sass` file under the asset tree is a stylesheet: it is
+  compiled with [grass](https://github.com/connorskees/grass), served as
+  `.css`, and carried on through everything a hand-written sheet gets -- minify,
+  browser targets, `url()` rewriting, fingerprinting, `integrity`, `embed`.
+
+  ```
+  assets/
+    _vars.scss     # a partial: imported, never served
+    style.scss     # -> /assets/style.css
+  ```
+
+  A page links either spelling: `href="/assets/style.scss"` and
+  `href="/assets/style.css"` both resolve to the compiled, hashed file. `@use`
+  and `@import` resolve beside the importing file first, then across the asset
+  roots, so a sheet a site wrote can pull in a partial its theme ships. Leading
+  `_` still means import-only, which is Sass's own convention and was already the
+  pipeline's.
+
+  The compiler is the `sass` cargo feature, on in the default (`full`) flavor.
+  A binary without it leaves a Sass source where it lies, and says so.
+
 ### Upgrading
 
 - **`Renderer::SCHEMA` moves to 20**: the first build after upgrading recompiles

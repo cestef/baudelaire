@@ -124,6 +124,60 @@ name, and naming none leaves the CSS exactly as written.
   independent: you can ship readable CSS that still runs on Safari 15.
 ]
 
+== Sass <sass>
+
+A `.scss` or `.sass` file under the asset tree is a stylesheet. It is compiled
+with #link("https://github.com/connorskees/grass")[grass], served as `.css`, and
+goes on through everything a hand-written sheet gets: `minify`, `targets`,
+`url()` rewriting, `fingerprint`, `integrity`, `embed`.
+
+```text
+assets/
+  _vars.scss    -> nothing; the sheet that imports it carries it
+  style.scss    -> /assets/style.css
+```
+
+There is nothing to turn on and no toolchain to install.
+
+```scss
+// assets/style.scss
+@use "vars";
+
+.card {
+  color: vars.$brand;
+  .title { font-weight: 600 }
+}
+```
+
+Link either spelling. `/assets/style.scss` is the file you put there and
+`/assets/style.css` is what it became, and both resolve to the same compiled,
+fingerprinted file:
+
+```typ
+#html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.scss"))
+```
+
+`@use` and `@import` resolve beside the importing sheet first, then across the
+asset roots -- the project's tree, then the theme's -- so a sheet you wrote can
+pull in a partial your theme ships, and a partial you add under the same name
+wins.
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Detail], [Is]),
+  [Syntax], [Both. `.scss` is the CSS-like one, `.sass` the indented one, picked off the extension.],
+  [Partials], [`_vars.scss` is import-only, as everywhere else in the tree.],
+  [`@warn` / `@debug`], [Written to stderr as the sheet asked.],
+  [Source maps], [Map the compiled CSS, not the Sass: grass emits no mapping to chain back to.],
+  [Output], [Always expanded. `minify` is Lightning CSS's pass, one step later.],
+)
+
+#callout(kind: "note")[
+  Sass is the `sass` cargo feature, on in the default build. A binary without it
+  leaves a `.scss` where it lies and warns that it did.
+]
+
 == The directory
 
 `paths { assets }` names the tree the pipeline reads, and the last segment is
@@ -307,16 +361,21 @@ none of them reaches `dist`:
   table.header([In `assets/`], [Why it is not published]),
   [`_search.js`, `_app.css`, `_type.scss`], [A leading `_` means import-only: something else pulls it in.],
   [`globals.d.ts`], [A type declaration carries no runtime code.],
-  [`style.scss`, `x.sass`, `x.less`, `x.styl`], [A preprocessor source. No browser reads one.],
   [`app.ts`, `app.tsx`, `app.jsx` with `bundle` off], [A script no browser can run, and nothing is bundling it.],
 )
+
+Nothing else is treated as an input. A file belonging to a toolchain this build
+does not run -- a `.less`, a `.styl` -- is copied like any other file, because
+the pipeline has no opinion about tools it does not run. Give it a leading `_`,
+or keep it out of `paths { assets }`, and it stays out of the output.
 
 ```text
 assets/
   main.js       -> /assets/main.js
   _search.js    -> nothing, inlined into main.js
   app.ts        -> /assets/app.js, bundled (nothing, with `bundle` off)
-  _brand.scss   -> nothing; your Sass step reads it
+  style.scss    -> /assets/style.css, compiled
+  _brand.scss   -> nothing; the sheet that imports it carries it
 ```
 
 Name a preprocessor's input with a leading `_` and it stays out of the output

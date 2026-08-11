@@ -342,7 +342,7 @@ failure to a warning, which is the setting for working through a large tree. See
   [`{{ .Site.Data.authors }}`], [`yaml("/data/authors.yaml")`],
   [`{{ i18n "readMore" }}`], [`page.strings.at("read-more", default: "Read more")`],
   [`{{ .Permalink }}`], [not available: a page does not know its own URL],
-  [`resources.Get | toCSS`], [none; run Sass from `hooks { before }`],
+  [`resources.Get | toCSS`], [always on: a `.scss` under `paths { assets }` is compiled],
   [`js.Build`], [`assets { bundle }`],
   [`| fingerprint`], [`assets { fingerprint }` and `security { sri }`],
   [`.Resize "600x"`], [`assets { images { responsive { widths .. } } }`],

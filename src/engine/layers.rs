@@ -37,6 +37,21 @@ impl Layers {
         Self(theme.into_iter().chain([project.to_path_buf()]).collect())
     }
 
+    /// The stack as a search path, the strongest root first. Read by the Sass
+    /// compiler, whose `@use` / `@import` resolution is a search over
+    /// directories rather than a lookup of one file: a partial the theme ships
+    /// has to be reachable from a sheet the project wrote, and the other way
+    /// round.
+    ///
+    /// Reversed here, because a search path states its winner first while the
+    /// stack states it last: `files` lets a later root overwrite an earlier
+    /// one, and the same override has to hold when the name is resolved by
+    /// searching instead.
+    #[cfg(feature = "sass")]
+    pub(super) fn search(&self) -> Vec<PathBuf> {
+        self.0.iter().rev().cloned().collect()
+    }
+
     /// Every file across the stack, keyed by relative path, ordered by that
     /// path so a build is deterministic whatever order the filesystem walks in.
     ///
