@@ -250,6 +250,13 @@ chores are visible in the git history and change nothing for a site.
   handler had sorted the dependency first. Each file is now recorded before the
   next one renders, which is what `Handler::render` already promised.
 
+- **`serve` no longer rebuilds forever on a site whose build reads a file back.**
+  The asset pipeline stages through `<dist>/.assets.staging/`, and a build that
+  reads any file back records its directory as one to watch, so the staging
+  writes read as an edit and every build queued the next one. The output
+  directory is now excluded from the watch exactly as the scratch tree already
+  was: both are what the build writes, and neither can be an input to it.
+
 - **A subpath-hosted site's full-content feed no longer spells the base path
   twice.** A `content "full"` entry carries the finished page, whose URLs the
   base-path transform has already shifted under the site's own path; making

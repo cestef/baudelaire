@@ -85,6 +85,9 @@ pub(super) struct Filter {
     /// The build's whole scratch tree, which is never an input however much it
     /// looks like one. See [`Filter::is_relevant`].
     scratch: PathBuf,
+    /// The output directory, for the same reason as `scratch`: it is what the
+    /// build writes, so nothing in it may queue another build.
+    dist: PathBuf,
 }
 
 impl Filter {
@@ -136,6 +139,7 @@ impl Filter {
             }
         }
         let exclude = Self::compile(&config.serve.exclude)?;
+        let dist = Self::absolute(&base, &config.paths.dist);
         Ok(Self {
             root: base,
             trees,
@@ -146,6 +150,7 @@ impl Filter {
             sourced,
             tracked: Vec::new(),
             scratch: cache,
+            dist,
         })
     }
 
@@ -316,7 +321,14 @@ impl Filter {
         // Nothing is lost by ignoring it: those files are derived from content
         // and templates, which are watched, so the edit that changes one is
         // already a rebuild on its own account.
-        if path.starts_with(&self.scratch) {
+        //
+        // `dist` is the same bug wearing the output directory. The asset
+        // pipeline stages through `<dist>/.assets.staging/`, and a build that
+        // reads any file back records its directory in `tracked`, which makes
+        // the staging writes relevant and every build queue the next one. The
+        // output is derived from the same watched inputs, so it can no more be
+        // an input than the scratch tree can.
+        if path.starts_with(&self.scratch) || path.starts_with(&self.dist) {
             return false;
         }
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
@@ -580,6 +592,37 @@ mod tests {
         assert!(
             filter.is_relevant(&Path::new("/proj").join(&config.paths.content).join("a.typ")),
             "the edit that regenerates it has to rebuild on its own account"
+        );
+    }
+
+    /// The same rule for the output directory, which is the other tree the build
+    /// writes.
+    ///
+    /// The asset pipeline stages through `<dist>/.assets.staging/`, and a build
+    /// that reads a file back records its directory as one to watch, so those
+    /// writes read as an edit and every build queued the next one -- the same
+    /// spinning session as the scratch tree, arrived at from the other end.
+    #[test]
+    fn the_builds_own_output_never_triggers_a_rebuild() {
+        let config = Config::default();
+        let root = Root::at("/proj");
+        let filter = Filter::new(&config, &root, Path::new("config.kdl")).unwrap();
+        let dist = Path::new("/proj").join(&config.paths.dist);
+
+        assert!(
+            !filter.is_relevant(&dist.join(".assets.staging/style.css")),
+            "a staged asset rebuilt the site that staged it"
+        );
+        assert!(!filter.is_relevant(&dist.join("index.html")));
+        assert!(!filter.is_relevant(&dist.join("assets/main.js")));
+        // The sources those are built from still are.
+        assert!(
+            filter.is_relevant(
+                &Path::new("/proj")
+                    .join(&config.paths.assets)
+                    .join("main.ts")
+            ),
+            "the edit that rebuilds the output has to be seen"
         );
     }
     /// A `--config` outside the root watches that file's own directory, and
