@@ -344,48 +344,71 @@ impl<'a> Assets<'a> {
         out: &mut Processed,
     ) -> Result<()> {
         let files = handler.order(files, ctx);
-        // Render first, emit second. A pure handler's files are independent, so
-        // the expensive half (re-encoding an image) runs across the pool while
-        // the writes and the map inserts stay ordered and single-threaded.
-        let rendered: Vec<Render> = match handler.pure() {
-            true => files
-                .par_iter()
-                .map(|file| self.render(handler, file, ctx, &out.map))
-                .collect::<Result<_>>()?,
-            false => files
-                .iter()
-                .map(|file| self.render(handler, file, ctx, &out.map))
-                .collect::<Result<_>>()?,
-        };
-        let posture = handler.sourcemaps(self.config);
-        for render in rendered {
-            let Render {
-                rel,
-                served,
-                primary,
-                map,
-                variants,
-            } = render;
-            if let Some(bytes) = primary {
-                let dst = self.mapped(ctx, &served, bytes, map, posture, out)?;
-                // A renamed asset is referenced by *either* name: authors write
-                // `main.js` for a bundle, but `main.ts` is what is on disk and
-                // what an editor completes. Map both, or one of the two spellings
-                // silently keeps pointing at a file that was never written.
-                if served != rel {
-                    out.map.insert(ctx.url(&rel), ctx.url(&dst));
+        match handler.pure() {
+            // A pure handler's output is decided by the file's own bytes, so its
+            // files are independent: the expensive half (re-encoding an image)
+            // runs across the pool, and the writes and map inserts follow in
+            // order, single-threaded.
+            true => {
+                let rendered: Vec<Render> = files
+                    .par_iter()
+                    .map(|file| self.render(handler, file, ctx, &out.map))
+                    .collect::<Result<_>>()?;
+                for render in rendered {
+                    self.finish(handler, render, ctx, out)?;
                 }
             }
-            // Responsive variants: write each downscaled copy (the source's own
-            // width carries no bytes, having been emitted above) and record it
-            // as a `srcset` candidate against the source's URL.
-            for variant in variants {
-                if let Some(bytes) = &variant.bytes {
-                    self.emit(ctx, &variant.rel, bytes, out)?;
+            // An impure one reads the map, which is what `Handler::render`
+            // promises holds every asset processed so far. Each file's insert has
+            // to land before the next one renders, or a handler whose files
+            // reference each other sees none of them: a stylesheet's `@import`
+            // resolved to nothing however carefully `order` had sorted it, and
+            // fell back to the unhashed name it was written with.
+            false => {
+                for file in &files {
+                    let render = self.render(handler, file, ctx, &out.map)?;
+                    self.finish(handler, render, ctx, out)?;
                 }
-                out.srcsets
-                    .record(ctx.url(&rel), variant.width, ctx.url(&variant.rel));
             }
+        }
+        Ok(())
+    }
+
+    /// Write one rendered file and record what it was served as.
+    fn finish(
+        &self,
+        handler: &dyn Handler,
+        render: Render,
+        ctx: &Ctx,
+        out: &mut Processed,
+    ) -> Result<()> {
+        let Render {
+            rel,
+            served,
+            primary,
+            map,
+            variants,
+        } = render;
+        if let Some(bytes) = primary {
+            let posture = handler.sourcemaps(self.config);
+            let dst = self.mapped(ctx, &served, bytes, map, posture, out)?;
+            // A renamed asset is referenced by *either* name: authors write
+            // `main.js` for a bundle, but `main.ts` is what is on disk and
+            // what an editor completes. Map both, or one of the two spellings
+            // silently keeps pointing at a file that was never written.
+            if served != rel {
+                out.map.insert(ctx.url(&rel), ctx.url(&dst));
+            }
+        }
+        // Responsive variants: write each downscaled copy (the source's own
+        // width carries no bytes, having been emitted above) and record it
+        // as a `srcset` candidate against the source's URL.
+        for variant in variants {
+            if let Some(bytes) = &variant.bytes {
+                self.emit(ctx, &variant.rel, bytes, out)?;
+            }
+            out.srcsets
+                .record(ctx.url(&rel), variant.width, ctx.url(&variant.rel));
         }
         Ok(())
     }

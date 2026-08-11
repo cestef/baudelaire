@@ -236,6 +236,20 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A stylesheet's `@import` of another stylesheet follows it to its
+  fingerprinted name.** Under `assets { fingerprint }` an imported sheet was
+  renamed like everything else, but the importer kept the name as authored, so
+  every `@import` pointed at a file that no longer existed and a site whose
+  stylesheet was split into parts served one that loaded none of them. Nothing
+  failed: the build was green and the pages came out unstyled. A `url()` naming
+  an image was always rewritten, which is why this survived -- an image is
+  another handler's file, already renamed a phase earlier, while two stylesheets
+  are one handler's and are renamed together. The asset pipeline rendered every
+  file in a handler's batch before recording any of them, so a sheet's importer
+  read a map its dependency was not in yet, however carefully the stylesheet
+  handler had sorted the dependency first. Each file is now recorded before the
+  next one renders, which is what `Handler::render` already promised.
+
 - **A subpath-hosted site's full-content feed no longer spells the base path
   twice.** A `content "full"` entry carries the finished page, whose URLs the
   base-path transform has already shifted under the site's own path; making

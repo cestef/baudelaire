@@ -63,3 +63,72 @@ scenario "a url() inside a stylesheet is fingerprinted too" {
     absent "assets/bg.png"
   }
 }
+
+// A stylesheet importing another stylesheet is the case `url()` above does not
+// cover: both files belong to the *same* handler, so the imported sheet's hashed
+// name has to exist in the asset map by the time its importer renders. It did
+// not, and every `@import` fell back to the name as written while the file it
+// named had already been renamed out from under it -- a site-wide unstyled page
+// out of a green build. `Stylesheet::order` sorts the dependency first; what was
+// missing was the pipeline recording each file before rendering the next.
+scenario "an @import between stylesheets is fingerprinted too" {
+  requires "css"
+  files {
+    "assets/style.css" #"""
+      @import "base.css";
+      body{color:var(--fg)}
+      """#
+    "assets/base.css" #"""
+      :root{--fg:red}
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.*.css" {
+      capture "base" #"/assets/(base\.[0-9a-f]+\.css)"#
+      // The name as authored must be gone, not merely accompanied.
+      missing "\"base.css\""
+    }
+    file "assets/{base}"
+    absent "assets/base.css"
+  }
+}
+
+// The chain is followed however deep it goes: the middle sheet has to be
+// rewritten *and* hashed before the sheet importing it renders, so a two-step
+// chain is what distinguishes recording each file from recording them in one
+// pass at the end.
+scenario "a chain of @imports resolves all the way down" {
+  requires "css"
+  files {
+    "assets/style.css" #"""
+      @import "mid.css";
+      """#
+    "assets/mid.css" #"""
+      @import "leaf.css";
+      """#
+    "assets/leaf.css" #"""
+      :root{--fg:red}
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "assets/style.*.css" {
+      capture "mid" #"/assets/(mid\.[0-9a-f]+\.css)"#
+    }
+    file "assets/{mid}" {
+      capture "leaf" #"/assets/(leaf\.[0-9a-f]+\.css)"#
+    }
+    file "assets/{leaf}"
+    absent "assets/mid.css"
+    absent "assets/leaf.css"
+  }
+}
