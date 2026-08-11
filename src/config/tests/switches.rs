@@ -176,9 +176,9 @@ fn err_a_section_without_a_switch_still_refuses_a_value() {
     for (config, node) in [
         ("paths #false", "paths"),
         ("serve #false", "serve"),
-        // A bundle binds what its block names, so there is no flag for a switch
-        // to set and `bundle #false` would configure nothing.
-        ("generate {\n  pdf {\n    bundle #false\n  }\n}", "bundle"),
+        // `pdf { }` groups the per-page block and nothing else: there is no
+        // flag for a switch to set, so `pdf #false` would configure nothing.
+        ("generate {\n  pdf #false\n}", "pdf"),
     ] {
         let rendered = err(config);
         assert!(

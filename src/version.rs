@@ -44,6 +44,7 @@ impl Version {
         ("cards", cfg!(feature = "cards")),
         ("css", cfg!(feature = "css")),
         ("embedded-fonts", cfg!(feature = "embedded-fonts")),
+        ("epub", cfg!(feature = "epub")),
         ("images", cfg!(feature = "images")),
         ("js", cfg!(feature = "js")),
         ("markdown", cfg!(feature = "markdown")),
@@ -78,9 +79,10 @@ impl Version {
                 .filter(|(_, on)| *on == want)
                 .map(|(name, _)| *name)
                 .collect();
-            match names.is_empty() {
-                true => "none".to_owned(),
-                false => names.join(" "),
+            if names.is_empty() {
+                "none".to_owned()
+            } else {
+                names.join(" ")
             }
         };
         (pick(true), pick(false))

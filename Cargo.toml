@@ -13,19 +13,19 @@ readme = "README.md"
 keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = [
-    "/docs",
-    # The four themes are `include_dir!`d into the binary by the `themes`
-    # feature, so they are package contents; the demo sites built from them are
-    # not, and are the bulk of the directory.
-    "/themes/demo",
-    "/.github",
-    "/public",
-    "/.jj",
-    "/.claude",
-    "/install.sh",
-    "/tests",
-    "/benches",
-    "/cliff.toml",
+  "/docs",
+  # The four themes are `include_dir!`d into the binary by the `themes`
+  # feature, so they are package contents; the demo sites built from them are
+  # not, and are the bulk of the directory.
+  "/themes/demo",
+  "/.github",
+  "/public",
+  "/.jj",
+  "/.claude",
+  "/install.sh",
+  "/tests",
+  "/benches",
+  "/cliff.toml",
 ]
 
 # Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
@@ -64,7 +64,21 @@ pkg-fmt = "zip"
 bin-dir = "baudelaire.exe"
 
 [features]
-default = ["embedded-fonts", "js", "css", "sass", "tailwind", "images", "cards", "pdf", "ssh", "announce", "themes", "markdown"]
+default = [
+  "embedded-fonts",
+  "js",
+  "css",
+  "sass",
+  "tailwind",
+  "images",
+  "cards",
+  "pdf",
+  "epub",
+  "ssh",
+  "announce",
+  "themes",
+  "markdown",
+]
 
 # Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
 # the binary: ~9 MiB. Off means text renders only with fonts found on the host,
@@ -141,6 +155,16 @@ cards = ["dep:typst-render", "sidecars"]
 # typst-pdf (~8 crates: krilla, pdf-writer, subsetter, write-fonts and friends).
 # Off means a `generate { pdf { } }` block warns and no PDF is written.
 pdf = ["dep:typst-pdf", "sidecars"]
+
+# EPUB bundles: a `generate { bundles }` selection written as an EPUB 3, which
+# is a zip of the pages as they were rendered. The writer is this crate's; what
+# the feature costs is `zip`, which `themes` already carries, so a build with
+# both pays for it once.
+#
+# Off means an `epub` format warns and no book is written. The PDF half of a
+# bundle is `pdf`'s, and the two are independent: a site that wants only the
+# reflowable one carries no typesetter.
+epub = ["dep:zip"]
 
 # The SSH/SFTP deploy backend, on russh. By crate count this is the most
 # expensive thing in the tree after typst and rolldown: ~76 crates reachable only
@@ -256,7 +280,7 @@ open = "5"
 # 0.7, whose derives are the only thing in the tree still on `syn` 1: ~150
 # cpu-seconds and 15 crates for three features nothing calls.
 lightningcss = { version = "1.0.0-alpha.71", default-features = false, features = [
-    "sourcemap",
+  "sourcemap",
 ], optional = true }
 # lightningcss writes its mappings into one of these, and does not re-export the
 # type, so the stylesheet handler names it directly. Same version lightningcss
@@ -267,7 +291,7 @@ parcel_sourcemap = { version = "2.1.1", features = ["json"], optional = true }
 # ordinary Sass builtins, and without it a sheet that calls one fails with
 # `Undefined function`, which names nothing the author could act on.
 grass = { version = "0.13.4", default-features = false, features = [
-    "random",
+  "random",
 ], optional = true }
 encre-css = { version = "0.20.1", optional = true }
 rolldown = { version = "1", optional = true }
@@ -316,7 +340,9 @@ md-5 = "0.11.0"
 include_dir = "0.7.4"
 flate2 = { version = "1.1.9", optional = true }
 tar = { version = "0.4.46", optional = true }
-zip = { version = "8.6.0", default-features = false, features = ["deflate"], optional = true }
+zip = { version = "8.6.0", default-features = false, features = [
+  "deflate",
+], optional = true }
 pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
 # The other two frontmatter dialects. Both are parsed as *documents* rather than
 # deserialized, because a diagnostic has to underline the value the author wrote:
@@ -336,7 +362,10 @@ saphyr = { version = "0.0.11", default-features = false, optional = true }
 [dev-dependencies]
 tempfile = "3"
 # Generate test images (already in the tree via the `images` feature).
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = [
+  "png",
+  "jpeg",
+] }
 # The scenario harness (`tests/scenarios.rs`) reads its cases as KDL, the same
 # language the product's own config speaks. A normal dependency is out of reach
 # from an integration test, so it is repeated here.
@@ -440,14 +469,14 @@ doc_markdown = "allow"
 # lifetimes and `!Send` futures that no threaded caller exists for.
 # `redundant_pub_crate` argues with `unreachable_pub` about the same items.
 missing_const_for_fn = "allow"
-option_if_let_else = "allow"
+# option_if_let_else = "allow"
 significant_drop_tightening = "allow"
 future_not_send = "allow"
 redundant_pub_crate = "allow"
 
 # `match` on a bool, with both arms spelled out, is used here where the two
 # outcomes are peers rather than a condition and a fallback.
-match_bool = "allow"
+# match_bool = "allow"
 
 # Fires on config structs whose fields really are independent flags, and the
 # suggested fix is a bitflag type that reads worse at every use site.

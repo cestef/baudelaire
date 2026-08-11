@@ -1,0 +1,78 @@
+// A bundle is a selection of pages -- which, in what order, under what title --
+// written in the formats it names.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      generate { bundles { guide { collections "guide"; formats "epub" } } }
+      """#
+    "content/guide/a.typ" #"""
+      #let frontmatter = (title: "First", order: 1)
+      the first chapter
+      """#
+    "content/guide/b.typ" #"""
+      #let frontmatter = (title: "Second", order: 2)
+      the second chapter
+      """#
+    "content/blog/c.typ" #"""
+      #let frontmatter = (title: "Elsewhere",)
+      not in the book
+      """#
+  }
+}
+
+scenario "a bundle is written as an epub under its own id" {
+  requires "epub"
+  expect {
+    ok
+    file "guide.epub"
+    // Named for the bundle, not for the collection it happens to bind: the id
+    // is what the site called it.
+    absent "blog.epub"
+  }
+}
+
+// A bundle that binds nothing writes nothing, and says so rather than leaving
+// the author to notice the missing file.
+scenario "a bundle naming no target reports itself inert" {
+  requires "epub"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; assets "assets" }
+      generate { bundles { guide { formats "epub" } } }
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::config::inert"
+    absent "guide.epub"
+  }
+}
+
+// The id is the filename stem for every format, so one selection written twice
+// is two files that differ only in extension.
+scenario "one selection is written in every format it names" {
+  requires "epub"
+  requires "pdf"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public"; templates "templates" }
+      generate { bundles { guide { collections "guide"; formats "pdf" "epub" } } }
+      """#
+    "templates/book.typ" #"""
+      #let book(doc, pages) = {
+        [#doc.title]
+        for p in pages [#p.body]
+      }
+      """#
+  }
+  expect {
+    ok
+    file "guide.pdf"
+    file "guide.epub"
+  }
+}

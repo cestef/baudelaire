@@ -211,7 +211,9 @@ fn bound(config: &str) -> Site {
 
 #[test]
 fn a_collection_and_the_site_bind_into_documents_of_their_own() {
-    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts"; site #true } }"#);
+    let site = bound(
+        r#"bundles { posts { template "book.typ"; collections "posts" }; site { template "book.typ"; site #true } }"#,
+    );
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nfirst",
@@ -238,7 +240,7 @@ fn a_collection_and_the_site_bind_into_documents_of_their_own() {
 /// not.
 #[test]
 fn a_bundle_re_exports_when_any_of_its_pages_changes() {
-    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts" } }"#);
+    let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nfirst",
@@ -268,7 +270,7 @@ fn a_bundle_re_exports_when_any_of_its_pages_changes() {
 /// (which names every page it binds, in order) can catch it.
 #[test]
 fn a_new_page_joins_the_bundle() {
-    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts" } }"#);
+    let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nfirst",
@@ -297,7 +299,7 @@ fn a_new_page_joins_the_bundle() {
 #[test]
 #[cfg(feature = "markdown")]
 fn a_markdown_page_binds_as_the_typst_it_lowered_to() {
-    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts" } }"#);
+    let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
     site.write(
         "templates/book.typ",
         "#let book(doc, entries) = {\n\
@@ -329,7 +331,7 @@ fn a_markdown_page_binds_as_the_typst_it_lowered_to() {
 /// cache stays warm has to come back.
 #[test]
 fn a_deleted_bundle_is_re_exported() {
-    let site = bound(r#"pdf { bundle { template "book.typ"; collections "posts" } }"#);
+    let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
     site.write(
         "content/posts/a.typ",
         "#let frontmatter = (title: \"A\",)\nfirst",
@@ -382,7 +384,8 @@ fn the_scaffolded_print_template_builds() {
             continue;
         }
         let mut config = t.read("config.kdl");
-        config.push_str("generate {\n  pdf { bundle { template \"book.typ\"; site #true } }\n}\n");
+        config
+            .push_str("generate {\n  bundles { site { template \"book.typ\"; site #true } }\n}\n");
         t.write("config.kdl", &config);
         let out = t.run(&["build"]);
         assert!(

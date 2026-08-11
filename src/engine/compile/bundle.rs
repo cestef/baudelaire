@@ -1,5 +1,11 @@
-//! Many pages as one document: a collection bound end to end, or the whole
-//! site, exported as a single PDF.
+//! Many pages as one document: what a bundle binds, and the paged compile that
+//! typesets it.
+//!
+//! What is bound is [`Selection`](crate::content::Selection)'s answer, and what
+//! it is written as is the format's: the PDF is here because it is a *compile*,
+//! a second pass over the pages the site already has, and the EPUB is an
+//! [`emit`](crate::engine::emit) processor because it is a container built from
+//! pages that have already rendered.
 //!
 //! The paged sibling of the single-file HTML export. Where a
 //! [`sidecar`](super::sidecar) is one page compiled twice, a bundle is *every*
@@ -15,8 +21,8 @@ use std::fmt::{self, Write as _};
 use std::path::PathBuf;
 
 use crate::codegen::{Import, Str, Typst, Value};
-use crate::config::Config;
-use crate::content::{Data, Page};
+use crate::config::{BundleConfig, BundleFormat, Config};
+use crate::content::{Data, Page, Selection};
 use crate::error::Result;
 use crate::graph::Deps;
 use crate::world::Project;
@@ -25,108 +31,81 @@ use super::paged::Paged;
 use super::prepare::Prepare;
 use crate::content::Frontmatter;
 
-/// What one bundle binds: the pages, in order, and where the result goes.
+/// One bundle, in one format: the pages it binds and where the file goes.
 ///
-/// Resolved from the config and the planned page set before anything compiles,
-/// so the prune, the cache and the exporter all read one list.
+/// The binding itself is [`Selection`]'s, which is the whole point of it: two
+/// formats of one bundle are the same pages under the same title, differing
+/// only in what is written. This adds the format and what follows from it --
+/// the URL, the cache id, the template -- and nothing else.
 pub(in crate::engine) struct Bundle<'a> {
-    /// The bundle's id, as the summary and the cache name it: the collection,
-    /// or `site`, suffixed with the language on a multilingual site.
-    id: String,
-    /// The document's title, handed to the template.
-    title: String,
-    lang: &'a str,
+    /// The bundle's id as the config names it, which is the filename stem every
+    /// format is written under.
+    key: &'a str,
+    /// What is written.
+    format: BundleFormat,
+    /// The bundle's config, for the template and whatever else a format reads.
+    cfg: &'a BundleConfig,
+    /// The pages, in order, under their title.
+    selection: Selection<'a>,
     /// Root-relative URL of the file, e.g. `/guide.pdf`.
     url: String,
-    pages: Vec<&'a Page>,
 }
 
 impl<'a> Bundle<'a> {
-    /// Every bundle this config asks for, over `pages`.
+    /// Every bundle this config asks for, over `pages`: one per named bundle,
+    /// per format it names, per built language.
     ///
-    /// One per named collection and one for the site, each per built language:
-    /// a French manual is a French document, and binding both languages into
-    /// one file would interleave them.
+    /// A format the binary cannot write is dropped here, having been reported
+    /// once by the feature gate: the alternative is a file nothing writes and a
+    /// prune that deletes last build's.
     pub(in crate::engine) fn planned(config: &'a Config, pages: &'a [Page]) -> Vec<Self> {
-        let cfg = &config.generate.pdf.bundle;
-        if !cfg.active() {
-            return Vec::new();
-        }
         let mut out = Vec::new();
-        for lang in config.langs() {
-            for collection in &cfg.collections {
-                let bound = Self::bind(pages, lang, |page| &page.collection == collection);
-                if bound.is_empty() {
-                    continue;
+        for (key, cfg) in &config.generate.bundles {
+            for selection in Selection::planned(key, cfg, config, pages) {
+                for format in cfg.active() {
+                    out.push(Self {
+                        key,
+                        format,
+                        cfg,
+                        url: selection.url(config, format.ext()),
+                        // One selection per format: the two are the same pages,
+                        // and holding one between them would tie every format's
+                        // lifetime to the others for a struct of borrows.
+                        selection: Selection {
+                            id: selection.id.clone(),
+                            title: selection.title.clone(),
+                            lang: selection.lang,
+                            pages: selection.pages.clone(),
+                        },
+                    });
                 }
-                out.push(Self {
-                    id: Self::named(collection, lang, config),
-                    // The collection's own id. There is no configured title for
-                    // a collection, and inventing one here would be a second
-                    // spelling of a name the site already has.
-                    title: collection.clone(),
-                    lang,
-                    url: Self::url(config, lang, collection),
-                    pages: bound,
-                });
-            }
-            if cfg.site {
-                let bound = Self::bind(pages, lang, |_| true);
-                if bound.is_empty() {
-                    continue;
-                }
-                out.push(Self {
-                    id: Self::named(Self::SITE, lang, config),
-                    title: config.title(lang).to_owned(),
-                    lang,
-                    url: Self::url(config, lang, Self::SITE),
-                    pages: bound,
-                });
             }
         }
         out
     }
 
-    /// The whole site's bundle, under the name it is written as.
-    const SITE: &'static str = "site";
-
-    /// Where a bundle is served: `/<target>.pdf`, localized like every other
-    /// per-language artifact. One rule for both kinds of target, so a reader
-    /// who knows where `/guide.pdf` came from knows where `/site.pdf` did.
-    fn url(config: &Config, lang: &str, target: &str) -> String {
-        format!("/{}.pdf", config.scope(lang, target))
+    /// The cache id: the bundle, its language, and its format. Two formats of
+    /// one selection are two files and two entries, since only one of them
+    /// changes when a template does.
+    pub(in crate::engine) fn id(&self) -> String {
+        format!("{}.{}", self.selection.id, self.format.ext())
     }
 
-    /// The pages one bundle binds, in the order [`crate::content::plan`] put
-    /// them, which is each collection's own sort order.
-    ///
-    /// Generated listings are excluded, as they are from every other paged
-    /// artifact: a tag index inside a manual is a page of links to a document
-    /// the reader is already holding.
-    fn bind(pages: &'a [Page], lang: &str, mut want: impl FnMut(&Page) -> bool) -> Vec<&'a Page> {
-        pages
-            .iter()
-            .filter(|page| page.lang == lang)
-            .filter(|page| page.authored())
-            .filter(|page| want(page))
-            .collect()
-    }
-
-    /// A bundle's id: its target, plus the language on a site that builds more
-    /// than one, so two editions never claim one cache entry.
-    fn named(target: &str, lang: &str, config: &Config) -> String {
-        match config.langs().len() > 1 {
-            true => format!("{target}.{lang}"),
-            false => target.to_owned(),
-        }
+    /// What this bundle is called in the summary: the file, which is the thing
+    /// the reader is waiting for.
+    pub(in crate::engine) fn label(&self) -> String {
+        self.url.trim_start_matches('/').to_owned()
     }
 
     /// What this kind of artifact is called: its module's file id, the label
     /// its compile errors carry, and the noun the summary counts.
     pub(in crate::engine) const KIND: &'static str = "bundle";
 
-    pub(in crate::engine) fn id(&self) -> &str {
-        &self.id
+    /// Whether this one is written by the paged compile. The other formats are
+    /// built from the rendered pages instead, so the compile pass has to know
+    /// which of the planned bundles are its.
+    pub(in crate::engine) fn typeset(&self) -> bool {
+        self.format == BundleFormat::Pdf
     }
 
     /// Where the file lands under `dist`. Read by the exporter and by the
@@ -146,10 +125,10 @@ impl<'a> Bundle<'a> {
         prepare: &Prepare<'_>,
         project: &Project,
     ) -> Result<String> {
-        let cfg = &prepare.config().generate.pdf.bundle;
-        let mut entries = Vec::with_capacity(self.pages.len());
+        let cfg = self.cfg;
+        let mut entries = Vec::with_capacity(self.selection.pages.len());
         let mut imports = String::new();
-        for (i, page) in self.pages.iter().enumerate() {
+        for (i, page) in self.selection.pages.iter().enumerate() {
             let vpath = format!(
                 "/{}",
                 project
@@ -206,15 +185,15 @@ impl<'a> Bundle<'a> {
     /// any one page.
     fn meta(&self, config: &Config) -> Value {
         Value::dict([
-            ("id", Value::str(&self.id)),
-            ("title", Value::str(&self.title)),
-            ("lang", Value::str(self.lang)),
+            ("id", Value::str(self.key)),
+            ("title", Value::str(&self.selection.title)),
+            ("lang", Value::str(self.selection.lang)),
             ("url", Value::str(&self.url)),
-            ("site", Value::str(config.title(self.lang))),
-            ("author", Value::opt(config.author(self.lang))),
+            ("site", Value::str(config.title(self.selection.lang))),
+            ("author", Value::opt(config.author(self.selection.lang))),
             (
                 "pages",
-                Value::Int(i64::try_from(self.pages.len()).unwrap_or(i64::MAX)),
+                Value::Int(i64::try_from(self.selection.pages.len()).unwrap_or(i64::MAX)),
             ),
         ])
     }
@@ -231,7 +210,7 @@ impl<'a> Bundle<'a> {
         text: String,
     ) -> Result<(Vec<u8>, Deps)> {
         let laid = Paged {
-            name: self.id.clone(),
+            name: self.id(),
             kind: Self::KIND,
             text,
         }

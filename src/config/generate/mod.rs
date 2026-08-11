@@ -1,5 +1,6 @@
 //! `generate { }`: the files a build emits beside the pages.
 
+pub mod bundle;
 pub mod cards;
 pub mod feed;
 pub mod headers;
@@ -10,12 +11,12 @@ pub mod robots;
 pub mod search;
 
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::{Flag, Tables};
+use crate::config::dispatch::Kind::{Flag, Items, Tables};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
-    CardsConfig, FeedConfig, HeadersConfig, LlmsConfig, ManifestConfig, PdfConfig, RobotsConfig,
-    SearchConfig,
+    BundleConfig, CardsConfig, FeedConfig, HeadersConfig, LlmsConfig, ManifestConfig, PdfConfig,
+    RobotsConfig, SearchConfig,
 };
 
 /// The files a build emits beside the pages themselves. Each one is opt-in:
@@ -50,6 +51,9 @@ pub struct GenerateConfig {
     pub cards: CardsConfig,
     /// A PDF of every page, beside its HTML.
     pub pdf: PdfConfig,
+    /// Documents bound from many pages, keyed by id. The id is the filename
+    /// stem every format of that bundle is written under.
+    pub bundles: Vec<(String, BundleConfig)>,
 }
 
 /// The `generate { .. }` section: the files a build emits beside the pages.
@@ -116,6 +120,15 @@ impl Section for GenerateConfig {
             Nested(PdfConfig::rows),
             "Typeset PDFs beside the pages.",
             |c, n, t| c.pdf.fill(n, t),
+        ),
+        (
+            "bundles",
+            Items(BundleConfig::rows),
+            "One block per bound document, each named by the id its files are written under.",
+            |c, n, t| {
+                c.bundles = n.unique(t, "bundle", BundleConfig::item)?;
+                Ok(())
+            },
         ),
     ]);
 }

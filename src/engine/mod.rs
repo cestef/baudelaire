@@ -581,17 +581,23 @@ impl Engine {
     fn bundles(&self, pass: &Pass<'_>, cache: &mut Cache, ui: &Ui) -> Result<Bundled> {
         let mut bundled = Bundled::default();
         for bundle in Bundle::planned(&self.config, pass.pages) {
+            // Only the typeset ones: a format built from the rendered pages is
+            // an emit processor's, and runs when those pages exist.
+            if !bundle.typeset() {
+                continue;
+            }
+            let id = bundle.id();
             let path = bundle.path(&self.config);
             bundled.paths.push(path.clone());
             let text = bundle.source(&pass.prepare, &self.project)?;
             let fingerprint = Hash::of_bytes(text.as_bytes());
-            if cache.reuse_bundle(bundle.id(), &fingerprint, &path) {
-                debug!(bundle = bundle.id(), "bundle reused");
+            if cache.reuse_bundle(&id, &fingerprint, &path) {
+                debug!(bundle = %id, "bundle reused");
                 continue;
             }
             let (bytes, deps) = bundle.export(&self.project, &pass.prepare, text)?;
-            cache.record_bundle(bundle.id(), fingerprint, &deps);
-            ui.page(bundle.id(), PageStatus::Built);
+            cache.record_bundle(&id, fingerprint, &deps);
+            ui.page(bundle.label(), PageStatus::Built);
             bundled.drawn.push(Artifact {
                 kind: Bundle::KIND,
                 path,
@@ -872,11 +878,9 @@ impl Engine {
         // and at the same cost: the region with the chrome gone and every URL
         // absolute cannot be recovered from the finished page without parsing
         // it, and only a site that asked for full entries pays the second pass.
-        let syndicated = self
-            .config
-            .generate
-            .feed
-            .full()
+        // ...or that binds its pages into an EPUB, whose chapters are the same
+        // prose under the same rule: the region, chrome gone, URLs absolute.
+        let syndicated = (self.config.generate.feed.full() || self.config.binds_prose())
             .then(|| {
                 Syndicated::capture(
                     &doc,

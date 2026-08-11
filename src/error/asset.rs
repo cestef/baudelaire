@@ -37,15 +37,17 @@ pub enum AssetError {
     /// [`AssetError::Css`]'s, because the file that failed is not CSS and the
     /// message quotes Sass syntax: folding the two would name a stylesheet the
     /// author never wrote.
+    ///
+    /// The compiler's error is kept whole rather than flattened to its text:
+    /// `grass` is a direct dependency of the feature that reads the file, so
+    /// the cause is nameable here, and it carries the span it underlined.
     #[cfg(feature = "sass")]
     #[error("failed to compile Sass asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::sass))]
     Sass {
         path: String,
-        /// The tool's own message, escaped: it is foreign text, not markup this
-        /// crate wrote.
-        #[help]
-        detail: Text<String>,
+        #[source]
+        source: Box<grass::Error>,
     },
 
     /// The encre-css configuration a site pinned could not be read or parsed.
@@ -56,10 +58,8 @@ pub enum AssetError {
     #[diagnostic(code(baudelaire::asset::tailwind))]
     Tailwind {
         path: String,
-        /// The tool's own message, escaped: it is foreign text, not markup this
-        /// crate wrote.
-        #[help]
-        detail: Text<String>,
+        #[source]
+        source: encre_css::Error,
     },
 
     /// rolldown could not bundle the JavaScript entry.
@@ -128,18 +128,18 @@ impl AssetError {
     }
 
     #[cfg(feature = "sass")]
-    pub fn sass(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
+    pub fn sass(path: impl std::fmt::Display, source: Box<grass::Error>) -> Self {
         Self::Sass {
             path: path.to_string(),
-            detail: Text(detail.to_string()),
+            source,
         }
     }
 
     #[cfg(feature = "tailwind")]
-    pub fn tailwind(path: impl std::fmt::Display, detail: impl std::fmt::Display) -> Self {
+    pub fn tailwind(path: impl std::fmt::Display, source: encre_css::Error) -> Self {
         Self::Tailwind {
             path: path.to_string(),
-            detail: Text(detail.to_string()),
+            source,
         }
     }
 

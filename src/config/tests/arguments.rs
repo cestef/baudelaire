@@ -19,7 +19,7 @@ use super::{err, parse};
 fn err_a_value_on_a_section_line_is_refused() {
     for (config, node) in [
         ("paths \"junk\"", "paths"),
-        ("generate {\n  pdf {\n    bundle \"junk\"\n  }\n}", "bundle"),
+        ("generate {\n  pdf \"junk\"\n}", "pdf"),
         (
             "content {\n  collections \"junk\" {\n    posts\n  }\n}",
             "collections",

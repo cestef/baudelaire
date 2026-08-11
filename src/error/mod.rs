@@ -19,6 +19,7 @@ pub mod annotated;
 #[cfg(feature = "announce")]
 pub mod announce;
 pub mod asset;
+pub mod bundle;
 pub mod card;
 pub mod cli;
 pub mod config;
@@ -49,6 +50,7 @@ pub use annotated::Annotated;
 #[cfg(feature = "announce")]
 pub use announce::AnnounceError;
 pub use asset::AssetError;
+pub use bundle::BundleError;
 pub use card::CardError;
 pub use config::{ConfigError, ConfigErrorKind};
 pub use content::ContentError;
@@ -123,6 +125,10 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Overweights(#[from] crate::error::lint::Overweights),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Bundle(#[from] crate::error::bundle::BundleError),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

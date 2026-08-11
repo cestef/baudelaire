@@ -75,12 +75,13 @@ pub use deploy::DeployConfig;
 pub use deploy::s3::S3Config;
 pub use deploy::ssh::SshConfig;
 pub use generate::GenerateConfig;
+pub use generate::bundle::{BundleConfig, BundleFormat};
 pub use generate::cards::CardsConfig;
 pub use generate::feed::{Content, FeedConfig, FeedKind, FeedNames};
 pub use generate::headers::HeadersConfig;
 pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
-pub use generate::pdf::{PdfBundle, PdfConfig, PdfPages};
+pub use generate::pdf::{PdfConfig, PdfPages};
 pub use generate::robots::RobotsConfig;
 pub use generate::search::{SearchConfig, SearchField, SearchFormat};
 pub use hooks::HooksConfig;
@@ -872,6 +873,21 @@ impl Config {
     /// default `lang` (always known, listed or not).
     pub fn knows(&self, code: &str) -> bool {
         code == self.lang || self.languages.iter().any(|(id, _)| id == code)
+    }
+
+    /// Whether anything in this build binds a page's *prose* rather than its
+    /// finished markup: an EPUB chapter, which is the region with the chrome
+    /// gone and every URL absolute.
+    ///
+    /// Read by the render pass to decide whether to capture it, beside the
+    /// full-content feed that asks the same question. One place, because the
+    /// capture is a second pass over the DOM and a site that asked for neither
+    /// must not pay for it.
+    pub fn binds_prose(&self) -> bool {
+        self.generate
+            .bundles
+            .iter()
+            .any(|(_, bundle)| bundle.active().contains(&BundleFormat::Epub))
     }
 
     /// Every language the site builds, default first then declared ones in

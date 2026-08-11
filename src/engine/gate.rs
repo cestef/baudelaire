@@ -212,14 +212,14 @@ pub(super) struct Inert {
 }
 
 const INERT: &[Inert] = &[
-    // A `bundle { }` block naming neither a collection nor the site binds no
-    // pages, so it wrote no document and said nothing about it.
+    // A bundle naming neither a collection nor the site binds no pages, so it
+    // wrote no document and said nothing about it.
     Inert {
-        setting: "generate { pdf { bundle } }",
-        asked: |config| config.generate.pdf.bundle.present,
-        needs: "a `collections` list or `site`",
-        met: |config| config.generate.pdf.bundle.enabled(),
-        effect: "no bundled document is written",
+        setting: "generate { bundles }",
+        asked: |config| !config.generate.bundles.is_empty(),
+        needs: "a `collections` list or `site` on each bundle",
+        met: |config| config.generate.bundles.iter().all(|(_, b)| b.enabled()),
+        effect: "that bundle binds no pages, so no document is written",
         help: "name the collections to bind (`collections \"guide\"`), or set `site #true` for the whole site",
     },
     // `assets { minify }` has no row of its own. It minifies stylesheets on its

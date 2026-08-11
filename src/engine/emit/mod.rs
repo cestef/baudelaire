@@ -11,6 +11,8 @@
 mod csp;
 #[cfg(feature = "js")]
 pub(crate) mod dts;
+#[cfg(feature = "epub")]
+mod epub;
 mod feed;
 mod headers;
 mod line;
@@ -151,6 +153,9 @@ const WROTE: &str = "wrote";
 pub(super) trait Emit {
     /// Write `contents` to absolute `path`, creating parent directories.
     fn file(&mut self, path: &Path, contents: &str) -> Result<()>;
+    /// The same for output that is not text: an EPUB is a zip, and a file whose
+    /// bytes are not UTF-8 cannot go through [`file`](Emit::file) at all.
+    fn binary(&mut self, path: &Path, contents: &[u8]) -> Result<()>;
     /// Whether a static file already claims `path`, so [`file`](Emit::file)
     /// would keep that one and drop what a processor writes.
     ///
@@ -226,6 +231,8 @@ impl Processors {
             Box::new(llms::Llms),
             Box::new(manifest::WebManifest),
             Box::new(feed::Feeds),
+            #[cfg(feature = "epub")]
+            Box::new(epub::Epub),
             Box::new(search::SearchIndex),
             #[cfg(feature = "announce")]
             Box::new(standard::WellKnown),
@@ -295,6 +302,10 @@ impl Emit for Emitter<'_> {
     }
 
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
+        self.binary(path, contents.as_bytes())
+    }
+
+    fn binary(&mut self, path: &Path, contents: &[u8]) -> Result<()> {
         if self.reserved.contains(path) {
             tracing::debug!(path = %path.display(), "kept the static file over generated output");
             return Ok(());
@@ -333,6 +344,15 @@ impl Emit for Recorder {
 
     fn file(&mut self, path: &Path, contents: &str) -> Result<()> {
         self.files.push((path.to_path_buf(), contents.to_owned()));
+        Ok(())
+    }
+
+    /// Recorded by *size*, not content: a test asserting on a zip's bytes would
+    /// assert on the compressor, and what a processor's test has to say about
+    /// one is that it wrote a file and how big it was.
+    fn binary(&mut self, path: &Path, contents: &[u8]) -> Result<()> {
+        self.files
+            .push((path.to_path_buf(), format!("<{} bytes>", contents.len())));
         Ok(())
     }
 

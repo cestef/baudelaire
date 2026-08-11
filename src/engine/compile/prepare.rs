@@ -28,7 +28,7 @@ use crate::error::{Result, TemplateMissing};
 use crate::graph::Hash;
 use crate::render::Backlinks;
 use crate::theme::Theme;
-use crate::ui::markup;
+use crate::ui::{Code, markup};
 use crate::world::Project;
 use crate::world::Wrapper;
 use crate::world::module;
@@ -231,9 +231,10 @@ impl<'a> Prepare<'a> {
         // (`Outputs::backlinks`) and verified once the graph is known.
         let bare = self.bound(page, &rooted, &dir, template, &Backlinks::Off);
         let fingerprint = Hash::of_bytes(bare.as_bytes());
-        let text = match self.backlinks.of(page).is_empty() {
-            true => bare,
-            false => self.bound(page, &rooted, &dir, template, &self.backlinks),
+        let text = if self.backlinks.of(page).is_empty() {
+            bare
+        } else {
+            self.bound(page, &rooted, &dir, template, &self.backlinks)
         };
         Ok((id, text, fingerprint))
     }
@@ -464,18 +465,22 @@ impl<'a> Prepare<'a> {
         if cfg!(feature = "cards") && cards.enabled {
             push(&cards.template, "`generate { cards }`".to_owned());
         }
-        let pdf = &self.config.generate.pdf;
-        if cfg!(feature = "pdf") {
-            if pdf.pages.enabled {
+        let config = &self.config;
+        let pdf = &config.generate.pdf;
+        if cfg!(feature = "pdf") && pdf.pages.enabled {
+            push(
+                &pdf.pages.template,
+                "`generate { pdf { pages } }`".to_owned(),
+            );
+        }
+        // Every bundle written as a PDF names a paged template of its own, and
+        // each is required separately: two bundles may be typeset by two
+        // templates, and the one that is missing is the one to name.
+        for (id, bundle) in &config.generate.bundles {
+            if bundle.active().contains(&crate::config::BundleFormat::Pdf) {
                 push(
-                    &pdf.pages.template,
-                    "`generate { pdf { pages } }`".to_owned(),
-                );
-            }
-            if pdf.bundle.enabled() {
-                push(
-                    &pdf.bundle.template,
-                    "`generate { pdf { bundle } }`".to_owned(),
+                    &bundle.template,
+                    markup!("`generate {{ bundles {{ {} }} }}`", Code(id)),
                 );
             }
         }
