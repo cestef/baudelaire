@@ -11,31 +11,16 @@ use crate::config::value::ValueExt;
 use crate::error::{ConfigError, Result};
 
 /// What is done with the source map for one kind of asset.
-///
-/// One value rather than a set of flags, because the choices are exclusive and
-/// the combinations are not all meaningful: a map cannot be inline *and*
-/// unreferenced, and "written but linked from nothing" is a deliberate posture
-/// rather than the absence of a link. Spelled as four words, each of which
-/// answers the only question a source map really poses, which is who is meant
-/// to read it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SourceMaps {
-    /// None written, and nothing disclosed. The default.
     #[default]
     Off,
-    /// Written into the asset itself, as a `data:` URI on the end of it. One
-    /// file and no second request, at the cost of shipping the map to every
-    /// visitor whether or not anybody opens it.
+    /// Written into the asset itself, as a `data:` URI on the end of it.
     Inline,
-    /// Written beside the asset, named by a `sourceMappingURL` comment. What a
-    /// browser follows when devtools are open, and nothing fetches otherwise.
+    /// Written beside the asset, named by a `sourceMappingURL` comment.
     External,
-    /// Written beside the asset and named by nothing at all.
-    ///
-    /// For uploading to an error tracker: the map exists for the build that
-    /// produced it, and a visitor is never told where to find it. Note the file
-    /// is still *served*, so this hides the map rather than protecting it; it is
-    /// a posture, not an access control.
+    /// Written beside the asset and named by nothing at all; the file is still
+    /// served, so this hides the map rather than protecting it.
     Hidden,
 }
 
@@ -54,15 +39,12 @@ impl SourceMaps {
         self != Self::Off
     }
 
-    /// Whether the map travels inside the asset rather than beside it.
     pub fn inline(self) -> bool {
         self == Self::Inline
     }
 
-    /// Whether the asset carries a comment naming its map.
-    ///
-    /// True for [`Inline`](Self::Inline) too: an inline map *is* that comment,
-    /// carrying the map in place of a filename.
+    /// Whether the asset carries a comment naming its map, which an inline map
+    /// is.
     pub fn linked(self) -> bool {
         matches!(self, Self::Inline | Self::External)
     }
@@ -72,9 +54,7 @@ impl SourceMaps {
 /// pipeline can map.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct SourceMapConfig {
-    /// Bundled JavaScript, which is to say whatever `assets { bundle }` built.
     pub scripts: SourceMaps,
-    /// Stylesheets the pipeline processed.
     pub styles: SourceMaps,
 }
 
@@ -104,19 +84,11 @@ impl Section for SourceMapConfig {
         ),
     ]);
 
-    /// `sourcemap "external"` sets every kind; a block then narrows it per kind.
+    /// `sourcemap "external"` sets every kind; a block narrows it per kind.
     ///
-    /// Written out rather than left to [`Section::shorthand`], which stands for
-    /// exactly one key: here the line stands for *all* of them, and the two
-    /// spellings have to compose, so `sourcemap "external" { styles "off" }`
-    /// reads as the sentence it looks like.
-    ///
-    /// The value is required, and deliberately. A bare `sourcemap` would have to
-    /// invent a default posture, and the same default would then be re-applied
-    /// by every profile that names the section, silently undoing whatever the
-    /// base config chose. Leaving the line empty instead means "change nothing
-    /// but what my block says", which is what fill-in-place promises everywhere
-    /// else.
+    /// A node with neither a value nor a block is an error: a default posture
+    /// invented here would be re-applied by every profile naming the section,
+    /// silently undoing the base config.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
         Self::line(node, text)?;
         let stated = node.entries().iter().any(|entry| entry.name().is_none());
@@ -130,9 +102,6 @@ impl Section for SourceMapConfig {
         match node.children() {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),
             None if stated => Ok(()),
-            // Neither a value nor a block: the node asks for nothing, and
-            // guessing what it meant is how a profile silently overrides its
-            // base.
             None => Err(ConfigError::missing_children(text, NodeExt::span(node)).into()),
         }
     }

@@ -5,7 +5,6 @@ use clap::Args;
 use super::{BuildOverrides, Cx, Run};
 use crate::error::Result;
 
-/// Arguments for `baudelaire build`.
 #[derive(Args, Debug, Clone, Default)]
 pub struct BuildArgs {
     #[command(flatten)]

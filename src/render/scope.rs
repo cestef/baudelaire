@@ -1,29 +1,14 @@
-//! Confining a stylesheet to one subtree.
-//!
-//! An inlined SVG's `<style>` is an ordinary page stylesheet: Illustrator's
-//! `.st0{fill:#231F20}` repaints every `.st0` on the page, not just the icon's.
-//! [`Scoped`] rewrites each style rule so it can only match inside the element
-//! that carries the scope, leaving at-rules that hold no selectors alone.
-//!
-//! This is a scanner rather than a lightningcss pass on purpose: lightningcss
-//! sits behind the `css` cargo feature, and a page whose markup differed
-//! between the default and `slim` builds would be a worse problem than the leak
-//! it fixes.
-//!
-//! The rewrite is textual because CSS is text; nothing here builds markup. It
-//! preserves whatever it does not need to change (comments, whitespace, the
-//! declarations themselves) so a stylesheet stays recognisable in the output.
+//! Confining a stylesheet to one subtree, so an inlined SVG's `<style>` cannot
+//! repaint the page around it.
 
-/// The at-rules whose body holds style rules, and so must be descended into.
-/// Everything else (`@keyframes`, `@font-face`, `@property`, `@page`) either
-/// holds declarations or names its own thing, and scoping it would break it.
+/// The at-rules whose body holds style rules, and so must be descended into;
+/// scoping any other kind would break it rather than confine it.
 const GROUPING: &[&str] = &["media", "supports", "container", "layer", "scope"];
 
 /// A stylesheet rewriter that confines every rule to one subtree.
 pub(crate) struct Scoped {
-    /// The selector each rule is confined to. Wrapped in `:where()`, which
-    /// contributes no specificity, so confining a rule does not also let it
-    /// outrank the page's own CSS.
+    /// The selector each rule is confined to, wrapped in `:where()` so
+    /// confining a rule does not also let it outrank the page's own CSS.
     scope: String,
 }
 
@@ -43,7 +28,8 @@ impl Scoped {
     }
 
     /// Copy the rules in `css` into `out`, confining each style rule's selector
-    /// and descending into the at-rules that contain style rules.
+    /// and descending into the at-rules that contain style rules. Anything
+    /// unterminated is copied verbatim rather than guessed at.
     fn rules(&self, css: &str, out: &mut String) {
         let src = Css(css);
         let bytes = css.as_bytes();
@@ -54,17 +40,12 @@ impl Scoped {
                 continue;
             }
             match bytes[i] {
-                // A statement at-rule (`@import ..;`, `@layer a, b;`) or a
-                // stray semicolon: nothing to confine, nothing to descend into.
                 b';' => {
                     out.push_str(&css[start..=i]);
                     i += 1;
                     start = i;
                 }
                 b'{' => {
-                    // An unterminated block is a stylesheet we cannot read;
-                    // copy the rest verbatim rather than guess where it ended
-                    // and silently drop a declaration.
                     let Some(end) = src.block(i) else { break };
                     self.rule(&css[start..i], &css[i + 1..end - 1], out);
                     i = end;
@@ -73,16 +54,13 @@ impl Scoped {
                 _ => i += 1,
             }
         }
-        // Trailing whitespace, comments, or an unterminated rule: kept as-is,
-        // since a stylesheet we cannot parse is the author's to fix, not ours
-        // to silently truncate.
         out.push_str(&css[start..]);
     }
 
-    /// Write one `prelude { block }` rule, confined if it is a style rule.
+    /// Write one `prelude { block }` rule, confined if it is a style rule. A
+    /// nested rule resolves against its already-confined parent, so its body is
+    /// copied as it stands.
     fn rule(&self, prelude: &str, body: &str, out: &mut String) {
-        // Leading whitespace and comments belong before the rule, not inside
-        // the selector we are about to rewrite.
         let selectors = &prelude[Css(prelude).lead()..];
         out.push_str(&prelude[..prelude.len() - selectors.len()]);
         if let Some(at) = Css(selectors).at_rule() {
@@ -96,8 +74,6 @@ impl Scoped {
         } else {
             out.push_str(&self.selectors(selectors));
             out.push('{');
-            // A nested rule resolves against its parent, which is already
-            // confined, so the body needs no rewriting of its own.
             out.push_str(body);
         }
         out.push('}');
@@ -121,9 +97,7 @@ impl Scoped {
 /// A stretch of CSS being scanned by byte index.
 ///
 /// Every scan below has to agree on where a comment and a string end, or a
-/// brace or comma inside one splits a rule in half. Hanging them all off one
-/// type is what makes that agreement structural instead of three copies of the
-/// same two match arms.
+/// brace or comma inside one splits a rule in half.
 #[derive(Clone, Copy)]
 struct Css<'a>(&'a str);
 
@@ -243,13 +217,10 @@ impl<'a> Css<'a> {
 mod tests {
     use super::Scoped;
 
-    /// Confine to `[s="1"]`, short enough to keep the expectations readable.
     fn scope(css: &str) -> String {
         Scoped::attribute("s", "1").stylesheet(css)
     }
 
-    /// The scope selector, spelled once so the expectations below read as CSS
-    /// rather than as escaping.
     const S: &str = r#":where([s="1"])"#;
 
     #[test]
@@ -267,7 +238,6 @@ mod tests {
 
     #[test]
     fn a_comma_inside_a_selector_does_not_split_it() {
-        // The comma belongs to `:is()`, not to the list.
         assert_eq!(
             scope(":is(.a, .b) c{fill:red}"),
             format!("{S} :is(.a, .b) c{{fill:red}}")
@@ -288,8 +258,6 @@ mod tests {
 
     #[test]
     fn leaves_keyframes_alone() {
-        // `from`/`to` are keyframe selectors, not element selectors; confining
-        // them would break the animation rather than scope it.
         let css = "@keyframes spin{from{opacity:0}to{opacity:1}}";
         assert_eq!(scope(css), css);
         let css = "@font-face{font-family:x;src:url(a.woff2)}";
@@ -306,8 +274,6 @@ mod tests {
 
     #[test]
     fn a_nested_rule_rides_on_its_parent() {
-        // The parent is confined, and a nested selector resolves against it, so
-        // rewriting the inner one too would confine it twice.
         assert_eq!(
             scope(".a{color:red;.b{color:blue}}"),
             format!("{S} .a{{color:red;.b{{color:blue}}}}")
@@ -334,9 +300,6 @@ mod tests {
     fn leaves_an_empty_or_unparseable_sheet_intact() {
         assert_eq!(scope(""), "");
         assert_eq!(scope("   \n"), "   \n");
-        // Unterminated: kept verbatim rather than half-rewritten. The rule never
-        // took effect anyway, and guessing where it ended would drop a
-        // declaration.
         assert_eq!(scope(".a{fill:red"), ".a{fill:red");
     }
 }

@@ -45,8 +45,6 @@ use crate::engine::summary::Summary;
 use crate::error::warning::{BacklinksUnstable, FeatureMissing, SettingInert};
 use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
-// The trait only: this module has a `Generated` of its own, naming the
-// post-build outputs rather than the files a build writes for tooling.
 use crate::generated::Generated as _;
 use crate::graph::{Cache, Hash, Outputs, SiteInputs};
 use crate::render::{AssetMap, Emitted, Fragments, SrcSets, Syndicated};
@@ -55,28 +53,21 @@ use crate::ui::{Count, Dur, PageStatus, Timer, Ui};
 pub use crate::world::Mode;
 use crate::world::{PageWorld, Project, Tracked};
 
-/// Build statistics returned to callers (the dev server renders its own concise
-/// line from these; the CLI prints the full [`Summary`]).
+/// Build statistics returned to callers.
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub pages: usize,
     pub cached: usize,
     /// The directories holding files this build read from outside its own source
-    /// trees: a `data/` tree a page loaded, a config a template imported.
-    ///
-    /// The dev server watches these on top of the four it always watches, so a
-    /// file the build demonstrably depends on does not also have to be named in
-    /// `serve { include }`. Directories rather than files: a watcher registers
-    /// directories, and a file created next to a tracked one has to be seen too.
+    /// trees, for the dev server to watch. Directories rather than files, so a
+    /// file created beside a tracked one is seen too.
     pub read: Vec<PathBuf>,
 }
 
 /// The bundled documents a build dealt with: the ones it exported, and every
-/// one the site asks for.
-///
-/// The paths are derived from the config and the page set, never from what was
-/// written, for the same reason a sidecar's are: a cached bundle produces no
-/// artifact, and a keep-set built from what this build wrote would sweep it.
+/// one the site asks for. `paths` comes from the config and the page set, never
+/// from what was written: a cached bundle produces no artifact, and the sweep
+/// would drop it.
 #[derive(Default)]
 struct Bundled {
     drawn: Vec<Artifact>,
@@ -90,12 +81,11 @@ struct Generated {
     paths: Vec<PathBuf>,
 }
 
-/// The build engine. Owns shared project state and drives the pipeline.
+/// The build engine: owns shared project state and drives the pipeline.
 pub struct Engine {
     project: Project,
     config: Config,
-    /// The resolved theme, when the site names one. Resolved once here rather
-    /// than per consumer, since obtaining a package can download it.
+    /// The resolved theme, when the site names one.
     theme: Option<Theme>,
     /// What this binary cannot do that the site asked for, from [`Gate`].
     gaps: Vec<FeatureMissing>,
@@ -105,11 +95,6 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(config: Config, mode: Mode) -> Result<Self> {
-        // Ahead of everything, including the gates: this is the one check whose
-        // failure destroys the project rather than the build. Checked here and
-        // not at parse because `dist` is not settled until the profile overlay
-        // and `--out` have had their say, and every command that writes to
-        // `dist` comes through this constructor.
         if let Some((key, source)) = config.paths.swallowed(&config.root) {
             return Err(ConfigError::dist_contains_source(
                 &config.paths.dist,
@@ -118,14 +103,9 @@ impl Engine {
             )
             .into());
         }
-        // Beside it, and for the same reason it is not a parse-time check: the
-        // paths are only settled once the profile overlay has had its say, and
-        // this asks the filesystem rather than the text.
         if let Some(dir) = config.typst.fonts.missing(&config.root) {
             return Err(ConfigError::missing_font_dir(dir).into());
         }
-        // A gate can turn a setting off, and a half-applied config is what ships
-        // the broken site that guards against.
         let (config, gaps) = Gate::resolve(config);
         let inert = Inert::resolve(&config);
         let theme = Theme::of(&config)?;
@@ -140,11 +120,9 @@ impl Engine {
     }
 
     /// Build the site incrementally: reuse cached output for unchanged pages,
-    /// recompile the rest in parallel, then copy assets.
-    ///
-    /// Failure leaves `dist` as the previous build left it, staged assets
-    /// included: `deploy` walks the whole directory, so a leftover staging tree
-    /// would be uploaded as a duplicate copy of the site's assets.
+    /// recompile the rest in parallel, then copy assets. Failure leaves `dist`
+    /// as the previous build left it, staging tree removed, which `deploy`
+    /// would otherwise upload as a duplicate copy of the assets.
     pub fn build(&self, ui: &Ui) -> Result<Stats> {
         let built = self.run(ui);
         if built.is_err() {
@@ -153,52 +131,28 @@ impl Engine {
         built
     }
 
-    /// A build, phase by phase. Each phase is a method below; this is the only
-    /// place their order is spelled, and every constraint on that order is
-    /// documented where it binds.
+    /// A build, phase by phase; this is the only place their order is spelled.
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let statics = self.stage()?;
         let planned = self.planned("planned build", ui)?;
         let warned = ui.warnings();
-        // What this binary cannot do that the site asked for. Reported per build
-        // rather than per process: the dev server rebuilds in place, and the
-        // warning belongs with the output it explains. `check` stays silent,
-        // producing none of what a missing feature would have shaped.
         for gap in &self.gaps {
             ui.warn(*gap);
         }
-        // ...and what its own config withholds from it. Same placement, same
-        // reason: the setting that will not take effect belongs beside the
-        // output that does not show it.
         for inert in &self.inert {
             ui.warn(*inert);
         }
-        // A site with no not-found page hands unmatched URLs to whatever its
-        // host answers with. `Page::listed` is false for exactly that page, so
-        // the whole check is asking whether the page set holds one.
-        if !planned.pages.iter().any(|page| !page.listed(&self.config)) {
+        let has_not_found = planned.pages.iter().any(|page| !page.listed(&self.config));
+        if !has_not_found {
             ui.warn(crate::error::warning::NotFoundMissing);
         }
-        // `before` hooks run after the plan (a hook's output is this build's
-        // assets, not this build's content) and ahead of the asset pipeline, so
-        // anything they emit into `assets/` (e.g. Tailwind output) is
-        // fingerprinted like any asset.
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
-        // Built before the asset pipeline, whose `baudelaire:*` JS modules serve
-        // the section trees it holds, and after it in [`Pass`], which renders
-        // against what the pipeline produced.
         let prepare = self.prepare(&planned)?;
-        // Before any compile: a template nothing supplies is one diagnostic
-        // naming what asked for it, rather than the compiler's own missing-file
-        // report against a generated wrapper, once per page.
         prepare.verify()?;
         #[cfg(feature = "js")]
         let modules = Modules::new(self, &prepare);
-        // the asset URL map feeds render-side fingerprint rewriting and folds
-        // into the cache fingerprint, so a re-fingerprinted asset invalidates
-        // the pages that reference it.
         let assets = Assets::new(
             &self.config,
             self.theme.as_ref(),
@@ -206,8 +160,6 @@ impl Engine {
             modules.ctx(&planned.pages),
         );
         let mut processed = assets.process()?;
-        // Taken out before the rest is handed to the pass: these are written
-        // after the pages, once they have said which of them they reference.
         let deferred = std::mem::take(&mut processed.deferred);
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
         debug!(count = asset_count, bytes = asset_bytes, "assets processed");
@@ -218,16 +170,9 @@ impl Engine {
             prepare,
             processed.map,
             processed.srcsets,
-            // The renderer's own copy: a page is stamped with the digest of the
-            // file the pipeline wrote, and the externalized images folded in
-            // below carry none.
             emitted.clone(),
         );
         let mut cache = self.cache(&pass, &planned, ui)?;
-        // Pass one compiles each page against the backlinks the *last* build
-        // recorded, because this build's are not knowable until every page has
-        // rendered. `backlinks` below replaces them with the truth and
-        // recompiles whatever the guess got wrong.
         if self.config.links.backlinks {
             pass.prepare.assume(Graph::predicted(
                 &self.project,
@@ -239,21 +184,12 @@ impl Engine {
         }
         let (mut rendered, mut cached) = self.incremental(&pass, &mut cache, ui)?;
         self.relink(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
-        // Ahead of validation, which weighs each page against what this build
-        // actually wrote: a typst-embedded image is the usual way a picture
-        // reaches a page, and a budget blind to those would count almost
-        // nothing. Nothing here reads the pages, so the order is free.
         let images = self.images(&rendered, &cached, ui)?;
         emitted.absorb(images.emitted());
-        // Beside the images and for the same reason: the asset tree is
-        // regenerated every build, so an asset the build provides itself is
-        // written now that the pages have said which of them they point at.
         let owned = assets.requested(&deferred, &Self::owned(&rendered, &cached))?;
         self.validate(&rendered, &cached, Some(&emitted), false, ui)?;
         let outputs = Self::outputs(&rendered, &cached);
         Self::write(&outputs)?;
-        // Bound from the page *sources*, so a bundle is exported whether its
-        // pages recompiled or were served from cache.
         let bundled = self.bundles(&pass, &mut cache, ui)?;
         let artifacts: Vec<&Artifact> = rendered
             .iter()
@@ -261,17 +197,12 @@ impl Engine {
             .chain(bundled.drawn.iter())
             .collect();
         Self::artifacts(&artifacts)?;
-        // Every page is on disk pointing at the new asset filenames, so the
-        // staged asset tree can replace the published one. Before this line a
-        // failure leaves `dist` exactly as the previous build left it.
         assets.publish()?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
         let generated = self.generate(&planned, &outputs, &statics, ui)?;
         self.sweep(ui, &outputs, &statics, &generated, &bundled)?;
-        // `after` hooks run once the whole site is on disk (deploy, Pagefind..).
         hooks.after(ui)?;
 
-        // Warnings render as a block ahead of the result line, cargo-style.
         ui.flush();
         let total = rendered.len() + cached.len();
         let page_bytes: u64 = outputs.iter().map(|out| out.html.len() as u64).sum();
@@ -303,15 +234,9 @@ impl Engine {
     }
 
     /// The directories holding `files`, minus anything already inside a source
-    /// tree the dev server watches by default.
-    ///
-    /// Deduped and sorted so a rebuild that read the same files hands back the
-    /// same list, which is what lets the watcher tell "nothing new" from "watch
-    /// something else" without re-registering on every build.
+    /// tree the dev server watches by default. Deduped and sorted, so a rebuild
+    /// that read the same files hands back the same list.
     fn outside(&self, files: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
-        // The same four `Paths::trees` names, so a new `paths` entry is not a
-        // tree the dev server re-registers a watch on because this list forgot
-        // it.
         let watched = self
             .config
             .paths
@@ -327,12 +252,8 @@ impl Engine {
         dirs
     }
 
-    /// Prepare `dist` and seed it with the static tree.
-    ///
-    /// A staging tree here is a previous build's failure; it is cleared before
-    /// the static copy, which writes into it (see `Static::destination`). Static
-    /// goes down first so a generated page or asset at the same output path
-    /// overwrites it: static is the lowest-priority source.
+    /// Prepare `dist` and seed it with the static tree, which goes down first
+    /// so a generated page or asset at the same output path overwrites it.
     fn stage(&self) -> Result<Copied> {
         fs::create_dir_all(&self.config.paths.dist)?;
         let _ = std::fs::remove_dir_all(self.config.asset_staging());
@@ -347,9 +268,6 @@ impl Engine {
 
     /// Plan the pages this pass covers, alongside the tracked value trees every
     /// consumer of them borrows. `what` names the pass in the trace line.
-    /// `ui` is here so a page discovery found and the build left out is
-    /// reported once, beside the other build-shaped advice, rather than
-    /// vanishing into a page count nobody can reconcile.
     fn planned(&self, what: &'static str, ui: &Ui) -> Result<Planned> {
         let planned = plan(&self.config, &self.project)?;
         debug!(
@@ -360,9 +278,6 @@ impl Engine {
         if planned.held.any() {
             ui.advice(crate::error::warning::PagesHeld(planned.held));
         }
-        // Every term that names an entity, held to the registry it names. Here
-        // rather than in the plan because two of the three policies report
-        // instead of failing, and reporting is what the `Ui` is for.
         planned
             .entities
             .check(&self.config, &self.project, &planned.pages, ui)?;
@@ -374,20 +289,9 @@ impl Engine {
     }
 
     /// The compile inputs for `pages`: the wrapper text binding each page to its
-    /// template, plus the section trees derived from the whole page set.
-    ///
-    /// Built by the caller rather than by [`Pass`], because a build feeds these
-    /// section trees to the JS bundler before the asset pipeline runs, and the
-    /// asset pipeline is what a [`Pass`] renders against.
-    ///
-    /// Writing the tree out is part of building the inputs, not a step a caller
-    /// can forget: a template's `#import` of it has to resolve on the very
-    /// first compile, including in a fresh checkout where nothing has run yet.
-    ///
-    /// The TypeScript declarations ride along, for the same reason and with the
-    /// opposite deadline: nothing in the build reads them back, but writing
-    /// them here is what keeps an editor's types following the config instead
-    /// of the last time someone ran `baudelaire mirror`.
+    /// template, plus the section trees derived from the whole page set, which
+    /// are written out here so a template's `#import` of one resolves on the
+    /// first compile of a fresh checkout.
     fn prepare<'a>(&'a self, planned: &'a Planned) -> Result<Prepare<'a>> {
         let prepare = Prepare::new(
             &self.config,
@@ -402,10 +306,6 @@ impl Engine {
         }
         #[cfg(feature = "js")]
         crate::engine::asset::Declarations::of(&self.config).write(root)?;
-        // A content page that imports a table was served the empty one during
-        // discovery (the table is derived from the frontmatter that read was
-        // producing). Now that the real ones are on disk, the world drops what
-        // it cached, so the compile reads what this build wrote.
         self.project.tables_written();
         Ok(prepare)
     }
@@ -437,8 +337,6 @@ impl Engine {
     ) -> Result<(Vec<Rendered<'a>>, Vec<Reused<'a>>)> {
         let (cached, stale) = pass.split(cache);
         debug!(stale = stale.len(), reused = cached.len(), "cache split");
-        // Compile only the stale pages (already prepared during the cache
-        // split); cached pages keep the HTML they were built with.
         let rendered = self.render_pages("compiling", stale, ui, |(page, prepared)| {
             (
                 page,
@@ -455,12 +353,8 @@ impl Engine {
     }
 
     /// Make every page's backlinks true, compiling again the ones the site
-    /// disagreed with, and warn if the graph never settles.
-    ///
-    /// The convergence itself is [`Graph::settle`]'s; what is here is the one
-    /// part of it that is this engine's, recompiling a page. A repaired page
-    /// keeps the sidecars pass one drew for it: those are not redrawn (see
-    /// [`Sidecars::none`]) and the build still has to write them.
+    /// disagreed with, and warn if the graph never settles. A repaired page
+    /// keeps the sidecars pass one drew for it.
     fn relink<'a>(
         &self,
         pass: &mut Pass<'a>,
@@ -472,7 +366,6 @@ impl Engine {
         if !self.config.links.backlinks {
             return Ok(());
         }
-        // A repair is the page's markup again and nothing beside it.
         pass.sidecars = Sidecars::none();
         let unstable = Graph::settle(pass, rendered, cached, |pass, stale| {
             let inputs: Vec<(&'a Page, Result<Prepared>)> = stale
@@ -488,8 +381,6 @@ impl Engine {
                 )
             })?;
             for page in &repaired {
-                // The entry keeps the dependencies the *full* compile recorded:
-                // a repair draws no sidecars, so it never saw the files they read.
                 cache.relink(page.into());
             }
             Ok(repaired)
@@ -503,8 +394,7 @@ impl Engine {
     }
 
     /// Copy every page's externalized images into the (freshly regenerated)
-    /// asset directory: fresh pages carry their refs, cache hits their stored
-    /// ones, so the files are present regardless of what recompiled.
+    /// asset directory, for fresh and cache-served pages alike.
     fn images(&self, rendered: &[Rendered], cached: &[Reused], ui: &Ui) -> Result<Images> {
         Images::new(&self.config, self.project.root()).copy(
             rendered
@@ -516,8 +406,7 @@ impl Engine {
     }
 
     /// The build's own assets that any page points at, rendered and cache-served
-    /// alike. A page served from cache references the same files it did when it
-    /// was compiled, and the asset tree it references was thrown away.
+    /// alike.
     fn owned(rendered: &[Rendered], cached: &[Reused]) -> std::collections::BTreeSet<String> {
         rendered
             .iter()
@@ -528,8 +417,7 @@ impl Engine {
     }
 
     /// Pair every page, rendered and cache-served alike, with what the render
-    /// pass produced for it: the write pass, the blob staging, and the
-    /// processors all read this one view.
+    /// pass produced for it.
     fn outputs<'a>(rendered: &'a [Rendered<'a>], cached: &'a [Reused<'a>]) -> Vec<Output<'a>> {
         rendered
             .iter()
@@ -558,12 +446,8 @@ impl Engine {
     }
 
     /// Write every artifact this build produced beside the pages: the sidecars
-    /// drawn during compile, and the bundled documents.
-    ///
-    /// Only what was freshly made is here. A cache hit leaves the file the
-    /// previous build wrote in place, and the sweep keeps it. Each artifact
-    /// carries its own destination, so nothing here has to know which kind it
-    /// is holding.
+    /// drawn during compile, and the bundled documents. Only what was freshly
+    /// made, since a cache hit leaves the previous build's file in place.
     fn artifacts(artifacts: &[&Artifact]) -> Result<()> {
         artifacts
             .par_iter()
@@ -571,18 +455,13 @@ impl Engine {
     }
 
     /// Export the bundled documents this site asks for: a collection, or the
-    /// whole site, as one PDF.
-    ///
-    /// Unlike a sidecar this belongs to no page, so it cannot ride a page's
-    /// cache entry: it carries one of its own, keyed on the module text (which
-    /// names every page it binds, in order) and on every file that compile
+    /// whole site, as one PDF. A bundle belongs to no page, so it carries a
+    /// cache entry of its own, keyed on the module text and what its compile
     /// read.
     #[cfg(feature = "pdf")]
     fn bundles(&self, pass: &Pass<'_>, cache: &mut Cache, ui: &Ui) -> Result<Bundled> {
         let mut bundled = Bundled::default();
         for bundle in Bundle::planned(&self.config, pass.pages) {
-            // Only the typeset ones: a format built from the rendered pages is
-            // an emit processor's, and runs when those pages exist.
             if !bundle.typeset() {
                 continue;
             }
@@ -607,12 +486,8 @@ impl Engine {
         Ok(bundled)
     }
 
-    /// Without the exporter nothing binds one, so there is nothing to write and
-    /// nothing to keep.
-    ///
-    /// It mirrors the `pdf`-on signature exactly so the caller compiles
-    /// unchanged in both flavors, which is why it takes a `self` it cannot use
-    /// and returns a `Result` it cannot fail.
+    /// Without the exporter nothing binds a document, and the signature mirrors
+    /// the `pdf`-on one so the caller compiles unchanged in both flavors.
     #[cfg(not(feature = "pdf"))]
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     fn bundles(&self, _pass: &Pass<'_>, _cache: &mut Cache, _ui: &Ui) -> Result<Bundled> {
@@ -643,22 +518,10 @@ impl Engine {
     }
 
     /// Drop orphaned outputs from earlier builds (a removed page or taxonomy
-    /// term, a renamed permalink) so `dist` never serves stale files.
-    ///
-    /// Gated on `prune` so a user managing `dist` by hand can opt out. The
-    /// keep-set is every file this build produced: page HTML, static
-    /// passthrough, generated files. The asset tree is regenerated wholesale, so
-    /// the prune skips it. Runs before `after` hooks, whose outputs (Pagefind..)
-    /// are not ours to prune.
-    ///
-    /// A build that produced no page at all sweeps nothing, whatever `prune`
-    /// says. That is the one case where "everything in `dist` is orphaned" is
-    /// almost certainly a mistake rather than a fact: a mistyped content path, a
-    /// command run from the wrong directory, a binary that cannot read the
-    /// dialect the pages are written in. Each of those is a green build whose
-    /// keep-set is empty, and the sweep would answer it by deleting the
-    /// published site. A site that genuinely has no pages loses nothing but a
-    /// tidy `dist`.
+    /// term, a renamed permalink) so `dist` never serves stale files. A build
+    /// that produced no page at all sweeps nothing, whatever `prune` says: an
+    /// empty keep-set is more often a mistyped content path than a site with no
+    /// pages.
     fn sweep(
         &self,
         ui: &Ui,
@@ -674,8 +537,6 @@ impl Engine {
             ui.warn(crate::error::warning::PruneEmpty);
             return Ok(());
         }
-        // A sidecar belongs to its page whether or not this build re-drew it,
-        // so the keep set is derived from the pages, never from what was written.
         let sidecars = Sidecars::builtin();
         let drawn = outputs
             .iter()
@@ -703,8 +564,6 @@ impl Engine {
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let planned = self.planned("planned check", ui)?;
-        // Nothing is written, so nothing was fingerprinted: the render pass has
-        // no asset renames to apply and no variants to offer.
         let pass = Pass::new(
             self,
             &planned,
@@ -713,7 +572,6 @@ impl Engine {
             SrcSets::default(),
             Emitted::default(),
         );
-        // Prepare + compile every page inline (no cache split, no output).
         let rendered = self.render_pages("checking", pass.pages.iter().collect(), ui, |page| {
             (
                 page,
@@ -722,9 +580,6 @@ impl Engine {
                     .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &pass)),
             )
         })?;
-        // No asset pipeline ran and nothing was written, so there is nothing to
-        // weigh a page's loads against: `check` lints, and leaves the budgets to
-        // the build that produces the bytes.
         self.validate(&rendered, &[], None, true, ui)?;
         ui.flush();
         ui.done(format_args!(
@@ -740,11 +595,9 @@ impl Engine {
     }
 
     /// Compile a batch of pages in parallel and reduce to their rendered
-    /// outputs: a progress bar, a rayon map producing one `(page, outcome)` per
-    /// item, then [`Engine::collect`] (status lines + diagnostics). The shared
-    /// spine of `build` (over the stale subset) and `check` (every page);
-    /// `outcome` supplies the only difference: how one item renders. Validation
-    /// is the caller's, since only `build` has cached pages to replay.
+    /// outputs. The shared spine of `build` (the stale subset) and `check`
+    /// (every page); `outcome` supplies the only difference, how one item
+    /// renders.
     fn render_pages<'a, T: Send>(
         &self,
         label: &'static str,
@@ -765,10 +618,9 @@ impl Engine {
         self.collect(outcomes, ui)
     }
 
-    /// Report each compile outcome (page status lines and any typst warnings
-    /// the compiler raised), returning the rendered pages or, after every
-    /// failure has been reported, an error carrying *all* failed pages'
-    /// diagnostics (a single failure propagates unchanged).
+    /// Report each compile outcome and return the rendered pages, or, once every
+    /// failure has been reported, an error carrying all failed pages'
+    /// diagnostics.
     fn collect<'a>(
         &self,
         outcomes: Vec<(&'a Page, Result<Rendered<'a>>)>,
@@ -811,9 +663,13 @@ impl Engine {
     }
 
     /// Compile a single page to rendered HTML, applying render post-processing
-    /// (link rewriting over the typed DOM) before serialization. Records the
-    /// files typst read so the cache can invalidate the page precisely, and
-    /// keeps typst's own compile warnings so the build can surface them.
+    /// (link rewriting over the typed DOM) before serialization.
+    ///
+    /// The recorded dependencies cover what the render pass and the page's
+    /// sidecars read on top of what typst opened, plus the clock, since none of
+    /// those show up in the compilation's own accesses. Typst's blanket "html
+    /// export is under active development" warning is filtered out: HTML is
+    /// this tool's entire output.
     fn compile<'a>(
         &self,
         page: &'a Page,
@@ -822,16 +678,9 @@ impl Engine {
         fingerprint: Hash,
         pass: &Pass<'_>,
     ) -> Result<Rendered<'a>> {
-        // parse only now, for a page actually being (re)compiled.
         let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
         let compiled = typst::compile::<HtmlDocument>(&world);
-        // typst warnings (unknown font families, deprecations..) survive a
-        // successful compile; bridge them like errors so they render with
-        // spans. On failure they are dropped: the errors say more. Typst's
-        // blanket "html export is under active development" notice is filtered:
-        // HTML is this tool's entire output, so it would fire on every page of
-        // every build while telling the author nothing actionable.
         let warnings = compiled
             .warnings
             .into_iter()
@@ -847,26 +696,16 @@ impl Engine {
         let mut rewrite = pass
             .renderer
             .rewrite(&mut doc, page, &self.config, world.inner());
-        // A marker the render pass refused leaves the page unshippable: an icon
-        // that could not be inlined is an empty `<svg>` in the DOM, an image
-        // marker naming a path outside the project is a `src` pointing at a
-        // file nothing wrote. Fail on the first one either way.
-        // Only the first is reported: the files are independent, and stopping
-        // at one error is the contract every other pass has.
         if let Some(invalid) = std::mem::take(&mut rewrite.invalid).into_iter().next() {
             return Err(invalid);
         }
         let options = HtmlOptions {
             pretty: self.config.pretty(),
         };
-        // Shared by both serializations below, so a failure in either reports
-        // with the page's own spans.
         let serialization_failed = |errs| {
             BaudelaireErrorKind::TypstHtml(Self::diagnostics(errs, page, &source, world.inner()))
         };
         let html = typst_html::html(&doc, &options).map_err(&serialization_failed)?;
-        // Only the single-file export consumes these, and capturing them costs
-        // a second pass over the DOM, so nothing else pays for it.
         let fragments = self
             .config
             .navigation
@@ -874,12 +713,6 @@ impl Engine {
             .enabled
             .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
             .transpose()?;
-        // The prose a full-content feed publishes, captured for the same reason
-        // and at the same cost: the region with the chrome gone and every URL
-        // absolute cannot be recovered from the finished page without parsing
-        // it, and only a site that asked for full entries pays the second pass.
-        // ...or that binds its pages into an EPUB, whose chapters are the same
-        // prose under the same rule: the region, chrome gone, URLs absolute.
         let syndicated = (self.config.generate.feed.full() || self.config.binds_prose())
             .then(|| {
                 Syndicated::capture(
@@ -891,32 +724,13 @@ impl Engine {
                 .map_err(&serialization_failed)
             })
             .transpose()?;
-        // A sidecar is a second, paged compile of the same page, so only a stale
-        // page pays for one. A cache hit keeps the file already in `dist`.
         let (artifacts, drawn) =
             pass.sidecars
                 .draw(&self.project, &self.config, &pass.prepare, page)?;
         let mut deps = self.project.dependencies(&world);
-        // Inlined icons and embedded assets are read by the render pass, not by
-        // typst, so they are absent from the compilation's own accesses. Adding
-        // them here puts them under the same content-hash check as every other
-        // dependency, instead of needing a mechanism of their own.
         deps.extend(std::mem::take(&mut rewrite.read));
-        // A sidecar is a second compile of this page, so the template it imports
-        // and everything that template pulls in are inputs to this page's output
-        // that its own compile never read. Folded in the same way, and for the
-        // same reason: without them an edited card helper changed no hash the
-        // cache checks, and every card-bearing page stayed a hit still serving
-        // the PNG the old helper drew.
         deps.extend(drawn.files().iter().cloned());
-        // Which injected values (`sys.inputs.baudelaire.*`) the page read, across
-        // its own source and every `.typ` it depends on: the fine-grained
-        // metadata dependency set.
         let mut reads = pass.analyzer.reads(&source, &deps);
-        // `datetime.today()` goes through the `World`, which records files
-        // only, so nothing else sees it: a page printing the current year stayed
-        // a cache hit into the next one. It reads the same clock as
-        // `sys.inputs.baudelaire.date`, so record it as that key.
         if world.reads_clock() {
             reads.insert(Project::clock());
         }
@@ -937,10 +751,6 @@ impl Engine {
                 anchors: rewrite.anchors,
                 deep: rewrite.deep,
                 outbound: rewrite.outbound,
-                // What this compile *assumed* about the rest of the site, kept
-                // so the repair pass can tell it from what the site turned out
-                // to be. `None` while the feature is off, which is what leaves
-                // such a page immune to the graph entirely.
                 backlinks: pass.prepare.digest(page),
                 fragments,
                 syndicated,
@@ -955,16 +765,9 @@ impl Engine {
     }
 
     /// Run the post-render validation passes over every page, compiled and
-    /// cached alike. Maps each into the decoupled [`Compiled`] view and hands it
-    /// to [`Links`]; the pass itself lives in [`check`].
-    ///
-    /// A cache hit replays the broken links it was built with, because checking
-    /// only fresh pages made the gate weaken on rebuild: a second build of a
-    /// site with a dangling link reported nothing and `links { strict #true }`
-    /// passed.
-    ///
-    /// `outbound` reaches the network and so is passed only by [`Engine::check`],
-    /// which recompiles every page and therefore sees every outbound link. A
+    /// cached alike, a cache hit replaying the broken links it was built with
+    /// so the gate does not weaken on rebuild. `outbound` reaches the network and
+    /// so is passed only by [`Engine::check`], which recompiles every page; a
     /// build stays offline whatever the config says.
     fn validate(
         &self,
@@ -974,9 +777,6 @@ impl Engine {
         outbound: bool,
         ui: &Ui,
     ) -> Result<()> {
-        // Cached pages contribute no outbound links: nothing recompiled them, so
-        // nothing re-read their anchors. Only `check` asks for them, and it never
-        // serves a page from cache.
         let fresh = rendered
             .iter()
             .map(|r| (r.page, r.html.as_str(), &r.outputs, r.external.as_slice()));
@@ -1023,8 +823,8 @@ impl Engine {
     }
 
     /// Wrap typst source diagnostics with the compiled source so miette renders
-    /// spans against exactly what was compiled (the layout-wrapped source, when
-    /// a template is bound). Shared by the compile and HTML-emit stages.
+    /// spans against exactly what was compiled, mapping a lowered page's spans
+    /// back to the lines its author wrote.
     fn diagnostics(
         errs: typst::ecow::EcoVec<typst::diag::SourceDiagnostic>,
         page: &Page,
@@ -1035,9 +835,6 @@ impl Engine {
             errs,
             (&page.source.display().to_string(), source.text()),
             Arc::new(world.clone()),
-            // A lowered page can say where its authored parts came from, so an
-            // error inside an `eval` fence reports the `.md` line rather than a
-            // line of the Typst the page was turned into.
             {
                 let named = page.source.display().to_string();
                 let mapped: Option<&Arc<crate::content::SourceMap>> = match &page.data {
@@ -1063,24 +860,20 @@ struct Planned {
     entities: crate::content::Registries,
     /// The injected values whose per-page reads drive fine-grained metadata
     /// invalidation: the analyzer records them from each page's syntax, the
-    /// cache re-hashes them to decide reuse. One owned copy backs the cache; the
-    /// analyzer borrows another view of the same trees.
+    /// cache re-hashes them to decide reuse.
     tracked: Vec<(String, Value)>,
 }
 
 /// The site values the `baudelaire:*` virtual JS modules serve, built from the
-/// same wrapper inputs the templates get rather than recomputed from scratch.
-///
-/// Owned by the build, because [`JsCtx`] borrows them for as long as the asset
-/// pipeline lives.
+/// same wrapper inputs the templates get. Owned by the build, because
+/// [`JsCtx`] borrows them for as long as the asset pipeline lives.
 #[cfg(feature = "js")]
 struct Modules {
-    /// The codegen `Value` view of the build context. It exists only for these
-    /// modules; Typst reads `sys.inputs` from the raw context.
+    /// The codegen `Value` view of the build context; Typst reads `sys.inputs`
+    /// from the raw context instead.
     context: Value,
     /// The section trees keyed by language: one bundle serves the whole site, so
-    /// a default-language-only tree left every translation without a nav.
-    /// Templates get their own wrapper text and never read this.
+    /// every translation needs its own tree.
     sections: Value,
 }
 

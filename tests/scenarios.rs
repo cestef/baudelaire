@@ -1,11 +1,6 @@
-//! Data-driven end-to-end builds.
-//!
-//! Every case under `tests/scenarios/*.kdl` is a set of files to lay down in a
-//! tempdir and a set of claims about the site they build to. The site lives in
-//! KDL — the language the product's own config speaks — so a config change is a
-//! mechanical edit of data files rather than of escaped Rust string literals.
-//!
-//! # The format
+//! Data-driven end-to-end builds: every case under `tests/scenarios/*.kdl` is a
+//! set of files to lay down in a tempdir and a set of claims about what they
+//! build to.
 //!
 //! ```kdl
 //! scenario "a dated collection emits an RSS feed" {
@@ -35,30 +30,14 @@
 //! }
 //! ```
 //!
-//! A file may hold any number of `scenario` nodes; group them by what they
-//! prove. Paths in `files` are relative to the site root, paths in `expect` to
-//! the configured `dist`. Multi-line raw strings (`#"""` … `"""#`) dedent to the
-//! closing delimiter, so bodies need no escaping.
+//! Paths in `files` are relative to the site root, paths in `expect` to the
+//! configured `dist`. Failure, `warns`, `advises` and `unwarned` all match on
+//! the miette diagnostic *code*, never on message text. A `defaults { files }`
+//! node at the top of a file is laid down before every scenario in it, path by
+//! path.
 //!
-//! Failure is matched on the miette diagnostic *code*, never on message text, so
-//! rewording an error does not break a scenario. The same holds for `warns`, for
-//! `advises`, and for `unwarned "baudelaire::x"`, which claims a code was *not*
-//! reported. `warns` and `advises` are separate claims because advice never
-//! counts against a build: the two say different things about what the run
-//! decided.
-//!
-//! ## Shared setup
-//!
-//! A `defaults { files { .. } }` node at the top of a file is laid down before
-//! every scenario in it, so the config a whole suite shares is written once. A
-//! scenario's own `files` overlay it path by path: naming `config.kdl` again
-//! replaces it, naming nothing keeps it.
-//!
-//! ## Several builds
-//!
-//! `expect { }` is one build. A case that needs more writes a `build { }` (or
-//! `check { }`) node per run, each optionally editing the site first, which is
-//! what makes cache behaviour testable:
+//! `expect { }` is one build; a case needing more writes a `build { }` (or
+//! `check { }`) node per run, each optionally editing the site first:
 //!
 //! ```kdl
 //! scenario "an edited page rebuilds alone" {
@@ -73,55 +52,17 @@
 //! ```
 //!
 //! A step also carries the overrides a command line would pass: `drafts`,
-//! `future`, `base "https://.."`, `profile "dev"`. Each is a toggle, so
-//! `drafts #false` turns off what the config turned on.
+//! `future`, `base "https://.."`, `profile "dev"`, each a toggle.
 //!
-//! ## Names the build chose
-//!
-//! `capture` binds part of a built file to a name, and `{name}` interpolates it
-//! into any later path or needle. This is how a generated filename — a
-//! fingerprinted asset, a hashed bundle — is asserted against the page that
-//! references it:
-//!
-//! ```kdl
-//! file "index.html" { capture "css" #"style\.[0-9a-f]+\.css"# }
-//! file "assets/{css}" { contains "body" }
-//! ```
-//!
-//! Bindings are scenario-wide and survive into later steps. Interpolation is
-//! deliberately *not* applied to a `matches`/`capture` pattern: `{8}` is a
-//! quantifier there, not a name.
-//!
-//! When nothing names the file, a `file`/`absent` path may hold a `*`, which
-//! matches within one segment and must hit *exactly one* file — "one of these
-//! exists" is a claim a case could pass by accident:
+//! `capture` binds part of a built file to a scenario-wide name, and `{name}`
+//! interpolates it into any later path or needle, never into a `matches` or
+//! `capture` pattern, where `{8}` is a quantifier. A `file`/`absent` path may
+//! hold a `*`, which matches within one segment and must hit exactly one file:
 //!
 //! ```kdl
 //! file "assets/style.*.css" { capture "bg" #"/assets/(bg\.[0-9a-f]+\.png)"# }
 //! file "assets/{bg}"
 //! ```
-//!
-//! # What cannot become a scenario
-//!
-//! A scenario is a sequence of in-process builds of one tempdir, checked against
-//! files on disk. Everything below falls outside that and stays in Rust:
-//!
-//! | Kind | Where | Why |
-//! | --- | --- | --- |
-//! | live server, SSE, timing | `serve_e2e.rs` | a running process, not a build |
-//! | subprocess + exit codes + stderr | `cli_e2e.rs` | the CLI's own output, not the site's |
-//! | in-process SSH server | `deploy_e2e.rs` | a fixture the harness has to host |
-//! | in-process HTTP server | `external_e2e.rs` | ditto |
-//! | project generation | `scaffold_e2e.rs` | there is no site to lay down yet |
-//! | library-level calls | `discovery.rs`, `frontmatter.rs` | assert on Rust values, not files |
-//! | bundled JS assets | `virtual_modules_e2e.rs` | reads the binary's own resources |
-//! | cargo feature matrix | `features_e2e.rs` | asserts on what a build *cannot* do |
-//!
-//! One narrower category cuts across the files that *are* mostly migrated:
-//! **element-level claims**. `count` counts occurrences of a needle and `json`
-//! addresses a document by pointer, but there is no CSS-selector claim, because
-//! there is no HTML parser in the tree and half a selector engine is worse than
-//! none. A claim that really needs the element tree stays in Rust.
 
 mod common;
 
@@ -139,18 +80,14 @@ use baudelaire::ui::Bytes;
 use common::{Run, Site};
 
 /// The cargo features a scenario may name in `requires`, paired with whether
-/// this build has them. `requires` both validates and skips against it, so a
-/// typo is a hard error rather than a case that quietly never runs.
-///
-/// Read from the binary's own inventory rather than kept here: a second copy
-/// would go stale the moment a feature is added, and the failure mode is a
-/// scenario that silently never runs.
+/// this build has them, read from the binary's own inventory so that a typo is
+/// a hard error rather than a case that quietly never runs.
 const FEATURES: &[(&str, bool)] = baudelaire::version::Version::FEATURES;
 
 /// Names bound by a `capture` claim, and the `{name}` substitution they drive.
 ///
 /// Scenario-wide and ordered, so a step can assert against a name an earlier
-/// step bound, and a failure report lists them the same way twice.
+/// step bound.
 #[derive(Default)]
 struct Bindings(BTreeMap<String, String>);
 
@@ -159,9 +96,8 @@ impl Bindings {
         self.0.insert(name.to_owned(), value.to_owned());
     }
 
-    /// `text` with every `{name}` replaced by what it captured. An unbound name
-    /// is an error rather than a literal: a typo would otherwise assert against
-    /// the braces themselves and quietly pass or fail for the wrong reason.
+    /// `text` with every `{name}` replaced by what it captured; an unbound name
+    /// is an error rather than a literal.
     fn expand(&self, text: &str) -> Result<String, String> {
         let mut out = String::with_capacity(text.len());
         let mut rest = text;
@@ -194,16 +130,13 @@ impl Bindings {
 /// What to write for one input file.
 #[derive(Clone)]
 enum Source {
-    /// Written verbatim, with a trailing newline: config, `.typ`, `.css`, `.js`.
+    /// Written verbatim, with a trailing newline: config, `.typ`, `.css`.
     Text(String),
     /// A generated `WxH` image whose pixels vary with position, so two sizes
-    /// never share bytes. Images need real dimensions an encoder agrees with; a
-    /// text placeholder will not do.
+    /// never share bytes.
     Image(image::ImageFormat, u32, u32),
     /// Bytes settled at parse time: a fixture copied out of the repo (`from=`),
-    /// or a short literal (`bytes=` hex). Both exist so a case can lay down a
-    /// file no generator produces — an SVG, a font, a deliberately corrupt
-    /// header.
+    /// or a short literal (`bytes=` hex).
     Bytes(Vec<u8>),
 }
 
@@ -218,8 +151,8 @@ impl Source {
             return Ok(Self::Image(image::ImageFormat::Jpeg, w, h));
         }
         if let Some(from) = node.get("from").and_then(KdlValue::as_string) {
-            // Read now, not at run time: a mistyped fixture path is a hard
-            // error in every run rather than one failing case somewhere.
+            // Read now, so a mistyped fixture path fails every run rather
+            // than one case somewhere.
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(from);
             let bytes = std::fs::read(&path)
                 .map_err(|e| format!("`from={from}`: {} ({e})", path.display()))?;
@@ -269,8 +202,7 @@ impl Source {
     /// An image of the given size, its pixels varying with position.
     fn image(format: image::ImageFormat, w: u32, h: u32) -> Vec<u8> {
         let img = image::RgbImage::from_fn(w, h, |x, y| {
-            // Masked rather than checked: the pattern is meant to wrap, so a
-            // truncating cast is the point.
+            // The pattern is meant to wrap, so a truncating cast is the point.
             image::Rgb([
                 ((x * 7 + y * 13) & 0xff) as u8,
                 ((x * 3) & 0xff) as u8,
@@ -310,8 +242,7 @@ enum Claim {
     Equals(String),
     /// Every needle appears, each after the one before it.
     Order(Vec<String>),
-    /// A needle appears exactly this many times: "inlined once" is a different
-    /// claim from "inlined", and `contains` cannot tell them apart.
+    /// A needle appears exactly this many times, which `contains` cannot say.
     Count(String, usize),
     Matches(regex::Regex),
     /// Bind what the pattern matched (group 1 if it has one, else the whole
@@ -427,9 +358,8 @@ impl Claim {
         }
     }
 
-    /// The complaint this claim has about the file, if any. `binds` is taken by
-    /// value for the needles it expands and mutated by `capture`, which is what
-    /// lets one claim name what an earlier one found.
+    /// The complaint this claim has about the file, if any. `binds` is mutated
+    /// by `capture`, which is what lets one claim name what an earlier found.
     fn check(&self, file: &Built, binds: &mut Bindings) -> Option<String> {
         let text = &file.text;
         match self {
@@ -472,8 +402,7 @@ impl Claim {
             }
             Self::Capture(name, pattern) => match pattern.captures(text) {
                 Some(found) => {
-                    // Group 1 when the pattern has one, so a name can be pulled
-                    // out of its surroundings; the whole match otherwise.
+                    // Group 1 when the pattern has one, the whole match else.
                     let hit = found.get(1).or_else(|| found.get(0))?;
                     binds.bind(name, hit.as_str());
                     None
@@ -535,8 +464,7 @@ impl Json {
             Self::Equals(want) => {
                 let want = binds.expand(want).ok()?;
                 // A JSON string compares as its bare content, so a claim reads
-                // `equals="A"` and not `equals="\"A\""`; anything else compares
-                // as the compact JSON it is.
+                // `equals="A"`; anything else compares as compact JSON.
                 let got = match found.as_str() {
                     Some(text) => text.to_owned(),
                     None => found.to_string(),
@@ -558,9 +486,7 @@ impl Json {
 /// An output path, either literal or holding a `*` that matches within one
 /// segment.
 ///
-/// A pattern is the entry point `capture` needs when *nothing* names the file:
-/// a fingerprinted stylesheet is `style.<hash>.css` on disk and referenced only
-/// from another generated file, so there is no literal path to start from.
+/// A pattern is the entry point `capture` needs when *nothing* names the file.
 /// Exactly one file may match, since "one of these exists" is a claim a case
 /// could pass by accident.
 struct Pattern(String);
@@ -571,8 +497,7 @@ impl Pattern {
     }
 
     /// Whether a dist-relative path matches, segment by segment. Only `*` is
-    /// special, and it never crosses a `/`: a pattern is for naming one
-    /// generated file, not for walking a tree.
+    /// special, and it never crosses a `/`.
     fn matches(&self, path: &str) -> bool {
         let (mut pattern, mut candidate) = (self.0.split('/'), path.split('/'));
         loop {
@@ -715,7 +640,7 @@ impl Output {
 /// Whether the build is meant to succeed, and if not, with which diagnostic.
 enum Outcome {
     Ok,
-    /// The miette code of the expected error, e.g. `baudelaire::svg::malformed`.
+    /// The miette code of the error, e.g. `baudelaire::svg::malformed`.
     Fails(String),
 }
 
@@ -773,12 +698,10 @@ struct Expect {
     /// a case names the one it is about, not every one the build may add.
     warns: Vec<String>,
     /// Advice codes the run must have reported. Its own claim rather than part
-    /// of `warns`, because advice never counts against a build: the two say
-    /// different things about what the run decided.
+    /// of `warns`, because advice never counts against a build.
     advises: Vec<String>,
     /// Diagnostic codes that must *not* be reported: the claim that a check
-    /// stayed quiet about a page, which is as much a part of what a report means
-    /// as the pages it does name.
+    /// stayed quiet about a page.
     unwarned: Vec<String>,
     outputs: Vec<Output>,
     absent: Vec<String>,
@@ -897,11 +820,8 @@ impl Expect {
     }
 }
 
-/// The command-line overrides a step applies over the config it loaded: the
-/// same levers `build`/`check` expose, spelled the same way.
-///
-/// Each is a toggle rather than a flag, so a step can turn *off* what the
-/// config turned on, which is the whole reason the CLI spells them in pairs.
+/// The command-line overrides a step applies over the config it loaded, each a
+/// toggle so a step can turn *off* what the config turned on.
 #[derive(Default)]
 struct Knobs {
     drafts: Option<bool>,
@@ -1013,8 +933,8 @@ impl Step {
         }
         let run = match site.try_config().and_then(|c| self.knobs.apply(c)) {
             Ok(config) => Run::of(config, self.mode),
-            // A config this step cannot even load is still an outcome the case
-            // may have asked for, so it is reported through the same path.
+            // A config this step cannot load is still an outcome the case may
+            // have asked for.
             Err(err) => Run {
                 result: Err(err),
                 report: baudelaire::ui::Report {
@@ -1071,8 +991,7 @@ impl Scenario {
                 "build" => steps.push(Step::parse(child, Mode::Build)?),
                 "check" => steps.push(Step::parse(child, Mode::Check)?),
                 "expect" => {
-                    // The one-build spelling is exactly one `build { expect }`,
-                    // so there is one runner and not two.
+                    // The one-build spelling is one `build { expect }`.
                     sugar = true;
                     steps.push(Step {
                         mode: Mode::Build,
@@ -1108,8 +1027,7 @@ impl Scenario {
     }
 
     /// The suite defaults with the scenario's own files laid over them: a path
-    /// in both keeps the scenario's, in declaration order with the defaults
-    /// first, so a case reads the way it is written.
+    /// in both keeps the scenario's, in declaration order with defaults first.
     fn overlay(defaults: &[(String, Source)], own: Vec<(String, Source)>) -> Vec<(String, Source)> {
         let mut out: Vec<(String, Source)> = Vec::new();
         for (path, source) in defaults {
@@ -1130,8 +1048,7 @@ impl Scenario {
     }
 
     /// Lay the case down in a fresh tempdir, run every step in order, and
-    /// collect every unmet expectation. A step that fails stops the case: the
-    /// ones after it were written against a site that never came to be.
+    /// collect every unmet expectation. A step that fails stops the case.
     fn run(&self) -> Vec<String> {
         let site = Site::new();
         for (path, source) in &self.files {
@@ -1302,8 +1219,7 @@ fn count(n: i128) -> Option<usize> {
 }
 
 /// A byte size written as an integer of bytes or as a string with a unit, read
-/// by the very parser the config uses, so `size max="50kB"` and a `budget`
-/// cannot disagree about what a kilobyte is.
+/// by the parser the config itself uses.
 fn size(value: &KdlValue) -> Option<u64> {
     match value.as_string() {
         Some(text) => Bytes::parse(text).map(|b| b.0),
@@ -1317,10 +1233,8 @@ fn line_of(text: &str, node: &KdlNode) -> usize {
     text[..offset.min(text.len())].lines().count().max(1)
 }
 
-/// The two pieces of the format that no scenario can prove about itself: a path
-/// pattern that never matched would report "nothing matches" rather than a
-/// wrong claim, and an unbound name has to fail rather than assert against its
-/// own braces.
+/// The two pieces of the format that no scenario can prove about itself: path
+/// matching, and the refusal to expand an unbound name.
 #[test]
 fn the_format_matches_paths_and_expands_names_as_documented() {
     let matches = |pattern: &str, path: &str| Pattern(pattern.to_owned()).matches(path);

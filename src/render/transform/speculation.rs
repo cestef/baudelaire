@@ -1,9 +1,5 @@
-//! Injects browser-native navigation hints into each page's `<head>`.
-//!
-//! A `<script type="speculationrules">` asks the browser to fetch, or fully
-//! render, an internal link's target before it is clicked. It is the
-//! zero-JavaScript neighbour of the SPA runtime: no code ships, nothing mounts,
-//! and a browser without the API ignores the script entirely.
+//! Injects a `<script type="speculationrules">` into each page's `<head>`,
+//! asking the browser to fetch or render an internal link before it is clicked.
 
 use serde::Serialize;
 use typst::syntax::Span;
@@ -25,8 +21,6 @@ impl Transform for Speculation {
         let Some(rules) = Rules::of(cx.config) else {
             return;
         };
-        // Best-effort, like every other transform: a page that emitted its own
-        // root has no `<head>` to append to, and gains no hints.
         if let Some(head) = doc.head() {
             head.children.push(rules.script());
         }
@@ -46,9 +40,8 @@ struct Rules {
 /// One rule: which links it covers, and how eagerly to act on them.
 #[derive(Serialize)]
 struct Rule {
-    /// A URL-pattern match. Every page of this site, and only this site: a
-    /// subpath-hosted site matches under its own prefix so the rules never
-    /// speculate on a neighbour sharing the host.
+    /// A URL-pattern match covering this site only, so a subpath-hosted site
+    /// never speculates on a neighbour sharing the host.
     #[serde(rename = "where")]
     scope: Scope,
     eagerness: &'static str,
@@ -60,9 +53,7 @@ struct Scope {
 }
 
 impl Rules {
-    /// The rules for a config, or `None` when both actions are off (a
-    /// `speculation { }` block that turned everything down would otherwise
-    /// emit an empty, meaningless script).
+    /// The rules for a config, or `None` when both actions are off.
     fn of(config: &Config) -> Option<Self> {
         let scope = config.prefixed("/*");
         let rule = |eagerness: Eagerness| match eagerness {
@@ -83,9 +74,6 @@ impl Rules {
 
     /// The rule document as the `<script>` element that carries it.
     fn script(&self) -> HtmlNode {
-        // Infallible: every field is a plain string or list of them, and
-        // `serde_json` only fails on a serializer that can (a map with
-        // non-string keys, a non-finite float, a custom error).
         let json = serde_json::to_string(self).expect("rules are plain strings");
         let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "speculationrules");
         el.children
@@ -119,8 +107,6 @@ mod tests {
         assert_eq!(value["prefetch"][0]["where"]["href_matches"], "/*");
     }
 
-    /// An action set to `none` is left out entirely: an empty list is not a
-    /// valid rule set.
     #[test]
     fn omits_an_action_that_is_off() {
         let value = json(&config(Eagerness::Eager, Eagerness::None));
@@ -128,14 +114,11 @@ mod tests {
         assert_eq!(value["prefetch"][0]["eagerness"], "eager");
     }
 
-    /// Both off means no script at all, rather than an empty one.
     #[test]
     fn produces_nothing_when_both_actions_are_off() {
         assert!(Rules::of(&config(Eagerness::None, Eagerness::None)).is_none());
     }
 
-    /// A subpath-hosted site speculates only under its own prefix, never on a
-    /// neighbouring site that happens to share the host.
     #[test]
     fn scopes_the_pattern_to_the_base_path() {
         let mut config = config(Eagerness::Moderate, Eagerness::None);

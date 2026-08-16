@@ -1,14 +1,5 @@
-//! Names the highlight marks the `raw` show rule left behind.
-//!
-//! [`crate::world::rules`] marks each highlighted piece with the vocabulary
-//! entry its scopes resolved to (`data-token`) and with the grammar's own scope
-//! (`data-scope`). A show rule is a bare `fn` with nowhere to keep a config, so
-//! it cannot know what the site calls those, and this is where
-//! `html { highlight { } }` is applied: the mark becomes a class, keeps or loses
-//! its scope stamp, and a token the site dropped loses its span entirely.
-//!
-//! No mark survives this pass, which is the contract: an unnamed `data-token` in
-//! the output would mean the transform did not run over markup the rule emitted.
+//! Names the highlight marks the `raw` show rule left behind, applying
+//! `html { highlight { } }`. No mark survives this pass.
 
 use typst::ecow::EcoVec;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
@@ -26,13 +17,11 @@ impl Transform for Highlight {
         config.html.highlight.enabled
     }
 
+    /// Keyed on `<code>` rather than the `<pre>` wrapper, which only a block
+    /// raw has.
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let highlight = &cx.config.html.highlight;
         doc.walk(|element| {
-            // Inside a `<code>`, which is what both spellings of a code block
-            // have: the block one is wrapped in a `<pre>` and the inline one is
-            // not, and keying on the wrapper left every `#raw("..", lang: ..)`
-            // in a sentence marked and unnamed.
             if element.tag == tag::code {
                 Self::name(element, highlight);
             }
@@ -60,8 +49,6 @@ impl Highlight {
                         child.attrs.remove(SCOPE);
                     }
                 }
-                // Left marked, so the splice below can find it again: a token
-                // the site turned off is a span it never asked to pay for.
                 None => dropped = true,
             }
         }
@@ -161,8 +148,6 @@ mod tests {
         );
     }
 
-    /// Both halves of the naming: the prefix a site chose, and the name it gave
-    /// one token.
     #[test]
     fn a_configured_prefix_and_rename_both_land() {
         let config = HighlightConfig {
@@ -186,8 +171,6 @@ mod tests {
         );
     }
 
-    /// A dropped token keeps its text and loses its span: the point of dropping
-    /// one is the markup, so leaving an empty span behind would buy nothing.
     #[test]
     fn a_dropped_token_leaves_its_text_behind() {
         let config = HighlightConfig {
@@ -210,8 +193,6 @@ mod tests {
         );
     }
 
-    /// The escape hatch: the grammar's own scope stays on the page for a
-    /// stylesheet that wants to select finer than the vocabulary can.
     #[test]
     fn the_scope_stamp_survives_when_it_is_asked_for() {
         let config = HighlightConfig {

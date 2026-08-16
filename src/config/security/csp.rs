@@ -4,23 +4,17 @@ use crate::config::dispatch::Kind::{Flag, Text, Url};
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
-/// A generated `Content-Security-Policy`.
-///
-/// Each directive is the value it is given, verbatim: a CSP source list is its
-/// own small language (`'self'`, `https:`, a host, `'unsafe-inline'`), and
-/// inventing a second spelling for it would help nobody. What this adds is the
-/// half no author can write down, the digest of every inline script and style
-/// the build produced.
+/// A generated `Content-Security-Policy`. Each directive is the value it is
+/// given, verbatim.
 #[derive(Debug, Clone, Hash)]
 pub struct CspConfig {
-    /// Whether a policy is emitted at all; flipped by the block's presence.
+    /// Whether a policy is emitted at all.
     pub enabled: bool,
     /// Enforce it. Off emits `Content-Security-Policy-Report-Only`, which
     /// reports violations and blocks nothing: how a policy is rolled out.
     pub enforce: bool,
     /// Add the digest of every inline `<script>` and `<style>` the build
-    /// produced to the script and style directives, which is what lets a strict
-    /// policy coexist with the inline blocks a page needs.
+    /// produced to the script and style directives.
     pub hashes: bool,
     /// `default-src`, the fallback every unstated fetch directive inherits.
     pub default: Option<String>,
@@ -42,18 +36,10 @@ pub struct CspConfig {
 
 impl Default for CspConfig {
     fn default() -> Self {
-        // opt-in as a whole, like every other generated artifact: a policy this
-        // tool invented for a site that never asked for one would be either
-        // useless or breaking. Once the block is present, it enforces (a
-        // report-only policy is a rollout step, not a destination) and carries
-        // the inline digests, which is the half an author cannot write.
         Self {
             enabled: false,
             enforce: true,
             hashes: true,
-            // The one directive with a default: a policy with no `default-src`
-            // restricts nothing it does not name, which is not what a block
-            // saying `csp { }` means.
             default: Some("'self'".into()),
             script: None,
             style: None,
@@ -69,8 +55,6 @@ impl Default for CspConfig {
     }
 }
 
-/// The `security { csp { .. } }` section: one key per directive, each taking a
-/// CSP source list verbatim.
 impl Section for CspConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 

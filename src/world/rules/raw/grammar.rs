@@ -23,13 +23,10 @@ pub(super) struct Piece<'a> {
     pub(super) line: usize,
     /// The text itself, never empty and never spanning a line break.
     pub(super) text: &'a str,
-    /// Its byte offset within that line, which is what typst turns back into a
-    /// source position when a diagnostic points inside a code block.
+    /// Its byte offset within that line.
     pub(super) offset: usize,
-    /// The mark it carries: the vocabulary entry it resolved to and the
-    /// grammar's own scope name, or `None` for text the vocabulary does not
-    /// name. Both, because a site may ask to keep the scope beside the class,
-    /// and this is the only place that still knows it.
+    /// The vocabulary entry it resolved to and the grammar's own scope name,
+    /// or `None` for text the vocabulary does not name.
     pub(super) token: Option<(Token, EcoString)>,
 }
 
@@ -42,8 +39,7 @@ pub(super) enum Mode {
 }
 
 /// Where a resolved grammar's syntax set lives: typst's bundled one, or one the
-/// page loaded itself. A borrow of either would tie the [`Grammar`] to it, so
-/// the loaded case owns its `Arc` and both answer [`Set::get`].
+/// page loaded itself.
 pub(super) enum Set {
     Builtin,
     Loaded(Arc<SyntaxSet>),
@@ -53,9 +49,7 @@ pub(super) enum Set {
 pub(super) enum Grammar {
     /// typst's own parser, for `typ`, `typc` and `typm`.
     Typst(Mode),
-    /// A sublime grammar, named by the language token that found it. Kept as a
-    /// token rather than a `&SyntaxReference` for the same borrow reason
-    /// [`Set`] exists; the second lookup is a hash map hit.
+    /// A sublime grammar, named by the language token that found it.
     Sublime(Set, EcoString),
     /// No grammar, or highlighting the author turned off: every line is one
     /// unclassed piece.
@@ -71,18 +65,11 @@ impl Set {
         }
     }
 
-    /// A sublime grammar's own one-syntax set, or `None` when the bytes will not
-    /// parse.
+    /// A sublime grammar's own one-syntax set, or `None` when the bytes will
+    /// not parse.
     ///
-    /// typst decodes the same bytes into a `RawSyntax` and keeps the
-    /// [`SyntaxSet`] to itself, so decoding them again is the only way to one
-    /// here. Memoized on the bytes, so a site whose template names a grammar
-    /// once builds it once, however many pages that `set` rule reaches.
-    ///
-    /// A failure is silent because it cannot be new: these bytes already parsed
-    /// when the `set` rule loaded them, and typst reported it there if they did
-    /// not. Leaving the block unhighlighted beats failing a page the compiler
-    /// itself accepted.
+    /// A failure is silent: the same bytes already parsed when the `set` rule
+    /// loaded them, and typst reported it there if they did not.
     #[comemo::memoize]
     fn decode(bytes: &Bytes) -> Option<Arc<SyntaxSet>> {
         let definition = SyntaxDefinition::load_from_str(bytes.as_str().ok()?, false, None).ok()?;
@@ -96,29 +83,16 @@ impl Grammar {
     /// What `elem` should be highlighted with, resolved the way typst resolves
     /// it: typst's own languages first, then the grammars the page loaded, then
     /// the bundled set.
+    ///
+    /// A block carrying a `theme` warns from a detached span, so every block
+    /// warns identically and the reporter collapses them into one line.
     pub(super) fn of(
         elem: &Packed<RawElem>,
         engine: &mut Engine,
         styles: StyleChain,
     ) -> SourceResult<Self> {
         match elem.theme.get_ref(styles) {
-            // `theme: none` is an author saying "do not highlight this block",
-            // and it means that in either mode.
             Smart::Custom(None) => return Ok(Self::Plain),
-            // A theme, on the other hand, is a palette this mode has nowhere to
-            // put: its colours are discarded, and silence would leave a site
-            // whose stylesheet has moved on looking merely unstyled.
-            //
-            // Detached deliberately, and it names no file: with no span there
-            // is no label, and miette prints no source header for a diagnostic
-            // that labels nothing. That is the trade, not an oversight -- an
-            // earlier comment here claimed the bridge would name the page, and
-            // it cannot. What it buys is that every block on every page renders
-            // one identical warning, which the reporter collapses into a single
-            // line for the whole site. The theme is set by one `set` rule, so
-            // there is one thing to change and the help names it; pointing at
-            // an arbitrary code block instead would be one warning per block
-            // and no better an answer.
             Smart::Custom(Some(_)) => engine.sink.warn(warning!(
                 Span::detached(),
                 "the `raw` theme is ignored while `html {{ highlight }}` is on";
@@ -156,8 +130,7 @@ impl Grammar {
     /// Split `lines` into classed pieces and hand each to `piece`, in order.
     ///
     /// `lines` are the block's lines as typst preprocessed them: tabs expanded,
-    /// no line breaks left inside one. Taking them rather than the element's own
-    /// text is what keeps this rule out of the business of reproducing that.
+    /// no line breaks left inside one.
     pub(super) fn tokens(&self, lines: &[EcoString], piece: &mut dyn FnMut(Piece<'_>)) {
         match self {
             Self::Typst(mode) => Self::typst(*mode, lines, piece),
@@ -177,8 +150,6 @@ impl Grammar {
         if sources.0.is_empty() {
             return Ok(Vec::new());
         }
-        // The world has these bytes memoized from the `set` rule's own load, so
-        // this reads no file a second time.
         let loaded = Spanned::new(sources, elem.span()).load(engine.world)?;
         Ok(loaded
             .iter()
@@ -200,8 +171,11 @@ impl Grammar {
     }
 
     /// Highlight through a sublime grammar, one line at a time, carrying the
-    /// scope stack across lines so a block comment or a here-doc keeps its
-    /// scope past the line it opened on.
+    /// scope stack across lines so a block comment keeps its scope past the
+    /// line it opened on.
+    ///
+    /// A line is parsed without its break, which is the no-newline mode both
+    /// the bundled set and a decoded `.sublime-syntax` are built in.
     fn sublime(set: &SyntaxSet, lang: &str, lines: &[EcoString], piece: &mut dyn FnMut(Piece<'_>)) {
         let Some(syntax) = set.find_syntax_by_token(lang) else {
             return Self::plain(lines, piece);
@@ -209,15 +183,7 @@ impl Grammar {
         let mut state = ParseState::new(syntax);
         let mut stack = ScopeStack::new();
         for (line, text) in lines.iter().enumerate() {
-            // Without the line break, which is what these grammars expect:
-            // typst's bundled set and a `.sublime-syntax` this decodes are both
-            // built in syntect's no-newline mode, where a rule that would have
-            // matched the break matches the end of the line instead. Handing one
-            // over anyway leaves a line's first token unrecognised.
             let Ok(ops) = state.parse_line(text, set) else {
-                // A grammar that cannot parse its own language (a runaway regex,
-                // a context that recurses) is typst's report to make, not this
-                // rule's: print the line and carry on.
                 piece(Piece {
                     line,
                     text,
@@ -261,9 +227,6 @@ impl Grammar {
             Mode::Math => typst::syntax::parse_math(&text),
         };
 
-        // Where each line starts in `text`. Joined with `\n` just above, so a
-        // line is exactly one byte from the end of the one before it, whatever
-        // the file's own line endings were.
         let mut starts = Vec::with_capacity(lines.len());
         let mut at = 0;
         for line in lines {
@@ -272,11 +235,7 @@ impl Grammar {
         }
 
         Self::leaves(&LinkedNode::new(&root), None, &mut |range, tag| {
-            // typst's own tag needs no scope round-trip to become a token, but
-            // it names the scope it stands for, which is what a `data-scope`
-            // stamp carries here.
             let token = tag.map(|tag| (Token::from(tag), EcoString::from(tag.tm_scope())));
-            // The line the leaf opens on; every part after a break is the next.
             let opens = starts.partition_point(|&start| start <= range.start) - 1;
             let mut at = range.start;
             for (line, part) in (opens..).zip(split_newlines(&text[range])) {
@@ -295,11 +254,6 @@ impl Grammar {
 
     /// Visit every leaf of `node`, carrying the innermost tag seen on the way
     /// down.
-    ///
-    /// typst stacks the tags instead and lets a theme's selectors pick, which
-    /// comes to the same thing for the themes it ships: the deepest tag is the
-    /// most specific scope. Here it is the answer directly, with no scope
-    /// spelled anywhere in between.
     fn leaves(
         node: &LinkedNode,
         tag: Option<Tag>,
@@ -360,9 +314,6 @@ mod tests {
         );
     }
 
-    /// The pieces of a line concatenate back to the line, at the offsets they
-    /// claim: a piece dropped or an offset off by one is markup that no longer
-    /// says what the author wrote.
     #[test]
     fn the_pieces_of_a_line_rebuild_it() {
         let lines = ["fn main() {", "    let x = 1; // one", "}"];
@@ -398,8 +349,6 @@ mod tests {
         );
     }
 
-    /// A scope opened on one line and closed on another has to survive the line
-    /// break, which is the whole reason the parse state outlives a line.
     #[test]
     fn a_block_comment_stays_a_comment_across_lines() {
         let classed = classed(
@@ -411,7 +360,6 @@ mod tests {
             && !text.contains("let")));
     }
 
-    /// A language nothing knows still prints, unclassed.
     #[test]
     fn an_unknown_language_falls_back_to_plain() {
         assert_eq!(
@@ -432,8 +380,6 @@ mod tests {
         );
     }
 
-    /// A multi-line string is one leaf of the tree covering three lines, which
-    /// is the case that has to be sliced back over them.
     #[test]
     fn a_leaf_spanning_lines_is_split_at_each_break() {
         let lines = ["#let s = \"one", "two", "three\""];

@@ -1,9 +1,5 @@
 //! End-to-end deploy tests: the real backends driven through the public
-//! [`baudelaire::deploy::Deploy::run`], against in-process servers. They exercise the
-//! whole round trip (signing, HTTP/SFTP, listing, and the upload/delete plan)
-//! without any external service. The digest *skip* path (unchanged files) is
-//! covered by unit tests in `deploy`; here we assert the observable effects:
-//! new files land, orphans are removed, and a dry run writes nothing.
+//! [`baudelaire::deploy::Deploy::run`], against in-process servers.
 
 mod common;
 
@@ -52,9 +48,6 @@ fn set_aws_creds() {
     }
 }
 
-// --- S3 -------------------------------------------------------------------
-
-/// A dist tree with three files, written under `public/`.
 fn s3_config(site: &Site, port: u16) -> Config {
     let mut config = Config::default();
     config.paths.dist = site.path("public");
@@ -80,8 +73,7 @@ fn spawn_s3(store: Store, log: Log) -> u16 {
 }
 
 /// `refusing` makes every write answer with that S3 error code, in the XML
-/// shape a real bucket uses, so a test can assert on what the *host* said
-/// rather than on the status alone.
+/// shape a real bucket uses.
 fn spawn_s3_answering(store: Store, log: Log, refusing: Option<&'static str>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -171,9 +163,7 @@ fn object_key(path: &str) -> String {
 fn listing(store: &BTreeMap<String, Vec<u8>>) -> String {
     let mut xml = String::from("<?xml version=\"1.0\"?><ListBucketResult>");
     for (key, body) in store {
-        // The ETag is deliberately bogus: these tests assert on upload/delete,
-        // not the unchanged-skip path (which the `plan` unit tests cover), so a
-        // non-matching ETag just means every local file re-uploads.
+        // The ETag is deliberately bogus, so every local file re-uploads.
         write!(
             xml,
             "<Contents><Key>{key}</Key><ETag>\"x\"</ETag><Size>{}</Size></Contents>",
@@ -189,12 +179,10 @@ fn listing(store: &BTreeMap<String, Vec<u8>>) -> String {
 fn s3_deploy_uploads_new_files_and_deletes_orphans() {
     let site = Site::new();
     dist(&site);
-    // A content-addressed asset, the one kind of file that may be cached
-    // forever: its name changes whenever its bytes do.
+    // A content-addressed name, the one kind that may be cached forever.
     site.write("public/assets/app.abc123def456.css", "body{}");
 
     let store: Store = Arc::new(Mutex::new(BTreeMap::new()));
-    // An object the build no longer produces: it must be deleted.
     store
         .lock()
         .unwrap()
@@ -226,10 +214,6 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
         "orphan should be deleted"
     );
 
-    // `assets { fingerprint }` renames a file after its own content, which is
-    // what makes it safe to cache forever. A raw bucket sets no `Cache-Control`
-    // of its own, so without this the whole point of hashing is lost at the
-    // last step.
     let log = log.lock().unwrap();
     let line = |key: &str| {
         log.iter()
@@ -255,11 +239,6 @@ fn s3_deploy_uploads_new_files_and_deletes_orphans() {
 }
 
 /// A bucket that refuses a write says why, and the deploy says what it said.
-///
-/// The agent used to surface a non-2xx as a transport error, so the branch that
-/// reads the bucket's own `<Error><Code>` body was unreachable and every refusal
-/// reported a bare status: a wrong secret, a missing bucket and a rate limit
-/// were indistinguishable.
 #[test]
 fn s3_deploy_reports_the_reason_the_bucket_gave() {
     let site = Site::new();

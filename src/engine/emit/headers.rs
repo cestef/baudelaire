@@ -12,45 +12,32 @@ use crate::error::Result;
 /// Emits a `_headers` rule file from the site's `caching` and `security`
 /// policies.
 ///
-/// The caching half is the same policy the S3 uploader sets per object, said
-/// once to a host that reads it from the publish directory (Netlify,
-/// Cloudflare Pages). Both are written from `caching { }` rather than each
-/// carrying its own, so a site that deploys to a bucket *and* ships `_headers`
-/// cannot state two different answers to one question.
+/// The caching half is written from `caching { }`, the same policy the S3
+/// uploader sets per object, so a site that does both cannot state two answers
+/// to one question.
 pub(super) struct Headers;
 
 impl Headers {
-    /// The rule file name. Netlify and Cloudflare Pages spell it the same.
     const FILE: &'static str = "_headers";
 }
 
 impl Processor for Headers {
-    /// Needs the file, and something to put in it. `generate { headers }` alone
-    /// would emit an empty rule file, which reads as "no policy" and is what the
-    /// host already assumed. A rule the site wrote itself is something to put in
-    /// it, as much as either derived policy is.
+    /// Needs the file, and something to put in it: an empty rule file says only
+    /// what the host already assumed.
     fn enabled(&self, config: &Config) -> bool {
         let headers = &config.generate.headers;
         headers.enabled
             && (config.caching.enabled || config.security.csp.enabled || !headers.rules.is_empty())
     }
 
+    /// Rules are written most specific first, since a host matches them in
+    /// order: the site's own lead and the catch-all comes last.
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let config = site.config;
         let mut body = Lines::default();
-        // The site's own rules lead. They are the only ones whose order the
-        // author controls, and the two derived rules below end in a catch-all
-        // that would otherwise be answered first.
         for (pattern, headers) in &config.generate.headers.rules {
             Self::rule(&mut body, &config.prefixed(pattern), headers);
         }
-        // Most specific first: a host matches rules in order, so the catch-all
-        // has to come last or it would claim the asset paths too.
-        //
-        // The asset rule only earns its place when this build content-addresses
-        // the names under that prefix. Without `assets { fingerprint }` an asset
-        // keeps its authored name across builds and is exactly as mutable as a
-        // page, which is the same call `CacheControl::header` makes per object.
         if config.caching.enabled && config.assets.fingerprint {
             let prefix = config.prefixed(&format!("{}/*", config.asset_prefix()));
             let immutable = [("Cache-Control", &config.caching.immutable)];
@@ -82,17 +69,11 @@ impl Headers {
     }
 
     /// One rule: the path pattern on its own line, then each header indented
-    /// beneath it, then the blank line that ends the record. The format both
-    /// hosts read.
+    /// beneath it, then the blank line that ends the record.
     ///
-    /// The name is a value here rather than a literal, because a site's own
-    /// rules name their own headers; the derived ones pass a literal that
-    /// happens to satisfy the same signature.
+    /// A record with no headers under it is skipped, since a bare pattern is a
+    /// rule a host parses and that says nothing.
     fn rule(body: &mut Lines, pattern: &str, headers: &[(impl fmt::Display, impl fmt::Display)]) {
-        // A record with no headers under it says nothing, and the derived
-        // catch-all is empty on any site with neither `caching` nor a policy:
-        // `_headers` then ended in a bare `/*` and a blank line, which is a
-        // rule a host parses and a reader has to work out means nothing.
         if headers.is_empty() {
             return;
         }
@@ -131,9 +112,6 @@ mod tests {
             .expect("no _headers")
     }
 
-    /// Both halves are required. A rule file with no policy in it says nothing
-    /// the host did not already assume, and a policy with nowhere to go is what
-    /// the S3 uploader is for.
     #[test]
     fn needs_a_policy_as_well_as_the_file() {
         assert!(!Headers.enabled(&config("generate { headers #true }")));
@@ -141,8 +119,6 @@ mod tests {
         assert!(Headers.enabled(&config("generate { headers #true }\ncaching { }")));
     }
 
-    /// A policy is enough on its own: a site can state one without saying
-    /// anything about caching.
     #[test]
     fn a_policy_alone_earns_the_file() {
         assert!(Headers.enabled(&config("generate { headers #true }\nsecurity { csp { } }")));
@@ -154,9 +130,6 @@ mod tests {
         assert!(!body.contains("Cache-Control"), "{body}");
     }
 
-    /// A rule the site wrote itself earns the file on its own: a header that is
-    /// neither a cache policy nor a security one is still a header, and this
-    /// used to be the case that had to be written by hand after the build.
     #[test]
     fn a_rule_of_the_sites_own_earns_the_file() {
         let text = "generate {\n  headers {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}";
@@ -167,8 +140,6 @@ mod tests {
         assert!(!body.contains("Cache-Control"), "{body}");
     }
 
-    /// The site's rules lead, because the derived ones end in a catch-all: a
-    /// host reads the file in order and the first match wins.
     #[test]
     fn the_sites_own_rules_precede_the_derived_ones() {
         let body = body(&config(
@@ -179,8 +150,6 @@ mod tests {
         assert!(own < catchall, "{body}");
     }
 
-    /// Base-path prefixed like every other pattern in the file: a site served
-    /// under a subdirectory states paths relative to itself.
     #[test]
     fn a_rule_is_written_under_the_base_path() {
         let body = body(&config(
@@ -189,9 +158,6 @@ mod tests {
         assert!(body.contains("/docs/private/*"), "{body}");
     }
 
-    /// A header name is the author's text, so it goes through the same filter
-    /// every other value does. Written raw, a name carrying a line break would
-    /// open a record of its own.
     #[test]
     fn a_header_name_cannot_open_a_line_of_its_own() {
         let mut config = config("generate {\n  headers #true\n}");
@@ -203,9 +169,6 @@ mod tests {
         assert!(body.contains("  X-AX-B: v\n"), "{body}");
     }
 
-    /// The asset rule is only true where the names are content-addressed, and
-    /// it has to precede the catch-all, which would otherwise claim those paths
-    /// first.
     #[test]
     fn only_a_fingerprinted_build_declares_its_assets_immutable() {
         let hashed = body(&config(

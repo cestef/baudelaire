@@ -1,11 +1,5 @@
-//! Injects the per-page standard.site verification `<link>` into dated pages.
-//!
-//! When `publish.standard` carries a `did` and `verify.links` is on, every dated
-//! page gets `<link rel="site.standard.document" href="at://..">` in its `<head>`,
-//! letting an AppView confirm the page and its record belong together. The URI
-//! (and the key scheme behind it) comes from [`crate::announce::standard`], the
-//! single source of the record shapes, so the build names exactly what the
-//! publisher writes.
+//! Injects the per-page standard.site verification `<link>` into dated pages,
+//! so an AppView can confirm the page and its record belong together.
 
 use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 
@@ -14,7 +8,8 @@ use crate::config::Config;
 
 use super::{Cx, DocumentExt, Transform};
 
-/// The transform that adds each dated page's `site.standard.document` backlink.
+/// The transform that adds each dated page's `site.standard.document` backlink;
+/// only dated pages are documents.
 pub(super) struct Verify;
 
 impl Transform for Verify {
@@ -23,7 +18,6 @@ impl Transform for Verify {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        // only dated pages are documents; the did gate matches the publisher
         let (Some(did), true) = (
             cx.config.verify_did(|v| v.links),
             cx.page.frontmatter.date.is_some(),

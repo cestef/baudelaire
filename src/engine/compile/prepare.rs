@@ -1,18 +1,5 @@
 //! The compile input for a page: the synthetic Typst module that binds it to
 //! its template, and the values injected into that module.
-//!
-//! Everything a page's wrapper text is made of lives here: which import root
-//! the template comes from, the sibling and translation links, the UI strings.
-//! They are wrapper *text*, so a change to any of them refingerprints the pages
-//! that read it and the cache stays correct, which is why they are built once
-//! for the whole site rather than per page.
-//!
-//! The section tree and the page catalogue are the deliberate exceptions: each
-//! names every page on the site, so as wrapper text they would tie every page's
-//! fingerprint to every other page's title and URL. They go to [`Generated`]
-//! instead, and reach templates as files they import.
-//!
-//! [`Layout`] renders the text; this decides what goes into it.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -37,43 +24,30 @@ use super::layout::{Bind, Body, Context, Layout};
 use crate::world::generated::Table;
 
 /// A page reduced to what the cache check needs: its `FileId`, the exact text
-/// typst will compile, and that text's fingerprint, before the costly parse
-/// into a `Source` (deferred to the compile, run only for stale pages).
+/// typst will compile, and that text's fingerprint.
 pub(in crate::engine) type Prepared = (FileId, String, Hash);
 
 /// Builds every page's compile input against one build's shared state: the site
-/// config, the project world, the resolved theme, and the section trees, which
-/// are derived from the whole page set and so cost one pass rather than one per
-/// page.
+/// config, the project world, the resolved theme, and the section trees.
 pub(in crate::engine) struct Prepare<'a> {
     config: &'a Config,
     /// The entity registries a page's credited references resolve against.
     entities: &'a Registries,
     /// For a page that *declares* an entity, the pages that name it: an
     /// author's own archive, handed to their profile as `page.members`.
-    ///
-    /// Built once for the whole set rather than searched per page, which would
-    /// be one walk of every page's references per page.
     members: BTreeMap<PathBuf, Vec<Value>>,
     project: &'a Project,
     theme: Option<&'a Theme>,
     pages: &'a [Page],
-    /// One section tree per built language. Not wrapper text: the tree reaches
-    /// templates as a file ([`Generated`]) and the JS bundler as a value, and
-    /// putting it in the wrapper would make every page's fingerprint depend on
-    /// every other page's title and URL.
+    /// One section tree per built language, kept out of the wrapper text: it
+    /// names every page, so it would tie every page's fingerprint to every
+    /// other page's title and URL.
     trees: BTreeMap<String, Value>,
-    /// The template directory as the compiler spells it, resolved once: every
-    /// page's wrapper names it, and canonicalizing per page would pay for the
-    /// same answer once per page.
+    /// The template directory as the compiler spells it, resolved once for the
+    /// build.
     templates: PathBuf,
-    /// The backlinks each page is compiled against.
-    ///
-    /// A *prediction* until the site has rendered: it starts as what the last
-    /// build recorded (or nothing, on a cold one), and the repair pass replaces
-    /// it with the graph this build actually produced before recompiling the
-    /// pages that disagree. [`Backlinks::Off`] until a build sets one, which is
-    /// also what a site with the feature off compiles against.
+    /// The backlinks each page is compiled against: a *prediction* until the
+    /// site has rendered, and [`Backlinks::Off`] until a build sets one.
     backlinks: Backlinks,
 }
 
@@ -96,9 +70,6 @@ impl<'a> Prepare<'a> {
             templates: config.paths.under(project.root()).templates,
             backlinks: Backlinks::Off,
         };
-        // Built once from the whole page set and shared by every consumer, so
-        // the file templates import, the JS module, and any future reader can
-        // never disagree about the site's shape.
         let trees = config
             .langs()
             .iter()
@@ -116,27 +87,19 @@ impl<'a> Prepare<'a> {
     /// The digest of the backlinks `page` was compiled with, which the repair
     /// pass checks the finished site's graph against.
     ///
-    /// `None` where the page never saw them: the feature is off, or the page has
-    /// no template and so no wrapper to carry the value. Recording a digest for
-    /// one of those would claim the compiled text holds something it does not,
-    /// and recompile the page to byte-identical output whenever the graph moved.
+    /// `None` where the page never saw them: the feature is off, or the page
+    /// has no template and so no wrapper to carry the value.
     pub(in crate::engine) fn digest(&self, page: &Page) -> Option<Hash> {
         page.template.as_ref()?;
         self.backlinks.digest(page)
     }
 
-    /// The site config this pass renders against. Read by the bundle, which
-    /// resolves its own template and title from it.
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn config(&self) -> &Config {
         self.config
     }
 
     /// Who `page` credits, with the site's own author as the floor.
-    ///
-    /// The one resolution, so the wrapper, the card and the fingerprint above
-    /// all carry the same byline: a second one is a second chance to disagree
-    /// about who wrote the page.
     pub(in crate::engine) fn byline(&self, page: &Page) -> Byline {
         Byline::of(self.entities, self.config, page).or_site(self.config, page)
     }
@@ -144,15 +107,9 @@ impl<'a> Prepare<'a> {
     /// Which pages each described term holds, keyed by the profile page that
     /// describes it.
     ///
-    /// Drawn from [`Taxonomy::groups`], the single grouping rule behind term
-    /// pages and term feeds, so a profile's archive is the very list the
-    /// generated listing would have held: the same members, canonicalized
-    /// through the registry, in the taxonomy's own `sort` and `reverse`. A
-    /// second walk here would be a second answer to "what is under this term".
-    ///
     /// A term whose slug is empty or collides is an error the plan already
-    /// raised, before any of this runs, so a group that will not resolve
-    /// contributes nothing rather than failing a second time.
+    /// raised, so a group that will not resolve contributes nothing rather than
+    /// failing a second time.
     fn members(
         config: &'a Config,
         entities: &'a Registries,
@@ -181,9 +138,8 @@ impl<'a> Prepare<'a> {
     /// The files templates import, ready to write: the section tree and the
     /// page catalogue.
     ///
-    /// One per file-backed module, as an array sized by that registry, so a
-    /// module added there without a table to write it fails to compile rather
-    /// than resolving to a file nothing produces.
+    /// Sized by the file-backed module registry, so a module added there
+    /// without a table to write it fails to compile.
     pub(in crate::engine) fn generated(&self) -> [Table; module::FILES.len()] {
         [
             Table::new(module::SECTIONS, self.trees.clone()),
@@ -197,23 +153,19 @@ impl<'a> Prepare<'a> {
         ]
     }
 
-    /// The compile input for a page: its (possibly synthetic) source and its
-    /// content fingerprint: a hash of the exact text typst compiles. A real
-    /// page's body reaches the compiler through `#include` (a tracked file
-    /// read, so the dependency cache covers its edits); only generated
-    /// listings, which have no file, inline their body, and only their
-    /// wrapper text needs fingerprinting. Built once and shared by the cache
-    /// check and the compile.
+    /// The compile input for a page: its (possibly synthetic) source and a
+    /// fingerprint of the exact text typst compiles.
+    ///
+    /// The fingerprint is taken over the wrapper as it would read with *no*
+    /// backlinks, since the link graph does not exist at cache-split time; what
+    /// the page was compiled with is recorded separately (`Outputs::backlinks`)
+    /// and verified once the graph is known. A page with no template has no
+    /// wrapper, so its byline is folded in by hand: the roster is read at plan
+    /// time and is in no page's dependency set.
     pub(in crate::engine) fn input(&self, page: &Page) -> Result<Prepared> {
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
-            // A page with no template has no wrapper, so the byline that every
-            // page's fingerprint otherwise carries is not in this text at all --
-            // and the render pass still writes it into the head tags. Mixed in
-            // here, since a roster is read at plan time and is in no page's
-            // dependency set: without it, renaming an author left every
-            // templateless page serving the old name out of a green build.
             let fingerprint = Hash::of(&(&text, Value::from(&self.byline(page))));
             return Ok((FileId::new(rooted), text, fingerprint));
         };
@@ -222,13 +174,6 @@ impl<'a> Prepare<'a> {
             _ => Wrapper::id(&rooted),
         };
         let dir = self.dir(template);
-        // The page's identity is its wrapper as it would read with *no*
-        // backlinks, and the text it compiles is that same wrapper carrying the
-        // ones this build assumes. The two differ on purpose: at cache-split
-        // time the site's link graph does not exist yet, so a fingerprint over
-        // the real value would check a page against something the build has not
-        // computed. What it was actually compiled with is recorded separately
-        // (`Outputs::backlinks`) and verified once the graph is known.
         let bare = self.bound(page, &rooted, &dir, template, &Backlinks::Off);
         let fingerprint = Hash::of_bytes(bare.as_bytes());
         let text = if self.backlinks.of(page).is_empty() {
@@ -239,18 +184,8 @@ impl<'a> Prepare<'a> {
         Ok((id, text, fingerprint))
     }
 
-    /// The synthetic module binding `page` to the template `file` under `dir`.
-    ///
-    /// Split out from [`Prepare::input`] because a page is bound to a template
-    /// more than once: to its layout for the HTML compile, and to a paged
-    /// template for each sidecar that wraps the page (the PDF). They must hand
-    /// the template the same `page` dict, or `page.strings` means one thing on
-    /// screen and another on paper.
-    ///
-    /// Backlinks are the one exception, and are always empty here: a sidecar is
-    /// a paged compile of the page, and a card or a printed PDF has nothing to
-    /// click. Redrawing every sidecar whenever a page gained an inbound link
-    /// would also make the repair pass cost what the whole build does.
+    /// The synthetic module binding `page` to the template `file` under `dir`,
+    /// with no backlinks: a paged artifact has nothing to click.
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn bind(
         &self,
@@ -263,8 +198,8 @@ impl<'a> Prepare<'a> {
     }
 
     /// [`Prepare::bind`] against a given set of backlinks: the one place the
-    /// wrapper text is assembled, so the fingerprinted spelling and the compiled
-    /// one can differ in that value alone and in nothing else.
+    /// wrapper text is assembled, so the fingerprinted spelling and the
+    /// compiled one can differ in that value alone.
     fn bound(
         &self,
         page: &Page,
@@ -293,24 +228,11 @@ impl<'a> Prepare<'a> {
         self.with(page, &Backlinks::Off, |context| context.dict(&frontmatter))
     }
 
-    /// Build this page's [`Context`] and hand it to `f`.
-    ///
-    /// The pieces borrow from locals, so they cannot be returned; taking the
-    /// consumer instead keeps every caller reading one construction rather than
-    /// each assembling its own and drifting.
+    /// Build this page's [`Context`] and hand it to `f`; its pieces borrow from
+    /// locals, so it cannot be returned.
     fn with<T>(&self, page: &Page, backlinks: &Backlinks, f: impl FnOnce(Context<'_>) -> T) -> T {
         let taxonomies = Typst(&page.taxonomies()).to_string();
-        // Who the page credits, resolved through the registries. Part of the
-        // wrapper text, like `nav` and `assets` and for the same reason: it
-        // names only what this page names, so an entity that changes
-        // refingerprints exactly the pages that credit it. That is also why
-        // nothing here needs a cache probe of its own.
         let credits = Typst(&Value::from(&self.byline(page))).to_string();
-        // The pages that name this one as an entity: an author's archive, on
-        // the author's own page. Wrapper text like `nav`, and part of the
-        // page's fingerprint for the same reason: it is what the page shows,
-        // so a post that starts crediting them rebuilds their page and no
-        // other.
         let members = Typst(&Value::array(
             self.members
                 .get(&crate::fs::resolved(&page.source))
@@ -318,26 +240,12 @@ impl<'a> Prepare<'a> {
                 .unwrap_or_default(),
         ))
         .to_string();
-        // prev/next sibling links, exposed to the template as `page.nav`. Part of
-        // the wrapper text, so a neighbour's addition, removal, or retitling
-        // refingerprints this page and rebuilds it: the cache stays correct.
         let nav = Typst(&Self::nav(&page.siblings)).to_string();
         let translations = Typst(&Self::translations(page)).to_string();
         let strings = Typst(&self.strings(&page.lang)).to_string();
-        // The word count is this page's own; the rate it is divided by is the
-        // site's (`content { reading { wpm } }`, or the language's). A scalar
-        // out of `Config`, which is already in the manifest fingerprint, so it
-        // names no *other page* and cannot widen this page's identity the way
-        // the section tree once did.
         let reading = Typst(&self.reading(page)).to_string();
-        // Names only the pages that link *here*, the same line `nav` sits on: a
-        // page's neighbours, never the site. What keeps it out of the page's
-        // fingerprint is in [`Prepare::input`], not here.
         let backlinks = Typst(&backlinks.value(page)).to_string();
         let date = Typst(&self.date(page)).to_string();
-        // The page's own directory, listed only for a bundle. Part of the
-        // wrapper, so adding or renaming a file beside the page refingerprints
-        // that page and nothing else.
         let assets = Typst(&self.colocated(page)).to_string();
         let bind = match &page.data {
             Data::Export => Bind::Import,
@@ -364,31 +272,19 @@ impl<'a> Prepare<'a> {
         })
     }
 
-    /// The files sitting beside a *page bundle*, as authored name to served URL.
+    /// The files sitting beside a *page bundle*, as authored name to served
+    /// URL, spelled the way the image pipeline publishes an extracted file.
     ///
-    /// A bundle is a page that owns its directory (`posts/hello/index.typ`), so
-    /// the files there belong to it alone and naming them widens this page's
-    /// fingerprint and no other's. A page that shares its directory with its
-    /// neighbours (`posts/hello.typ`) gets an empty dict rather than a listing
-    /// of the whole section, which would be a site-wide value in disguise.
-    ///
-    /// A page is not an asset, whichever dialect it is written in, so every
-    /// extension [`Config::sources`] names is skipped. Spelled `typ` here, it
-    /// listed the page's own `index.md` and every sibling `.md` page as assets,
-    /// at URLs nothing publishes: a template iterating `page.assets` rendered
-    /// dead links.
-    ///
-    /// The URL is where the image pipeline publishes an extracted file, which is
-    /// what makes a frontmatter `hero: "cover.png"` resolvable from a template.
-    /// Only what a page *shows* is written to `dist` (see
-    /// [`crate::render::transform::externalize`]), so an entry here is a name
-    /// the page must also use in its body for the file to exist.
+    /// Empty for a page that shares its directory with its neighbours
+    /// (`posts/hello.typ`), whose siblings are not its own. Every extension
+    /// [`Config::sources`] names is skipped: a page is not an asset, whichever
+    /// dialect it is written in, and one listed here is a URL nothing
+    /// publishes.
     fn colocated(&self, page: &Page) -> crate::codegen::Value {
         use crate::codegen::Value;
         let Some(dir) = page.source.parent() else {
             return Value::dict::<&str>([]);
         };
-        // Only a bundle: its stem is the configured index name.
         let bundled = page
             .source
             .file_stem()
@@ -399,7 +295,6 @@ impl<'a> Prepare<'a> {
         }
         let root = crate::fs::canonical(&self.config.root);
         let content = crate::fs::canonical(&self.config.paths.content);
-        // A page is not an asset, whichever dialect it is written in.
         let sources = self.config.sources();
         let is_page = |path: &std::path::Path| {
             path.extension()
@@ -418,8 +313,6 @@ impl<'a> Prepare<'a> {
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            // Named the way the extractor names it: relative to the content
-            // root, so the two cannot disagree about where the file lands.
             let rel = crate::fs::canonical(&path);
             let rel = rel
                 .strip_prefix(&content)
@@ -430,12 +323,9 @@ impl<'a> Prepare<'a> {
         Value::dict(entries)
     }
 
-    /// One language's [`Section`] tree as a value: written out by [`Generated`]
-    /// for that language's templates to import (the single source a site nav is
-    /// built from, so it can't drift from the pages) and reused by the
-    /// `baudelaire:sections` JS module. Each node is
+    /// One language's [`Section`] tree as a value: each node is
     /// `(id, pages: ((url, title), ..), children: (..))`, one per content
-    /// directory; generated listings are excluded.
+    /// directory, with generated listings excluded.
     pub(in crate::engine) fn sections(&self, lang: &str) -> Value {
         Value::array(
             Section::tree(self.pages, self.config, lang)
@@ -446,9 +336,8 @@ impl<'a> Prepare<'a> {
 
     /// Every template this build will import, and what named it: each page's
     /// resolved layout, then the paged templates the config asks for. Deduped
-    /// by filename, so one missing layout is reported once however many pages
-    /// bind it, and named by the first page that did, since that is the one to
-    /// open.
+    /// by filename and attributed to the first page that named it, so a missing
+    /// layout is reported once however many pages bind it.
     fn asked(&self) -> Vec<(String, String)> {
         let mut asked: Vec<(String, String)> = Vec::new();
         let mut push = |file: &str, by: String| {
@@ -473,9 +362,6 @@ impl<'a> Prepare<'a> {
                 "`generate { pdf { pages } }`".to_owned(),
             );
         }
-        // Every bundle written as a PDF names a paged template of its own, and
-        // each is required separately: two bundles may be typeset by two
-        // templates, and the one that is missing is the one to name.
         for (id, bundle) in &config.generate.bundles {
             if bundle.active().contains(&crate::config::BundleFormat::Pdf) {
                 push(
@@ -487,12 +373,9 @@ impl<'a> Prepare<'a> {
         asked
     }
 
-    /// Fail on a template nothing supplies, before the first compile.
-    ///
-    /// Without this the compiler reports it: once per page, as `file not found`
-    /// against the generated wrapper that imports it, naming neither the config
-    /// key nor the frontmatter that asked. A missing `card.typ` (the default
-    /// name, which no starter shape writes) was a screenful of that.
+    /// Fail on a template nothing supplies, before the first compile, so it is
+    /// reported once and against what asked for it rather than once per page
+    /// against a generated wrapper.
     pub(in crate::engine) fn verify(&self) -> Result<()> {
         let searched: Vec<String> = self
             .theme
@@ -509,20 +392,15 @@ impl<'a> Prepare<'a> {
     }
 
     /// Whether any layer carries `template`: the project's directory, else the
-    /// theme's. The same order [`Self::dir`] resolves in, so what this accepts
-    /// is exactly what that will import.
+    /// theme's, in the order [`Self::dir`] resolves in.
     fn supplied(&self, template: &str) -> bool {
         self.config.paths.templates.join(template).is_file()
             || self.theme.is_some_and(|theme| theme.has_template(template))
     }
 
-    /// The import root a template is loaded from, layout or paged alike.
-    ///
-    /// The project's own template directory, expressed relative to the root
-    /// because a typst import is root-absolute in the compiler's terms, not the
-    /// config's, and resolved once for the build rather than per page. A
-    /// template the project does not have falls back to the theme's package,
-    /// which the compiler resolves by spec rather than by path.
+    /// The import root a template is loaded from, layout or paged alike: the
+    /// project's own directory as a root-absolute typst path, else the theme's
+    /// package spec.
     pub(in crate::engine) fn dir(&self, template: &str) -> String {
         match self.theme {
             Some(theme)
@@ -536,8 +414,7 @@ impl<'a> Prepare<'a> {
     }
 
     /// The prev/next sibling links as a typst dict value:
-    /// `(prev: (url: .., title: ..), next: none)`. Each link is a dict or `none`,
-    /// so a template reads `page.nav.prev.url` / `page.nav.next` uniformly.
+    /// `(prev: (url: .., title: ..), next: none)`, each link a dict or `none`.
     fn nav(siblings: &Siblings) -> Value {
         let link = |s: &Option<Sibling>| match s {
             Some(s) => Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))]),
@@ -550,19 +427,11 @@ impl<'a> Prepare<'a> {
     }
 
     /// A page's reading estimate as a typst dict value:
-    /// `(words: 1200, minutes: 6)`, exposed to the template as `page.reading`
-    /// for a "6 min read" badge.
+    /// `(words: 1200, minutes: 6)`.
     ///
-    /// Taken from the page's own source, whatever that source is. A page whose
-    /// body is *generated* Typst carries an estimate of its own, measured on the
-    /// text its author actually wrote and taken while that text was in hand:
-    /// reading the generated body counts machinery and not prose, since every
-    /// line of a lowered markdown page opens with `#`, and each one shipped
-    /// `0 min read`.
-    ///
-    /// The rate is the page's *language's*, so a site whose Japanese edition
-    /// reads three times faster by word says so once and both editions of a
-    /// translated page report the read they are.
+    /// A page whose body is *generated* Typst carries an estimate of its own,
+    /// measured on the text its author wrote: reading the generated body would
+    /// count machinery rather than prose.
     fn reading(&self, page: &Page) -> Value {
         let reading = match &page.data {
             #[cfg(feature = "markdown")]
@@ -583,12 +452,8 @@ impl<'a> Prepare<'a> {
     }
 
     /// A page's date in both forms: `(iso: .., display: ..)`, or `none` when it
-    /// carries no date.
-    ///
-    /// The ISO day is what a `<time datetime>` wants and the localized one is
-    /// what a reader wants, and a template cannot derive the second from the
-    /// first: typst's `datetime.display` knows English month names only, so a
-    /// French site rendered `2026-07-30` whatever its layout did.
+    /// carries no date; typst's `datetime.display` knows English month names
+    /// only, so a template cannot derive the localized form from the ISO one.
     fn date(&self, page: &Page) -> Value {
         let strings = Strings::new(self.config, &page.lang);
         match page.frontmatter.date {
@@ -604,9 +469,7 @@ impl<'a> Prepare<'a> {
     }
 
     /// A page's translations as an array value:
-    /// `((lang: .., url: .., title: ..), ..)`, exposed to the template as
-    /// `page.translations` for a language switcher. Empty on a single-language
-    /// site.
+    /// `((lang: .., url: .., title: ..), ..)`. Empty on a single-language site.
     fn translations(page: &Page) -> Value {
         Value::array(page.translations.iter().map(|t| {
             Value::dict([
@@ -617,8 +480,8 @@ impl<'a> Prepare<'a> {
         }))
     }
 
-    /// A language's UI-string table as a dict value, exposed to the template as
-    /// `page.strings`. Empty for a language with no `strings` block.
+    /// A language's UI-string table as a dict value. Empty for a language with
+    /// no `strings` block.
     fn strings(&self, lang: &str) -> Value {
         Value::dict(
             self.config

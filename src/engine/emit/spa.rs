@@ -1,16 +1,6 @@
-//! Client-side navigation over the ordinary multi-file output.
-//!
-//! The site keeps building exactly as it did: every route stays a real document
-//! that loads on its own. On top of that, a small runtime intercepts internal
-//! link clicks, fetches the target page, and swaps one container, so shared
-//! chrome (a header, a sidebar, an audio player) survives a navigation and the
-//! browser skips a full parse. Progressive enhancement throughout: without
-//! JavaScript nothing changes.
-//!
-//! The runtime ships two ways, from one source: `spa.js` at the `dist` root for
-//! a site that just drops a `<script type="module">`, and the `baudelaire:spa`
-//! virtual module for one that bundles its own entry and wants to call
-//! `mountSpa` itself.
+//! Client-side navigation over the ordinary multi-file output: a runtime that
+//! intercepts internal link clicks, fetches the target, and swaps one
+//! container.
 
 use super::script::Script;
 use super::{Emit, Processor, Site};
@@ -34,21 +24,17 @@ impl Processor for Spa {
     }
 }
 
-/// The router core, shared verbatim with the single-file export: this is the
-/// one place link interception, history handling, and container swapping are
-/// implemented.
+/// The router core, shared verbatim with the single-file export.
 pub(super) const ROUTER: &str = include_str!("js/router.js");
 
 /// The fetch adapter that turns the built site into single-page navigation.
 const ADAPTER: &str = include_str!("js/spa.js");
 
-/// The runtime's entry point: what the standalone client auto-calls and what a
-/// bundling site imports.
+/// The runtime's entry point.
 const MOUNT: &str = "mountSpa";
 
 impl SpaConfig {
-    /// The generated client's file name at the `dist` root. Single source, so
-    /// the emitted file and the documented `<script src>` cannot drift.
+    /// The generated client's file name at the `dist` root.
     pub const FILE: &'static str = "spa.js";
 
     /// The standalone client: core, adapter, and an auto-mount, so dropping one
@@ -58,9 +44,8 @@ impl SpaConfig {
     }
 
     /// The composable module source served through `baudelaire:spa`, exporting
-    /// [`MOUNT`] for the configured runtime and `mountRouter` for a site driving
-    /// the core itself. No auto-mount: the importer decides when to mount, and
-    /// against which container.
+    /// [`MOUNT`] for the configured runtime and `mountRouter` for a site
+    /// driving the core itself, with no auto-mount.
     #[cfg(feature = "js")]
     pub(crate) fn module(&self) -> String {
         self.script().exports(&[MOUNT, "mountRouter"])
@@ -109,8 +94,6 @@ mod tests {
         assert!(js.contains("mountSpa();"), "auto-mounts: {js}");
     }
 
-    /// The module is the same source minus the auto-mount, plus exports: a
-    /// bundling site mounts it itself, against its own container if it likes.
     #[cfg(feature = "js")]
     #[test]
     fn module_exports_instead_of_auto_mounting() {
@@ -119,7 +102,6 @@ mod tests {
         assert!(!js.contains("mountSpa();"), "no auto-mount: {js}");
     }
 
-    /// Nothing is emitted unless the site asked for it.
     #[test]
     fn stays_off_without_a_spa_block() {
         assert!(!Spa.enabled(&Config::default()));

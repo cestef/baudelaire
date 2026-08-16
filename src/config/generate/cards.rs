@@ -7,18 +7,13 @@ use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
 /// Generated social cards: the image a link to this site unfurls into, rendered
-/// per page from a Typst template. Enabled by the presence of a
-/// `generate { cards { .. } }` block.
-///
-/// The template is compiled to a *paged* document, not an HTML one, so it is
-/// ordinary Typst: `html.elem` does not exist there, and page layout does.
+/// per page from a paged Typst template, where `html.elem` does not exist.
 #[derive(Debug, Clone, Hash)]
 pub struct CardsConfig {
-    /// Whether to render cards.
     pub enabled: bool,
     /// The template file under the templates directory.
     pub template: String,
-    /// Card size in pixels. The card is one page rendered at one pixel per
+    /// Card size in pixels; the card is one page rendered at one pixel per
     /// point, so these are also the page's dimensions in points.
     pub width: u32,
     pub height: u32,
@@ -29,21 +24,17 @@ impl CardsConfig {
     /// of every card URL.
     pub const DIR: &'static str = "cards";
 
-    /// The widest and tallest a card may be. Unfurlers cap well below this; the
-    /// limit exists so a typo cannot ask for a gigapixel rasterization.
+    /// The widest and tallest a card may be, so a typo cannot ask for a
+    /// gigapixel rasterization.
     pub(crate) const MAX: u32 = 4096;
 
     /// The served URL of a page's card, whether or not it has been rendered
-    /// yet: the meta transform names it while the file is still being made, the
-    /// renderer writes it, and the prune keeps it, so all three have to derive
-    /// it the same way.
+    /// yet; the meta transform, the renderer and the prune all derive it here.
     pub fn url(&self, permalink: &str) -> String {
         format!("/{}/{}.png", Self::DIR, Basename(permalink))
     }
 
-    /// Whether cards are actually produced: configured *and* compiled in. A
-    /// build without the `cards` feature has no rasterizer, so pointing pages at
-    /// images it cannot make would be worse than making none.
+    /// Whether cards are actually produced: configured *and* compiled in.
     pub fn active(&self) -> bool {
         self.enabled && cfg!(feature = "cards")
     }
@@ -51,8 +42,6 @@ impl CardsConfig {
 
 impl Default for CardsConfig {
     fn default() -> Self {
-        // opt-in: rendering a page per card is the most expensive thing a build
-        // can do per page. 1200x630 is the size every unfurler crops to.
         Self {
             enabled: false,
             template: "card.typ".into(),
@@ -62,8 +51,7 @@ impl Default for CardsConfig {
     }
 }
 
-/// The `cards { template ..; width ..; height .. }` block. Its presence enables
-/// social card rendering.
+/// The `cards { }` block, whose presence enables social card rendering.
 impl Section for CardsConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 

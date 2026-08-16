@@ -1,6 +1,5 @@
 //! In-process full-site build exercising taxonomies, pagination, feeds, robots,
-//! and the sitemap. Unlike the binary-spawning e2e tests, this drives the engine
-//! inside the test process, so the generators are actually measured by coverage.
+//! and the sitemap.
 
 mod common;
 
@@ -34,7 +33,6 @@ generate {
 }
 "#;
 
-/// A blog post with a date and tags in its frontmatter.
 fn post(title: &str, day: u8, tags: &str) -> String {
     format!(
         "#let frontmatter = (title: \"{title}\", \
@@ -59,16 +57,13 @@ fn full_site_generates_taxonomies_pagination_feeds_and_metadata() {
         stats.pages
     );
 
-    // Pagination: paginate=2 over 3 posts -> page 1 plus a page 2.
     assert!(site.exists("public/blog/index.html"), "paginated index");
     assert!(site.exists("public/blog/page/2/index.html"), "second page");
 
-    // Taxonomy: an index plus one page per term.
     assert!(site.exists("public/tags/index.html"), "tag index");
     assert!(site.exists("public/tags/rust/index.html"), "rust term");
     assert!(site.exists("public/tags/cli/index.html"), "cli term");
 
-    // Sitemap + robots (base url is set, so robots links the sitemap).
     assert!(site.exists("public/sitemap.xml"), "sitemap");
     let robots = site.read("public/robots.txt");
     assert!(robots.contains("Disallow: /drafts/"), "robots: {robots}");
@@ -77,7 +72,6 @@ fn full_site_generates_taxonomies_pagination_feeds_and_metadata() {
         "robots sitemap link: {robots}"
     );
 
-    // A feed was emitted (rss + atom enabled).
     let files = site.files("public");
     assert!(
         files
@@ -127,12 +121,8 @@ fn flat_urls_with_redirects_search_and_llms() {
         .expect("build");
     assert!(stats.pages >= 2, "home + about built, got {}", stats.pages);
 
-    // Flat URLs write `.html` files rather than `dir/index.html`.
     assert!(site.exists("public/about.html"), "flat about page");
 
-    // ...and every emitted URL names that file. The style used to decide the
-    // output path only, so permalinks, canonicals, the sitemap, feeds and
-    // redirect targets all still said `/about/`, which nothing serves.
     let about = site.read("public/about.html");
     assert!(
         about.contains("/about.html") && !about.contains("\"/about/\""),
@@ -144,7 +134,6 @@ fn flat_urls_with_redirects_search_and_llms() {
     let search = site.read("public/search.json");
     assert!(search.contains("/about.html"), "{search}");
 
-    // A redirect stub forwards the stale path to the page's permalink.
     let stub = site.read("public/old-about.html");
     assert!(stub.contains("http-equiv"), "meta-refresh redirect: {stub}");
     assert!(stub.contains("/about.html"), "redirect target: {stub}");
@@ -153,7 +142,6 @@ fn flat_urls_with_redirects_search_and_llms() {
         "redirect body: {stub}"
     );
 
-    // Client-side search index (formats "json").
     assert!(site.exists("public/search.json"), "search index");
 }
 
@@ -178,7 +166,7 @@ fn asset_pipeline_processes_css_js_and_images() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
-    // CSS with a url() reference so the fingerprint-rewrite path runs.
+    // The `url()` reference is what makes the fingerprint-rewrite path run.
     site.write(
         "assets/style.css",
         "body { color: #ff0000; background: url(\"pic.png\"); }\n",
@@ -197,7 +185,6 @@ fn asset_pipeline_processes_css_js_and_images() {
         .expect("build");
     assert!(stats.pages >= 1);
 
-    // Each asset kind lands under dist/assets, fingerprinted.
     let out = site.files("public/assets");
     assert!(
         out.iter().any(|f| has_ext(f, "css")),

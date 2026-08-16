@@ -4,9 +4,7 @@
 
 use crate::config::MarkdownConfig;
 /// A fence's info string: a language, and the parameters that say what to do
-/// with it. Parsed rather than matched whole so a new option is a key here and
-/// nothing else, and so `typ eval` cannot be confused for a language nobody
-/// registered.
+/// with it.
 pub(super) struct Fence {
     pub(super) lang: Option<String>,
     /// Whether the block is Typst to run rather than a sample to show.
@@ -14,16 +12,11 @@ pub(super) struct Fence {
 }
 
 impl Fence {
-    /// The parameter that makes a fence run. Named once.
+    /// The parameter that makes a fence run.
     pub(super) const EVAL: &'static str = "eval";
 
     /// The languages a fence has to claim before that parameter means anything,
-    /// which is the set the highlighter reads as typst markup.
-    ///
-    /// Read from [`crate::world::rules::TYPST`] rather than spelled here: the two halves of
-    /// one rule did drift apart, this one taking `typ` alone while the
-    /// highlighter took `typst` as well, so ` ```typst eval ` was highlighted
-    /// as typst and then silently shown instead of run.
+    /// read from the highlighter's own set so the two cannot drift apart.
     pub(super) const TYPST: &'static [&'static str] = crate::world::rules::TYPST;
 
     pub(super) fn parse(info: &str) -> Self {
@@ -31,8 +24,6 @@ impl Fence {
         let lang = words.next().filter(|w| !w.is_empty()).map(str::to_owned);
         let mut eval = false;
         for param in words {
-            // `key=value` is accepted so the grammar has room to grow; today
-            // the only key is a bare flag, and `eval=false` reads as written.
             let (key, value) = param.split_once('=').unwrap_or((param, "true"));
             if key == Self::EVAL {
                 eval = value == "true";
@@ -58,10 +49,8 @@ impl Fence {
 /// for it: the alt text of an image, the body of a footnote, the text of a code
 /// block. Everything else streams straight out.
 pub(super) enum Buffered {
-    /// `alt` collects the raw text of the alt run. It is *not* taken from the
-    /// lowered buffer: an alt attribute is a plain string, and un-escaping
-    /// lowered output to recover one loses every inline that is not a text run
-    /// and mistakes a `#"` inside the generated source for the start of one.
+    /// `alt` collects the raw text of the alt run, never the lowered output
+    /// read back, which would leave generated source in the attribute.
     Alt {
         dest: String,
         alt: String,
@@ -75,25 +64,17 @@ pub(super) enum Buffered {
 pub(super) struct Html<'a>(pub(super) &'a str);
 
 impl Html<'_> {
-    /// What opens a comment.
     const OPEN: &'static str = "<!--";
-    /// What closes one.
     const CLOSE: &'static str = "-->";
     /// The two empty comments, `<!-->` and `<!--->`, written as what follows
-    /// their `<!--`. Both close on a terminator that overlaps the opening, so
+    /// their `<!--`; both close on a terminator overlapping the opening, so
     /// scanning for `-->` finds neither and they have to be matched first.
     const EMPTY: [&'static str; 2] = [">", "->"];
 
-    /// Whether the run is nothing but comments and the whitespace around them.
-    /// A comment is the one shape of raw HTML with no rendered counterpart, so
-    /// dropping *that* loses nothing.
-    ///
-    /// Scanned, rather than matched at its two ends. CommonMark ends an HTML
-    /// block on the line carrying `-->`, so
-    /// `<!-- a --><div>secret</div><!-- b -->` is one event that opens and
-    /// closes like a comment with an element hidden between: testing the ends
-    /// dropped the whole run, which lost the content *and* walked past the
-    /// `html` policy that would have refused it.
+    /// Whether the run is nothing but comments and the whitespace around them,
+    /// scanned rather than matched at its two ends because
+    /// `<!-- a --><div>x</div><!-- b -->` is one event that opens and closes
+    /// like a comment.
     pub(super) fn is_comment(&self) -> bool {
         let mut rest = self.0.trim();
         while let Some(after) = rest.strip_prefix(Self::OPEN) {
@@ -127,12 +108,8 @@ mod tests {
         for run in [
             "<!-- a note -->",
             "  <!-- a -->\n<!-- b -->\n",
-            // Empty comments, whose terminator overlaps the `<!--` that opened
-            // them. The length guard that used to defeat that overlap rejected
-            // both outright.
             "<!-->",
             "<!--->",
-            // A comment whose content is a single `-`.
             "<!----->",
         ] {
             assert!(Html(run).is_comment(), "{run:?}");
@@ -142,12 +119,9 @@ mod tests {
     #[test]
     fn a_comment_cannot_hide_markup_behind_it() {
         for run in [
-            // One HTML block, and the whole reason for the scan.
             "<!-- a --><div>secret</div><!-- b -->",
-            // `<!-->` is a *complete* comment, so what follows it is markup.
             "<!--><div>secret</div>-->",
             "<div>secret</div>",
-            // Never closed, so nothing here is a comment.
             "<!-- unterminated",
         ] {
             assert!(!Html(run).is_comment(), "{run:?}");

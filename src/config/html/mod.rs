@@ -12,10 +12,8 @@ use crate::config::node::NodeExt;
 use crate::config::{AnchorConfig, HighlightConfig, MathConfig, MetaConfig, RegionConfig};
 use crate::error::ConfigError;
 
-/// HTML output options.
 #[derive(Debug, Clone, Hash)]
 pub struct HtmlConfig {
-    /// Pretty-print HTML.
     pub pretty: bool,
     /// Inline local assets (`/assets/..` refs) as `data:` URIs.
     pub embed: bool,
@@ -25,60 +23,35 @@ pub struct HtmlConfig {
     /// Deep-linkable headings: a slug `id` where one is missing, and the link
     /// back to it.
     pub anchors: AnchorConfig,
-    /// Which part of a rendered page is its prose: read by the search index and
-    /// by a full-content feed, so both mean the same thing by it.
+    /// Which part of a rendered page is its prose, read by both the search
+    /// index and a full-content feed.
     pub region: RegionConfig,
     /// Class a code block's tokens instead of colouring them inline.
     pub highlight: HighlightConfig,
     /// Where the CSS that typst's MathML output depends on lives.
     pub math: MathConfig,
     /// Emit a schema.org JSON-LD island in each page's `<head>`.
-    ///
-    /// Opt-in, unlike the meta tags beside it: those restate facts the page
-    /// already states, while structured data is a claim made *to* a search
-    /// engine about what the page is, and that is the author's claim to make.
     pub jsonld: bool,
     /// Where a page's footnotes are moved to.
     pub footnotes: Footnotes,
     /// Stamp every element with the `file:line:column` it was authored at, as
-    /// `data-typst`. What a source-mapped preview reads to jump from a rendered
-    /// element back to the Typst that produced it.
-    ///
-    /// Opt-in, and off in a published build: the attributes are for the author,
-    /// not the reader. `serve --spans` turns them on for a preview session.
-    /// Deliberately a config field rather than a `serve`-only flag: `serve`
-    /// settings are excluded from the cache fingerprint, so a mode-derived
-    /// stamp would leave a `build` reusing a served page's markup, attributes
-    /// and all.
+    /// `data-typst`. A config field rather than a `serve`-only flag, because
+    /// `serve` settings are excluded from the cache fingerprint and a
+    /// mode-derived stamp would leave a `build` reusing a served page's markup.
     pub spans: bool,
 }
 
-/// The elements a page's footnote list is moved into, most specific first.
-///
-/// Typst appends the list to the end of the document, which is right for a page
-/// with no template and wrong for one with a layout: everything the layout emits
-/// is already in the body, so the notes land after the site footer, outside the
-/// element that sets the content width.
-///
-/// This is a list rather than one name because a site's layouts rarely agree: a
-/// post wraps its body in `<article>`, a generated index has only `<main>`, and
-/// a bespoke page may have neither. Each name is tried in order and the first
-/// element found wins, so `footnotes "article" "main"` covers all three without
-/// a rule per template. An empty list moves nothing, which is how a site keeps
-/// Typst's own placement.
+/// The elements a page's footnote list is moved into, most specific first; the
+/// first one a page has wins, and an empty list keeps Typst's own placement.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Footnotes(Vec<String>);
 impl Default for Footnotes {
-    /// An article, else the main region: the two elements a layout is most
-    /// likely to have, in the order that puts the notes closest to the text
-    /// they annotate.
     fn default() -> Self {
         Self(vec!["article".to_owned(), "main".to_owned()])
     }
 }
 
 impl Footnotes {
-    /// The element names to try, in order.
     pub fn targets(&self) -> &[String] {
         &self.0
     }
@@ -89,8 +62,6 @@ impl Footnotes {
     }
 }
 
-/// Built from the configured names, which the parser has already checked are
-/// element names the DOM can hold.
 impl From<Vec<String>> for Footnotes {
     fn from(names: Vec<String>) -> Self {
         Self(names)
@@ -107,18 +78,13 @@ impl Default for HtmlConfig {
             region: RegionConfig::default(),
             highlight: HighlightConfig::default(),
             math: MathConfig::default(),
-            // opt-in: structured data is a claim about the page, not a restating
-            // of what it already says.
             jsonld: false,
             footnotes: Footnotes::default(),
-            // opt-in: source spans are scaffolding for whoever is writing the
-            // page, and every reader of the published one would pay for them.
             spans: false,
         }
     }
 }
 
-/// The `html { .. }` section: post-processing of typst's HTML output.
 impl Section for HtmlConfig {
     const RULES: Block<Self> = Block(&[
         ("pretty", Flag, "Indent the emitted HTML.", |c, n, t| {
@@ -176,9 +142,6 @@ impl Section for HtmlConfig {
                 Ok(())
             },
         ),
-        // A list of element names, tried in order. Each is checked here, where
-        // the span points at the word the author wrote: an unwritable name would
-        // otherwise fail silently at render, as an element the page never has.
         (
             "footnotes",
             Texts,
@@ -187,9 +150,6 @@ impl Section for HtmlConfig {
                 let span = NodeExt::span(n);
                 let names = n.words(t)?;
                 for name in &names {
-                    // The DOM's own judgement of what can be an element, rather
-                    // than a second opinion here; why it is judged at this span
-                    // is on `NotAnElement`.
                     typst_html::HtmlTag::intern(name)
                         .map_err(|why| ConfigError::not_an_element(t, name, &why, span))?;
                 }

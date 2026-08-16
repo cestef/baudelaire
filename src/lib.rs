@@ -25,8 +25,5 @@ pub mod world;
 
 pub use error::*;
 
-/// The crate version, the single source for every place that surfaces it: the
-/// CLI banner, the HTTP user agent, `sys.inputs.baudelaire.version`, and the
-/// `baudelaire:site` module. The provenance behind it lives on
-/// [`version::Version`].
+/// The crate version, the single source every surface reads.
 pub const VERSION: &str = version::Version::SEMVER;

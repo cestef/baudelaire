@@ -4,7 +4,7 @@ version = "0.0.14"
 edition = "2024"
 rust-version = "1.95"
 description = "A Typst-native static site generator: write pages in Typst, get incremental builds, live reload, feeds, search, taxonomies, and an asset pipeline."
-authors = ["cstef <root@cstef.dev>"]
+authors = ["cstef <hi@cstef.dev>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cestef/baudelaire"
 homepage = "https://baudelaire.cstef.dev"
@@ -14,9 +14,6 @@ keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = [
   "/docs",
-  # The four themes are `include_dir!`d into the binary by the `themes`
-  # feature, so they are package contents; the demo sites built from them are
-  # not, and are the bulk of the directory.
   "/themes/demo",
   "/.github",
   "/public",
@@ -28,12 +25,7 @@ exclude = [
   "/cliff.toml",
 ]
 
-# Prebuilt-binary install via `cargo binstall baudelaire`, mapping each release
-# target to its GitHub release tarball. Falls back to a source build otherwise.
 [package.metadata.binstall]
-# The default never matched a real asset: `{ target-family }` renders `unix`,
-# and the `v` prefix was missing, so every target fell through to a source
-# build. Each shipped target is spelled out instead.
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-linux-{ arch }.tar.gz"
 pkg-fmt = "tgz"
 bin-dir = "baudelaire"
@@ -56,8 +48,6 @@ pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-aarch64.tar.
 [package.metadata.binstall.overrides.x86_64-apple-darwin]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-macos-x86_64.tar.gz"
 
-# Windows ships a zip, not a tarball, so the format and the binary name are
-# overridden with the URL rather than inherited from the default above.
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-url = "{ repo }/releases/download/v{ version }/baudelaire-windows-x86_64.zip"
 pkg-fmt = "zip"
@@ -80,139 +70,62 @@ default = [
   "markdown",
 ]
 
-# Bundle Typst's default font set (Libertinus, New Computer Modern, DejaVu) into
-# the binary: ~9 MiB. Off means text renders only with fonts found on the host,
-# so keep it on for portable builds (CI, containers) that lack those fonts.
+# Bundle Typst's default font set into the binary: ~9 MiB
 embedded-fonts = ["typst-kit/embedded-fonts"]
 
-# Every feature below is a capability, not a behaviour switch: turning one off
-# never changes what a site that does not ask for it produces. A site that *does*
-# ask gets a `baudelaire::feature::missing` warning naming the setting, the
-# feature, and what was emitted instead. The table driving those warnings is
-# `GATES` in `src/engine/mod.rs`; a new gated capability is one row there.
-
-# The `theme` command: the four themes carried inside the binary (~230 KiB of
-# Typst and CSS) and every source it installs from. The decompressors are the
-# whole cost (flate2, tar, zip's deflate-only build: ~10 crates), and they serve
-# both the archive source and the forge one, which fetches a repository as that
-# forge's own source archive rather than cloning it. A vendored git client was
-# the alternative, at ~150 crates and a second HTTP stack, for files a single
-# request already returns. Off means the command is not built at all, and a
-# theme is a directory you put in the project yourself.
+# The `theme` command
 themes = ["dep:flate2", "dep:tar", "dep:zip"]
 
-# JavaScript bundling via rolldown (import resolution, tree-shaking, minify, and
-# the `baudelaire:*` virtual modules): ~2.5 MiB of oxc/rolldown/tokio. Off means
-# `assets { bundle }` warns and `.js` files are copied verbatim.
+# JavaScript bundling via rolldown
 js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
 
-# CSS minification and `url()`/`@import` fingerprint rewriting via lightningcss:
-# ~3.2 MiB. Off means `assets { minify }` warns and `.css` files are copied
-# verbatim. It also forces `assets { fingerprint }` off, since a verbatim sheet
-# keeps naming its assets by their pre-hash filenames: see `Gate::rewrites`.
+# CSS minification and `url()` + `@import` fingerprint rewriting via lightningcss
 css = ["dep:lightningcss", "dep:parcel_sourcemap"]
 
-# Sass compilation via grass: a `.scss` or `.sass` file under the asset tree is
-# a stylesheet, compiled and then carried on through everything a `.css` file
-# gets. ~700 KiB. Off means a Sass source is what it was before this existed, a
-# build input the pipeline leaves where it lies and publishes nothing from.
-#
-# It enables `css` rather than standing beside it, because what the compiler
-# emits *is* a stylesheet: it goes to the same handler, for the same minify,
-# downlevel and `url()` rewriting. A flavor with one and not the other would be
-# a second copy of that handler for a build nobody ships.
+# Sass compilation via grass
 sass = ["dep:grass", "css"]
 
-# The generated utility stylesheet, via encre-css: a Tailwind-compatible
-# generator that reads the class names the site was written with and writes the
-# rules for exactly those. ~1 MiB, and four crates nothing else here needs.
-# Off means an `assets { tailwind { } }` block warns and writes no sheet.
-#
-# Standing alone rather than on `css`, because it produces a file rather than
-# transforming one: the sheet is an asset the build owns, and what happens to it
-# afterwards is whatever the rest of the pipeline is compiled to do.
+# TailwindCSS support via encre-css
 tailwind = ["dep:encre-css"]
 
-# Raster optimization: lossless PNG recompression (oxipng) and JPEG re-encode with
-# EXIF-orientation baking (image), plus responsive width variants. Off means
-# `assets { images { optimize } }` and `assets { images { responsive } }` warn and
-# PNG/JPEG assets are copied verbatim. Note: `<img>` lazy/async annotation is
-# attribute-only and stays on regardless.
+# Raster optimization
 images = ["dep:oxipng", "dep:image"]
 
-# The paged second compile a sidecar artifact is drawn from (`typst-layout`),
-# and the registry in `engine/compile/sidecar.rs` that drives it. Internal: not a
-# flavor anyone selects, but the one name every artifact drawn that way enables,
-# so a build that draws none carries no layout engine.
 sidecars = ["dep:typst-layout"]
 
-# Social card rendering: compiles `templates/card.typ` to a paged document and
-# rasterizes it to PNG (typst-render, ~1 MiB of tiny-skia). Off means a
-# `generate { cards { } }` block warns and produces nothing.
+# Social card rendering
 cards = ["dep:typst-render", "sidecars"]
 
-# A PDF of every page, laid out from a paged template and exported with
-# typst-pdf (~8 crates: krilla, pdf-writer, subsetter, write-fonts and friends).
-# Off means a `generate { pdf { } }` block warns and no PDF is written.
+# PDF sidecar generation
 pdf = ["dep:typst-pdf", "sidecars"]
 
-# EPUB bundles: a `generate { bundles }` selection written as an EPUB 3, which
-# is a zip of the pages as they were rendered. The writer is this crate's; what
-# the feature costs is `zip`, which `themes` already carries, so a build with
-# both pays for it once.
-#
-# Off means an `epub` format warns and no book is written. The PDF half of a
-# bundle is `pdf`'s, and the two are independent: a site that wants only the
-# reflowable one carries no typesetter.
+# EPUB 3 bundles
 epub = ["dep:zip"]
 
-# The SSH/SFTP deploy backend, on russh. By crate count this is the most
-# expensive thing in the tree after typst and rolldown: ~76 crates reachable only
-# through it over the default set (~91 over `--no-default-features`), including
-# `aws-lc-sys`, a large C/assembly build that nothing else pulls. Off means a
-# `deploy { ssh { } }` block warns and that destination is skipped;
-# `deploy { s3 { } }` is unaffected, since S3 rides on ureq.
+# SSH/SFTP deploy backend via russh
 ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 
-# Announcing to an AT Protocol PDS (standard.site): the `announce` command, the
-# XRPC client, and the two build-time verification artifacts (`.well-known` and
-# the per-page `<link>`). Alone among the gates this pulls no extra crates: it
-# rides `ureq`, already here for S3 and the link checker. What it costs is
-# ~1.4k lines compiled into every binary for an integration with one vendor,
-# which is why it is opt-out rather than unconditional. Off means an
-# `announce { }` block warns and no verification artifacts are emitted.
+# Announcing to an AT Protocol PDS (standard.site)
 announce = []
 
-# `.md` content pages, lowered to Typst source before they compile: CommonMark
-# plus the GFM set. Which extensions exist and which are on by default is one
-# table, `config::Extension`, and the generated config reference reads it.
-# ~4k lines of parser. It is a source dialect, not a second pipeline: by the
-# time the engine sees a markdown page it *is* Typst, so highlighting, math,
-# link resolution, sidecars, the transform chain and the cache all apply
-# unchanged. Off means a `.md` file under `content/` is not a page at all.
+# `.md` content pages, lowered to Typst source before they compile
 markdown = [
   "dep:pulldown-cmark",
   "dep:saphyr",
   "dep:toml_edit",
-  # `#md`'s native function; see the dependency note.
   "dep:typst-library",
   "dep:typst-utils",
 ]
 
-# Build OpenSSL from source and link it statically instead of using the host's
-# libssl. Both the Typst package downloader (`typst-kit`) and our HTTP client
-# (`ureq`) pull in `native-tls` and thus OpenSSL, which has no system copy on a static
-# musl target, so the musl release builds turn this on. Needs a C compiler,
-# `perl`, and `make` at build time.
+# Build OpenSSL from source and link it statically instead of the host's libssl
 vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
+
 [dependencies]
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
 typst-svg = { version = "0.15" }
 typst-pdf = { version = "0.15", optional = true }
 typst-render = { version = "0.15", optional = true }
-# `PagedDocument` lives here and `typst` does not re-export it, so naming the
-# card's compile target needs the layout crate directly.
 typst-layout = { version = "0.15", optional = true }
 typst-kit = { version = "0.15", features = [
   "system-files",
@@ -220,46 +133,24 @@ typst-kit = { version = "0.15", features = [
   "scan-fonts",
 ] }
 typst-eval = "0.15"
-# Named only so `#[func]` expands: the macro emits absolute `::typst_library`
-# and `::typst_utils` paths, which `typst`'s re-exports cannot satisfy. Nothing
-# here imports either crate directly, and both are already in the tree under
-# `typst` at the same pinned version.
 typst-library = { version = "0.15", optional = true }
 typst-utils = { version = "0.15", optional = true }
-# The scope machinery typst highlights with, so `world/rules/raw.rs` can class a
-# code block's tokens rather than colour them. Features are a subset of the ones
-# typst-library asks for: cargo unions them, and a wider set here would pull a
-# second regex engine (`regex-onig`, which needs a C compiler) into typst's own
-# build.
 syntect = { version = "5.3", default-features = false, features = [
   "parsing",
   "regex-fancy",
   "yaml-load",
 ] }
-# Named so `#[comemo::memoize]` expands: the macro emits absolute `::comemo`
-# paths, which typst's re-export cannot satisfy. Same version the compiler
-# memoizes with, so there is one cache and one eviction clock.
 comemo = "0.5"
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
-# Both read the same `Cli` derive the binary parses with, so a completion script
-# and a man page cannot describe a flag set this build does not have: the
-# feature-gated subcommands are absent from both exactly when they are absent
-# from `--help`.
 clap_complete = "4"
-# Nushell's generator is a separate crate rather than a `Shell` variant, and
-# leaving it out would mean the shell this project is developed in is the one
-# shell with no completions.
 clap_complete_nushell = "4"
 clap_mangen = "0.2"
 time = { version = "0.3", features = ["parsing", "formatting", "serde"] }
 itertools = "0.15.0"
 kdl = { version = "6" }
 serde = { version = "1", features = ["derive"] }
-# Slugs normalize to NFC first: a macOS filename arrives decomposed, and a
-# combining mark is not a letter, so `café` would otherwise slug to `cafe`
-# depending only on which normalization form the author's OS produced.
 unicode-normalization = "0.1"
 serde_json = "1"
 blake3 = "1"
@@ -274,30 +165,15 @@ notify = "8"
 notify-debouncer-full = "0.7"
 tiny_http = "0.12"
 open = "5"
-# `default-features = false` drops `bundler`, `nodejs` and `sourcemap`. The
-# handler only parses, minifies and reads back `dependencies`, none of which
-# live behind those. What they cost is `parcel_sourcemap` and with it `rkyv`
-# 0.7, whose derives are the only thing in the tree still on `syn` 1: ~150
-# cpu-seconds and 15 crates for three features nothing calls.
 lightningcss = { version = "1.0.0-alpha.71", default-features = false, features = [
   "sourcemap",
 ], optional = true }
-# lightningcss writes its mappings into one of these, and does not re-export the
-# type, so the stylesheet handler names it directly. Same version lightningcss
-# resolves, so the two share one copy.
 parcel_sourcemap = { version = "2.1.1", features = ["json"], optional = true }
-# `default-features = false` drops `commandline`, which is grass's own binary
-# and the clap it wants. `random` is kept: `math.random()` and `unique-id()` are
-# ordinary Sass builtins, and without it a sheet that calls one fails with
-# `Undefined function`, which names nothing the author could act on.
 grass = { version = "0.13.4", default-features = false, features = [
   "random",
 ], optional = true }
 encre-css = { version = "0.20.1", optional = true }
 rolldown = { version = "1", optional = true }
-# Wanted by two independent capabilities: `js` (rolldown drives an async
-# bundler) and `ssh` (russh is async). The feature list is the union of what
-# those two need, so neither has to restate it.
 tokio = { version = "1.52.3", features = [
   "rt",
   "rt-multi-thread",
@@ -305,12 +181,6 @@ tokio = { version = "1.52.3", features = [
   "time",
   "io-util",
 ], optional = true }
-# `ring` rather than russh's default `aws-lc-rs` backend. aws-lc-sys is a large
-# C/assembly build: ~180 cpu-seconds, 162 of them one build script, and it drags
-# `cmake` and a host C toolchain into every cross-compiled release target. It
-# was also the last thing on the cold build's critical path, gating russh and so
-# the whole link. `ring` covers the algorithms the SFTP deploy uses, and
-# `deploy_ssh_e2e` handshakes against a real in-process server to prove it.
 russh = { version = "0.62.2", default-features = false, features = [
   "ring",
   "rsa",
@@ -344,43 +214,22 @@ zip = { version = "8.6.0", default-features = false, features = [
   "deflate",
 ], optional = true }
 pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
-# The other two frontmatter dialects. Both are parsed as *documents* rather than
-# deserialized, because a diagnostic has to underline the value the author wrote:
-# serde hands back a value with no idea where it came from.
-#
-# `toml_edit` is pinned to the 0.22 typst already resolves, so it costs no new
-# crate; 0.25 would fork a second copy of the whole stack. Note `ImDocument`, not
-# `DocumentMut`: the mutable form despans on conversion and every `span()` is
-# then `None`.
 toml_edit = { version = "0.22", default-features = false, features = [
   "parse",
 ], optional = true }
-# The maintained yaml-rust2 successor, and the only one exposing both ends of a
-# node's span. `serde_yaml` is deprecated and span-free.
 saphyr = { version = "0.0.11", default-features = false, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
-# Generate test images (already in the tree via the `images` feature).
 image = { version = "0.25", default-features = false, features = [
   "png",
   "jpeg",
 ] }
-# The scenario harness (`tests/scenarios.rs`) reads its cases as KDL, the same
-# language the product's own config speaks. A normal dependency is out of reach
-# from an integration test, so it is repeated here.
 kdl = { version = "6" }
-# ...and asserts on `Diagnostic::code`, which needs the trait in scope.
 miette = { version = "7" }
-# `matches`/`capture` claims, and the JSON pointer claims. Both are already in
-# the dependency tree; naming them here costs no new crate.
 regex = { version = "1" }
 serde_json = { version = "1" }
 criterion = { version = "0.8", features = ["html_reports"] }
-# In-process SSH/SFTP server for the deploy end-to-end test. The backend has to
-# match the one above: cargo unifies features across the two dependency kinds,
-# so a default-featured dev-dependency would pull aws-lc-rs back into every
-# `cargo test` and undo the trim.
 russh = { version = "0.62.2", default-features = false, features = [
   "ring",
   "rsa",
@@ -389,8 +238,6 @@ russh = { version = "0.62.2", default-features = false, features = [
 russh-sftp = "2.3.0"
 rand = "0.10"
 tokio = { version = "1.52.3", features = ["rt", "net", "io-util"] }
-# Serve one archive to `theme add` over http, in-process. Already in the tree as
-# the dev server, so naming it here costs no new crate.
 tiny_http = "0.12"
 
 [[bench]]
@@ -416,19 +263,10 @@ harness = false
 [lints.rust]
 unsafe_code = "deny"
 
-# `pedantic` and `nursery` wholesale, then subtract. Subtracting from a group is
-# the only form that stays honest as the toolchain adds lints: a hand-listed set
-# silently never grows, and every allow below has to carry a reason for being
-# there.
-#
-# `priority = -1` is what lets the individual `allow`s below outrank the groups;
-# without it cargo rejects the table as ambiguous.
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 
-# Restriction lints, which are opt-in one at a time by design: the group as a
-# whole contradicts itself.
 dbg_macro = "warn"
 todo = "warn"
 unimplemented = "warn"
@@ -442,55 +280,23 @@ mem_forget = "warn"
 rc_buffer = "warn"
 float_cmp_const = "warn"
 
-# --- Subtractions from the two groups above. ---
-
-# Public-API bureaucracy. The crate ships a binary; `lib.rs` exists so the tests
-# and benches can reach the engine, not as a surface anyone builds against.
-# Annotating ~500 functions with `#[must_use]` and ~130 with an `# Errors`
-# section buys that hypothetical consumer nothing and buries the doc comments
-# that say something.
 must_use_candidate = "allow"
 return_self_not_must_use = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
-# Doc comments here are prose, deliberately: a paragraph of why, not a summary
-# line. `too_long_first_doc_paragraph` wants the opposite shape, and
-# `doc_markdown` wants every proper noun in the prose backticked.
-too_long_first_doc_paragraph = "allow"
+too_long_first_doc_paragraph = "warn"
 doc_markdown = "allow"
 
-# Known-noisy nursery lints, each wrong often enough that the allow costs less
-# than the false positives.
-#
-# `missing_const_for_fn` fires on functions whose const-ness is an accident of
-# the current body. `option_if_let_else` rewrites readable `if let` into nested
-# closures. `significant_drop_tightening` and `future_not_send` chase guard
-# lifetimes and `!Send` futures that no threaded caller exists for.
-# `redundant_pub_crate` argues with `unreachable_pub` about the same items.
 missing_const_for_fn = "allow"
-# option_if_let_else = "allow"
 significant_drop_tightening = "allow"
 future_not_send = "allow"
 redundant_pub_crate = "allow"
 
-# `match` on a bool, with both arms spelled out, is used here where the two
-# outcomes are peers rather than a condition and a fallback.
-# match_bool = "allow"
-
-# Fires on config structs whose fields really are independent flags, and the
-# suggested fix is a bitflag type that reads worse at every use site.
 struct_excessive_bools = "allow"
 
-# Fires inside test fixtures and generated-content literals, where `{ }` is
-# typst or KDL syntax and not a format placeholder.
 literal_string_with_formatting_args = "allow"
 
-# Size-optimized release. `opt-level = "s"` + thin LTO + a single codegen unit
-# lets the linker drop dead code across the ~500-crate tree; `strip` removes
-# ~15 MiB of symbol/debug tables and `panic = "abort"` another ~4 MiB of unwind
-# tables. Cargo force-unwinds the test/bench profiles, so `cargo bench` (criterion
-# needs unwinding) keeps working without an override here.
 [profile.release]
 opt-level = "s"
 lto = "thin"

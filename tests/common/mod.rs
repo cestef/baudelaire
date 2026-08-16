@@ -15,7 +15,7 @@ use baudelaire::ui::{Level, Ui};
 use baudelaire::world::Project;
 
 /// The minimal config nearly every test starts from: content in, `public` out,
-/// clean URLs on. Tests needing more compose their own.
+/// clean URLs on.
 pub const CONFIG: &str = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
 
 /// A throwaway site rooted in a tempdir, removed on drop.
@@ -60,8 +60,7 @@ impl Site {
         fs::write(path, contents).unwrap();
     }
 
-    /// Names of the immediate files in `rel`, for asserting on generated
-    /// (possibly fingerprinted) filenames.
+    /// Names of the immediate files in `rel`.
     pub fn files(&self, rel: &str) -> Vec<String> {
         fs::read_dir(self.path(rel))
             .map(|rd| {
@@ -79,8 +78,7 @@ impl Site {
     }
 
     /// [`Site::config`] as a `Result`, for callers that must report a malformed
-    /// config rather than panic on it (the scenario runner, whose whole job is
-    /// to survive one broken case and report the rest).
+    /// config rather than panic on it.
     pub fn try_config(&self) -> baudelaire::Result<Config> {
         let mut cfg = Config::load(&self.read("config.kdl"), &self.root, None)?;
         cfg.root.clone_from(&self.root);
@@ -104,9 +102,7 @@ impl Site {
     }
 
     /// [`Site::run`] with extra environment, for behaviour the environment
-    /// shapes rather than the config: a Typst package store is found under the
-    /// user's data directory, so a test that installs a package into one has to
-    /// move the whole home.
+    /// shapes rather than the config.
     pub fn run_with(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
         let mut cmd = self.cmd(args);
         for (key, value) in env {
@@ -123,10 +119,9 @@ impl Site {
     /// Verbose build through the real binary, which must succeed; its logs come
     /// back for tests that assert on the CLI's own output.
     ///
-    /// Prefer [`Site::stats`] for anything else. The two are not interchangeable
-    /// within one test: the binary resolves paths relative to its cwd while
-    /// `config()` rebases them absolute, and `Config::hash` covers the path
-    /// fields, so the two never share a cache.
+    /// Not interchangeable with [`Site::stats`] within one test: the two
+    /// resolve paths differently, and `Config::hash` covers those fields, so
+    /// they never share a cache.
     pub fn build(&self) -> String {
         let out = self.run(&["build", "-v"]);
         assert!(
@@ -134,17 +129,10 @@ impl Site {
             "build failed: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        // Human-facing logs (per-page lines, summary) live on stderr.
         String::from_utf8_lossy(&out.stderr).into_owned()
     }
 
     /// Build in-process and return the engine's own [`Stats`].
-    ///
-    /// Preferred over scraping `build()`'s summary text for cache counts: the
-    /// numbers come from the engine rather than from prose that could be
-    /// reworded, `!contains("1 cached")` cannot pass by accident, and the
-    /// coverage tool sees this path (it instruments the test binary, not a
-    /// spawned subprocess).
     pub fn stats(&self) -> Stats {
         self.stats_with(|_| {})
     }
@@ -156,7 +144,7 @@ impl Site {
     }
 
     /// The in-process build's own `Result`, for tests asserting on a failure:
-    /// the typed diagnostic and its code, rather than the words the CLI printed.
+    /// the typed diagnostic and its code, not the words the CLI printed.
     pub fn build_error(&self) -> BaudelaireErrorKind {
         match self.try_stats(|_| {}) {
             Err(err) => err,
@@ -164,8 +152,8 @@ impl Site {
         }
     }
 
-    /// The plain in-process build as a `Result`: neither success nor failure is
-    /// assumed, so a caller can decide which one the case wanted.
+    /// The plain in-process build as a `Result`, assuming neither success nor
+    /// failure.
     pub fn try_build(&self) -> baudelaire::Result<Stats> {
         self.try_stats(|_| {})
     }
@@ -190,17 +178,11 @@ impl Site {
     }
 }
 
-/// A `Ui` that prints nothing, for tests that drive the library in-process.
 pub fn silent() -> Ui {
     Ui::new(Level::Silent)
 }
 
 /// One in-process engine run: what it produced, and everything it reported.
-///
-/// The diagnostics come from [`Ui::summary`], the same machine-readable record
-/// `--json` publishes, rather than from stderr: a warning is matched on its
-/// `baudelaire::..` code, so rewording one does not break a test, exactly as
-/// for the errors the outcome already matches on.
 pub struct Run {
     pub result: baudelaire::Result<Stats>,
     pub report: baudelaire::ui::Report,
@@ -208,10 +190,6 @@ pub struct Run {
 
 impl Run {
     /// Drive one engine mode against an already-resolved config.
-    ///
-    /// Takes the finished config rather than a mutating closure because a
-    /// profile is applied *by value* (`Config::with_profile` consumes and can
-    /// fail), so a caller that overlays one has to build its config anyway.
     pub fn of(config: Config, mode: Mode) -> Self {
         let ui = Ui::new(Level::Silent);
         let result = Engine::new(config, mode).and_then(|engine| match mode {
@@ -223,9 +201,7 @@ impl Run {
     }
 
     /// The codes of every diagnostic this run reported at warning severity.
-    /// Advice is collected alongside them and deliberately excluded: it never
-    /// counts against a build, so a claim about it is a different claim, made
-    /// with [`Run::advice`].
+    /// Advice is excluded; it is claimed separately, with [`Run::advice`].
     pub fn warnings(&self) -> Vec<&str> {
         self.codes("warning")
     }
@@ -245,18 +221,13 @@ impl Run {
     }
 }
 
-/// A [`Project`] for a test config: module evaluation needs the real world,
-/// theme included: a package theme is served through it.
+/// A [`Project`] for a test config, theme included.
 pub fn project(cfg: &Config) -> Project {
     let theme = baudelaire::theme::Theme::of(cfg).expect("theme");
     Project::new(cfg, baudelaire::world::Mode::Build, theme.as_ref()).expect("project")
 }
 
 /// Load one page the way discovery does, against a cold cache.
-///
-/// The project and its tracked value trees are owned here because the cache
-/// borrows them, which is the whole reason this is a helper rather than five
-/// lines at each call site.
 pub fn load_page(
     collection: &str,
     path: &std::path::Path,
@@ -269,8 +240,7 @@ pub fn load_page(
     Page::load(collection, path, cfg, &project, &cache)
 }
 
-/// A spawned child process, killed and reaped on drop so an early panic never
-/// leaks a child holding its port.
+/// A spawned child process, killed and reaped on drop.
 pub struct Child(std::process::Child);
 
 impl Drop for Child {
@@ -313,9 +283,8 @@ impl Serve {
         let arg = port.to_string();
         let mut full = vec!["serve"];
         full.extend_from_slice(args);
-        // `serve.open` defaults to on, so a test whose config forgets
-        // `serve { open #false }` launches a real browser on the runner. Forced
-        // here rather than per test, where it can be forgotten again.
+        // `serve.open` defaults to on, so an unforced run launches a real
+        // browser on the runner.
         full.extend_from_slice(&["--port", &arg, "--no-open"]);
         let child = site.spawn(&full);
         assert!(
@@ -339,17 +308,10 @@ impl Serve {
     /// Wait for `/` to serve a body containing `want`, re-issuing `edit`
     /// between attempts.
     ///
-    /// [`Serve::start`] returns as soon as the port accepts a connection, and
-    /// the server binds it *before* its first build and before the watcher is
-    /// registered. An edit landing in that window is seen by nobody, and no
-    /// later event ever arrives to make up for it, so a test that only polls is
-    /// waiting for a rebuild that will never happen: on a loaded machine that
-    /// window stretches from microseconds to seconds and the test hangs until
-    /// its own budget runs out. Re-issuing the edit is what closes it.
-    ///
-    /// The retry interval is deliberately longer than the watcher's 500ms
-    /// debounce: a repeat inside that window would keep resetting the very
-    /// timer it is waiting on.
+    /// An edit landing before the watcher is registered is seen by nobody and
+    /// no later event makes up for it, so re-issuing it is what closes that
+    /// window; the retry interval must stay longer than the watcher's 500ms
+    /// debounce, which a repeat inside would keep resetting.
     pub fn awaiting(&self, want: &str, edit: impl Fn()) -> bool {
         (0..10).any(|round| {
             if round > 0 {
@@ -362,9 +324,9 @@ impl Serve {
         })
     }
 
-    /// Like [`Serve::get`], but sends the path verbatim (`curl --path-as-is`) so
-    /// `..` segments reach the server instead of being collapsed by the client:
-    /// the only way to exercise path-traversal defenses.
+    /// Like [`Serve::get`], but sends the path verbatim (`curl --path-as-is`)
+    /// so `..` segments reach the server instead of being collapsed by the
+    /// client: the only way to exercise path-traversal defenses.
     pub fn get_raw(&self, path: &str) -> (u16, String) {
         self.request(path, true)
     }
@@ -377,10 +339,6 @@ impl Serve {
             cmd.arg("--path-as-is");
         }
         let resp = cmd.arg(&url).output().expect("curl");
-        // `-w "\n%{http_code}"` appends a newline and the status to the body, so
-        // split at the last newline rather than counting characters: the old
-        // arithmetic was off by three and left `"\n2"` on every body, so every
-        // negative assertion was checking slightly wrong data.
         let out = String::from_utf8_lossy(&resp.stdout);
         let (body, status) = out.rsplit_once('\n').unwrap_or_else(|| ("", out.as_ref()));
         (status.trim().parse().unwrap_or(0), body.to_owned())
@@ -388,9 +346,6 @@ impl Serve {
 }
 
 /// Whether `name`'s extension is `ext`, spelled without the dot.
-///
-/// Generated names are fingerprinted (`style.<hash>.css`), so the assertion is
-/// about the extension itself rather than a `.css` suffix on the whole string.
 pub fn has_ext(name: &str, ext: &str) -> bool {
     std::path::Path::new(name)
         .extension()
@@ -398,8 +353,7 @@ pub fn has_ext(name: &str, ext: &str) -> bool {
 }
 
 /// The fixture site both deploy e2e suites reconcile against: three files under
-/// `public/`, one of them nested, so a run exercises directory creation as well
-/// as plain uploads.
+/// `public/`, one of them nested so a run exercises directory creation.
 pub fn dist(site: &Site) {
     site.write("public/index.html", "<h1>home</h1>");
     site.write("public/posts/a.html", "post a");

@@ -9,12 +9,11 @@ use crate::config::value::ValueExt;
 use crate::error::Result;
 
 /// Languages written right to left, so `dir="rtl"` is right without the site
-/// having to say so. A monolingual `lang "ar"` site has no `languages` block to
-/// declare `dir` in, and so could never get it.
+/// having to say so.
 pub(crate) struct Rtl;
 impl Rtl {
-    /// Primary subtags, and the script subtags that imply the direction
-    /// whatever the language (`az-Arab`).
+    /// Primary subtags; [`Rtl::SCRIPTS`] holds the script subtags that imply
+    /// the direction whatever the language (`az-Arab`).
     const LANGS: &'static [&'static str] = &[
         "ar", "arc", "ckb", "dv", "fa", "he", "khw", "ks", "ps", "sd", "ug", "ur", "yi",
     ];
@@ -29,7 +28,6 @@ impl Rtl {
     }
 }
 
-/// One declared language in a multi-language site.
 #[derive(Debug, Clone, Default, Hash, serde::Serialize)]
 pub struct LanguageConfig {
     /// Display name for a language switcher, e.g. `Français`. Falls back to the
@@ -37,19 +35,14 @@ pub struct LanguageConfig {
     pub name: Option<String>,
     /// Writing direction, `ltr` (default) or `rtl`, surfaced as `<html dir>`.
     pub dir: Option<String>,
-    /// Per-language site title override (else the site-wide `site`).
+    /// Overrides the site-wide `site` when set.
     pub site: Option<String>,
-    /// Per-language description override (else the site-wide `description`), so
-    /// a French feed does not carry an English blurb.
+    /// Overrides the site-wide `description` when set.
     pub description: Option<String>,
-    /// Per-language author override (else the site-wide `author`).
+    /// Overrides the site-wide `author` when set.
     pub author: Option<String>,
-    /// Per-language reading rate override (else `content { reading { wpm } }`).
-    ///
-    /// The one number here that is a fact about the *language* rather than a
-    /// label for it: 200 words a minute is European prose, and a reader of
-    /// Japanese gets through three times as many, so a shared figure reports
-    /// every article in one of those languages as a third of the read it is.
+    /// Overrides `content { reading { wpm } }` when set, because a reading rate
+    /// is a fact about the language rather than about the site.
     pub wpm: Option<usize>,
     /// UI-string table for this language, exposed to templates as
     /// `page.strings` and to client JS via `baudelaire:i18n`.
@@ -65,9 +58,6 @@ impl LanguageConfig {
     }
 }
 
-/// Scalar fields dispatch like any other section; the nested `strings { .. }`
-/// table reuses the very parser `client { .. }` uses, so a UI string dictionary
-/// and a client-constant block stay one shape.
 impl Section for LanguageConfig {
     const RULES: Block<Self> = Block(&[
         (

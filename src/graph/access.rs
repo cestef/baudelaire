@@ -1,24 +1,9 @@
-//! Fine-grained tracking of which *values* a page reads from a structured input.
+//! Which *values* a page reads from a structured input (`sys.inputs.*`),
+//! recovered from the syntax tree so a page depends on
+//! `sys.inputs.baudelaire.git.hash` alone rather than on the whole tree.
 //!
-//! Some values reach typst not as files but as injected data: `sys.inputs.*`,
-//! and build metadata at `sys.inputs.baudelaire`. Reading one is an in-language
-//! dictionary access that the file-dependency tracker never sees, so a change to
-//! it can't be pinned to the pages it affects. This module recovers the read set
-//! statically from the syntax tree, letting a page depend on
-//! `sys.inputs.baudelaire.git.hash` alone and rebuild only when *that* value
-//! changes, not on every commit.
-//!
-//! It is generic over the root value. Build a [`Roots`] set of [`Root`]s, each a
-//! dotted base that names the value in source (`"sys.inputs.baudelaire"`) and
-//! its current [`Value`]; [`Roots::reads`] returns the qualified paths read from
-//! each, and [`Roots::digest`] fingerprints the value at one of those paths, so
-//! analysis and invalidation share one source of truth and cannot drift.
-//!
-//! The analysis is sound by over-approximation: it never misses a read (which
-//! would serve stale output), but where it cannot narrow an access (a dynamic
-//! `.at(key)`, a value pulled through a destructuring) it widens to the base
-//! itself, i.e. "depends on the entire value". Precise for the direct-access and
-//! `let`-alias patterns templates actually use.
+//! Sound by over-approximation: an access it cannot narrow widens to the base
+//! itself, and a read is never missed.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -36,30 +21,27 @@ use crate::config::Config;
 use crate::graph::Deps;
 use crate::world::Project;
 
-/// A structured value exposed to typst whose reads we track. `base` is the
-/// dotted identifier chain naming it in source; `tree` is its current value.
+/// A structured value exposed to typst whose reads we track; `base` is the
+/// dotted identifier chain naming it in source.
 #[derive(Clone, Copy)]
 pub struct Root<'a> {
     pub base: &'a str,
     pub tree: &'a Value,
 }
 
-/// The tracked-value form [`crate::world::Project::tracked`] hands out: an owned
-/// `(dotted base, tree)` pair borrowed as a root. The single conversion, so no
-/// consumer re-spells the field mapping.
 impl<'a> From<&'a (String, Value)> for Root<'a> {
     fn from((base, tree): &'a (String, Value)) -> Self {
         Self { base, tree }
     }
 }
 
-/// The qualified value paths a source reads, e.g. `"sys.inputs.baudelaire.git.hash"`.
-/// A bare base means the whole value was read (or couldn't be narrowed).
+/// The qualified value paths a source reads, e.g.
+/// `"sys.inputs.baudelaire.git.hash"`; a bare base means the whole value was
+/// read, or could not be narrowed.
 pub type Reads = BTreeSet<String>;
 
-/// Every tracked value of one build. Analysis and invalidation both go through
-/// here, so a page's recorded reads and the digests they are validated against
-/// are always resolved from the same set.
+/// Every tracked value of one build, so a page's recorded reads and the digests
+/// they are validated against resolve from the same set.
 pub struct Roots<'a>(Vec<Root<'a>>);
 
 impl<'a> From<Vec<Root<'a>>> for Roots<'a> {
@@ -83,9 +65,8 @@ impl Roots<'_> {
     }
 
     /// The content digest of the value at a qualified `key`, or `None` when no
-    /// value lives there. Two builds agree iff the digests are equal, so a path
-    /// that gains or loses a value (`None` <-> `Some`) reads as a change, no
-    /// sentinel needed.
+    /// value lives there, so a path that gains or loses a value reads as a
+    /// change.
     pub fn digest(&self, key: &str) -> Option<Hash> {
         self.0.iter().find(|root| root.owns(key))?.digest(key)
     }
@@ -113,11 +94,12 @@ impl<'a> Root<'a> {
                 .is_some_and(|r| r.starts_with('.'))
     }
 
-    /// The qualified key an access `path` (from the global scope) reads from this
-    /// root, or `None` if it doesn't touch it. A path that stops short of, equals,
-    /// or grabs a non-narrowable part of the base yields the base itself (the
-    /// whole value); a longer one is truncated at the first leaf it reaches, since
-    /// trailing segments are method calls on the value.
+    /// The qualified key an access `path` (from the global scope) reads from
+    /// this root, or `None` if it doesn't touch it.
+    ///
+    /// A path that stops short of, equals, or grabs a non-narrowable part of
+    /// the base yields the base itself; a longer one is truncated at the first
+    /// leaf or absent key it reaches, so a key that appears later invalidates.
     fn key(&self, path: &[String]) -> Option<String> {
         let path: Vec<&str> = path.iter().map(String::as_str).collect();
         let base: Vec<&str> = self.base.split('.').collect();
@@ -132,13 +114,13 @@ impl<'a> Root<'a> {
         let mut node = self.tree;
         for segment in &path[base.len()..] {
             let Value::Dict(_) = node else {
-                break; // a leaf; the rest are method calls on it.
+                break;
             };
             key.push('.');
             key.push_str(segment);
             match node.get(segment) {
                 Some(child) => node = child,
-                None => break, // an absent key; its presence is the dependency.
+                None => break,
             }
         }
         Some(key)
@@ -150,7 +132,7 @@ impl<'a> Root<'a> {
         let mut node = self.tree;
         for segment in rest.strip_prefix('.').unwrap_or_default().split('.') {
             if segment.is_empty() {
-                continue; // the bare base: the whole value.
+                continue;
             }
             node = node.get(segment)?;
         }
@@ -163,13 +145,11 @@ impl<'a> Root<'a> {
     }
 }
 
-/// A syntax-tree walk that accumulates the value paths a source reads. Threads
-/// its state (the tracked roots, the `let`-alias environment, and the reads so
-/// far) as one object rather than through every step.
+/// A syntax-tree walk that accumulates the value paths a source reads.
 struct Scan<'a> {
     roots: &'a [Root<'a>],
-    /// `let` aliases into a tracked value, e.g. the `git` in
-    /// `#let git = sys.inputs.baudelaire.git`, mapped to the path it stands for.
+    /// `let` aliases into a tracked value, e.g. the `git` in `#let git =
+    /// sys.inputs.baudelaire.git`, mapped to the path it stands for.
     env: HashMap<String, Vec<String>>,
     out: Reads,
 }
@@ -183,16 +163,11 @@ impl<'a> Scan<'a> {
         }
     }
 
-    /// Walk a node, recording the read of every maximal access. Recording happens
-    /// at the outermost resolvable node, then descends only into call arguments
-    /// (never the callee chain), so a chain is recorded once, not per link.
+    /// Walk a node, recording the read of every maximal access at the outermost
+    /// resolvable node, then descending only into call arguments, so a chain is
+    /// recorded once rather than per link.
     fn walk(&mut self, node: &SyntaxNode) {
         if let Some(expr) = node.cast::<Expr>() {
-            // A binding we can alias is not a read: the value becomes a dependency
-            // where the alias is *used*, so we only scan a call's arguments (a
-            // default is still a read). A binding we can't alias (a destructuring
-            // or complex pattern) would let the value escape untracked, so its
-            // initializer is recorded like any other use instead.
             if let Expr::LetBinding(binding) = expr {
                 let init = binding.init().map(Expr::to_untyped);
                 match (self.bind(binding), init) {
@@ -214,7 +189,8 @@ impl<'a> Scan<'a> {
     }
 
     /// Walk the argument list of a call node (a no-op for anything else), so a
-    /// read nested in an argument is caught while the callee chain is left alone.
+    /// read nested in an argument is caught while the callee chain is left
+    /// alone.
     fn args(&mut self, node: &SyntaxNode) {
         if let Some(Expr::FuncCall(call)) = node.cast::<Expr>() {
             for arg in call.args().items() {
@@ -224,10 +200,11 @@ impl<'a> Scan<'a> {
     }
 
     /// Alias `#let name = <access>` so later uses of `name` resolve through it,
-    /// returning whether an alias was created. Only a plain `name = access` binds;
-    /// a destructuring or complex pattern, or a non-access initializer, returns
-    /// `false` so the caller records the initializer instead of dropping a value
-    /// it can't follow.
+    /// returning whether an alias was created.
+    ///
+    /// Only a plain `name = access` binds; anything else returns `false` so the
+    /// caller records the initializer instead of dropping a value it cannot
+    /// follow.
     fn bind(&mut self, binding: ast::LetBinding) -> bool {
         let ast::LetBindingKind::Normal(ast::Pattern::Normal(Expr::Ident(name))) = binding.kind()
         else {
@@ -240,9 +217,8 @@ impl<'a> Scan<'a> {
         true
     }
 
-    /// Resolve an access to its path from the global scope, or `None` if it isn't
-    /// a plain access. Follows identifiers (through `env` aliases), field access,
-    /// `.at("key")`, and the collection methods that expose a whole value.
+    /// Resolve an access to its path from the global scope, or `None` if it
+    /// isn't a plain access.
     fn resolve(&self, expr: &Expr) -> Option<Vec<String>> {
         match expr {
             Expr::Ident(ident) => {
@@ -265,9 +241,9 @@ impl<'a> Scan<'a> {
         }
     }
 
-    /// Resolve `<target>.method(..)` for the accessors that read a value: `.at("k")`
-    /// narrows to that key; a dynamic `.at(expr)` and the collection accessors
-    /// (`.keys`, `.values`, ..) widen to the whole target.
+    /// Resolve `<target>.method(..)` for the accessors that read a value:
+    /// `.at("k")` narrows to that key, while a dynamic `.at(expr)` and the
+    /// collection accessors widen to the whole target.
     fn call(&self, call: ast::FuncCall) -> Option<Vec<String>> {
         let Expr::FieldAccess(access) = call.callee() else {
             return None;
@@ -299,8 +275,8 @@ impl<'a> Scan<'a> {
     }
 }
 
-/// A build-scoped analyzer: the tracked roots plus a per-file memo, so a template
-/// shared by hundreds of pages is analyzed once, not once per page.
+/// A build-scoped analyzer: the tracked roots plus a per-file memo, so a
+/// template shared by hundreds of pages is analyzed once.
 pub struct Analyzer<'a> {
     roots: Roots<'a>,
     project: &'a Project,
@@ -308,7 +284,6 @@ pub struct Analyzer<'a> {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Build an analyzer over `roots` for the pages of `project`.
     pub fn new(roots: impl Into<Roots<'a>>, project: &'a Project) -> Self {
         Self {
             roots: roots.into(),
@@ -317,10 +292,8 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The roots this analyzer resolves against, for a caller that has to digest
-    /// what [`reads`](Analyzer::reads) reported. Borrowed rather than rebuilt,
-    /// so the keys a cache records and the digests it checks them against come
-    /// from one set.
+    /// The roots this analyzer resolves against, for a caller that has to
+    /// digest what [`reads`](Analyzer::reads) reported.
     pub fn roots(&self) -> Roots<'_> {
         Roots(self.roots.0.clone())
     }
@@ -339,18 +312,15 @@ impl<'a> Analyzer<'a> {
     }
 
     /// The reads of a dependency file, analyzed once per build.
+    ///
+    /// A file that could not be loaded widens to every root: recording it as
+    /// reading nothing would leave a page it can never be invalidated by.
     fn file(&self, path: &Path) -> Arc<Reads> {
         if let Some(cached) = self.memo.lock().get(path) {
             return Arc::clone(cached);
         }
         let found = match self.project.source(path) {
             Ok(source) => self.roots.reads(&source),
-            // A file that could not be loaded must not be recorded as reading
-            // *nothing*: that is the unsound direction, and it leaves a page
-            // depending on a dependency it can never be invalidated by (a
-            // `@preview` theme in the package cache reading `git.hash` would go
-            // stale across every commit). Widen to every root instead, the same
-            // over-approximation this analysis uses for an unnarrowable access.
             Err(_) => self.roots.everything(),
         };
         let found = Arc::new(found);
@@ -404,7 +374,6 @@ mod tests {
 
     #[test]
     fn method_on_a_leaf_is_truncated() {
-        // `.slice` is a method on the string, not a deeper value.
         assert_eq!(
             keys(&read("#sys.inputs.baudelaire.git.hash.slice(0, 7)")),
             ["sys.inputs.baudelaire.git.hash"]
@@ -421,7 +390,6 @@ mod tests {
 
     #[test]
     fn let_aliases_are_followed() {
-        // The exact shape a theme uses: bind the root, then a subtree, then read.
         let code = r#"
             #let build = sys.inputs.at("baudelaire", default: (:))
             #let git = build.at("git", default: none)
@@ -438,8 +406,6 @@ mod tests {
 
     #[test]
     fn binding_alone_is_not_a_read() {
-        // Binding the whole context must NOT record a whole-context dependency;
-        // only the fields actually read count.
         let code = r"
             #let build = sys.inputs.baudelaire
             #build.version
@@ -465,7 +431,6 @@ mod tests {
 
     #[test]
     fn transitive_aliases_chain() {
-        // a = root; c = a; d = c; then read a leaf off d.
         let code = r"
             #let a = sys.inputs.baudelaire
             #let c = a
@@ -477,17 +442,12 @@ mod tests {
 
     #[test]
     fn destructuring_the_value_widens_soundly() {
-        // We can't alias `git` through a destructuring pattern, so the whole
-        // value it's pulled from is recorded, never dropped (that would be a
-        // stale-output bug).
         let code = "#let (git,) = sys.inputs.baudelaire\n#git.hash";
         assert_eq!(keys(&read(code)), ["sys.inputs.baudelaire"]);
     }
 
     #[test]
     fn destructuring_a_tuple_of_leaves_stays_precise() {
-        // The initializer is an array of individual reads, so each is recorded
-        // on its own, no need to widen to the whole context.
         let code = "#let (v, d) = (sys.inputs.baudelaire.version, sys.inputs.baudelaire.date)";
         assert_eq!(
             keys(&read(code)),
@@ -506,7 +466,6 @@ mod tests {
 
     #[test]
     fn a_superset_of_inputs_widens_to_the_whole_value() {
-        // Grabbing all of `sys.inputs` could read baudelaire, so depend on it whole.
         assert_eq!(
             keys(&read("#let all = sys.inputs\n#all")),
             ["sys.inputs.baudelaire"]
@@ -520,8 +479,6 @@ mod tests {
 
     #[test]
     fn absent_path_is_still_recorded() {
-        // Reading a field that doesn't exist yet still creates a dependency, so a
-        // future value invalidates the page.
         assert_eq!(
             keys(&read("#sys.inputs.baudelaire.tag")),
             ["sys.inputs.baudelaire.tag"]
@@ -533,7 +490,7 @@ mod tests {
         let before = tree();
         let after = Value::dict([
             ("version", Value::str("0.1.0")),
-            ("date", Value::str("2026-07-17")), // a new day
+            ("date", Value::str("2026-07-17")),
             (
                 "git",
                 Value::dict([
@@ -544,12 +501,10 @@ mod tests {
         ]);
         let (before, after) = (roots(&before), roots(&after));
 
-        // git.hash unchanged across a day boundary -> same digest -> no rebuild.
         assert_eq!(
             before.digest("sys.inputs.baudelaire.git.hash"),
             after.digest("sys.inputs.baudelaire.git.hash")
         );
-        // date changed -> its digest differs.
         assert_ne!(
             before.digest("sys.inputs.baudelaire.date"),
             after.digest("sys.inputs.baudelaire.date")

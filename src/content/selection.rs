@@ -1,43 +1,25 @@
-//! Which pages, in what order, under what title.
-//!
-//! One question, asked by everything that binds many pages into one artifact: a
-//! typeset PDF, an EPUB, and whatever binds them next. Each used to answer it
-//! for itself, and the answers differed in ways nobody chose: one skipped
-//! generated listings and another did not, one bound a collection in the site's
-//! order and another in the order the config happened to name.
-//!
-//! The title is part of the selection rather than of the format, because it is
-//! the same title whichever file it ends up in: a selection of one collection is
-//! that collection's document, and a French edition of it is a French document.
+//! Which pages, in what order, under what title: the one question everything
+//! that binds many pages into a single artifact asks.
 
 use crate::config::{BundleConfig, Config, SortKey};
 
 use super::Page;
 
 /// The pages one artifact binds, in order, and what the whole is called.
-///
-/// Resolved from the config and the planned page set before anything compiles,
-/// so the prune, the cache and every writer read one list.
 pub struct Selection<'a> {
-    /// The id the artifact is written under, and the cache names: the bundle's
-    /// own id, suffixed with the language on a multilingual site.
+    /// The id the artifact is written and cached under: the bundle's own id,
+    /// suffixed with the language on a multilingual site.
     pub id: String,
-    /// The document's title, handed to whatever renders it.
     pub title: String,
-    /// The language every bound page is in. A French manual is a French
-    /// document, and binding both languages into one file would interleave
-    /// them.
+    /// The language every bound page is in.
     pub lang: &'a str,
     pub pages: Vec<&'a Page>,
 }
 
 impl<'a> Selection<'a> {
     /// Every selection a bundle asks for: one per built language, in the order
-    /// the config names them.
-    ///
-    /// A language with no page in the selection yields nothing at all, rather
-    /// than an empty document: a site that translated its blog and not its
-    /// manual would otherwise ship an empty French manual.
+    /// the config names them. A language binding no page yields nothing at all,
+    /// rather than an empty document.
     pub fn planned(
         id: &str,
         cfg: &BundleConfig,
@@ -62,9 +44,6 @@ impl<'a> Selection<'a> {
         let mut bound: Vec<&'a Page> = pages
             .iter()
             .filter(|page| page.lang == lang)
-            // Generated listings are excluded, as they are from every other
-            // bound artifact: a tag index inside a manual is a page of links to
-            // a document the reader is already holding.
             .filter(|page| page.authored())
             .filter(|page| cfg.site || cfg.collections.iter().any(|id| page.section() == id))
             .collect();
@@ -80,22 +59,14 @@ impl<'a> Selection<'a> {
         })
     }
 
-    /// Put the bound pages in order.
-    ///
-    /// The bundle's own `sort` when it states one. Otherwise the order the
-    /// pages already arrived in, which is each collection's own: they were
-    /// sorted when the collection was built, and re-sorting a multi-collection
-    /// selection by one key would interleave two collections that were never
-    /// meant to mix.
+    /// Put the bound pages in order: the bundle's own `sort` when it states
+    /// one, a single bound collection's own key when it does not, and otherwise
+    /// the order the pages arrived in, since re-sorting a multi-collection
+    /// selection by one key would interleave collections that never mix.
     fn order(bound: &mut [&'a Page], cfg: &BundleConfig, config: &Config) {
         if let Some(sort) = cfg.sort {
             bound.sort_by(|a, b| Page::compare(sort, a, b));
         } else if !cfg.site && cfg.collections.len() == 1 {
-            // One collection, no override: its own key, which is what the site
-            // shows that collection in and what the pages were already sorted
-            // by. Restated here because a selection is built from the whole
-            // page set, whose order is the plan's rather than any one
-            // collection's.
             let sort = config
                 .collection(&cfg.collections[0])
                 .map_or_else(SortKey::default, |c| c.sort);
@@ -114,17 +85,13 @@ impl<'a> Selection<'a> {
             return title.clone();
         }
         if !cfg.site && cfg.collections.len() == 1 {
-            // The collection's own id. A collection has no configured title, and
-            // inventing one here would be a second spelling of a name the site
-            // already has; `title` is what a site says when the id is not the
-            // word it wants on the cover.
             return cfg.collections[0].clone();
         }
         config.title(lang).to_owned()
     }
 
     /// A selection's id: the bundle's, plus the language on a site that builds
-    /// more than one, so two editions never claim one cache entry or one file.
+    /// more than one, so two editions never claim one file.
     fn named(id: &str, lang: &str, config: &Config) -> String {
         if config.langs().len() > 1 {
             format!("{id}.{lang}")
@@ -134,18 +101,13 @@ impl<'a> Selection<'a> {
     }
 
     /// Where a file of this selection is served: `/<id>.<ext>`, localized like
-    /// every other per-language artifact. One rule for every format, so a
-    /// reader who knows where `/guide.pdf` came from knows where `/guide.epub`
-    /// did.
+    /// every other per-language artifact.
     pub fn url(&self, config: &Config, ext: &str) -> String {
-        // The id already carries the language on a multilingual site; the URL
-        // scope is what puts it in the path, and both read the same `langs`.
         format!("/{}.{ext}", config.scope(self.lang, self.stem()))
     }
 
-    /// The id without the language suffix `named` may have added: the URL scope
-    /// puts the language in the path, and spelling it twice would serve
-    /// `/fr/guide.fr.pdf`.
+    /// The id without the language suffix `named` may have added, since the URL
+    /// scope already puts the language in the path.
     fn stem(&self) -> &str {
         self.id
             .strip_suffix(&format!(".{}", self.lang))

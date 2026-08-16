@@ -70,23 +70,19 @@ impl Rkey {
     }
 
     /// A deterministic 13-character key derived from `input` (FNV-1a, top bit
-    /// cleared, base32-sortable). A pure function of the input, so the same
-    /// source always maps to the same record: republishing updates in place
-    /// instead of duplicating.
+    /// cleared, base32-sortable), so republishing updates a record in place.
     pub fn derived(input: &str) -> Self {
         let mut hash = OFFSET;
         for byte in input.bytes() {
             hash ^= u64::from(byte);
             hash = hash.wrapping_mul(PRIME);
         }
-        // A TID's high bit is always 0; clearing it keeps keys in range.
         hash &= 0x7fff_ffff_ffff_ffff;
         let mut out = [0u8; 13];
         for slot in out.iter_mut().rev() {
             *slot = ALPHABET[(hash & 0x1f) as usize];
             hash >>= 5;
         }
-        // Every byte comes from `ALPHABET`, which is ASCII.
         Self(String::from_utf8(out.to_vec()).expect("base32 alphabet is ASCII"))
     }
 
@@ -101,8 +97,8 @@ impl fmt::Display for Rkey {
     }
 }
 
-/// An `at://did/collection/rkey` reference to a single record. Serializes as its
-/// canonical string form, the shape records use to point at one another.
+/// An `at://did/collection/rkey` reference to a single record, serialized as
+/// its canonical string form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AtUri {
     did: Did,
@@ -153,9 +149,8 @@ mod tests {
         assert_ne!(Rkey::derived("/a/"), Rkey::derived("/b/"));
     }
 
-    /// The derivation is a permanent contract: the build and the publisher must
-    /// agree on it forever, so a change here would silently orphan every record.
-    /// This golden value fails loudly if the algorithm ever drifts.
+    /// The derivation is a permanent contract: a change orphans every record
+    /// already published under the old keys.
     #[test]
     fn derived_key_is_stable() {
         assert_eq!(Rkey::derived("/posts/hello/").as_str(), "6bgie3n5676tz");

@@ -1,24 +1,11 @@
-//! Errors from lowering a markdown page to Typst.
-//!
-//! Three things can go wrong that are the author's to fix: a frontmatter block
-//! that never closes, one that does not parse as the dialect its fence opened,
-//! and raw HTML, which this pipeline has nowhere to put.
-//!
-//! Nothing here is per-dialect. A block reports the language it was read as and
-//! carries that dialect's own diagnostics, rebased onto the page, so a new
-//! dialect adds no variant.
-//!
-//! A block that parses but names a key no page has is *not* here: that is a
-//! [`crate::error::ContentError`], raised by the same walk and the same typo
-//! suggester a typst page's frontmatter goes through, which is what makes a
-//! misspelled `titel` say "did you mean `title`?".
+//! Errors from lowering a markdown page to Typst: a frontmatter block that
+//! never closes, one that does not parse as its fence's dialect, and raw HTML.
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 use crate::ui::{Code, Text};
 
-/// A failure while reading a `.md` page.
 #[derive(Error, Diagnostic, Debug)]
 pub enum MarkdownError {
     #[error("frontmatter in {} is never closed", Text(.path))]
@@ -28,9 +15,7 @@ pub enum MarkdownError {
     )]
     UnterminatedFrontmatter {
         path: String,
-        /// The fence that opened it, which is the only one that closes it: a
-        /// help naming `---` under a `+++` block sends the reader to write the
-        /// one spelling that would not have worked.
+        /// The fence that opened it, which is the only one that closes it.
         fence: String,
         #[source_code]
         src: NamedSource<String>,
@@ -54,13 +39,6 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
-    /// A frontmatter key declared twice at the same level.
-    ///
-    /// TOML refuses this itself; YAML and KDL both took the last one and said
-    /// nothing, so a page that set `title` twice published one of them and gave
-    /// the author no reason to think the other had been read. One rule for the
-    /// three dialects, since which of them a page is written in is a fence, not
-    /// a difference in what a page may say.
     #[error("frontmatter {} in {} is declared twice", Code(.key), Text(.path))]
     #[diagnostic(
         code(baudelaire::markdown::duplicate_key),
@@ -75,13 +53,6 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
-    /// A KDL frontmatter key written as both a value and a dictionary.
-    ///
-    /// The reader takes the four shapes KDL itself distinguishes: a bare flag,
-    /// one argument, several arguments, and a block or `key=value` entries.
-    /// A node carrying both an argument and a named entry is none of them, and
-    /// it used to resolve to the dictionary with the arguments dropped in
-    /// silence.
     #[error("frontmatter {} in {} is written as both a value and a dictionary", Code(.key), Text(.path))]
     #[diagnostic(
         code(baudelaire::markdown::ambiguous_node),
@@ -103,33 +74,20 @@ pub enum MarkdownError {
     #[diagnostic(code(baudelaire::markdown::frontmatter))]
     Frontmatter {
         path: String,
-        /// The language the block was read as, so the message names what it
-        /// failed to be rather than what it most often is.
         dialect: String,
-        /// What that dialect's block looks like when it is right. Carried rather
-        /// than written here, so a new dialect brings its own and this variant
-        /// stays the one frontmatter-syntax error there is.
+        /// What that dialect's block looks like when it is right.
         #[help]
         hint: String,
         #[source_code]
         src: NamedSource<String>,
-        /// The dialect's own diagnostics, shifted onto the file the author
-        /// wrote: the block is parsed on its own, so every span it reports is
-        /// relative to the block and would underline the wrong line here.
+        /// The dialect's own diagnostics, every span rebased onto the file: a
+        /// block is parsed on its own, so its spans are relative to the block.
         #[related]
         faults: Vec<FrontmatterFault>,
     },
 }
 
 /// One fault a parser found inside a frontmatter block, rebased onto the page.
-///
-/// Kept as a diagnostic of its own rather than flattened into a message: a
-/// parser reports a span and often a help per fault, and folding them into one
-/// string is exactly the coercion `error/mod.rs` forbids.
-///
-/// Dialect-agnostic on purpose. KDL reports several faults at once and each
-/// carries its own help; YAML and TOML report one, with none. Both are a list of
-/// this.
 #[derive(Error, Diagnostic, Debug)]
 #[error("{message}")]
 #[diagnostic(code(baudelaire::markdown::frontmatter_fault))]
@@ -144,9 +102,6 @@ pub struct FrontmatterFault {
 
 impl FrontmatterFault {
     /// A fault a parser reported at a span already rebased onto the file.
-    ///
-    /// What a dialect with one error and no help of its own builds: everything
-    /// it knows is the message and where.
     pub fn at(message: String, span: std::ops::Range<usize>) -> Self {
         Self {
             message,
@@ -159,11 +114,9 @@ impl FrontmatterFault {
     /// Rebase one of kdl's diagnostics by `offset`, the byte position the block
     /// starts at in the file.
     ///
-    /// The message and the help are escaped on the way in, as the other two
-    /// dialects escape theirs: [`Styled`](crate::ui::Styled) wraps a `#[related]`
-    /// diagnostic recursively, so both are read as this crate's markup, and a
-    /// parser that quotes a KDL token in backticks would restyle the rest of the
-    /// line. The label is not: miette forwards it untouched.
+    /// The message and the help are escaped, the label not:
+    /// [`Styled`](crate::ui::Styled) reads a `#[related]` diagnostic as this
+    /// crate's markup, and miette forwards a label untouched.
     pub fn rebased(fault: &kdl::KdlDiagnostic, offset: usize) -> Self {
         Self {
             message: fault

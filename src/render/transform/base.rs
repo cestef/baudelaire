@@ -6,11 +6,9 @@ use crate::config::Config;
 
 use super::{Cx, DocumentExt, Transform};
 
-/// The final [`Transform`]: shifts every on-page root-absolute URL under the
-/// site's [`base_path`](Config::base_path) for subdirectory hosting. Runs after
-/// fingerprinting and embedding, so it sees final `href`/`src` values and skips
-/// already-inlined `data:` URIs and the absolute canonical/og URLs from
-/// [`super::meta::Meta`] (neither is root-absolute).
+/// Shifts every on-page root-absolute URL under the site's
+/// [`base_path`](Config::base_path), for subdirectory hosting. Runs last, so it
+/// sees final `href`/`src` values.
 pub(super) struct BasePath;
 
 impl Transform for BasePath {

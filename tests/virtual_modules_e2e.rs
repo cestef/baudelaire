@@ -54,7 +54,7 @@ fn config_module_exposes_client_constants() {
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx");
     let js = bundle(&site);
     assert!(js.contains("prod"), "string constant inlined: {js}");
-    // `contains('3')` matched any digit anywhere in the bundle.
+    // `contains('3')` would match any digit anywhere in the bundle.
     assert!(js.contains("retries"), "number constant inlined: {js}");
     assert!(js.contains("beta"), "boolean constant inlined: {js}");
 }
@@ -74,15 +74,11 @@ fn assets_module_resolves_fingerprinted_urls() {
     );
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx");
     site.stats();
-    // The logo's fingerprinted name is derived from its bytes, not discovered
-    // by scanning the output directory.
     let hashed = format!("logo.{}.svg", fingerprint(logo));
     assert!(
         site.exists(&format!("public/assets/{hashed}")),
         "logo fingerprinted to {hashed}"
     );
-    // The bundled entry (the sole `.js`, its own name fingerprinted by the
-    // unpredictable bundle bytes) must carry the logo's hashed name in its map.
     let js = entry(&site, ".js");
     assert!(js.contains(&hashed), "map serves the hashed name: {js}");
 }
@@ -103,8 +99,8 @@ fn pages_module_lists_authored_content() {
         "#let frontmatter = (title: \"Hello Post\", date: datetime(year: 2026, month: 7, day: 14), tags: (\"rust\",))\nx",
     );
     let js = bundle(&site);
-    // One row is the shape a listing entry and the Typst catalogue carry, so a
-    // page's title arrives as `label` and its own frontmatter as `extra`.
+    // A row is the shape a listing entry carries, so a title arrives as
+    // `label`.
     assert!(js.contains("Hello Post"), "title inlined: {js}");
     assert!(js.contains("label"), "listing row shape: {js}");
     assert!(js.contains("2026-07-14"), "iso date inlined: {js}");
@@ -112,10 +108,7 @@ fn pages_module_lists_authored_content() {
 }
 
 /// A frontmatter field the page set carries is whatever the author wrote, not
-/// its Typst `repr`. Everything but a string used to reach `Raw`, which is
-/// Typst-only and renders as `null` here: `weight: 3` and `featured: true`
-/// arrived in the browser as `null` against a declared `Record<string,
-/// unknown>`, while the identically-typed `client { retries 3 }` arrived as `3`.
+/// its Typst `repr`.
 #[test]
 fn pages_module_carries_non_string_frontmatter_as_itself() {
     let site = Site::new();
@@ -158,8 +151,7 @@ fn sections_module_groups_by_collection() {
     let js = bundle(&site);
     assert!(js.contains("posts"), "collection id inlined: {js}");
     assert!(js.contains("One"), "page title inlined: {js}");
-    // Keyed by language: one bundle serves every language's nav. `"en"` alone
-    // would match the `children` key, so require the quoted key itself.
+    // `"en"` alone would match the `children` key, so require the quoted key.
     assert!(js.contains("\"en\""), "language key inlined: {js}");
 }
 
@@ -212,9 +204,8 @@ fn feed_module_lists_recent_dated_pages_newest_first() {
     assert!(newer < older, "newest first: {js}");
 }
 
-/// The sole emitted file under `public/assets` with extension `ext`. Read by
-/// uniqueness, not by guessing its fingerprint: the entry's hash depends on the
-/// bundler's output, which the test can't reproduce.
+/// The sole emitted file under `public/assets` with extension `ext`, found by
+/// uniqueness because the entry's hash depends on the bundler's own output.
 fn entry(site: &Site, ext: &str) -> String {
     let mut found: Vec<_> = site
         .files("public/assets")
@@ -225,9 +216,8 @@ fn entry(site: &Site, ext: &str) -> String {
     site.read(&format!("public/assets/{}", found.remove(0)))
 }
 
-/// A bundled `.ts` entry holds JavaScript, so it must be served as `.js`: under
-/// its source extension the asset map is keyed under a name no author writes,
-/// and browsers refuse the MIME type for `type=module`.
+/// A bundled `.ts` entry holds JavaScript, and browsers refuse its source
+/// extension's MIME type for `type=module`.
 #[test]
 fn a_typescript_entry_is_served_as_javascript() {
     let site = Site::new();
@@ -250,8 +240,6 @@ fn a_typescript_entry_is_served_as_javascript() {
     assert!(!site.exists("public/assets/main.ts"));
 }
 
-/// A dynamic `import()` used to produce a second chunk the pipeline dropped,
-/// leaving the written entry importing a file absent from `dist`.
 #[test]
 fn a_dynamic_import_lands_in_the_entry() {
     let site = Site::new();
@@ -276,9 +264,8 @@ fn a_dynamic_import_lands_in_the_entry() {
     assert!(site.read("public/assets/main.js").contains("42"));
 }
 
-/// A bundled `.ts` entry is served as `.js`, so *both* spellings must resolve:
-/// `main.ts` is the file on disk and what an editor completes, `main.js` is what
-/// the bundle is. Mapping only one left the other pointing at nothing.
+/// `main.ts` is the file on disk and what an editor completes, `main.js` is
+/// what the bundle is, so both spellings have to resolve.
 #[test]
 fn a_renamed_entry_resolves_under_both_names() {
     let site = Site::new();
@@ -306,9 +293,6 @@ fn a_renamed_entry_resolves_under_both_names() {
     );
 }
 
-/// Every build writes the declarations, so an editor's types follow the config
-/// without anyone re-running `baudelaire packages`. They are typed from the
-/// site's own values, which is what a fixed hand-written `.d.ts` cannot be.
 #[test]
 fn a_build_writes_declarations_typed_from_this_site() {
     let site = Site::new();
@@ -329,7 +313,6 @@ fn a_build_writes_declarations_typed_from_this_site() {
         declared.contains("export const retries: number;"),
         "{declared}"
     );
-    // The declarations are not the bundle: a site that bundles nothing still
-    // gets them, since an editor resolves imports before anything is built.
+    // A site that bundles nothing still gets the declarations.
     assert!(!site.exists("public/assets/main.js"));
 }

@@ -8,7 +8,6 @@ use crate::config::node::NodeExt;
 /// block.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct RobotsConfig {
-    /// Whether to emit `robots.txt`.
     pub enabled: bool,
     /// Paths disallowed for all crawlers. Empty = allow everything.
     pub disallow: Vec<String>,

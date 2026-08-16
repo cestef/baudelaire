@@ -1,23 +1,14 @@
-//! Generated (synthetic) pages.
-//!
-//! Beyond the authored content pages, a build includes pages *derived* from
-//! them: taxonomy term indexes, paginated collection listings. Each derivation
-//! is a [`Generate`] pass; [`Generators::builtin`] is the single source of what
-//! runs, so a new kind of generated page (archives, author pages, ...) is one
-//! `impl Generate` plus one line here, mirroring `engine::process::Processors`
-//! for emitted files.
+//! Generated (synthetic) pages: taxonomy term indexes and paginated collection
+//! listings, each derived from the authored pages by a [`Generate`] pass.
 
 use crate::config::Config;
 use crate::content::{Collection, Page, Pagination, Taxonomy};
 use crate::error::Result;
 
-/// The inputs a generator reads: the config, the content pages planned so far
-/// (a fixed snapshot taken before any generated page joins the set), and the
-/// source collections.
+/// The inputs a generator reads; `pages` is a fixed snapshot taken before any
+/// generated page joins the set.
 pub(super) struct PlanCtx<'a> {
     pub config: &'a Config,
-    /// The entity registries, so a generator can tell a term that names
-    /// somebody from one that names a word.
     pub entities: &'a crate::content::Registries,
     pub pages: &'a [Page],
     pub collections: &'a [Collection],
@@ -28,8 +19,7 @@ pub(super) trait Generate {
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>>;
 }
 
-/// The built-in generators, in run order. THE single source of what synthetic
-/// pages a build adds: a new kind is one `impl Generate` plus one line here.
+/// The built-in generators, in run order.
 pub(super) struct Generators(Vec<Box<dyn Generate>>);
 
 impl Generators {
@@ -37,8 +27,6 @@ impl Generators {
         Self(vec![Box::new(Taxonomy), Box::new(Pagination)])
     }
 
-    /// Run every generator against the same content snapshot, concatenating
-    /// their pages in registry order.
     pub(super) fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for generator in &self.0 {

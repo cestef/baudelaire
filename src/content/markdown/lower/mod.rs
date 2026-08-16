@@ -1,27 +1,14 @@
 //! CommonMark + GFM lowered to Typst source.
 //!
 //! Every node becomes a Typst *call* with content arguments, never spliced
-//! markup: text runs go through [`Content`], which emits `#"..."`, so an
-//! asterisk, a `#`, or an unbalanced bracket in prose is data and can never
-//! become syntax. That is what makes the lowering total rather than a template
-//! that happens to work on well-behaved input.
-//!
-//! The one deliberate hole in that rule is a fence marked `eval`, which is
-//! emitted verbatim because evaluating it is the point. Its errors land in the
-//! author's own code, which is where they belong.
-//!
-//! A fence's info string is `lang` followed by space-separated `key` or
-//! `key=value` parameters, so an option never has to be smuggled in as a
-//! language name:
+//! markup, so prose can never become syntax; a fence marked `eval` is the one
+//! exception and is emitted verbatim. A fence's info string is `lang` followed
+//! by space-separated `key` or `key=value` parameters:
 //!
 //! ````text
 //! ```typ            a Typst sample, shown
 //! ```typ eval       evaluated instead
 //! ````
-//!
-//! Showing is the default because a fence means "show this code" everywhere
-//! else, and a document *about* Typst is the common case: this project's own
-//! `CHANGELOG.md` has six Typst samples and not one line it wants run.
 
 mod fence;
 mod located;
@@ -38,23 +25,18 @@ use crate::config::{Extension, MarkdownConfig};
 use crate::content::SourceMap;
 use crate::error::Result;
 
-/// A markdown body, without its frontmatter block.
-///
-/// Carries the whole file and where the body starts in it, not just the body:
-/// a fault belongs to the page the author wrote, and a span measured against
-/// the body alone would underline the wrong line of it.
+/// A markdown body, without its frontmatter block; it carries the whole file
+/// and where the body starts in it, so a fault underlines the line the author
+/// wrote rather than that many bytes into the body.
 pub struct Markdown<'a> {
     file: &'a str,
     body: &'a str,
     offset: usize,
-    /// The page this came from, for diagnostics.
     path: &'a str,
-    /// What this site allows a page to contain.
     config: &'a MarkdownConfig,
 }
 
 impl<'a> Markdown<'a> {
-    /// The body of `document`, positioned in the `file` it was split from.
     pub fn new(
         document: &super::Document<'a>,
         file: &'a str,
@@ -71,10 +53,6 @@ impl<'a> Markdown<'a> {
     }
 
     /// The parser options the configured extensions ask for.
-    ///
-    /// One arm per [`Extension`], so a variant added to that table fails to
-    /// compile until it says which option it turns on: the config name and the
-    /// parser bit cannot drift apart.
     fn options(&self) -> Options {
         self.config
             .extensions
@@ -90,29 +68,19 @@ impl<'a> Markdown<'a> {
     }
 
     /// The Typst source this page compiles as, and where it came from in the
-    /// file the author wrote.
+    /// file the author wrote; the note pass runs twice so a definition may
+    /// reference one defined further down the file.
     pub fn lower(&self) -> Result<(String, SourceMap)> {
-        // `into_offset_iter` so every event knows the bytes it came from, which
-        // is what lets a fault point at the markdown rather than at the Typst
-        // this produces.
         let (events, spans): (Vec<Event<'_>>, Vec<Range<usize>>) =
             Parser::new_ext(self.body, self.options())
                 .into_offset_iter()
                 .unzip();
-        // Numbered, and the numbers travel with the events. A footnote body is
-        // lowered by a walk of its own over a *copy* of its events, and a copy
-        // renumbers them: every span that walk recorded would name whichever
-        // event happened to sit at the same index in the whole document.
         let events: Vec<Numbered<'_>> = events.into_iter().enumerate().collect();
         let mut writer = Writer::new(
             self.path,
             Located::new(self.file, self.offset, &spans),
             self.config,
         );
-        // Twice: a definition may reference one defined further down the file,
-        // and the first pass only knows the ones above it. The second pass runs
-        // with all of them, which resolves a forward reference and bounds a
-        // circular one instead of chasing it.
         writer.notes(&events)?;
         writer.notes(&events)?;
         writer.walk(&events)?;
@@ -122,11 +90,8 @@ impl<'a> Markdown<'a> {
     }
 }
 
-/// A parse event and its index into the parse's span table.
-///
-/// Carried as one value because the two are only useful together: an event
-/// separated from its number cannot say where it came from, and that is exactly
-/// what a nested walk over cloned events used to do.
+/// A parse event and its index into the parse's span table, carried together so
+/// a walk over cloned events can still say where each came from.
 type Numbered<'a> = (usize, Event<'a>);
 
 impl From<Align> for Value {
@@ -152,8 +117,7 @@ mod tests {
     use crate::content::markdown::lower::writer::Buffer;
     use crate::content::sourcemap::{Mapping, Shape};
 
-    /// Split then lower, which is the path a real page takes: a test that
-    /// skipped the split would not notice a body offset going wrong.
+    /// Split then lower, which is the path a real page takes.
     fn under(source: &str, config: &MarkdownConfig) -> Result<String> {
         let document = super::super::Document::split(source, "a.md")?;
         Markdown::new(&document, source, "a.md", config)
@@ -169,15 +133,10 @@ mod tests {
         try_lower(source).expect("lower")
     }
 
-    /// The property the whole design rests on: prose is data. Typst syntax in a
-    /// paragraph has to survive as text, not become syntax.
     #[test]
     fn prose_can_never_become_syntax() {
         let out = lower("a #call() and [brackets and $math$\n");
         assert!(out.contains(r#"#"a #call() and ""#), "{out}");
-        // The bracket is its own text run, because that is where the parser
-        // split it; what matters is that it is a literal and not a content
-        // block that would swallow the rest of the line.
         assert!(out.contains(r#"#"[""#), "{out}");
         assert!(out.contains(r#"brackets and $math$""#), "{out}");
     }
@@ -196,8 +155,6 @@ mod tests {
         assert!(lower("### T\n").contains("#heading(level: 3)["));
     }
 
-    /// A fence is shown by default, including a Typst one: a document about
-    /// Typst is the common case, and this project's own changelog is one.
     #[test]
     fn a_typ_fence_is_shown_unless_it_says_eval() {
         let shown = lower("```typ\n#callout[hi]\n```\n");
@@ -211,27 +168,19 @@ mod tests {
         assert!(!run.contains("#raw(block: true"), "{run}");
     }
 
-    /// Parameters are `key` or `key=value`, so the grammar has room for options
-    /// that are not a language name.
     #[test]
     fn fence_parameters_parse_as_flags_or_pairs() {
         assert!(lower("```typ eval=true\n#emph[x]\n```\n").contains("#emph[x]"));
         assert!(lower("```typ eval=false\n#emph[x]\n```\n").contains("#raw(block: true"));
-        // An unknown parameter is not an instruction, and must not change what
-        // the fence does.
         assert!(lower("```typ linenos\n#emph[x]\n```\n").contains("#raw(block: true"));
     }
 
-    /// Only Typst can be evaluated. `sh eval` would otherwise emit a shell
-    /// script into the page as Typst source.
     #[test]
     fn eval_on_another_language_is_not_honoured() {
         let out = lower("```sh eval\nrm -rf /\n```\n");
         assert!(out.contains(r#"#raw(block: true, lang: "sh""#), "{out}");
     }
 
-    /// A level-6 heading has no HTML heading to be, so it clamps rather than
-    /// becoming an `aria-level="7"` div the anchor pass cannot see.
     #[test]
     fn heading_levels_clamp_to_a_real_heading() {
         assert!(lower("# a\n").contains("#heading(level: 1)["));
@@ -247,8 +196,6 @@ mod tests {
         assert!(out.contains(r#"#html.elem("hr")"#), "{out}");
     }
 
-    /// Alt text is the raw text of the run, never the lowered output read back:
-    /// a link inside the alt used to leave generated source in the attribute.
     #[test]
     fn alt_text_survives_inline_marks() {
         let out = lower("![a *b* `c` d](/i.png)\n");
@@ -265,7 +212,6 @@ mod tests {
         );
     }
 
-    /// A definition may sit below a definition that references it.
     #[test]
     fn a_footnote_may_reference_one_defined_later() {
         let out = lower("see[^a]\n\n[^a]: outer with [^b]\n\n[^b]: inner\n");
@@ -275,7 +221,6 @@ mod tests {
         );
     }
 
-    /// A cycle terminates rather than recursing.
     #[test]
     fn circular_footnotes_terminate() {
         let out = lower("see[^a]\n\n[^a]: to [^b]\n\n[^b]: back to [^a]\n");
@@ -297,8 +242,6 @@ mod tests {
         assert!(out.contains("table.header("), "{out}");
     }
 
-    /// Markdown separates a footnote from its definition; Typst does not. The
-    /// body has to arrive at the reference.
     #[test]
     fn a_footnote_body_moves_to_its_reference() {
         let out = lower("see[^n]\n\n[^n]: the note\n");
@@ -319,9 +262,6 @@ mod tests {
         assert!(try_lower("a <b>c</b>\n").is_err());
     }
 
-    /// The span is measured against the *file*, frontmatter included, so the
-    /// underline lands on the line the author wrote rather than that many bytes
-    /// into the body.
     #[test]
     fn a_fault_points_into_the_file_not_the_body() {
         let source = "---\ntitle \"A\"\n---\n\n<div>x</div>\n";
@@ -329,15 +269,11 @@ mod tests {
             panic!("raw html should fail");
         };
         let rendered = format!("{:?}", miette::Report::new(error));
-        // The snippet has to show the whole page, and the label has to sit on
-        // the markup rather than inside the frontmatter block.
         assert!(rendered.contains("<div>x</div>"), "{rendered}");
         let at = source.find("<div>").expect("the markup is in the source");
         assert!(at > source.find("title").expect("frontmatter"), "sanity");
     }
 
-    /// Every knob is the site's, and each one has to actually reach the
-    /// lowering rather than merely parse.
     #[test]
     fn the_site_decides_what_a_page_may_contain() {
         let dropping = MarkdownConfig {
@@ -348,7 +284,6 @@ mod tests {
         assert!(!out.contains("<b>"), "{out}");
         assert!(out.contains(r#"#"a ""#), "{out}");
 
-        // A site that does not trust its authors can refuse to run any of it.
         let sealed = MarkdownConfig {
             eval: false,
             ..MarkdownConfig::default()
@@ -360,7 +295,6 @@ mod tests {
         );
     }
 
-    /// An extension the site did not ask for is not parsed, and one it added is.
     #[test]
     fn extensions_follow_the_configured_set() {
         let table = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
@@ -373,9 +307,6 @@ mod tests {
         let out = under(table, &without).expect("lower");
         assert!(!out.contains("#table("), "tables were off: {out}");
 
-        // Asserted on rendered characters, not on the call being emitted: an
-        // assertion that a call *appears* is what hid three extensions whose
-        // events the writer silently swallowed.
         let smart = MarkdownConfig {
             extensions: vec![Extension::Smart],
             ..MarkdownConfig::default()
@@ -385,8 +316,7 @@ mod tests {
         assert!(out.contains('\u{2026}'), "ellipsis: {out}");
     }
 
-    /// How many bytes of preamble the tests below put in front of a body. Any
-    /// number does; the map derives it from the wrapper rather than being told.
+    /// How many bytes of preamble the tests below put in front of a body.
     const PREAMBLE: usize = 100;
 
     /// Lower `source`, then place the result in a wrapper the way a real
@@ -410,8 +340,6 @@ mod tests {
             .unwrap_or_else(|| panic!("{needle:?} maps to nothing: {lowered}"))
     }
 
-    /// An `eval` fence is authored Typst copied out verbatim, so it is the one
-    /// construct whose offsets survive byte for byte.
     #[test]
     fn an_eval_fence_records_where_it_came_from() {
         let source = "---\ntitle \"A\"\n---\n\ntext\n\n```typ eval\n#emph[x]\n```\n";
@@ -421,10 +349,7 @@ mod tests {
     }
 
     /// An indented fence maps a line at a time, because the parser hands its
-    /// content back with the indentation stripped: the block is not byte-for-
-    /// byte with the file, and one whole-block pair drifted by the indent times
-    /// the lines before it. Both lines of this landed on the first one, the
-    /// second at a column past the end of it.
+    /// content back with the indentation stripped.
     #[test]
     fn an_indented_fence_maps_each_of_its_lines() {
         let source = concat!(
@@ -440,15 +365,12 @@ mod tests {
         let two = back(&lowered, &map, "#emph[two]");
         assert_eq!(&source[one.start..one.start + 10], "#emph[one]");
         assert_eq!(&source[two.start..two.start + 10], "#emph[two]");
-        // Different authored lines, which is the whole point: they used to
-        // resolve into the same one.
         assert_ne!(
             source[..one.start].lines().count(),
             source[..two.start].lines().count()
         );
     }
 
-    /// The wrapper is not lowered from anything, so nothing in it maps.
     #[test]
     fn the_wrapper_maps_to_nothing() {
         let (_, map) = mapped("---\ntitle \"A\"\n---\n\njust prose\n");
@@ -456,18 +378,12 @@ mod tests {
         assert_eq!(map.locate(&(0..PREAMBLE)), None);
     }
 
-    /// A page with nothing under its frontmatter lowers to nothing, and an
-    /// empty map must answer "nowhere" rather than "the top of the file".
     #[test]
     fn an_empty_body_maps_to_nothing() {
         let (_, map) = mapped("---\ntitle \"A\"\n---\n");
         assert_eq!(map.locate(&(PREAMBLE..PREAMBLE + 1)), None);
     }
 
-    /// Every construct the lowering emits is attributed, not just `eval`
-    /// fences: the generated call for a heading, a list, a link came from the
-    /// markdown that asked for it, and a jump-to-source that lands on the
-    /// generated Typst instead is a path no editor can open.
     #[test]
     fn every_construct_maps_back_to_the_markdown() {
         let source = "---\ntitle \"A\"\n---\n\nFirst paragraph.\n\n## A heading\n\n- an item\n- another, with a [link](https://x.com)\n\nLast.\n";
@@ -485,11 +401,9 @@ mod tests {
         assert_eq!(line(r#"#"Last.""#), 12);
     }
 
-    /// The subtle half of the map, tested on its own because a wrong shift is
-    /// invisible in the output: a buffered construct is written apart from its
-    /// parent, so its spans are in its own coordinates and the splice has to
-    /// move them by where its text landed. Unshifted, every one of them names
-    /// bytes that many too early.
+    /// A buffered construct is written apart from its parent, so its spans are
+    /// in its own coordinates and the splice moves them by where its text
+    /// landed.
     #[test]
     fn splicing_shifts_a_childs_spans_by_where_its_text_landed() {
         let mut parent = Buffer::default();
@@ -502,9 +416,6 @@ mod tests {
         assert_eq!(parent.spans, vec![Mapping::new(4..6, 40..42, Shape::Whole)]);
     }
 
-    /// Splices compose, which is what a construct buffered inside another
-    /// buffered one needs: each level shifts by its own landing point, and the
-    /// pair that reaches the root has been moved by both.
     #[test]
     fn splices_compose_through_a_stack_of_buffers() {
         let mut inner = Buffer::default();
@@ -523,10 +434,6 @@ mod tests {
         assert_eq!(root.spans, vec![Mapping::new(6..7, 7..8, Shape::Whole)]);
     }
 
-    /// A footnote body is lowered at its definition by a walk of its own and
-    /// written at its reference, which is the splice a real page exercises: its
-    /// spans have to follow the text, and the walk that recorded them has to
-    /// have known which events it was looking at.
     #[test]
     fn a_footnote_body_maps_to_its_definition() {
         let source = "---\ntitle \"A\"\n---\n\nsee[^n]\n\n[^n]: the note\n";
@@ -538,6 +445,8 @@ mod tests {
 
     /// A comment renders as nothing anywhere, so it is the one raw-HTML shape
     /// that can be dropped without losing content.
+    ///
+    /// `<!-->` and `<!--->` are empty comments, which must not be refused.
     #[test]
     fn html_comments_are_dropped_not_refused() {
         assert!(
@@ -546,27 +455,18 @@ mod tests {
         let inline = lower("text <!-- hidden --> more\n");
         assert!(!inline.contains("hidden"), "{inline}");
         assert!(inline.contains(r#"#"text ""#), "{inline}");
-        // `<!-->` and `<!--->` are empty comments. The guard that used to
-        // defeat the overlap between `<!--` and `-->` rejected both, so they
-        // reached the policy and failed a build over nothing.
         assert!(try_lower("<!-->\n").is_ok());
         assert!(try_lower("<!--->\n").is_ok());
     }
 
-    /// ..but only a run that is *nothing but* comments. CommonMark ends an HTML
-    /// block on the line carrying `-->`, so this is one event that opens and
-    /// closes like a comment with an element hidden between: matching its two
-    /// ends dropped the whole thing, which lost the content and walked past the
-    /// `html` policy that exists to refuse exactly this.
+    /// CommonMark ends an HTML block on the line carrying `-->`, so a run that
+    /// opens and closes like a comment may hide an element between.
     #[test]
     fn a_comment_cannot_smuggle_markup_past_the_html_policy() {
         let source = "<!-- a --><div>SECRET</div><!-- b -->\n";
         assert!(try_lower(source).is_err(), "{source}");
-        // A complete empty comment does not open one either.
         assert!(try_lower("<!--><div>SECRET</div>-->\n").is_err());
 
-        // And where the site drops raw HTML it is dropped as the block it is,
-        // rather than silently mistaken for a comment.
         let dropping = MarkdownConfig {
             html: RawHtml::Drop,
             ..MarkdownConfig::default()
@@ -575,43 +475,34 @@ mod tests {
         assert!(!out.contains("SECRET"), "{out}");
     }
 
-    /// An email autolink's destination is the bare address, and every renderer
-    /// puts the scheme back. Emitted as authored it is a relative path to a page
-    /// nobody has, and nothing downstream questions it: `mailto:` is left alone
-    /// by the link checker and a bare address is not, so the two spellings of
-    /// one link disagreed.
+    /// An email autolink's destination is the bare address, which without the
+    /// scheme is a relative path to a page nobody has.
     #[test]
     fn an_email_autolink_keeps_its_scheme() {
         let out = lower("<me@example.com>\n");
         assert!(out.contains(r#"#link("mailto:me@example.com")["#), "{out}");
-        // The explicit spelling is already a scheme, and is not given a second.
         let written = lower("[x](mailto:me@example.com)\n");
         assert!(
             written.contains(r#"#link("mailto:me@example.com")["#),
             "{written}"
         );
-        // A plain autolink is untouched.
         assert!(lower("<https://x.com>\n").contains(r#"#link("https://x.com")["#));
     }
 
     /// A break inside an alt run is the space between the two lines it
-    /// separated. It used to be written into the lowered buffer that the image
-    /// then discards, so `alt` read `alphabeta`.
+    /// separated.
     #[test]
     fn a_multi_line_alt_keeps_the_space_between_its_lines() {
         let soft = lower("![alpha\nbeta](/i.png)\n");
         assert!(soft.contains(r#"alt: "alpha beta""#), "{soft}");
-        // A hard break is the same run, spelled with two trailing spaces.
         let hard = lower("![alpha  \nbeta](/i.png)\n");
         assert!(hard.contains(r#"alt: "alpha beta""#), "{hard}");
-        // Outside an alt run each break is still what it was.
         assert!(lower("a\nb\n").contains(r#"#" ""#));
         assert!(lower("a  \nb\n").contains("#linebreak()"));
     }
 
     /// Math is not an extension a site can enable, so a dollar run is prose and
-    /// stays prose. Pinned because the arms that used to handle the events could
-    /// never fire, and emitted a `math.equation` given a *string* if they had.
+    /// stays prose.
     #[test]
     fn math_is_never_parsed_so_a_dollar_run_is_text() {
         let out = lower("an $x^2$ run\n");

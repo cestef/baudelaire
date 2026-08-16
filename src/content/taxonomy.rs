@@ -1,8 +1,5 @@
-//! Generation of taxonomy index pages.
-//!
-//! For each configured taxonomy with `listing`, this builds a [`Listing`]
-//! per term (plus one listing every term), which lower to synthetic pages in
-//! the normal compile pipeline.
+//! Generation of taxonomy index pages: for each configured taxonomy with
+//! `listing`, a [`Listing`] per term plus one listing every term.
 
 use std::collections::BTreeMap;
 
@@ -21,8 +18,8 @@ pub struct Taxonomy;
 impl Generate for Taxonomy {
     /// Generate index + term pages for every configured taxonomy that requests
     /// an index, drawing terms from the planned pages' frontmatter. Terms are
-    /// grouped per language: a French and an English `rust` tag are separate
-    /// `/fr/tags/rust/` and `/tags/rust/` pages, never a merged one.
+    /// grouped per language, so a French and an English `rust` tag are separate
+    /// pages.
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for group in Self::groups(ctx.config, ctx.entities, ctx.pages) {
@@ -33,11 +30,8 @@ impl Generate for Taxonomy {
 }
 
 impl Taxonomy {
-    /// Every indexed taxonomy's terms, one [`Group`] per taxonomy per language.
-    ///
-    /// The single grouping rule behind both the generated term pages and the
-    /// per-term feeds, so a term that has a page always has a feed at the same
-    /// URL and neither can drift from the other's idea of what a term contains.
+    /// Every indexed taxonomy's terms, one [`Group`] per taxonomy per language,
+    /// the single grouping rule behind the term pages and the per-term feeds.
     pub(crate) fn groups<'a>(
         config: &'a Config,
         entities: &'a Registries,
@@ -62,7 +56,6 @@ impl Taxonomy {
 pub(crate) struct Group<'a> {
     /// Taxonomy name, e.g. `tags`; also its URL prefix and section id.
     name: &'a str,
-    /// Optional user template for the generated pages.
     template: Option<String>,
     /// Members per term page; `None` puts every member on one.
     paginate: Option<usize>,
@@ -74,8 +67,8 @@ pub(crate) struct Group<'a> {
     pages: &'a [Page],
     /// The language whose pages this group indexes; localizes every URL.
     lang: &'a str,
-    /// The registry this taxonomy's terms are ids in, when they are: what makes
-    /// two spellings of one person one term.
+    /// The registry this taxonomy's terms are ids in, when they are, which is
+    /// what makes two spellings of one person one term.
     registry: Option<&'a Registry>,
     /// Whether a term written as a page is that page, rather than a listing
     /// generated beside it.
@@ -97,18 +90,11 @@ impl<'a> Group<'a> {
         for page in pages.iter().filter(|p| p.lang == lang && p.listed(config)) {
             if let Some(values) = page.frontmatter.taxonomies.get(&cfg.key) {
                 for term in values {
-                    // Grouped by what the term *names*, not by how it was
-                    // spelled: an alias is a second name for one entity, so a
-                    // page writing it belongs on that entity's term and not on
-                    // a second one of its own.
                     let term = registry.map_or(term.as_str(), |r| r.canonical(term));
                     terms.entry(term.to_owned()).or_default().push(page);
                 }
             }
         }
-        // The collection comparator, on the taxonomy's own declared order: one
-        // rule, so a term page and a collection index listing the same posts
-        // cannot come in two orders.
         for members in terms.values_mut() {
             members.sort_by(|a, b| Page::compare(cfg.sort, a, b));
             if cfg.reverse {
@@ -134,13 +120,10 @@ impl<'a> Group<'a> {
         self.config.localize(self.lang, &Permalink::join(segments))
     }
 
-    /// Emit the index listing and one listing per term. Resolves every term's
+    /// Emit the index listing and one listing per term, resolving every term's
     /// slug up front so an empty slug or a collision (`C++`/`C--` -> `c`) is a
-    /// precise error, not a silent `/tags//` or overwrite.
-    ///
-    /// A described term emits nothing: its page was written by hand, sits at its
-    /// own permalink, and is handed the term's members through the wrapper. Only
-    /// the index row changes, and it changed itself, by pointing at that page.
+    /// precise error rather than a silent overwrite. A described term emits
+    /// nothing: its page was written by hand and sits at its own permalink.
     fn build(&self, out: &mut Vec<Page>) -> Result<()> {
         if self.terms.is_empty() {
             return Ok(());
@@ -153,8 +136,6 @@ impl<'a> Group<'a> {
         Ok(())
     }
 
-    /// The language this group indexes, so a consumer can title and localize
-    /// its output the same way the term pages are.
     pub(crate) fn lang(&self) -> &'a str {
         self.lang
     }
@@ -170,8 +151,6 @@ impl<'a> Group<'a> {
             if let Some(prev) = seen.insert(slug.clone(), name) {
                 return Err(ContentError::term_collision(self.name, &slug, prev, name).into());
             }
-            // A described term is wherever its page already is: one URL for one
-            // person, and every link written to that page still reaches it.
             let described = self.described(name);
             resolved.push(Term {
                 url: match described {
@@ -188,12 +167,7 @@ impl<'a> Group<'a> {
     }
 
     /// The page that declares the entity `term` names, in this group's own
-    /// language.
-    ///
-    /// Language-scoped like everything else here: a French profile describes the
-    /// French term page, and a term whose profile is in another language is
-    /// generated as an ordinary listing rather than pointing a reader at a page
-    /// they cannot read.
+    /// language; a profile written in another language describes nothing here.
     fn described(&self, term: &str) -> Option<&'a Page> {
         if !self.describe {
             return None;
@@ -221,19 +195,15 @@ impl<'a> Group<'a> {
         .lang(self.lang)
     }
 
-    /// How a term is titled wherever it is presented: its listing page, and the
-    /// feed that sits beside it.
+    /// How a term is titled wherever it is presented, its listing page and the
+    /// feed beside it alike.
     pub(crate) fn title(&self, term: &Term<'_>) -> String {
         format!("{}: {}", Titlecase(self.name), term.name)
     }
 
     /// The `/{name}/{term}/` listing of the pages under `term`, chunked when
-    /// the taxonomy sets a `paginate` count.
-    ///
-    /// Through the same [`Paged`] a collection index uses, so `/tags/rust/` and
-    /// `/blog/` name page 2 the same way. A term used to list every member on
-    /// one page whatever its size, which on a blog with three years of `#rust`
-    /// posts meant all 400 of them.
+    /// the taxonomy sets a `paginate` count, through the same [`Paged`] a
+    /// collection index uses.
     fn term(&self, term: &Term<'_>, out: &mut Vec<Page>) {
         let root = [self.name, term.slug.as_str()];
         let paged = Paged::new(
@@ -274,8 +244,7 @@ impl<'a> Group<'a> {
 /// invariance of `&Vec`.
 pub(crate) struct Term<'a> {
     pub(crate) name: &'a str,
-    /// The page that describes it, where one does: what makes this term's page
-    /// something an author wrote rather than something the build generated.
+    /// The page that describes it, where one does.
     pub(crate) described: Option<&'a Page>,
     slug: String,
     /// The term listing's localized URL (`/fr/tags/rust/`), which a term feed

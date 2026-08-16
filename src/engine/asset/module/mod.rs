@@ -1,8 +1,6 @@
-//! Virtual JS modules: the `baudelaire:*` specifiers a user's bundle can import
-//! and have inlined, tree-shaken, minified, and fingerprinted like first-party
-//! code. Each [`Module`] generates ES-module source from the site's build data;
-//! [`Virtual`] is the single rolldown plugin that serves them all, assembled
-//! from the registry in [`builtin`]. Adding a module is one impl and one line.
+//! Virtual JS modules: the `baudelaire:*` specifiers a user's bundle can
+//! import, served by the one rolldown plugin [`Virtual`] from the registry in
+//! [`builtin`]. Adding a module is one impl and one line.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -50,16 +48,11 @@ pub(super) trait Module {
     /// Nothing on disk holds these modules, so a TypeScript entry importing one
     /// reads it as unknown until [`Declarations`] writes these out.
     ///
-    /// No default: a module that served JavaScript and declared nothing would
-    /// be an import a typed bundle cannot use, and the gap would be silent.
-    ///
     /// [`entries`]: Module::entries
     fn types(&self, cx: &ModuleCx) -> Vec<(String, Dts)>;
 }
 
-/// The registered virtual modules. Adding one is an impl plus a line here, so
-/// the list is a `Vec` rather than a fixed-size array whose length is a second
-/// place to edit.
+/// The registered virtual modules.
 fn builtin() -> Vec<Box<dyn Module>> {
     vec![
         Box::new(client::Search),
@@ -103,7 +96,6 @@ impl Plugin for Virtual {
         _ctx: &PluginContext,
         args: &HookResolveIdArgs<'_>,
     ) -> impl Future<Output = HookResolveIdReturn> + Send {
-        // Claim our specifiers so rolldown skips filesystem resolution.
         let resolved = self
             .modules
             .contains_key(args.specifier)
@@ -145,15 +137,13 @@ impl<T: Named> std::fmt::Display for Names<T> {
     }
 }
 
-/// ES-module source builders, shared by the data modules so they emit exports
-/// one way: a default export always, plus a named const per top-level object
-/// key that is a safe identifier (so `import { title }` tree-shakes).
+/// ES-module source builders: a default export always, plus a named const per
+/// top-level object key that is a safe identifier, so `import { title }`
+/// tree-shakes.
 pub(super) struct Esm;
 
 impl Esm {
-    /// The declaration matching [`Esm::object`]: the same named consts and the
-    /// same default, typed from the value itself, so a site's own keys are what
-    /// an editor completes.
+    /// The declaration matching [`Esm::object`], typed from the value itself.
     fn typed(value: &Value) -> Dts {
         let mut dts = Dts::new();
         if let Value::Dict(pairs) = value {
@@ -186,12 +176,8 @@ impl Esm {
         format!("export default {};\n", Js(value))
     }
 
-    /// Whether `s` is a safe, non-reserved JS identifier for a named export.
-    /// The spelling of an identifier is [`codegen::ident`]; a reserved word is
-    /// a legal object key but cannot be bound, which is this module's concern
-    /// and not the renderer's.
-    ///
-    /// [`codegen::ident`]: crate::codegen::ident
+    /// Whether `s` is a safe, non-reserved JS identifier for a named export: a
+    /// reserved word is a legal object key but cannot be bound.
     fn ident(s: &str) -> bool {
         const RESERVED: &[&str] = &[
             "default", "class", "const", "let", "var", "function", "return", "import", "export",

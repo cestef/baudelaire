@@ -5,11 +5,9 @@ use thiserror::Error;
 
 use crate::ui::Code;
 
-/// An image marker the render pass refused to resolve.
-///
-/// Fatal rather than a warning, for the same reason [`crate::error::SvgError`]
-/// is: the element is already in the page, so continuing would ship a `<src>`
-/// naming a file the build declined to write.
+/// An image marker the render pass refused to resolve, fatal because the
+/// element is already in the page and continuing would ship a `<src>` naming a
+/// file the build declined to write.
 #[derive(Debug, Error, Diagnostic)]
 pub enum ImageError {
     #[error("{} is not a path inside the project", Code(.path))]
@@ -26,7 +24,6 @@ pub enum ImageError {
 }
 
 impl ImageError {
-    /// A marker naming something other than a file under the project root.
     pub fn escaping(path: &str) -> Self {
         Self::Escaping {
             path: path.to_owned(),

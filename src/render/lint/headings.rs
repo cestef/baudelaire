@@ -1,9 +1,6 @@
-//! Heading levels that skip.
-//!
-//! A document outline is read by level: assistive technology jumps `h2` to
-//! `h2`, and a section introduced by an `h4` under an `h2` has no place in that
-//! outline. Only *downward* skips are reported; coming back up any number of
-//! levels closes sections and is how a document ends a chapter.
+//! Heading levels that skip. Only *downward* skips are reported; coming back
+//! up any number of levels closes sections and is how a document ends a
+//! chapter.
 
 use crate::config::LintConfig;
 use crate::error::Lint;

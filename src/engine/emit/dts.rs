@@ -1,10 +1,5 @@
-//! Assembly of the generated TypeScript declarations.
-//!
-//! The `.d.ts` counterpart of [`Script`](super::script::Script): a declaration
-//! is a prelude of build-time types, one or more embedded fragments from
-//! `asset/types/`, and a module block around the result. [`Dts`] is that shape,
-//! so the indentation, the default-export binding, and the way a value's type
-//! is written each exist once instead of once per module.
+//! Assembly of the generated TypeScript declarations: build-time types,
+//! embedded fragments from `asset/types/`, and a module block around them.
 
 use std::fmt::{Display, Write};
 
@@ -17,9 +12,8 @@ pub(crate) struct Dts {
 }
 
 impl Dts {
-    /// The binding a default export goes through. A declaration cannot say
-    /// `export default <type>`, so the type is named first and the name is
-    /// exported.
+    /// The binding a default export goes through, since a declaration cannot
+    /// say `export default <type>`.
     const DEFAULT: &'static str = "data";
 
     pub(crate) fn new() -> Self {
@@ -29,7 +23,7 @@ impl Dts {
     }
 
     /// Append one embedded fragment: the hand-written half of a declaration,
-    /// for the modules whose shape is fixed rather than read off site data.
+    /// for a module whose shape is fixed rather than read off site data.
     pub(crate) fn part(mut self, fragment: &str) -> Self {
         if !self.body.is_empty() {
             self.body.push('\n');
@@ -59,8 +53,7 @@ impl Dts {
     }
 
     /// Everything `specifier` declares, for a module serving the same thing
-    /// under another name. A declaration file has no other way to share a
-    /// shape between modules.
+    /// under another name.
     pub(crate) fn same_as(mut self, specifier: &str) -> Self {
         let _ = writeln!(self.body, "export * from \"{specifier}\";");
         self

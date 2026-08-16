@@ -1,4 +1,4 @@
-//! Redirect stubs: a minimal HTML page that forwards a stale URL to its new one.
+//! Redirect stubs: a minimal HTML page forwarding a stale URL to its new one.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -16,9 +16,7 @@ use crate::ui::Count;
 /// pair the config declares.
 pub(super) struct Redirects;
 
-/// One declared redirect, whatever declared it: the two sources differ only in
-/// where the old path and the target come from, so they are emitted by one
-/// loop rather than two that would drift.
+/// One declared redirect, whatever declared it.
 struct Rule<'a> {
     /// The old path, localized if a page declared it.
     old: String,
@@ -26,43 +24,28 @@ struct Rule<'a> {
     target: String,
     /// The language whose strings the stub is written in.
     lang: &'a str,
-    /// The page that declared it; absent for a config pair, which is exactly
-    /// the case this exists for and so has no source file to name.
+    /// The page that declared it; `None` for a config pair.
     source: Option<&'a PathBuf>,
-    /// What the rule file tells the host to answer with.
-    ///
-    /// A page's own `redirect` is always permanent: the page moved, and the
-    /// old URL is not coming back. Only a config line can say otherwise, which
-    /// is why the status lives there and not in frontmatter.
+    /// What the rule file tells the host to answer with; permanent unless a
+    /// config line says otherwise.
     status: u16,
 }
 
 impl Processor for Redirects {
+    /// A rule file and a stub cannot coexist: a host serves a static file in
+    /// preference to a redirect rule, so the stub would win at the old path and
+    /// the rule would never fire.
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let mut rules: Vec<(String, String, u16)> = Vec::new();
-        // A rule file the site publishes itself wins over a generated one, and
-        // silently: `static/` is the escape hatch. Asking first is what keeps
-        // that from meaning "no redirects at all", since choosing rules turns
-        // the stubs off. Shadowed, the stubs come back and the build says so.
         let path = site.dist(&[Self::RULES]);
         let mut rules_wanted = site.config.generate.redirects;
         if rules_wanted && out.claimed(&path) {
             out.warn(RedirectsShadowed { path: path.clone() });
             rules_wanted = false;
         }
-        // Two pages claiming one old path used to last-writer-win in silence,
-        // and each write also pushed a duplicate path, so the summary counted a
-        // file it had overwritten. Keep the first and say so, as the sibling
-        // image-collision path does.
         let mut claimed: BTreeMap<PathBuf, Option<&PathBuf>> = BTreeMap::new();
-        // Rules that claim no file, so the summary counts what was declared
-        // rather than only what landed somewhere.
         let mut patterns = 0;
         for rule in Self::declared(site) {
-            // A pattern names a family of URLs, so there is no one file to put
-            // a stub at and nothing to claim. Without the rule file it is
-            // dropped rather than mangled into a literal `*` directory; the
-            // gate has already said so, once, before the build got here.
             if crate::config::Config::wildcard(&rule.old) {
                 if rules_wanted {
                     rules.push((site.config.prefixed(&rule.old), rule.target, rule.status));
@@ -72,10 +55,6 @@ impl Processor for Redirects {
             }
             let destination = site.config.destination(&rule.old);
             if let Some(kept) = claimed.get(&destination) {
-                // Reachable only if [`Claim::unique`] let two claims on one
-                // output file through, which it does not. Kept as the last
-                // word on which stub survives, and it names the page that lost
-                // one whenever a page is what declared the loser.
                 if let (Some(kept), Some(dropped)) = (kept, rule.source) {
                     out.warn(RedirectCollision {
                         old: rule.old.clone(),
@@ -85,9 +64,6 @@ impl Processor for Redirects {
                 }
                 continue;
             }
-            // A rule file and a stub cannot coexist: both hosts that read one
-            // serve a static file in preference to a redirect rule, so the stub
-            // would win at the old path and the 301 would never fire.
             if rules_wanted {
                 rules.push((site.config.prefixed(&rule.old), rule.target, rule.status));
             } else {
@@ -104,9 +80,6 @@ impl Processor for Redirects {
         }
         let declared = claimed.len() + patterns;
         if declared > 0 {
-            // A count rather than a path: this is the one processor that
-            // writes a file per rule, so there is no single destination for
-            // `Emit::wrote` to name.
             out.note(format_args!("{WROTE} {}", Count::redirects(declared)));
         }
         Ok(())
@@ -118,14 +91,12 @@ impl Redirects {
     /// then the config's own pairs.
     ///
     /// Pages first, so a config pair can never take an old path out from under
-    /// the page that declared it.
+    /// the page that declared it. A page's old path is localized like the
+    /// target it forwards to; a config pair is literal on both sides, since the
+    /// path it claims is one the author read off an old site.
     fn declared<'a>(site: &'a Site<'a>) -> impl Iterator<Item = Rule<'a>> {
         let pages = site.pages.iter().flat_map(|page| {
             page.frontmatter.redirect.iter().map(|old| Rule {
-                // Localized like the target it forwards to. Translating a page
-                // by copying its frontmatter (the documented workflow) copies
-                // the `redirect` list too, so unlocalized old paths made both
-                // editions claim one output file and hard-failed the build.
                 old: site.config.localize(&page.lang, old),
                 target: site.config.prefixed(&page.permalink),
                 lang: &page.lang,
@@ -133,12 +104,6 @@ impl Redirects {
                 status: crate::config::RedirectConfig::PERMANENT,
             })
         });
-        // A config pair is literal on both sides: nobody copied it per
-        // language, and the path it claims is one the author read off an old
-        // site, so localizing it would claim a path that never existed. The
-        // target passes through `prefixed` all the same, since a site under a
-        // subdirectory still has to forward within it, and an absolute URL to
-        // another host is left alone by that.
         let config = site.config.redirect.iter().map(|(old, rule)| Rule {
             old: old.clone(),
             target: site.config.prefixed(&rule.target),
@@ -150,20 +115,15 @@ impl Redirects {
     }
 
     /// The rule file Netlify and Cloudflare Pages read from the publish
-    /// directory. One name, since both hosts spell it the same.
+    /// directory.
     const RULES: &'static str = "_redirects";
 
     /// The rule file's body: `<old> <new> <status>` per line, in the order the
     /// pages claimed their old paths.
     ///
-    /// Permanent unless a config line says otherwise, because that is what these
-    /// mostly are. The meta-refresh stub this replaces could only ever be a
-    /// client-side round trip, which passes link equity worse than a real 301
-    /// and costs a page load to do it.
-    ///
     /// Both paths are written as *fields*, not as text: the line is read by
-    /// splitting on spaces, so a path carrying one would put the status where
-    /// the host looks for the target and leave the rule pointing at a path.
+    /// splitting on spaces, so a path carrying one would shift every field
+    /// after it.
     fn rules(rules: &[(String, String, u16)]) -> String {
         let mut body = Lines::default();
         for (old, new, status) in rules {
@@ -178,8 +138,7 @@ impl Redirects {
     }
 
     /// A client-side redirect to `target`: a meta-refresh with a canonical link
-    /// and a manual fallback anchor. Every value is attribute-escaped by the
-    /// markup builder, so no `format!`-built HTML and no bespoke escaper.
+    /// and a manual fallback anchor.
     fn stub(target: &str, label: &str, lang: &str) -> String {
         let mut html = Xml::fragment();
         html.doctype("html");
@@ -232,8 +191,6 @@ mod tests {
         }
     }
 
-    /// Two pages claiming one old path keep the first and warn, rather than
-    /// silently overwriting each other and counting the file twice.
     #[test]
     fn a_duplicate_old_path_warns_and_keeps_the_first() {
         let config = Config::default();
@@ -258,17 +215,12 @@ mod tests {
         assert_eq!(rec.notes, ["wrote 1 redirect"]);
     }
 
-    /// A `_redirects` line is three space-separated fields. A path carrying a
-    /// space used to shift the target into the status column, leaving a rule
-    /// that forwards to `301`.
     #[test]
     fn a_rule_keeps_each_path_to_one_field() {
         let rules = [("/old path/".to_owned(), "/new/".to_owned(), 301)];
         assert_eq!(Redirects::rules(&rules), "/oldpath/ /new/ 301\n");
     }
 
-    /// The status is the rule's own, so a temporary diversion says so where a
-    /// host reads it.
     #[test]
     fn a_rule_writes_the_status_it_carries() {
         let rules = [
@@ -302,8 +254,6 @@ mod tests {
         assert!(rec.warns.is_empty(), "{:?}", rec.warns);
     }
 
-    /// A config pair whose old path carries a `*` becomes a rule and nothing
-    /// else: one family of URLs, one line, no file at a literal `*` path.
     #[test]
     fn a_wildcard_old_path_is_written_as_a_rule() {
         let config = Config::parse(
@@ -326,9 +276,6 @@ mod tests {
         assert_eq!(rec.notes, ["wrote 1 redirect"]);
     }
 
-    /// Without the rule file there is nowhere for a pattern to go, and a stub
-    /// at a literal `*` directory is not it. The build drops it; `gate.rs` is
-    /// what tells the author, once, before any of this runs.
     #[test]
     fn a_wildcard_writes_no_stub() {
         let config =

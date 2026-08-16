@@ -1,9 +1,5 @@
-//! The UI strings baudelaire itself writes into generated pages.
-//!
-//! Generated listings (taxonomy indexes, paginated indexes) and redirect stubs
-//! are markup baudelaire authors, not the site's templates, so their wording
-//! cannot come from a layout. Each string here has an English default and is
-//! overridable per language:
+//! The UI strings baudelaire itself writes into generated pages, each with an
+//! English default and overridable per language:
 //!
 //! ```kdl
 //! languages {
@@ -20,16 +16,12 @@ pub struct Strings<'a> {
 }
 
 impl<'a> Strings<'a> {
-    /// Every key baudelaire looks up, with its English default. The single
-    /// source of truth: the lookup and the documentation both read this.
+    /// Every key baudelaire looks up, with its English default.
     const DEFAULTS: &'static [(&'static str, &'static str)] = &[
         ("previous", "← Previous"),
         ("next", "Next →"),
         ("page", "page"),
         ("redirecting", "Redirecting.."),
-        // How a date is written out for a reader. `{month}` takes its word from
-        // the `months` list, which is a list rather than a string and so is not
-        // in this table; the rest are numbers off the date itself.
         ("date", "{month} {day}, {year}"),
     ];
 
@@ -46,15 +38,13 @@ impl<'a> Strings<'a> {
             .unwrap_or_default()
     }
 
-    /// A list a language declares, when it is an array of plain strings. The
-    /// same language-then-default-then-nothing fallback [`get`](Self::get)
+    /// A list a language declares, with the same fallback [`get`](Self::get)
     /// uses, for the one key whose value is a list: `months`.
     pub fn list(&self, key: &str) -> Option<Vec<String>> {
         self.array(self.lang, key)
             .or_else(|| self.array(&self.config.lang, key))
     }
 
-    /// An array of plain strings a language declares under `key`.
     fn array(&self, lang: &str, key: &str) -> Option<Vec<String>> {
         let crate::codegen::Value::Array(items) = self
             .config
@@ -107,13 +97,10 @@ mod tests {
     fn a_language_overrides_the_built_in_default() {
         let cfg = config("lang \"en\"\nlanguages {\n  fr { strings { next \"Suivant →\" } }\n}");
         assert_eq!(Strings::new(&cfg, "fr").get("next"), "Suivant →");
-        // Keys it does not declare keep the default.
         assert_eq!(Strings::new(&cfg, "fr").get("previous"), "← Previous");
         assert_eq!(Strings::new(&cfg, "en").get("next"), "Next →");
     }
 
-    /// A site that retitles a string for its own default language gets it in
-    /// every language that has not overridden it.
     #[test]
     fn the_default_language_supplies_the_fallback() {
         let cfg =

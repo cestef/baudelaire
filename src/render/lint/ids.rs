@@ -1,12 +1,5 @@
-//! Ids used more than once.
-//!
-//! An id names one element. A repeated one silently breaks every deep link and
-//! every `aria-labelledby` into it, since both reach only the first, and the
-//! anchor pass will not save it: a *derived* heading id is deduplicated against
-//! everything already on the page, but two authored ones are the author's.
-//!
-//! Reported at the second and later occurrences, so the first stays the one
-//! that owns the name.
+//! Ids used more than once, reported at the second and later occurrences so
+//! the first stays the one that owns the name.
 
 use std::collections::HashSet;
 

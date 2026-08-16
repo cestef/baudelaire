@@ -19,8 +19,7 @@ use crate::mirror::{Mirror, Settings};
 use crate::ui::{Paths, Ui};
 
 /// Scaffolding a whole project: what `init` decides, in what order, and what it
-/// writes. A namespace rather than a value, in the unit-struct style the rest of
-/// the codebase uses for an action with no state of its own (`Editor`, `Http`).
+/// writes.
 pub(in crate::cli) struct Init;
 
 impl Init {
@@ -29,10 +28,6 @@ impl Init {
     /// prompt at), write the files the flags did not exclude, and optionally
     /// initialize a repository.
     pub(in crate::cli) fn run(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
-        // Every selection is resolved before anything is prompted for or written,
-        // so a mistyped name fails on the spot rather than half a scaffold in.
-        // These two first, because they are settled by flags alone: a mistyped
-        // `--with` has to fail before the shape question, not after answering it.
         let extras = Extra::resolve(&args.with)?;
         let config = templates::File::config_at(config)?;
         let interactive = !args.yes && std::io::stdin().is_terminal();
@@ -45,9 +40,6 @@ impl Init {
         }
 
         let files = template.files(&details.vars());
-        // What the shape already configures is not appended a second time: `--with
-        // search` on a shape whose config already sets `formats`, `fields` and a
-        // palette used to bolt a barer `search { formats "json" }` on beneath it.
         let extras = Extra::wanted(&extras, &files, ui);
 
         let mut scaffold = Scaffold::new(&target).ignore();
@@ -85,15 +77,9 @@ impl Init {
             "baudelaire build".cyan(),
             "baudelaire serve".cyan()
         ));
-        // Before the editor settings, because a build cannot succeed until the
-        // theme is where the config says it is, and `init` naming a directory
-        // nobody has put anything in yet is the ordinary case.
         if let Some(spec) = &start.theme {
             Placement::of(spec, &target).settle(ui, &target)?;
         }
-        // Last, because it is the one thing here that a reader has to act on: a
-        // scaffold that mirrors the modules and never says they need pointing at
-        // leaves every import in the templates it just wrote marked unresolved.
         if let Some(settings) = settings {
             settings.render(ui);
         }
@@ -101,13 +87,8 @@ impl Init {
     }
 
     /// Mirror the generated modules for editor tooling, so the imports the
-    /// scaffolded templates and scripts carry resolve from the first minute.
-    ///
-    /// A warning rather than an error: this is tooling convenience, and a
-    /// platform with no data directory (or one that is read-only) is no reason
-    /// to fail a scaffold that otherwise succeeded. The site builds either way,
-    /// since a build serves these modules from memory and never reads what this
-    /// writes.
+    /// scaffolded templates carry resolve from the first minute. A failure
+    /// warns rather than errors: a build never reads what this writes.
     fn packages(ui: &Ui, target: &Path) -> Option<Settings> {
         let config = Config {
             root: target.to_path_buf(),
@@ -128,18 +109,12 @@ impl Init {
 /// What a run scaffolds from, once the flags and the prompts have both had
 /// their say: the `--template` name and the `--theme` spec, either of which may
 /// still be absent.
-///
-/// The two are one question, not two, and the interactive form asks it once.
-/// That is not a shortcut: [`Template::select`] already lets a theme win over a
-/// starter shape, because what a shape would contribute to the config is
-/// exactly what a theme declares for itself.
 pub(super) struct Start {
     template: Option<String>,
     theme: Option<String>,
 }
 
-/// One answer to that question. Ephemeral: it exists to carry a table row out
-/// of the prompt, and [`Start`] is what the rest of `init` reads.
+/// One answer to that question, carrying a table row out of the prompt.
 #[derive(Clone, Copy)]
 pub(super) enum Chosen {
     /// A starter shape, scaffolded in full.
@@ -150,12 +125,9 @@ pub(super) enum Chosen {
 }
 
 impl Start {
-    /// The shape and theme for this run.
-    ///
-    /// A flag always wins, as everywhere else in `init`, and naming either one
-    /// settles the question: a run that said `--template docs` has chosen its
-    /// shape, and one that said `--theme` has chosen a theme's. Only a run that
-    /// named neither, with a terminal to ask at, is asked.
+    /// The shape and theme for this run: naming either flag settles the
+    /// question, so only a run that named neither, with a terminal to ask at,
+    /// is asked.
     fn gather(args: &InitArgs, interactive: bool) -> Result<Self> {
         if !interactive || args.template.is_some() || args.theme.is_some() {
             return Ok(Self {
@@ -182,9 +154,6 @@ impl Start {
 impl Chosen {
     /// Every answer the question offers: the starter shapes, then the themes
     /// this binary carries.
-    ///
-    /// Both tables are read where they live, so a new shape or a new theme is
-    /// offered by existing rather than by a second list here.
     fn all() -> Vec<Self> {
         let shapes = templates::TEMPLATES.iter().map(Self::Shape);
         #[cfg(feature = "themes")]
@@ -201,8 +170,7 @@ impl Chosen {
         }
     }
 
-    /// The one line it describes itself with: the same one `--help` lists the
-    /// shapes by and `theme list` prints.
+    /// The one line it describes itself with.
     fn about(self) -> &'static str {
         match self {
             Self::Shape(template) => template.about,
@@ -211,9 +179,8 @@ impl Chosen {
         }
     }
 
-    /// Whether this is the answer an unanswered prompt takes. The shape a
-    /// non-interactive run scaffolds, so pressing enter and passing `--yes`
-    /// produce the same project.
+    /// Whether this is the answer an unanswered prompt takes, which is also the
+    /// shape a non-interactive run scaffolds.
     fn preselected(self) -> bool {
         match self {
             Self::Shape(template) => template.name == Template::DEFAULT,
@@ -225,9 +192,7 @@ impl Chosen {
 
 impl From<Chosen> for Start {
     /// A chosen theme becomes the directory spec `--theme` documents
-    /// (`themes/<name>`), which is what makes the answer a project that builds:
-    /// the config names that directory and [`Placement`] writes the theme into
-    /// it.
+    /// (`themes/<name>`), which [`Placement`] then writes the theme into.
     fn from(chosen: Chosen) -> Self {
         match chosen {
             Chosen::Shape(template) => Self {
@@ -245,10 +210,6 @@ impl From<Chosen> for Start {
 
 /// What a `--theme` spec asks of the scaffold: a directory theme is a path
 /// inside the project, and `init` runs before anyone has put one there.
-///
-/// Three answers, and only the last leaves the reader with work: the shipped
-/// themes are in the binary, so a spec naming one is written on the spot rather
-/// than described.
 pub(super) enum Placement<'a> {
     /// A package spec, or a directory already in place: the build resolves it.
     Resolved,
@@ -275,13 +236,8 @@ impl<'a> Placement<'a> {
         Self::Missing(spec)
     }
 
-    /// Write what can be written, and say what cannot. Installing here rather
-    /// than leaving an instruction is what makes the documented one-liner
-    /// (`init --theme "themes/albatros"`) a project that builds.
-    ///
-    /// The signature is the same in both flavors, so the caller is: with no
-    /// themes carried there is nothing to write, and the `target` to write it
-    /// into and the failure of writing it both go with them.
+    /// Write what can be written, and say what cannot; the signature is the
+    /// same in both feature flavors, so the caller is too.
     #[cfg_attr(
         not(feature = "themes"),
         allow(unused_variables, clippy::unnecessary_wraps)
@@ -325,34 +281,18 @@ pub(super) struct Details {
 }
 
 impl Details {
-    /// The site name a run falls back to when nothing names one: the prompt's
-    /// default answer and the name for a directory that has none (`/`, or a
-    /// path ending in `..`).
+    /// The site name a run falls back to when nothing names one.
     const UNNAMED: &'static str = "my-site";
 
-    /// The author a run falls back to when nothing names one: no `--author`,
-    /// and no `user.name` in git config.
-    ///
-    /// A placeholder, for the same reason `url` has always had one. The fallback
-    /// was the empty string, which a non-interactive `init --yes` took as its
-    /// answer and wrote as `author ""`, and from there into every page's
-    /// `<meta name="author">` and every feed entry: a value that is wrong
-    /// everywhere and looks like nothing anywhere. `Your Name` is visibly a
-    /// placeholder, so it gets edited.
+    /// The author a run falls back to when nothing names one; visibly a
+    /// placeholder, so it gets edited rather than shipped.
     const UNSIGNED: &'static str = "Your Name";
 
-    /// Where to scaffold, and what to fill the placeholders with.
-    ///
-    /// A flag always wins. What a flag did not supply is prompted for when
-    /// there is a terminal to prompt at, and otherwise defaulted, so `--yes` in
-    /// CI is fully scriptable rather than silently accepting `example.com`.
-    ///
-    /// The target directory has three cases: an explicit `dir` names it, an
-    /// interactive run without one takes the site name for it, and a
-    /// non-interactive run without one scaffolds into `.`.
+    /// Where to scaffold, and what to fill the placeholders with. A flag always
+    /// wins; what a flag did not supply is prompted for when there is a
+    /// terminal to prompt at, and otherwise defaulted.
     fn gather(args: &InitArgs, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
         let git = Self::git_author().unwrap_or_else(|| Self::UNSIGNED.to_owned());
-        // Only prompt for what was not given, and only when someone is there.
         let ask = |label: &str, default: &str, given: Option<&String>| -> Result<String> {
             match given {
                 Some(v) => Ok(v.clone()),
@@ -367,8 +307,6 @@ impl Details {
                 let site = Input::new("Site name").default(Self::UNNAMED).ask()?;
                 (PathBuf::from(&site), site)
             }
-            // No directory, but a title (or no terminal): scaffold into `.`, the
-            // shape `baudelaire init --yes` has always had in CI.
             None => (PathBuf::from("."), Self::dir_name(Path::new("."), root)),
         };
         let site = match &args.title {
@@ -377,9 +315,6 @@ impl Details {
         };
         let author = ask("Author", &git, args.author.as_ref())?;
         let url = ask("Base URL", "https://example.com", args.url.as_ref())?;
-        // `--url` answers to the same rule through its value parser; an
-        // interactive answer reaches this config key by another road and used
-        // to reach it unchecked.
         if !crate::config::BaseUrl::absolute(&url) {
             return Err(crate::error::ScaffoldError::RelativeUrl { url }.into());
         }
@@ -448,8 +383,7 @@ mod start_tests {
     use super::{Chosen, Start, templates::Template};
     use crate::cli::{Cli, Command, InitArgs};
 
-    /// The `init` flags a command line carries, parsed as the CLI parses them,
-    /// so a test cannot construct a combination clap would refuse.
+    /// The `init` flags a command line carries, parsed as the CLI parses them.
     fn args(flags: &[&str]) -> InitArgs {
         use clap::Parser as _;
         let cli = Cli::parse_from(["baudelaire", "init"].iter().chain(flags));
@@ -459,10 +393,6 @@ mod start_tests {
         args
     }
 
-    /// Naming either flag settles the question, so nothing is asked: a run that
-    /// said `--template docs` has chosen its shape, and `--theme` has chosen a
-    /// theme's. `interactive` is true here, which is what makes the assertion
-    /// mean something.
     #[test]
     fn a_named_shape_or_theme_is_never_asked_about() {
         let named = Start::gather(&args(&["--template", "docs"]), true).unwrap();
@@ -473,15 +403,11 @@ mod start_tests {
         assert_eq!(themed.template, None);
         assert_eq!(themed.theme.as_deref(), Some("themes/mine"));
 
-        // Both is not an error: `Template::select` resolves the shape (so a
-        // typo still fails) and then lets the theme win.
         let both = Start::gather(&args(&["--template", "docs", "--theme", "t/x"]), true).unwrap();
         assert_eq!(both.template.as_deref(), Some("docs"));
         assert_eq!(both.theme.as_deref(), Some("t/x"));
     }
 
-    /// With nobody to ask, a run names neither and falls to the default shape,
-    /// which is the behaviour `--yes` and CI have always had.
     #[test]
     fn a_run_with_no_terminal_names_neither() {
         let start = Start::gather(&args(&[]), false).unwrap();
@@ -489,9 +415,6 @@ mod start_tests {
         assert_eq!(start.theme, None);
     }
 
-    /// The question offers both tables in full. A shape or a theme that shipped
-    /// without being offered here would be one nobody choosing interactively
-    /// could reach.
     #[test]
     fn every_shape_and_every_theme_is_offered() {
         let offered: Vec<&str> = Chosen::all().iter().map(|c| c.name()).collect();
@@ -505,7 +428,6 @@ mod start_tests {
         );
     }
 
-    /// Pressing enter and passing `--yes` scaffold the same project.
     #[test]
     fn exactly_one_answer_is_preselected_and_it_is_the_default_shape() {
         let preselected: Vec<&str> = Chosen::all()
@@ -516,7 +438,6 @@ mod start_tests {
         assert_eq!(preselected, vec![Template::DEFAULT]);
     }
 
-    /// A chosen shape is named, and nothing else is.
     #[test]
     fn choosing_a_shape_names_it() {
         let start = Start::from(Chosen::Shape(Template::find("book").unwrap()));
@@ -524,10 +445,6 @@ mod start_tests {
         assert_eq!(start.theme, None);
     }
 
-    /// A chosen theme becomes a spec the scaffold can act on: the config names
-    /// the directory, and the theme is written into it. A spec `Placement` read
-    /// as `Missing` would be an `init` that told the reader to go and find the
-    /// theme it had just offered them.
     #[cfg(feature = "themes")]
     #[test]
     fn choosing_a_theme_installs_it_where_the_config_names_it() {

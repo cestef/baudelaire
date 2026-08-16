@@ -1,12 +1,5 @@
 //! Failures from the entity registries: a reference nobody answers, a name that
 //! reaches two entities, a roster that does not carry what it says it does.
-//!
-//! Every one of them underlines the line that caused it, in the file that wrote
-//! it. A registry is assembled from several sources, so "which file said this"
-//! is the first thing an author has to know and the message alone cannot say
-//! it: the term is in a page, the field is in a roster, and the two are read
-//! hours apart. [`crate::content::entities::Provenance`] is what carries the
-//! answer this far.
 
 use std::fmt;
 
@@ -18,17 +11,13 @@ use crate::content::entities::{Entity, Snippet};
 use crate::content::frontmatter::check::Fault;
 use crate::ui::{Code, Text, markup};
 
-/// A failure while building or resolving an entity registry.
 #[derive(Error, Diagnostic, Debug)]
 pub enum EntityError {
-    /// A term whose registry holds no entity of that name. Its own type
-    /// because it is the one entity failure a site may ask to be told about
-    /// rather than stopped by: see [`Unresolved`].
+    /// A term whose registry holds no entity of that name.
     #[error(transparent)]
     #[diagnostic(transparent)]
     Unresolved(Unresolved),
 
-    /// Two entities reachable by one name.
     #[error(
         "{} reaches both {} and {} in the {} registry",
         Code(.alias),
@@ -53,7 +42,6 @@ pub enum EntityError {
         span: Option<SourceSpan>,
     },
 
-    /// An entity that does not carry a field its registry declares.
     #[error(
         "{} in the {} registry has no {}, which its entities must carry",
         Code(.id),
@@ -68,15 +56,13 @@ pub enum EntityError {
         help: String,
         #[source_code]
         src: Option<NamedSource<String>>,
-        // What the field holds, not what is there: nothing is there, and
-        // `want` is one of this crate's own literals rather than authored
-        // text, which a label renders raw.
+        // `want` is one of this crate's own literals, never authored text: a
+        // label is rendered raw rather than as markup.
         #[label("should carry {want}")]
         span: Option<SourceSpan>,
         want: String,
     },
 
-    /// An entity whose field is not the shape its registry declares.
     #[error(
         "{} of {} in the {} registry must be {}, but is {}",
         Code(.key),
@@ -99,7 +85,6 @@ pub enum EntityError {
         want: String,
     },
 
-    /// A taxonomy pointing at a registry nobody declared.
     #[error(
         "the {} taxonomy resolves its terms in the {} registry, which nothing declares",
         Code(.taxonomy),
@@ -134,9 +119,6 @@ impl EntityError {
     }
 
     /// An entity that fails the fields its registry declares.
-    ///
-    /// Built from the same [`Fault`] a page's frontmatter schema produces, so a
-    /// `list<dict>` reads the same way whichever declared it.
     pub(crate) fn field(
         registry: &str,
         entity: &Entity,
@@ -175,7 +157,6 @@ impl EntityError {
         }
     }
 
-    /// A taxonomy naming a registry that does not exist.
     pub fn no_registry(taxonomy: &str, registry: &str, known: &[&str]) -> Self {
         Self::NoRegistry {
             help: if known.is_empty() {
@@ -194,10 +175,9 @@ impl EntityError {
 
 /// A term that names nothing in the registry its taxonomy resolves against.
 ///
-/// Its own type, and not a variant of [`EntityError`], for the same reason a
-/// broken link is: the registry decides whether this stops the build or is
-/// merely reported (`unknown "error"` against `unknown "warn"`), and a
-/// severity that varies is a field rather than an attribute.
+/// Its own type rather than a plain variant: the registry decides whether this
+/// stops the build (`unknown "error"`) or is merely reported (`unknown
+/// "warn"`), and a severity that varies is a field rather than an attribute.
 #[derive(Debug)]
 pub struct Unresolved {
     registry: String,
@@ -223,9 +203,6 @@ impl Unresolved {
     ) -> Self {
         let (src, span) = Snippet::parts(snippet);
         Self {
-            // A registry whose sources have produced nothing yet is a roster
-            // waiting to be written, not a typo: there is no near name to
-            // suggest, so the help says what would make the term resolve.
             help: if known.is_empty() {
                 markup!(
                     "the `{}` registry holds no entities yet: declare this one, or set `unknown \"synthesize\"` to take the term as written",
@@ -279,9 +256,6 @@ impl Diagnostic for Unresolved {
     }
 
     fn source_code(&self) -> Option<&dyn SourceCode> {
-        // Only with a span: a source with nothing to underline renders as a
-        // filename and no snippet, which reads as a diagnostic that lost its
-        // way rather than one that had nowhere to point.
         self.span
             .and_then(|_| self.src.as_ref().map(|src| src as &dyn SourceCode))
     }

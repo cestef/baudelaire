@@ -4,9 +4,7 @@
 //! A field's type is an expression, not a keyword: `list<..>` wraps another
 //! type, so `list<int>`, `list<list<int>>` and `list<dict>` all say exactly what
 //! they hold. The leaves are the Typst types a page can write in a frontmatter
-//! dict, never a second type system. Written beside its own parser and error the
-//! way [`Permalink`](crate::config::Permalink) is, because it is the same kind
-//! of thing: a mini-language inside a config string.
+//! dict, never a second type system.
 
 use kdl::KdlNode;
 use miette::SourceSpan;
@@ -22,12 +20,8 @@ use crate::ui::markup;
 /// How a type is named to a reader, in every shape a diagnostic needs it: `a
 /// string`, `strings`, `a list of strings`.
 ///
-/// Static, and that is the point. A frontmatter type mismatch renders the
-/// expected type in a miette *label*, which is not markup-rendered and so may
-/// only ever carry this crate's own literals; a `String` assembled at the call
-/// site could not promise that. Built by the `words!` table below, so the
-/// plural is written once and the list form is concatenated from it at compile
-/// time.
+/// Static because a miette label is not markup-rendered and so may only carry
+/// this crate's own literals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Words {
     /// `a string`
@@ -39,8 +33,7 @@ pub struct Words {
 }
 
 /// One row of [`FieldType::words`], from the two words that are not derivable
-/// from each other. The list form is neither: it is the plural, and saying so
-/// here is what stops the two from drifting.
+/// from each other; the list form is concatenated from the plural.
 macro_rules! words {
     ($article:literal, $plural:literal) => {
         Words {
@@ -53,10 +46,8 @@ macro_rules! words {
 
 /// One field a collection's frontmatter schema declares.
 ///
-/// Declaring a field *requires* it. A field that may be absent says so with
-/// `optional=#true`, because an absent field is exactly the failure the schema
-/// exists to catch: a template reading `page.frontmatter.hero` for a page that
-/// never set one renders nothing at all, and the build stays green.
+/// Declaring a field *requires* it; a field that may be absent says so with
+/// `optional=#true`.
 #[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
 pub struct FieldSchema {
     /// The shape the value must have. [`FieldType::Any`] (the default, and what
@@ -82,8 +73,7 @@ pub enum FieldType {
     Float,
     /// A `datetime(..)`, with or without a time of day.
     Date,
-    /// An array whose every element has this type. Bare `list` is `list<str>`,
-    /// which is what it meant before the type language had a parameter.
+    /// An array whose every element has this type. Bare `list` is `list<str>`.
     List(Box<Self>),
     /// A dictionary, and the fields it must carry. Empty (a bare `dict`)
     /// constrains the shape and nothing inside it.
@@ -94,9 +84,8 @@ impl FieldType {
     /// The constructor spelling, and the only compound one.
     const LIST: &'static str = "list";
 
-    /// The leaf types, in the order the reference lists them: the single source
-    /// of truth for what the innermost name of a type expression may be, read by
-    /// both the parser and [`names`](Self::names).
+    /// The leaf types, in the order the reference lists them: what the
+    /// innermost name of a type expression may be.
     fn leaves() -> Vec<(&'static str, Self)> {
         vec![
             ("any", Self::Any),
@@ -109,10 +98,8 @@ impl FieldType {
         ]
     }
 
-    /// Every spelling the type language accepts, for the generated reference and
-    /// for the "valid values" help on a typo. A function rather than a constant
-    /// because `list<..>` is a shape and not a variant, so the list is the leaf
-    /// table plus the two ways to write the constructor over it.
+    /// Every spelling the type language accepts, for the generated reference
+    /// and for the "valid values" help on a typo.
     pub fn names() -> Vec<&'static str> {
         let mut names: Vec<&'static str> = Self::leaves().into_iter().map(|(n, _)| n).collect();
         names.push(Self::LIST);
@@ -129,14 +116,11 @@ impl FieldType {
         let mut depth = 0usize;
         while let Some(rest) = name.strip_prefix(Self::LIST) {
             let rest = rest.trim_start();
-            // `list` alone: the parameter it had before it could take one.
             if rest.is_empty() {
                 name = "str";
                 depth += 1;
                 break;
             }
-            // Anything else that merely starts with those four letters is a leaf
-            // name, and fails as one ("listy" is unknown, not malformed).
             let Some(open) = rest.strip_prefix('<') else {
                 break;
             };
@@ -176,13 +160,10 @@ impl FieldType {
         }
     }
 
-    /// The English a diagnostic names this type by: the single table every
-    /// message describing a frontmatter value reads, whether it came from a
-    /// declared schema or from a built-in key's own reader.
+    /// The English a diagnostic names this type by.
     ///
     /// A list is named after what it holds, so [`article`](Self::article) and
-    /// [`plural`](Self::plural) answer for one before reaching here; the row is
-    /// the bare form, which is what a `list` with no parameter would be called.
+    /// [`plural`](Self::plural) answer for one before reaching here.
     pub fn words(&self) -> Words {
         match self {
             Self::Any => words!("any value", "values"),
@@ -196,8 +177,7 @@ impl FieldType {
         }
     }
 
-    /// How a diagnostic names this type ("a string"), so the schema errors read
-    /// like the built-in frontmatter ones rather than printing a config keyword.
+    /// How a diagnostic names this type ("a string").
     pub fn article(&self) -> String {
         match self {
             Self::List(inner) => format!("a list of {}", inner.plural()),
@@ -214,11 +194,8 @@ impl FieldType {
         }
     }
 
-    /// A Typst literal of this type, for the "add the field" help. Beside
-    /// [`article`](Self::article) because a message that says what is missing
-    /// and one that shows how to write it are the same fact. A declared
-    /// dictionary shows the fields it requires, since those are the next thing
-    /// the author would have got wrong.
+    /// A Typst literal of this type, for the "add the field" help. A declared
+    /// dictionary shows the fields it requires.
     pub fn example(&self) -> String {
         match self {
             Self::Any | Self::Str => "\"..\"".to_owned(),
@@ -245,9 +222,8 @@ impl FieldType {
 
 /// A type expression that names no type.
 ///
-/// Not a diagnostic itself: the config layer owns the span, and an unknown leaf
-/// is the same "unknown value" every other named config value raises, listed out
-/// of the very table that parses them.
+/// Not a diagnostic itself: the config layer owns the span, and turns this into
+/// one through [`TypeError::at`].
 #[derive(Debug, PartialEq, Eq)]
 pub enum TypeError {
     /// A leaf name no type answers to.
@@ -283,12 +259,11 @@ impl TypeError {
 
 impl FieldSchema {
     /// One `title "str" optional=#true` line: the node name is the frontmatter
-    /// key it constrains, and an optional leading positional its type, so both
-    /// the bare `title` (present, any shape) and the terse `tags "list"` read.
+    /// key it constrains, and an optional leading positional its type.
     ///
     /// A `{ .. }` block declares the fields of the dictionary the type ends in,
-    /// through however many `list<..>` wrap it, and recurses through this same
-    /// reader: `authors "list<dict>" { name "str" }`.
+    /// through however many `list<..>` wrap it:
+    /// `authors "list<dict>" { name "str" }`.
     pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let key = node.name().value().to_owned();
         let span = NodeExt::span(node);
@@ -310,10 +285,6 @@ impl FieldSchema {
             };
             *dict = fields;
         }
-        // A built-in key's type is fixed by the frontmatter reader, and that
-        // reader runs first: it would reject the value before the schema ever
-        // saw it. A contradiction is therefore unsatisfiable, and fails at the
-        // line that wrote it rather than on every page of the collection.
         if let Some(builtin) = Frontmatter::builtin(&key)
             && field.ty != FieldType::Any
             && field.ty != builtin
@@ -333,14 +304,11 @@ impl FieldSchema {
     }
 }
 
-/// One schema field: the shape a frontmatter value must have, and whether the
-/// page may leave it out.
 impl Attributed for FieldSchema {
     /// The type, written as the leading positional.
     const LEADING: usize = 1;
 
-    /// The one attribute scope with a block of its own: `item` reads it as the
-    /// fields of the dictionary the type ends in.
+    /// `item` reads the block as the fields of the dictionary the type ends in.
     const NESTS: bool = true;
 
     const ATTRS: Attrs<Self> = Attrs(&[
@@ -377,7 +345,6 @@ mod tests {
     fn parses_leaves_and_nested_lists() {
         assert_eq!(FieldType::parse("str"), Ok(FieldType::Str));
         assert_eq!(FieldType::parse("dict"), Ok(FieldType::Dict(Vec::new())));
-        // bare `list` keeps the parameter it had before there were parameters
         assert_eq!(FieldType::parse("list"), Ok(list(FieldType::Str)));
         assert_eq!(FieldType::parse("list<int>"), Ok(list(FieldType::Int)));
         assert_eq!(
@@ -396,7 +363,6 @@ mod tests {
             FieldType::parse("strr"),
             Err(TypeError::Unknown("strr".to_owned()))
         );
-        // four letters of `list` and nothing else is a leaf name, not a list
         assert_eq!(
             FieldType::parse("listy"),
             Err(TypeError::Unknown("listy".to_owned()))
@@ -415,10 +381,8 @@ mod tests {
         );
     }
 
-    /// The static list form and the one `article` composes are the same words,
-    /// and have to stay so: a frontmatter reader needs a `&'static str` and
-    /// reads the first, while a schema mismatch renders the second, and the two
-    /// describe the same failure to the same reader.
+    /// The static list form and the one `article` composes must stay the same
+    /// words: different readers use each, for the same failure.
     #[test]
     fn the_static_list_form_is_the_composed_one() {
         for ty in [
@@ -461,8 +425,6 @@ mod tests {
                 },
             ),
         ];
-        // optional fields are left out: the help shows the smallest value that
-        // would satisfy the declaration.
         assert_eq!(list(*inner).example(), "((name: \"..\"),)");
     }
 }

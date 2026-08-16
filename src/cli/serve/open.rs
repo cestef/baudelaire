@@ -8,20 +8,14 @@ use crate::config::Config;
 use crate::error::Result;
 
 /// Opens a source location in the author's editor, for a preview alt-click.
-///
-/// Exists only when `serve { editor .. }` names a command: nothing is guessed
-/// from the environment, and with no command configured the endpoint answers
-/// with what to configure instead of launching something the author did not ask
-/// for.
+/// Exists only when `serve { editor .. }` names a command; nothing is guessed
+/// from the environment.
 #[derive(Clone)]
 pub(super) struct Open {
-    /// The project root, canonical. Every requested file is resolved against it
-    /// and must stay inside it: the request names a path, and this is what
-    /// keeps it to the site's own sources.
+    /// The project root, canonical; every requested file must resolve inside it.
     root: PathBuf,
-    /// The program, then each of its arguments. Run directly, never through a
-    /// shell, so a path with a space or a semicolon in it is an argument and
-    /// can never be a second command.
+    /// The program, then each of its arguments, run directly and never through
+    /// a shell.
     command: Vec<String>,
 }
 
@@ -49,8 +43,6 @@ impl Open {
         let mut child = Command::new(&program)
             .args(words)
             .current_dir(&self.root)
-            // The dev server owns this terminal; an editor writing into it
-            // would land in the middle of the rebuild log.
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -59,18 +51,14 @@ impl Open {
                 program: program.clone(),
                 source,
             })?;
-        // Reaped on its own thread: waiting here would hold the request open
-        // for as long as the editor runs, and not waiting at all leaves a
-        // zombie behind every click.
         std::thread::spawn(move || {
             let _ = child.wait();
         });
         Ok(())
     }
 
-    /// The command with `{file}`, `{line}` and `{column}` filled in. Per word,
-    /// so a value lands inside whatever argument shape an editor wants
-    /// (`+{line}`, `--goto {file}:{line}:{column}`) and never splits into two.
+    /// The command with `{file}`, `{line}` and `{column}` filled in, per word,
+    /// so a value never splits an argument in two.
     fn substituted(&self, file: &str, at: &At<'_>) -> Vec<String> {
         self.command
             .iter()
@@ -92,11 +80,6 @@ pub(super) enum Unopenable {
     #[error("no editor configured")]
     Unconfigured,
     /// The request named no location at all.
-    ///
-    /// Its own arm, not a [`Malformed`](Self::Malformed) carrying the endpoint
-    /// path: that message reads "not a source location: /__baudelaire/open",
-    /// which claims the endpoint's own URL is a badly written `file:line:column`
-    /// and sends the reader looking at the wrong string entirely.
     #[error("no source location: this endpoint takes `?at=file:line:column`")]
     Unaddressed,
     #[error("not a source location: {0}")]
@@ -123,10 +106,7 @@ impl Unopenable {
         }
     }
 
-    /// What to do about it, when there is something to do. A spawn failure is
-    /// the one worth guessing at: an editor the server cannot find is almost
-    /// always one that is not installed, or not on the `PATH` this process
-    /// inherited (a desktop-launched terminal often has a shorter one).
+    /// What to do about it, when there is something to do.
     fn help(&self) -> Option<&'static str> {
         match self {
             Self::Foreign => None,
@@ -148,9 +128,8 @@ impl Unopenable {
     }
 
     /// The response body, in the shape a diagnostic has: a marked headline and
-    /// a `help:` line. The injected client lays a refusal out with the same
-    /// renderer it lays a failed rebuild out with, so one shape here means one
-    /// presentation there rather than a special case per message.
+    /// a `help:` line, which the injected client renders as it renders a failed
+    /// rebuild.
     pub(super) fn body(&self) -> String {
         use std::fmt::Write as _;
 

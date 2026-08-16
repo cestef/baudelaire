@@ -7,7 +7,6 @@ use crate::error::Result;
 use crate::error::cli::{Generated, UnknownKey};
 use crate::ui::markup;
 
-/// Arguments for `baudelaire reference`.
 #[derive(Args, Debug, Clone)]
 #[command(after_help = ReferenceArgs::examples())]
 pub struct ReferenceArgs {
@@ -16,8 +15,7 @@ pub struct ReferenceArgs {
 }
 
 impl ReferenceArgs {
-    /// Appended to `reference --help`. The narrowing argument is the part worth
-    /// showing: the bare command prints a hundred and fifty keys.
+    /// Appended to `reference --help`.
     fn examples() -> String {
         help::Table::examples(&[
             ("baudelaire reference", "Every key"),
@@ -37,10 +35,6 @@ impl Run for ReferenceArgs {
 
         let reference = match &self.key {
             None => Reference::new(),
-            // The nearest real path, and *not* the whole list: there are over a
-            // hundred and fifty of them, and a help that prints them all is a
-            // wall rather than an answer. The command with no argument is the
-            // list, so the help says so instead.
             Some(key) => Reference::at(key).ok_or_else(|| {
                 let all = Reference::new();
                 let paths = all.paths();

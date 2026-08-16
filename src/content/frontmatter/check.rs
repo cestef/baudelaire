@@ -4,10 +4,9 @@ use super::origin::At;
 use crate::config::{FieldSchema, FieldType};
 use crate::error::Result;
 use typst::foundations::{Datetime, Dict, Value};
-/// Typed accessors over an evaluated frontmatter [`Value`]. The [`At`] each
-/// takes lets a type mismatch name the file and field and underline the value,
-/// instead of being silently dropped. [`ValueExt::str`] (infallible, for
-/// `extra` reads) is the exception: a non-string there is simply "absent".
+/// Typed accessors over an evaluated frontmatter [`Value`]; the [`At`] each
+/// takes lets a type mismatch underline the value. [`ValueExt::str`] is the
+/// infallible exception, for `extra` reads, where a non-string is "absent".
 pub(super) trait ValueExt {
     fn str(&self) -> Option<String>;
     fn string(&self, at: At<'_>) -> Result<String>;
@@ -22,10 +21,6 @@ pub(super) trait ValueExt {
 
 /// One step from the frontmatter dict down to the value a diagnostic is about:
 /// a key of a dictionary, or the position of a list element.
-///
-/// What both halves of a nested schema failure are built from: the dotted name
-/// the message uses (`authors.1.email`) and the walk that finds its span in the
-/// page source.
 #[derive(Debug, Clone)]
 pub(crate) enum Step {
     Key(String),
@@ -41,10 +36,8 @@ impl std::fmt::Display for Step {
     }
 }
 
-/// The first way a frontmatter value failed the type declared for it, and where.
-///
-/// The check stops at the first fault, so a page fixes one thing at a time
-/// rather than reading a list of consequences of the same mistake.
+/// The first way a frontmatter value failed the type declared for it, and
+/// where; the check stops here.
 #[derive(Debug)]
 pub(crate) enum Fault {
     Missing {
@@ -60,7 +53,6 @@ pub(crate) enum Fault {
 }
 
 impl Fault {
-    /// The steps to the value at fault.
     pub(crate) fn path(&self) -> &[Step] {
         let (Self::Missing { path, .. } | Self::Mismatch { path, .. }) = self;
         path
@@ -71,8 +63,7 @@ impl Fault {
         self.path().split_last().map_or(&[], |(_, rest)| rest)
     }
 
-    /// How a diagnostic names the field: dotted, so a nested one is located
-    /// without the message having to describe the nesting.
+    /// How a diagnostic names the field: dotted, as `authors.1.email`.
     pub(crate) fn key(&self) -> String {
         self.path()
             .iter()
@@ -92,8 +83,7 @@ pub(crate) struct Check {
 
 impl Check {
     /// Every field a schema declares, against the dictionary that should carry
-    /// them. Keys the schema does not name are not the schema's business, so
-    /// extra frontmatter passes through as it always has.
+    /// them. Keys the schema does not name pass through unchecked.
     pub(crate) fn dict(&mut self, schema: &[(String, FieldSchema)], dict: &Dict) -> Option<Fault> {
         for (key, field) in schema {
             self.path.push(Step::Key(key.clone()));
@@ -118,8 +108,6 @@ impl Check {
     /// containing it.
     pub(super) fn value(&mut self, ty: &FieldType, value: &Value) -> Option<Fault> {
         let fits = match (ty, value) {
-            // Element-wise: an array holding one integer is not a list of
-            // strings, and would fail the moment anything read it.
             (FieldType::List(inner), Value::Array(items)) => {
                 for (i, item) in items.iter().enumerate() {
                     self.path.push(Step::Index(i));
@@ -132,8 +120,6 @@ impl Check {
                 true
             }
             (FieldType::Dict(fields), Value::Dict(nested)) => return self.dict(fields, nested),
-            // Everything a type expression can end in, and the compound types
-            // whose value was not the shape the two arms above match.
             _ => Self::scalar(ty, value),
         };
         (!fits).then(|| Fault::Mismatch {
@@ -152,8 +138,6 @@ impl Check {
             FieldType::Bool => matches!(value, Value::Bool(_)),
             FieldType::Int => matches!(value, Value::Int(_)),
             FieldType::Float => matches!(value, Value::Float(_)),
-            // The same two datetime shapes `date` reads: a time of day alone
-            // is not a date, and would be dropped rather than ordered.
             FieldType::Date => matches!(
                 value,
                 Value::Datetime(Datetime::Date(_) | Datetime::Datetime(_))
@@ -189,8 +173,6 @@ mod tests {
                 .collect::<Dict>(),
         )
     }
-    /// Whether a value satisfies a type, which is what every schema check
-    /// reduces to once the path bookkeeping is stripped away.
     fn fits(ty: &FieldType, value: &Value) -> bool {
         Check::default().value(ty, value).is_none()
     }
@@ -210,7 +192,6 @@ mod tests {
         assert!(fits(&nested, &list(vec![list(vec![Value::Int(1)])])));
         assert!(!fits(&nested, &list(vec![Value::Int(1)])));
 
-        // `any` is presence alone, so every one of them satisfies it.
         assert!(fits(&FieldType::Any, &Value::Int(2)));
         assert!(!fits(&FieldType::Str, &Value::Int(2)));
     }
@@ -229,12 +210,10 @@ mod tests {
         ];
 
         assert!(fits(&ty, &list(vec![dict(vec![("name", text("A"))])])));
-        // an undeclared key is not the schema's business
         assert!(fits(
             &ty,
             &list(vec![dict(vec![("name", text("A")), ("bio", text("B"))])])
         ));
-        // ..but a declared one is, present or absent
         assert!(!fits(&ty, &list(vec![dict(vec![("age", Value::Int(3))])])));
         assert!(!fits(
             &ty,
@@ -242,8 +221,6 @@ mod tests {
         ));
         assert!(!fits(&ty, &list(vec![text("A")])));
     }
-    /// The fault names the field that broke, not the top-level one it sits
-    /// under: a page with fifty authors is told which.
     #[test]
     fn a_fault_names_the_nested_field_it_happened_at() {
         let mut ty = FieldType::parse("list<dict>").expect("a valid type");

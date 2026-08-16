@@ -7,10 +7,8 @@ use crate::ui::{Code, Text, markup};
 #[derive(Error, Debug)]
 #[error("{kind}")]
 pub struct ConfigError {
-    /// The config text, named so the rendered snippet says *which* file it came
-    /// from. The name is [`Config::FILE`] until [`ConfigError::named`] replaces
-    /// it with the path actually loaded, which is what makes
-    /// `--config prod.kdl` report `prod.kdl`.
+    /// The config text, named [`Config::FILE`] until [`ConfigError::named`]
+    /// replaces it with the path actually loaded.
     file: NamedSource<String>,
     span: SourceSpan,
     kind: ConfigErrorKind,
@@ -25,8 +23,6 @@ impl ConfigError {
         }
     }
 
-    /// Name this diagnostic's source after the file it was really loaded from.
-    /// Applied once, where the path is known, so no error has to carry it.
     #[must_use]
     pub fn named(self, path: &std::path::Path) -> Self {
         Self {
@@ -61,8 +57,7 @@ impl ConfigError {
     ///
     /// Sourceless, and so unlabeled: `dist` is settled only after the profile
     /// overlay and `--out`, so the offending value often has no span in the
-    /// config text at all. Naming both paths in the message carries what a label
-    /// would have.
+    /// config text at all.
     pub fn dist_contains_source(dist: &std::path::Path, key: &'static str, path: &str) -> Self {
         Self {
             file: NamedSource::new(Config::FILE, String::new()),
@@ -77,10 +72,8 @@ impl ConfigError {
 
     /// A `typst { fonts { paths } }` entry that is not a directory.
     ///
-    /// Sourceless, and so unlabeled, for the same reason
-    /// [`ConfigError::dist_contains_source`] is: it is checked once the paths
-    /// are settled, against the filesystem, well after the text that named them
-    /// has been parsed. Naming the path carries what a label would have.
+    /// Sourceless, and so unlabeled: it is checked against the filesystem once
+    /// the paths are settled, well after the text that named them was parsed.
     pub fn missing_font_dir(path: &std::path::Path) -> Self {
         Self {
             file: NamedSource::new(Config::FILE, String::new()),
@@ -91,8 +84,8 @@ impl ConfigError {
         }
     }
 
-    /// An unrecognized structural key, with a caller-built `help` (nearest match
-    /// + the valid keys for the enclosing scope).
+    /// `help` is caller-built: the nearest match, plus the valid keys for the
+    /// enclosing scope.
     pub fn unknown_key(source: &str, key: &str, help: String, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -104,8 +97,7 @@ impl ConfigError {
         )
     }
 
-    /// An unrecognized enum *value* (a `key=value` where the value is not one of
-    /// the allowed variants), distinct from an unknown structural key.
+    /// An unrecognized enum *value*, distinct from an unknown structural key.
     pub fn unknown_value(source: &str, value: &str, help: String, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -117,8 +109,6 @@ impl ConfigError {
         )
     }
 
-    /// A whole command line written as a single string, where the key reads the
-    /// program and each of its arguments as its own word.
     pub fn command_line(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -129,8 +119,6 @@ impl ConfigError {
         )
     }
 
-    /// A name no HTML element answers to, on a key that names elements. `why`
-    /// is typst's own reason, carried through verbatim.
     pub fn not_an_element(source: &str, name: &str, why: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -142,7 +130,6 @@ impl ConfigError {
         )
     }
 
-    /// A node missing its required positional argument.
     pub fn missing_arg(source: &str, node: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -153,8 +140,6 @@ impl ConfigError {
         )
     }
 
-    /// A value of the wrong KDL type (e.g. a string where a boolean was
-    /// expected).
     pub fn type_mismatch(
         source: &str,
         expected: &'static str,
@@ -168,17 +153,14 @@ impl ConfigError {
         )
     }
 
-    /// An integer literal too large to fit the field's type.
     pub fn integer_overflow(source: &str, value: i128, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::IntegerOverflow { value }, span)
     }
 
-    /// An integer outside an allowed `[min, max]` range.
     pub fn out_of_range(source: &str, min: i64, max: i64, got: i64, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::OutOfRange { min, max, got }, span)
     }
 
-    /// A credential-bearing URL on a plaintext scheme.
     pub fn insecure_url(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -189,12 +171,10 @@ impl ConfigError {
         )
     }
 
-    /// A TCP port outside `0..=65535`.
     pub fn port_range(source: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::PortRange { got }, span)
     }
 
-    /// A budget written in something that is not a byte size.
     pub fn bad_size(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -205,7 +185,6 @@ impl ConfigError {
         )
     }
 
-    /// A key written in something that is not a length of time.
     pub fn bad_duration(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -216,7 +195,6 @@ impl ConfigError {
         )
     }
 
-    /// A browser version written in something that is not one.
     pub fn bad_version(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -227,7 +205,6 @@ impl ConfigError {
         )
     }
 
-    /// A count field given a negative value.
     pub fn negative_count(source: &str, field: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -239,13 +216,11 @@ impl ConfigError {
         )
     }
 
-    /// A `paginate` size below 1.
     pub fn paginate_too_small(source: &str, got: i64, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::PaginateTooSmall { got }, span)
     }
 
-    /// A repeated id where each must be unique (a collection, taxonomy, or
-    /// profile), naming the kind.
+    /// A repeated id where each must be unique; `noun` names the kind.
     pub fn duplicate_id(source: &str, noun: &'static str, id: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -259,11 +234,8 @@ impl ConfigError {
 
     /// A `paths { sources }` name that typst cannot bind.
     ///
-    /// The one config key whose *names* are emitted as generated typst: a page
-    /// reaches a declared file by importing the name from
-    /// `@baudelaire/sources`, so a name that is not an identifier produces a
-    /// module that does not parse, and the failure lands at the first import,
-    /// inside a generated file nobody has opened.
+    /// The names are emitted as generated typst, so one that is not an
+    /// identifier fails at the first import, inside a file nobody has opened.
     pub fn not_an_identifier(source: &str, name: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -276,10 +248,9 @@ impl ConfigError {
 
     /// A generated asset's served path that leaves the tree it is written in.
     ///
-    /// Both halves of the build read this one string: the pipeline writes the
-    /// file under `paths { assets }`, and the render pass links a page to the
-    /// same name. An absolute path or one climbing out with `..` makes those two
-    /// disagree, and the page ends up naming a URL nothing was written to.
+    /// The pipeline writes the file under `paths { assets }` and the render pass
+    /// links a page to the same name, so an absolute path or one climbing out
+    /// with `..` leaves the page naming a URL nothing was written to.
     pub fn not_an_asset_path(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -290,7 +261,6 @@ impl ConfigError {
         )
     }
 
-    /// A repeated entry within a list-valued node (e.g. `formats rss rss`).
     pub fn duplicate_entry(source: &str, name: &str, scope: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -302,8 +272,6 @@ impl ConfigError {
         )
     }
 
-    /// A generated file named by something other than a plain name under
-    /// `dist`: an absolute path, or one walking out of it.
     pub fn escaping_file(source: &str, path: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -314,8 +282,7 @@ impl ConfigError {
         )
     }
 
-    /// A `-html` entry: HTML export is required and cannot be disabled (other
-    /// features may be toggled off with `-name`).
+    /// A `-html` entry, the one feature that cannot be disabled.
     pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -326,7 +293,6 @@ impl ConfigError {
         )
     }
 
-    /// A stray positional argument on a node that takes only `key=value` attrs.
     pub fn unexpected_argument(source: &str, value: &str, node: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -338,9 +304,8 @@ impl ConfigError {
         )
     }
 
-    /// A `key=value` written on a node-keyed line, whose keys are child nodes.
-    /// `example` is the line the author meant, built from the very key and value
-    /// they wrote, so the help shows the spelling rather than describing it.
+    /// `example` is the line the author meant, built from the very key and
+    /// value they wrote.
     pub fn unexpected_attribute(
         source: &str,
         key: &str,
@@ -359,8 +324,7 @@ impl ConfigError {
         )
     }
 
-    /// A value on a section's own line, where everything the section configures
-    /// is inside its block.
+    /// `example` is the section written the way it parses.
     pub fn unexpected_section_argument(
         source: &str,
         value: &str,
@@ -379,7 +343,6 @@ impl ConfigError {
         )
     }
 
-    /// A positional argument past the ones a key reads.
     pub fn extra_argument(source: &str, value: &str, node: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -391,9 +354,8 @@ impl ConfigError {
         )
     }
 
-    /// A `{ .. }` block on a node whose settings are `key=value` attributes.
-    /// `example` is that node written the way it parses, built from its own key
-    /// table, so the help shows the spelling rather than describing it.
+    /// `example` is the node written the way it parses, built from its own key
+    /// table.
     pub fn unexpected_block(source: &str, node: &str, example: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -405,7 +367,6 @@ impl ConfigError {
         )
     }
 
-    /// A `url` that is not an absolute base: no scheme, or no host.
     pub fn not_absolute_url(source: &str, got: &str, span: SourceSpan) -> Self {
         Self::at(
             source,
@@ -416,7 +377,6 @@ impl ConfigError {
         )
     }
 
-    /// A `profiles` block nested inside another profile.
     pub fn nested_profiles(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::NestedProfiles, span)
     }
@@ -432,14 +392,11 @@ impl ConfigError {
         )
     }
 
-    /// A node that requires a `{ ... }` children block but has none.
     pub fn missing_children(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::MissingChildren, span)
     }
 
     pub fn parse(source: &str, error: kdl::KdlError) -> Self {
-        // kdl 6 is itself on miette 7: `KdlError` is a `Diagnostic` we surface
-        // directly (see `diagnostic_source`), no wrapper needed.
         let span = error
             .diagnostics
             .first()
@@ -469,15 +426,15 @@ impl miette::Diagnostic for ConfigError {
         self.kind.url()
     }
 
+    /// `None` for an error raised outside any config text (missing file,
+    /// missing profile), which would render a snippet of nothing.
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        // Errors raised outside any config text (missing file, missing profile)
-        // carry no source; suppress the snippet instead of pointing at nothing.
         (!self.file.inner().is_empty()).then_some(&self.file as &dyn miette::SourceCode)
     }
 
+    /// `None` for a parse error, whose nested kdl diagnostics carry their own
+    /// spans, and for a sourceless one, which has nothing to label.
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        // For a parse error the nested kdl diagnostics carry their own spans,
-        // and a sourceless error has nothing to label.
         if self.file.inner().is_empty() || matches!(self.kind, ConfigErrorKind::Parse(_)) {
             return None;
         }
@@ -490,9 +447,8 @@ impl miette::Diagnostic for ConfigError {
         None
     }
 
-    /// Hand the kdl error over transparently: it is itself a miette-7
-    /// `Diagnostic` that renders each of its diagnostics (with spans against the
-    /// kdl source) as related.
+    /// Hands a kdl parse error over as-is: it is itself a miette-7 `Diagnostic`,
+    /// and renders each of its own diagnostics as related.
     fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
         match &self.kind {
             ConfigErrorKind::Parse(e) => Some(e.as_ref() as &dyn miette::Diagnostic),
@@ -523,12 +479,8 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    /// A command written the way a shell would take it, by a key that runs its
-    /// words directly. Not an [`UnknownValue`](Self::UnknownValue): the value is
-    /// drawn from no fixed set, so there is nothing to list and nothing to
-    /// suggest, and "unknown value `code --goto`" says the wrong thing about it.
-    ///
-    /// Raised by `serve { editor }`, the one key that spells a command.
+    /// Not an [`UnknownValue`](Self::UnknownValue): the value is drawn from no
+    /// fixed set, so there is nothing to list and nothing to suggest.
     #[error("{} is a command line, not a program", Code(.got))]
     #[diagnostic(
         code(baudelaire::config::command_line),
@@ -538,14 +490,8 @@ pub enum ConfigErrorKind {
     )]
     CommandLine { got: String },
 
-    /// A name that no HTML element answers to, on a key that names elements.
-    /// Also not an [`UnknownValue`](Self::UnknownValue): the set is the whole of
-    /// HTML and typst owns it, so the judgement and the reason both come from
-    /// there. `why` is that foreign text, escaped rather than parsed as markup.
-    ///
-    /// Raised by `html { footnotes }`, checked at the span the author wrote
-    /// because a name no element can carry would otherwise fail silently at
-    /// render, as a container the page simply never has.
+    /// The judgement and the reason both come from typst, which owns the set;
+    /// `why` is that foreign text, escaped rather than parsed as markup.
     #[error("{} is not an HTML element", Code(.name))]
     #[diagnostic(
         code(baudelaire::config::not_an_element),
@@ -659,8 +605,8 @@ pub enum ConfigErrorKind {
     DuplicateId { noun: &'static str, id: String },
 
     /// A schema field declaring a type its built-in frontmatter key cannot
-    /// hold. Nothing would ever satisfy it, so it fails here rather than on
-    /// every page of the collection.
+    /// hold, which nothing would satisfy, so it fails here rather than on every
+    /// page of the collection.
     #[error("schema field {} must be {builtin}, not {declared}", Code(.key))]
     #[diagnostic(
         code(baudelaire::config::field_conflict),
@@ -675,11 +621,9 @@ pub enum ConfigErrorKind {
         builtin: String,
     },
 
-    /// A taxonomy key that only means something beside another one.
-    ///
-    /// Refused rather than ignored: every one of these parses, configures
-    /// nothing, and leaves a site waiting for output that no code path can
-    /// produce.
+    /// A taxonomy key that only means something beside another one, refused
+    /// rather than ignored: it parses, configures nothing, and leaves a site
+    /// waiting for output no code path can produce.
     #[error("the {} taxonomy writes {} without {}", Code(.taxonomy), Code(.key), Code(.needs))]
     #[diagnostic(code(baudelaire::config::taxonomy_requires), help("{help}"))]
     TaxonomyRequires {
@@ -689,11 +633,9 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    /// A registry slot naming a field its entities do not declare.
-    ///
-    /// Refused at the block that wrote it, because where a renderer reads the
-    /// slot the answer is merely "no value": every entity would render without
-    /// its picture out of a green build, and nothing would say why.
+    /// A registry slot naming a field its entities do not declare, refused at
+    /// the block that wrote it: where a renderer reads the slot the answer is
+    /// merely "no value", so a green build renders every entity without it.
     #[error(
         "the {} slot of the {} registry names {}, which its entities do not declare",
         Code(.slot),
@@ -708,8 +650,6 @@ pub enum ConfigErrorKind {
         help: String,
     },
 
-    /// A schema field given a block of fields, whose type ends in no dictionary
-    /// for them to belong to.
     #[error("schema field {} is {declared}, so it has no fields", Code(.key))]
     #[diagnostic(
         code(baudelaire::config::field_not_dict),
@@ -717,7 +657,6 @@ pub enum ConfigErrorKind {
     )]
     FieldNotDict { key: String, declared: String },
 
-    /// A schema type expression that never closes, or wraps nothing.
     #[error("{} is not a type", Code(.ty))]
     #[diagnostic(code(baudelaire::config::type_expr))]
     TypeExpr {
@@ -784,10 +723,9 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::unexpected_argument))]
     UnexpectedArgument { value: String, node: String },
 
-    /// A `key=value` on a line whose scope spells its keys as child nodes.
     /// Distinct from [`UnknownKey`](Self::UnknownKey): the key is often a real
     /// one (`content { drafts suffix=".x" }`), written in the one spelling its
-    /// scope does not take, and it used to be discarded in silence.
+    /// scope does not take.
     #[error("unexpected attribute {} on {}", Code(.key), Code(.node))]
     #[diagnostic(
         code(baudelaire::config::unexpected_attribute),
@@ -799,10 +737,8 @@ pub enum ConfigErrorKind {
         example: String,
     },
 
-    /// A value on the line of a section that reads none. The rule dispatched the
-    /// section's block and never looked at the line, so `lint #false` *enabled*
-    /// linting; it is now a section that reads one boolean there, and this is
-    /// what the ones that read nothing (`paths`, `serve`) still answer.
+    /// A value on the line of a section that reads none, such as `paths` or
+    /// `serve`.
     #[error("unexpected argument {} for {}", Text(.value), Code(.node))]
     #[diagnostic(
         code(baudelaire::config::unexpected_section_argument),
@@ -814,11 +750,10 @@ pub enum ConfigErrorKind {
         example: String,
     },
 
-    /// A positional past the ones a key reads, which nothing would ever look at:
-    /// `serve { port 1 2 }` dropped the `2`. The attribute scope's counterpart is
-    /// [`UnexpectedArgument`](Self::UnexpectedArgument), which differs in what it
-    /// advises: there the settings are `key=value`, here they are keys of their
-    /// own.
+    /// A positional past the ones a key reads (`serve { port 1 2 }`). The
+    /// attribute scope's counterpart is
+    /// [`UnexpectedArgument`](Self::UnexpectedArgument), which advises
+    /// `key=value` where this advises a key of its own.
     #[error("unexpected argument {} for {}", Text(.value), Code(.node))]
     #[diagnostic(
         code(baudelaire::config::extra_argument),
@@ -878,8 +813,6 @@ pub enum ConfigErrorKind {
     )]
     MissingEnv { name: String },
 
-    /// An invalid permalink template on a collection, surfaced with the config
-    /// span. Transparent: message, code, and help come from [`PermalinkError`].
     #[error(transparent)]
     #[diagnostic(transparent)]
     Permalink(#[from] crate::config::PermalinkError),

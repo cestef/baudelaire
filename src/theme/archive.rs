@@ -1,13 +1,7 @@
-//! A theme from an archive over http.
+//! A theme from a `.tar.gz` or a `.zip` at a URL.
 //!
-//! The source with no tooling behind it: a `.tar.gz` or a `.zip` at a URL, which
-//! is what every forge offers for a tag without anyone cloning anything, and
-//! what a theme published as a release asset is.
-//!
-//! What it cannot do is follow anything. An archive is a snapshot at a URL, so
-//! `update` fetches that same URL and takes whatever is there now: if the URL
-//! names a tag, the copy is pinned; if it names a branch's tip, it moves. That
-//! is the URL's business, and the record says exactly which one was used.
+//! `update` fetches that same URL and takes whatever is there now, so what the
+//! URL points at decides whether the copy is pinned.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -22,24 +16,11 @@ use crate::remote::{Http, Status};
 /// An archive fetched over http.
 pub struct Archive;
 
-/// What an archive is still allowed to cost, counted down as it unpacks.
-///
-/// THE ceiling on unpacking, and deliberately not one per format, for the same
-/// reason [`Archive::inside`] is not: the zip branch and the tar branch each
-/// read an entry to the end, and a rule written twice is a rule one branch
-/// ends up without.
-///
-/// [`Archive::LIMIT`] bounds what is *downloaded*, which says nothing about
-/// what those bytes expand to. Gzip and deflate both reach roughly a thousand
-/// to one on a repeated byte, so a 1 MiB archive comfortably inside that
-/// ceiling unpacked to over a gigabyte, held it all in memory, and wrote it to
-/// disk. Two counters close it: one on the total unpacked size, one on the
-/// number of entries, since many tiny files compress just as well as one large
-/// one.
+/// What an archive is still allowed to cost, counted down as it unpacks;
+/// [`Archive::LIMIT`] bounds the download and says nothing about what those
+/// bytes expand to, so both counters are needed.
 struct Budget {
-    /// Bytes of unpacked content still allowed.
     bytes: u64,
-    /// Entries still allowed.
     entries: usize,
 }
 
@@ -55,10 +36,9 @@ impl Default for Budget {
 impl Budget {
     /// Read one entry to its end, or fail if it would spend more than is left.
     ///
-    /// The read itself is capped, not just checked afterwards: reading a
-    /// gigabyte into memory and *then* refusing it is the failure this exists
-    /// to prevent. One byte past what remains is read, so an entry that exactly
-    /// fits is told apart from one that ran over.
+    /// The read itself is capped and never checked afterwards, at one byte past
+    /// what remains, so an entry that exactly fits is told from one that ran
+    /// over without a gigabyte reaching memory first.
     fn read(&mut self, url: &str, from: impl Read) -> Result<Vec<u8>> {
         self.entries = self
             .entries
@@ -82,36 +62,22 @@ impl Budget {
 pub(super) type Contents = (Option<String>, BTreeMap<PathBuf, Vec<u8>>);
 
 impl Archive {
-    /// The suffixes this source answers for. A URL without one is not an
-    /// archive as far as this is concerned, and falls through to the sources
-    /// that fetch a repository.
+    /// The suffixes this source answers for; a URL without one falls through to
+    /// the sources that fetch a repository.
     const SUFFIXES: [&'static str; 3] = [".tar.gz", ".tgz", ".zip"];
 
-    /// What a theme may weigh on the wire, compressed.
-    ///
-    /// A ceiling, not a guess: this reads a remote stream into memory, and
-    /// without a limit a hostile (or merely wrong) URL decides how much of it
-    /// to use. The shipped themes are ~60 KiB each, so this is three orders of
-    /// magnitude of room. What those bytes expand to is [`Budget`]'s question,
-    /// not this one.
+    /// What a theme may weigh on the wire, compressed, since this reads a
+    /// remote stream into memory.
     const LIMIT: u64 = 64 * 1024 * 1024;
 
-    /// What a theme may weigh once unpacked, and in how many files. See
-    /// [`Budget`], which is the only thing that reads either: [`Archive::LIMIT`]
-    /// bounds the download, and these bound what it expands to.
+    /// Read only by [`Budget`].
     const UNPACKED: u64 = 256 * 1024 * 1024;
     const ENTRIES: usize = 10_000;
 
-    /// The files an archive at `url` holds, and the wrapper directory they
-    /// were inside, if they shared one.
-    ///
-    /// The whole of what this source does, so the forge source can spell a URL
-    /// and reuse everything after it: download, unpack, drop the wrapper, and
-    /// leave behind whatever record the packed copy carried.
+    /// Any lock the packed copy carried is dropped: it claims what baudelaire
+    /// wrote in the project it was packed from, not in this one.
     pub(super) fn contents(url: &str) -> Result<Contents> {
         let (wrapper, files) = Self::unwrap(Self::unpack(url, Self::download(url)?)?);
-        // A lock inside an archive is whatever project it was packed from
-        // saying what baudelaire wrote *there*, which is no claim on this copy.
         Ok((
             wrapper,
             files
@@ -121,10 +87,9 @@ impl Archive {
         ))
     }
 
-    /// Fetch the bytes at `url`.
-    ///
-    /// One byte past the ceiling is read on purpose, so [`Archive::whole`] can
-    /// tell a theme that exactly fills it from one that ran over.
+    /// Fetch the bytes at `url`, reading one byte past the ceiling so
+    /// [`Archive::whole`] can tell a theme that exactly fills it from one that
+    /// ran over.
     fn download(url: &str) -> Result<Vec<u8>> {
         let mut body = Http::agent("fetching a theme", Status::Fatal)
             .get(url)
@@ -139,14 +104,8 @@ impl Archive {
         Self::whole(url, bytes)
     }
 
-    /// The downloaded bytes, unless the read ran past [`Archive::LIMIT`].
-    ///
-    /// The ceiling used to be a `take`, and a `take` is a truncation: an
-    /// oversize (or endless) URL handed back its first 64 MiB, which unpacked
-    /// as far as it went and installed as a theme with whatever fell off the
-    /// end simply absent. A prefix of an archive is not a smaller theme, so
-    /// hitting the ceiling is a failure that names it rather than a silent
-    /// shortening.
+    /// A prefix of an archive is not a smaller theme, so hitting
+    /// [`Archive::LIMIT`] is a failure rather than a truncation that installs.
     fn whole(url: &str, bytes: Vec<u8>) -> Result<Vec<u8>> {
         if u64::try_from(bytes.len()).is_ok_and(|read| read <= Self::LIMIT) {
             Ok(bytes)
@@ -155,10 +114,9 @@ impl Archive {
         }
     }
 
-    /// The files inside, by the archive's own kind.
+    /// The files inside, by the suffix the URL was claimed by rather than by
+    /// the bytes.
     fn unpack(url: &str, bytes: Vec<u8>) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
-        // The suffix, not the bytes: an archive is claimed by its spelling in
-        // the first place, so it is read by the same test it was claimed by.
         if url.to_ascii_lowercase().ends_with(".zip") {
             Self::zip(url, bytes)
         } else {
@@ -166,20 +124,11 @@ impl Archive {
         }
     }
 
-    /// Where one entry lands, as a path that cannot leave the directory the
-    /// theme is unpacked into.
+    /// Where one entry lands, as a path that cannot leave the theme's
+    /// directory: an absolute one would discard it and a `..` climb out, and
+    /// the escaped path would then be locked as ours to overwrite and delete.
     ///
-    /// THE containment decision, and deliberately not one per format. Every key
-    /// of a [`Fetched`]'s files is later joined to the theme's directory, where
-    /// `Path::join` on an absolute entry silently discards that directory and a
-    /// `..` climbs out of it; the escaped path is then recorded in the lock,
-    /// reads back as pristine, and so is overwritten by `theme update` and
-    /// deleted by `theme remove`. Deciding it per format is exactly how the zip
-    /// branch came to have a guard and the tar branch none.
-    ///
-    /// A leading `./` is dropped first: `tar -czf x.tgz .` spells every entry
-    /// that way, and it is the same relative path written differently rather
-    /// than a step out of anything.
+    /// The containment decision for every format, never one per format.
     fn inside(url: &str, entry: &Path) -> Result<PathBuf> {
         let rel = entry.strip_prefix(".").unwrap_or(entry);
         Contained::new(rel)
@@ -221,23 +170,15 @@ impl Archive {
             if !entry.is_file() {
                 continue;
             }
-            // The name as the archive wrote it, judged by the same guard the
-            // tar branch uses: `enclosed_name` is the zip reader's own reading
-            // of the question, and two readings of one question is what left
-            // the other branch without an answer at all.
             let path = Self::inside(url, Path::new(entry.name()))?;
             entries.insert(path, budget.read(url, &mut entry)?);
         }
         Ok(entries)
     }
 
-    /// Drop the wrapper directory an archive of a directory has.
-    ///
-    /// Every forge's tarball is one top-level `name-ref/`, and unpacking it as
-    /// the theme would make every layout `plume-1.0.0/templates/page.typ`. The
-    /// test is that *everything* shares one first segment: an archive of the
-    /// theme itself, with `templates/` at the root, has more than one and is
-    /// left exactly as it is.
+    /// Drop the wrapper directory an archive of a directory has; the test is
+    /// that *everything* shares one first segment, so an archive of the theme
+    /// itself is left exactly as it is.
     fn unwrap(files: BTreeMap<PathBuf, Vec<u8>>) -> (Option<String>, BTreeMap<PathBuf, Vec<u8>>) {
         let mut roots = files.keys().filter_map(|path| {
             path.components()
@@ -258,15 +199,12 @@ impl Archive {
         (Some(root), stripped)
     }
 
-    /// The name a copy takes, from the archive's own wrapper directory when it
-    /// had one, else from the URL's filename with its suffixes removed.
+    /// The name a copy takes: the archive's wrapper directory, else the URL's
+    /// filename with its suffixes removed.
     ///
-    /// One ordinary directory name and nothing else, because the name is joined
-    /// to `themes/` to make the directory the copy is written into and deleted
-    /// from: `.` would name that directory itself and `..` the project root. A
-    /// URL is enough to produce either (`.../...tar.gz` leaves `..`), and so was
-    /// an archive whose entries all began `../`, whose shared first component
-    /// `unwrap` read as the wrapper directory.
+    /// One ordinary directory name and nothing else, since it is joined to
+    /// `themes/` to make the directory the copy is written into and deleted
+    /// from.
     fn names(url: &str, wrapper: Option<String>) -> Result<String> {
         let name = wrapper.unwrap_or_else(|| {
             let file = url.rsplit('/').next().unwrap_or_default();
@@ -331,11 +269,8 @@ mod tests {
 
     /// A gzipped tar of one entry, named exactly as asked.
     ///
-    /// Hand-built, because nothing that writes a tar willingly writes this one:
-    /// the `tar` program refuses a `..` name and strips a leading `/`, and the
-    /// crate's builder does the same. The header is the 512-byte ustar block,
-    /// whose fields are at fixed offsets and whose checksum is taken with its
-    /// own field read as eight spaces.
+    /// Hand-built as the 512-byte ustar block, because the `tar` program and
+    /// the crate's builder both refuse a `..` name and strip a leading `/`.
     fn tarball(name: &str, body: &[u8]) -> Vec<u8> {
         fn field(header: &mut [u8; 512], at: usize, bytes: &[u8]) {
             header[at..at + bytes.len()].copy_from_slice(bytes);
@@ -360,7 +295,6 @@ mod tests {
 
         let mut out = header.to_vec();
         out.extend_from_slice(body);
-        // Everything is a whole block, and two empty ones end the archive.
         out.resize(out.len().div_ceil(512) * 512, 0);
         out.extend_from_slice(&[0u8; 1024]);
         let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
@@ -368,8 +302,7 @@ mod tests {
         gz.finish().expect("gzip")
     }
 
-    /// A zip of one entry, named exactly as asked: the writer records the name
-    /// it is given, which is all this fixture needs.
+    /// A zip of one entry, named exactly as asked.
     fn zipped(name: &str, body: &[u8]) -> Vec<u8> {
         let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
         writer
@@ -386,14 +319,6 @@ mod tests {
         )
     }
 
-    /// An entry naming a file outside the archive is refused before a byte is
-    /// written, in both formats.
-    ///
-    /// The tar branch had no guard at all: it inserted `entry.path()` as it
-    /// came, and the install joined that to the theme directory, where an
-    /// absolute entry discards the directory outright and a `..` climbs above
-    /// it. The lock then claimed whatever it landed on, so `update` overwrote
-    /// and `remove` deleted a file outside the project.
     #[test]
     fn an_entry_outside_the_archive_is_refused() {
         for name in ["../../evil", "/tmp/evil", "themes/../../evil"] {
@@ -404,9 +329,6 @@ mod tests {
         }
     }
 
-    /// ...and an ordinary entry still comes through, including the `./name`
-    /// spelling `tar -czf x.tgz .` writes, which is the same relative path and
-    /// not a step out of anything.
     #[test]
     fn an_ordinary_entry_is_read_by_either_format() {
         const BODY: &[u8] = b"lang \"fr\"\n";
@@ -420,10 +342,6 @@ mod tests {
         }
     }
 
-    /// The name a copy is known by is joined to `themes/`, so anything but one
-    /// ordinary directory name would write and later delete somewhere else:
-    /// `..` is the project root itself, and both an archive's wrapper directory
-    /// and a URL's filename can spell it.
     #[test]
     fn a_copy_is_not_named_after_a_directory_above_it() {
         assert!(Archive::names("https://x.dev/d.tar.gz", Some("..".to_owned())).is_err());
@@ -434,14 +352,9 @@ mod tests {
         assert!(Archive::names("https://x.dev/.tar.gz", None).is_err());
     }
 
-    /// A download that ran past the ceiling is refused, not shortened. The
-    /// reader used to `take` the limit, so an oversize URL installed as a theme
-    /// with whatever fell off the end simply missing.
     #[test]
     fn an_archive_past_the_ceiling_is_refused_rather_than_truncated() {
         const URL: &str = "https://x.dev/t.tar.gz";
-        // Exactly the ceiling is a theme; one byte more is not. The reader
-        // takes `LIMIT + 1`, so this is the pair the guard has to separate.
         let limit = usize::try_from(Archive::LIMIT).expect("64 MiB fits a usize");
         assert!(Archive::whole(URL, vec![0; 16]).is_ok());
         assert!(Archive::whole(URL, vec![0; limit]).is_ok());
@@ -458,8 +371,6 @@ mod tests {
             .collect()
     }
 
-    /// A URL is an archive by its suffix, because a repository URL is spelled
-    /// the same way and only the suffix tells them apart.
     #[test]
     fn an_archive_is_claimed_by_its_suffix() {
         assert!(Archive.parse("https://x.dev/plume-1.0.0.tar.gz").is_some());
@@ -468,8 +379,6 @@ mod tests {
         assert!(Archive.parse("./plume.zip").is_none());
     }
 
-    /// A forge's tarball wraps the theme in one directory, and unpacking that
-    /// as the theme would put every layout one level down.
     #[test]
     fn one_wrapper_directory_is_dropped() {
         let (wrapper, files) = Archive::unwrap(entries(&[
@@ -483,8 +392,6 @@ mod tests {
         );
     }
 
-    /// ...and an archive of the theme itself is left alone: two first segments
-    /// mean no wrapper, and stripping one would eat a real directory.
     #[test]
     fn an_archive_of_the_theme_itself_keeps_its_shape() {
         let (wrapper, files) = Archive::unwrap(entries(&["templates/page.typ", "theme.kdl"]));
@@ -493,8 +400,6 @@ mod tests {
         assert!(files.contains_key(Path::new("templates/page.typ")));
     }
 
-    /// The name: the wrapper's, else the URL's filename without the suffix that
-    /// made it an archive.
     #[test]
     fn a_copy_is_named_after_the_wrapper_or_the_url() {
         assert_eq!(
@@ -508,13 +413,8 @@ mod tests {
         );
     }
 
-    /// The unpacking ceiling, exercised on [`Budget`] itself rather than
-    /// through a real bomb: the point of the guard is that a 256 MiB entry is
-    /// never read into memory, so a test that builds one to prove it would be
-    /// doing the very thing the guard prevents.
-    ///
-    /// One byte past what remains is read, so an entry that exactly fills the
-    /// budget is accepted and the next byte is not.
+    /// Exercised on [`Budget`] itself rather than through a real bomb, which
+    /// would read into memory the very thing the guard exists to refuse.
     #[test]
     fn an_entry_may_not_unpack_past_what_is_left() {
         let mut budget = Budget {
@@ -533,9 +433,6 @@ mod tests {
         ));
     }
 
-    /// And the other half: many tiny entries cost nothing to compress, so the
-    /// byte ceiling alone would let an archive of a million empty files
-    /// through.
     #[test]
     fn an_archive_may_not_hold_more_entries_than_a_theme_has() {
         let mut budget = Budget {

@@ -17,13 +17,11 @@ use crate::ui::{Level, Ui};
 /// request-handling thread, so it is `Send` and self-contained.
 pub(super) struct Handler {
     /// Shared with the rebuild loop, so a `config.kdl` reload that moves `dist`
-    /// or changes `url` reaches the request thread; the handler outlives any
-    /// single config, and used to serve the startup one forever.
+    /// or changes `url` reaches the request thread.
     route: Arc<Mutex<Route>>,
     live: Option<Live>,
     /// The handler's own [`Ui`] at the session's verbosity, so per-request
-    /// logging (404s) honors `--quiet` like every other line without sharing
-    /// the rebuild loop's writer.
+    /// logging honors `--quiet` without sharing the rebuild loop's writer.
     ui: Ui,
 }
 
@@ -42,8 +40,7 @@ pub(super) struct Route {
     /// `serve { editor .. }` names one.
     open: Option<Open>,
     /// The declared language codes, so an unmatched URL under `/fr/` is answered
-    /// with the French not-found page the build wrote there rather than the
-    /// default language's. Empty on a single-language site.
+    /// with the French not-found page. Empty on a single-language site.
     langs: Vec<String>,
 }
 
@@ -52,27 +49,14 @@ impl Route {
     /// URLs. Every candidate is checked to stay within it (see
     /// [`within`](Route::within)), so a `..`-laden or symlinked request can
     /// never escape the served root.
-    ///
-    /// On the route rather than on the handler because it is a question about
-    /// the served tree and nothing else: no request, no server, no lock. It used
-    /// to clone the whole route and then re-lock it once per candidate, which
-    /// meant the path it resolved and the root it was checked against could come
-    /// from two different configs across a reload, and it left the traversal
-    /// check reachable only by making an HTTP request.
     fn resolve(&self, url: &str) -> Option<PathBuf> {
         let path = url.split('?').next().unwrap_or(url);
         let rel = path
             .strip_prefix(&self.base)
             .unwrap_or(path)
             .trim_start_matches('/');
-        // Browsers percent-encode every non-ASCII byte, so a page whose slug
-        // carries one (`/posts/café/`) arrives as `%C3%A9` and matches no file
-        // on disk. `within` still canonicalizes and containment-checks whatever
-        // this produces, so decoding cannot open a traversal.
         let rel = Percent::decode(rel);
         let base = self.dist.join(&rel);
-        // The directory index is the build's own spelling of it, not a second
-        // copy: a URL ending in `/` is served the file the build wrote there.
         self.within(&base)
             .or_else(|| self.within(&base.join(Config::INDEX)))
             .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
@@ -138,7 +122,8 @@ impl Handler {
     }
 
     /// Serve the live-reload stream, open a source location, or map the URL to
-    /// a file under `dist`.
+    /// a file under `dist`. The resolved file is bound before the match, since
+    /// a guard held into an arm would deadlock against `respond_404`.
     fn handle(&self, req: Request) {
         let url = req.url().to_owned();
         if let Some(live) = &self.live
@@ -147,15 +132,10 @@ impl Handler {
             live.serve(req);
             return;
         }
-        // Only while watching: the alt-click handler rides in with the
-        // live-reload client, so a `--no-watch` session serves files and
-        // nothing else.
         if self.live.is_some() && url.starts_with(Open::ENDPOINT) {
             self.open(req, &url);
             return;
         }
-        // Bound before the match, not in it: the guard would otherwise live to
-        // the end of the arm, and `respond_404` locks the route again.
         let file = self.route.lock().resolve(&url);
         match file {
             Some(file) => self.serve_file(req, &file, 200),
@@ -167,11 +147,7 @@ impl Handler {
     /// live-reload client into HTML when live reload is enabled.
     fn serve_file(&self, req: Request, path: &Path, status: u16) {
         let mime = Mime::of(path);
-        // A read failure (a permission error, or the file vanishing between the
-        // `exists` check and here during a rebuild) is a 500, never a blank 200.
         let Ok(mut body) = crate::fs::read(path) else {
-            // Logged like a 404: an unreadable file used to produce a blank page
-            // and an idle-looking server, with no line at any verbosity.
             self.ui.request(500, &path.display().to_string());
             let _ = req.respond(Response::empty(500));
             return;
@@ -189,14 +165,7 @@ impl Handler {
     /// Respond with the site's own not-found page when it emits one (the same
     /// file a static host serves for unmatched URLs), else an empty 404.
     fn respond_404(&self, req: Request, url: &str) {
-        // A per-request line at the session's level, so `--quiet` silences
-        // these too. (It may still interleave with a concurrent rebuild
-        // status line; acceptable for now.)
         self.ui.request(404, url);
-        // The build writes one not-found page per language; a request inside a
-        // language's own subtree gets that language's, and everything else the
-        // default one. One lock for the whole lookup, so the page and the root
-        // it is checked against come from the same route.
         let found = {
             let route = self.route.lock();
             let scoped = route
@@ -215,19 +184,13 @@ impl Handler {
         }
     }
 
-    /// Hand a stamped source location to the configured editor.
-    ///
-    /// The location was written by this build, into a `data-typst` attribute,
-    /// but it arrives as a request and is checked as one: the browser must be
-    /// calling from the page itself, the location must parse, and the file it
-    /// names must be one of the project's own.
+    /// Hand a stamped source location to the configured editor, checked as any
+    /// request is: same-origin, parseable, and naming one of the project's own
+    /// files.
     fn open(&self, req: Request, url: &str) {
         let outcome = self.launch(&req, url);
         let status = outcome.as_ref().err().map_or(200, Unopenable::status);
         self.ui.request(status, url);
-        // The refusal is the response body: the author is looking at the
-        // browser (they just clicked in it), which is where the injected
-        // client puts this, exactly as it does a failed rebuild.
         let body = outcome.err().map(|why| why.body()).unwrap_or_default();
         let _ = req.respond(Response::from_string(body).with_status_code(status));
     }
@@ -243,12 +206,8 @@ impl Handler {
         open.ok_or(Unopenable::Unconfigured)?.at(&at)
     }
 
-    /// Whether the request came from the page this server served.
-    ///
-    /// A browser labels every request: the injected client's `fetch` is
-    /// `same-origin`, and anything another site provokes is not. A client that
-    /// sends no label at all (curl, a test) is allowed through: it is already
-    /// running as the author, which is all this endpoint's authority amounts to.
+    /// Whether the request came from the page this server served. A client that
+    /// sends no `Sec-Fetch-Site` at all (curl, a test) is allowed through.
     fn same_origin(req: &Request) -> bool {
         req.headers()
             .iter()
@@ -256,15 +215,8 @@ impl Handler {
             .is_none_or(|header| header.value.as_str() == "same-origin")
     }
 
-    /// The source location a request names, still encoded: the `at` parameter,
-    /// when it carries anything at all.
-    ///
-    /// A parameter that is absent and one that is present but empty name a
-    /// location equally little, so both answer `None` and become
-    /// [`Unopenable::Unaddressed`]. An empty one used to reach [`At::parse`],
-    /// which failed it as [`Unopenable::Malformed`] and reported "not a source
-    /// location: " with nothing after the colon, sending the reader to look for
-    /// a badly written location that was never written at all.
+    /// The source location a request names, still encoded. An absent `at` and an
+    /// empty one both answer `None`, becoming [`Unopenable::Unaddressed`].
     fn addressed(url: &str) -> Option<&str> {
         Self::query(url, "at").filter(|raw| !raw.is_empty())
     }
@@ -323,7 +275,7 @@ mod tests {
         };
         (tmp, route)
     }
-    /// The three shapes a URL can name a file by.
+
     #[test]
     fn a_url_resolves_to_the_file_under_dist() {
         let (_tmp, route) = served();
@@ -339,10 +291,9 @@ mod tests {
         }
         assert_eq!(route.resolve("/nowhere/"), None);
     }
-    /// The traversal check, asked directly rather than through a spawned server
-    /// and `curl`. A `..` is refused however it is spelled, and a percent-encoded
-    /// one is refused *after* decoding, which is the case decoding could have
-    /// opened.
+
+    /// A percent-encoded `..` is refused after decoding, which is the case
+    /// decoding could have opened.
     #[test]
     fn a_request_cannot_escape_the_served_root() {
         let (tmp, route) = served();
@@ -358,9 +309,7 @@ mod tests {
             assert_eq!(route.resolve(url), None, "{url} escaped the served root");
         }
     }
-    /// A symlink is followed to where it actually points, so one aimed out of
-    /// the tree is refused even though every path segment looks innocent. The
-    /// reason the check canonicalizes rather than comparing strings.
+
     #[test]
     #[cfg(unix)]
     fn a_symlink_out_of_the_served_root_is_refused() {
@@ -369,8 +318,6 @@ mod tests {
             .expect("symlink");
         assert_eq!(route.resolve("/leak.txt"), None);
 
-        // ...and one pointing back inside is served, so the check is
-        // containment and not a blanket refusal of symlinks.
         std::os::unix::fs::symlink(route.dist.join("index.html"), route.dist.join("alias.html"))
             .expect("symlink");
         assert_eq!(
@@ -378,15 +325,13 @@ mod tests {
             Some(route.dist.join("index.html"))
         );
     }
-    /// A directory is not a file: the check answers for what would be read, so
-    /// a request naming one falls through rather than serving a listing.
+
     #[test]
     fn a_directory_is_not_served_as_a_file() {
         let (_tmp, route) = served();
         assert_eq!(route.resolve("/posts"), None);
     }
-    /// The base path is stripped before resolution, so a subdirectory-hosted
-    /// site previews at the URLs it will really be served at.
+
     #[test]
     fn a_base_path_is_stripped_before_the_lookup() {
         let (_tmp, mut route) = served();
@@ -397,9 +342,6 @@ mod tests {
         );
     }
 
-    /// Naming no location and naming a bad one are different failures, and the
-    /// query answers for the first of them: `?at=` with nothing after it names
-    /// no location, so it must not be reported as a badly written one.
     #[test]
     fn an_empty_at_names_no_location_rather_than_a_bad_one() {
         assert_eq!(Handler::addressed("/__baudelaire/open"), None);

@@ -1,14 +1,6 @@
-//! A theme from the Typst package store.
-//!
-//! The same store the compiler resolves `#import "@preview/.."` through, so a
-//! theme published as a package is fetched by the machinery already here: one
-//! download, cached across projects, pinned by the exact version in the spec.
-//!
-//! Installing one *copies* it into the project, which is the difference between
-//! this and naming the package in `theme`. Naming it leaves the files in the
-//! store, read-only and shared; copying makes them the project's, to edit and
-//! commit. Both work; this is for when the theme is a starting point rather
-//! than a dependency.
+//! A theme from the Typst package store, the same store the compiler resolves
+//! `#import "@preview/.."` through. Installing one copies it into the project,
+//! which is the difference between this and naming the package in `theme`.
 
 use typst::syntax::package::PackageSpec;
 use typst_kit::packages::SystemPackages;
@@ -26,9 +18,8 @@ impl Source for Store {
         "package"
     }
 
-    /// A package specifier, which is the one spec shape Typst itself defines:
-    /// `@namespace/name:version`. Parsed here rather than pattern-matched, so
-    /// what this claims is exactly what the compiler would resolve.
+    /// A package specifier, `@namespace/name:version`, parsed rather than
+    /// pattern-matched so what this claims is what the compiler would resolve.
     fn parse(&self, spec: &str) -> Option<Origin> {
         spec.parse::<PackageSpec>()
             .ok()
@@ -51,8 +42,6 @@ impl Source for Store {
         let root = SystemPackages::from(Registry(cx.registry.as_deref()))
             .obtain(&parsed)
             .map_err(|why| ThemeError::unavailable(spec, why))?;
-        // The package's own name, not the last segment of the spec, because the
-        // version is part of that segment.
         Local::read(root.path(), parsed.name.to_string(), None, origin.clone())
     }
 }
@@ -61,8 +50,6 @@ impl Source for Store {
 mod tests {
     use super::*;
 
-    /// A specifier is claimed, and nothing else is: `@` alone is not a package,
-    /// and a bare name belongs to the shelf.
     #[test]
     fn a_package_is_claimed_by_its_specifier() {
         assert_eq!(

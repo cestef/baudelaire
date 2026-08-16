@@ -1,8 +1,5 @@
 //! The `baudelaire:*` modules serving the site's own build data: identity,
 //! config constants, the asset map, and the page-derived tables.
-//!
-//! Each is [`Esm`]-shaped, so what a module exports and what it declares are
-//! two renderings of one value rather than two hand-kept lists.
 
 use std::collections::BTreeMap;
 
@@ -22,10 +19,8 @@ const TAXONOMIES: &str = include_str!("types/taxonomies.d.ts");
 const FEED: &str = include_str!("types/feed.d.ts");
 
 /// `baudelaire:site`: site identity and build version, mirroring what templates
-/// read from `sys.inputs.baudelaire`.
-///
-/// The field list belongs to [`BuildContext::site_fields`], which the Typst
-/// module `@baudelaire/site` serves too, so the two cannot drift.
+/// read from `sys.inputs.baudelaire`. The field list is
+/// [`BuildContext::site_fields`], shared with the Typst `@baudelaire/site`.
 pub(super) struct Site;
 
 impl Module for Site {
@@ -61,8 +56,6 @@ impl Module for Settings {
     }
 
     fn types(&self, cx: &ModuleCx) -> Vec<(String, Dts)> {
-        // Typed from the block itself, so an editor completes this site's own
-        // constants rather than an anonymous bag of unknowns.
         vec![("baudelaire:config".into(), Esm::typed(&Self::data(cx)))]
     }
 }
@@ -91,11 +84,8 @@ impl Module for Assets {
 
 /// `baudelaire:pages`: the authored content pages as `{ url, label,
 /// collection, lang, date, display, note, description, taxonomies, extra }`,
-/// for client nav, related-posts, and prefetch.
-///
-/// One row is [`Page::entry`], the same value a generated listing's entries and
-/// the Typst `@baudelaire/pages` catalogue are built from, so the shape a theme
-/// learns once holds everywhere.
+/// for client nav, related-posts, and prefetch. One row is [`Page::entry`], the
+/// same value a generated listing and the Typst catalogue are built from.
 pub(super) struct Pages;
 
 impl Module for Pages {
@@ -105,9 +95,6 @@ impl Module for Pages {
     }
 
     fn types(&self, _cx: &ModuleCx) -> Vec<(String, Dts)> {
-        // Declared rather than read off the pages, so the type is the same on a
-        // site with no content as on a full one. The keys are
-        // `content::listing::Item::value`'s, which a test pins against it.
         vec![("baudelaire:pages".into(), Dts::new().part(PAGES))]
     }
 }
@@ -120,7 +107,6 @@ pub(super) struct Sections;
 
 impl Module for Sections {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // Reuse the tree already built for `page.sections`.
         vec![("baudelaire:sections".into(), Esm::value(cx.sections))]
     }
 
@@ -136,7 +122,6 @@ pub(super) struct Taxonomies;
 
 impl Module for Taxonomies {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // taxonomy -> term -> pages, sorted for deterministic output.
         let mut taxos: BTreeMap<&str, BTreeMap<&str, Vec<Value>>> = BTreeMap::new();
         for page in cx.pages.iter().filter(|p| p.authored()) {
             let link = Value::dict([
@@ -174,9 +159,6 @@ pub(super) struct Feed;
 
 impl Module for Feed {
     fn entries(&self, cx: &ModuleCx) -> Vec<(String, String)> {
-        // Every language's recent pages, each tagged, rather than only the
-        // default language's: one bundle serves the whole site, so a French
-        // page's widget had nothing of its own to show.
         let items = cx.config.langs().into_iter().flat_map(|lang| {
             Page::recent(
                 cx.pages,
@@ -213,8 +195,7 @@ impl Module for Feed {
 pub(super) struct I18n;
 
 impl I18n {
-    /// The declared languages and their string tables, the value the module
-    /// exports and the value its declaration is typed from.
+    /// The declared languages and their UI-string tables.
     fn data(cx: &ModuleCx) -> Value {
         let codes = cx.config.langs();
         let languages = Value::array(codes.iter().map(|code| {

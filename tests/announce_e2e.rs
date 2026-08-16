@@ -3,14 +3,6 @@
 
 //! End-to-end announce tests: the standard.site backend driven through the
 //! public [`baudelaire::announce::Announce::run`], against an in-process PDS.
-//!
-//! The build-time half of announcing (the verification artifacts) is covered by
-//! `scenarios/announce.kdl`, which deliberately touches no network. This is the
-//! other half, and the half that matters most: announcing is the one thing
-//! baudelaire does that makes authenticated, *destructive* writes to somebody
-//! else's account. The reconcile loop deletes every remote record no longer
-//! backed by a page, and until this file existed nothing exercised that path,
-//! nor session login, nor the XRPC client at all.
 
 mod common;
 
@@ -95,7 +87,6 @@ fn serve(mut stream: TcpStream, records: &Records, log: &Log) {
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).unwrap();
 
-    // `/xrpc/<nsid>?query` -> `<nsid>`.
     let nsid = path
         .split('?')
         .next()
@@ -158,8 +149,8 @@ fn query(path: &str, key: &str) -> String {
         .to_owned()
 }
 
-/// A site with two dated pages and one undated. Changes into it, which is where
-/// the skip-cache and the content tree both resolve from.
+/// A site with two dated pages and one undated, changed into because the
+/// skip-cache and the content tree both resolve from the working directory.
 fn site() -> Site {
     let site = Site::with(common::CONFIG);
     site.write(
@@ -204,13 +195,9 @@ fn options(dry_run: bool) -> Options<'static> {
     }
 }
 
-/// The destructive path, and the reason this file exists: a record whose page is
-/// gone must be deleted from the remote repository. The remote is the source of
-/// truth, so a stale record is not merely left behind, it is removed.
 #[test]
 fn a_record_whose_page_is_gone_is_deleted_from_the_repo() {
     let records: Records = Arc::new(Mutex::new(BTreeSet::new()));
-    // A record for a page this site no longer has.
     records
         .lock()
         .unwrap()
@@ -227,10 +214,8 @@ fn a_record_whose_page_is_gone_is_deleted_from_the_repo() {
         !records.contains(&format!("{DOCUMENTS}/staleaaaaaaaa")),
         "the orphaned record should have been deleted: {records:?}"
     );
-    // Both dated pages were published, under their derived keys...
     assert!(records.contains(&format!("{DOCUMENTS}/{}", rkey("/posts/hello/"))));
     assert!(records.contains(&format!("{DOCUMENTS}/{}", rkey("/posts/second/"))));
-    // ...the undated one was not, and the publication record went up.
     assert_eq!(
         records.iter().filter(|k| k.starts_with(DOCUMENTS)).count(),
         2,
@@ -243,8 +228,6 @@ fn a_record_whose_page_is_gone_is_deleted_from_the_repo() {
     assert!(log.contains(&"com.atproto.repo.deleteRecord".to_owned()));
 }
 
-/// A dry run diffs against the live repo, so it authenticates nothing and writes
-/// nothing: no session, no puts, and above all no deletes.
 #[test]
 fn a_dry_run_diffs_the_live_repo_without_writing() {
     let records: Records = Arc::new(Mutex::new(BTreeSet::new()));
@@ -279,9 +262,8 @@ fn a_dry_run_diffs_the_live_repo_without_writing() {
     );
 }
 
-/// A `did` pinned in config that disagrees with the account actually
-/// authenticated is fatal: the build emitted verification artifacts naming one
-/// identity while the records would land under another.
+/// The build emits verification artifacts naming one identity, so records must
+/// never land under another.
 #[test]
 fn a_mismatched_did_pin_refuses_to_publish() {
     let records: Records = Arc::new(Mutex::new(BTreeSet::new()));

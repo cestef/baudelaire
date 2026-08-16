@@ -1,10 +1,4 @@
 //! Rewrites asset references to their content-addressed (fingerprinted) URLs.
-//!
-//! When `assets { fingerprint #true }` is set, the engine copies each
-//! asset to a content-hashed name (`style.css` -> `style.<hash>.css`) and records
-//! the mapping in an [`super::AssetMap`]. This transform rewrites every `href`/
-//! `src` that names an original asset to its hashed URL, so caches can serve
-//! assets forever and bust automatically on change.
 
 use typst_html::HtmlDocument;
 
@@ -12,13 +6,8 @@ use crate::config::Config;
 
 use super::{Cx, DocumentExt, Transform};
 
-/// The [`Transform`] that swaps asset references for their fingerprinted URLs.
-///
-/// Replaces mapped `href`/`src`/`content`/`poster`/`srcset` values with their
-/// fingerprinted URLs. `content` covers asset references in `<meta>` tags (a
-/// social `og:image`); `srcset` covers responsive `<img>`/`<source>` candidate
-/// lists. Anything not in the map (external URLs, already-inlined `data:` URIs,
-/// unmanaged paths, plain text) is left untouched.
+/// The [`Transform`] that swaps mapped asset references for their fingerprinted
+/// URLs, leaving anything the map does not name untouched.
 pub(super) struct Fingerprint;
 
 impl Transform for Fingerprint {

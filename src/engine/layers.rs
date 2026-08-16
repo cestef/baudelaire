@@ -1,9 +1,5 @@
-//! Stacked source directories: a theme's tree under the project's own.
-//!
-//! A theme ships `templates/`, `assets/`, and `static/` the way a site does. The
-//! rule everywhere is the same and stated once here: the project wins. A file
-//! the project has is the file that is used; one it does not have is taken from
-//! the theme; a theme with nothing to add costs nothing.
+//! Stacked source directories: a theme's `templates/`, `assets/` and `static/`
+//! under the project's own, where the project's file always wins.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -11,13 +7,9 @@ use std::path::{Path, PathBuf};
 use crate::error::Result;
 use crate::fs;
 
-/// One file resolved through the stack: where it lives, and the relative path it
-/// is known by.
-///
-/// The relative path is carried rather than recomputed, because with more than
-/// one root there is no single prefix to strip: `assets/app.css` and
-/// `<theme>/assets/reset.css` are siblings in the output and neighbours in the
-/// asset map, but nothing on disk says so.
+/// One file resolved through the stack: where it lives, and the relative path
+/// it is known by, which is carried because with more than one root there is no
+/// single prefix to strip.
 #[derive(Debug, Clone)]
 pub(super) struct Layered {
     /// Path relative to whichever root this file came from: its identity in the
@@ -37,16 +29,9 @@ impl Layers {
         Self(theme.into_iter().chain([project.to_path_buf()]).collect())
     }
 
-    /// The stack as a search path, the strongest root first. Read by the Sass
-    /// compiler, whose `@use` / `@import` resolution is a search over
-    /// directories rather than a lookup of one file: a partial the theme ships
-    /// has to be reachable from a sheet the project wrote, and the other way
-    /// round.
-    ///
-    /// Reversed here, because a search path states its winner first while the
-    /// stack states it last: `files` lets a later root overwrite an earlier
-    /// one, and the same override has to hold when the name is resolved by
-    /// searching instead.
+    /// The stack as a search path, the strongest root first, which is the
+    /// reverse of the stack's own order: the Sass compiler resolves a `@use` by
+    /// searching directories rather than by overwriting.
     #[cfg(feature = "sass")]
     pub(super) fn search(&self) -> Vec<PathBuf> {
         self.0.iter().rev().cloned().collect()
@@ -68,7 +53,6 @@ impl Layers {
                     .strip_prefix(root)
                     .expect("Walk yields paths under root")
                     .to_path_buf();
-                // Later roots overwrite earlier ones: this is the override.
                 found.insert(rel, path);
             }
         }
@@ -108,16 +92,12 @@ mod tests {
             .collect();
 
         assert_eq!(by_rel.len(), 4, "{by_rel:?}");
-        // Only in the theme: taken from the theme.
         assert_eq!(by_rel["a.css"], theme.join("a.css"));
         assert_eq!(by_rel["deep/x.css"], theme.join("deep/x.css"));
-        // In both: the project's copy wins.
         assert_eq!(by_rel["shared.css"], project.join("shared.css"));
-        // Only in the project.
         assert_eq!(by_rel["b.css"], project.join("b.css"));
     }
 
-    /// The overwhelmingly common case: no theme, one root, nothing changes.
     #[test]
     fn a_stack_without_a_theme_is_just_the_project() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -129,7 +109,6 @@ mod tests {
         assert_eq!(files[0].rel, Path::new("a.css"));
     }
 
-    /// A directory that is not there is simply empty, for either layer.
     #[test]
     fn missing_directories_are_not_errors() {
         let tmp = tempfile::tempdir().expect("tempdir");

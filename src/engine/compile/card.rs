@@ -1,15 +1,9 @@
 //! Generated social cards: the image a link to a page unfurls into.
 //!
-//! The card template is compiled to a *paged* document, not an HTML one, and
-//! rasterized to PNG. That split matters: `html.elem` does not exist on the
-//! paged target and page layout does, so a card template is ordinary Typst,
-//! written the way a poster is, and cannot share code with a page layout.
-//!
-//! A card is rendered only for a page that does not already name its own
-//! `image`, so an author who has a real screenshot keeps it.
-//!
-//! One [`Sidecar`] among however many the flavor registers; everything around
-//! the compile lives there.
+//! The template is compiled to a *paged* document and rasterized to PNG, so it
+//! is ordinary Typst and cannot share code with a page layout, where
+//! `html.elem` is what draws. A card is rendered only for a page that does not
+//! already name its own `image`.
 
 use std::fmt;
 use std::path::PathBuf;
@@ -42,8 +36,8 @@ impl Sidecar for Card {
         config.file(&config.generate.cards.url(&page.permalink))
     }
 
-    /// A card is a poster of its own shape, so it takes the page's data flat
-    /// and ignores the layout bindings [`Cx`] also carries.
+    /// A card takes the page's data flat, ignoring the layout bindings [`Cx`]
+    /// also carries.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
         let template = &cx.config.generate.cards.template;
         Ok(Self::module(cx, page, rooted, &cx.prepare.dir(template)))
@@ -55,23 +49,20 @@ impl Sidecar for Card {
 }
 
 impl Card {
-    /// The kind's name: the file id of its synthetic module, the label its
-    /// compile errors carry, and the noun the summary counts.
+    /// The file id of the synthetic module, the label its compile errors carry,
+    /// and the noun the summary counts.
     pub(in crate::engine) const NAME: &'static str = "card";
 
-    /// The first page as PNG, at one pixel per point (so the configured size in
-    /// pixels is also the page size the template is given in points).
-    ///
-    /// A template that overflowed onto a second page would silently ship only
-    /// its first, so the extra pages are reported rather than dropped.
+    /// The first page as PNG, at one pixel per point, so the configured size in
+    /// pixels is also the page size the template is given in points and a card
+    /// is never resampled. A template that overflowed onto a second page is an
+    /// error rather than a silently truncated card.
     fn rasterize(document: &typst_layout::PagedDocument, page: &Page) -> Result<Vec<u8>> {
         let [first] = document.pages() else {
             return Err(
                 crate::error::CardError::pages(&page.permalink, document.pages().len()).into(),
             );
         };
-        // One pixel per point, so the configured pixel size is also the page
-        // size the template was handed, and a card is never resampled.
         let options = typst_render::RenderOptions {
             pixel_per_pt: typst::utils::Scalar::new(1.0),
             render_bleed: false,
@@ -83,17 +74,11 @@ impl Card {
     }
 
     /// The synthetic module compiled for a card: the page size baudelaire owns,
-    /// then the template applied to the page's data.
-    ///
-    /// The page rule is set *before* the import so a template that wants a
-    /// different size can still say so, and after nothing else, so the default
-    /// is exactly the configured card.
-    ///
-    /// `dir` is the import root the template is loaded from, resolved by
-    /// [`Prepare::dir`](crate::engine::compile::prepare) the way every other
-    /// template is: it derived its own from `config.paths.templates`, which
-    /// looked only at the project and so failed on a theme's `card.typ` after
-    /// `verify` had accepted it, with typst's own `file not found`.
+    /// then the template applied to the page's data. The page rule is set
+    /// *before* the import so a template that wants a different size can still
+    /// say so. `dir` is the import root the template is loaded from, resolved
+    /// by [`Prepare::dir`](crate::engine::compile::prepare) so a theme's
+    /// `card.typ` is found too.
     fn module(cx: &Cx<'_>, page: &Page, rooted: &RootedPath, dir: &str) -> String {
         let config = cx.config;
         Template {
@@ -112,9 +97,8 @@ impl Card {
         .to_string()
     }
 
-    /// What the template is handed. Deliberately flat and small: a card shows a
-    /// title, maybe a date and a site name, and nothing a card can render is
-    /// worth invalidating every card over.
+    /// What the template is handed, kept flat and small so little invalidates
+    /// every card.
     fn data(cx: &Cx<'_>, page: &Page) -> Value {
         let config = cx.config;
         Value::dict([
@@ -123,9 +107,6 @@ impl Card {
             ("lang", Value::str(&page.lang)),
             ("collection", Value::str(&page.collection)),
             ("site", Value::str(config.title(&page.lang))),
-            // Whom the page credits, under the name this surface spells the
-            // role by, rather than the site's one author: a card is a byline
-            // for the page it draws.
             (
                 Credit::Author
                     .spelling(Vocabulary::Document)
@@ -141,8 +122,7 @@ impl Card {
     }
 }
 
-/// The generated module, rendered through [`fmt::Display`] like every other
-/// piece of Typst this build writes.
+/// The generated module.
 struct Template {
     import: String,
     func: String,
@@ -201,8 +181,6 @@ mod tests {
         );
     }
 
-    /// A page with no `frontmatter` export still renders, with an empty dict
-    /// rather than a compile error about a missing import.
     #[test]
     fn a_page_without_frontmatter_gets_an_empty_dict() {
         let out = Template {

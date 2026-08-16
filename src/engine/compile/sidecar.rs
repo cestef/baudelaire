@@ -1,20 +1,5 @@
 //! Sidecars: the files a page produces beside its HTML, drawn by a second,
 //! *paged* compile of the same page.
-//!
-//! A page's own compile targets HTML, where `html.elem` exists and page layout
-//! does not. A sidecar targets the other half: ordinary Typst, laid out on real
-//! pages, encoded to whatever that artifact is (a PNG for a social card). The
-//! two cannot share a template for that reason, but everything around the
-//! compile is the same whatever is being drawn, and lives here: the synthetic
-//! module's file id, the tracked world, the dependency set, the diagnostics.
-//!
-//! An implementation supplies only what is specific to it: whether a page wants
-//! one, where the file goes, the module to compile, and how to encode the
-//! result. One `impl` plus one line in [`Sidecars::builtin`].
-//!
-//! The whole module is gated on the `sidecars` feature, which every artifact
-//! that registers one enables: it is what pulls `typst-layout`, and a flavor
-//! that draws nothing paged should not carry the layout engine.
 
 use std::path::PathBuf;
 
@@ -37,15 +22,6 @@ use crate::world::Project;
 
 /// What a sidecar builds its module out of: the site config, and the same
 /// per-page bindings the HTML compile is given.
-///
-/// The bindings are here because a sidecar that wraps the page in a template
-/// wants exactly what a layout gets (`page.nav`, `page.strings`, the localized
-/// date), and deriving them a second time is how the two drift apart. A sidecar
-/// that draws something of its own shape, like a card, ignores them.
-///
-/// Assembled by [`Sidecars::draw`] rather than by the caller: without the paged
-/// compile there is no implementation to read it, and a struct nothing reads is
-/// a struct that goes stale.
 #[cfg(feature = "sidecars")]
 pub(in crate::engine) struct Cx<'a> {
     pub config: &'a Config,
@@ -53,10 +29,6 @@ pub(in crate::engine) struct Cx<'a> {
 }
 
 /// One drawn sidecar file, ready to write.
-///
-/// Carries its own destination, so the writer needs to know nothing about which
-/// artifact it is holding, and the kind that drew it, so the summary can still
-/// name what it counts.
 pub(in crate::engine) struct Artifact {
     /// The [`Sidecar`] that drew it.
     pub kind: &'static str,
@@ -66,19 +38,14 @@ pub(in crate::engine) struct Artifact {
 }
 
 /// A kind of paged artifact a page can produce beside its HTML.
-///
-/// Object-safe and registered as a trait object, like the asset handlers and
-/// the post-build processors: the set of sidecars is a list, and every pass
-/// over it (drawing, writing, keeping) reads that one list.
 #[cfg(feature = "sidecars")]
 pub(in crate::engine) trait Sidecar: Sync {
-    /// This kind's name, in one word. Used for three things that must agree:
-    /// the synthetic module's file id, the label a compile error is reported
-    /// against, and the noun the summary counts.
+    /// This kind's name, in one word: the synthetic module's file id, the label
+    /// a compile error is reported against, and the noun the summary counts.
     fn name(&self) -> &'static str;
 
-    /// Whether this page gets one. Read by the draw and by the prune, so a file
-    /// an earlier build wrote is never swept out from under a cache hit.
+    /// Whether this page gets one; read by the prune too, so a file an earlier
+    /// build wrote is never swept out from under a cache hit.
     fn wanted(&self, config: &Config, page: &Page) -> bool;
 
     /// Where this page's artifact lands under `dist`.
@@ -92,8 +59,7 @@ pub(in crate::engine) trait Sidecar: Sync {
     fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>>;
 
     /// Lay this page's module out and encode it, reporting what the compile
-    /// read: the template it imports and everything that template pulls in,
-    /// which the page's own HTML compile never touches.
+    /// read.
     fn draw(&self, project: &Project, cx: &Cx<'_>, page: &Page) -> Result<(Artifact, Deps)> {
         let rooted = project.virtualize(&page.source)?;
         let laid = Paged {
@@ -111,13 +77,10 @@ pub(in crate::engine) trait Sidecar: Sync {
     }
 }
 
-/// The registered sidecars. One list, read by everything that has to agree
-/// about which files a page owns.
 #[cfg(feature = "sidecars")]
 pub(in crate::engine) struct Sidecars(Vec<Box<dyn Sidecar>>);
 
-/// Without the paged compile there is nothing to register, and no
-/// `typst-layout` to register it with.
+/// Without the paged compile there is nothing to register.
 #[cfg(not(feature = "sidecars"))]
 pub(in crate::engine) struct Sidecars;
 
@@ -132,10 +95,8 @@ impl Sidecars {
         ])
     }
 
-    /// A registry that draws nothing, for a compile that only wants the page's
-    /// markup again: the backlink repair pass. A card and a printed PDF carry no
-    /// backlinks, and redrawing one per repaired page would cost more than the
-    /// pass it repairs.
+    /// A registry that draws nothing, for the backlink repair pass, which only
+    /// wants the page's markup again.
     pub(in crate::engine) fn none() -> Self {
         Self(Vec::new())
     }
@@ -161,11 +122,8 @@ impl Sidecars {
     }
 
     /// Every file this page's sidecars own, whether or not this build drew
-    /// them.
-    ///
-    /// Derived from the page rather than from what was written, because a cache
-    /// hit draws nothing and the file an earlier build left is still the page's:
-    /// the prune reads this to keep it.
+    /// them, since a cache hit draws nothing and the prune reads this to keep
+    /// what an earlier build left.
     pub(in crate::engine) fn planned(&self, config: &Config, page: &Page) -> Vec<PathBuf> {
         self.0
             .iter()
@@ -175,9 +133,8 @@ impl Sidecars {
     }
 }
 
-// The stubs below mirror the `sidecars`-on signatures exactly, so the caller
-// compiles unchanged in both flavors. That is the whole point of them, and it is
-// why they take a `self` they cannot use and return a `Result` they cannot fail.
+// The stubs mirror the `sidecars`-on signatures exactly, so the caller compiles
+// unchanged in both flavors.
 #[cfg(not(feature = "sidecars"))]
 #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
 impl Sidecars {
@@ -185,12 +142,10 @@ impl Sidecars {
         Self
     }
 
-    /// Nothing is registered either way; see the `sidecars` counterpart.
     pub(in crate::engine) fn none() -> Self {
         Self
     }
 
-    /// Nothing is registered, so nothing is drawn and nothing is read.
     pub(in crate::engine) fn draw(
         &self,
         _project: &Project,
@@ -201,7 +156,6 @@ impl Sidecars {
         Ok((Vec::new(), Deps::default()))
     }
 
-    /// Nothing is drawn, so this page owns no sidecar file.
     pub(in crate::engine) fn planned(&self, _config: &Config, _page: &Page) -> Vec<PathBuf> {
         Vec::new()
     }
@@ -211,9 +165,6 @@ impl Sidecars {
 mod tests {
     use super::*;
 
-    /// A kind's name is what distinguishes its synthetic module's file id from
-    /// every other kind's, so two sidecars sharing one would compile as the
-    /// same `main` and the second would draw the first's document.
     #[test]
     fn every_registered_sidecar_names_a_distinct_kind() {
         let sidecars = Sidecars::builtin();
@@ -233,16 +184,14 @@ mod tests {
 #[derive(Default)]
 pub(in crate::engine) struct Tally {
     /// One entry per kind that drew at least one file, in the order the kinds
-    /// were first seen. The name is the summary's noun, so a build that drew
-    /// both counts them apart instead of reporting a total of two unlike things.
+    /// were first seen.
     pub kinds: Vec<(&'static str, usize)>,
     pub bytes: u64,
 }
 
 impl Tally {
-    /// Count what this build drew. A cache hit draws nothing, so this counts
-    /// only fresh artifacts; the files from earlier builds are still in `dist`
-    /// and still kept.
+    /// Count what this build drew; a cache hit draws nothing, so a file an
+    /// earlier build left is not counted.
     pub(in crate::engine) fn of<'a>(artifacts: impl IntoIterator<Item = &'a Artifact>) -> Self {
         let mut tally = Self::default();
         for artifact in artifacts {

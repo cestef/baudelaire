@@ -1,18 +1,7 @@
 //! End-to-end tests for incremental builds and dependency tracking.
 //!
-//! Several of these exist to *confirm* a specific claim: that wrapping the
-//! shared, comemo-memoized world in `Tracked` captures a page's true
-//! dependency set (transitive imports and shared modules included) because
-//! comemo re-calls the tracked `source`/`file` accessors when validating a
-//! cached result. Each such test edits only a transitive/shared input and
-//! asserts the affected page's *output* actually changed on rebuild; a missed
-//! dependency would leave stale HTML and fail the test.
-//!
-//! The plainest of those sequences are now data in `tests/scenarios/incremental.kdl`,
-//! since a scenario's `build { }` steps express "build, edit, rebuild, count".
-//! What stays here needs more than the site's own files: the cache's internals
-//! (a corrupt manifest, a corrupt blob), a site that moves on disk, a symlinked
-//! content tree, or the CLI's own logs.
+//! What stays here needs more than the site's own files: the cache's internals,
+//! a site that moves on disk, a symlinked content tree, or the CLI's own logs.
 
 mod common;
 
@@ -29,7 +18,6 @@ fn corrupt_manifest_warns_and_rebuilds() {
     );
     site.build();
 
-    // A present-but-unparseable manifest must not be mistaken for a fresh cache.
     site.write(".baudelaire/cache/manifest.json", "{ not valid json");
     let out = site.run(&["build", "-v"]);
     assert!(
@@ -50,8 +38,7 @@ fn corrupt_manifest_warns_and_rebuilds() {
 
 #[test]
 fn retitling_invalidates_taxonomy_listing() {
-    // A term listing embeds member titles, so retitling a member must rebuild
-    // that listing, but not the index (its per-term counts are unchanged).
+    // A term listing embeds member titles; the index carries per-term counts.
     let site = Site::with(CONFIG);
     site.write(
         "config.kdl",
@@ -77,18 +64,14 @@ fn retitling_invalidates_taxonomy_listing() {
         site.output("tags/x/index.html").contains("AA"),
         "term listing did not pick up the new title"
     );
-    // Page a rebuilds (the `#let frontmatter` export is part of its compiled
-    // source: the page can render its own metadata) and so does the tags/x
-    // listing that embeds the title. tags/index shows unchanged per-term counts
-    // and stays cached; page b is untouched.
+    // a and the `tags/x` listing rebuild; `tags/index` and b stay cached.
     assert_eq!((stats.pages, stats.cached), (4, 2));
 }
 
 #[test]
 fn changing_a_slug_updates_links_from_cached_pages() {
-    // Page a links to b by source path; b's permalink is resolved into a's HTML
-    // at render time: a dependency the per-page tracker cannot see (typst never
-    // reads b.typ). Changing b's slug must still invalidate a's cached link.
+    // b's permalink is resolved into a's HTML at render time, a dependency the
+    // per-page tracker cannot see: typst never reads b.typ.
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
@@ -104,7 +87,6 @@ fn changing_a_slug_updates_links_from_cached_pages() {
         "a's link should resolve to b's permalink"
     );
 
-    // Give b a new slug -> new permalink.
     site.write(
         "content/posts/b.typ",
         "#let frontmatter = (title: \"B\", slug: \"bee\",)\nbeta",
@@ -124,11 +106,8 @@ fn changing_a_slug_updates_links_from_cached_pages() {
 
 #[test]
 fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
-    // The narrow half of the same claim: a's link to b is a dependency, so
-    // moving b rebuilds a. c links to nobody, so moving b must leave it cached.
-    // Keying the whole page-to-permalink map into the manifest fingerprint (as
-    // this once did) rebuilds c too, which makes publishing a post cost a cold
-    // build of the entire archive.
+    // c links to nobody, so keying the whole page-to-permalink map into the
+    // fingerprint would rebuild it too.
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
@@ -150,8 +129,7 @@ fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
     );
     let stats = site.stats();
 
-    // b recompiled (its own source changed) and a with it (its link moved); c
-    // is untouched by either.
+    // b recompiled and a with it, its link having moved; c by neither.
     assert_eq!((stats.pages, stats.cached), (3, 1));
     assert!(
         site.output("posts/a/index.html").contains("/posts/bee/"),
@@ -161,11 +139,8 @@ fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
 
 #[test]
 fn a_link_to_a_page_that_does_not_exist_yet_resolves_when_it_appears() {
-    // The negative dependency. `a` linked to a page that was not there, so it
-    // recorded "nothing sits at b.typ". Writing b must invalidate a, or a stays
-    // cached and serves the unresolved link forever.
-    // A dangling link is a build error under the default `links { strict }`,
-    // and the whole point here is to build with one and fix it afterwards.
+    // The negative dependency: `a` records "nothing sits at b.typ". A dangling
+    // link is an error under the default `links { strict }`, hence the opt-out.
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
     );
@@ -196,13 +171,9 @@ fn a_link_to_a_page_that_does_not_exist_yet_resolves_when_it_appears() {
 #[test]
 #[cfg(unix)]
 fn a_link_resolves_when_its_target_appears_under_a_symlinked_content_dir() {
-    // The same negative dependency, with a symlinked content subtree (a shared
-    // notes vault, a submodule linked into place). A page that exists
-    // canonicalizes to its real location, while a probe at a page that is *not*
-    // there has nothing to canonicalize and keeps the path as walked, so the two
-    // used to be recorded under different keys: the recorded `None` kept
-    // matching "nothing sits here", and `a` stayed a cache hit serving its
-    // broken link.
+    // The same negative dependency under a symlinked content subtree: a page
+    // that exists canonicalizes to its real location, while a probe at one that
+    // does not keeps the path as walked, so both have to key the same way.
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
     );
@@ -236,11 +207,8 @@ fn a_link_resolves_when_its_target_appears_under_a_symlinked_content_dir() {
 
 #[test]
 fn a_link_that_falls_through_to_the_base_page_rebuilds_when_an_edition_appears() {
-    // On a multilingual site a link probes the reader's own edition first and
-    // falls through to the target as written. That fall-through is only correct
-    // while the edition is absent, so its absence has to be a dependency too:
-    // recording just the entry that matched leaves the French page pointing at
-    // the English one after `b.fr.typ` is written.
+    // A link probes the reader's own edition first and falls through to the
+    // target as written, which is only correct while that edition is absent.
     let site = Site::with(
         "site \"T\"\nlang \"en\"\nlanguages {\n  fr { name \"Français\" }\n}\npaths { content \"content\"; dist \"public\" }\n",
     );
@@ -279,8 +247,7 @@ fn templated(head: &str, extra: &str) -> Site {
         &format!("{head}#let layout(page, body) = {{\n  body\n{extra}\n}}\n"),
     );
     // Five, so the page retitled below has pages that are *not* its prev/next
-    // neighbours: those two rebuild for their pager links whatever happens, and
-    // would mask what these tests are actually measuring.
+    // neighbours, which rebuild for their pager links whatever happens.
     for (name, title) in [("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")] {
         site.write(
             &format!("content/posts/{name}.typ"),
@@ -292,10 +259,6 @@ fn templated(head: &str, extra: &str) -> Site {
 
 #[test]
 fn retitling_leaves_pages_whose_template_ignores_the_section_tree_cached() {
-    // The section tree names every page on the site. Embedded in each page's
-    // generated wrapper (as it once was) it made every title part of every
-    // page's fingerprint, so one retitle was a cold build of the whole site.
-    // As a file, only the templates that import it depend on it.
     let site = templated("", "");
     site.stats();
 
@@ -305,17 +268,13 @@ fn retitling_leaves_pages_whose_template_ignores_the_section_tree_cached() {
     );
     let stats = site.stats();
 
-    // b recompiled, and a and c with it: they are its prev/next neighbours,
-    // whose pager links carry its title. d and e are neither, and nothing here
-    // reads the section tree, so they stay cached.
+    // b recompiled, and its prev/next neighbours a and c with it; d and e read
+    // nothing that moved.
     assert_eq!((stats.pages, stats.cached), (5, 2));
 }
 
 #[test]
 fn a_template_that_imports_the_section_tree_rebuilds_when_a_title_changes() {
-    // The other half: a nav really does change on every page when any page is
-    // retitled, so a template that renders one must rebuild. Correctness first;
-    // the saving is only for templates that ask for nothing.
     let site = templated(
         "#import \"@baudelaire/sections:0.1.0\": sections\n",
         "  [#sections(page.lang).len()]",
@@ -341,8 +300,6 @@ fn a_template_that_imports_the_section_tree_rebuilds_when_a_title_changes() {
 
 #[test]
 fn the_generated_section_tree_is_written_before_the_first_compile() {
-    // A template importing the tree has to work on the first build of a fresh
-    // checkout, where nothing has written it yet.
     let site = templated(
         "#import \"@baudelaire/sections:0.1.0\": sections\n",
         "  [#sections(page.lang).len()]",
@@ -351,17 +308,15 @@ fn the_generated_section_tree_is_written_before_the_first_compile() {
     let stats = site.stats();
 
     assert_eq!(stats.pages, 5);
-    // Where the registry resolves `@baudelaire/sections` to. Asserted so the
-    // import above is served from a real file, which is what puts it in each
-    // importing page's dependency set.
+    // Served from a real file, which is what puts it in the importing page's
+    // dependency set.
     assert!(site.exists(".baudelaire/generated/sections.typ"));
 }
 
 #[test]
 fn editing_an_embedded_asset_invalidates_the_page() {
-    // With `embed`, a page inlines asset bytes as a `data:` URI at render time:
-    // bytes typst never reads, so the per-page tracker is blind to them. Editing
-    // the asset must still rebuild the page (its inlined copy is now stale).
+    // `embed` inlines asset bytes at render time, and typst never reads them,
+    // so the per-page tracker is blind to them.
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\n\\\nhtml {\n  embed #true\n}\n",
     );
@@ -384,7 +339,6 @@ fn editing_an_embedded_asset_invalidates_the_page() {
         stats.cached, 0,
         "page must rebuild when its embedded asset changes"
     );
-    // The freshly inlined bytes differ from the original.
     assert_ne!(
         first,
         site.output("posts/a/index.html"),
@@ -394,9 +348,6 @@ fn editing_an_embedded_asset_invalidates_the_page() {
 
 #[test]
 fn discovery_cache_persisted_and_reused() {
-    // Discovery caches each page's extracted frontmatter so an unchanged rebuild
-    // skips re-evaluating its module. The manifest must be written, and a second
-    // build must produce identical output from it.
     let site = Site::with(CONFIG);
     site.write(
         "content/posts/a.typ",
@@ -410,15 +361,12 @@ fn discovery_cache_persisted_and_reused() {
 
     let before = site.output("posts/a/index.html");
     site.stats();
-    // Frontmatter served from the discovery cache: output is unchanged.
     assert_eq!(before, site.output("posts/a/index.html"));
 }
 
 #[test]
 fn frontmatter_from_import_invalidated_on_dep_change() {
-    // A page's frontmatter reads a value from an imported module, so the cached
-    // frontmatter depends on that module. Editing it must re-evaluate the page's
-    // frontmatter: a missed dependency would serve the stale title from cache.
+    // The cached frontmatter depends on the module it read its title from.
     let site = Site::with(
         "site \"T\"\ncontent {\n  collections {\n    posts { template \"post.typ\" }\n  }\n}\n",
     );
@@ -434,7 +382,6 @@ fn frontmatter_from_import_invalidated_on_dep_change() {
     site.stats();
     assert!(site.output("posts/a/index.html").contains("FIRST"));
 
-    // Change only the imported module the frontmatter reads from.
     site.write("titles.typ", "#let title = \"SECOND\"");
     site.stats();
     assert!(
@@ -453,9 +400,7 @@ fn no_cache_flag_forces_full_rebuild() {
     );
     site.build();
     let warm = site.build();
-    // The flag is a `build` option, not a global one: passed before the
-    // subcommand it is a usage error, and this test used to assert against
-    // clap's help text rather than a build.
+    // The flag is a `build` option, not a global one.
     assert!(
         warm.contains("cached"),
         "cache not warm to begin with: {warm}"
@@ -464,8 +409,7 @@ fn no_cache_flag_forces_full_rebuild() {
     let out = site.run(&["build", "--no-cache", "-v"]);
     let logs = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "no-cache build failed: {logs}");
-    // A forced full rebuild serves nothing from cache: no page nor the summary
-    // mentions caching (the summary omits the cached count when it is zero).
+    // The summary omits the cached count when it is zero.
     assert!(
         !logs.contains("cached"),
         "no-cache must rebuild everything: {logs}"
@@ -473,9 +417,7 @@ fn no_cache_flag_forces_full_rebuild() {
 }
 
 /// A blob whose bytes no longer match its own content address is a miss, and
-/// the build must repair it: it stays referenced (so the prune keeps it) and its
-/// path exists (so a write is skipped), which left that page missing on every
-/// build from then on.
+/// the build must repair it rather than skip a write it still references.
 #[test]
 fn a_corrupt_blob_is_rewritten_not_missed_forever() {
     let site = Site::with(CONFIG);
@@ -509,9 +451,8 @@ fn a_corrupt_blob_is_rewritten_not_missed_forever() {
     assert!(site.output("posts/a/index.html").contains("alpha"));
 }
 
-/// A warm cache must survive the site moving on disk: `mv site site2`, or a CI
-/// runner checking out at a different workspace path. Manifest keys are
-/// therefore stored relative to the project root, not absolute.
+/// A warm cache must survive the site moving on disk, so manifest keys are
+/// stored relative to the project root.
 #[test]
 fn a_warm_cache_survives_the_site_moving() {
     fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
@@ -557,10 +498,8 @@ fn a_warm_cache_survives_the_site_moving() {
 }
 
 /// The link graph is built from what an *author* wrote, so a page records the
-/// pages its own content points at and nothing its layout does. Recorded only
-/// while `links { backlinks }` asks for it, since nothing else reads the graph. A nav that links
-/// every page from every page would otherwise make every page a neighbour of
-/// every other, and the backlinks derived from it worthless.
+/// pages its own content points at and nothing its layout does: a nav would
+/// otherwise make every page a neighbour of every other.
 #[test]
 fn a_page_records_its_own_links_and_not_its_layout_s() {
     let site = Site::with(
@@ -590,25 +529,21 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
             .cloned()
             .unwrap_or_default()
     };
-    // Each distinct link is an edge, section and all, so the page at the other
-    // end can group who linked to what. A link to itself is not one.
+    // Each distinct link is an edge, section and all; a link to itself is not.
     assert_eq!(
         outbound("a"),
         ["/posts/b/", "/posts/b/#install"],
         "{manifest}"
     );
-    // b writes no links at all: the one in its markup is its layout's.
+    // The one link in b's markup is its layout's.
     assert!(outbound("b").is_empty(), "{manifest}");
 }
 
 /// Frontmatter derived from a build input the file tracker cannot see (a git
 /// hash, the clock) re-derives when that input changes.
 ///
-/// Discovery stored the extracted frontmatter against the files the evaluation
-/// read and nothing else, so a title built from the commit hash was extracted
-/// once and frozen. The page's *compile* invalidated correctly and dutifully
-/// re-emitted the stale title it had been handed, which is what made this look
-/// like it was working: the page rebuilt, and still said the old thing.
+/// Discovery stores the extracted frontmatter against the files the evaluation
+/// read, so a value that is not a file has to be recorded on its own.
 #[test]
 fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
     let site = Site::with(CONFIG);
@@ -625,7 +560,7 @@ fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
     let before = site.output("reader/index.html");
     assert!(!before.contains("At none"), "no commit hash: {before}");
 
-    // The value the frontmatter is derived from changes, and no file does.
+    // The derived value changes, and no file does.
     git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
     site.stats();
 
@@ -637,13 +572,9 @@ fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
 }
 
 /// An asset the inliner could not read is still something the page consulted.
-/// The path was recorded only when the read succeeded, so a page referencing an
-/// asset that was not there stayed a cache hit once the file appeared: the
-/// "self-contained" export kept pointing at a file it does not carry.
 ///
-/// With `fingerprint` off, nothing else records the reference: the asset map is
-/// empty (it maps only the files whose name changed), so the page's asset probe
-/// has no key to notice.
+/// With `fingerprint` off, nothing else records the reference: the asset map
+/// holds only the files whose name changed.
 #[test]
 fn an_embedded_asset_that_was_missing_is_inlined_once_it_appears() {
     let site = Site::with(
@@ -676,12 +607,8 @@ fn an_embedded_asset_that_was_missing_is_inlined_once_it_appears() {
     );
 }
 
-/// A link an author wrote as a URL is an edge of the link graph too, so the page
-/// writing it depends on whether the site serves anything there. Recording only
-/// the links that *matched* left the negative unrecorded: adding the page at
-/// that URL changed nothing the linker was validated against, so it stayed a
-/// cache hit, replayed an `outbound` without the edge, and the new page was
-/// reported as linked from nowhere out of a green build.
+/// A link an author wrote as a URL is an edge of the link graph too, so the
+/// page writing it depends on whether the site serves anything there.
 #[test]
 fn a_url_link_to_a_page_that_does_not_exist_yet_invalidates_when_it_does() {
     let site = Site::with(
@@ -705,13 +632,12 @@ fn a_url_link_to_a_page_that_does_not_exist_yet_invalidates_when_it_does() {
             .unwrap_or_default()
     };
 
-    // Nothing is served there yet, and that answer is what the page depends on.
+    // Nothing is served there yet, and that answer is the dependency.
     let manifest = site.read(".baudelaire/cache/manifest.json");
     assert_eq!(probed(&manifest), serde_json::json!(false), "{manifest}");
     assert!(outbound(&manifest).is_empty(), "{manifest}");
 
-    // The page appears. `a.typ` is untouched, its own dependencies unchanged,
-    // and no other probe it recorded has moved.
+    // `a.typ` is untouched and no other probe it recorded has moved.
     site.write(
         "content/guide.typ",
         "#let frontmatter = (title: \"Guide\",)\nhere",
@@ -724,11 +650,8 @@ fn a_url_link_to_a_page_that_does_not_exist_yet_invalidates_when_it_does() {
     assert_eq!(outbound(&manifest), ["/guide/"], "{manifest}");
 }
 
-/// `datetime.today()` is a build input the file-dependency tracker cannot see:
-/// it goes through the `World`, which records `source`/`file` only. Recording it
-/// as a read of `sys.inputs.baudelaire.date` is what makes a page printing the
-/// current year rebuild when the day rolls over instead of serving last year's
-/// markup forever.
+/// `datetime.today()` goes through the `World`, which records `source`/`file`
+/// only, so it is recorded as a read of `sys.inputs.baudelaire.date` instead.
 #[test]
 fn a_page_reading_the_clock_records_the_date_as_a_dependency() {
     let site = Site::with(CONFIG);
@@ -760,18 +683,6 @@ fn a_page_reading_the_clock_records_the_date_as_a_dependency() {
     );
 }
 
-/// `--no-cache` costs one cold build, not two: the manifest it writes must be
-/// fingerprinted like any other, or the next normal build sees a mismatch and
-/// rebuilds the whole site.
-
-// ---- Stale-output pruning -------------------------------------------------
-//
-// A build must not only write the current outputs; it must remove the ones a
-// previous build wrote that no longer belong (a deleted page, a renamed
-// permalink, a taxonomy term whose last page dropped it). Otherwise `dist`
-// only grows and keeps serving files no source maps to. These lock in that
-// pruning across the ways an output can be orphaned.
-
 #[test]
 fn renamed_page_prunes_the_old_permalink() {
     let site = Site::with(CONFIG);
@@ -782,7 +693,6 @@ fn renamed_page_prunes_the_old_permalink() {
     site.stats();
     assert!(site.exists("public/posts/old/index.html"));
 
-    // Rename the source (slug -> permalink), which moves the output.
     fs::rename(
         site.path("content/posts/old.typ"),
         site.path("content/posts/new.typ"),
@@ -801,8 +711,6 @@ fn renamed_page_prunes_the_old_permalink() {
 
 #[test]
 fn dropped_taxonomy_term_prunes_its_index() {
-    // The exact shape of the original bug: a term page lingering after no page
-    // carries the term anymore.
     let config = format!("{CONFIG}content {{\n  taxonomies {{\n    tags listing=#true\n  }}\n}}\n");
     let site = Site::with(&config);
     site.write(
@@ -813,7 +721,6 @@ fn dropped_taxonomy_term_prunes_its_index() {
     assert!(site.exists("public/tags/keep/index.html"));
     assert!(site.exists("public/tags/drop/index.html"));
 
-    // The page keeps `keep` but loses `drop`; the `drop` term page must vanish.
     site.write(
         "content/a.typ",
         "#let frontmatter = (title: \"A\", tags: (\"keep\",))\nhi",
@@ -831,9 +738,7 @@ fn dropped_taxonomy_term_prunes_its_index() {
 
 #[test]
 fn changed_site_url_refreshes_canonical_on_rebuild() {
-    // Regression for the sibling failure mode: a config change that only the
-    // render pass sees (the base `url`, baked into canonical/og:url) must
-    // invalidate cached pages, not serve their stale absolute links.
+    // The base `url` is a config change only the render pass sees.
     let base = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n";
     let site = Site::with(&format!("{base}url \"https://one.example\"\n"));
     site.write(
@@ -879,7 +784,6 @@ fn pruning_spares_assets_and_static_files() {
     );
     assert!(!site.files("public/assets").is_empty(), "asset missing");
 
-    // A no-op rebuild must not sweep away the asset tree or static passthrough.
     site.stats();
     assert!(
         site.exists("public/CNAME"),
@@ -893,8 +797,6 @@ fn pruning_spares_assets_and_static_files() {
 
 #[test]
 fn clean_false_disables_pruning() {
-    // The prune is opt-out: with `clean #false` an orphaned output survives, for
-    // users who manage `dist/` by hand.
     let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nprune #false\n";
     let site = Site::with(config);
     site.write(
@@ -918,8 +820,6 @@ fn clean_false_disables_pruning() {
 
 #[test]
 fn flat_urls_still_prune_on_rename() {
-    // Pruning is independent of URL style: a renamed page under flat URLs must
-    // still drop its old `.html` output.
     let config = "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  style \"flat\"\n}\n";
     let site = Site::with(config);
     site.write(
@@ -945,8 +845,7 @@ fn flat_urls_still_prune_on_rename() {
     );
 }
 
-/// Run a git command in the site root, failing loudly. Isolated: the site lives
-/// in a fresh tempdir, so this never touches the project's own repository.
+/// Run a git command in the site root, failing loudly.
 fn git(site: &Site, args: &[&str]) {
     let out = std::process::Command::new("git")
         .args(args)
@@ -966,10 +865,8 @@ fn git(site: &Site, args: &[&str]) {
 
 #[test]
 fn metadata_change_rebuilds_only_the_pages_that_read_it() {
-    // The payoff of per-value tracking: a new commit changes
-    // `sys.inputs.baudelaire.git.hash`, so the page that displays it rebuilds,
-    // while a page that reads no metadata stays cached. Build metadata is not in
-    // the manifest fingerprint, so nothing forces a whole-site rebuild.
+    // Build metadata is not in the manifest fingerprint, so nothing here
+    // forces a whole-site rebuild.
     let site = Site::with(CONFIG);
     git(&site, &["init", "-q"]);
     git(&site, &["commit", "-q", "--allow-empty", "-m", "one"]);
@@ -991,7 +888,6 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
         "the reader page should display the real commit hash: {reader_before}"
     );
 
-    // Unchanged rebuild: both pages served from cache.
     let unchanged = site.stats();
     assert_eq!(
         (unchanged.pages, unchanged.cached),
@@ -999,11 +895,10 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
         "an unchanged rebuild must reuse both pages"
     );
 
-    // A new commit changes only git.hash: no page source touched.
+    // A new commit changes only git.hash, and no page source.
     git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
     let after = site.stats();
 
-    // The reader rebuilt (its value changed); the plain page stayed cached.
     assert_eq!(
         (after.pages, after.cached),
         (2, 1),
@@ -1016,10 +911,8 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
     );
 }
 
-/// The cache stays portable when `content` is not a direct child of the project
-/// root: the root used to be inferred as `content`'s parent, so with
-/// `paths { content "src/content" }` everything outside `src/` stored an
-/// absolute path and the cache stopped surviving a move.
+/// The cache stays portable when `content` is not a direct child of the
+/// project root.
 #[test]
 fn a_nested_content_dir_keeps_the_cache_portable() {
     let site = Site::with(
@@ -1044,9 +937,8 @@ fn a_nested_content_dir_keeps_the_cache_portable() {
     assert!(manifest.contains("templates/post.typ"), "{manifest}");
 }
 
-/// Asset fingerprinting used to rebuild every page whenever any asset changed,
-/// because the whole request-to-served map was folded into the build
-/// fingerprint. A page depends on the assets it actually references.
+/// A page depends on the assets it actually references, not on the whole
+/// request-to-served map.
 #[test]
 #[cfg(feature = "css")]
 fn changing_an_asset_leaves_pages_that_do_not_reference_it_cached() {
@@ -1075,7 +967,6 @@ fn changing_an_asset_leaves_pages_that_do_not_reference_it_cached() {
         "neither page references the changed asset"
     );
 
-    // ...and the page that does reference an asset still follows it when it moves.
     site.write("assets/used.css", "body{color:black}");
     let stats = site.stats();
     assert_eq!(
@@ -1085,10 +976,8 @@ fn changing_an_asset_leaves_pages_that_do_not_reference_it_cached() {
     );
 }
 
-/// The negative half. A reference to an asset that is not there records that it
-/// was absent, so the page picks up the real URL once the asset appears.
-/// Recording only the references that resolved would leave it cached pointing
-/// at a file that never existed.
+/// A reference to an asset that is not there records that it was absent, so
+/// the page picks up the real URL once the asset appears.
 #[test]
 #[cfg(feature = "css")]
 fn a_reference_to_an_asset_that_appears_later_invalidates_the_page() {
@@ -1117,10 +1006,8 @@ fn a_reference_to_an_asset_that_appears_later_invalidates_the_page() {
 }
 
 /// The complement of `editing_an_embedded_asset_invalidates_the_page`: the
-/// embedded bytes are now the embedding page's own dependency, so a page that
-/// inlines nothing is untouched by an asset edit. Hashing the whole staged
-/// asset tree (as this once did) rebuilt every page, and walked the tree on
-/// every build to do it.
+/// bytes are the embedding page's dependency, so a page inlining nothing is
+/// untouched by an asset edit.
 #[test]
 fn a_page_that_embeds_nothing_survives_an_asset_edit() {
     let site = Site::with(

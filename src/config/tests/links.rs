@@ -4,10 +4,7 @@ use std::time::Duration;
 
 use super::{code, parse};
 
-/// `external` was a flag, and the block has to stay the same flag: the spelling
-/// every site already has, still meaning what it did. Turning it *on* is covered
-/// by the switch table in `switches`; this is that the settings behind it are
-/// untouched by which spelling turned it on.
+/// The settings behind `external` are untouched by which spelling turned it on.
 #[test]
 fn the_flag_spelling_still_leaves_the_defaults_alone() {
     let default = parse("");
@@ -43,8 +40,6 @@ fn a_duration_that_is_not_one_is_refused() {
         code("links {\n  external {\n    fresh \"soon\"\n  }\n}"),
         "baudelaire::config::bad_duration"
     );
-    // A negative count, not a duration: the integer spelling is held to the
-    // same rule every other count is.
     assert_eq!(
         code("links {\n  external {\n    timeout -5\n  }\n}"),
         "baudelaire::config::negative_count"
@@ -65,8 +60,7 @@ fn the_lists_and_the_pool_are_read() {
 }
 
 /// A pool of nothing would hang rather than throttle, and a status code outside
-/// the range a status code lives in matches nothing at all. Both are typos, and
-/// both are named as such.
+/// the range a status code lives in matches nothing at all.
 #[test]
 fn a_pool_of_none_and_a_status_that_is_not_one_are_refused() {
     for text in [
@@ -78,8 +72,6 @@ fn a_pool_of_none_and_a_status_that_is_not_one_are_refused() {
     }
 }
 
-/// A profile tuning one key inherits its siblings, the merge policy every
-/// nested section has.
 #[test]
 fn a_profile_tunes_one_key_of_the_external_block() {
     let cfg = parse(

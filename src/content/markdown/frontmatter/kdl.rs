@@ -1,12 +1,5 @@
-//! KDL frontmatter: the language `config.kdl` is written in.
-//!
-//! Written between `;;;` fences: the semicolon is KDL's own statement
-//! terminator, and it is the one of the three spellings CommonMark gives no
-//! meaning to at the start of a line.
-//!
-//! A site already writing KDL config has one language rather than two, and KDL
-//! is the only one of the three whose parser reports every fault in a block at
-//! once.
+//! KDL frontmatter, between `;;;` fences: the language `config.kdl` is written
+//! in.
 
 use kdl::{KdlDocument, KdlNode, KdlValue};
 use typst::foundations::{Dict, Value};
@@ -27,8 +20,6 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
                 dialect: "KDL".to_owned(),
                 hint: HINT.to_owned(),
                 src: miette::NamedSource::new(path, source.to_owned()),
-                // Every fault at once, which is kdl's own behaviour and worth
-                // keeping: the other two dialects can only ever report the first.
                 faults: error
                     .diagnostics
                     .iter()
@@ -37,9 +28,6 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
             })?;
     let mut reader = Reader::new(&doc, offset);
     let dict = reader.fields(&doc, &[]);
-    // Collected on the way down rather than returned from it: the walk builds a
-    // value per node and has nowhere to put a `Result` without threading one
-    // through every arm of it.
     if let Some((key, span)) = reader.duplicate {
         return Err(MarkdownError::DuplicateKey {
             path: path.to_owned(),
@@ -64,21 +52,20 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
     })
 }
 
-/// One block being read: what the walk down it needs, and what it collects.
 struct Reader {
-    /// Where the block starts in the file, folded into every span this records
-    /// so no step of the walk can hand back one measured against the block.
+    /// Where the block starts in the file, folded into every span this records.
     offset: usize,
     spans: Spans,
     /// The first key written as both a value and a dictionary, and the argument
-    /// that would have been dropped. See [`Reader::read`].
+    /// that would have been dropped.
     ambiguous: Option<(String, std::ops::Range<usize>)>,
     /// The first key declared twice at one level, and where the second one is.
     duplicate: Option<(String, std::ops::Range<usize>)>,
 }
 
 impl Reader {
-    /// A reader over `doc`, which sits at `offset` in the file.
+    /// A reader over `doc`, recording the block's own span so a field the page
+    /// never wrote underlines the block rather than nothing.
     fn new(doc: &KdlDocument, offset: usize) -> Self {
         let mut reader = Self {
             offset,
@@ -86,8 +73,6 @@ impl Reader {
             ambiguous: None,
             duplicate: None,
         };
-        // The block itself, so a field the page never wrote underlines the
-        // block rather than nothing.
         let block = reader.shift(doc.span());
         reader.spans.insert(Vec::new(), block);
         reader
@@ -107,10 +92,6 @@ impl Reader {
             .iter()
             .map(|node| {
                 let key = node.name().value();
-                // `collect` into a dict keeps the last of two, silently. TOML
-                // refuses the same page outright, and which dialect a page is
-                // written in is a fence rather than a difference in what it may
-                // say.
                 if seen.contains(&key) && self.duplicate.is_none() {
                     self.duplicate = Some((key.to_owned(), self.shift(node.name().span())));
                 }
@@ -123,9 +104,7 @@ impl Reader {
             .collect()
     }
 
-    /// What a node holds, by the shape it was written in. The four spellings are
-    /// the ones KDL itself distinguishes, so nothing here is a convention a
-    /// reader has to learn separately:
+    /// What a node holds, by the shape it was written in.
     ///
     /// ```kdl
     /// draft                      // a bare flag is true
@@ -147,18 +126,12 @@ impl Reader {
         let children = node.children().map(|doc| self.fields(doc, at));
 
         if !named.is_empty() || children.is_some() {
-            // A node carrying an argument *and* fields is none of the four
-            // shapes below, and resolving it to the dictionary dropped the
-            // argument without a word. Recorded rather than resolved: whichever
-            // way it were read, half of what the author wrote would be ignored.
             if let Some(arg) = node.entries().iter().find(|e| e.name().is_none())
                 && self.ambiguous.is_none()
             {
                 self.ambiguous = Some((node.name().value().to_owned(), self.shift(arg.span())));
             }
             let mut dict: Dict = named.into_iter().collect();
-            // A block and `key=value` entries on one node are both fields of it,
-            // so they land in one dict rather than the block silently winning.
             for (key, value) in children.unwrap_or_default() {
                 dict.insert(key, value);
             }
@@ -170,8 +143,6 @@ impl Reader {
             .iter()
             .filter(|e| e.name().is_none())
             .collect();
-        // A list's elements are indexed, so a fault in one underlines that
-        // element.
         if args.len() > 1 {
             for (i, entry) in args.iter().enumerate() {
                 let span = self.shift(entry.span());
@@ -181,19 +152,16 @@ impl Reader {
         let values: Vec<Value> = args.iter().map(|e| Self::scalar(e.value())).collect();
         match <[Value; 1]>::try_from(values) {
             Ok([only]) => only,
-            // Zero arguments is a flag that was written, and writing it is the
-            // point: `draft` means the same as `draft #true`.
             Err(values) if values.is_empty() => Value::Bool(true),
             Err(values) => Value::Array(values.into_iter().collect()),
         }
     }
 
-    /// A KDL scalar as its typst counterpart. Read through the accessors rather
+    /// A KDL scalar as its typst counterpart, read through the accessors rather
     /// than matched on the variants, so a new KDL number representation cannot
     /// turn into a silent `none` here.
-    // The one lossy step, and it is the honest option: a KDL integer wider than
-    // `i64` has no typst counterpart, and a float at least keeps the magnitude
-    // where dropping the value would keep nothing.
+    // A KDL integer wider than `i64` has no typst counterpart; a float keeps
+    // its magnitude where dropping the value would keep nothing.
     #[allow(clippy::cast_precision_loss)]
     fn scalar(value: &KdlValue) -> Value {
         if let Some(text) = value.as_string() {
@@ -236,10 +204,8 @@ mod tests {
         assert_eq!(tags.len(), 2);
     }
 
-    /// The distinction a single-element list turns on. In typst this is the
-    /// trailing comma; in KDL it cannot be written at all, so one argument is
-    /// always the scalar. A page needing a one-element list writes it in YAML
-    /// or TOML, both of which can spell one.
+    /// KDL cannot spell a one-element list, so one argument is always the
+    /// scalar and a page needing one writes it in YAML or TOML.
     #[test]
     fn one_argument_is_never_a_list() {
         assert_eq!(
@@ -278,8 +244,8 @@ mod tests {
         );
     }
 
-    /// Every value knows where it was written, nested ones included, and the
-    /// spans are file offsets: a block does not start at the top of the file.
+    /// kdl's node span runs to the next node, so it carries the space before
+    /// the closing brace.
     #[test]
     fn spans_point_into_the_file_and_reach_nested_keys() {
         let source = ";;;\nauthor { name \"cstef\" }\n;;;\n";
@@ -288,9 +254,6 @@ mod tests {
             let steps: Vec<String> = path.iter().map(|s| (*s).to_owned()).collect();
             block.spans.of(&steps).map(|s| source[s].to_owned())
         };
-        // kdl's node span runs to the next node, so it carries the space before
-        // the closing brace. Underlining one character of trailing whitespace is
-        // not worth trimming for.
         assert_eq!(at(&["author", "name"]).as_deref(), Some("name \"cstef\" "));
         assert_eq!(
             at(&["author"]).as_deref(),
@@ -298,21 +261,15 @@ mod tests {
         );
     }
 
-    /// kdl reports every fault in a block, and each is kept as its own
-    /// diagnostic rather than folded into one message.
     #[test]
     fn a_block_that_is_not_kdl_is_an_error() {
         assert!(parse("title \"unclosed\n", 0, "a.md", "title \"unclosed\n").is_err());
     }
 
-    /// A node carrying an argument *and* fields is none of the four shapes the
-    /// reader takes, and resolving it to the dictionary dropped the argument
-    /// without a word.
     #[test]
     fn a_node_that_is_both_a_value_and_a_dictionary_is_refused() {
         let text = "author \"cstef\" role=\"editor\"\n";
         assert!(parse(text, 0, "a.md", text).is_err());
-        // Either shape alone is still read.
         assert!(parse("author \"cstef\"\n", 0, "a.md", "author \"cstef\"\n").is_ok());
         let named = "author role=\"editor\"\n";
         assert!(parse(named, 0, "a.md", named).is_ok());
@@ -320,16 +277,10 @@ mod tests {
         assert!(parse(block, 0, "a.md", block).is_ok());
     }
 
-    /// Two nodes of one name collapse into the last of them when the dict is
-    /// built, silently. TOML refuses the same page outright, and which dialect
-    /// a page is written in is a fence rather than a difference in what it may
-    /// say. (YAML is the one that still takes the last: saphyr collapses the
-    /// repeat while loading, so nothing downstream can see it happened.)
     #[test]
     fn a_key_declared_twice_is_refused() {
         let text = "title \"A\"\ntitle \"B\"\n";
         assert!(parse(text, 0, "a.md", text).is_err());
-        // Nesting is per level: the same name inside a block is a different key.
         let nested = "title \"A\"\nauthor { title \"B\" }\n";
         assert!(parse(nested, 0, "a.md", nested).is_ok());
     }

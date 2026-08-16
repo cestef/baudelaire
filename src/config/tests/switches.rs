@@ -1,11 +1,5 @@
-//! Turning a section back off.
-//!
-//! Presence is the switch for a dozen sections, which is a fine switch right up
-//! until a base config or a theme's `theme.kdl` names one: an overlay applies
-//! nodes *over* the base, so naming the section is what re-enables it, and the
-//! config language has no spelling for deleting a node. Each of these sections
-//! therefore reads one boolean on its own line, the same spelling
-//! `content { markdown }` has always had.
+//! Turning a section back off: an overlay has no spelling for deleting a node,
+//! so a section whose presence is its switch also reads a boolean on its line.
 
 use super::{err, parse};
 use crate::config::Config;
@@ -14,11 +8,8 @@ use crate::config::Config;
 type Reads = fn(&Config) -> bool;
 
 /// Every section whose presence is its switch: the line that names it, with `@`
-/// standing where its own argument goes, and the flag that says whether it is
+/// standing where its own argument goes, and how a config answers whether it is
 /// on.
-///
-/// One table rather than a test each, so a section that gains the switch and
-/// forgets to be listed here is the only way this can go stale.
 const SWITCHES: &[(&str, Reads)] = &[
     ("lint @", |c| c.lint.enabled),
     ("caching @", |c| c.caching.enabled),
@@ -33,11 +24,7 @@ const SWITCHES: &[(&str, Reads)] = &[
         c.generate.pdf.pages.enabled
     }),
     ("links {\n  external @\n}", |c| c.links.external.enabled),
-    // Reads `css` for the whole: the switch sets every kind, so any one of
-    // them answers whether it was thrown.
     ("assets {\n  minify @\n}", |c| c.assets.minify.css()),
-    // The one switch that is *on* by default, so the table's "off until named"
-    // case does not apply to it: see `anchors_keep_the_flag_and_gain_a_block`.
     ("navigation {\n  spa @\n}", |c| c.navigation.spa.enabled),
     ("navigation {\n  standalone @\n}", |c| {
         c.navigation.standalone.enabled
@@ -50,8 +37,6 @@ const SWITCHES: &[(&str, Reads)] = &[
     }),
     (
         "content {\n  collections {\n    posts {\n      paginate @\n    }\n  }\n}",
-        // Not indexed: the same getter answers for a config that names no
-        // collection at all, which is what the default case asks it.
         |c| {
             c.content
                 .collections
@@ -61,13 +46,10 @@ const SWITCHES: &[(&str, Reads)] = &[
     ),
 ];
 
-/// The line with `argument` written where the section's own value goes.
 fn written(line: &str, argument: &str) -> String {
     line.replace('@', argument)
 }
 
-/// Presence still means on, in every spelling that has ever meant it, and each
-/// of these sections is off until something names it.
 #[test]
 fn presence_is_still_the_switch() {
     for &(line, on) in SWITCHES {
@@ -78,9 +60,6 @@ fn presence_is_still_the_switch() {
     }
 }
 
-/// And the whole point: the same line takes it back. Each of these was
-/// `unexpected argument` before, which left a section a theme had turned on with
-/// no way down.
 #[test]
 fn a_flag_on_the_line_turns_a_section_off() {
     for &(line, on) in SWITCHES {
@@ -88,9 +67,8 @@ fn a_flag_on_the_line_turns_a_section_off() {
     }
 }
 
-/// The flag stands in front of the block rather than replacing it, so a site can
-/// keep its settings and still say no: the shape a theme's floor is overridden
-/// in, and the one `html { highlight #false { .. } }` already had.
+/// The flag stands in front of the block rather than replacing it, so a site
+/// can keep its settings and still say no.
 #[test]
 fn a_block_still_reads_behind_the_flag() {
     let cfg = parse("lint #false {\n  strict #true\n}");
@@ -102,9 +80,8 @@ fn a_block_still_reads_behind_the_flag() {
     assert_eq!(cfg.generate.robots.disallow, vec!["/private/".to_owned()]);
 }
 
-/// A profile is the reason this exists. An overlay can only *add* nodes, so
-/// before the flag there was no way for one to undo a section the base had
-/// turned on.
+/// An overlay can only *add* nodes, so the flag is a profile's only way to undo
+/// a section the base turned on.
 #[test]
 fn a_profile_takes_back_what_the_base_turned_on() {
     let cfg = parse(
@@ -127,10 +104,8 @@ fn a_profile_takes_back_what_the_base_turned_on() {
     assert_eq!(dev.generate.cards.width, 800);
 }
 
-/// `caching` is the one switch that fills something in when it is thrown, so it
-/// is also the one that must fill nothing when it is not: the conventional
-/// policy is what a `caching { }` block *means*, and a section turned off has no
-/// policy to state.
+/// `caching` is the one switch that fills a policy in when it is thrown, so it
+/// is also the one that must fill nothing when it is not.
 #[test]
 fn caching_off_states_no_policy() {
     let cfg = parse("caching");
@@ -144,8 +119,6 @@ fn caching_off_states_no_policy() {
     assert_eq!(cfg.caching.header("/a.css", "assets", true), None);
 }
 
-/// The line reads a boolean and only a boolean: `generate { robots "junk" }` was
-/// refused as a value nothing read, and is now refused as the value it is not.
 #[test]
 fn err_a_switch_reads_a_boolean_and_nothing_else() {
     for config in [
@@ -159,8 +132,6 @@ fn err_a_switch_reads_a_boolean_and_nothing_else() {
             "{config}: {rendered}"
         );
     }
-    // One boolean, not two: the second is read by nobody, exactly as it is on
-    // any other key that reads a single value.
     let rendered = err("lint #false #true");
     assert!(rendered.contains("unexpected argument"), "{rendered}");
     assert!(
@@ -169,15 +140,13 @@ fn err_a_switch_reads_a_boolean_and_nothing_else() {
     );
 }
 
-/// A section with no switch is unchanged: its line is still read by nobody, and
-/// a value there is still the forgotten-block mistake it always was.
+/// A section with no switch still refuses a value, `generate { pdf }` included:
+/// it groups the per-page block and has no flag of its own for one to set.
 #[test]
 fn err_a_section_without_a_switch_still_refuses_a_value() {
     for (config, node) in [
         ("paths #false", "paths"),
         ("serve #false", "serve"),
-        // `pdf { }` groups the per-page block and nothing else: there is no
-        // flag for a switch to set, so `pdf #false` would configure nothing.
         ("generate {\n  pdf #false\n}", "pdf"),
     ] {
         let rendered = err(config);
@@ -188,9 +157,8 @@ fn err_a_section_without_a_switch_still_refuses_a_value() {
     }
 }
 
-/// The spelling this one copies, unchanged: `markdown` reaches the flag through
-/// its own documented `enabled` key rather than through a section switch, and
-/// both spellings still agree.
+/// `markdown` reaches the flag through its own `enabled` key rather than
+/// through a section switch, and both spellings agree.
 #[test]
 fn the_markdown_precedent_is_untouched() {
     assert!(parse("").content.markdown.enabled);

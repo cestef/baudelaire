@@ -1,15 +1,7 @@
 //! A PDF of every page, laid out beside its HTML.
 //!
-//! The same source, the other target: where the page's own compile builds a
-//! DOM, this one lays the document out on paper and exports it. It is the thing
-//! a Typst-native generator can do that a Markdown one cannot, so it is
-//! deliberately the *page*, template and all, and not a stripped print view.
-//!
-//! The template is paged, so it is separate from the layout for the reason
-//! written in [`super::card`]: `html.elem` draws nothing on this target. It is
-//! handed the same `page` dict the layout gets, though, built once by
-//! [`Prepare::bind`], so `page.strings` and `page.date` mean the same thing on
-//! paper as on screen.
+//! The template is paged and so separate from the layout, but is handed the
+//! same `page` dict, built once by `Prepare::bind`.
 
 use std::path::PathBuf;
 
@@ -47,15 +39,15 @@ impl Sidecar for Pdf {
             .bind(page, rooted, &cx.prepare.dir(template), template))
     }
 
-    /// Identified by the page's permalink: stable across builds, and unique on
-    /// a site where two pages may share a title.
+    /// Identified by the page's permalink, which is stable across builds and
+    /// unique where a title is not.
     fn encode(&self, laid: &Laid, page: &Page) -> Result<Vec<u8>> {
         laid.pdf(Self::NAME, &page.permalink)
     }
 }
 
 impl Pdf {
-    /// The kind's name: the file id of its synthetic module, the label its
-    /// export errors carry, and the noun the summary counts.
+    /// The file id of the synthetic module, the label its export errors carry,
+    /// and the noun the summary counts.
     pub(in crate::engine) const NAME: &'static str = "pdf";
 }

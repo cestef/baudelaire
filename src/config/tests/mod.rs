@@ -26,9 +26,8 @@ pub(super) fn err(text: &str) -> String {
     format!("{:?}", miette::Report::from(error))
 }
 
-/// The diagnostic code a config that must not parse reports. Beside [`err`]
-/// because the two are different contracts: the prose is for a reader, the code
-/// is what a caller and a scenario key on, and only the second is stable.
+/// The diagnostic code a config that must not parse reports, which unlike its
+/// prose is stable.
 pub(super) fn code(text: &str) -> String {
     let error = Config::parse(text).expect_err("should be refused");
     miette::Diagnostic::code(&error).map_or_else(String::new, |code| code.to_string())
@@ -75,11 +74,6 @@ fn scalars() {
 }
 
 /// A scope whose settings are `key=value` on one line refuses a `{ }` block.
-///
-/// It used to accept one and read nothing out of it: the block parsed, the
-/// build went green, and the setting inside was simply not applied. The
-/// generated reference called these "block" at the time, so it documented the
-/// spelling that did nothing.
 #[test]
 fn err_a_block_on_an_attribute_scope_is_refused() {
     for (config, node) in [
@@ -188,14 +182,11 @@ fn err_missing_children() {
 
 #[test]
 fn bare_flag_node_enables() {
-    // A bare flag node enables; the default is on too.
     assert!(parse("").prune.enabled);
     assert!(parse("prune").prune.enabled);
     assert!(!parse("prune #false").prune.enabled);
 }
 
-/// `prune` grew a block without losing the flag it has always been: the keep
-/// list reads on its own, and the flag still stands in front of it.
 #[test]
 fn prune_keeps_what_it_is_told_to() {
     assert!(parse("prune").prune.keep.is_empty());
@@ -278,10 +269,8 @@ fn err_duplicate_profile() {
 
 #[test]
 fn err_unexpected_positional_argument() {
-    // taxonomies take no positional arguments
     let err = Config::parse("content {\n  taxonomies {\n    tags \"extra\"\n  }\n}\n").unwrap_err();
     assert!(err.to_string().contains("unexpected argument"), "{err}");
-    // collections consume exactly one (the glob); a second is discarded today
     let err =
         Config::parse("content {\n  collections {\n    posts \"posts/*.typ\" \"extra\"\n  }\n}\n")
             .unwrap_err();
@@ -299,9 +288,6 @@ fn err_unset_env_var_without_default() {
     assert!(rendered.contains(":-default"), "{rendered}");
 }
 
-/// `html { anchors }` was a flag and stays one, with a block behind it: the id
-/// half has always been on, and the link half is opt-in because it is markup the
-/// site did not write.
 #[test]
 fn anchors_keep_the_flag_and_gain_a_block() {
     use crate::config::Place;
@@ -324,19 +310,15 @@ fn anchors_keep_the_flag_and_gain_a_block() {
     assert_eq!(anchors.levels, vec![2, 3]);
     assert_eq!(anchors.link.as_deref(), Some("#"));
     assert_eq!(anchors.place, Place::Before);
-    // An empty list is every level; a narrowed one covers what it names.
     assert!(anchors.covers(2) && anchors.covers(3));
     assert!(!anchors.covers(1) && !anchors.covers(4));
     assert!(default.covers(1) && default.covers(6));
 
-    // An empty text is no link rather than an empty one, which is also the only
-    // spelling that takes back a `link` a theme's own config already set.
     let cleared = parse("html {\n  anchors {\n    link \"\"\n  }\n}");
     assert_eq!(cleared.html.anchors.link, None);
 }
 
-/// There are six heading levels, so `levels 0` and `levels 7` are typos that
-/// would narrow the set to nothing at all.
+/// There are six heading levels, so `levels 0` and `levels 7` are typos.
 #[test]
 fn err_a_heading_level_that_is_not_one_is_refused() {
     for text in [
@@ -347,8 +329,6 @@ fn err_a_heading_level_that_is_not_one_is_refused() {
     }
 }
 
-/// A lint rule takes the boolean it always did, or a severity of its own, and
-/// `strict` is the default the unnamed ones follow.
 #[test]
 fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     use crate::config::{Ruled, Severity};
@@ -360,7 +340,6 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     assert_eq!(strict.lint.severity(Ruled::Alt), Severity::Error);
     assert_eq!(strict.lint.severity(Ruled::Headings), Severity::Error);
 
-    // Named, and so kept: `strict` is a default, not an override.
     let mixed = parse("lint {\n  strict\n  headings \"warn\"\n  ids \"off\"\n}");
     assert_eq!(mixed.lint.severity(Ruled::Alt), Severity::Error);
     assert_eq!(mixed.lint.severity(Ruled::Headings), Severity::Warn);
@@ -368,9 +347,6 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     assert!(!mixed.lint.ids.on());
     assert!(mixed.lint.headings.on(), "a warning rule still runs");
 
-    // The flag spelling every site already wrote, bare form included: these
-    // keys were flags before they took a severity, and a bare node enables
-    // everywhere else in this config language.
     let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
     assert_eq!(flags.lint.severity(Ruled::Aria), Severity::Off);
     assert_eq!(
@@ -393,8 +369,6 @@ fn err_a_severity_that_is_not_one_is_refused() {
     );
 }
 
-/// A budget fails by default and can be turned down to a report, which a site
-/// adopting one on existing pages needs.
 #[test]
 fn a_budget_can_report_instead_of_failing() {
     assert!(parse("lint { }").lint.budget.strict);

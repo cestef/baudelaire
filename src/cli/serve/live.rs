@@ -9,22 +9,14 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use tiny_http::Request;
 
-/// Live-reload coordination between the request handler and the rebuild loop.
-///
-/// The handler injects [`Live::SCRIPT`] into HTML responses; the injected
-/// client opens a Server-Sent Events stream at [`Live::ENDPOINT`]. Each
-/// successful rebuild calls [`Live::bump`], pushing a reload to every open
-/// stream.
-///
-/// Streams are keyed by id so a closed connection is reaped promptly: the writer
-/// thread wakes every [`Live::HEARTBEAT`] to send an SSE comment, notices the
-/// dead socket on the failed write, and removes its own entry: no leak waiting
-/// on the next rebuild.
+/// Live-reload coordination between the request handler and the rebuild loop:
+/// the handler injects [`Live::SCRIPT`], the injected client opens a
+/// Server-Sent Events stream at [`Live::ENDPOINT`], and each successful rebuild
+/// calls [`Live::bump`].
 #[derive(Clone, Default)]
 pub(super) struct Live {
     /// One sender per open SSE connection, keyed for self-removal on close.
     streams: Arc<Mutex<HashMap<u64, flume::Sender<Signal>>>>,
-    /// Monotonic source of stream ids.
     next_id: Arc<AtomicU64>,
 }
 
@@ -36,15 +28,8 @@ impl Live {
     /// bound on how long a closed connection lingers before it is reaped.
     const HEARTBEAT: Duration = Duration::from_secs(10);
 
-    /// Client script appended to served HTML.
-    ///
-    /// One file per piece, composed here: the DOM helpers, the diagnostic
-    /// renderer, the panel a message is shown in, the reload stream with its
-    /// status dot, and the alt-click that opens a stamped element's source.
-    /// Each is a lambda, so the block
-    /// scope below is all they share and the endpoint literals reach them
-    /// through the same `concat!` that keeps [`Live::ENDPOINT`] and
-    /// [`Open::ENDPOINT`] in agreement with the client that calls them.
+    /// Client script appended to served HTML, one lambda per file, sharing only
+    /// the block scope below.
     pub(super) const SCRIPT: &'static str = concat!(
         "\n<script>\n{\n",
         "const dom = (",
@@ -83,11 +68,8 @@ impl Live {
         self.push(&Signal::Reload);
     }
 
-    /// Put a failed rebuild's diagnostic on screen in every open tab.
-    ///
-    /// The terminal already says this; the browser did not, and the browser is
-    /// where the author is looking. `text` is the same rendered diagnostic,
-    /// plain, carried as a JSON string so it survives SSE's line framing.
+    /// Put a failed rebuild's diagnostic on screen in every open tab; `text` is
+    /// carried as a JSON string so it survives SSE's line framing.
     pub(super) fn failed(&self, text: &str) {
         let payload = serde_json::to_string(text).unwrap_or_else(|_| String::from("\"\""));
         self.push(&Signal::Failed(payload));
@@ -99,10 +81,9 @@ impl Live {
             .retain(|_, tx| tx.send(signal.clone()).is_ok());
     }
 
-    /// Open an SSE stream for `req` on its own thread, writing directly to the
-    /// socket so each event flushes the instant a rebuild finishes. The thread
-    /// removes its own entry when it ends, so a closed tab frees its slot within
-    /// one [`Live::HEARTBEAT`] instead of lingering until the next rebuild.
+    /// Open an SSE stream for `req` on its own thread, writing straight to the
+    /// socket so each event flushes at once. The thread removes its own entry
+    /// when it ends, within one [`Live::HEARTBEAT`] of the tab closing.
     pub(super) fn serve(&self, req: Request) {
         let (tx, signals) = flume::unbounded();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -112,8 +93,6 @@ impl Live {
             let mut socket = req.into_writer();
             if socket.write_all(Self::HEAD.as_bytes()).is_ok() && socket.flush().is_ok() {
                 loop {
-                    // A rebuild pushes `reload`; an idle timeout emits a comment
-                    // keep-alive whose failed write reveals a closed socket.
                     let payload = match signals.recv_timeout(Self::HEARTBEAT) {
                         Ok(signal) => signal.frame(),
                         Err(flume::RecvTimeoutError::Timeout) => ": ping\n\n".to_owned(),
@@ -139,8 +118,7 @@ pub(super) enum Signal {
 }
 
 impl Signal {
-    /// This signal as an SSE frame. The default (unnamed) event stays `reload`,
-    /// so a client from before the overlay existed still reloads.
+    /// This signal as an SSE frame; the unnamed default event stays `reload`.
     fn frame(&self) -> String {
         match self {
             Self::Reload => "data: reload\n\n".to_owned(),
@@ -153,8 +131,6 @@ impl Signal {
 mod tests {
     use super::*;
 
-    /// A stream whose client is gone is reaped on the next bump, rather than
-    /// accumulating in the registry.
     #[test]
     fn bump_reaps_streams_whose_client_disconnected() {
         let live = Live::default();
@@ -162,7 +138,6 @@ mod tests {
         let (dead_tx, dead_rx) = flume::unbounded::<Signal>();
         live.streams.lock().insert(0, live_tx);
         live.streams.lock().insert(1, dead_tx);
-        // The dead stream's receiver (its writer thread) is gone.
         drop(dead_rx);
 
         live.bump();
@@ -170,12 +145,9 @@ mod tests {
         let streams = live.streams.lock();
         assert!(streams.contains_key(&0), "live stream kept");
         assert!(!streams.contains_key(&1), "disconnected stream reaped");
-        // The surviving stream received the reload signal.
         assert!(matches!(live_rx.try_recv(), Ok(Signal::Reload)));
     }
-    /// A failed rebuild reaches the browser too. It used to reach only the
-    /// terminal, so a tab kept showing the last good page with no hint that the
-    /// save had not taken.
+
     #[test]
     fn a_failed_rebuild_pushes_its_diagnostic_to_open_tabs() {
         let live = Live::default();
@@ -188,14 +160,9 @@ mod tests {
             panic!("the open stream should have been signalled");
         };
         let frame = signal.frame();
-        // A named event, so it is distinguishable from `EventSource`'s own
-        // transport errors, and JSON-encoded so the newline survives SSE's
-        // line framing intact.
         assert!(frame.starts_with("event: failed\ndata: "), "{frame}");
         assert!(frame.contains(r"expected `}`\n  at line 3"), "{frame}");
         assert!(frame.ends_with("\n\n"), "{frame}");
-        // Exactly one `data:` line: an unencoded newline would split the frame
-        // and the client would parse half a diagnostic.
         assert_eq!(frame.matches("data: ").count(), 1, "{frame}");
     }
 }

@@ -1,9 +1,5 @@
-//! A theme from a directory on this machine.
-//!
-//! The one source with nothing between it and the files: a theme you are
-//! writing, one another project already has, or one you cloned yourself. It is
-//! also what every fetching source reduces to once it has the bytes somewhere,
-//! so the reading of a theme directory lives here and they call it.
+//! A theme from a directory on this machine, and the reading of a theme
+//! directory every fetching source reduces to once it has the bytes somewhere.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,11 +20,9 @@ impl Local {
     /// Read a directory as a theme: every file under it, keyed by its path
     /// relative to the root.
     ///
-    /// Two things are left behind, and both would be wrong to carry. A `.git`
-    /// directory is the source's history, not the theme's files. A lock is the
-    /// *other* copy's record of what baudelaire wrote there, and copying it
-    /// would have this copy claim bytes it never wrote and an origin it did not
-    /// come from.
+    /// A `.git` directory and a lock are left behind: the history is not the
+    /// theme's files, and the lock is the other copy's record of what
+    /// baudelaire wrote there.
     pub fn read(
         root: &Path,
         name: String,
@@ -59,7 +53,7 @@ impl Local {
         })
     }
 
-    /// The name a directory's theme is known by: the directory's own.
+    /// The name a directory's theme is known by: the directory's own name.
     pub fn names(path: &Path) -> Result<String> {
         path.file_name()
             .map(|name| name.to_string_lossy().into_owned())
@@ -109,9 +103,6 @@ impl Source for Local {
 mod tests {
     use super::*;
 
-    /// What a path spec looks like: a directory that is there, or a spelling
-    /// that could only be a path. A bare word is not one, or every typo would
-    /// be answered as a missing directory instead of as a theme name.
     #[test]
     fn a_path_is_claimed_by_its_spelling_or_by_being_there() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -123,8 +114,6 @@ mod tests {
         assert!(Local.parse("plume").is_none(), "a bare word is a name");
     }
 
-    /// The two files a copy must not carry: the source's history, and the other
-    /// copy's record of what baudelaire wrote there.
     #[test]
     fn a_read_leaves_the_history_and_the_other_copy_s_record() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -147,8 +136,6 @@ mod tests {
         assert_eq!(fetched.name, "plume");
     }
 
-    /// A directory with nothing in it is not a theme, and the run says so
-    /// rather than writing a record of no files and reporting success.
     #[test]
     fn an_empty_directory_is_not_a_theme() {
         let tmp = tempfile::tempdir().expect("tempdir");

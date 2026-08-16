@@ -10,7 +10,6 @@ use crate::config::node::NodeExt;
 /// [llmstxt.org]: https://llmstxt.org
 #[derive(Debug, Clone, Hash, Default)]
 pub struct LlmsConfig {
-    /// Whether to emit `llms.txt`.
     pub enabled: bool,
     /// Optional one-line summary rendered as the blockquote under the title.
     pub summary: Option<String>,

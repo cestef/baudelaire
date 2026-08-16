@@ -19,45 +19,28 @@ use crate::config::{
     RobotsConfig, SearchConfig,
 };
 
-/// The files a build emits beside the pages themselves. Each one is opt-in:
-/// either a flag or a block whose presence turns it on.
+/// Each field is opt-in: either a flag or a block whose presence turns it on.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct GenerateConfig {
-    /// Emit `sitemap.xml`. Opt-in like its neighbours, and needs a `url`.
+    /// Emit `sitemap.xml`, which needs `url` set.
     pub sitemap: bool,
-    /// Emit a `_headers` rule file: the `caching` policy, the content security
-    /// policy, and whatever else the site states for itself.
     pub headers: HeadersConfig,
-    /// Emit a `_redirects` rule file instead of the per-path HTML stubs.
-    ///
-    /// Netlify and Cloudflare Pages read it from the publish directory and
-    /// answer with a real 301, where a stub is a client-side round trip that
-    /// passes link equity worse. It *replaces* the stubs rather than joining
-    /// them: both hosts serve a static file in preference to a redirect rule,
-    /// so a stub sitting at the old path would win and the 301 would never
-    /// fire.
+    /// Emit a `_redirects` file in place of the per-path HTML stubs; both
+    /// Netlify and Cloudflare Pages serve a static file over a redirect rule,
+    /// so a stub would shadow the rule if the two coexisted.
     pub redirects: bool,
-    /// `robots.txt` generation.
     pub robots: RobotsConfig,
-    /// `llms.txt` generation.
     pub llms: LlmsConfig,
-    /// `manifest.webmanifest` generation.
     pub manifest: ManifestConfig,
-    /// Syndication feeds.
     pub feed: FeedConfig,
-    /// Client-side search indexes.
     pub search: SearchConfig,
-    /// Generated social cards.
     pub cards: CardsConfig,
-    /// A PDF of every page, beside its HTML.
     pub pdf: PdfConfig,
-    /// Documents bound from many pages, keyed by id. The id is the filename
-    /// stem every format of that bundle is written under.
+    /// Documents bound from many pages, keyed by the filename stem every format
+    /// of that bundle is written under.
     pub bundles: Vec<(String, BundleConfig)>,
 }
 
-/// The `generate { .. }` section: the files a build emits beside the pages.
-/// Each child is opt-in, either a flag or a block whose presence turns it on.
 impl Section for GenerateConfig {
     const RULES: Block<Self> = Block(&[
         ("sitemap", Flag, "Write `sitemap.xml`.", |c, n, t| {

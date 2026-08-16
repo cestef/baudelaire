@@ -5,31 +5,21 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::error::ConfigError;
 
-/// Dev server options.
 #[derive(Debug, Clone, Hash)]
 pub struct ServeConfig {
-    /// Port to listen on.
     pub port: u16,
-    /// Address to bind.
     pub bind: String,
-    /// Open browser on start.
     pub open: bool,
-    /// Watch for changes and rebuild.
     pub watch: bool,
-    /// Extra paths to watch, beyond content, templates, and assets (e.g. a data
-    /// directory or a Tailwind input outside `assets/`).
+    /// Extra paths to watch, beyond content, templates, and assets.
     pub include: Vec<String>,
-    /// Paths the watcher ignores (e.g. hook-generated files), so a `before`
-    /// hook writing into a watched directory does not trigger a rebuild loop.
-    /// Checked first, so it overrides both the defaults and `include`.
+    /// Paths the watcher ignores, checked first so they override both the
+    /// defaults and `include`.
     pub exclude: Vec<String>,
-    /// The command that opens a source location, run when a preview alt-click
-    /// asks for one. The program first, then each argument as its own word,
-    /// with `{file}`, `{line}` and `{column}` substituted per argument: no
-    /// shell, so a path is never re-parsed as a command line.
-    ///
-    /// Empty means no editor, and the preview says so rather than guessing at
-    /// one.
+    /// The command a preview alt-click runs to open a source location: the
+    /// program, then each argument as its own word, with `{file}`, `{line}` and
+    /// `{column}` substituted per argument and no shell in between. Empty means
+    /// no editor.
     pub editor: Vec<String>,
 }
 
@@ -42,9 +32,6 @@ impl Default for ServeConfig {
             watch: true,
             include: Vec::new(),
             exclude: Vec::new(),
-            // No guess: launching a program is the author's instruction, and
-            // `$EDITOR` is as likely to be a terminal editor with no terminal
-            // to appear in.
             editor: Vec::new(),
         }
     }
@@ -106,11 +93,6 @@ impl Section for ServeConfig {
                 Ok(())
             },
         ),
-        // The program and its arguments, each its own word: the command is run
-        // directly, never through a shell, so a whole command line in one
-        // string would name a program that does not exist. Caught here, where
-        // the span points at what the author wrote, rather than as a spawn
-        // failure on the first alt-click.
         (
             "editor",
             Texts,

@@ -4,10 +4,9 @@ use crate::config::dispatch::Kind::{Flag, Text};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
-/// Draft handling: whether drafts build, and the file-stem suffix marking one.
 #[derive(Debug, Clone, Hash)]
 pub struct DraftConfig {
-    /// Build draft pages. Runtime flag, set by `--drafts` or a profile.
+    /// Set by `--drafts` or a profile, not only by this block.
     pub build: bool,
     /// Suffix marking draft sources, e.g. `post.draft.typ`.
     pub suffix: String,

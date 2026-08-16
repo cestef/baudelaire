@@ -3,8 +3,6 @@
 use super::{code, err, parse};
 use crate::config::{Config, Version};
 
-/// `minify` was a flag, and the block has to stay that flag: its presence turns
-/// every kind on, and the line takes them all back off.
 #[test]
 fn minify_keeps_the_flag_it_used_to_be() {
     let off = Config::default().assets.minify;
@@ -18,8 +16,6 @@ fn minify_keeps_the_flag_it_used_to_be() {
     assert!(!back.css() && !back.js());
 }
 
-/// And the point of the block: the two are separate asks, so a site can keep
-/// small stylesheets and readable scripts.
 #[test]
 fn minify_names_one_kind_without_losing_the_other() {
     let one = parse("assets {\n  minify {\n    js #false\n  }\n}")
@@ -35,13 +31,8 @@ fn minify_names_one_kind_without_losing_the_other() {
     assert!(!neither.js());
 }
 
-/// A profile naming one kind must not answer for the other.
-///
-/// `Section::fill` runs a section's switch on *every* mention, and this switch
-/// used to write both content flags, so an overlay that said only `css` turned
-/// `js` back on: the site asked for readable scripts, the profile said nothing
-/// about scripts, and the build shipped them mangled. Fill-in-place is the
-/// whole contract of a profile overlay.
+/// A profile naming one kind must not answer for the other, `Section::fill`
+/// running a section's switch on every mention.
 #[test]
 fn a_profile_naming_one_kind_leaves_the_other_alone() {
     let config = parse(
@@ -67,7 +58,6 @@ fn targets_are_versions_packed_one_byte_per_component() {
     assert_eq!(targets.chrome, Some(Version(80 << 16)));
     assert_eq!(targets.safari, Some(Version((13 << 16) | (1 << 8))));
     assert_eq!(targets.ios, Some(Version((15 << 16) | (4 << 8) | 1)));
-    // A browser nobody named is not a constraint.
     assert_eq!(targets.firefox, None);
     assert!(!Config::default().assets.targets.any());
 }
@@ -83,24 +73,18 @@ fn a_version_that_is_not_one_is_refused() {
     ] {
         assert_eq!(code(text), "baudelaire::config::bad_version", "{text}");
     }
-    // Written unquoted it is refused as a *version*, not as a type mismatch:
-    // that is the mistake this key actually has, and the help explaining the
-    // quoting used to reach only an author who had already got it right.
     for text in [
         "assets {\n  targets {\n    chrome 80\n  }\n}",
         "assets {\n  targets {\n    safari 15.4\n  }\n}",
     ] {
         assert_eq!(code(text), "baudelaire::config::bad_version", "{text}");
     }
-    // And what the message quotes back is what the file says, not the float it
-    // has already become.
     assert!(
         err("assets {\n  targets {\n    safari 15.4\n  }\n}").contains("15.4"),
         "the message quotes the value as written"
     );
 }
 
-/// A browser this crate does not know is a typo, named as one.
 #[test]
 fn an_unknown_browser_is_refused() {
     assert_eq!(

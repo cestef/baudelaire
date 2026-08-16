@@ -1,7 +1,5 @@
-//! Multi-language sites: a `languages` block turns on i18n. A `.{code}.typ`
-//! filename (or a frontmatter `lang`) marks a translation; the default language
-//! keeps clean root URLs while others sit under `/{code}/`. Untranslated pages
-//! are simply omitted for a language.
+//! Multi-language sites: a `languages` block turns on i18n, and a `.{code}.typ`
+//! filename or a frontmatter `lang` marks a translation.
 
 mod common;
 
@@ -58,7 +56,6 @@ fn other_languages_are_prefixed_by_code() {
 
 #[test]
 fn untranslated_pages_are_omitted() {
-    // German is declared but has no content, so nothing builds under /de/.
     let site = multilingual();
     site.stats();
     assert!(!site.exists("public/de/index.html"));
@@ -72,7 +69,6 @@ fn frontmatter_lang_overrides_the_filename() {
         "content/about.typ",
         "#let frontmatter = (title: \"About\",)\nAbout.\n",
     );
-    // No `.de` suffix; the language comes from frontmatter instead.
     site.write(
         "content/about-de.typ",
         "#let frontmatter = (title: \"Über\", slug: \"about\", lang: \"de\",)\nÜber.\n",
@@ -134,7 +130,6 @@ fn tagged_blog() -> Site {
 fn taxonomies_do_not_merge_across_languages() {
     let site = tagged_blog();
     site.stats();
-    // Each language gets its own tag pages; the term is never merged.
     assert!(site.exists("public/tags/rust/index.html"));
     assert!(site.exists("public/fr/tags/rust/index.html"));
     assert!(site.exists("public/fr/tags/index.html"));
@@ -144,7 +139,6 @@ fn taxonomies_do_not_merge_across_languages() {
 fn pagination_is_per_language() {
     let site = tagged_blog();
     site.stats();
-    // English has two posts at paginate=1 -> page 1 + page 2; French has one.
     assert!(site.exists("public/blog/index.html"));
     assert!(site.exists("public/blog/page/2/index.html"));
     assert!(site.exists("public/fr/blog/index.html"));
@@ -209,7 +203,6 @@ fn hreflang_alternates_link_the_translations() {
     let site = hosted();
     site.stats();
     let en = site.output("index.html");
-    // Both editions plus an x-default, on the page and in the sitemap.
     assert!(en.contains("hreflang=\"en\"") && en.contains("hreflang=\"fr\""));
     assert!(en.contains("hreflang=\"x-default\""));
     assert!(en.contains("property=\"og:locale\" content=\"en\""));
@@ -217,9 +210,8 @@ fn hreflang_alternates_link_the_translations() {
     assert!(map.contains("hreflang=\"fr\"") && map.contains("xmlns:xhtml"));
 }
 
-/// A localized slug and a working switcher used to be mutually exclusive:
-/// editions pair on `collection/slug`, so a French edition that renamed itself
-/// became a standalone page. `translation` names the pairing outright.
+/// Editions otherwise pair on `collection/slug`, so a `translation` name is
+/// what keeps a renamed edition from becoming a standalone page.
 #[test]
 fn a_named_translation_pairs_editions_with_different_slugs() {
     let site = Site::with(
@@ -240,10 +232,8 @@ fn a_named_translation_pairs_editions_with_different_slugs() {
         "#let frontmatter = (title: \"Bonjour\", translation: \"greeting\")\nx\n",
     );
     site.stats();
-    // Each edition keeps its own slug...
     assert!(site.exists("public/posts/hello/index.html"));
     assert!(site.exists("public/fr/posts/bonjour/index.html"));
-    // ...and they still know about each other.
     let en = site.output("posts/hello/index.html");
     assert!(
         en.contains("hreflang=\"fr\"") && en.contains("/fr/posts/bonjour/"),
@@ -283,8 +273,7 @@ fn template_receives_lang_translations_and_strings() {
     assert!(fr.contains("L=fr") && fr.contains("S=Lire") && fr.contains("T=2"));
 }
 
-/// The `baudelaire:*` virtual modules are served by the bundler, which the `js`
-/// feature owns.
+/// The `baudelaire:*` modules are served by the bundler, which `js` owns.
 #[test]
 #[cfg(feature = "js")]
 fn i18n_module_inlines_languages_and_strings() {
@@ -323,8 +312,6 @@ fn i18n_module_inlines_languages_and_strings() {
 
 #[test]
 fn an_undeclared_suffix_is_part_of_the_slug() {
-    // A single-language site: a dotted stem is not a language, so it survives
-    // into the slug rather than being peeled off.
     let site = Site::with(
         r#"
         site "T"
@@ -340,9 +327,6 @@ fn an_undeclared_suffix_is_part_of_the_slug() {
     assert!(!site.exists("public/fr/notes/index.html"));
 }
 
-/// Each language gets its own feed identity and its own search index. A shared
-/// `<id>` made `/rss.xml` and `/fr/rss.xml` one feed to an aggregator, and a
-/// single global index served English hits to a visitor searching from `/fr/`.
 #[test]
 fn feeds_and_search_are_per_language() {
     let site = Site::with(
@@ -373,7 +357,6 @@ fn feeds_and_search_are_per_language() {
     );
     site.stats();
 
-    // Distinct Atom feed ids, each naming its own feed.
     let en = site.output("atom.xml");
     let fr = site.output("fr/atom.xml");
     assert!(en.contains("<id>https://host.test/atom.xml</id>"), "{en}");
@@ -381,22 +364,18 @@ fn feeds_and_search_are_per_language() {
         fr.contains("<id>https://host.test/fr/atom.xml</id>"),
         "{fr}"
     );
-    // ...and JSON Feed's self-link follows the file it is written to.
     assert!(
         site.output("fr/feed.json")
             .contains("https://host.test/fr/feed.json"),
         "{}",
         site.output("fr/feed.json")
     );
-    // The per-language title override reaches the feed.
     assert!(fr.contains("T (fr)"), "{fr}");
 
-    // One index per language, each holding only its own pages.
     let en = site.output("search.json");
     let fr = site.output("fr/search.json");
     assert!(en.contains("Hello") && !en.contains("Bonjour"), "{en}");
     assert!(fr.contains("Bonjour") && !fr.contains("Hello"), "{fr}");
-    // The French client fetches the French index.
     let client = site.output("fr/search.js");
     assert!(
         client.contains("const INDEX = \"/fr/search.json\""),
@@ -404,9 +383,6 @@ fn feeds_and_search_are_per_language() {
     );
 }
 
-/// Generated listings are translations of each other too: their page ids used
-/// to carry the language scope, so a taxonomy index had no switcher and no
-/// `hreflang`, and the generated chrome was English in every language.
 #[test]
 fn generated_listings_are_translated_and_localized() {
     let site = Site::with(
@@ -442,7 +418,6 @@ fn generated_listings_are_translated_and_localized() {
     );
     site.stats();
 
-    // The sitemap pairs the two taxonomy indexes as alternates.
     let map = site.output("sitemap.xml");
     assert!(map.contains("/fr/tags/"), "{map}");
     let tags = map
@@ -453,8 +428,7 @@ fn generated_listings_are_translated_and_localized() {
 }
 
 /// A translated page writes the same `#link("b.typ")` as its original and means
-/// its own edition: resolving language-blind sent every French link to the
-/// English page, and did so silently because the link resolved.
+/// its own edition.
 #[test]
 fn typ_links_resolve_to_the_linking_page_s_language() {
     let site = multilingual();
@@ -478,8 +452,6 @@ fn typ_links_resolve_to_the_linking_page_s_language() {
     assert!(fr.contains("\"/fr/posts/hello/\""), "{fr}");
 }
 
-/// Slugs and heading anchors keep Unicode letters: dropping them turned `café`
-/// into `caf` and left a page named in a non-Latin script with no slug at all.
 #[test]
 fn unicode_names_survive_slugging() {
     let site = Site::with(

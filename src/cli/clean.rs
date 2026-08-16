@@ -10,9 +10,8 @@ use crate::error::Result;
 use crate::error::warning::{CleanDefaults, CleanRefused};
 use crate::ui::Ui;
 
-/// Arguments for `baudelaire clean`. With no target flag every directory is
-/// swept; naming targets narrows it to those, so `clean --cache` forces a
-/// rebuild without discarding announce state.
+/// With no target flag every directory is swept; naming targets narrows the
+/// sweep to those.
 #[derive(Args, Debug, Clone, Default)]
 pub struct CleanArgs {
     /// Remove everything: the output directory and all local build state.
@@ -39,9 +38,7 @@ pub struct CleanArgs {
 }
 
 /// One nameable `clean` target: the flag that selects it and the directories it
-/// removes. THE single source of what `clean` can sweep: a new target is one
-/// row here plus its flag on [`CleanArgs`]; `all` and the narrowed `targets`
-/// both derive from this table.
+/// removes.
 struct CleanTarget {
     selected: fn(&CleanArgs) -> bool,
     dirs: fn(&Config) -> Vec<PathBuf>,
@@ -62,26 +59,14 @@ const CLEAN_TARGETS: &[CleanTarget] = &[
     },
 ];
 impl CleanArgs {
-    /// Whether this is the wholesale wipe. Naming no target stays the shorthand
-    /// for it, and `--all` is the spelling a script can state, so "I meant
-    /// everything" and "I forgot the flag" stop being the same invocation.
+    /// Whether this is the wholesale wipe; naming no target is shorthand for it.
     pub(super) fn all(&self) -> bool {
         self.all || CLEAN_TARGETS.iter().all(|t| !(t.selected)(self))
     }
 
     /// Remove this invocation's targets, skipping any that would take the
-    /// project with them.
-    ///
-    /// The paths are printed before anything is removed, whether or not they
-    /// are about to be confirmed: they come from config, so the directory named
-    /// `dist` is only the one you expect if the config says what you think it
-    /// does.
-    ///
-    /// What is refused is settled before the listing, not during the removal.
-    /// It used to be settled during: a `--dry-run` listed every existing target
-    /// and reported them all as "to remove", including the ones a real run
-    /// would then refuse, so the preview of a destructive command disagreed
-    /// with the command.
+    /// project with them. What is refused is settled before the listing, so a
+    /// `--dry-run` previews exactly what a real run would take.
     fn sweep(
         &self,
         ui: &Ui,
@@ -94,8 +79,6 @@ impl CleanArgs {
             .into_iter()
             .filter(|dir| dir.exists())
             .partition(|dir| Self::removable(dir, root));
-        // Warned about in a dry run too: "this one is not going anywhere" is
-        // exactly what a preview is for.
         for dir in refused {
             ui.warn(CleanRefused { dir });
         }
@@ -110,9 +93,6 @@ impl CleanArgs {
             ui.done(format_args!("{} to remove", Self::count(dirs.len())));
             return Ok(());
         }
-        // A refusal is an answer, and saying "nothing to clean" reported the
-        // opposite of what happened: there was something to clean, and it is
-        // still there.
         if !self.consented(interaction, dirs.len())? {
             ui.done(format_args!(
                 "declined; {} left in place",
@@ -128,13 +108,8 @@ impl CleanArgs {
     }
 
     /// The config to sweep by, falling back to the built-in paths when the file
-    /// exists and does not load.
-    ///
-    /// A config that is missing entirely stays an error: `clean` would
-    /// otherwise sweep `public` and `.baudelaire` out of whatever directory it
-    /// was run in, which is not a recovery. One that exists and does not parse
-    /// is the case worth recovering from, since `clean` is what you reach for
-    /// when the project is in a state you want gone.
+    /// exists and does not load. A missing config stays an error, or `clean`
+    /// would sweep the built-in paths out of whatever directory it was run in.
     fn config(cx: &Cx) -> Result<Config> {
         match cx.announced("cleaning") {
             Ok(config) => Ok(config),
@@ -152,13 +127,9 @@ impl CleanArgs {
         }
     }
 
-    /// Whether the sweep may go ahead.
-    ///
-    /// Only the wholesale wipe asks. It takes the output directory *and* every
-    /// scrap of local state with it, announce state included, which is remote
-    /// reconciliation state: wiping it changes what the next `announce` does to
-    /// a live repository. A narrowed `clean --cache` costs a rebuild and needs
-    /// no ceremony.
+    /// Whether the sweep may go ahead. Only the wholesale wipe asks: it takes
+    /// announce state with it, which decides what the next `announce` does to a
+    /// live repository.
     pub(super) fn consented(
         &self,
         interaction: &dyn crate::remote::Interaction,
@@ -185,21 +156,14 @@ impl CleanArgs {
     }
 
     /// Whether `dir` may be removed: it must not be the project root, nor an
-    /// ancestor of it.
-    ///
-    /// The paths come from config with no containment check of their own, so
-    /// `paths { dist "." }` deleted the whole project and `cache { dir "/" }`
-    /// everything above it. A `dist` deliberately placed outside the project
-    /// stays cleanable: only swallowing the project is refused.
+    /// ancestor of it. A `dist` placed outside the project stays cleanable.
     pub(super) fn removable(dir: &Path, root: &Path) -> bool {
         !crate::fs::canonical(root).starts_with(crate::fs::canonical(dir))
     }
 
-    /// The directories to remove for this invocation. A full sweep clears the
-    /// output plus the whole scratch root in one step (covering the cache,
-    /// announce state, and any future intermediate); a relocated cache dir lives
-    /// outside that root, so it is named explicitly. A narrowed sweep removes
-    /// only the [`CLEAN_TARGETS`] whose flags were set.
+    /// The directories to remove for this invocation: a full sweep clears the
+    /// output plus the whole scratch root, naming a relocated cache dir
+    /// separately; a narrowed one removes only the selected [`CLEAN_TARGETS`].
     pub(super) fn targets(&self, config: &Config) -> Vec<PathBuf> {
         if self.all() {
             let mut dirs = vec![config.paths.dist.clone(), PathBuf::from(Config::SCRATCH)];
@@ -228,7 +192,6 @@ mod tests {
     use super::*;
     use crate::ui::Level;
 
-    /// Someone is there, and they say no.
     struct Declines;
 
     impl crate::remote::Interaction for Declines {
@@ -258,9 +221,6 @@ mod tests {
         (tmp, config)
     }
 
-    /// The dry run counts what a real run would take, and nothing else. It used
-    /// to list every existing target, refused ones included, so the preview of
-    /// the destructive command promised more than the command delivered.
     #[test]
     fn a_dry_run_leaves_out_what_a_real_run_would_refuse() {
         let (tmp, config) = project();
@@ -273,13 +233,10 @@ mod tests {
         };
         args.sweep(&ui, &config, tmp.path(), &Declines)
             .expect("a dry run removes nothing and fails at nothing");
-        // The dist that swallows the project is refused, and said so.
         assert_eq!(ui.warnings(), 1);
         assert!(tmp.path().join("cache").is_dir());
     }
 
-    /// Declining says so. It used to report `nothing to clean`, which is the
-    /// opposite of what happened: there was something, and it is still there.
     #[test]
     fn a_declined_sweep_removes_nothing_and_does_not_claim_otherwise() {
         let (tmp, config) = project();

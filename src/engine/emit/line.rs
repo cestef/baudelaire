@@ -1,19 +1,6 @@
-//! A builder for the line-oriented generated files.
-//!
-//! The sibling of [`xml`](super::xml) for the four formats that have no grammar
-//! to speak of: `_redirects`, `_headers`, `robots.txt` and `llms.txt`. Each is
-//! read a line at a time, so a value ends where the line does, and in
-//! `_redirects` where the next space begins. Assembled with `writeln!` they
-//! were exactly as safe as their values happened to be: a page title carrying a
-//! line break put half of itself on a line the host reads as another rule, and
-//! nothing in the build said so.
-//!
-//! Infallible by construction like the XML builder, and for the same reason:
-//! the sink is a `String`, whose `fmt::Write` cannot fail. Unlike XML there is
-//! nothing to escape *to* here, since the only structure these formats have is
-//! the line break itself, so a character a line cannot hold is dropped at the
-//! boundary rather than reported. What is dropped is invisible either way; what
-//! it would have broken is the whole file.
+//! A builder for the line-oriented generated files (`_redirects`, `_headers`,
+//! `robots.txt`, `llms.txt`), where a value ends where the line does and so is
+//! stripped of anything a line cannot hold.
 
 use std::fmt::{self, Write as _};
 
@@ -22,8 +9,7 @@ use std::fmt::{self, Write as _};
 pub(super) struct Lines(String);
 
 impl Lines {
-    /// Open a line. It terminates itself when it goes out of scope, so no
-    /// caller can write a value and forget the break after it.
+    /// Open a line; it terminates itself when it goes out of scope.
     pub(super) fn line(&mut self) -> Line<'_> {
         Line(&mut self.0)
     }
@@ -43,18 +29,15 @@ impl Lines {
 /// One line under construction, written part by part.
 ///
 /// Every part says whether it is text this crate authored or a value from the
-/// site, and only the second kind is filtered. That distinction is the whole
-/// point of the type: a literal `301` and a redirect target are the same bytes
-/// to `writeln!` and can never be the same thing here.
+/// site, and only the second kind is filtered.
 pub(super) struct Line<'a>(&'a mut String);
 
 impl Line<'_> {
     /// Fixed text this crate authored: a prefix, a marker, a separator.
     ///
-    /// `&'static str` rather than `&str`, for the reason
-    /// [`Call::named`](crate::codegen::Call::named) takes one: a literal is the
-    /// only thing whose safety can be checked by reading the call, and anything
-    /// that is not one is a value and belongs in [`Line::value`].
+    /// `&'static str` rather than `&str`, because a literal is the only thing
+    /// whose safety can be checked by reading the call; anything else is a
+    /// value and belongs in [`Line::value`].
     pub(super) fn lit(&mut self, text: &'static str) -> &mut Self {
         self.0.push_str(text);
         self
@@ -70,10 +53,9 @@ impl Line<'_> {
     /// the author named in `generate { headers { } }`, where this crate knows
     /// neither half.
     ///
-    /// The name is written as a [`word`](Line::word) rather than as a
-    /// [`value`](Line::value), because a header name may not carry whitespace
-    /// and one that did would put the rest of itself where the host reads the
-    /// value.
+    /// The name is written as a [`word`](Line::word), because a header name may
+    /// not carry whitespace and one that did would put the rest of itself where
+    /// the host reads the value.
     pub(super) fn pair(&mut self, name: impl fmt::Display, value: impl fmt::Display) -> &mut Self {
         self.word(name).lit(": ").value(value)
     }
@@ -92,15 +74,13 @@ impl Line<'_> {
 
     /// A value in a space-separated field, which loses its whitespace as well:
     /// a `_redirects` rule is three fields on one line, so a path carrying a
-    /// space is read as a rule with a target of `301` and no status at all.
+    /// space shifts every field after it.
     pub(super) fn word(&mut self, value: impl fmt::Display) -> &mut Self {
         let _ = write!(self.0, "{}", Word(&value.to_string()));
         self
     }
 }
 
-/// Terminates the line, so the break is written by the type that knows a line
-/// ended rather than by every caller that wrote one.
 impl Drop for Line<'_> {
     fn drop(&mut self) {
         self.0.push('\n');
@@ -111,9 +91,8 @@ impl Drop for Line<'_> {
 /// dropped, the line break among them.
 ///
 /// Public to the emitters because a value does not always reach a line through
-/// [`Line`]: the content security policy is assembled as one long header value
-/// and only then written into `_headers`, and it has to obey the same rule on
-/// the way.
+/// [`Line`]: the content security policy is assembled as one header value
+/// first, and has to obey the same rule on the way.
 pub(super) struct Plain<'a>(pub &'a str);
 
 impl fmt::Display for Plain<'_> {
@@ -126,12 +105,8 @@ impl fmt::Display for Plain<'_> {
 }
 
 /// Displays a value inside a Markdown inline link: [`Plain`], with the four
-/// delimiters that would end the link early escaped.
-///
-/// `llms.txt` is Markdown, and both halves of `[text](url)` are site values. A
-/// page titled `A [draft] note` wrote `- [A [draft] note](/x/)`, which a reader
-/// parses as a different link or as none; a permalink may carry a paren, which
-/// `Percent` leaves literal because a URL is allowed one.
+/// delimiters that would end the link early escaped; `llms.txt` is Markdown,
+/// and both halves of `[text](url)` are site values.
 struct Link<'a>(&'a str);
 
 impl fmt::Display for Link<'_> {
@@ -161,7 +136,6 @@ impl fmt::Display for Word<'_> {
 mod tests {
     use super::{Lines, Plain};
 
-    /// Each line terminates itself, and a blank one is a line of its own.
     #[test]
     fn parts_assemble_into_terminated_lines() {
         let mut lines = Lines::default();
@@ -172,8 +146,6 @@ mod tests {
         assert_eq!(lines.finish(), "User-agent: *\nDisallow:\n\n# Title\n");
     }
 
-    /// The failure the type exists for: a value carrying a line break used to
-    /// end the line early and leave its tail as a record of its own.
     #[test]
     fn a_value_cannot_open_a_line_of_its_own() {
         let mut lines = Lines::default();
@@ -185,8 +157,6 @@ mod tests {
         );
     }
 
-    /// A space-separated format loses the spaces inside a field, or the fields
-    /// after it shift by one and the status is read off the wrong column.
     #[test]
     fn a_field_of_a_space_separated_line_keeps_its_spaces_out() {
         let mut lines = Lines::default();
@@ -194,9 +164,6 @@ mod tests {
         assert_eq!(lines.finish(), "/oldpath/ /new/\n");
     }
 
-    /// The same rule, reachable without a line: what the policy is written
-    /// through before it becomes one header's value. A space is a value's own
-    /// business here, unlike in a field.
     #[test]
     fn a_plain_value_drops_what_a_line_cannot_hold() {
         assert_eq!(Plain("a\r\nb").to_string(), "ab");

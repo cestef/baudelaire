@@ -1,10 +1,5 @@
 //! The handler protocol: what an asset kind is, and the registry of the kinds
-//! this build knows.
-//!
-//! One [`Handler`] owns one kind end to end: which files it claims, when it
-//! runs, and how a claimed file becomes the bytes written to `dist`. Adding a
-//! kind is a new impl and one line in [`builtin`]; the pipeline in
-//! [`super::Assets`] never learns about it.
+//! this build knows. Adding a kind is one impl and one line in [`builtin`].
 
 #[cfg(feature = "css")]
 use std::path::Component;
@@ -26,26 +21,9 @@ use super::image::Raster;
 use super::js::{Js, Script};
 
 /// What the pipeline reads but never publishes: the sources a build step
-/// consumes, and the files a convention marks import-only.
-///
-/// The asset tree is both an input tree and an output tree, and nothing in a
-/// file's extension says which. A `.ts` is a source unless something bundles it,
-/// a `.scss` is a source this build compiles itself, and `_partial.css` is a
-/// fragment its neighbour imports. All three used to be copied verbatim to
-/// `dist`, so a site shipped its own TypeScript (unrunnable in a browser, and
-/// carrying whatever the comments said) beside the JavaScript built from it.
-///
-/// Only what this build *knows* is listed. A file some other toolchain reads is
-/// not a kind the pipeline has an opinion about: it is copied like any other
-/// file, and the `_` convention below is how a site keeps one out of the output.
-/// Naming such extensions here would be this crate claiming knowledge of tools
-/// it does not run, and going stale the moment one of them moved.
-///
-/// One rule for the whole tree rather than a `claims` arm per handler: an
-/// exclusion is not a kind, and the JS handler's own `_name` convention only
-/// applied while bundling, which is exactly when the leak did not happen.
-/// `static/` is untouched by this: that tree is the verbatim escape hatch, and a
-/// host's `_redirects` has to publish under its own name.
+/// consumes, and the files a convention marks import-only. Only what this build
+/// itself knows is listed; a file some other toolchain reads is copied like any
+/// other, and the `_` convention is how a site keeps one out of the output.
 pub(super) struct Private;
 
 impl Private {
@@ -63,16 +41,13 @@ impl Private {
     }
 
     /// A Sass source in a binary with no Sass compiler: the one input this
-    /// build recognizes and cannot turn into anything. Publishing it would
-    /// serve a file no browser can read, under a name a page is linking to as
-    /// though it were CSS.
+    /// build recognizes and cannot turn into anything.
     fn uncompiled(ext: &str) -> bool {
         !cfg!(feature = "sass") && Config::SASS.contains(&ext)
     }
 
     /// A file whose name starts with `_` is imported by a neighbour, never
-    /// served: Sass has spelled partials this way for a decade, and the script
-    /// handler already read it the same way.
+    /// served.
     fn partial(rel: &Path) -> bool {
         rel.file_name()
             .and_then(|n| n.to_str())
@@ -80,7 +55,7 @@ impl Private {
     }
 
     /// A type declaration (`globals.d.ts`), read off the stem's own extension so
-    /// `.d.mts` and `.d.cts` are the same rule rather than two more cases.
+    /// `.d.mts` and `.d.cts` are the same rule.
     fn declaration(rel: &Path) -> bool {
         rel.file_stem()
             .map(Path::new)
@@ -102,18 +77,12 @@ pub(super) enum Phase {
 }
 
 /// The read-only context a handler renders against: the config, the served URL
-/// prefix, and the shared JS bundler. The accumulating [`AssetMap`] is passed to
-/// [`Handler::render`] separately, so the pipeline can keep mutating it between
-/// calls.
+/// prefix, and the shared JS bundler.
 pub(super) struct Ctx<'a> {
-    /// The site config: read by the css and image handlers for their options,
-    /// and by [`Ctx::url`], which is what keeps a served asset URL to one
-    /// derivation whatever flavor this is.
     pub config: &'a Config,
     /// The asset roots as a search path, strongest first: where the Sass
     /// compiler resolves a `@use` that names no file it can see from the
-    /// importing sheet. Owned rather than borrowed because the stack is
-    /// reversed to build it, and a build has at most two of them.
+    /// importing sheet.
     #[cfg(feature = "sass")]
     pub roots: Vec<PathBuf>,
     #[cfg(feature = "js")]
@@ -126,13 +95,9 @@ impl Ctx<'_> {
         self.config.asset_url(rel)
     }
 
-    /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments
-    /// (the assets live under `dist`, so there is nothing to canonicalize).
-    /// `None` when the path walks out of the asset root.
-    ///
-    /// Fallible because `PathBuf::pop` on an empty buffer is a silent no-op:
-    /// `url(../x.png)` in `assets/a.css` normalized to `assets/x.png` and so
-    /// resolved to a *different, real* file whenever one happened to exist.
+    /// Lexically normalize a virtual asset path, collapsing `.`/`..` segments.
+    /// `None` when the path walks out of the asset root, which `PathBuf::pop`
+    /// alone would silently absorb into a sibling that may really exist.
     #[cfg(feature = "css")]
     pub fn normalize(path: &Path) -> Option<PathBuf> {
         let mut out = PathBuf::new();
@@ -150,20 +115,12 @@ impl Ctx<'_> {
 /// Path knowledge the pipeline and its handlers share: how a file's kind is
 /// read off its name, and how a suffix is spliced into that name.
 pub(super) trait PathExt {
-    /// The extension as written, or `""` when there is none. Read by the
-    /// css/js/image handlers to claim a file, and by [`Private`] to tell a
-    /// build input from an artifact, which every flavor does.
-    ///
-    /// Every caller lowercases before comparing, which is why the content side
-    /// asks [`Config::has_ext`](crate::config::Config::has_ext) rather than
-    /// this: the two used to disagree, and a `README.MD` was an asset here and
-    /// not a page there.
+    /// The extension as written, or `""` when there is none; every caller
+    /// lowercases before comparing.
     fn ext(&self) -> &str;
 
     /// The same path with `suffix` appended to the file stem, the extension
-    /// kept: `photo.jpg` + `-480` -> `photo-480.jpg`. A responsive variant is
-    /// the fingerprint splice with a suffix that is not a digest, so it goes
-    /// through the same [`AssetName`] rule.
+    /// kept: `photo.jpg` + `-480` -> `photo-480.jpg`.
     fn suffixed(&self, suffix: &str) -> PathBuf;
 }
 
@@ -192,23 +149,17 @@ pub(super) trait Handler: Sync {
         Phase::Early
     }
 
-    /// What becomes of the source map for the kind of asset this handler owns.
-    ///
-    /// Asked of the handler rather than read from the config by the pipeline,
-    /// because "which kind of asset is this" is the one thing the pipeline
-    /// deliberately does not know: it is the handler's whole identity. Default
-    /// is [`SourceMaps::Off`], so a kind that cannot produce a map says so by
-    /// saying nothing.
+    /// What becomes of the source map for the kind of asset this handler owns;
+    /// [`SourceMaps::Off`] by default, so a kind that cannot produce a map says
+    /// so by saying nothing.
     fn sourcemaps(&self, _config: &Config) -> SourceMaps {
         SourceMaps::Off
     }
 
     /// Whether this handler's output is a pure function of the file's own bytes
-    /// and the config, and so can be memoized across builds.
-    ///
-    /// False by default, and deliberately so: a stylesheet rewrites references
-    /// to *other* assets' hashed names and a script bundles a whole import
-    /// graph, so neither is determined by the bytes in front of it.
+    /// and the config, and so can be memoized across builds. False by default:
+    /// a stylesheet rewrites references to *other* assets' hashed names and a
+    /// script bundles a whole import graph.
     fn pure(&self) -> bool {
         false
     }
@@ -222,10 +173,6 @@ pub(super) trait Handler: Sync {
 
     /// The served path for a claimed file, when this handler's output is no
     /// longer the same kind of file as its source. Default: unchanged.
-    ///
-    /// Scripts use it: a bundled `.ts` entry holds JavaScript, and writing it as
-    /// `app.<hash>.ts` left the served file under a MIME type browsers refuse
-    /// for `type=module`, keyed in the asset map under a name no author writes.
     fn rename(&self, rel: &Path) -> PathBuf {
         rel.to_path_buf()
     }
@@ -236,10 +183,7 @@ pub(super) trait Handler: Sync {
 
     /// Responsive width variants derived from `file`, beyond the primary
     /// [`render`](Handler::render) output: the raster handler's downscaled
-    /// copies. The pipeline writes each variant and records the `srcset`
-    /// manifest from their widths. Default: none.
-    ///
-    /// [`Handler::render`]: Handler::render
+    /// copies. Default: none.
     fn variants(&self, _file: &Path, _rel: &Path, _ctx: &Ctx) -> Result<Vec<Variant>> {
         Ok(Vec::new())
     }
@@ -247,24 +191,17 @@ pub(super) trait Handler: Sync {
 
 /// Everything a handler produced for one file: the bytes served under its own
 /// name, and the source map they were built against, when it built one.
-///
-/// A struct rather than the bare `Option<Vec<u8>>` this used to be, because a
-/// map is a *second* file: written beside the first and named after it. The
-/// handler cannot name it, since the served name is only settled once the
-/// pipeline has fingerprinted the bytes, so the link between the two is the
-/// pipeline's to write and this type is how the map reaches it.
 pub(in crate::engine) struct Produced {
     /// The served bytes, or `None` to emit nothing: a script partial pulled in
     /// only through imports.
     pub bytes: Option<Vec<u8>>,
     /// The source map for `bytes`, when the site asked for one and this handler
-    /// can build it. Never carries the `sourceMappingURL` link; that is the
-    /// pipeline's, for the reason above.
+    /// can build it. Never carries the `sourceMappingURL` link: only the
+    /// pipeline knows the fingerprinted name it has to point at.
     pub map: Option<Vec<u8>>,
 }
 
 impl Produced {
-    /// The ordinary case: bytes, no map.
     pub(in crate::engine) fn bytes(bytes: Vec<u8>) -> Self {
         Self {
             bytes: Some(bytes),
@@ -317,9 +254,6 @@ mod tests {
     use super::PathExt;
     use std::path::{Path, PathBuf};
 
-    /// A `..` that walks out of the asset root must not be absorbed: it used to
-    /// normalize to a sibling inside the root and resolve to a different, real
-    /// file.
     #[cfg(feature = "css")]
     #[test]
     fn normalize_rejects_a_path_escaping_the_asset_root() {
@@ -338,15 +272,8 @@ mod tests {
         );
     }
 
-    /// The registry's one ordering invariant, which `builtin()` states in a
-    /// comment and nothing enforced: [`super::Verbatim`] claims every file, so
-    /// anything registered after it could never run. The crate's two other
-    /// registries (`engine/emit/mod.rs`, `engine/compile/sidecar.rs`) both pin
-    /// theirs; this one is why adding a handler is not quite "one impl plus one
-    /// line".
-    ///
-    /// Holds in both flavors: with `css`, `js` and `images` off the fallback is
-    /// the only handler there is, and it is still the last one.
+    /// [`super::Verbatim`] claims every file, so anything registered after it
+    /// could never run.
     #[test]
     fn only_the_last_handler_claims_a_file_nothing_else_wants() {
         let config = crate::config::Config::default();
@@ -361,8 +288,6 @@ mod tests {
         assert_eq!(claimed, [handlers.len() - 1]);
     }
 
-    /// The trait is a spelling of [`crate::graph::AssetName`], which owns the
-    /// splice and is tested there; this only pins the wiring.
     #[test]
     fn a_suffix_lands_between_the_stem_and_the_extension() {
         assert_eq!(

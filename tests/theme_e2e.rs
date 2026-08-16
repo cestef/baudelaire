@@ -30,8 +30,6 @@ fn site() -> Site {
     site
 }
 
-/// The theme supplies the layout: the project has no `templates/` at all, and
-/// the page still gets wrapped.
 #[test]
 fn a_page_uses_the_themes_template() {
     let site = site();
@@ -65,8 +63,6 @@ fn a_project_template_overrides_the_themes() {
     assert!(!html.contains("<main>"), "{html}");
 }
 
-/// Assets and static files layer the same way: the theme's come through, and
-/// the project replaces the ones it also has.
 #[test]
 fn assets_and_static_files_layer_with_the_project_on_top() {
     let site = site();
@@ -79,12 +75,9 @@ fn assets_and_static_files_layer_with_the_project_on_top() {
     );
     site.stats();
 
-    // Only in the theme.
     assert!(site.output("assets/theme.css").contains("red"));
     assert!(site.output("robots.txt").contains("theme"));
-    // In both: the project's content is what is served.
     assert!(site.output("assets/shared.css").contains("8px"));
-    // Only in the project.
     assert!(site.output("assets/own.css").contains("padding"));
     assert!(site.output("humans.txt").contains("project"));
 }
@@ -96,17 +89,13 @@ fn theme_config_supplies_defaults_the_site_overrides() {
     let site = site();
     let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
 
-    // Stated by the site: the site wins.
     assert_eq!(config.site.as_deref(), Some("T"));
-    // Stated only by the theme: inherited, nested keys included.
     assert_eq!(config.lang, "fr");
     assert!(!config.html.pretty, "nested theme default inherited");
 }
 
-/// `--theme` replaces the theme the config names, and it replaces it early
-/// enough to matter: the `theme.kdl` that supplies the defaults has to be the
-/// overriding theme's. Applying the name to a config already loaded would leave
-/// the site standing on the *other* theme's floor.
+/// `--theme` replaces the theme early enough that the `theme.kdl` supplying the
+/// defaults is the overriding theme's.
 #[test]
 fn the_theme_override_supplies_its_own_defaults() {
     let site = site();
@@ -119,15 +108,12 @@ fn the_theme_override_supplies_its_own_defaults() {
         Config::load(&site.read("config.kdl"), &site.root, Some("themes/other")).expect("config");
 
     assert_eq!(config.theme.as_deref(), Some("themes/other"));
-    // The overriding theme's floor, not `themes/plume`'s `fr`/`#false`.
     assert_eq!(config.lang, "de");
     assert!(config.html.pretty);
-    // The site's own keys still win over it.
     assert_eq!(config.site.as_deref(), Some("T"));
 }
 
-/// The same when the config names no theme at all, which is the case the
-/// previews build has: one demo config, one theme named per run.
+/// The same when the config names no theme at all.
 #[test]
 fn the_theme_override_applies_to_a_config_naming_none() {
     let site = Site::with("site \"T\"\npaths { content \"content\"; dist \"public\" }\n");
@@ -140,17 +126,9 @@ fn the_theme_override_applies_to_a_config_naming_none() {
     assert_eq!(config.lang, "fr");
 }
 
-/// ...and a floor only for what the site *builds*. The sections that decide what
-/// the machine does, or what the browser trusts in the site's name, are the
-/// site's, and a theme is fetched: a package theme is downloaded at build time,
-/// so its `theme.kdl` need never appear in the repository at all. `hooks` runs
-/// each entry through a shell, `deploy` and `announce` say where the built site
-/// goes and with which credentials, `paths` decides which trees are read and
-/// pruned, `serve { editor }` is a command the dev server runs on the author's
-/// machine, `typst { registry }` redirects package downloads into a cache
-/// shared with every other project, `security` is the policy visitors' browsers
-/// enforce, and `profiles` is raw KDL that can carry any of them. A site
-/// stating none of its own silently inherited every one.
+/// ...and a floor only for what the site *builds*: a theme is fetched, so the
+/// sections deciding what the machine does, or what a browser trusts in the
+/// site's name, stay the site's.
 #[test]
 fn a_theme_cannot_set_the_sections_a_site_owns() {
     use miette::Diagnostic;
@@ -179,14 +157,8 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
 }
 
 /// Two keys a theme may not carry from inside a section it is otherwise
-/// allowed. Both are ways for a fetched theme to speak to a browser in the
-/// site's name, which is the line the section list draws.
-///
-/// A header rule is an arbitrary response header on an arbitrary path:
-/// `Refresh` forwards every page elsewhere, `Access-Control-Allow-Origin` hands
-/// the site's content to anyone. A wildcard `redirect` claims no output file, so
-/// the collision check that stops a theme's redirect burying a real page has
-/// nothing to compare it against, and `"/*"` covers the site.
+/// allowed: an arbitrary response header on an arbitrary path, and a wildcard
+/// `redirect`, which claims no output file for the collision check to catch.
 #[test]
 fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
     use miette::Diagnostic;
@@ -208,10 +180,8 @@ fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
     }
 }
 
-/// ...and what stays allowed, so the refusal above is a line and not a ban. A
-/// theme may still turn the rule files on: what goes in them is then computed
-/// from the site's own `caching` and `csp`, and a literal old path is still held
-/// to the collision check every redirect is.
+/// ...and what stays allowed: a theme may turn the rule files on, since what
+/// goes in them is computed from the site's own `caching` and `csp`.
 #[test]
 fn a_theme_may_still_ask_for_the_rule_files() {
     let site = site();
@@ -241,8 +211,7 @@ fn a_missing_theme_is_a_precise_error() {
     assert!(format!("{err}").contains("themes/absent"), "{err}");
 }
 
-/// The shipped themes are in the binary, so adopting one is two commands and no
-/// download: `theme add` writes it, and the site builds against it.
+/// The shipped themes are in the binary, so adopting one needs no download.
 #[test]
 #[cfg(feature = "themes")]
 fn a_shipped_theme_is_written_into_the_project_and_builds() {
@@ -272,15 +241,11 @@ fn a_shipped_theme_is_written_into_the_project_and_builds() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // The theme binds root pages, so the home page comes out wrapped in its
-    // chrome rather than as the bare body typst rendered.
     let html = site.read("public/index.html");
     assert!(html.contains("<header"), "no theme chrome: {html}");
 }
 
-/// The record `theme add` leaves is what tells your edits from ours: an update
-/// rewrites the files you have not touched, keeps the ones you have, and leaves
-/// a file you deleted deleted.
+/// The record `theme add` leaves is what tells your edits from ours.
 #[test]
 #[cfg(feature = "themes")]
 fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
@@ -291,14 +256,13 @@ fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
     let page = site.path("themes/albatros/templates/page.typ");
     let shipped = std::fs::read_to_string(&page).expect("read");
 
-    // Two files that are the author's: one edited, one deleted.
     let style = site.path("themes/albatros/assets/style.css");
     std::fs::write(&style, "/* mine */\n").expect("edit");
     let home = site.path("themes/albatros/templates/home.typ");
     std::fs::remove_file(&home).expect("delete");
 
-    // Twice: the record says what baudelaire's copy is, so a file kept because
-    // it was edited is still the author's on the run after.
+    // Twice, so a file kept because it was edited is still the author's on the
+    // run after.
     for run in 1..=2 {
         let out = site.run(&["theme", "update", "albatros"]);
         assert!(
@@ -319,7 +283,6 @@ fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
         assert!(!home.exists(), "run {run}: a deleted file stays deleted");
     }
 
-    // ...and --force takes the edit back.
     assert!(
         site.run(&["theme", "update", "albatros", "--force"])
             .status
@@ -331,9 +294,8 @@ fn an_update_keeps_what_you_changed_and_replaces_what_you_did_not() {
     );
 }
 
-/// `--dir` addresses a directory the verbs write to and delete from, and it is
-/// the one path here a project did not resolve itself, so a path that climbs
-/// out of the project is refused rather than written.
+/// `--dir` is the one path here a project did not resolve itself, so one that
+/// climbs out of it is refused rather than written.
 #[test]
 #[cfg(feature = "themes")]
 fn a_theme_directory_outside_the_project_is_refused() {
@@ -351,8 +313,7 @@ fn a_theme_directory_outside_the_project_is_refused() {
     );
 }
 
-/// Removing keeps work: a file you edited stays, and so does the record, so the
-/// same command with `--force` can still finish the job.
+/// Removing keeps work, the record included, so `--force` can still finish.
 #[test]
 #[cfg(feature = "themes")]
 fn removing_refuses_to_delete_what_you_edited() {
@@ -387,15 +348,8 @@ fn removing_refuses_to_delete_what_you_edited() {
 
 /// A theme installed as a Typst package layers exactly as a directory one does.
 ///
-/// It could not: the layout import was written as a package subpath
-/// (`@local/plume:0.1.0/templates/page.typ`), which typst reads as a version and
-/// rejects, so every page of a package-themed site failed to compile while its
-/// assets and `theme.kdl` came through. The package's root is served under the
-/// project instead, which is what makes the import a path again.
-///
 /// Unix only, and through the binary: the package store is found under the
-/// user's data directory, so this moves `HOME` for the child process rather
-/// than for the test runner.
+/// user's data directory, so this moves `HOME` for the child process.
 #[test]
 #[cfg(unix)]
 fn a_package_theme_supplies_its_layouts_assets_and_defaults() {
@@ -419,8 +373,7 @@ fn a_package_theme_supplies_its_layouts_assets_and_defaults() {
         "[package]\nname = \"plume\"\nversion = \"0.1.0\"\nentrypoint = \"lib.typ\"\n",
     );
     write("lib.typ", "#let marker = \"from the package\"\n");
-    // Relative, the way a theme has to import its own pieces: it is the second
-    // thing the mount has to get right, after the layout itself.
+    // A relative import, the way a theme names its own pieces.
     write(
         "parts.typ",
         "#let shell(body) = html.elem(\"main\")[#body]\n",
@@ -486,7 +439,6 @@ fn a_theme_is_installed_from_a_directory_and_updated_from_it() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(site.read("themes/plume/theme.kdl"), "lang \"fr\"\n");
-    // The source's own directory is not touched, and the copy is the project's.
     assert!(site.exists("themes/plume/.baudelaire-lock.json"));
 
     // The record says where it came from, so `update` needs no second telling.
@@ -501,10 +453,8 @@ fn a_theme_is_installed_from_a_directory_and_updated_from_it() {
 /// A theme from an archive, one directory down in a project that holds more
 /// than one.
 ///
-/// Served in-process, so nothing here reaches the network: what is being tested
-/// is the download, the unwrapping, the narrowing and the record, none of which
-/// cares which host the URL names. A forge repository is the same path with the
-/// URL spelled by the forge's own table, which is unit-tested.
+/// Served in-process, since none of the download, unwrapping, narrowing or
+/// record cares which host the URL names.
 #[test]
 #[cfg(all(feature = "themes", unix))]
 fn a_theme_is_fetched_out_of_an_archive_at_a_url() {
@@ -547,23 +497,17 @@ fn a_theme_is_fetched_out_of_an_archive_at_a_url() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    // Named after the directory inside the archive, not after the download, and
-    // holding the theme rather than the project.
     assert_eq!(site.read("themes/plume/theme.kdl"), "lang \"fr\"\n");
     assert!(!site.exists("themes/plume/README.md"));
     assert!(!site.exists("themes/plume/themes"));
 
-    // The record carries the URL and the directory inside it, which is what
-    // lets `update` fetch the same thing again.
     let lock = site.read("themes/plume/.baudelaire-lock.json");
     assert!(lock.contains("\"source\": \"archive\""), "{lock}");
     assert!(lock.contains("\"subdir\": \"themes/plume\""), "{lock}");
     assert!(lock.contains(&url), "{lock}");
 }
 
-/// The shelf is not the whole answer any more: a theme fetched from somewhere
-/// else is a theme this project has, and `list` says so and says where it came
-/// from.
+/// A theme fetched from elsewhere is one this project has, and `list` says so.
 #[test]
 #[cfg(feature = "themes")]
 fn list_reports_a_theme_the_binary_does_not_carry() {

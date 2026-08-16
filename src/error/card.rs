@@ -32,9 +32,6 @@ impl CardError {
         }
     }
 
-    /// The encoder's own message, kept as text: its error type belongs to a
-    /// crate reached only through the rasterizer, and naming it here would make
-    /// a transitive dependency a direct one for one string.
     pub fn encode(page: &str, why: impl std::fmt::Display) -> Self {
         Self::Encode {
             page: page.to_owned(),

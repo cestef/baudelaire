@@ -1,9 +1,7 @@
 //! `content { entities { <id> { shape } } }`: a field set and its slots, named.
 //!
-//! A shape is a row in a table, never a type in the code: what makes `person`
-//! ship with the crate is that somebody wrote its fields down here, and a site
-//! declaring its own `fields { }` and `slots` is doing exactly what the row
-//! does. Nothing downstream branches on which shape a registry named.
+//! A shape is a row in the tables below, never a type in the code: nothing
+//! downstream branches on which shape a registry named.
 
 use super::slots::Slots;
 use crate::config::{FieldSchema, FieldType, Named};
@@ -11,7 +9,6 @@ use crate::config::{FieldSchema, FieldType, Named};
 /// A named field set a registry can take instead of declaring its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Shape {
-    /// A human: what an `authors` registry almost always holds.
     Person,
     /// A company, a publisher, a band.
     Organization,
@@ -24,9 +21,8 @@ impl Named for Shape {
     ];
 }
 
-/// One field a shape declares: its key, and what it holds. As a constructor
-/// rather than a value, for the same reason the frontmatter table carries one:
-/// [`FieldType`] owns the types it wraps, which no constant can build.
+/// One field a shape declares: its key, and a constructor for what it holds,
+/// since [`FieldType`] owns the types it wraps and no constant can build one.
 type Field = (&'static str, fn() -> FieldType);
 
 /// The `person` fields, and the slots that read them.
@@ -35,15 +31,13 @@ const PERSON: &[Field] = &[
     ("url", || FieldType::Str),
     ("avatar", || FieldType::Str),
     ("email", || FieldType::Str),
-    // Deliberately unconstrained. The slot that reads it takes a list of URLs
-    // or a dictionary of platform to URL, and the two roster dialects cannot
-    // both write both: a typst profile page can spell a dict, a KDL roster
-    // spells a list. Typing it either way would refuse the other.
+    // Unconstrained: the slot takes a list of URLs or a dictionary of platform
+    // to URL, and typing it either way would refuse one of the two roster
+    // dialects.
     ("socials", || FieldType::Any),
 ];
 
-/// The `organization` fields. Deliberately smaller: what a publisher line and a
-/// `sameAs` need, and nothing that would only ever be true of a person.
+/// The `organization` fields.
 const ORGANIZATION: &[Field] = &[
     ("name", || FieldType::Str),
     ("url", || FieldType::Str),
@@ -51,13 +45,8 @@ const ORGANIZATION: &[Field] = &[
 ];
 
 impl Shape {
-    /// The fields this shape declares, every one of them optional.
-    ///
-    /// A shape types a field, it does not require one: a profile page carrying
-    /// its name as its `title` would otherwise have to repeat it, and a roster
-    /// half-filled while a site is being written would fail the build. A site
-    /// that *wants* a field required declares it itself, in `fields { }`, where
-    /// requiredness is what declaring a field means.
+    /// The fields this shape declares, every one of them optional: a shape
+    /// types a field, it does not require one.
     pub fn fields(self) -> Vec<(String, FieldSchema)> {
         self.table()
             .iter()
@@ -97,10 +86,6 @@ impl Shape {
 
     /// What schema.org calls this kind of thing, for the one vocabulary that
     /// types its objects.
-    ///
-    /// A column of the shape table rather than a slot, because it is not a
-    /// field an entity carries: it is what the entity *is*, which is exactly
-    /// what naming a shape says.
     pub fn schema(self) -> &'static str {
         match self {
             Self::Person => "Person",
@@ -108,7 +93,6 @@ impl Shape {
         }
     }
 
-    /// This shape's field table.
     fn table(self) -> &'static [Field] {
         match self {
             Self::Person => PERSON,
@@ -123,7 +107,7 @@ mod tests {
     use crate::config::Named;
 
     /// Every slot a shape fills has to name a field that shape declares, or the
-    /// registry it seeds fails its own check the moment a site names the shape.
+    /// registry it seeds fails its own check.
     #[test]
     fn every_shape_fills_slots_from_its_own_fields() {
         for (name, shape) in Shape::NAMES {

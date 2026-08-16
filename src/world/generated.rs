@@ -12,63 +12,42 @@ use crate::generated::{File, Generated};
 /// One per-language table, written out as Typst source and imported as
 /// `@baudelaire/<module>`.
 ///
-/// Deliberately a *file* rather than a field of each page's generated wrapper.
-/// The wrapper's text is the page's cache fingerprint, so a table derived from
-/// the whole site embedded there folds every title and URL into every page's
-/// identity: one retitle, one rename, one new post, and the whole site
-/// recompiles. Written out instead, the import is an ordinary file read, so
-/// typst's own dependency tracking records it and the table invalidates exactly
-/// the pages whose template reads it.
-///
-/// The files are generated build state, not source: rewritten every build,
-/// never edited, and safe to delete.
+/// A file rather than a field of each page's generated wrapper, whose text is
+/// that page's cache fingerprint and so must name nothing site-wide.
 pub(crate) struct Table {
-    /// The module this backs, which is also the accessor a template calls:
-    /// `@baudelaire/sections` exports `sections(lang)`.
+    /// The module this backs, and the accessor it exports: `sections(lang)`.
     module: &'static str,
     /// The table, keyed by language code.
     trees: BTreeMap<String, Value>,
 }
 
 impl Table {
-    /// The private binding holding the per-language values, which callers reach
-    /// only through the accessor named after the module.
+    /// The private binding holding the per-language values.
     const TABLE: &'static str = "__table";
 
     pub(crate) fn new(module: &'static str, trees: BTreeMap<String, Value>) -> Self {
         Self { module, trees }
     }
 
-    /// Where this file lives, relative to the project root.
-    ///
-    /// Templates never spell it: they import `@baudelaire/<module>`, and the
-    /// module registry resolves that to this path.
-    ///
-    /// Under [`Config::SCRATCH`] because it is regenerable build state:
-    /// gitignored, wiped by `clean`, and outside every root `serve` watches, so
-    /// writing it cannot retrigger the build that wrote it.
+    /// Where this file lives, relative to the project root, under
+    /// [`Config::SCRATCH`], which `clean` wipes and `serve` does not watch.
     pub(crate) fn path(&self) -> PathBuf {
         Self::of(self.module)
     }
 
-    /// The same path for a module named directly, which the registry needs to
-    /// serve a file-backed module before any [`Table`] exists.
+    /// The same path for a module named directly, before any [`Table`] exists.
     pub(crate) fn of(module: &str) -> PathBuf {
         Config::scratch(crate::config::Scratch::Generated).join(format!("{module}.typ"))
     }
 
     /// The table with nothing in it: what a module reads as before a build has
-    /// written the real one. Every language resolves to an empty value, which
-    /// is what the accessor already promises for a language that was not built.
+    /// written the real one.
     pub(crate) fn empty(module: &'static str) -> Self {
         Self::new(module, BTreeMap::new())
     }
 
-    /// The generated Typst source.
-    ///
-    /// A function rather than a bare dict so a template reads `sections(page.lang)`
-    /// on a multilingual site and a single-language one alike, and so an unbuilt
-    /// language yields an empty value instead of failing the page that asked.
+    /// The generated Typst source: a function rather than a bare dict, so an
+    /// unbuilt language yields an empty value instead of failing the page.
     pub(crate) fn source(&self) -> String {
         let table = Value::dict(
             self.trees
@@ -88,9 +67,8 @@ impl Table {
     }
 }
 
-/// Written once per build and before any page compiles, because a template's
-/// `#import` of a table has to resolve on the very first build in a fresh
-/// checkout, where nothing has written one yet.
+/// Written before any page compiles, so a template's `#import` resolves on the
+/// first build in a fresh checkout.
 impl Generated for Table {
     fn files(&self) -> Vec<File> {
         vec![File::new(self.path(), self.source())]
@@ -121,10 +99,6 @@ mod tests {
 
     #[test]
     fn binds_every_language_behind_one_accessor() {
-        // A regional tag has to survive as a key. Typst identifiers are
-        // kebab-case, so `pt-BR` needs no quoting, and `codegen` quotes the
-        // keys that would not parse; this pins that the tree goes through it
-        // rather than formatting keys itself.
         let source = sections(&[("en", "Home"), ("pt-BR", "Início")]).source();
 
         assert!(source.contains("en: "), "{source}");
@@ -136,8 +110,6 @@ mod tests {
         );
     }
 
-    /// Each file names its own accessor, so two of them can be imported into
-    /// one template without colliding.
     #[test]
     fn the_accessor_is_named_after_the_module() {
         let source = Table::new(PAGES, BTreeMap::new()).source();
@@ -150,8 +122,6 @@ mod tests {
 
     #[test]
     fn a_site_with_no_pages_still_generates_an_importable_file() {
-        // The import must resolve before it is useful: a template that reads
-        // the tree cannot be made to fail by an empty site.
         let source = sections(&[]).source();
 
         assert!(source.contains("#let __table = (:)"), "{source}");

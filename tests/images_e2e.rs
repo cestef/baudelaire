@@ -1,19 +1,17 @@
 //! Image handling that turns on bytes rather than markup.
 //!
-//! Externalization, sizing and `srcset` are scenarios (`tests/scenarios/images.kdl`).
-//! What is left here compares raw bytes, captures a generated fingerprint, spans
-//! two builds, or reads a warning off the CLI's stderr.
+//! Externalization, sizing and `srcset` are scenarios, in
+//! `tests/scenarios/images.kdl`.
 
 mod common;
 
 use common::Site;
 
 /// A tiny PNG of the given size, its pixels varying with position so two
-/// different sizes never share bytes (and so collide only when we mean them to).
+/// different sizes never share bytes.
 fn png(w: u32, h: u32) -> Vec<u8> {
     let img = image::RgbImage::from_fn(w, h, |x, y| {
-        // Masked rather than checked: the pattern is meant to wrap, so a
-        // truncating cast is the point.
+        // The pattern is meant to wrap, so a truncating cast is the point.
         image::Rgb([
             ((x * 7 + y * 13) & 0xff) as u8,
             ((x * 3) & 0xff) as u8,
@@ -46,7 +44,6 @@ fn typst_image_externalizes_to_a_file() {
         "no inline base64 remains: {html}"
     );
     assert!(site.exists("public/assets/pic.png"), "the file was copied");
-    // The copied bytes are the source bytes, untouched.
     assert_eq!(
         std::fs::read(site.path("public/assets/pic.png")).unwrap(),
         png(2, 2)
@@ -75,8 +72,6 @@ fn fingerprint_hashes_the_externalized_name() {
 
 #[test]
 fn cached_rebuild_keeps_the_externalized_file() {
-    // The asset directory is regenerated every build, so a cache hit (which does
-    // not recompile the page) must still re-copy the image from its stored ref.
     let site = Site::with(EXTRACT);
     site.write_bytes("content/pic.png", &png(2, 2));
     site.write("content/index.typ", "#image(\"pic.png\")\n");
@@ -92,17 +87,13 @@ fn cached_rebuild_keeps_the_externalized_file() {
 
 #[test]
 fn same_named_images_in_different_directories_are_different_files() {
-    // Naming a picture for its role (`cover.png`, `hero.jpg`) is the page-bundle
-    // convention every Markdown generator encourages, so a tree of them is the
-    // normal case, not the odd one. Served flat under their base name, they were
-    // one file: N-1 pages showed the wrong picture, with a warning each.
     let site = Site::with(EXTRACT);
     site.write_bytes("content/one/pic.png", &png(2, 2));
     site.write_bytes("content/two/pic.png", &png(3, 3));
     site.write("content/a.typ", "#image(\"one/pic.png\")\n");
     site.write("content/b.typ", "#image(\"two/pic.png\")\n");
 
-    // Spawn the binary so any warning would surface on stderr.
+    // The binary is spawned so a warning would surface on stderr.
     let stderr = site.build();
     assert!(
         !stderr.contains("two images map to"),
@@ -122,8 +113,6 @@ fn same_named_images_in_different_directories_are_different_files() {
 
 #[test]
 fn an_extracted_image_never_overwrites_a_pipeline_asset() {
-    // The one collision left: the asset tree owns `/assets/..`, and a page whose
-    // image lands on a name the pipeline already wrote keeps the pipeline's.
     let site = Site::with(
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images {\n    extract #true\n  }\n}\n",
     );
@@ -138,9 +127,6 @@ fn an_extracted_image_never_overwrites_a_pipeline_asset() {
     );
 }
 
-/// Processed bytes are memoized across builds: the pipeline used to re-run
-/// oxipng and the downscale over every image on every build, including a fully
-/// cached one.
 #[test]
 #[cfg(feature = "images")]
 fn an_unchanged_image_is_not_re_encoded() {
@@ -156,7 +142,6 @@ fn an_unchanged_image_is_not_re_encoded() {
     let first = std::fs::read(site.path("public/assets/big.png")).unwrap();
     let variant = std::fs::read(site.path("public/assets/big-20.png")).unwrap();
 
-    // The memo survives the asset tree being regenerated wholesale.
     site.stats();
     assert_eq!(
         std::fs::read(site.path("public/assets/big.png")).unwrap(),
@@ -168,7 +153,6 @@ fn an_unchanged_image_is_not_re_encoded() {
         variant
     );
 
-    // ...and a changed source is re-encoded rather than served from the memo.
     site.write_bytes("assets/big.png", &png(60, 41));
     site.stats();
     assert_ne!(
@@ -179,12 +163,9 @@ fn an_unchanged_image_is_not_re_encoded() {
 }
 
 /// A page's `srcset` depends on the variants of the images it actually shows.
-/// Folding the whole variant manifest into the build fingerprint (as this once
-/// did) meant a change to any one image rebuilt every page on the site.
 ///
 /// The image is resized rather than merely re-encoded, because that is what
-/// moves the *manifest*: the recorded URLs are authored paths, so new pixels at
-/// the same size leave it identical and would prove nothing.
+/// moves the *manifest*: the recorded URLs are authored paths.
 #[test]
 #[cfg(feature = "images")]
 fn losing_one_images_variants_leaves_pages_that_do_not_show_it_cached() {
@@ -218,9 +199,8 @@ fn losing_one_images_variants_leaves_pages_that_do_not_show_it_cached() {
     );
 }
 
-/// The negative half. An image with no variants records that it had none, so
-/// gaining some later still invalidates the page showing it. Recording only the
-/// sources that matched would leave that page cached with no `srcset` at all.
+/// An image with no variants records that it had none, so gaining some later
+/// still invalidates the page showing it.
 #[test]
 #[cfg(feature = "images")]
 fn an_image_that_gains_variants_invalidates_the_page_showing_it() {
@@ -249,10 +229,6 @@ fn an_image_that_gains_variants_invalidates_the_page_showing_it() {
     );
 }
 
-/// A page showing an image that lives in the asset tree points at the pipeline's
-/// copy: the file the pipeline optimized and named, written once. Extraction
-/// used to stage the source bytes under that same name, which warned that two
-/// images claimed it and shipped whichever won.
 #[test]
 fn an_image_from_the_asset_tree_is_not_extracted_a_second_time() {
     let site = Site::with(
@@ -278,9 +254,6 @@ fn an_image_from_the_asset_tree_is_not_extracted_a_second_time() {
     assert_eq!(files, vec!["photo.png".to_owned()], "one copy only");
 }
 
-/// A responsive variant is optimized like the source it was cut from. Encoding
-/// a downscale and shipping it as written left a `srcset` whose middle
-/// candidate was heavier than the optimized full-size image beside it.
 #[test]
 #[cfg(feature = "images")]
 fn responsive_variants_are_optimized_like_their_source() {
@@ -309,8 +282,6 @@ fn responsive_variants_are_optimized_like_their_source() {
     );
 }
 
-/// An extracted image is recompressed like one in the asset tree: a picture
-/// beside its page used to be the one unoptimized file on the site.
 #[test]
 #[cfg(feature = "images")]
 fn a_colocated_image_is_optimized_on_the_way_out() {
@@ -330,9 +301,6 @@ fn a_colocated_image_is_optimized_on_the_way_out() {
     );
 }
 
-/// An image lifted out of a page gets the variants a page in the asset tree
-/// gets: the `srcset` names them from the source's own width, and the copy that
-/// materializes the image cuts exactly those widths.
 #[test]
 #[cfg(feature = "images")]
 fn an_extracted_image_carries_its_own_srcset() {
@@ -360,9 +328,8 @@ fn an_extracted_image_carries_its_own_srcset() {
     );
 }
 
-/// The names the page promised and the files the copy writes are spliced the
-/// same way, fingerprint included: a variant carries the source's digest, since
-/// the page names it before those bytes exist.
+/// A variant carries the *source's* digest, since the page names it before
+/// those bytes exist.
 #[test]
 #[cfg(all(feature = "images", feature = "css"))]
 fn a_fingerprinted_extracted_variant_is_named_as_the_page_promised() {

@@ -29,6 +29,9 @@ pub struct Session {
 
 impl Session {
     /// Connect, verify the host key, authenticate, and open the SFTP subsystem.
+    ///
+    /// A host-key warning is flushed as it happens, since warnings are buffered
+    /// and the upload would otherwise start before the operator saw it.
     pub async fn connect(
         config: &SshConfig,
         user: &str,
@@ -36,35 +39,24 @@ impl Session {
         ui: &Ui,
     ) -> Result<Self> {
         let rc = Arc::new(client::Config::default());
-        // The handler records its verdict here, since it can only return a
-        // bool; a plain connection failure otherwise stays generic.
         let verdict = Arc::new(Mutex::new(None));
         let client = Client::new(config, Arc::clone(&verdict));
         let mut handle = client::connect(rc, (config.host.as_str(), config.port), client)
             .await
             .map_err(|e| {
-                // Read the verdict out before matching: the guard must not stay
-                // alive for the arms, which lock nothing but would hold it.
                 let seen = *verdict.lock();
                 match seen {
-                    // The port too: the check is scoped to it, and so is the
-                    // `known_hosts` line the remedy has to name.
                     Some(Verdict::Changed) => {
                         DeployError::host_key_changed(&config.host, config.port)
                     }
                     _ => DeployError::connect(&config.host, e),
                 }
             })?;
-        // Connected despite a changed key: only `strict #false` gets here, and
-        // it must not do so quietly.
         if *verdict.lock() == Some(Verdict::Changed) {
             ui.warn(HostKeyAccepted {
                 host: config.host.clone(),
                 entry: DeployError::entry(&config.host, config.port),
             });
-            // Rendered now, not at the end of the run: warnings are buffered,
-            // and every file would otherwise be uploaded to the new host before
-            // the operator was told the key had changed.
             ui.flush();
         }
         Auth::new(config, opts).run(&mut handle, user).await?;
@@ -87,11 +79,9 @@ impl Session {
         })
     }
 
-    /// The remote files' digests, from the host's `sha256sum`. A missing
+    /// The remote files' digests, from the host's `sha256sum`; a missing
     /// directory or absent tool yields an empty map, so every file reads as new
-    /// and the site uploads in full rather than skipping wrongly. Paths the
-    /// host named that this client will not act on come back in the
-    /// [`Inventory`] rather than being dropped.
+    /// rather than being skipped wrongly.
     pub async fn digests(&self) -> Result<Inventory> {
         Ok(Remote::parse(&self.exec(&self.remote.command()).await?))
     }
@@ -117,7 +107,6 @@ impl Session {
         Ok(())
     }
 
-    /// Delete the remote file for dist-relative `rel`.
     pub async fn remove(&self, rel: &str) -> Result<()> {
         self.sftp
             .remove_file(self.remote.path(rel))
@@ -126,7 +115,7 @@ impl Session {
         Ok(())
     }
 
-    /// Cleanly disconnect; a failed teardown is not worth surfacing.
+    /// A failed teardown is not worth surfacing.
     pub async fn close(self) {
         let _ = self
             .handle
@@ -134,13 +123,9 @@ impl Session {
             .await;
     }
 
-    /// Run `command` over an exec channel and collect its stdout.
-    ///
-    /// Capped: the output is the host's own answer, and an endless stream (a
-    /// hostile host, or a `find` pointed at something enormous) would otherwise
-    /// grow this buffer until the process died. The same ceiling reasoning as
-    /// `atproto::Repo`'s page limit. 64 MiB of `sha256sum` output is roughly a
-    /// million files, far past any site this reconciles.
+    /// Run `command` over an exec channel and collect its stdout, capped: the
+    /// output is the host's own answer, and an endless stream would otherwise
+    /// grow this buffer until the process died.
     async fn exec(&self, command: &str) -> Result<String> {
         const LIMIT: usize = 64 << 20;
         let mut channel = self
@@ -191,28 +176,21 @@ impl Session {
     }
 }
 
-/// The remote directory the site is mirrored into: it maps dist-relative paths to
-/// absolute remote ones and speaks the `sha256sum` listing protocol.
+/// The remote directory the site is mirrored into, mapping dist-relative paths
+/// to absolute remote ones.
 struct Remote {
     base: String,
 }
 
 impl Remote {
     /// The remote root, with any trailing slash trimmed so [`Remote::path`] can
-    /// add exactly one.
-    ///
-    /// `base` is an absolute path by the time it gets here: [`super::Ssh::check`]
-    /// refuses an empty or relative one before a session is opened. It did not
-    /// use to, and an unset `path` produced a base of `""`, which turned
-    /// `index.html` into `/index.html` and had the run issue
-    /// `create_dir("/assets")` on the host.
+    /// add exactly one; `base` is absolute, as [`super::Ssh::check`] guarantees.
     fn new(base: &str) -> Self {
         Self {
             base: base.trim_end_matches('/').to_owned(),
         }
     }
 
-    /// The absolute remote path for a dist-relative file.
     fn path(&self, rel: &str) -> String {
         format!("{}/{rel}", self.base)
     }
@@ -230,14 +208,12 @@ impl Remote {
         format!("'{}'", value.replace('\'', r"'\''"))
     }
 
-    /// Parse `sha256sum` output (`<hex>  ./path` per line) into digests keyed by
-    /// the relative path, dropping the `./` prefix `find` emits.
+    /// Parse `sha256sum` output (`<hex>  ./path` per line) into digests keyed
+    /// by the relative path.
     ///
-    /// Paths that would escape the deploy root are refused here, the one place
-    /// the host's own answer becomes a path this client joins and deletes: see
-    /// [`Listed`]. Refused, and *kept*: one that is merely dropped is a file
-    /// the reconcile can neither overwrite nor delete, and that nothing in the
-    /// run ever mentions.
+    /// A path that would escape the deploy root is refused and *kept*: one
+    /// merely dropped is a file the reconcile can neither overwrite nor delete,
+    /// and that nothing in the run ever mentions.
     fn parse(output: &str) -> Inventory {
         let mut out = Inventory::default();
         for (hash, path) in output
@@ -273,7 +249,6 @@ mod tests {
         );
     }
 
-    /// The files a parse admitted, for the cases that only care about those.
     fn admitted(output: &str) -> crate::deploy::Digests {
         Remote::parse(output).report(&Ui::new(crate::ui::Level::Silent), "host")
     }
@@ -303,10 +278,6 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./index.html
         assert!(admitted("\n\n").is_empty());
     }
 
-    /// A path the host named that this client will not join is refused *and*
-    /// reported. It used to be dropped inside a `filter_map`, so a file the
-    /// reconcile could neither overwrite nor delete simply did not exist as far
-    /// as the run was concerned.
     #[test]
     fn a_refused_remote_path_is_kept_for_reporting() {
         let out = "\

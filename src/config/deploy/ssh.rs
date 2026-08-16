@@ -7,15 +7,13 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
 /// A host reachable over SSH. Files are reconciled with the remote directory
-/// over SFTP; change detection runs `sha256sum` on the host so an unchanged file
-/// is never re-sent. Works against any OpenSSH-compatible server.
+/// over SFTP, and change detection runs `sha256sum` on the host so an unchanged
+/// file is never re-sent.
 #[derive(Debug, Clone, Hash)]
 pub struct SshConfig {
-    /// Hostname or IP of the server.
     pub host: String,
     /// Absolute path to the remote directory the build is mirrored into.
     pub path: String,
-    /// Port the SSH server listens on.
     pub port: u16,
     /// User to authenticate as. Defaults to `$USER`.
     pub user: Option<String>,
@@ -24,8 +22,8 @@ pub struct SshConfig {
     /// from the environment/prompt.
     pub key: Option<PathBuf>,
     /// Verify the server's host key against `~/.ssh/known_hosts`, learning an
-    /// unseen host on first connect and refusing a changed key (MITM guard).
-    /// Turn off to accept any key (`StrictHostKeyChecking=no`).
+    /// unseen host on first connect and refusing a changed key. Off accepts any
+    /// key.
     pub strict: bool,
     /// Delete remote files under `path` that the build no longer produces.
     pub delete: bool,
@@ -36,21 +34,15 @@ impl Default for SshConfig {
         Self {
             host: String::new(),
             path: String::new(),
-            // The standard SSH port.
             port: 22,
-            // None resolves to $USER at deploy time.
             user: None,
-            // None falls back to agent, then password auth.
             key: None,
-            // secure by default: verify host keys against known_hosts.
             strict: true,
-            // reconcile: remove what the build no longer produces.
             delete: true,
         }
     }
 }
 
-/// The `ssh { .. }` block: presence enables the SSH backend.
 impl Section for SshConfig {
     const RULES: Block<Self> = Block(&[
         ("host", Text, "The host uploaded to.", |c, n, t| {

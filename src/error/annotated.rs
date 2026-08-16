@@ -1,10 +1,6 @@
-//! A generic, self-contained miette diagnostic.
-//!
-//! Several dependencies (kdl, wax, ..) ship their own `Diagnostic`s but against
-//! an incompatible miette version, so their rich spans can't cross into ours
-//! directly. Rather than hand-roll a bespoke bridge per dependency, they lower
-//! their error (a message, the offending source, and labeled byte ranges)
-//! into an [`Annotated`], which renders natively.
+//! A generic, self-contained miette diagnostic, the shape a dependency's own
+//! diagnostic (kdl, wax, ..) is lowered into when it is built against an
+//! incompatible miette version.
 
 use std::fmt;
 use std::ops::Range;
@@ -29,8 +25,6 @@ struct Label {
 }
 
 impl Annotated {
-    /// Start a diagnostic with a stable `code`, a headline `message`, and the
-    /// `source` text its spans point into.
     pub fn new(code: &'static str, message: impl Into<String>, source: impl Into<String>) -> Self {
         Self {
             code,
@@ -41,7 +35,6 @@ impl Annotated {
         }
     }
 
-    /// Attach a help line.
     pub fn help(mut self, help: impl Into<String>) -> Self {
         self.help = Some(help.into());
         self

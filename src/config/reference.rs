@@ -1,15 +1,9 @@
 //! The config schema, flattened for documentation.
 //!
 //! Walks the same [`Section`](super::dispatch::Section) tables that parse a
-//! config, so the reference cannot describe a key that does not exist or miss
-//! one that does. Nothing here knows what any key *means*: that text lives on
-//! the rule beside its handler, which is what makes adding a key and
-//! documenting it the same edit.
-//!
-//! One walk, two renderings: [`Module`] for the docs site and [`Terminal`] for
-//! `baudelaire reference`. Both are Display adapters over the same [`Reference`]
-//! rather than methods on it, so a third output is a third adapter and never a
-//! second walk.
+//! config, so the reference cannot describe a key that does not exist. One
+//! walk, two Display adapters: [`Module`] for the docs site and [`Terminal`]
+//! for `baudelaire reference`.
 
 use std::fmt;
 
@@ -17,9 +11,6 @@ use super::Config;
 use super::dispatch::Section;
 use crate::codegen::{Typst, Value};
 
-// Re-exported rather than left behind `pub(crate) mod dispatch`: `Kind` is part
-// of what an [`Entry`] says, so a caller outside the crate (the reference test)
-// has to be able to name it.
 pub use super::dispatch::{Kind, Row, Rows};
 
 /// Every key the config accepts, depth-first, in the order the tables declare
@@ -34,25 +25,21 @@ pub struct Entry {
     pub key: &'static str,
     pub kind: Kind,
     pub doc: &'static str,
-    /// How many blocks deep, so a renderer can indent without re-parsing the
-    /// path.
+    /// How many blocks deep the key sits.
     pub depth: usize,
 }
 
 impl Reference {
-    /// The whole schema.
     pub fn new() -> Self {
         let mut entries = Vec::new();
         Self::walk(Config::rows, "", 0, &mut entries);
         Self(entries)
     }
 
-    /// The schema below a dotted path, the path's own key first: what
-    /// `baudelaire reference assets.images` prints.
+    /// The schema below a dotted path, the path's own key first.
     ///
-    /// `None` when nothing is named that, which the caller turns into an error
-    /// listing what does exist; an empty `Reference` would read as "this key
-    /// has no settings", which is a different and wrong answer.
+    /// `None` when nothing is named that, which is a different answer from an
+    /// empty `Reference` (a key with no settings of its own).
     pub fn at(path: &str) -> Option<Self> {
         let all = Self::new();
         let start = all.0.iter().position(|e| e.path == path)?;
@@ -74,23 +61,19 @@ impl Reference {
         ))
     }
 
-    /// Every key, in declaration order.
     pub fn entries(&self) -> &[Entry] {
         &self.0
     }
 
-    /// Every dotted path, for the did-you-mean on an unknown one. Derived from
-    /// the same walk that would have printed them, so a suggestion is always a
-    /// path that works.
+    /// Every dotted path, for the did-you-mean on an unknown one.
     pub fn paths(&self) -> Vec<&str> {
         self.0.iter().map(|e| e.path.as_str()).collect()
     }
 
     /// Append `rows`, then descend into whichever of them are blocks.
     ///
-    /// [`Kind::Overlay`] is the one shape that does not recurse: a profile
-    /// accepts every top-level key, so walking into it would be walking the
-    /// whole document again, for ever.
+    /// [`Kind::Overlay`] does not recurse: a profile accepts every top-level
+    /// key, so walking into it would never terminate.
     fn walk(rows: super::dispatch::Rows, prefix: &str, depth: usize, out: &mut Vec<Entry>) {
         for row in rows() {
             let path = if prefix.is_empty() {
@@ -124,21 +107,14 @@ impl Default for Reference {
     }
 }
 
-/// The reference as a terminal tree: what `baudelaire reference` writes.
-///
-/// Indented by nesting depth rather than printing each full dotted path, so the
-/// shape of the config is legible down the left edge. Colour follows the same
-/// palette as the rest of the CLI, and drops out on its own when stdout is not
-/// a terminal.
+/// The reference as a terminal tree: what `baudelaire reference` writes,
+/// indented by nesting depth rather than by full dotted path.
 pub struct Terminal<'a>(pub &'a Reference);
 
 impl fmt::Display for Terminal<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use owo_colors::{OwoColorize, Stream::Stdout};
 
-        // The description column, measured over what will actually be printed
-        // rather than fixed, so a narrow subtree is not indented to the width of
-        // the whole document.
         let width = self
             .0
             .entries()
@@ -168,14 +144,10 @@ impl fmt::Display for Terminal<'_> {
 /// The reference as a generated Typst data module, which the docs site's
 /// reference page imports and renders.
 ///
-/// Nothing here formats markup: the module is one binding of plain data, so how
-/// the reference *reads* is a typst template in the docs site, in the docs'
-/// own style, and this crate only has to keep saying what the keys are. It also
-/// means no hand-rolled escaping, since every string goes out through
-/// [`codegen::Value`].
+/// One binding of plain data and no markup: how the reference *reads* is a
+/// template in the docs site.
 pub struct Module<'a>(pub &'a Reference);
 
-/// One entry as the record the template destructures.
 impl From<&Entry> for Value {
     fn from(entry: &Entry) -> Self {
         Self::dict([
@@ -183,8 +155,6 @@ impl From<&Entry> for Value {
             ("key", Self::str(entry.key)),
             ("shape", Self::str(entry.kind.label())),
             ("doc", Self::str(entry.doc)),
-            // The depth is how deep the dispatch tables nest, a handful at
-            // most, so the conversion cannot fail on any real reference.
             (
                 "depth",
                 Self::Int(i64::try_from(entry.depth).expect("config nesting depth fits an i64")),
@@ -203,9 +173,6 @@ impl fmt::Display for Module<'_> {
              // edit: `cargo nextest run --test reference` fails when this file\n\
              // and those tables disagree.\n"
         )?;
-        // One entry per line rather than one rendered array: the file is
-        // committed, and a diff that names the key that changed is worth the
-        // extra loop.
         writeln!(f, "#let entries = (")?;
         for entry in self.0.entries() {
             writeln!(f, "  {},", Typst(&Value::from(entry)))?;
@@ -215,8 +182,8 @@ impl fmt::Display for Module<'_> {
 }
 
 impl Kind {
-    /// Whether this key opens a block of its own keys, rather than holding a
-    /// value: what a renderer turns into a heading instead of a table row.
+    /// Whether this key opens a block of its own keys rather than holding a
+    /// value.
     pub fn section(self) -> bool {
         matches!(
             self,
@@ -229,10 +196,8 @@ impl Kind {
         )
     }
 
-    /// How this shape is named to a reader, in both renderings.
-    ///
-    /// A `String` and not a `&'static str` because a `Choice` spells out the
-    /// names it accepts, read from the enum's own table.
+    /// How this shape is named to a reader, in both renderings. A `String`
+    /// because a `Choice` spells out the names it accepts.
     pub fn label(self) -> String {
         match self {
             Self::Text => "text".to_owned(),
@@ -241,8 +206,6 @@ impl Kind {
             Self::Size => "size".to_owned(),
             Self::Time => "duration".to_owned(),
             Self::Version => "version".to_owned(),
-            // The boolean leads, because it is the spelling that was there
-            // first and the one most sites write.
             Self::Level(names) => format!("flag | {}", names().join(" | ")),
             Self::Path => "path".to_owned(),
             Self::Asset => "asset path".to_owned(),
@@ -252,15 +215,7 @@ impl Kind {
             Self::Numbers => "number ..".to_owned(),
             Self::Table => "key value ..".to_owned(),
             Self::Choice(names) => names().join(" | "),
-            // The trailing `..` is what tells a reader the key takes as many
-            // names as it likes, the same mark `Texts` and `Numbers` carry.
             Self::Choices(names) => format!("({}) ..", names().join(" | ")),
-            // The `-` is half the grammar, so the rendering says so rather than
-            // leaving it to the key's prose. Both spellings of it render the
-            // same way; only the name set differs.
-            // A `*` marks a name that is on by default, which is the other half
-            // of what a reader needs: the set of names, and which of them they
-            // already have.
             Self::Toggled(names, on) => {
                 let on = on();
                 let names: Vec<String> = names()
@@ -290,10 +245,6 @@ impl Kind {
 mod tests {
     use super::{Kind, Reference};
 
-    /// A key taking any number of names says so, with the same trailing `..`
-    /// every other list key carries. Three of these were declared with the
-    /// single-name variant, so the reference documented
-    /// `formats "rss" "atom"` as a key that reads one word.
     #[test]
     fn a_multi_value_choice_renders_as_a_list() {
         let reference = Reference::new();
@@ -314,8 +265,6 @@ mod tests {
         }
     }
 
-    /// And a key that reads exactly one name still reads as one, with no list
-    /// mark to suggest otherwise.
     #[test]
     fn a_single_choice_carries_no_list_mark() {
         let reference = Reference::new();

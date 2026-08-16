@@ -5,18 +5,13 @@ use std::path::{Path, PathBuf};
 
 use super::PathExt;
 
-/// The link between a processed asset and the source map beside it.
-///
-/// Both halves live here because they are one fact read from two ends: the map
-/// is named after the file it maps, and that file names the map back. Spelled
-/// apart, a change to either is a map a browser asks for and does not get, and
-/// nothing fails until somebody opens devtools.
+/// The link between a processed asset and the source map beside it: the map is
+/// named after the file it maps, and that file names the map back.
 pub(super) struct SourceMap;
 
 impl SourceMap {
-    /// Appended to the whole served name rather than replacing its extension.
-    /// `app.js` maps to `app.js.map`; `with_extension` would give `app.map`,
-    /// which is both the convention nothing follows and a name the stylesheet
+    /// Appended to the whole served name rather than replacing its extension:
+    /// `app.js` maps to `app.js.map`, and `app.map` is a name the stylesheet
     /// beside it would claim too.
     const EXT: &'static str = "map";
 
@@ -32,26 +27,15 @@ impl SourceMap {
     const MEDIA: &'static str = "application/json;charset=utf-8;base64,";
 
     /// `bytes` carrying `map` itself, as a `data:` URI in place of a filename.
-    ///
-    /// Base64 through [`crate::digest::Base64`], which is the crate's one
-    /// encoder, so a map and a subresource digest cannot disagree about what
-    /// base64 is.
     pub(super) fn inlined(bytes: Vec<u8>, dst: &Path, map: &[u8]) -> Vec<u8> {
         let uri = format!("data:{}{}", Self::MEDIA, crate::digest::Base64(map));
         Self::commented(bytes, dst, &uri)
     }
 
     /// `bytes` with the comment naming its map appended, in the syntax the
-    /// file's own language reads.
-    ///
-    /// The comment names the map by bare filename, not by path: the two are
-    /// written into the same directory, so a relative reference resolves
-    /// wherever the site is hosted, including under a subdirectory, where a
-    /// root-absolute one would not.
-    ///
-    /// A file whose extension has no comment syntax is returned untouched. The
-    /// map is still written beside it, which is what a tool looking the file up
-    /// by name reads anyway.
+    /// file's own language reads. The map is named by bare filename, so the
+    /// reference resolves wherever the site is hosted; a file whose extension
+    /// has no comment syntax is returned untouched.
     pub(super) fn linked(bytes: Vec<u8>, dst: &Path) -> Vec<u8> {
         let name = Self::beside(dst);
         let Some(name) = name.file_name().and_then(|n| n.to_str()) else {
@@ -62,15 +46,11 @@ impl SourceMap {
     }
 
     /// `bytes` with a `sourceMappingURL` comment naming `target`, which is
-    /// either the map's filename or the map itself as a `data:` URI. One
-    /// spelling for both, since the only difference between an external map and
-    /// an inline one is what the comment points at.
+    /// either the map's filename or the map itself as a `data:` URI.
     fn commented(mut bytes: Vec<u8>, dst: &Path, target: &str) -> Vec<u8> {
         let Some((open, close)) = Self::comment(dst) else {
             return bytes;
         };
-        // A file that does not end in a newline would otherwise take the comment
-        // onto its last line, which for a `//` comment reads as part of it.
         if !bytes.ends_with(b"\n") {
             bytes.push(b'\n');
         }
@@ -104,8 +84,6 @@ mod tests {
             SourceMap::beside(Path::new("css/app.a1b2.css")),
             PathBuf::from("css/app.a1b2.css.map")
         );
-        // Not `app.a1b2.map`: the fingerprint is part of the name, and the
-        // script beside it would land on the very same one.
         assert_eq!(
             SourceMap::beside(Path::new("app.a1b2.js")),
             PathBuf::from("app.a1b2.js.map")
@@ -126,9 +104,6 @@ mod tests {
         );
     }
 
-    /// The comment names a sibling, so it has to be the bare filename: a
-    /// directory in front of it resolves against the *page's* URL, not the
-    /// asset's, and points at nothing.
     #[test]
     fn the_comment_names_the_map_without_its_directory() {
         let out = SourceMap::linked(b"x\n".to_vec(), Path::new("deep/nested/app.js"));
@@ -137,8 +112,6 @@ mod tests {
         assert!(!out.contains("deep/"), "{out}");
     }
 
-    /// A minified file has no trailing newline, and a `//` comment appended to
-    /// its last line would be read as part of that line.
     #[test]
     fn a_file_with_no_trailing_newline_gets_one_first() {
         let out = SourceMap::linked(b"const a=1".to_vec(), Path::new("app.js"));

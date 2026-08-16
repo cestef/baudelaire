@@ -1,13 +1,5 @@
-//! `manifest.webmanifest` generation.
-//!
-//! The [web app manifest][spec] a browser reads when a visitor installs the
-//! site: what to call it, what to launch, what to draw before the first page
-//! renders. One per language, beside that language's feeds and search index, so
-//! installing from `/fr/` gives a French app that stays in the French site.
-//!
-//! Every member the build can derive it derives ([`Config::title`], the
-//! language's root URL, an icon's media type), leaving the config to carry only
-//! what an author knows.
+//! `manifest.webmanifest` generation: the [web app manifest][spec] a browser
+//! reads when a visitor installs the site, one per language.
 //!
 //! [spec]: https://www.w3.org/TR/appmanifest/
 
@@ -30,10 +22,6 @@ impl Processor for WebManifest {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        // A manifest with no icon parses, installs nothing, and looks like a
-        // working feature: no browser offers to install a site it cannot draw
-        // on a home screen. Warned once for the site rather than once per
-        // language, since the icons are configured once.
         if site.config.generate.manifest.icons.is_empty() {
             out.warn(ManifestIcons);
         }
@@ -48,9 +36,8 @@ impl Processor for WebManifest {
     }
 }
 
-/// The manifest as it is serialized. Field names are the members the spec
-/// defines, so what is written is read off this struct rather than assembled
-/// from string keys.
+/// The manifest as it is serialized; field names are the members the spec
+/// defines.
 #[derive(Serialize)]
 struct Document<'a> {
     name: &'a str,
@@ -58,9 +45,6 @@ struct Document<'a> {
     short_name: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
-    /// The manifest's own language, and the direction it reads in: the app name
-    /// is text like any other, and a launcher has no page to inherit either
-    /// from.
     lang: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     dir: Option<&'a str>,
@@ -101,12 +85,9 @@ impl<'a> Document<'a> {
     /// language: the authored path if there is one, else where that language's
     /// site begins.
     ///
-    /// Localized either way, and for the same reason the defaults are: an app
-    /// installed from `/fr/` launches into the French site and treats leaving it
-    /// as leaving the app. A shared `start "/home/"` written outside a scope
-    /// that *is* localized is a manifest a browser rejects, since `start_url`
-    /// must sit within `scope`. Both then carry the base path, which a browser
-    /// resolves neither of them against.
+    /// Localized either way, so an app installed from `/fr/` launches into the
+    /// French site: an unlocalized `start` would sit outside a localized
+    /// `scope`, which a browser rejects.
     fn url(config: &Config, authored: Option<&str>, lang: &str) -> String {
         config.prefixed(&config.localize(lang, authored.unwrap_or("/")))
     }
@@ -117,8 +98,7 @@ impl<'a> Document<'a> {
 struct Icon {
     src: String,
     sizes: String,
-    /// The media type, from the file's extension: it lets a launcher pick
-    /// without fetching every candidate first.
+    /// The media type, from the file's extension with any query stripped.
     r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     purpose: Option<&'static str>,
@@ -128,17 +108,10 @@ impl Icon {
     fn new(config: &Config, icon: &IconConfig) -> Self {
         Self {
             src: config.prefixed(&icon.src),
-            // `any` is what the spec calls an image that scales, which is the
-            // honest answer for a vector icon and the reason `size` is optional.
             sizes: icon
                 .size
                 .map_or_else(|| "any".to_owned(), |size| format!("{size}x{size}")),
-            // From the path alone: a `?v=2` cache-buster is part of the request
-            // and not of the file, and reading it as the extension would tell a
-            // launcher the image is an unknown binary and have it skip the icon.
             r#type: Mime::of(Tail::of(&icon.src).path).to_string(),
-            // The default is what a manifest means by an absent `purpose`, so
-            // writing it would only restate the spec.
             purpose: (icon.purpose != IconPurpose::default()).then(|| icon.purpose.name()),
         }
     }
@@ -182,17 +155,12 @@ mod tests {
         assert_eq!(json["name"], "Baudelaire");
         assert_eq!(json["start_url"], "/");
         assert_eq!(json["scope"], "/");
-        // `minimal` is one word in config; the member it writes is not.
         assert_eq!(json["display"], "minimal-ui");
         assert_eq!(json["theme_color"], "#101014");
-        // Nothing said, nothing written: an absent member and an empty one mean
-        // different things to a browser.
         assert!(json.get("short_name").is_none());
         assert!(json.get("background_color").is_none());
     }
 
-    /// A vector icon scales, so it declares `any` rather than a made-up size,
-    /// and only a non-default purpose is spelled out.
     #[test]
     fn an_icon_carries_its_size_type_and_purpose() {
         let config = configured();
@@ -206,8 +174,6 @@ mod tests {
         assert_eq!(icons[1]["purpose"], "maskable");
     }
 
-    /// A non-default language gets its own manifest, launching into its own
-    /// scope: installing from `/fr/` must not open the English site.
     #[test]
     fn a_language_launches_into_its_own_scope() {
         let mut config = configured();
@@ -217,7 +183,6 @@ mod tests {
         assert_eq!(json["lang"], "fr");
         assert_eq!(json["start_url"], "/docs/fr/");
         assert_eq!(json["scope"], "/docs/fr/");
-        // ...and the icons a base path serves are under it too.
         assert_eq!(json["icons"][0]["src"], "/docs/icons/app-192.png");
         assert_eq!(
             ManifestConfig::url(&config, "fr"),
@@ -225,9 +190,6 @@ mod tests {
         );
     }
 
-    /// An authored `start`/`scope` is localized like the defaults are. Written
-    /// once and shared verbatim, a `start_url` would sit outside the `scope`
-    /// every other language localized, which is a manifest a browser refuses.
     #[test]
     fn an_authored_start_and_scope_are_localized_too() {
         let mut config = configured();

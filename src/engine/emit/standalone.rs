@@ -1,12 +1,5 @@
-//! Single-file export: the whole site as one HTML document.
-//!
-//! Every page's body is stored as a route in a JSON island, the entry page's
-//! head and body seed the shell, and the bundled router swaps routes in place.
-//! The result is one file to mail, drop on a USB stick, or open from disk, with
-//! working navigation and no server anywhere.
-//!
-//! It is an *additional* artifact: `dist` still holds the ordinary site, and
-//! this pass only reads what that build already produced.
+//! Single-file export: the whole site as one HTML document, every page's body
+//! a route in a JSON island that the bundled router swaps in place.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -39,8 +32,6 @@ impl Processor for Standalone {
             out.warn(StandaloneEntryMissing { entry });
             return Ok(());
         };
-        // Root-absolute asset URLs resolve against a server, not a file. Saying
-        // so here beats a user discovering an unstyled page on another machine.
         if !site.config.html.embed {
             out.warn(StandaloneLinked {
                 file: cfg.file.clone(),
@@ -68,7 +59,7 @@ impl Processor for Standalone {
 }
 
 /// The `id` of the JSON island the routes are parsed from, shared by the shell
-/// that writes it and the generated script that reads it.
+/// and the generated script.
 const ROUTES_ID: &str = "baudelaire-routes";
 
 /// One page as the exported file carries it.
@@ -104,8 +95,6 @@ impl<'a> Route<'a> {
 #[derive(Serialize)]
 struct Swap<'a> {
     title: &'a str,
-    /// Borrowed when the route's resources are all in the shell already, which
-    /// is the ordinary case; owned only when a page brought one of its own.
     html: Cow<'a, str>,
 }
 
@@ -142,12 +131,9 @@ impl<'a> Routes<'a> {
 
     /// The resource elements every route carries, in document order.
     ///
-    /// An element present on every route is, in a one-document export, an
-    /// element of that document: the shell states it once and no route repeats
-    /// it. That is the difference between a file that inlines the site's
-    /// stylesheet and bundle once and one that inlines them per page, and it is
-    /// why the bundle also runs once rather than on every navigation. A
-    /// resource only some pages carry is not shared, and stays with them.
+    /// An element present on every route is an element of the document: the
+    /// shell states it once and no route repeats it, which is also what keeps
+    /// the bundle from running on every navigation.
     fn shared(&self) -> Vec<&str> {
         let mut routes = self.0.values();
         let Some(first) = routes.next() else {
@@ -166,20 +152,12 @@ impl<'a> Routes<'a> {
     }
 
     /// The route table, safe to nest inside a `<script>`: every `<` is written
-    /// as its JSON unicode escape for U+003C, which a JSON parser reads back as
-    /// the same character and an HTML tokenizer never reads as markup at all.
+    /// as its JSON escape for U+003C, which a JSON parser reads back as the
+    /// same character and an HTML tokenizer never reads as markup.
     ///
-    /// Every `<`, not just `</`. A `<script>` element's content ends at the
-    /// first `</script>`, but `<!--` is the other door into it: the tokenizer
-    /// treats that as the start of an escaped block, and `<!--<script` puts it
-    /// in the state where the island's own `</script>` no longer closes
-    /// anything and the rest of the document is swallowed as text. An inlined
-    /// SVG carrying a generator comment is enough to reach it. Escaping the one
-    /// character both sequences begin with closes the class rather than the two
-    /// spellings of it, and costs five bytes per `<` in a file whose markup is
-    /// JSON-escaped throughout anyway.
-    ///
-    /// `<` appears in serialized JSON only inside a string, so replacing it
+    /// Every `<`, not just `</`: `<!--<script` puts the tokenizer in the state
+    /// where the island's own `</script>` no longer closes anything. `<`
+    /// appears in serialized JSON only inside a string, so replacing it
     /// wholesale cannot touch the structure.
     fn json(&self, shared: &[&str]) -> Result<String> {
         let swaps: BTreeMap<&str, Swap> = self
@@ -207,6 +185,8 @@ struct Document<'a> {
 }
 
 impl Document<'_> {
+    /// The router goes in as a *classic* script, since module scripts do not
+    /// run on `file://`, which is where a single file is usually opened.
     fn render(&self) -> String {
         let mut attrs = vec![("lang", self.lang)];
         if let Some(dir) = self.dir {
@@ -216,18 +196,12 @@ impl Document<'_> {
         html.doctype("html");
         html.nest("html", &attrs, |x| {
             x.nest("head", &[], |x| {
-                // The entry page's own head (its meta tags, the charset
-                // typst-html generates) plus the resources every route shares.
-                // Rebuilding either here would be a second, drifting definition
-                // of what this site's pages carry.
                 x.raw(self.head);
                 x.nest(
                     "script",
                     &[("type", "application/json"), ("id", ROUTES_ID)],
                     |x| x.raw(self.routes),
                 );
-                // A classic script, deliberately: module scripts do not run on
-                // `file://`, which is where a single file is usually opened.
                 x.nest("script", &[], |x| x.raw(self.script));
             });
             x.nest("body", &[], |x| x.raw(self.body));
@@ -244,8 +218,8 @@ impl StandaloneConfig {
     }
 
     /// The inlined router: the three constants it closes over, the shared core,
-    /// and the bundle adapter. It mounts itself as it is evaluated (there is
-    /// only ever this one document to drive), so nothing follows the parts.
+    /// and the bundle adapter. It mounts itself as it is evaluated, so nothing
+    /// follows the parts.
     fn script(&self, entry: &str) -> String {
         Script::new(&[
             ("ROUTES_ID", ROUTES_ID),
@@ -303,9 +277,7 @@ mod tests {
     /// The stylesheet every fixture page carries, as a real build's pages do.
     const SITE_CSS: &str = r#"<link rel="stylesheet" href="data:text/css,body{}">"#;
 
-    /// A built site: pages and the fragments the render pass captured for them,
-    /// owned here so a test states only `(slug, title, body)` and the borrows
-    /// stay local.
+    /// A built site: pages and the fragments the render pass captured for them.
     struct Built(Vec<(Page, Fragments)>);
 
     impl Built {
@@ -365,17 +337,13 @@ mod tests {
     }
 
     /// The exported file's route table: the text between the island's tags,
-    /// exactly as the browser's JSON parser is handed it. Nothing is undone
-    /// here, because nothing has to be: the escape the island carries is a
-    /// plain JSON one that any parser resolves.
+    /// exactly as the browser's JSON parser is handed it.
     fn island(html: &str) -> &str {
         let after = html.split_once(ROUTES_ID).expect("island present").1;
         let json = after.split_once('>').expect("island opens").1;
         json.split_once("</script>").expect("island closes").0
     }
 
-    /// The happy path: one file, every page a route, the entry rendered into
-    /// the body so the export shows something without JavaScript.
     #[test]
     fn writes_one_file_carrying_every_route() {
         let built = Built::of(&[
@@ -397,10 +365,6 @@ mod tests {
         assert_eq!(routes["/about/"]["html"], "<p>about</p>");
     }
 
-    /// The stylesheet every page links is the document's, so the file states it
-    /// once instead of once per route: with `embed` on, that is the difference
-    /// between carrying the site's CSS once and carrying it N times. A link only
-    /// one page has stays with that page.
     #[test]
     fn links_every_route_shares_are_hoisted_into_the_shell() {
         const OWN: &str = r#"<link rel="stylesheet" href="data:text/css,p{}">"#;
@@ -419,7 +383,6 @@ mod tests {
         assert_eq!(routes["/about/"]["html"], format!("{OWN}<p>about</p>"));
     }
 
-    /// An entry that names no page leaves nothing half-written.
     #[test]
     fn an_unknown_entry_warns_and_writes_nothing() {
         let mut config = config();
@@ -431,7 +394,6 @@ mod tests {
         assert!(rec.warns[0].contains("/nope/"), "{:?}", rec.warns);
     }
 
-    /// Linked assets do not survive a move to another machine; the build says so.
     #[test]
     fn warns_when_the_pages_only_link_their_assets() {
         let mut config = config();
@@ -443,8 +405,6 @@ mod tests {
         assert!(rec.warns[0].contains("site.html"), "{:?}", rec.warns);
     }
 
-    /// A `</script>` inside a page's markup would otherwise close the island
-    /// early and spill the rest of the site into the document as text.
     #[test]
     fn route_markup_cannot_close_the_json_island() {
         let built = Built::of(&[("index", "Home", "<p>a</p><script>1</script>")]);
@@ -453,16 +413,10 @@ mod tests {
         let (_, html) = &rec.files[0];
         let raw = island(html);
         assert!(!raw.contains("</script"), "closes early: {raw}");
-        // ..and the escape is one the JSON parser undoes, so the route is intact.
         let routes: serde_json::Value = serde_json::from_str(raw).unwrap();
         assert_eq!(routes["/"]["html"], "<p>a</p><script>1</script>");
     }
 
-    /// `</script>` is not the only way out of a `<script>` element: `<!--`
-    /// opens the escaped state, and `<!--<script` the double-escaped one, where
-    /// the island's own closing tag stops closing it and the whole rest of the
-    /// document is read as its text. An inlined SVG carrying a generator
-    /// comment reaches this, which is why no `<` at all survives the island.
     #[test]
     fn a_comment_in_route_markup_cannot_reopen_the_island() {
         let built = Built::of(&[("index", "Home", "<!--<script-->ok")]);
@@ -475,8 +429,6 @@ mod tests {
         assert_eq!(routes["/"]["html"], "<!--<script-->ok");
     }
 
-    /// The generated script never carries the sequence that would end its own
-    /// element, which nothing escapes for us.
     #[test]
     fn the_inlined_router_never_closes_its_own_element() {
         let script = StandaloneConfig {

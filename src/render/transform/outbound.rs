@@ -1,12 +1,4 @@
-//! Collects the outbound links a page carries, for `check --external`.
-//!
-//! Only anchors: an outbound link is something a *reader* can follow and find
-//! gone. A stylesheet or script from a CDN fails loudly in the browser and is
-//! not the site's link rot to report.
-//!
-//! Collected here rather than by scanning the rendered text, because at this
-//! point the DOM already says which values are `href`s, and no `http` inside a
-//! code block or a paragraph can be mistaken for one.
+//! Collects the outbound anchors a page carries, for `check --external`.
 
 use typst_html::{HtmlDocument, attr, tag};
 
@@ -30,8 +22,6 @@ impl Transform for Outbound {
             let Some(href) = el.attrs.get(attr::href) else {
                 return;
             };
-            // Deduplicated per page: a nav repeated on every page is one URL to
-            // check, and one page to name when it is dead.
             if Self::is_external(href) && !cx.found.external.iter().any(|seen| seen == href) {
                 cx.found.external.push(href.to_string());
             }
@@ -42,8 +32,8 @@ impl Transform for Outbound {
 impl Outbound {
     /// Whether a href names something out on the web that can be requested.
     ///
-    /// Scheme-relative (`//host/x`) is excluded on purpose: it resolves against
-    /// the page's own scheme, which a static build does not know.
+    /// Scheme-relative (`//host/x`) is excluded: it resolves against the page's
+    /// own scheme, which a static build does not know.
     fn is_external(href: &str) -> bool {
         href.starts_with("http://") || href.starts_with("https://")
     }

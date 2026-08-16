@@ -17,7 +17,6 @@ use crate::error::Result;
 
 use dev::Dev;
 
-/// Arguments for `baudelaire serve`.
 #[derive(Args, Debug, Clone)]
 pub struct ServeArgs {
     #[command(flatten)]
@@ -57,7 +56,6 @@ impl Run for ServeArgs {
 
         let mut config = cx.cli.config()?;
         self.apply(&mut config);
-        // Prefix the site name with the active profile, if one was requested.
         match cx.cli.global.profile.as_deref() {
             Some(profile) => cx.ui.banner(format_args!(
                 "{} · {}",
@@ -66,8 +64,6 @@ impl Run for ServeArgs {
             )),
             None => cx.ui.banner(format_args!("{}", config.label())),
         }
-        // Re-reads config.kdl with the same profile + overrides, so the dev
-        // server picks up config edits live.
         let reload = || -> Result<Config> {
             let mut config = cx.cli.config()?;
             self.apply(&mut config);
@@ -78,6 +74,8 @@ impl Run for ServeArgs {
 }
 
 impl ServeArgs {
+    /// `--spans` lands in `html`, not `serve`: the stamps are markup, and the
+    /// cache fingerprint keys on the config that shapes markup.
     fn apply(&self, config: &mut Config) {
         self.overrides.apply(config);
         if let Some(port) = self.port {
@@ -88,10 +86,6 @@ impl ServeArgs {
         }
         Toggle::of(self.open, self.no_open).apply(&mut config.serve.open);
         Toggle::of(self.watch, self.no_watch).apply(&mut config.serve.watch);
-        // Into `html`, not `serve`: the stamps are markup, and the cache keys on
-        // the config that shapes markup. A preview-only switch that the
-        // fingerprint could not see would leave a later `build` reusing these
-        // pages with their attributes still on.
         Toggle::of(self.spans, self.no_spans).apply(&mut config.html.spans);
     }
 }

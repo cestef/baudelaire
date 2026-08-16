@@ -1,10 +1,7 @@
-//! Per-page transforms over the typed HTML DOM.
+//! Per-page transforms over the typed HTML DOM, applied before serialization.
 //!
-//! A [`Transform`] rewrites a page's [`HtmlDocument`] in place before
-//! serialization: the render-side counterpart to a post-build
-//! [`crate::engine`] `Processor`. [`Transforms::builtin`] is the single source
-//! of the DOM pipeline: a new pass is one `impl Transform` plus one line in that
-//! list, each gated on its own config. Even core link resolution is a transform.
+//! [`Transforms::builtin`] is the single source of the pipeline: a new pass is
+//! one `impl Transform` plus one line in that list.
 
 mod anchors;
 mod base;
@@ -67,70 +64,42 @@ use svg::Svg;
 pub(super) struct Cx<'a> {
     pub config: &'a Config,
     pub page: &'a Page,
-    /// The entity registries, so a transform can resolve who a page credits.
     pub entities: &'a crate::content::Registries,
     pub links: &'a LinkMap,
-    /// Processed-asset URL map, consumed by the fingerprint and meta transforms.
     pub assets: &'a AssetMap,
-    /// Responsive width-variant manifest, consumed by the sources transform.
     pub srcsets: &'a SrcSets,
-    /// What this build wrote and what each file digests to, consumed by the
-    /// integrity transform.
+    /// What this build wrote and what each file digests to.
     pub emitted: &'a super::Emitted,
-    /// Project root, so the externalize and svg transforms resolve a marker's
-    /// project-relative path to the source file on disk.
     pub root: &'a std::path::Path,
-    /// The content tree as the compiler spells it, resolved once for the build:
-    /// what a link's origin is tested against to tell an author's own reference
-    /// from a layout's chrome.
+    /// The content tree as the compiler spells it: what a link's origin is
+    /// tested against to tell an author's own reference from a layout's chrome.
     pub content: &'a std::path::Path,
-    /// The world this page compiled in, so a transform can ask what a node's
-    /// span points at: the source files, as the compiler read them.
     pub world: &'a crate::world::PageWorld,
-    /// What the pipeline has found so far. This is the value the caller gets
-    /// back, accumulated in place rather than copied out field by field.
+    /// What the pipeline has found so far, and the value the caller gets back.
     pub found: super::Rewrite,
     /// The width variants this page's *extracted* images will be given, keyed
     /// by the URL each is served at.
     ///
-    /// Page-local scratch rather than part of [`SrcSets`]: the pipeline's
-    /// manifest is built before any page renders, and an image lifted out of a
-    /// page is not known to exist until that page has rendered. Written by
-    /// [`Externalize`] and read by [`Sources`], which run in that order, so the
-    /// two kinds of responsive image reach the `srcset` writer the same way.
+    /// Written by [`Externalize`] and read by [`Sources`], which run in that
+    /// order.
     pub extracted: std::collections::BTreeMap<String, Vec<super::Candidate>>,
 }
 
-/// The attributes that carry a URL to an asset this site owns.
+/// The attributes that unconditionally carry a URL to an asset this site owns.
 ///
-/// One list, because four hand-written copies had drifted into four different
-/// sets: `og:image` was fingerprinted but never base-path-prefixed and never
-/// embedded, so a subpath-hosted site's social card pointed at a file that was
-/// not there. `srcset` is handled separately by [`ElementExt::assets`], which
-/// parses its candidate list, and `content` by [`URL_META`], which is not
-/// unconditional.
+/// `srcset` and `content` are conditional, and handled by
+/// [`ElementExt::assets`].
 const URL_ATTRS: &[HtmlAttr] = &[attr::href, attr::src, attr::poster];
 
-/// `svg`, interned once rather than per element: typst-html's `tag` module
-/// names the HTML vocabulary, and this one is SVG's root.
+/// SVG's root tag, which typst-html's HTML-only `tag` module does not name.
 static SVG: LazyLock<HtmlTag> =
     LazyLock::new(|| HtmlTag::intern("svg").expect("svg is a valid tag name"));
 
-/// OpenGraph names its tags with `property` where the HTML spec uses `name`.
-/// typst-html has no constant for it, since it is RDFa rather than HTML. Here
-/// rather than on the pass that writes the tags, because the pass that decides
-/// whether their `content` is a URL reads the same attribute.
+/// The attribute OpenGraph names its tags with, where HTML uses `name`.
 pub(super) const PROPERTY: HtmlAttr = HtmlAttr::constant("property");
 
-/// The `<meta>` keys whose `content` is a URL.
-///
-/// Every other one is prose: a title, a description, an author, a tag. `content`
-/// was in [`URL_ATTRS`] outright for a while, which made it a URL on every
-/// `<meta>` in the page. The asset passes were saved by their own prefix check
-/// (nothing that is not under `/assets/` can match), but the base path has none
-/// to make: it prefixes any value starting with `/`, so a site at `/docs` and a
-/// page titled `/etc/hosts, annotated` published
-/// `og:title` = `/docs/etc/hosts, annotated`.
+/// The `<meta>` keys whose `content` is a URL; every other one is prose, and
+/// rewriting it as a URL corrupts titles and descriptions.
 const URL_META: &[&str] = &[
     "og:image",
     "og:image:url",
@@ -139,25 +108,17 @@ const URL_META: &[&str] = &[
     "twitter:image",
 ];
 
-/// The elements a reader deep-links to and an outline is read from, in level
-/// order, so an index into this *is* the heading level. One list, because three
-/// passes ask about headings: the anchor pass, the lint that reports a skipped
-/// level, and anything that comes after them.
+/// The heading elements in level order, so an index into this *is* the heading
+/// level.
 const HEADINGS: &[HtmlTag] = &[tag::h1, tag::h2, tag::h3, tag::h4, tag::h5, tag::h6];
 
-/// The one replace-or-push rule for an attribute list, shared by
-/// [`ElementExt::set`] and by any pass still assembling attributes that has no
-/// element to hang them off yet.
+/// The replace-or-push rule for an attribute list, for a pass still assembling
+/// attributes that has no element to hang them off yet.
 pub(super) trait AttrsExt {
     /// Set `key` to `value`, replacing an existing entry rather than appending
     /// a duplicate (which is invalid HTML).
     fn set(&mut self, key: HtmlAttr, value: &str);
-    /// Drop `key` if present.
-    ///
-    /// The counterpart to [`set`](AttrsExt::set), for a transform that moves a
-    /// value *out* of an attribute rather than changing it: emptying an
-    /// attribute leaves `key=""` in the markup, which is not the same as not
-    /// having one.
+    /// Drop `key` entirely, which is not the same as emptying it to `key=""`.
     fn remove(&mut self, key: HtmlAttr);
 }
 
@@ -175,51 +136,29 @@ impl AttrsExt for typst_html::HtmlAttrs {
 }
 
 pub(super) trait ElementExt {
-    /// Visit this element, then every descendant element, depth-first. The one
-    /// shared walk over the typed DOM, so no transform hand-rolls its own
-    /// recursion.
+    /// Visit this element, then every descendant element, depth-first.
     fn walk(&mut self, f: &mut impl FnMut(&mut HtmlElement));
     /// The same walk, read-only: what a pass that only *looks* at the DOM
-    /// takes, since [`walk`](ElementExt::walk) reaches for the mutable children
-    /// of every element it passes and would copy each shared list to hand one
-    /// out.
+    /// takes, since [`walk`](ElementExt::walk) clones each shared child list.
     fn visit(&self, f: &mut impl FnMut(&HtmlElement));
     /// The text this element and its descendants carry, markup dropped, **in
     /// document order**: what a heading's anchor is slugged from, and the bytes
     /// an inline `<script>` or `<style>` ships.
     ///
-    /// The order is the whole contract. Built on [`visit`](ElementExt::visit)
-    /// plus a scan of each element's own `Text` children, it was not document
-    /// order for mixed content: an element's direct text came out before
-    /// anything nested inside it, so `== The *fast* way` slugged to
-    /// `the-way-fast` and every heading carrying emphasis, a link, `raw`, math
-    /// or a footnote marker got a scrambled `id`. Ids are the site's deep-link
-    /// surface and the fragment check reads the same set, so a *correct*
-    /// `#link("page.typ#the-fast-way")` failed the build.
-    /// Descendants whose text a reader does not read are skipped, which the
-    /// same walk did not do: an inlined `svg()` icon carries the file's own
-    /// `<title>`, so `= #svg("/star.svg") The fast way` slugged to
-    /// `a-gold-starthe-fast-way`. The element the call is made *on* is never
-    /// skipped, because the digest and weight passes ask a `<script>` for its
-    /// own body.
+    /// A [`silent`] descendant or an inlined `<svg>` contributes nothing, but
+    /// the element the call is made *on* is never skipped.
+    ///
+    /// [`silent`]: ElementExt::silent
     fn text(&self) -> String;
     /// Whether this element carries no text a reader reads: a script or style
     /// body, or something declaring itself hidden from assistive technology.
-    ///
-    /// One rule, asked by [`text`](ElementExt::text) when it decides whether to
-    /// descend and by [`Syndicated::chrome`](crate::render::Syndicated) when it
-    /// decides what travels in a feed. Both used to state their own, and only
-    /// one of them was right.
     fn silent(&self) -> bool;
     /// This element's heading level, `1`..`6`, or `None` for anything that is
     /// not a heading.
     fn heading(&self) -> Option<u8>;
-    /// Whether this element pulls in a stylesheet. `rel` may hold several
-    /// tokens (`rel="preload stylesheet"`), which is why it is not a string
-    /// comparison, and why it is written once.
+    /// Whether this element pulls in a stylesheet, by token rather than string
+    /// comparison: `rel` may hold several (`rel="preload stylesheet"`).
     fn stylesheet(&self) -> bool;
-    /// This element's `<head>` child, if it has one: the one place a transform
-    /// appends head elements, so meta and verification tags find it the same way.
     fn head(&mut self) -> Option<&mut HtmlElement>;
     /// Set `key` to `value`, replacing an existing attribute or appending one.
     fn set(&mut self, key: HtmlAttr, value: &str);
@@ -253,20 +192,10 @@ impl ElementExt for HtmlElement {
 
     fn text(&self) -> String {
         let mut out = String::new();
-        // One in-order walk over `children`, pushing each `Text` where it
-        // occurs and descending into an `Element` at that same point. An
-        // explicit stack rather than recursion, so a deeply nested document
-        // cannot overflow the one the compiler gave us; reversed on push, so
-        // popping yields the children back in the order they were written.
         let mut stack: Vec<&HtmlNode> = self.children.iter().rev().collect();
         while let Some(node) = stack.pop() {
             match node {
                 HtmlNode::Text(text, _) => out.push_str(text),
-                // Descend, unless what is inside is not text a reader reads
-                // here. An inlined icon is the case that matters: `svg()`
-                // splices the file's own `<title>` and `<desc>` into the DOM,
-                // and a heading carrying one slugged its id from the icon's
-                // description as well as its own words.
                 HtmlNode::Element(child) if child.silent() || child.tag == *SVG => {}
                 HtmlNode::Element(child) => stack.extend(child.children.iter().rev()),
                 _ => {}
@@ -342,16 +271,11 @@ impl ElementExt for HtmlElement {
     }
 }
 
-/// Document-level entry points, so a transform states what it visits rather
-/// than repeating `root_mut()` and its own closure plumbing.
+/// [`ElementExt`] rooted at the document.
 pub(super) trait DocumentExt {
-    /// Visit every element in the document, depth-first.
     fn walk(&mut self, f: impl FnMut(&mut HtmlElement));
-    /// The same, read-only: what the lint pass takes.
     fn visit(&self, f: impl FnMut(&HtmlElement));
-    /// The document's `<head>`, if the page has one.
     fn head(&mut self) -> Option<&mut HtmlElement>;
-    /// Rewrite every asset-bearing URL in the document through `f`.
     fn assets(&mut self, f: impl FnMut(&str) -> Option<String>);
 }
 
@@ -420,7 +344,6 @@ impl<'a> SrcSet<'a> {
             let (url, tail) = rest.split_at(split);
             let trimmed = url.trim_end_matches(',');
             if trimmed.len() != url.len() {
-                // the comma belonged to the separator, not the URL: no descriptor.
                 out.push((trimmed, ""));
                 rest = tail;
                 continue;
@@ -439,53 +362,32 @@ impl<'a> SrcSet<'a> {
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning
 /// [`super::Renderer`] is shared read-only across the parallel compile pool.
 pub(super) trait Transform: Send + Sync {
-    /// Whether to run, from config alone. Keeps the gate declarative.
+    /// Whether to run, from config alone.
     fn enabled(&self, config: &Config) -> bool;
     /// Rewrite `doc` in place, optionally recording findings in `cx`.
     /// Best-effort: a transform that cannot act on a node leaves it untouched.
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>);
 }
 
-/// The built-in transforms, in apply order (link resolution first).
+/// The built-in transforms, in apply order.
 pub(super) struct Transforms(Vec<Box<dyn Transform>>);
 
 impl Transforms {
+    /// The pipeline in apply order: resolve links, restructure and annotate
+    /// authored markup, synthesize `<head>` elements, add responsive srcsets,
+    /// inline embeds, fingerprint whatever references remain, shift them under
+    /// the base path, and digest the finished markup last.
     pub(super) fn builtin() -> Self {
-        // order matters: resolve links, annotate, add responsive srcsets, inline
-        // embeds (as `data:` URIs), fingerprint whatever refs remain (the srcset
-        // URLs among them), then shift them under the base path.
         Self(vec![
             Box::new(Links),
-            // Early, so every later pass sees an inlined icon as ordinary DOM:
-            // an `<image href>` inside one is fingerprinted and base-pathed
-            // like any other reference.
             Box::new(Svg),
             Box::new(Lang),
             Box::new(Anchors),
-            // Before anything that reads the page's structure: every later pass
-            // should see the notes where they will be served, not where typst
-            // left them.
             Box::new(Footnotes),
-            // Straight after the compiler's own output is in hand: the marks the
-            // raw rule left are an intermediate spelling, and no later pass
-            // should have to know they ever existed.
             Box::new(Highlight),
-            // After the passes that move authored elements around, before the
-            // ones that synthesize elements of our own: an element is stamped
-            // where it ends up, and only what the author actually wrote carries
-            // a location at all.
             Box::new(Spans),
             Box::new(Meta),
-            // With the other passes that write into `<head>`, and before the
-            // ones that rewrite references: the `<link>` it leaves is spelled as
-            // an author would spell it, so fingerprinting, embedding and the
-            // base path all reach it without knowing it was synthesized.
             Box::new(Math),
-            // After every pass that can ask for an owned asset, and before the
-            // ones that rewrite references: the `<link>`s it leaves are spelled
-            // as an author would spell them, so fingerprinting, embedding and
-            // the base path all reach them without knowing they were
-            // synthesized.
             Box::new(Sheets),
             Box::new(Speculation),
             Box::new(Outbound),
@@ -497,9 +399,6 @@ impl Transforms {
             Box::new(Embed),
             Box::new(Fingerprint),
             Box::new(BasePath),
-            // Last, over the finished markup: an `integrity` names the file a
-            // browser will actually fetch, base path and content hash and all,
-            // and an inline digest has to cover the bytes as they are served.
             Box::new(Integrity),
         ])
     }
@@ -523,8 +422,6 @@ mod tests {
         SrcSet(srcset).candidates()
     }
 
-    /// An element carrying `children`, in order: what mixed content looks like
-    /// once typst has emitted it.
     fn element(name: HtmlTag, children: Vec<HtmlNode>) -> HtmlElement {
         let mut el = HtmlElement::new(name);
         for child in children {
@@ -538,10 +435,7 @@ mod tests {
     }
 
     /// `== The *fast* way to a #emph[slug]`, as typst emits it: text, an
-    /// element, text, an element. The anchor is slugged from this, so reading
-    /// an element's own text before its children's spelled the heading back in
-    /// an order nobody wrote and gave the section an id no correct deep link
-    /// could ever name.
+    /// element, text, an element.
     #[test]
     fn text_reads_mixed_content_in_document_order() {
         let heading = element(
@@ -557,15 +451,8 @@ mod tests {
         assert_eq!(heading.text(), "The fast way to a slug");
     }
 
-    /// `= #svg("/star.svg") The fast way`, once the icon has been inlined.
-    ///
-    /// `svg()` splices the file verbatim, `<title>` and all, and that title is
-    /// an accessible name for the icon rather than words in the heading. Read
-    /// as heading text it produced `id="a-gold-starthe-fast-way"`: an id no
-    /// correct deep link can name, and one the fragment check then reads back
-    /// as the truth. The same goes for a `<script>` a heading somehow carries
-    /// and for anything marked `aria-hidden`, the heading's own self link
-    /// among them.
+    /// `= #svg("/star.svg") The fast way`, once the icon has been inlined: its
+    /// `<title>` is an accessible name for the icon, not words in the heading.
     #[test]
     fn text_does_not_read_what_a_reader_does_not() {
         let svg = HtmlTag::intern("svg").expect("svg");
@@ -584,9 +471,7 @@ mod tests {
         assert_eq!(heading.text(), "The fast way");
     }
 
-    /// Nesting is followed at the point it occurs, however deep, and an element
-    /// with no text of its own contributes nothing rather than reordering what
-    /// surrounds it.
+    /// Nesting is followed at the point it occurs, however deep.
     #[test]
     fn text_descends_where_the_nesting_is() {
         let heading = element(
@@ -604,8 +489,7 @@ mod tests {
         assert_eq!(heading.text(), "a raw tail");
     }
 
-    /// The flat case the inline `<script>`/`<style>` digests rely on: one
-    /// element, text children only, concatenated as written.
+    /// The flat case the inline `<script>`/`<style>` digests rely on.
     #[test]
     fn text_concatenates_flat_children_as_written() {
         let script = element(tag::script, vec![text("let a = 1;"), text("let b = 2;")]);

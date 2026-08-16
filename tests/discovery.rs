@@ -52,7 +52,6 @@ fn collection_sort_and_reverse_applied() {
     );
     let cols = discover(&site.config(), &project(&site.config())).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
-    // date descending -> newest first.
     let slugs: Vec<_> = posts
         .pages
         .iter()
@@ -119,7 +118,6 @@ fn glob_assigns_files_to_its_collection_regardless_of_directory() {
             }
             "#,
     );
-    // Files live under `articles/` but the glob routes them to `blog`.
     site.write(
         "content/articles/a.typ",
         "#let frontmatter = (title: \"A\",)\na",
@@ -168,8 +166,7 @@ fn page_loads_frontmatter_and_body() {
     assert_eq!(page.frontmatter.title.as_deref(), Some("Hello"));
     assert_eq!(page.frontmatter.slug.as_deref(), Some("hello"));
     assert!(page.body.contains("Body of Hello"));
-    // the export stays in the body: it is a valid binding producing no
-    // output, and lets the page read its own metadata.
+    // The export stays in the body: a binding that produces no output.
     assert!(page.body.contains("#let frontmatter"));
 }
 
@@ -278,9 +275,7 @@ fn draft_page_skipped_unless_flag() {
     assert!(!page.skipped(true, false));
 }
 
-/// `expiry` is the last day a page is published, and no flag brings it back:
-/// unlike a draft or a future date, which are pages on their way in, an expired
-/// page was dated out of the site deliberately.
+/// `expiry` is the last day a page is published, and no flag brings it back.
 #[test]
 fn expired_page_is_skipped_and_todays_expiry_still_builds() {
     let site = Site::new();
@@ -401,12 +396,10 @@ fn bundle_index_takes_slug_from_its_directory() {
             }
             "#,
     );
-    // A page bundle: the directory name is the slug, not the `index` filename.
     site.write(
         "content/posts/ring-buffers/index.typ",
         "#let frontmatter = (title: \"RB\",)\nbody",
     );
-    // A flat file keeps its stem.
     site.write(
         "content/posts/flat.typ",
         "#let frontmatter = (title: \"Flat\",)\nbody",

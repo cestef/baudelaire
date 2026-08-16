@@ -1,13 +1,5 @@
-//! The end-to-end builds that a scenario cannot express.
-//!
-//! The bulk of what used to live here is now data under `tests/scenarios/`; see
-//! `tests/scenarios.rs` for the format and for why each of these stayed. In
-//! short, they need something a scenario has no vocabulary for: the CLI's own
-//! stderr, the cache's internal files, or the library's own return values.
-//!
-//! Several of the old reasons are gone: a generated name fed into a second
-//! assertion is a `capture`, byte-level comparisons are `identical`/`smaller`,
-//! and several builds in a row are `build { }` steps.
+//! The end-to-end builds that a scenario cannot express: they need the CLI's
+//! own stderr, the cache's internal files, or the library's own return values.
 
 mod common;
 
@@ -81,16 +73,12 @@ fn compile_error_reports_with_context() {
     let out = site.run(&["build"]);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // The context is the point: which file, which line, and the offending text.
     assert!(stderr.contains("bad.typ"), "no source named: {stderr}");
     assert!(stderr.contains("invalid_func"), "no span excerpt: {stderr}");
     assert!(stderr.contains("bad.typ:2"), "no line number: {stderr}");
 }
 
-/// A refusal about `source` underlines the key that caused it. The page is
-/// named either way; a page with a dozen frontmatter lines does not say which
-/// one this is about, and its neighbours in the same file have said so for
-/// their own keys all along.
+/// A refusal about `source` underlines the key that caused it.
 #[cfg(feature = "markdown")]
 #[test]
 fn a_source_refusal_underlines_the_key() {
@@ -116,7 +104,6 @@ fn a_source_refusal_underlines_the_key() {
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("unknown_source"), "{stderr}");
-    // The key's own line, and the label under it.
     assert!(stderr.contains("page.md:4"), "no line number: {stderr}");
     assert!(
         stderr.contains("no declaration under this name"),
@@ -125,10 +112,7 @@ fn a_source_refusal_underlines_the_key() {
 }
 
 /// ...and the refusal for a source of a kind nothing reads underlines the page
-/// too. It passed the *declared file's* path as the label's name while handing
-/// over the *page's* text, so miette printed the page's frontmatter under the
-/// name of a file containing none of it. The three sibling refusals from the
-/// same change all pass the page; this one call site did not.
+/// too, rather than the file the key names.
 #[cfg(feature = "markdown")]
 #[test]
 fn an_unreadable_source_underlines_the_page_that_named_it() {
@@ -149,7 +133,6 @@ fn an_unreadable_source_underlines_the_page_that_named_it() {
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("source_unreadable"), "{stderr}");
-    // The page, at the key's own line -- not the file the key names.
     assert!(stderr.contains("p.md:3"), "no page label: {stderr}");
     assert!(
         !stderr.contains("[notes/n.rst"),
@@ -157,10 +140,8 @@ fn an_unreadable_source_underlines_the_page_that_named_it() {
     );
 }
 
-/// A declared source the build cannot read says why. Every failure on the mount
-/// came back as typst's `NotFound`, naming a path that in the common cases is
-/// right there: a directory named as a source, or a file the process may not
-/// open, reported "file not found" about something the author can see.
+/// A declared source the build cannot read says why, rather than answering
+/// with typst's `NotFound` about a path the author can see.
 #[test]
 fn an_unreadable_declared_source_reports_the_real_reason() {
     let site = Site::with(
@@ -173,8 +154,8 @@ fn an_unreadable_declared_source_reports_the_real_reason() {
             }
         "#,
     );
-    // A directory where a file was declared: the one case that needs no
-    // permission games to reach, and `chmod` is not portable anyway.
+    // A directory where a file was declared: the one unreadable case that is
+    // portable to set up.
     site.write("shared/adir.typ/keep.txt", "x\n");
     site.write(
         "content/p.typ",
@@ -198,9 +179,6 @@ fn an_unreadable_declared_source_reports_the_real_reason() {
 
 #[test]
 fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
-    // The one silent failure the classes mode has: a `.tmTheme` is still loaded
-    // and validated, and then every colour in it is discarded. A site whose
-    // stylesheet has not caught up sees unstyled code and no reason for it.
     let site = Site::new();
     site.write(
         "config.kdl",
@@ -230,13 +208,11 @@ fn a_theme_set_under_class_highlighting_warns_that_it_is_ignored() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("theme is ignored"), "no warning: {stderr}");
     assert!(stderr.contains("highlight #false"), "no way out: {stderr}");
-    // Once for the page, not once per code block.
     assert_eq!(
         stderr.matches("theme is ignored").count(),
         1,
         "warned more than once: {stderr}"
     );
-    // And the block is still classed, from the grammar's scopes.
     assert!(site.read("public/index.html").contains("sx-keyword"));
 }
 
@@ -266,15 +242,12 @@ const THEME: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 
 #[test]
 fn error_in_a_bound_template_renders_against_the_template_file() {
-    // A span reaching into another file (here a template, whose text differs in
-    // length from the page's) must resolve against that file: never overrun the
-    // page source and crash the renderer with an `OutOfBounds` panic.
     let site = Site::new();
     site.write(
         "config.kdl",
         "site \"T\"\ncontent {\n  collections { pages { template \"page.typ\" } }\n}\n",
     );
-    // Padding pushes the erroring span past the length of the short page source.
+    // Padding pushes the erroring span past the length of the page source.
     site.write(
         "templates/page.typ",
         "#let pad = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n#let page(meta, body) = html.elem(\"body\", { body; nope_undefined })\n",
@@ -291,7 +264,6 @@ fn error_in_a_bound_template_renders_against_the_template_file() {
         "renderer panicked: {stderr}"
     );
     assert!(stderr.contains("unknown variable"), "{stderr}");
-    // The label lands in the template, not the page.
     assert!(
         stderr.contains("page.typ"),
         "points at the template: {stderr}"
@@ -307,18 +279,15 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     );
     site.write("assets/style.css", "body { color: red; }");
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
-    // The summary is CLI output, so this one stays on the real binary.
+    // The summary is CLI output, so this one runs the real binary.
     let logs = site.build();
-    // The compact summary line counts assets and generated files, and shows dist.
     assert!(logs.contains("1 asset"), "assets counted: {logs}");
     assert!(logs.contains("file"), "generated files counted: {logs}");
     assert!(logs.contains("╰─ public"), "output dir shown: {logs}");
 }
 
-/// The orphan report is only worth having if it names the right pages: the one
-/// nothing points at, and not the one every layout points at. A report that
-/// counted the nav would name nothing at all on a site with a nav, which is
-/// every site.
+/// The orphan report names the page nothing points at, and not the one every
+/// layout points at.
 #[test]
 fn the_orphan_report_names_the_page_no_content_links_to() {
     let site = Site::new();
@@ -350,15 +319,13 @@ fn the_orphan_report_names_the_page_no_content_links_to() {
         logs.contains("/lonely/"),
         "the orphan says where it is served: {logs}"
     );
-    // Named as *orphans*, specifically: every page also appears in the build's
-    // own progress lines.
+    // Named as an *orphan*: every page also appears in the progress lines.
     let orphaned = |page: &str| logs.contains(&format!("`{page}` is linked from nowhere"));
     assert!(orphaned("lonely.typ"), "{logs}");
     assert!(
         !orphaned("seen.typ"),
         "a page linked from content is not an orphan: {logs}"
     );
-    // The home page is an entry point, not a page anyone forgot to link.
     assert!(!orphaned("index.typ"), "the root is not one: {logs}");
 }
 
@@ -383,7 +350,6 @@ fn optimize_losslessly_shrinks_png_assets() {
         out.len(),
         png.len()
     );
-    // Still a valid PNG (signature intact).
     assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "output is a PNG");
 }
 
@@ -396,8 +362,7 @@ fn optimize_reencodes_jpeg_with_lax_extension() {
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\nassets {\n  images { optimize { jpeg quality=70 } }\n}\n",
     );
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
-    // A high-quality JPEG shrinks when re-encoded at quality 70. The `.jpg`
-    // extension must match the `jpeg` format leniently.
+    // The `.jpg` extension has to match the `jpeg` format leniently.
     let jpg = include_bytes!("fixtures/big.jpg");
     site.write_bytes("assets/photo.jpg", jpg);
     site.stats();
@@ -467,7 +432,6 @@ fn embed_inlines_processed_not_source_bytes() {
         .output()
         .expect("base64");
     let decoded = String::from_utf8_lossy(&out.stdout);
-    // The inlined bytes are the minified output, not the raw source.
     assert!(
         !decoded.contains("/*"),
         "inlined raw source, not processed: {decoded}"
@@ -520,7 +484,6 @@ fn srcset_urls_are_fingerprinted() {
         .find(|n| n.starts_with("b.") && has_ext(n, "png"))
         .expect("hashed b");
     let html = fs::read_to_string(site.root.join("public/a/index.html")).unwrap();
-    // Each candidate URL is fingerprinted; its descriptor is preserved.
     assert!(
         html.contains(&format!("/assets/{a} 1x")),
         "srcset a not rewritten: {html}"
@@ -543,7 +506,6 @@ fn cache_stores_html_in_object_store_not_manifest() {
         "#let frontmatter = (title: \"Unique Marker\",)\nDistinct Body Text",
     );
     site.stats();
-    // The manifest is metadata only: page markup lives in the object store.
     let manifest = fs::read_to_string(site.root.join(".baudelaire/cache/manifest.json")).unwrap();
     assert!(
         !manifest.contains("Distinct Body Text"),
@@ -553,7 +515,6 @@ fn cache_stores_html_in_object_store_not_manifest() {
         manifest.contains("blob"),
         "manifest points at blobs: {manifest}"
     );
-    // At least one content-addressed blob was written, holding the HTML.
     let objects = site.root.join(".baudelaire/cache/objects");
     assert!(objects.is_dir(), "object store created");
     let shard = fs::read_dir(&objects)
@@ -575,12 +536,8 @@ fn cache_stores_html_in_object_store_not_manifest() {
 
 #[test]
 fn before_hook_output_flows_into_the_asset_pipeline() {
-    // The Tailwind model: a before hook generates CSS into assets/, which the
-    // pipeline then minifies + fingerprints + rewrites references to.
-    //
-    // The hook's redirect is relative, so this also pins where hooks run: the
-    // configured project root, not the process cwd. Driven in-process it fails
-    // outright if that regresses.
+    // The hook's redirect is relative, so this also pins that hooks run in the
+    // configured project root and not the process cwd.
     let site = Site::new();
     site.write(
         "config.kdl",
@@ -598,9 +555,8 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
             .any(|n| n.starts_with("gen.") && has_ext(n, "css")),
         "hook output reached the asset pipeline: {names:?}"
     );
-    // Fingerprinting is a `css` capability, so only that flavor renames the file
-    // and rewrites the reference; a slim build serves the generated name as-is.
-    // The assertions above hold either way, which is what pins where hooks run.
+    // Fingerprinting is a `css` capability, so only that flavor rewrites the
+    // reference; a slim build serves the generated name as-is.
     #[cfg(feature = "css")]
     {
         let html = fs::read_to_string(site.root.join("public/index.html")).unwrap();
@@ -611,10 +567,8 @@ fn before_hook_output_flows_into_the_asset_pipeline() {
     }
 }
 
-/// Assets are fingerprinted before pages compile, so a page failing to compile
-/// used to abort *after* the asset tree had been regenerated: `dist` kept the
-/// previous build's HTML pointing at asset filenames that no longer existed, and
-/// every stylesheet 404'd. A failed build must leave `dist` exactly as it was.
+/// Assets are fingerprinted before pages compile, so a failed build has to
+/// leave `dist` exactly as it was.
 #[test]
 fn a_failed_build_leaves_the_previous_assets_in_place() {
     let site = Site::with(
@@ -635,9 +589,8 @@ fn a_failed_build_leaves_the_previous_assets_in_place() {
         "{html}"
     );
 
-    // Edit the stylesheet (so a regenerated tree would be named differently)
-    // and break the layout in the same build. The break has to be one that
-    // survives discovery and fails at compile, which is where the window is.
+    // The stylesheet is edited so a regenerated tree would be named
+    // differently, and the break has to survive discovery and fail at compile.
     site.write("assets/app.css", "body { color: blue }\n");
     site.write("templates/broken.typ", "#let broken(page, body) = #(");
     site.build_error();
@@ -648,9 +601,8 @@ fn a_failed_build_leaves_the_previous_assets_in_place() {
     );
 }
 
-/// The broken-link check must not weaken on rebuild. Feeding it only
-/// freshly-compiled pages meant a second, fully-cached build reported nothing,
-/// and with `links { strict #true }` the gate passed outright.
+/// The broken-link check must not weaken on rebuild: fed only freshly-compiled
+/// pages, a fully-cached build reports nothing.
 #[test]
 fn broken_links_are_still_reported_on_a_cached_rebuild() {
     let site = Site::with(
@@ -675,9 +627,7 @@ fn broken_links_are_still_reported_on_a_cached_rebuild() {
 }
 
 /// A template nothing supplies is one diagnostic naming what asked for it,
-/// raised before the first compile. The compiler's own report was one
-/// `file not found` per page, against the generated wrapper that imports the
-/// template rather than against the line that named it.
+/// raised before the first compile.
 #[test]
 fn a_missing_template_names_what_asked_for_it() {
     let site = Site::new();
@@ -713,7 +663,6 @@ fn a_missing_template_names_what_asked_for_it() {
         stderr.contains("content/index.typ"),
         "names the page that asked: {stderr}"
     );
-    // One diagnostic, not the compiler's per-page report of the same thing.
     assert!(
         !stderr.contains("file not found"),
         "raw typst report leaked: {stderr}"

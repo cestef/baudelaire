@@ -1,13 +1,5 @@
-//! The blocks appended under a command's generated help.
-//!
-//! Clap writes the flags; everything a reader needs *around* them is here, in
-//! one rendering each. Three commands grew their own copy of the same example
-//! table, so a column width and an accent colour were decided three times and
-//! agreed twice.
-//!
-//! Colour is gated on the stdout stream itself (`if_supports_color`), so
-//! escapes never leak when piped or under `NO_COLOR`: the same policy
-//! [`crate::ui`] uses.
+//! The blocks appended under a command's generated help: clap writes the flags,
+//! and everything around them is rendered here.
 
 use std::fmt::Display;
 
@@ -19,25 +11,17 @@ use owo_colors::{OwoColorize, Stream::Stdout};
 pub(super) enum Accent {
     /// `command  what it does`: the invocation leads.
     Left,
-    /// `label  the line to run`: the row is keyed by something else, and the
-    /// line to type is the value. `completions` keys its install lines by shell.
+    /// `label  the line to run`: the row is keyed by something else, so the
+    /// line to type is the value.
     Right,
 }
 
 /// A titled block of two aligned columns: the `Examples:` table under a
 /// command, the `Exit codes:` list, the `Environment:` one.
-///
-/// One renderer for all of them, so the column width is measured from the rows
-/// rather than hand-tuned to the longest, and the heading and the literal
-/// accent are decided once. A new section is a heading const and a constructor,
-/// not a second layout.
 pub(super) struct Table {
     heading: &'static str,
-    /// `(left, right)`. The left column is padded so the right lines up.
     rows: Vec<(String, String)>,
     accent: Accent,
-    /// A closing line under the table, for a block that has one more thing to
-    /// say than its rows do.
     footer: Option<String>,
 }
 
@@ -94,10 +78,10 @@ impl Table {
 }
 
 impl Display for Table {
+    /// Padding is measured on the unstyled text, so the escapes cannot skew the
+    /// alignment.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", Heading(self.heading))?;
-        // Padding is measured on the *visible* length, so the escapes below
-        // cannot skew the alignment.
         let column = self.rows.iter().map(|(l, _)| l.len()).max().unwrap_or(0) + 2;
         for (left, right) in &self.rows {
             let pad = " ".repeat(column - left.len());
@@ -160,15 +144,11 @@ impl Display for Literal<'_> {
 mod tests {
     use super::{Accent, Table};
 
-    /// A block as a reader without colour sees it. Stripped rather than assumed
-    /// plain: whether these render styled is the stream's business (and, since
-    /// `--color`, the flag's), and neither is this test's.
+    /// A block as a reader without colour sees it.
     fn plain(table: &Table) -> String {
         console::strip_ansi_codes(&table.to_string()).into_owned()
     }
 
-    /// The description column is computed from the rows, not hand-tuned: the
-    /// longest command decides where every description starts.
     #[test]
     fn a_table_aligns_its_second_column_past_the_longest_first() {
         let table = plain(&Table::examples(&[("short", "a"), ("much-longer", "b")]));
@@ -177,8 +157,6 @@ mod tests {
         assert_eq!(column(lines[0]), column(lines[1]), "{table}");
     }
 
-    /// A block keyed by something else puts the line to type on the right, and
-    /// still lines the two columns up.
     #[test]
     fn a_keyed_table_pads_the_key_column() {
         let table = Table::keyed([
@@ -191,8 +169,6 @@ mod tests {
         assert!(rendered.contains("  bash        run this\n"), "{rendered}");
     }
 
-    /// Every block writes its own heading, so a new section cannot ship under
-    /// the wrong one.
     #[test]
     fn each_block_is_titled() {
         assert!(plain(&Table::codes(&[("0", "fine")])).starts_with("Exit codes:"));
@@ -201,7 +177,6 @@ mod tests {
         );
     }
 
-    /// A footer hangs one blank line under the last row.
     #[test]
     fn a_footer_closes_the_block() {
         let table = Table::examples(&[("a", "b")]).footer("and one more thing");

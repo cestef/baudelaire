@@ -7,7 +7,6 @@ use thiserror::Error;
 /// A failure common to any remote destination.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RemoteError {
-    /// A secret was not supplied and could not be prompted for.
     #[error("no {label} supplied")]
     #[diagnostic(
         code(baudelaire::remote::secret),

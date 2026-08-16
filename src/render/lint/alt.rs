@@ -1,11 +1,5 @@
-//! Images with no text alternative.
-//!
-//! A missing `alt` and an empty one are different claims: an empty one says the
-//! image is decorative and the page reads the same without it, which only the
-//! author can know. Absent means nobody decided, so it is what is reported. An
-//! image already kept out of the accessibility tree (`aria-hidden`,
-//! `role="presentation"`) has made that decision and is left alone; the model
-//! filters those out while it gathers.
+//! Images with no text alternative: only an *absent* `alt` is reported, since
+//! an empty one is the author's claim that the image is decorative.
 
 use crate::config::LintConfig;
 use crate::error::Lint;

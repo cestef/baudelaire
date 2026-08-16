@@ -1,7 +1,5 @@
 //! A minimal, blocking XRPC client for the `com.atproto.*` methods a publisher
-//! needs: authenticate, upload a blob, put/list/delete records. Built on `ureq`
-//! (blocking, native-tls) so publishing needs no async runtime; a [`Session`]'s
-//! `ureq::Agent` is `Send + Sync`, so a caller may drive calls from a rayon pool.
+//! needs: authenticate, upload a blob, put/list/delete records.
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -12,9 +10,8 @@ use crate::ui::markup;
 
 use super::id::{Did, Nsid, Rkey};
 
-/// A blob reference returned by `uploadBlob`, embedded verbatim into the owning
-/// record. Opaque: its internal shape (`$type`, `ref`, `mimeType`, `size`) is
-/// the PDS's to define, so it round-trips unmodified. Serializes transparently.
+/// A blob reference returned by `uploadBlob`, opaque so it round-trips into the
+/// owning record unmodified.
 #[derive(Debug, Clone, Serialize)]
 pub struct Blob(Value);
 
@@ -24,22 +21,18 @@ fn agent() -> ureq::Agent {
     crate::remote::Http::agent("announce", crate::remote::Status::Read)
 }
 
-/// A read-only handle to a repository on a PDS: its host and DID, plus a shared
-/// agent. Every read (`listRecords`) is a public XRPC call needing no auth, so a
-/// `--dry-run` can diff against the live repo without a password. A [`Session`]
-/// wraps one of these with an access token to gain the mutating calls.
+/// A read-only handle to a repository on a PDS; every read it offers is a
+/// public XRPC call needing no auth.
 pub struct Repo {
     agent: ureq::Agent,
-    /// The PDS/entryway base, e.g. `https://bsky.social`, without a trailing `/`.
+    /// The PDS/entryway base, e.g. `https://bsky.social`, without a trailing
+    /// `/`.
     host: String,
-    /// The repository DID identifying whose records to read.
     did: Did,
 }
 
 impl Repo {
-    /// Resolve `identifier` (a handle or a DID) to a repo reader on `host`. A DID
-    /// is taken as-is; a handle is resolved through the public `resolveHandle`
-    /// call, so no credentials are needed.
+    /// Resolve `identifier`, a handle or a DID, to a repo reader on `host`.
     pub fn resolve(host: &str, identifier: &str) -> Result<Self, AnnounceError> {
         let host = host.trim_end_matches('/').to_owned();
         let agent = agent();
@@ -54,20 +47,14 @@ impl Repo {
         Ok(Self { agent, host, did })
     }
 
-    /// The repository DID.
     pub fn did(&self) -> &Did {
         &self.did
     }
 
-    /// Every record key currently in `collection`, following pagination: the
-    /// remote source of truth a publisher diffs against, so a removed page's
-    /// record is deleted and nothing is orphaned. A public read: no auth.
+    /// Every record key currently in `collection`, following pagination, and
+    /// erroring rather than returning a short list.
     pub fn list_rkeys(&self, collection: Nsid) -> Result<Vec<Rkey>, AnnounceError> {
         const NSID: &str = "com.atproto.repo.listRecords";
-        // A ceiling on pages followed, so a PDS that advances the cursor forever
-        // (buggy or hostile) fails loudly instead of looping or exhausting memory.
-        // At 100 records/page this admits a million records: far past any real
-        // announce repo, which holds one record per published page.
         const MAX_PAGES: usize = 10_000;
         let mut rkeys = Vec::new();
         let mut cursor: Option<String> = None;
@@ -102,9 +89,6 @@ impl Repo {
                 _ => return Ok(rkeys),
             }
         }
-        // Fell off the page ceiling with a cursor still pending: the walk never
-        // reached the end, so refuse rather than return a silently short list
-        // (which would leave stale remote records undeleted).
         Err(AnnounceError::Pagination {
             nsid: NSID.to_owned(),
             pages: MAX_PAGES,
@@ -120,7 +104,6 @@ impl Repo {
 /// bearer token that unlocks the record-mutating calls.
 pub struct Session {
     repo: Repo,
-    /// The bearer access token.
     access: String,
 }
 
@@ -143,18 +126,15 @@ impl Session {
         })
     }
 
-    /// The authenticated repository DID: the source of truth for identity,
-    /// overriding any configured guess.
+    /// The authenticated repository DID, which overrides any configured guess.
     pub fn did(&self) -> &Did {
         self.repo.did()
     }
 
-    /// The read-only view of the authenticated repository, for diffing.
     pub fn repo(&self) -> &Repo {
         &self.repo
     }
 
-    /// Upload `bytes` (of type `mime`) as a blob and return its reference.
     pub fn upload_blob(&self, bytes: &[u8], mime: Mime) -> Result<Blob, AnnounceError> {
         const NSID: &str = "com.atproto.repo.uploadBlob";
         let mut resp = self
@@ -189,7 +169,6 @@ impl Session {
         )
     }
 
-    /// Delete the record at `collection/rkey`.
     pub fn delete_record(&self, collection: Nsid, rkey: &Rkey) -> Result<(), AnnounceError> {
         const NSID: &str = "com.atproto.repo.deleteRecord";
         self.post(
@@ -202,8 +181,7 @@ impl Session {
         )
     }
 
-    /// POST a JSON `body` to `nsid` with bearer auth, discarding the response:
-    /// the shared spine of the record-mutating calls (put/delete).
+    /// POST a JSON `body` to `nsid` with bearer auth, discarding the response.
     fn post(&self, nsid: &str, body: &Value) -> Result<(), AnnounceError> {
         let mut resp = self
             .repo

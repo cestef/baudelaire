@@ -9,7 +9,6 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::error::warning::Uninferred;
 
-/// Arguments for `baudelaire new`.
 #[derive(Args, Debug, Clone)]
 pub struct NewArgs {
     /// Path for the new content file (e.g. `posts/my-post` or
@@ -35,9 +34,6 @@ pub struct NewArgs {
     pub bundle: bool,
 
     /// Open the new file in `$EDITOR` after creating it.
-    // `--edit`, not `--open`: `serve --open` opens a browser, and the two are
-    // unrelated. The short form was already `-e`, so the flag's own two names
-    // disagreed about what it was called.
     #[arg(short = 'e', long, alias = "open", help_heading = group::CONTENT)]
     pub edit: bool,
 }
@@ -45,11 +41,6 @@ pub struct NewArgs {
 impl Run for NewArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = cx.cli.config()?;
-        // A project lets `new` read the existing content: next order in an
-        // ordered collection, and permalink collisions. Both are conveniences,
-        // so a content tree that cannot be opened costs the inference and warns
-        // rather than refusing to write the file. The theme is part of that: a
-        // page of an existing site may import one of its modules.
         let opened = crate::theme::Theme::of(&config).and_then(|theme| {
             crate::world::Project::new(&config, crate::engine::Mode::Build, theme.as_ref())
         });
@@ -67,28 +58,22 @@ impl Run for NewArgs {
 }
 
 impl NewArgs {
-    /// The file `baudelaire new` should create: a relative path lands under
-    /// the content directory (unless it already starts with it, so an explicit
-    /// `content/posts/foo.typ` is not double-prefixed), and `.typ` is appended
-    /// when the name does not already carry it.
-    /// Whether the scaffolded page is a draft. Drafting is the default: a page
-    /// being written is not one being published, and `--no-draft` says so.
+    /// Whether the scaffolded page is a draft; drafting is the default.
     pub(crate) fn is_draft(&self) -> bool {
         Toggle::of(self.draft, self.no_draft).or(true)
     }
 
+    /// The file to create: a relative path lands under the content directory,
+    /// and `.typ` is appended when the name does not already carry it. Only a
+    /// `.typ` suffix is dropped for a bundle, since `set_extension("")` would
+    /// cut `posts/v1.2` down to `v1`.
     pub(crate) fn target(&self, config: &Config) -> PathBuf {
         let mut path = if self.path.is_absolute() || self.path.starts_with(&config.paths.content) {
             self.path.clone()
         } else {
             config.paths.content.join(&self.path)
         };
-        // A bundle is a directory holding an `index.typ` (the collection's
-        // configured index name), so images and data can sit beside the page.
         if self.bundle {
-            // Only a `.typ` suffix is an extension to drop here. `set_extension("")`
-            // cuts at the last dot whatever follows it, so `new -b posts/v1.2`
-            // asked for a bundle called `v1.2` and got one called `v1`.
             if Config::has_ext(&path, Config::TYPST) {
                 path.set_extension("");
             }

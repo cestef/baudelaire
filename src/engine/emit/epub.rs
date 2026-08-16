@@ -1,17 +1,5 @@
-//! EPUB bundles: a selection of pages as one reflowable book.
-//!
-//! A processor rather than a compile, which is the whole difference between
-//! this format and the PDF one. A book is the pages *as they were rendered*:
-//! each chapter is the prose region of a page the build already produced, with
-//! the chrome gone and its URLs made absolute, which is exactly what a
-//! full-content feed carries and is captured by the same pass. Nothing here
-//! compiles anything, so a site can ship a book without a typesetter.
-//!
-//! The container is EPUB 3: a zip whose first entry is an uncompressed
-//! `mimetype`, a `META-INF/container.xml` naming the package document, an OPF
-//! listing every file and the order they are read in, and a navigation
-//! document. Every one of them goes through [`Xml`], like every other piece of
-//! markup this build writes.
+//! EPUB 3 bundles: a selection of pages as one reflowable book, each chapter
+//! the prose the render pass already captured rather than a second compile.
 
 use std::io::Write as _;
 
@@ -26,17 +14,13 @@ use super::xml::Xml;
 use super::{Emit, Processor, Site};
 
 /// What the format pins: the names and namespaces a reader matches on.
-///
-/// A table rather than literals at each use, because these are the strings that
-/// have to be exactly right and are never read by anyone reviewing the code
-/// around them: a book a reader refuses is a diff of this block.
 struct Epub3;
 
 impl Epub3 {
     /// The media type, written as the zip's first entry.
     const MIME: &'static str = "application/epub+zip";
-    /// The entry that carries it, stored rather than deflated: the spec pins
-    /// both, and it is how a reader identifies the file at all.
+    /// The entry that carries it, stored rather than deflated, as the spec
+    /// pins both.
     const MIMETYPE: &'static str = "mimetype";
     /// The one path a reader is guaranteed to open.
     const CONTAINER: &'static str = "META-INF/container.xml";
@@ -114,8 +98,8 @@ struct Book<'a> {
 /// One chapter: the page it came from, and the prose to write for it.
 struct Chapter<'a> {
     page: &'a Page,
-    /// Its position in the spine, which is the whole of its identity inside the
-    /// container: the page's own path may hold characters an OPF id cannot.
+    /// Its position in the spine, which is its identity inside the container:
+    /// the page's own path may hold characters an OPF id cannot.
     index: usize,
     /// The page's prose, as a full-content feed carries it.
     body: &'a str,
@@ -127,7 +111,7 @@ impl Chapter<'_> {
         format!("ch{}", self.index)
     }
 
-    /// The file it is written to, derived from the id so the two cannot drift.
+    /// The file it is written to.
     fn file(&self) -> String {
         format!("{}.{}", self.id(), Epub3::XHTML_EXT)
     }
@@ -158,11 +142,9 @@ impl<'a> Book<'a> {
         }
     }
 
-    /// The prose the render pass captured for `page`.
-    ///
-    /// A page with none is one whose layout emitted no region and no body,
-    /// which is nothing to read: it is left out of the book rather than written
-    /// as an empty chapter a reader has to page through.
+    /// The prose the render pass captured for `page`; `None` where its layout
+    /// emitted none, and the page is then left out rather than written as an
+    /// empty chapter.
     fn prose(page: &Page, site: &'a Site<'a>) -> Option<&'a str> {
         site.outputs
             .iter()
@@ -174,9 +156,6 @@ impl<'a> Book<'a> {
 
     /// The whole container, as bytes.
     fn write(&self) -> Result<Vec<u8>> {
-        // Every failure below is the same failure -- this book's container --
-        // so it is named once here rather than at each `?`. `zip` folds its own
-        // io errors in, so one closure covers both halves.
         let fail = |e: zip::result::ZipError| BundleError::epub(&self.selection.id, e);
         let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
         zip.start_file(
@@ -282,12 +261,9 @@ impl<'a> Book<'a> {
         xml.finish()
     }
 
-    /// What the book is stored under.
-    ///
-    /// The absolute URL of the file on a site that has one, since that is
-    /// already unique and stable. An EPUB without a unique identifier is
-    /// invalid, and a generated one would change on every build and re-add the
-    /// book to every library that already had it.
+    /// What the book is stored under: the absolute URL of the file where the
+    /// site has one, since a generated identifier would change on every build
+    /// and re-add the book to every library that had it.
     fn identifier(&self) -> String {
         let url = self.selection.url(self.config, BundleFormat::Epub.ext());
         match self.config.base() {
@@ -318,11 +294,7 @@ impl<'a> Book<'a> {
     }
 
     /// One chapter document: the page's title, then the prose the render pass
-    /// captured for it.
-    ///
-    /// The prose goes in through [`Xml::raw`], the same way the single-file
-    /// export splices a page fragment: it is markup this build serialized, and
-    /// escaping it would print the chapter as source code.
+    /// captured for it, spliced in raw as markup this build already serialized.
     fn chapter(&self, chapter: &Chapter<'_>) -> String {
         self.xhtml(chapter.title(), |xml| {
             xml.leaf("h1", chapter.title());

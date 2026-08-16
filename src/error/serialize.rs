@@ -1,9 +1,5 @@
-//! Precise serialization errors for build artifacts.
-//!
-//! A `serde_json::Error` alone says *what* is malformed but not *which* artifact
-//! failed. [`SerializeError`] names the artifact so a failure reads `failed to
-//! serialize the search index` rather than being folded into a generic I/O
-//! error.
+//! Serialization errors for build artifacts, naming the artifact a
+//! `serde_json::Error` alone does not.
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -11,17 +7,11 @@ use thiserror::Error;
 /// A build artifact that is serialized to JSON, named for error messages.
 #[derive(Debug, Clone, Copy)]
 pub enum Artifact {
-    /// The incremental build cache manifest.
     Cache,
-    /// A generated search index.
     SearchIndex,
-    /// A publish backend's skip-cache.
     AnnounceCache,
-    /// A JSON Feed.
     Feed,
-    /// A generated web app manifest.
     WebManifest,
-    /// The single-file export's route table.
     Standalone,
 }
 
@@ -38,7 +28,6 @@ impl std::fmt::Display for Artifact {
     }
 }
 
-/// Failure serializing a build artifact to JSON.
 #[derive(Debug, Error, Diagnostic)]
 #[error("failed to serialize the {artifact}")]
 #[diagnostic(code(baudelaire::serialize))]

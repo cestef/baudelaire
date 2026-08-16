@@ -11,10 +11,6 @@ use typst::syntax::{
 };
 /// Where a frontmatter dict came from: the source its spans point into, the
 /// path errors name it by, and the collection whose schema constrains it.
-///
-/// One value rather than three parameters threaded through extraction, because
-/// every one of them exists to make a diagnostic precise and they are always
-/// needed together.
 pub struct Origin<'a> {
     pub(super) dialect: Dialect<'a>,
     pub(super) path: &'a Path,
@@ -23,18 +19,12 @@ pub struct Origin<'a> {
 
 /// The dialect a page declared its fields in, and so how a [`Step`] path
 /// resolves to a span.
-///
-/// Both reach the same [`Frontmatter`] through the same [`FIELDS`] walk; they
-/// differ only in what the author actually wrote, and a diagnostic has to
-/// underline that rather than a reconstruction of it. A markdown page has no
-/// typst `Source` at all, which is why this is a dialect and not an `Option`.
 pub(super) enum Dialect<'a> {
     /// `#let frontmatter = (..)` in a typst page: walk the AST.
     Typst(&'a Source),
     /// The fenced block at the top of a markdown page, in any of the dialects
-    /// one may be written in. One arm rather than three: each dialect resolved
-    /// its own document into file-relative spans as it parsed, so by here they
-    /// are indistinguishable.
+    /// one may be written in, each of which resolved its own spans as it
+    /// parsed.
     #[cfg(feature = "markdown")]
     Block {
         text: &'a str,
@@ -76,18 +66,10 @@ impl<'a> Origin<'a> {
         }
     }
 
-    /// The byte span of the value `path` leads to inside
-    /// `#let frontmatter = (..)`, or of the binding itself for the empty path: a
-    /// field that is absent has nowhere of its own to point at.
-    ///
-    /// Walks as far down `path` as the source literally spells, and underlines
-    /// the deepest value it reached. A nested key the page never wrote stops one
-    /// step short, at the dictionary that should have held it, which is where a
-    /// reader would go to add it.
-    ///
-    /// `None` when the frontmatter is not a dict literal this can locate (it
-    /// may be computed, or imported), which leaves the diagnostic snippet-less
-    /// rather than underlining an arbitrary offset.
+    /// The byte span of the value `path` leads to, walking as far down as the
+    /// source literally spells and underlining the deepest value reached.
+    /// `None` when the frontmatter is not a dict literal this can locate, which
+    /// leaves the diagnostic snippet-less.
     pub(super) fn span(&self, path: &[Step]) -> Option<SourceSpan> {
         match &self.dialect {
             Dialect::Typst(source) => Self::in_typst(source, path),
@@ -96,17 +78,9 @@ impl<'a> Origin<'a> {
         }
     }
 
-    /// Where the author wrote `key` itself, rather than the value under it:
-    /// what an unrecognized key underlines, since the mistake is the key.
-    ///
+    /// Where the author wrote `key` itself, rather than the value under it.
     /// Only a top-level key, because that is the only depth at which a key is
-    /// held against the known set. A block dialect records an entry from its
-    /// key where its syntax has one to start from, so its recorded span is
-    /// already the closest thing to the key it has.
-    ///
-    /// `pub(crate)` rather than `pub(super)` like its siblings: the keys are
-    /// *read* here, but a fault in what one names is found by whoever resolves
-    /// it, and `source` is resolved a module away.
+    /// held against the known set.
     pub(crate) fn entry(&self, key: &str) -> Option<SourceSpan> {
         match &self.dialect {
             Dialect::Typst(source) => {
@@ -139,9 +113,6 @@ impl<'a> Origin<'a> {
                 reached += 1;
             }
         }
-        // A path that got nowhere is a frontmatter this cannot read into at all
-        // (computed, or imported): underlining the binding would label the whole
-        // of it as the value that is wrong.
         if !path.is_empty() && reached == 0 {
             return None;
         }
@@ -154,12 +125,8 @@ impl<'a> Origin<'a> {
         Some(SourceSpan::new(range.start.into(), range.len()))
     }
 
-    /// Look a block's span up, by the path of steps that names the value.
-    ///
-    /// Every dialect resolved its own document into a
-    /// [`Spans`](crate::content::markdown::Spans) as it parsed, so there is one
-    /// of these rather than one walk per language, and the rule is
-    /// [`Spans::of`]'s: the deepest prefix of `path` the author actually wrote.
+    /// Look a block's span up, by the path of steps that names the value: the
+    /// deepest prefix of `path` the author actually wrote.
     #[cfg(feature = "markdown")]
     pub(crate) fn in_block(
         spans: &crate::content::markdown::Spans,
@@ -187,9 +154,8 @@ impl<'a> Origin<'a> {
         }
     }
 
-    /// The `#let frontmatter = ..` binding anywhere in the tree, so a page that
-    /// declares it inside a code block is located just as well as the
-    /// conventional top-level form.
+    /// The `#let frontmatter = ..` binding anywhere in the tree, so one
+    /// declared inside a code block is located too.
     pub(super) fn binding(node: &SyntaxNode) -> Option<LetBinding<'_>> {
         if let Some(binding) = node.cast::<LetBinding>()
             && binding
@@ -204,16 +170,11 @@ impl<'a> Origin<'a> {
     }
 }
 
-/// A page's frontmatter, re-read for the sake of a diagnostic.
-///
-/// [`Origin`] borrows what it points into, which suits the reader that already
-/// holds the page open. Everything that finds a fault *later* -- the entity
-/// registries, resolving a term long after discovery closed the file -- has only
-/// a path, so this owns what it needs and answers the same question.
-///
-/// Built only on the failing path. A green build never opens a page for this.
+/// A page's frontmatter, re-read for the sake of a diagnostic by a reader that
+/// holds only a path, and built only on the failing path.
 pub(crate) enum Located {
-    /// A typst page: the same parse the compiler holds, walked as a syntax tree.
+    /// A typst page: the same parse the compiler holds, walked as a syntax
+    /// tree.
     Typst(Source),
     /// A markdown page: its frontmatter block, re-split, with the span map its
     /// dialect recorded while parsing.
@@ -226,10 +187,8 @@ pub(crate) enum Located {
 
 impl Located {
     /// Re-read `path` far enough to locate a value inside its frontmatter.
-    ///
-    /// `None` when the page cannot be read or its frontmatter cannot be parsed
-    /// at all, which leaves the diagnostic snippet-less rather than failing a
-    /// second time while reporting the first failure.
+    /// `None` when the page cannot be read or parsed, which leaves the
+    /// diagnostic snippet-less rather than failing while reporting a failure.
     pub(crate) fn of(path: &Path, project: &crate::world::Project) -> Option<Self> {
         #[cfg(feature = "markdown")]
         if crate::config::Config::has_ext(path, crate::config::Config::MARKDOWN) {
@@ -270,18 +229,12 @@ impl Located {
 /// One frontmatter key being read, and everything a diagnostic about it needs:
 /// the page it is on, the source that page was written in, and where in that
 /// source its value sits.
-///
-/// One value rather than the `(path, key)` pair the accessors used to take.
-/// That pair could name the file and the field but not point at either, so
-/// every wrong-typed value and every typo'd key reported itself with no snippet
-/// at all. The loop over the dict is the one place holding both the [`Origin`]
-/// and the key, and this is what carries them the rest of the way down.
 #[derive(Clone, Copy)]
 pub(super) struct At<'a> {
     pub(super) origin: &'a Origin<'a>,
     pub(super) key: &'a str,
-    /// Which element of a list value, when the fault is in one: a wrong-typed
-    /// element underlines itself rather than the whole list around it.
+    /// Which element of a list value, when the fault is in one, so it
+    /// underlines itself rather than the whole list.
     pub(super) element: Option<usize>,
 }
 impl<'a> At<'a> {
@@ -327,12 +280,8 @@ impl<'a> At<'a> {
         .into()
     }
 
-    /// A name this key does not answer to, underlined where it was written.
-    ///
-    /// `valid` is the set of names it does, taken from the very table that
-    /// parses them. The help comes from [`Keys::help`], the one owner of this
-    /// shape, so a frontmatter name gets the did-you-mean and the per-name code
-    /// spans a config key already got, rather than a comma-separated wall.
+    /// A name this key does not answer to, underlined where it was written;
+    /// `valid` is the set of names it does.
     pub(super) fn name(self, got: &str, valid: &[&str]) -> BaudelaireErrorKind {
         ContentError::frontmatter_name(
             self.origin.path,
@@ -369,7 +318,6 @@ mod tests {
     fn key(name: &str) -> Step {
         Step::Key(name.to_owned())
     }
-    /// What a span underlines, which is the only thing any of these assert on.
     fn cut(text: &str, span: SourceSpan) -> &str {
         &text[span.offset()..span.offset() + span.len()]
     }
@@ -383,9 +331,6 @@ mod tests {
     fn origin(source: &Source) -> Origin<'_> {
         Origin::new(source, std::path::Path::new("page.typ"), "blog")
     }
-    /// The span is what makes a schema failure readable, and it is the one part
-    /// the build never exercises on a green run: a locator that silently
-    /// returned `None` would leave every one of these diagnostics snippet-less.
     #[test]
     fn a_key_locates_its_own_value_and_a_missing_one_the_binding() {
         let text = "#let frontmatter = (\n  title: \"Hello\",\n  hero: 3,\n)\n\nBody.\n";
@@ -399,10 +344,6 @@ mod tests {
             &text[title.offset()..title.offset() + title.len()],
             "\"Hello\""
         );
-        // A key that is not there points at the binding, which is the thing
-        // that should have carried it.
-        // The binding node starts at `let`: in markup the `#` is a token of
-        // its own, ahead of the expression.
         let binding = origin.span(&[]).expect("the binding");
         assert!(text[binding.offset()..].starts_with("let frontmatter"));
         assert_eq!(origin.span(&[key("absent")]), None);
@@ -434,16 +375,10 @@ mod tests {
         assert_eq!(origin(&imported).span(&[]), None);
 
         let computed = page("#let frontmatter = build()\n");
-        // The binding is still where it is; only the key inside it is not.
         assert!(origin(&computed).span(&[]).is_some());
         assert_eq!(origin(&computed).span(&[key("title")]), None);
-        // Neither is the key it never spelled out, so a typo in a computed
-        // frontmatter is reported without a snippet rather than with a wrong one.
         assert_eq!(origin(&computed).entry("titel"), None);
     }
-    /// The two frontmatter errors a page hits before any schema does: a
-    /// wrong-typed value and a typo'd key. Both are only readable with a
-    /// snippet, and these are what decides whether they get one.
     #[test]
     fn a_typst_page_locates_a_wrong_typed_value_and_a_typod_key() {
         let text =
@@ -453,17 +388,14 @@ mod tests {
 
         let order = At::new(&origin, "order").span().expect("order's value");
         assert_eq!(cut(text, order), "\"first\"");
-        // A wrong-typed element of a list underlines itself, not the list.
         let tag = At::new(&origin, "tags").nth(1).span().expect("the element");
         assert_eq!(cut(text, tag), "3");
-        // The key, not the value under it: the mistake is the key.
         let titel = origin.entry("titel").expect("the key as written");
         assert_eq!(cut(text, titel), "titel");
         assert_eq!(origin.entry("absent"), None);
     }
     /// The same two on a markdown page, which reaches them through a recorded
-    /// span map rather than a syntax tree: one walk per dialect would be one
-    /// place for the snippet to go missing.
+    /// span map rather than a syntax tree.
     #[cfg(feature = "markdown")]
     #[test]
     fn a_markdown_page_locates_the_same_two_things() {
@@ -478,8 +410,6 @@ mod tests {
         let path = std::path::Path::new("page.md");
         let origin = Origin::block(&text, &spans, path, "blog");
 
-        // A block dialect records an entry from its key, so the value span
-        // covers the line rather than half of it.
         let order = At::new(&origin, "order").span().expect("order's entry");
         assert_eq!(cut(&text, order), "order: not a number");
         let tag = At::new(&origin, "tags").nth(1).span().expect("the element");

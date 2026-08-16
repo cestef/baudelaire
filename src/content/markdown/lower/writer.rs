@@ -1,4 +1,5 @@
-//! Writing the Typst: the event walk, its output buffer, and the source map it records.
+//! Writing the Typst: the event walk, its output buffer, and the source map it
+//! records.
 
 use super::Numbered;
 use super::fence::{Buffered, Fence, Html};
@@ -11,10 +12,6 @@ use crate::error::markdown::MarkdownError;
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 use std::ops::Range;
 /// A table column's alignment, as the Typst identifier that names it.
-///
-/// An enum rather than the identifier as a string: the set is closed, so a
-/// misspelling is generated code that does not compile, and the mapping from
-/// what the parser reports to what Typst reads lives in exactly one place.
 #[derive(Clone, Copy)]
 pub(super) enum Align {
     Left,
@@ -27,7 +24,6 @@ impl From<Alignment> for Align {
         match alignment {
             Alignment::Right => Self::Right,
             Alignment::Center => Self::Center,
-            // A column the table left unaligned reads left, as it does in HTML.
             Alignment::Left | Alignment::None => Self::Left,
         }
     }
@@ -35,13 +31,9 @@ impl From<Alignment> for Align {
 
 /// Lowered Typst together with where each stretch of it came from.
 ///
-/// Every buffer on the writer's stack carries its own list rather than the
-/// writer keeping one: a buffered construct is written apart from its parent
-/// and spliced in afterwards, so an offset taken while it was open names the
-/// wrong bytes once its text has moved. [`Buffer::splice`] shifts the child's
-/// list by where its text landed, which is the one operation that keeps the two
-/// in step - and which the lowering did not have, so it recorded top-level
-/// fences only and mapped everything nested to nothing.
+/// Every buffer carries its own list, because a buffered construct is written
+/// apart from its parent: [`Buffer::splice`] shifts the child's spans by where
+/// its text landed.
 #[derive(Default, Clone)]
 pub(super) struct Buffer {
     pub(super) text: String,
@@ -63,22 +55,16 @@ impl Buffer {
             .extend(child.spans.into_iter().map(|span| span.shifted(at)));
     }
 
-    /// Record that everything written since `from` came from `source`.
-    ///
-    /// Nothing is recorded for an event that wrote nothing, which keeps an
-    /// empty pair out of the map: [`SourceMap`] resolves the first pair
-    /// covering an offset, and an empty one covers none.
+    /// Record that everything written since `from` came from `source`; an event
+    /// that wrote nothing records nothing, since an empty pair covers no
+    /// offset.
     pub(super) fn record(&mut self, from: usize, source: Range<usize>, shape: Shape) {
         self.record_range(from..self.text.len(), source, shape);
     }
 
     /// Record a pair whose lowered end is known rather than "wherever the
-    /// buffer has reached".
-    ///
-    /// What a construct emitting *several* pairs needs: [`Buffer::record`]
-    /// closes each at the buffer's current end, so the first of two mappings
-    /// swallowed the second and every offset inside it resolved against the
-    /// first one's source line.
+    /// buffer has reached", which is what a construct emitting several pairs
+    /// needs.
     pub(super) fn record_range(
         &mut self,
         lowered: Range<usize>,
@@ -93,27 +79,21 @@ impl Buffer {
 pub(super) struct Writer<'a> {
     pub(super) path: &'a str,
     pub(super) at: Located<'a>,
-    /// What the site allows, consulted where a page asks for something it may
-    /// not have: an `eval` fence, and raw HTML.
     pub(super) config: &'a MarkdownConfig,
-    /// The output, and above it one buffer per open [`Buffered`] construct.
-    /// Writing always targets the top, so a nested image inside a footnote
-    /// nests its buffers too.
+    /// The output, and above it one buffer per open [`Buffered`] construct;
+    /// writing always targets the top.
     pub(super) stack: Vec<Buffer>,
     pub(super) buffered: Vec<Buffered>,
-    /// Footnote bodies by label, lowered in the pre-pass. Typst has no separate
-    /// definition: the body belongs at the reference, so it has to be known
-    /// before the reference is reached. Kept as buffers, not strings, so a body
-    /// keeps pointing at the definition it was written from once it has been
-    /// moved to the reference.
+    /// Footnote bodies by label, lowered in the pre-pass and kept as buffers so
+    /// a body still points at the definition it was written from once it has
+    /// moved to its reference.
     pub(super) notes: Vec<(String, Buffer)>,
     /// Column alignments of the table being written, from its `Start(Table)`.
     pub(super) columns: Vec<Alignment>,
 }
 
 /// Where the writer stood before an event: which buffer was on top, and how
-/// much of it was written. What lets the walk attribute exactly the bytes one
-/// event produced, and nothing else.
+/// much of it was written.
 pub(super) struct Mark {
     pub(super) depth: usize,
     pub(super) at: usize,
@@ -131,15 +111,9 @@ impl<'a> Writer<'a> {
         }
     }
 
-    /// A markdown heading level as a Typst one, which is the same number: `#`
-    /// is `=`, so a markdown page and a typst page with the same outline render
-    /// the same HTML.
-    ///
-    /// Clamped at 5 because typst-html renders level *n* as `h(n+1)`, and a
-    /// level 6 becomes `div role="heading" aria-level="7"` -- which warns on
-    /// every occurrence, and which the anchor pass does not recognise as a
-    /// heading, so it silently loses its `id`. Six `#` are rare; a heading with
-    /// no anchor is worse than one a level too shallow.
+    /// A markdown heading level as a Typst one, which is the same number,
+    /// clamped at 5 because typst-html renders level *n* as `h(n+1)` and a
+    /// level 6 becomes a div the anchor pass does not recognise as a heading.
     pub(super) fn depth(level: HeadingLevel) -> usize {
         match level {
             HeadingLevel::H1 => 1,
@@ -165,14 +139,8 @@ impl<'a> Writer<'a> {
     }
 
     /// Write `text` into the alt run being collected, if one is open, and say
-    /// whether there was one.
-    ///
-    /// What every inline event has to ask before it lowers itself: an alt
-    /// attribute is a plain string, so a code span, a line break and a text run
-    /// inside one are each nothing but their characters. Asked in one place
-    /// because the events that forgot to ask are exactly the bug: a break wrote
-    /// into the lowered buffer that the image then discards, and the two lines
-    /// of a multi-line alt were joined without the space between them.
+    /// whether there was one; every inline event has to ask before it lowers
+    /// itself, because an alt attribute is a plain string.
     pub(super) fn alt(&mut self, text: &str) -> bool {
         let Some(Buffered::Alt { alt, .. }) = self.buffered.last_mut() else {
             return false;
@@ -187,13 +155,8 @@ impl<'a> Writer<'a> {
     }
 
     /// A link's destination, with the scheme an autolink leaves implicit put
-    /// back.
-    ///
-    /// `<me@example.com>` is parsed as an email autolink whose destination is
-    /// the bare address, and every renderer prepends the scheme. Emitted as
-    /// authored it was a *relative path* to a page nobody has, which nothing
-    /// downstream could question: `mailto:` is left alone by the link checker
-    /// and a bare address is not, so the two spellings of one link disagreed.
+    /// back: a bare address emitted as authored is a relative path to a page
+    /// nobody has.
     pub(super) fn destination(link_type: LinkType, dest: &str) -> String {
         match link_type {
             LinkType::Email => ["mailto:", dest].concat(),
@@ -211,12 +174,9 @@ impl<'a> Writer<'a> {
     }
 
     /// Attribute everything the event just written produced to the markdown it
-    /// came from.
-    ///
-    /// Skipped when the event opened or closed a buffer: `before` was measured
-    /// against a buffer that is no longer the one being written to, and the
-    /// close is recorded by [`Writer::end`], which is the only place that knows
-    /// how the child's text was transformed on its way in.
+    /// came from, skipped when the event opened or closed a buffer because
+    /// `before` was measured against another buffer and [`Writer::end`] records
+    /// that case.
     pub(super) fn attribute(&mut self, before: &Mark) {
         if self.stack.len() != before.depth {
             return;
@@ -224,14 +184,11 @@ impl<'a> Writer<'a> {
         let Some(source) = self.at.range() else {
             return;
         };
-        // Assembled, not copied: every construct but an `eval` fence is a
-        // generated call or an escaped literal, whose bytes line up with
-        // nothing on the authored side.
         self.out().record(before.at, source, Shape::Whole);
     }
 
-    /// Lower every footnote definition first. The main walk then skips them and
-    /// reads the bodies back at each reference.
+    /// Lower every footnote definition first, so the main walk can skip them
+    /// and read the bodies back at each reference.
     pub(super) fn notes(&mut self, events: &[Numbered<'_>]) -> Result<()> {
         let mut depth = 0usize;
         let mut current: Option<String> = None;
@@ -291,12 +248,6 @@ impl<'a> Writer<'a> {
                 continue;
             }
             self.at.at = *index;
-            // Every event is authored: the parser hands back the bytes each one
-            // was parsed from, so whatever this writes belongs to those bytes,
-            // generated call or literal text alike. What has no origin is what
-            // no event produced -- the wrapper the body is compiled inside, and
-            // the punctuation `end` writes while closing a buffered construct
-            // whose text was transformed rather than copied.
             let before = self.mark();
             self.event(event)?;
             self.attribute(&before);
@@ -316,11 +267,7 @@ impl<'a> Writer<'a> {
             }
             Event::Text(text) => {
                 match self.buffered.last_mut() {
-                    // Inside a code block the text is the code: it is escaped
-                    // once, as a whole string, when the block closes.
                     Some(Buffered::Code { .. }) => self.push(text),
-                    // Inside an alt run the text is the attribute, kept raw
-                    // because that is what it has to be at the end.
                     Some(Buffered::Alt { alt, .. }) => alt.push_str(text),
                     None => {
                         let literal = Content(text.as_ref()).to_string();
@@ -330,8 +277,6 @@ impl<'a> Writer<'a> {
                 Ok(())
             }
             Event::Code(code) => {
-                // An alt attribute is plain text, so a code span inside one is
-                // its text: the marks around it have nowhere to go.
                 if self.alt(code) {
                     return Ok(());
                 }
@@ -339,10 +284,6 @@ impl<'a> Writer<'a> {
                 self.push(&call);
                 Ok(())
             }
-            // A break inside an alt run is the space between the two lines it
-            // separated. Without it `![alpha\nbeta](/i.png)` set `alt: "alphabeta"`,
-            // because the break wrote into the lowered buffer the image then
-            // discards rather than into the attribute being collected.
             Event::SoftBreak => {
                 if !self.alt(" ") {
                     self.push(&Content(" ").to_string());
@@ -356,9 +297,6 @@ impl<'a> Writer<'a> {
                 Ok(())
             }
             Event::Rule => {
-                // Not `line`, which typst drops on HTML export with a warning
-                // and no element: a thematic break is a rule in the document,
-                // and `hr` is the element that means it.
                 let call = Call::new("html.elem").pos(Value::str("hr")).to_string();
                 self.push(&call);
                 self.push("\n\n");
@@ -373,9 +311,6 @@ impl<'a> Writer<'a> {
                     }
                     .to_owned(),
                 );
-                // The `#` enters markup and the space ends the identifier;
-                // between them the name goes through `Value::Raw`, the one door
-                // for an identifier no string literal can stand in for.
                 self.push("#");
                 self.push(&Typst(&symbol).to_string());
                 self.push(" ");
@@ -389,33 +324,11 @@ impl<'a> Writer<'a> {
                     .map(|(_, body)| body.clone())
                     .unwrap_or_default();
                 self.push(&Call::new("footnote").content().to_string());
-                // Spliced rather than pushed as text: the body was lowered at
-                // the definition, so its spans point there and have to be moved
-                // to wherever it lands at this reference.
                 self.out().splice(body);
                 self.push("]");
                 Ok(())
             }
-            // A run that is nothing but comments is not content, and dropping it
-            // drops nothing: a comment is the one shape of raw HTML with no
-            // rendered counterpart to lose. A run that merely *begins and ends*
-            // with one is a different thing entirely, and goes below.
             Event::Html(raw) | Event::InlineHtml(raw) if Html(raw).is_comment() => Ok(()),
-            // The rest has no home here. The DOM this build produces is typed
-            // and typst-html owns the document element, so a string of markup
-            // cannot be spliced into it: it would have to be parsed, and a
-            // second HTML parser is exactly the string templating the pipeline
-            // exists to avoid. A fence with `html.elem` says the same thing in
-            // the typed form.
-            //
-            // Refusing is the default and dropping is the site's call: content
-            // written elsewhere arrives carrying markup nobody wants to hand-fix.
-            //
-            // Dropping an *inline* run removes the tags and leaves the prose
-            // between them, because that prose arrives as its own text events.
-            // A block-level run is one event carrying its whole contents, so
-            // dropping it drops those too -- which is what `drop` has to mean
-            // for a block, and why `refuse` is the default.
             Event::Html(_) | Event::InlineHtml(_) => match self.config.html {
                 RawHtml::Drop => Ok(()),
                 RawHtml::Refuse => Err(MarkdownError::RawHtml {
@@ -425,17 +338,6 @@ impl<'a> Writer<'a> {
                 }
                 .into()),
             },
-            // Math is not among the extensions a site can enable:
-            // `Markdown::options` never sets `ENABLE_MATH`, deliberately, since
-            // Typst's math is not LaTeX and there is no mapping between them
-            // that is not a guess. These two arms are what exhaustiveness costs.
-            //
-            // They lower a run to the characters the author typed, delimiters
-            // included, which is exactly what the parser hands over with math
-            // off: turning the option on would change no page silently. What
-            // used to be here emitted `#math.equation("x^2")`, and `equation`
-            // takes *content*, so a string argument set the characters as prose
-            // -- the one thing the config comment says it is avoiding.
             Event::InlineMath(text) => {
                 self.math("$", text);
                 Ok(())
@@ -520,12 +422,7 @@ impl<'a> Writer<'a> {
                     .to_string();
                 self.push(&call);
             }
-            // Bare: this sits inside the `#table(..` this writer just opened,
-            // where Typst is already reading arguments and a `#` would be a
-            // syntax error.
             Tag::TableHead => self.push(&Call::new("table.header").bare().items().to_string()),
-            // Nothing to open: a paragraph is separated by its end, a row by
-            // its cells, and the rest have no Typst counterpart.
             Tag::Paragraph
             | Tag::TableRow
             | Tag::FootnoteDefinition(_)
@@ -551,11 +448,6 @@ impl<'a> Writer<'a> {
                 };
                 let at = self.out().text.len();
                 if fence.runs(self.config) {
-                    // Emitted verbatim, so an error inside a multi-line fence
-                    // lands on its own line. Paired a line at a time rather than
-                    // as one block: an indented fence (inside a list item, a
-                    // blockquote) reaches here with its indentation already
-                    // stripped, so only the lines correspond byte for byte.
                     let lines = self.at.fenced_lines(&text);
                     self.push(&text);
                     for (lowered, source) in lines {
@@ -573,10 +465,6 @@ impl<'a> Writer<'a> {
                     call = call.named("lang", Value::str(&name));
                 }
                 self.push(&call.pos(Value::str(&text)).to_string());
-                // The call is nothing like the fence it renders -- the code is
-                // escaped into a string argument -- so the fence maps as a
-                // whole and an offset inside it resolves to the fence's start
-                // rather than to a byte the author never typed there.
                 if let Some(source) = self.at.range() {
                     self.out().record(at, source, Shape::Whole);
                 }
@@ -588,9 +476,6 @@ impl<'a> Writer<'a> {
                 self.push("]");
             }
             TagEnd::Image => {
-                // The lowered buffer is discarded: an alt run's inline marks
-                // have no home in a string attribute, and `alt` already holds
-                // the text they wrapped.
                 self.stack.pop();
                 let Some(Buffered::Alt { dest, alt }) = self.buffered.pop() else {
                     return;
@@ -601,10 +486,6 @@ impl<'a> Writer<'a> {
                 }
                 let at = self.out().text.len();
                 self.push(&call.to_string());
-                // Recorded here rather than by the walk, which cannot attribute
-                // an event that closed a buffer. The call maps as a whole: it
-                // is assembled from the destination and the alt run, not copied
-                // from either.
                 if let Some(source) = self.at.range() {
                     self.out().record(at, source, Shape::Whole);
                 }

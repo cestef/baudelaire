@@ -13,56 +13,43 @@ use crate::error::Result;
 /// browser reads when a visitor installs the site to a home screen. Enabled by
 /// the presence of a `generate { manifest }` block.
 ///
-/// Everything here is what only the author knows. What the build already knows
-/// (the site title, the language's root URL) is filled in from the config it is
-/// written for, so a bare `manifest { }` beside an icon is a valid manifest.
-///
 /// [spec]: https://www.w3.org/TR/appmanifest/
 #[derive(Debug, Clone, Hash, Default)]
 pub struct ManifestConfig {
-    /// Whether to emit `manifest.webmanifest`.
     pub enabled: bool,
     /// The installed app's name. Defaults to the site title in the language the
     /// manifest is written for.
     pub name: Option<String>,
     /// The name a launcher falls back to when the full one does not fit.
     pub short: Option<String>,
-    /// One line about the app, shown by an install prompt.
     pub description: Option<String>,
-    /// How the installed app is presented.
     pub display: DisplayMode,
     /// CSS colour of the browser UI around the app, also written to every
-    /// page's `<meta name="theme-color">` so a tab is tinted before any install.
+    /// page's `<meta name="theme-color">` so a tab is tinted before any
+    /// install.
     pub theme: Option<String>,
     /// CSS colour painted before the first page has rendered.
     pub background: Option<String>,
-    /// Where launching the installed app lands, as a root-relative path.
-    /// Localized per language, like the default it replaces: `/home/` launches
-    /// the French app into `/fr/home/`. Defaults to the language's root.
+    /// Where launching the installed app lands, as a root-relative path
+    /// localized per language: `/home/` launches the French app into
+    /// `/fr/home/`. Defaults to the language's root.
     pub start: Option<String>,
-    /// The URLs the installed app covers; navigating outside it leaves the app.
-    /// Localized the same way, since a `start_url` outside its `scope` is a
-    /// manifest a browser refuses. Defaults to the language's root.
+    /// The URLs the installed app covers, localized like
+    /// [`start`](Self::start); navigating outside it leaves the app. Defaults
+    /// to the language's root.
     pub scope: Option<String>,
-    /// The icons a launcher picks from. A manifest with none cannot be
+    /// The icons a launcher picks from; a manifest with none cannot be
     /// installed, so a build that emits one warns.
     pub icons: Vec<IconConfig>,
 }
 
 impl ManifestConfig {
-    /// The output file name, at the root of each language's scope. The
-    /// `.webmanifest` extension is the one the spec registers; `manifest.json`
-    /// is the older spelling, and browsers accept both.
+    /// The output file name, at the root of each language's scope.
     pub const FILE: &'static str = "manifest.webmanifest";
 
-    /// The manifest of a language, root-relative and under the site's base
-    /// path: what that language's pages point `<link rel="manifest">` at.
-    ///
-    /// Beside [`FILE`](Self::FILE) for the reason
-    /// [`FeedConfig::url`](crate::config::FeedConfig::url) sits beside its file
-    /// name: the processor that writes the file and the tag that names
-    /// it derive the path once, so they cannot drift. Root-relative rather than
-    /// absolute, so a manifest is reachable without a configured site `url`.
+    /// The manifest of a language: what that language's pages point
+    /// `<link rel="manifest">` at. Root-relative rather than absolute, so a
+    /// manifest is reachable without a configured site `url`.
     pub fn url(config: &Config, lang: &str) -> String {
         let scope = config.scope(lang, "");
         let path = if scope.is_empty() {
@@ -77,18 +64,15 @@ impl ManifestConfig {
 /// One entry of a manifest's `icons` array.
 #[derive(Debug, Clone, Hash)]
 pub struct IconConfig {
-    /// Where the image is served from, root-relative, exactly as a browser will
-    /// request it. Written as the node's name: `"/icon-512.png" size=512`.
+    /// Where the image is served from, root-relative, written as the node's
+    /// name: `"/icon-512.png" size=512`.
     pub src: String,
     /// The square edge in pixels. Absent means the image scales to any size,
     /// which is what a vector icon does.
     pub size: Option<u32>,
-    /// What a launcher may do with the image.
     pub purpose: IconPurpose,
 }
 
-/// An icon is written as a path with its dimensions attached, so the path is
-/// what one is built from and the rest is filled in from the line's attributes.
 impl From<String> for IconConfig {
     fn from(src: String) -> Self {
         Self {
@@ -104,13 +88,13 @@ impl From<String> for IconConfig {
 /// [spec]: https://www.w3.org/TR/appmanifest/#display-member
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum DisplayMode {
-    /// Its own window, with no browser UI. Why a site ships a manifest at all,
-    /// hence the default.
+    /// Its own window, with no browser UI.
     #[default]
     Standalone,
     /// Its own window, and the whole screen.
     Fullscreen,
-    /// Its own window, keeping the minimum navigation UI the browser insists on.
+    /// Its own window, keeping the minimum navigation UI the browser insists
+    /// on.
     Minimal,
     /// An ordinary browser tab.
     Browser,
@@ -127,8 +111,7 @@ impl Named for DisplayMode {
 
 impl DisplayMode {
     /// The spelling the manifest takes, which is the config spelling bar
-    /// `minimal`: the member is `minimal-ui`, and a config key or value is one
-    /// word.
+    /// `minimal`, whose member is `minimal-ui`.
     pub fn member(self) -> &'static str {
         match self {
             Self::Minimal => "minimal-ui",
@@ -145,8 +128,8 @@ pub enum IconPurpose {
     /// Shown as drawn, whatever the platform's icon shape is.
     #[default]
     Any,
-    /// Safe to crop to the platform's shape: the image keeps its subject inside
-    /// the safe zone and fills the rest with its own background.
+    /// Safe to crop to the platform's shape, so the image keeps its subject
+    /// inside the safe zone.
     Maskable,
     /// A single-colour glyph the platform recolours, for a notification badge.
     Monochrome,
@@ -160,9 +143,7 @@ impl Named for IconPurpose {
     ];
 }
 
-/// The `manifest { .. }` block. Its presence enables the manifest; every key is
-/// something only the author knows, since what the build knows it fills in
-/// itself.
+/// The `manifest { }` block, whose presence enables the manifest.
 impl Section for ManifestConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 

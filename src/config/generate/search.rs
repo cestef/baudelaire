@@ -10,22 +10,18 @@ use crate::config::node::NodeExt;
 pub struct SearchConfig {
     /// Index formats to emit. Empty = disabled.
     pub formats: Vec<SearchFormat>,
-    /// Page fields included in each indexed document.
     pub fields: Vec<SearchField>,
     /// Tokens excluded from the inverted index.
     pub stopwords: Vec<String>,
     /// Minimum token length kept in the inverted index.
     pub min_length: usize,
     /// Also emit the shipped search UI (a Ctrl-K palette) next to each index.
-    /// Spelled `ui` in config: the top-level `client { }` block is build-time
-    /// constants for client JS, and one name could not mean both.
     pub ui: bool,
 }
 
 impl SearchConfig {
-    /// Whether the prebuilt inverted index is among the formats emitted. It is
-    /// the only one `stopwords` and `minimum` reach, so it is also what decides
-    /// whether either of them does anything.
+    /// Whether the prebuilt inverted index is among the formats emitted, and so
+    /// whether `stopwords` and `minimum` do anything.
     pub fn inverted(&self) -> bool {
         self.formats.contains(&SearchFormat::Inverted)
     }
@@ -37,8 +33,9 @@ pub enum SearchFormat {
     /// A flat document list (`search.json`): pair with any client library
     /// (Fuse.js, MiniSearch, ..), which builds its own index at runtime.
     Json,
-    /// A prebuilt inverted index (`search.inverted.json`): server-side tokenized
-    /// so the client looks up terms directly instead of scanning every doc.
+    /// A prebuilt inverted index (`search.inverted.json`): server-side
+    /// tokenized so the client looks up terms directly instead of scanning
+    /// every doc.
     Inverted,
 }
 
@@ -84,12 +81,8 @@ impl Named for SearchField {
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
-            // opt-in: no index until a format is configured
             formats: Vec::new(),
             fields: vec![SearchField::Title, SearchField::Body, SearchField::Tags],
-            // The landmark a page's own prose lives in. Indexing the whole
-            // document instead puts every page's navigation in every document,
-            // which is the fastest way to make a small site's search useless.
             stopwords: Vec::new(),
             min_length: 2,
             ui: false,

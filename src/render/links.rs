@@ -14,30 +14,21 @@ use crate::graph::Hash;
 /// A link that names a page of this site: which page, and what the author wrote
 /// after it.
 ///
-/// The one parsed form of an internal link. A raw `href` is split exactly once,
-/// where it is resolved, and travels as this afterwards: the render pass, the
-/// link graph, the deep-link check and the build manifest all read one value
-/// rather than each splitting the string again on a rule of its own. They did,
-/// and disagreed: the graph read `#install?x` as a section named `install?x`
-/// while the anchor check read it as `install`.
+/// The one parsed form of an internal link: an `href` is split exactly once, so
+/// the render pass, the link graph and the deep-link check cannot disagree on
+/// where the page ends and the fragment begins.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub struct Target {
-    /// The page's permalink, `#fragment` and `?query` stripped: what identifies
-    /// the page at the other end.
+    /// The page's permalink, `#fragment` and `?query` stripped.
     page: String,
     /// The `#fragment` / `?query` the link carried, empty when it carried
-    /// neither. Kept verbatim, because it is what the rewritten `href` has to
-    /// say; read through [`Target::fragment`], never matched on again.
+    /// neither, kept verbatim for the rewritten `href`.
     tail: String,
 }
 
 impl Target {
     /// The link `raw` wrote, aimed at the page served at `page`.
-    ///
-    /// The two halves come from different places on purpose: resolution has
-    /// just mapped a `.typ` source path to the permalink it is served at, and
-    /// only the tail survives from what the author typed.
     fn new(page: &str, raw: &str) -> Self {
         Self {
             page: page.to_owned(),
@@ -45,7 +36,6 @@ impl Target {
         }
     }
 
-    /// The page this link names.
     pub fn page(&self) -> &str {
         &self.page
     }
@@ -53,9 +43,7 @@ impl Target {
     /// The heading id the link aimed at, without the `#`.
     ///
     /// `None` when it named the page rather than a section within it: a
-    /// `?query` is not a section, and neither is a bare `#`. A `?query` written
-    /// *after* the fragment is not part of it either, which is the rule the
-    /// deep-link check had of its own and the link graph did not.
+    /// `?query` is not a section, and neither is a bare `#`.
     pub fn fragment(&self) -> Option<&str> {
         let anchor = self.tail.strip_prefix('#')?;
         let anchor = anchor.split('?').next().unwrap_or(anchor);
@@ -63,18 +51,12 @@ impl Target {
     }
 }
 
-/// The URL this link is served at: the permalink it resolved to, carrying
-/// whatever the author wrote after it. What goes back into the `href`, and the
-/// spelling the build manifest stores.
 impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.page, self.tail)
     }
 }
 
-/// A link already whole, split back into its parts: how a target comes out of
-/// the build manifest, and how a page written as a URL rather than as a source
-/// path is read.
 impl From<&str> for Target {
     fn from(url: &str) -> Self {
         let split = super::Tail::of(url);
@@ -97,31 +79,21 @@ impl From<Target> for String {
     }
 }
 
-/// The links one page's own content carries: this page's contribution to the
-/// site's link graph, as the [`Target`]s it points at.
+/// The links one page's own content carries, as the [`Target`]s it points at.
 ///
-/// A set, so the order is the same on every build and the same link written
-/// twice is one edge. A target keeps the section it aimed at, because a link
-/// into a page's section says more than a link to the page: it is what lets the
-/// page at the other end group who linked to *what*. Which paragraph they add up
-/// to one edge from is [`Backlinks`]'s business, not this type's.
-///
-/// Only links written in the content tree are collected. A layout's nav, a
-/// sidebar, and the prev/next pair are links every page carries by virtue of its
-/// template, and counting them would make every page a neighbour of every other.
-/// See [`crate::render::transform::rewrite`] for where that line is drawn.
+/// Only links written in the content tree are collected, never a template's nav
+/// or prev/next pair: counting those would make every page a neighbour of every
+/// other.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Outbound(BTreeSet<Target>);
 
 impl Outbound {
-    /// The links of a page that has none: what a check reads for a build that
-    /// never asked for the graph.
     pub const EMPTY: &'static Self = &Self(BTreeSet::new());
 
     /// Record a resolved link written on the page permalinked `from`. A page
-    /// linking to itself is not an edge, whichever of its own sections it names:
-    /// it says nothing a reader already on that page does not know.
+    /// linking to itself is not an edge, whichever of its own sections it
+    /// names.
     pub fn record(&mut self, target: Target, from: &str) {
         if target.page() != from {
             self.0.insert(target);
@@ -133,33 +105,23 @@ impl Outbound {
         self.0.iter()
     }
 
-    /// The same links as the *pages* they name: what asking "is anything
-    /// pointing at this page?" reads. A page named both plainly and by section
-    /// appears twice, which no caller cares about and every caller would
-    /// otherwise dedup for itself.
+    /// The same links as the *pages* they name; a page named both plainly and
+    /// by section appears twice.
     pub fn pages(&self) -> impl Iterator<Item = &str> {
         self.targets().map(Target::page)
     }
 
-    /// Whether the page links to nothing, so a manifest entry can leave the
-    /// field out entirely.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// What a page's source *looks* like it links to: every string literal in it
-    /// that resolves to a page, read the way the render pass reads a link.
+    /// What a page's source *looks* like it links to: every string literal in
+    /// it that resolves to a page, read the way the render pass reads a link.
     ///
-    /// Only ever a guess, and only used as one: it is what a cold build predicts
-    /// each page's backlinks from, before there is a rendered site to invert
-    /// (see `engine::links::Graph`). Both kinds of wrong are harmless, because the
-    /// graph the build actually produces is what every page is checked against
-    /// and a page guessed wrongly is simply compiled again. A link built in a
-    /// loop is missed; a `.typ` path written for some other reason is counted.
-    ///
-    /// Reading every string rather than the arguments of `link` calls is
-    /// deliberate: it costs one walk, needs to know nothing about how a link is
-    /// spelled, and cannot go stale when that changes.
+    /// Only ever a guess, and only used as one: it is what a cold build
+    /// predicts each page's backlinks from, before there is a rendered site to
+    /// invert. Being wrong either way costs a recompile, since the graph the
+    /// build produces is what every page is checked against.
     pub fn scanned(
         source: &Source,
         page: &Path,
@@ -184,34 +146,25 @@ impl Outbound {
 
 /// The site's link graph, inverted: for each page, the pages whose content
 /// links to it.
-///
-/// [`Outbound`] is what one page contributes; this is what the whole set of them
-/// adds up to, and what a template renders as "linked from". It exists only
-/// after every page has rendered, which is why a page compiles against a
-/// *predicted* one and is recompiled when the prediction turns out wrong (see
-/// `engine::links::Graph`).
 pub enum Backlinks {
-    /// `links { backlinks }` is off. A page compiles with an empty set and
-    /// records no digest, so nothing about the graph can ever invalidate it.
+    /// `links { backlinks }` is off, so a page compiles with an empty set and
+    /// records no digest.
     Off,
     /// Sources keyed by the permalink they point at. A page absent from the map
     /// is linked from nowhere.
     On(BTreeMap<String, Vec<Backlink>>),
 }
 
-/// One inbound link, as a template renders it: a page, once, whichever of this
-/// page's sections it pointed at.
+/// One inbound link: a page, named once whichever of this page's sections it
+/// pointed at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Backlink {
     /// The permalink of the page that links here.
     pub url: String,
     pub title: String,
-    /// Its language, so a template can drop or mark a link from another edition
-    /// of the site: an `en` page linking a `fr` one is a real edge.
     pub lang: String,
-    /// The heading ids it aimed at, without the `#`, in a stable order. Empty
-    /// when it linked to the page rather than into it, which is what lets a
-    /// template group its backlinks by section and still name a source once.
+    /// The heading ids it aimed at, without the `#`, in a stable order; empty
+    /// when it linked to the page rather than into it.
     pub fragments: Vec<String>,
 }
 
@@ -219,13 +172,9 @@ impl Backlinks {
     /// Invert `edges`: each page's own outbound links become, for every page
     /// they name, the pages that name it.
     ///
-    /// A source appears once per page it links to, however many links it wrote
-    /// and however many sections they aimed at: those collect into
-    /// [`Backlink::fragments`] instead, so the plain "linked from" list never
-    /// says one name twice. Sources come ordered by permalink, so the value a
-    /// page compiles against is the same on every build: an order that depended
-    /// on which pages hit the cache would refingerprint pages that nothing
-    /// changed about.
+    /// A source appears once per page it links to, the sections it aimed at
+    /// collecting into [`Backlink::fragments`], and sources come ordered by
+    /// permalink so a page compiles against the same value on every build.
     pub fn new<'a>(edges: impl Iterator<Item = (&'a Page, &'a Outbound)>) -> Self {
         let mut inverted: BTreeMap<String, BTreeMap<String, Backlink>> = BTreeMap::new();
         for (page, outbound) in edges {
@@ -276,8 +225,8 @@ impl Backlinks {
     }
 
     /// The digest of what `page` was, or would be, compiled with. `None` when
-    /// the feature is off: there is then nothing to validate a page against, and
-    /// a recorded digest would only force a rebuild when it was turned on.
+    /// the feature is off, so nothing validates a page against a graph it never
+    /// saw.
     pub fn digest(&self, page: &Page) -> Option<Hash> {
         match self {
             Self::Off => None,
@@ -286,9 +235,6 @@ impl Backlinks {
     }
 }
 
-/// A page names itself in a backlink by the three things a link needs: where it
-/// is, what to call it, and what language it is in. What it aimed at is the
-/// link's, not the page's, and is filled in as the graph is inverted.
 impl From<&Page> for Backlink {
     fn from(page: &Page) -> Self {
         Self {
@@ -303,7 +249,8 @@ impl From<&Page> for Backlink {
 /// How a raw link in page markup should be treated.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Link {
-    /// Not a managed page link (external, fragment, or non-`.typ`); leave as authored.
+    /// Not a managed page link (external, fragment, or non-`.typ`); leave as
+    /// authored.
     Passthrough,
     /// An internal `.typ` link resolved to the page it names.
     Resolved(Target),
@@ -314,51 +261,34 @@ pub enum Link {
 /// The link-map entries a page's resolution consulted: for each source path
 /// probed, the permalink it mapped to, or `None` when no page sat there.
 ///
-/// This is a page's dependency on the site's URL layout, which the per-page
-/// dependency tracker cannot see (resolution is render-side, and typst never
-/// reads a link target's source). Recorded per page and revalidated on a cache
-/// hit, so a permalink change invalidates the pages that linked to it rather
-/// than the whole site.
-///
 /// A `None` carries as much weight as a `Some`: a link that fell through to the
 /// base page because the site had no `.de` edition of it must rebuild when that
-/// edition appears. Recording only the entry that matched would leave it stale.
+/// edition appears.
 pub type LinkDeps = BTreeMap<PathBuf, Option<String>>;
 
 /// A page's dependency on *which URLs the site serves*, keyed by the URL a link
 /// named and holding whether a page sat there.
 ///
-/// [`LinkDeps`] cannot express this: it is keyed by a target's source path, and
-/// a link already written as a URL never names one. A `false` is the load-
-/// bearing half, and the reason this exists at all: a link to a page that does
-/// not exist yet leaves no other trace on the linking page, so without the probe
-/// the page it will eventually reach can be added, and the linker stays a cache
-/// hit replaying an outbound edge it never recorded.
+/// A `false` is the load-bearing half: a link to a page that does not exist yet
+/// leaves no other trace on the linking page, so without the probe that page
+/// can appear and the linker stays a cache hit.
 pub type UrlDeps = BTreeMap<String, bool>;
 
 /// Whether a link spelled as a URL reaches a page of this site, and the probe
-/// that decided it. The [`Resolution`] of the URL-spelled path, and travelling
-/// together for the same reason.
+/// that decided it.
 pub struct Serving {
     /// The page it names, if the site serves one there.
     pub target: Option<Target>,
-    /// The URL consulted, and the answer.
     pub probed: UrlDeps,
 }
 
 /// How one raw link resolved, and the map entries the outcome depended on.
-///
-/// The two travel together because they are computed together: deriving the
-/// dependencies in a second pass would mean spelling the probe order twice.
 pub struct Resolution {
-    /// What to do with the link.
     pub link: Link,
-    /// Every entry consulted before settling on [`Resolution::link`].
     pub probed: LinkDeps,
 }
 
 impl Resolution {
-    /// A link that is none of this module's business, and so depends on nothing.
     fn passthrough() -> Self {
         Self {
             link: Link::Passthrough,
@@ -375,24 +305,18 @@ pub struct LinkMap {
     by_source: HashMap<PathBuf, String>,
     /// The extensions that make a link a source-path link rather than a URL or
     /// a file link, from [`Config::sources`](crate::config::Config::sources).
-    ///
-    /// The site's answer, not a constant: `.md` names a page only where markdown
-    /// is a source dialect, and where it is not, a link to a `.md` file has to
-    /// stay the file link it was written as.
     sources: Vec<&'static str>,
     /// Every permalink this site serves, so a link written as a URL rather than
     /// as a source path can still be recognized as naming a page. Generated
-    /// listings are in here even though they are not in `by_source`: a link to a
-    /// term page is a link to a page, whoever wrote it.
+    /// listings are in here even though they are not in `by_source`.
     urls: HashSet<String>,
     /// The typst project root: absolute link paths (`/posts/hello.typ`)
     /// resolve against it, mirroring typst's own path convention.
     root: PathBuf,
 }
 
-/// An empty map for a default site: it indexes no page, and still knows what a
-/// source path looks like. Derived, `sources` would have been empty, and a map
-/// that recognizes no source path at all classifies every link as a URL.
+/// Hand-written: derived, `sources` would be empty, and a map that recognizes
+/// no source path at all classifies every link as a URL.
 impl Default for LinkMap {
     fn default() -> Self {
         Self {
@@ -410,13 +334,10 @@ impl LinkMap {
     /// absolute references resolve against.
     ///
     /// Generated listings are excluded: their source path is fabricated and no
-    /// file sits there, so no author can write a source link against it. Said
-    /// outright rather than left to canonicalization failing on a path that is
-    /// not there, because resolution has to give the same answer for a target
-    /// that exists and one that does not.
-    ///
-    /// `sources` is the site's [`Config::sources`](crate::config::Config::sources),
-    /// which decides what counts as a source path at all.
+    /// file sits there, so no author can write a source link against it.
+    /// `sources` is the site's
+    /// [`Config::sources`](crate::config::Config::sources), which decides what
+    /// counts as a source path at all.
     pub fn new(pages: &[Page], root: &Path, sources: Vec<&'static str>) -> Self {
         let by_source = pages
             .iter()
@@ -432,10 +353,6 @@ impl LinkMap {
     }
 
     /// Every indexed page as `(source path, permalink)`.
-    ///
-    /// The build cache keeps its own copy, keyed the way it stores every other
-    /// path, so it can revalidate a page's recorded [`LinkDeps`] without
-    /// reaching into this map's internals or repeating its normalization.
     pub fn entries(&self) -> impl Iterator<Item = (&Path, &str)> {
         self.by_source
             .iter()
@@ -444,18 +361,6 @@ impl LinkMap {
 
     /// The page a raw link already spelled as a URL names, if this site serves
     /// one there, and the probe that decided it.
-    ///
-    /// A `.typ` link is the way to cross-reference a page and the only spelling
-    /// that survives a rename, but it is not the only one that *reaches* a page:
-    /// an author writing `/guide/` means the guide, and a generated index links
-    /// its members by permalink because it has no source path to name them by.
-    /// Both are edges of the link graph, and neither goes through
-    /// [`LinkMap::classify`], which exists to rewrite what has to be rewritten.
-    ///
-    /// The probe carries the negative answer too, for the same reason
-    /// [`LinkMap::classify`] does: a link to a URL no page serves yet is an edge
-    /// the site gains the moment that page exists, and nothing else about the
-    /// linking page changes when it does.
     pub fn served(&self, raw: &str) -> Serving {
         let target = Target::from(raw);
         let serves = self.urls.contains(target.page());
@@ -466,10 +371,6 @@ impl LinkMap {
     }
 
     /// Every URL this site serves a page at.
-    ///
-    /// The build cache keeps its own copy, as it does for every other map it
-    /// revalidates against, so a page's recorded [`UrlDeps`] is checked against
-    /// the same set [`LinkMap::served`] answered from.
     pub fn urls(&self) -> &HashSet<String> {
         &self.urls
     }
@@ -479,25 +380,19 @@ impl LinkMap {
     /// entries that decided it.
     ///
     /// `lang` is the linking page's language on a multilingual site, `None`
-    /// otherwise. A translated page writes the same `#link("b.typ")` as its
-    /// original, and means its own edition of `b`; resolving language-blind sent
-    /// every French link to the English page, silently and with no warning,
-    /// since the link did resolve.
+    /// otherwise: a translated page writes the same `#link("b.typ")` as its
+    /// original and means its own edition of `b`.
     pub fn classify(&self, raw: &str, from: &Path, lang: Option<&str>) -> Resolution {
         if Self::is_external(raw) {
             return Resolution::passthrough();
         }
         let split = super::Tail::of(raw);
-        // Case-sensitively, the way discovery matches content files: typst
-        // resolves the path literally, so `b.TYP` is not a link to `b.typ`.
         let Some(extension) = Path::new(split.path).extension() else {
             return Resolution::passthrough();
         };
         if !self.sources.iter().any(|source| extension == *source) {
             return Resolution::passthrough();
         }
-        // Typst path semantics: absolute paths are project-root-relative,
-        // relative ones resolve against the linking file's directory.
         let target = match split.path.strip_prefix('/') {
             Some(rooted) => self.root.join(rooted),
             None => from
@@ -505,9 +400,6 @@ impl LinkMap {
                 .unwrap_or_else(|| Path::new("."))
                 .join(split.path),
         };
-        // Probing stops at the first candidate that exists, so only the entries
-        // actually consulted become dependencies: a resolved edition means the
-        // base page's permalink never mattered and must not invalidate.
         let mut probed = LinkDeps::new();
         let resolved = Self::candidates(&target, lang).find_map(|candidate| {
             let permalink = self.by_source.get(&candidate).cloned();
@@ -522,16 +414,11 @@ impl LinkMap {
     }
 
     /// The source paths a link to `target` probes, in order: the reader's own
-    /// language edition first, then the target as written. Spelled by
-    /// [`crate::fs::resolved`], the same rule [`LinkMap::new`] indexes by, so
-    /// they key into [`LinkMap::by_source`] and compare equal across builds.
+    /// language edition first, then the target as written.
     ///
-    /// The spelling has to hold for a target that is *not* there, since a probe
-    /// resolving to nothing is recorded as a dependency ("no page sat here") and
-    /// revalidated against the page that later appears at that path.
-    /// [`crate::fs::canonical`] would spell those two differently the moment any
-    /// ancestor is a symlink, leaving the recorded absence matching forever and
-    /// the linking page cached with a broken link.
+    /// Spelled by [`crate::fs::resolved`] and never [`crate::fs::canonical`]:
+    /// a probe resolving to nothing is recorded as a dependency, so it has to
+    /// spell the same for a target that is not there as for one that is.
     fn candidates(target: &Path, lang: Option<&str>) -> impl Iterator<Item = PathBuf> {
         lang.and_then(|lang| Self::edition(target, lang))
             .into_iter()
@@ -543,8 +430,7 @@ impl LinkMap {
     /// of the page a link points at.
     ///
     /// The extension is the target's own, not `typ`: a link to a markdown page
-    /// means its markdown edition, and a hardcoded `typ` here looked for a
-    /// translation nobody wrote and silently served the original.
+    /// means its markdown edition.
     fn edition(target: &Path, lang: &str) -> Option<PathBuf> {
         let stem = target.file_stem()?.to_str()?;
         let extension = target.extension()?.to_str()?;
@@ -555,29 +441,22 @@ impl LinkMap {
     /// and must be left as authored.
     ///
     /// A bare `#fragment` is *not* external: it names a section of the page it
-    /// was written on, which is as internal as a link gets. It was listed here,
-    /// so it never reached the deep-link check and a link to a heading that had
-    /// been renamed away was published without a word. It still resolves to
-    /// nothing here (it names no source path), and is recorded by the render
-    /// pass instead, which is the only place that knows what page it was
-    /// written on.
+    /// was written on, and is recorded by the render pass, which is the only
+    /// place that knows which page that is.
     fn is_external(raw: &str) -> bool {
         raw.starts_with("//") || Self::scheme(raw)
     }
 
-    /// Whether `raw` opens with a URL scheme (`https:`, `mailto:`).
+    /// Whether `raw` opens with an RFC 3986 URL scheme (`https:`, `mailto:`).
     ///
-    /// Tested on the head alone - what precedes the first `/`, `?` or `#` -
-    /// because a scheme is the *start* of a URL and nothing else. Matched
-    /// anywhere in the string, `b.typ?redirect=https://x` read as a link off
-    /// the site: it was left exactly as authored and the reader was served the
-    /// literal `.typ` source path.
+    /// Tested on the head alone, what precedes the first `/`, `?` or `#`:
+    /// matched anywhere, `b.typ?redirect=https://x` reads as a link off the
+    /// site and is published as the literal source path.
     fn scheme(raw: &str) -> bool {
         let head = raw.split(['/', '?', '#']).next().unwrap_or(raw);
         let Some((scheme, _)) = head.split_once(':') else {
             return false;
         };
-        // RFC 3986: a letter, then letters, digits, `+`, `-` and `.`.
         let mut chars = scheme.chars();
         chars.next().is_some_and(|c| c.is_ascii_alphabetic())
             && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
@@ -590,9 +469,6 @@ mod tests {
     use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
     use std::path::PathBuf;
 
-    /// One rule for what a link aimed at, read once. The graph and the anchor
-    /// check each had their own and disagreed about `#install?x`; a link is also
-    /// served back exactly as it was written, query and all.
     #[test]
     fn a_target_names_one_page_and_at_most_one_section() {
         for (raw, page, fragment) in [
@@ -612,10 +488,8 @@ mod tests {
         }
     }
 
-    /// A target is stored as the URL it names and nothing else, which is what
-    /// lets it be parsed without a [`crate::graph::Renderer::SCHEMA`] bump: a
-    /// manifest written when these were plain strings reads back identically,
-    /// and one written now is still readable by a build that has not upgraded.
+    /// A target is stored as the URL it names and nothing else, so a manifest
+    /// round-trips without a [`crate::graph::Renderer::SCHEMA`] bump.
     #[test]
     fn a_target_is_stored_as_the_url_it_names() {
         let mut outbound = Outbound::default();
@@ -632,9 +506,6 @@ mod tests {
         );
     }
 
-    /// A link is kept whole, so the page at the other end can tell which of its
-    /// sections was aimed at. The same link written twice is still one edge, and
-    /// a page never links to itself, whichever of its own sections it names.
     #[test]
     fn an_edge_keeps_what_the_link_aimed_at() {
         let mut outbound = Outbound::default();
@@ -649,9 +520,6 @@ mod tests {
         assert_eq!(urls(&outbound), ["/posts/b/", "/posts/b/#install"]);
     }
 
-    /// Inverting names each source once per page it links to, however many links
-    /// it wrote: the sections they aimed at collect on that one entry, which is
-    /// what lets a template group by section without listing a page twice.
     #[test]
     fn a_source_is_named_once_and_carries_the_sections_it_aimed_at() {
         let mut outbound = Outbound::default();
@@ -666,18 +534,13 @@ mod tests {
         assert_eq!(sources[0].url, "/posts/a/");
         assert_eq!(sources[0].title, "A");
         assert_eq!(sources[0].fragments, ["install", "usage"]);
-        // A page nothing points at is linked from nowhere, not from everywhere.
         assert!(backlinks.of(&source).is_empty());
     }
 
-    /// The links a page carries, as the URLs they are served at: what an
-    /// assertion about a page's edges reads.
     fn urls(outbound: &Outbound) -> Vec<String> {
         outbound.targets().map(Target::to_string).collect()
     }
 
-    /// The pages a backlink test links between: a title and a permalink are all
-    /// an inbound link is made of.
     fn page(title: &str, permalink: &str) -> Page {
         Page {
             id: PageId::new("posts", title),
@@ -712,10 +575,6 @@ mod tests {
         }
     }
 
-    /// A scheme is the head of a URL, not a substring of one. Matched anywhere,
-    /// a query naming another URL made the link external, so the `.typ` source
-    /// path was published verbatim and the reader got a 404 - the one shape
-    /// where being wrong is invisible, since the link *looks* absolute.
     #[test]
     fn a_scheme_is_only_read_at_the_head_of_a_link() {
         for raw in [
@@ -725,23 +584,16 @@ mod tests {
         ] {
             assert!(!LinkMap::is_external(raw), "{raw} should be local");
         }
-        // ...and something that really does open with one still is.
         for raw in ["data:text/plain,x", "git+ssh://host/repo", "HTTPS://x"] {
             assert!(LinkMap::is_external(raw), "{raw} should be external");
         }
     }
 
-    /// A bare fragment names a section of the page it was written on, which is
-    /// as internal as a link gets. Called external, it never reached the
-    /// site-wide deep-link check, so a link to a heading since renamed away was
-    /// published in silence.
     #[test]
     fn a_bare_fragment_is_not_a_link_off_the_site() {
         for raw in ["#install", "#", "#install?x=1"] {
             assert!(!LinkMap::is_external(raw), "{raw} should be local");
         }
-        // It still names no source path, so resolution leaves it as authored
-        // and depends on nothing.
         let map = LinkMap::default();
         let resolution = map.classify("#install", std::path::Path::new("a.typ"), None);
         assert_eq!(resolution.link, super::Link::Passthrough);
@@ -760,14 +612,6 @@ mod tests {
         }
     }
 
-    /// A markdown page is a page, so a link naming its source resolves and is
-    /// checked exactly as a `.typ` one is.
-    ///
-    /// It did not: the extension test was the literal `typ`, so a `.md` target
-    /// passed through as though it were a URL. The build stayed green, the link
-    /// was published as the relative `.md` path the author wrote, and the reader
-    /// got a 404 -- including on this project's own documentation, which linked
-    /// its markdown changelog that way.
     #[test]
     fn a_link_naming_a_markdown_page_resolves_like_any_other() {
         use super::Link;
@@ -781,14 +625,9 @@ mod tests {
             map.classify("notes.md", from, None).link,
             Link::Resolved(Target::from("/notes/")),
         );
-        // And a name nothing sits at is reported, rather than published as
-        // written: that is the whole point of naming the source.
         assert_eq!(map.classify("gone.md", from, None).link, Link::Broken);
     }
 
-    /// Where markdown is not a source dialect, a `.md` file is a file, and a
-    /// link to one is left exactly as authored. The site's answer decides, so
-    /// `content { markdown #false }` cannot turn a working file link red.
     #[test]
     fn a_markdown_link_passes_through_where_markdown_is_not_a_source() {
         use super::Link;
@@ -800,16 +639,9 @@ mod tests {
         assert!(map.classify("notes.md", from, None).probed.is_empty());
     }
 
-    /// A link to a markdown page means the reader's own edition of it, and the
-    /// edition of a `.md` page is a `.md` file. The probe spelled it `.typ`
-    /// whatever the target was, so a translated markdown page was never found
-    /// and every reader silently got the original.
-    ///
     /// Built with explicit sources rather than [`LinkMap::default`], whose set
-    /// is the default site's: with the `markdown` feature off that set is `typ`
-    /// alone, and the test silently stopped testing anything. What is asserted
-    /// here is the probe's spelling, which is the site's answer to ask, not the
-    /// binary's.
+    /// is `typ` alone with the `markdown` feature off, leaving the test
+    /// asserting nothing.
     #[test]
     fn the_edition_probed_keeps_the_targets_own_extension() {
         let map = LinkMap::new(&[], std::path::Path::new("."), vec!["typ", "md"]);
@@ -844,9 +676,6 @@ mod tests {
 
     #[test]
     fn a_link_that_resolves_to_nothing_still_records_what_it_probed() {
-        // The negative dependency: without it, the page that links to a
-        // not-yet-written target stays cached when that target appears, and
-        // serves a link that is still broken.
         let map = LinkMap::default();
         let from = std::path::Path::new("a.typ");
 
@@ -867,8 +696,6 @@ mod tests {
         assert!(map.classify("https://x.com", from, None).probed.is_empty());
     }
 
-    /// A link written as a URL names a page too, which is how a generated index
-    /// reaches its members: it has no source path to name them by.
     #[test]
     fn a_link_spelled_as_a_url_still_names_a_page() {
         let pages = [page("A", "/a/"), page("B", "/b/")];
@@ -876,15 +703,11 @@ mod tests {
 
         let page = |raw| map.served(raw).target.map(|t| t.page().to_owned());
         assert_eq!(page("/b/").as_deref(), Some("/b/"));
-        // The section is not part of the page's identity, and a page this site
-        // does not serve is not one of ours.
         assert_eq!(page("/b/#install").as_deref(), Some("/b/"));
         assert_eq!(page("/nowhere/"), None);
         assert_eq!(page("https://example.com/b/"), None);
     }
 
-    /// The probe carries the answer either way. A miss recorded as nothing at
-    /// all is a page that never learns the URL it linked to started existing.
     #[test]
     fn a_url_link_records_its_probe_whether_or_not_it_named_a_page() {
         let pages = [page("A", "/a/"), page("B", "/b/")];
@@ -901,9 +724,6 @@ mod tests {
         );
     }
 
-    /// The cold-build guess: what a page's source looks like it links to,
-    /// resolved through the same map the render pass uses. Only a guess, so it
-    /// is allowed to be wide; it must not be *wrong* about what resolves.
     #[test]
     fn a_scan_finds_the_links_a_source_writes_out() {
         let tmp = tempfile::tempdir().unwrap();
@@ -919,8 +739,6 @@ mod tests {
 
         let scanned = Outbound::scanned(&source, &pages[0].source, &pages[0].permalink, &map, None);
 
-        // The link to b, once, however many strings named it; the self-link and
-        // the non-page reference are not edges.
         assert_eq!(urls(&scanned), ["/b/"]);
     }
 
@@ -931,8 +749,6 @@ mod tests {
 
         let probed = map.classify("b.typ", from, Some("de")).probed;
 
-        // Both, because neither exists: the edition is consulted first, and the
-        // fall-through to the base page is only reached because it was absent.
         let names: Vec<_> = probed
             .keys()
             .filter_map(|p| p.file_name()?.to_str())

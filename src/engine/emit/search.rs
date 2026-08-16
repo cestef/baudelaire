@@ -1,24 +1,10 @@
-//! Client-side search indexes.
-//!
-//! One [`Corpus`] is built from every page's rendered HTML, then serialized
-//! into each configured [`SearchFormat`]. Adding a format is a
-//! [`crate::config::SearchFormat`] variant plus an arm in each method of the
-//! `impl SearchFormat` below, which is where everything a format decides lives;
-//! the corpus is shared.
-//!
-//! ## Output schemas
+//! Client-side search indexes: one [`Corpus`] built from every page's rendered
+//! HTML, serialized into each configured [`SearchFormat`].
 //!
 //! - [`SearchFormat::Json`] -> `search.json`: a flat array of documents
-//!   `[{ "url", "title", "tags", "body" }]`. Feed it to any client library
-//!   (Fuse.js, MiniSearch, ..) that indexes at runtime.
+//!   `[{ "url", "title", "tags", "body" }]`.
 //! - [`SearchFormat::Inverted`] -> `search.inverted.json`: a prebuilt index
 //!   `{ "documents": [{ "url", "title" }], "postings": { term: [docId..] } }`.
-//!   The server does the tokenizing; the client resolves a query by looking up
-//!   its terms and intersecting the posting lists.
-//!
-//! With `generate { search { client #true } }` each format also emits a matching tiny
-//! ES-module client (`search.js` / `search.inverted.js`, see `js/`) exporting
-//! `createSearch(url?) -> search(query, { limit })`.
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -43,8 +29,6 @@ impl Processor for SearchIndex {
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let cfg = &site.config.generate.search;
-        // One index per language, alongside that language's feeds. A single
-        // global index served English hits to a visitor searching from `/fr/`.
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
             let corpus = Corpus::build(site, cfg, lang);
@@ -77,10 +61,6 @@ impl Corpus {
     ///
     /// The order is load-bearing: the inverted index keys postings by document
     /// *position*, and `site.outputs` is ordered by which pages hit the cache.
-    /// The sort restores it whatever order the documents were built in, which is
-    /// what lets them be built across the pool: stripping the markup off a page
-    /// reads only that page, and on a large site it is the slowest thing a build
-    /// does after compiling.
     fn build(site: &Site, config: &SearchConfig, lang: &str) -> Self {
         let has = |field| config.fields.contains(&field);
         let region = Region::from(&site.config.html.region);
@@ -101,8 +81,6 @@ impl Corpus {
                     .then(|| out.page.frontmatter.title.clone())
                     .flatten()
                     .unwrap_or_default(),
-                // every configured taxonomy's terms, not a hardcoded key: a
-                // site classifying by `topics` indexes just as well as `tags`.
                 tags: if has(SearchField::Tags) {
                     out.page
                         .frontmatter
@@ -134,14 +112,10 @@ impl Corpus {
         Artifact::SearchIndex.json(&self.documents)
     }
 
-    /// A prebuilt inverted index (`search.inverted.json`): term -> document ids,
-    /// with tokens shorter than `min_length` or listed in `stopwords` dropped.
+    /// A prebuilt inverted index (`search.inverted.json`): term -> document
+    /// ids, with tokens shorter than `min_length` or in `stopwords` dropped.
     fn inverted_json(&self, stopwords: &[String], min_length: usize) -> Result<String> {
         let stop: HashSet<&str> = stopwords.iter().map(String::as_str).collect();
-        // Every word of every page becomes a normalized key, which on a large
-        // site is the slowest thing a build does outside the compiles. Each
-        // chunk of documents indexes itself across the pool and the chunks are
-        // merged pairwise.
         let postings = self
             .documents
             .par_iter()
@@ -162,9 +136,8 @@ impl Corpus {
 /// Which documents carry each term, their ids ascending: the half of an
 /// inverted index a query looks a term up in.
 ///
-/// A type rather than a bare map because it is built in pieces and put back
-/// together, and both halves of that have to agree about the one invariant the
-/// client relies on: a posting list is sorted and holds each id once.
+/// A posting list is sorted and holds each id once, which the client relies on
+/// however the parallel build chunked it.
 #[derive(Default, Serialize)]
 #[serde(transparent)]
 struct Postings(BTreeMap<String, Vec<usize>>);
@@ -178,19 +151,14 @@ impl Postings {
                 continue;
             }
             let ids = self.0.entry(token).or_default();
-            // one doc's tokens are visited contiguously, so checking the last
-            // id keeps each posting list duplicate-free.
             if ids.last() != Some(&id) {
                 ids.push(id);
             }
         }
     }
 
-    /// Fold `later` into these.
-    ///
-    /// Chunks cover contiguous ranges of document ids and are combined in order,
-    /// so appending is almost always what this is: the check is what keeps the
-    /// invariant true if it ever is not, rather than trusting the pool's shape.
+    /// Fold `later` into these, sorting only where the two ranges are not
+    /// already in order.
     fn merge(mut self, later: Self) -> Self {
         for (term, ids) in later.0 {
             let list = self.0.entry(term).or_default();
@@ -224,23 +192,11 @@ impl Document {
     /// Normalized search tokens over every indexed field: split on whitespace,
     /// lowercased, stripped to alphanumerics, empties dropped.
     ///
-    /// The client's `tokenize` (in `js/tokenize.js`) has to normalize a query
-    /// the same way, or a term is looked up in a form the postings were never
-    /// keyed by. Two things make that hold, and both are load-bearing:
-    ///
-    /// - **Lowercase before stripping.** `İ` lowercases to `i` + U+0307, and
-    ///   U+0307 is not alphanumeric. Stripping first never sees the mark it is
-    ///   about to introduce, so the index was keyed `i̇stanbul` while every query
-    ///   asked for `istanbul`, and the page was unreachable.
-    /// - **`char::is_alphanumeric` is Unicode `Alphabetic | N`,** which the
-    ///   client spells `\p{Alphabetic}\p{N}`. The narrower-looking `\p{L}` is
-    ///   *not* the same set: it drops the Indic, Arabic and Hebrew vowel marks
-    ///   this keeps, so a Devanagari word indexed whole was queried stripped.
-    ///
-    /// [`tokens_agree_with_the_client_tokenizer`] pins both against the cases
-    /// that broke.
-    ///
-    /// [`tokens_agree_with_the_client_tokenizer`]: tests::tokens_agree_with_the_client_tokenizer
+    /// The client's `tokenize` (in `js/tokenize.js`) must normalize a query
+    /// the same way: lowercase *before* stripping, since a codepoint like `İ`
+    /// lowercases to a letter plus a combining mark that is not alphanumeric,
+    /// and match `char::is_alphanumeric` as `\p{Alphabetic}\p{N}` rather than
+    /// the narrower `\p{L}`, which drops marks the index keeps.
     fn tokens(&self) -> impl Iterator<Item = String> + '_ {
         std::iter::once(self.title.as_str())
             .chain(std::iter::once(self.body.as_str()))
@@ -250,9 +206,7 @@ impl Document {
             .filter(|token| !token.is_empty())
     }
 
-    /// One word reduced to its index key. Split out from [`tokens`](Self::tokens)
-    /// so the agreement test can drive it directly, rather than round-tripping a
-    /// whole document to see one word.
+    /// One word reduced to its index key.
     fn normalize(word: &str) -> String {
         word.chars()
             .flat_map(char::to_lowercase)
@@ -261,8 +215,8 @@ impl Document {
     }
 }
 
-/// The display metadata carried in an inverted index (the body lives only in
-/// the postings, not repeated per document).
+/// The display metadata carried in an inverted index; the body lives only in
+/// the postings.
 #[derive(Serialize)]
 struct Meta<'a> {
     url: &'a str,
@@ -285,22 +239,19 @@ struct Inverted<'a> {
     postings: Postings,
 }
 
-/// The query tokenizer, one definition for both engines and for the palette
-/// that highlights what a query matched.
+/// The query tokenizer, shared by both engines and by the palette.
 const TOKENIZE: &str = include_str!("js/tokenize.js");
 
 /// The self-mounting command-palette UI, concatenated onto whichever engine a
-/// format needs. Shared verbatim by every format and by the virtual module.
+/// format needs.
 const PALETTE: &str = include_str!("js/palette.js");
 
-/// The generated client's entry point, called by the emitted standalone file
-/// and exported to bundlers by the virtual module.
+/// The generated client's entry point.
 const MOUNT: &str = "mountSearch";
 
-/// Generated JavaScript for a search format. The engine (defining `createSearch`),
-/// the shared [`TOKENIZE`] rule and the [`PALETTE`] UI are real `.js` sources
-/// under `js/`, embedded and concatenated so the composable pieces stay in one
-/// module scope.
+/// Generated JavaScript for a search format: the engine, the shared
+/// [`TOKENIZE`] rule and the [`PALETTE`] UI, concatenated into one module
+/// scope.
 impl SearchFormat {
     /// The per-format engine source, defining `createSearch`.
     fn engine(self) -> &'static str {
@@ -310,10 +261,8 @@ impl SearchFormat {
         }
     }
 
-    /// This format's serialized index over `corpus`: the shape documented at
-    /// the top of this module. Here rather than at the call site so everything
-    /// a format decides (its file names, its engine, its index shape) is stated
-    /// in this one impl.
+    /// This format's serialized index over `corpus`, in the shape documented at
+    /// the top of this module.
     fn json(self, corpus: &Corpus, cfg: &SearchConfig) -> Result<String> {
         match self {
             Self::Json => corpus.documents_json(),
@@ -321,29 +270,25 @@ impl SearchFormat {
         }
     }
 
-    /// The standalone generated client: tokenizer + engine + palette UI, with an
-    /// auto-mount so dropping one `<script type=module>` yields a working
-    /// Cmd/Ctrl-K palette and no markup or CSS to write.
+    /// The standalone generated client: tokenizer, engine and palette UI, with
+    /// an auto-mount.
     fn client(self, base: &str, index: &str) -> String {
         self.script(base, index).mount(MOUNT)
     }
 
-    /// The composable module source (no auto-mount, the importer wires the
-    /// trigger itself) served to bundlers through the `baudelaire:search`
-    /// virtual module.
+    /// The composable module source served to bundlers through the
+    /// `baudelaire:search` virtual module, with no auto-mount.
     #[cfg(feature = "js")]
     pub(crate) fn module(self, base: &str, index: &str) -> String {
         self.script(base, index).finish()
     }
 
     /// The sources every build of this format's client is assembled from, and
-    /// the two constants they close over: `BASE`, prepended to each hit's href
-    /// so a subdirectory-hosted site resolves it, and `INDEX`, the URL of the
-    /// index this client fetches.
+    /// the two constants they close over: `BASE`, prepended to each hit's href,
+    /// and `INDEX`, the URL of the index this client fetches.
     ///
-    /// The two are separate because they scope differently: hits carry
-    /// already-localized permalinks, so folding the language into `BASE` would
-    /// double it.
+    /// The two are separate because a hit carries an already-localized
+    /// permalink, so folding the language into `BASE` would double it.
     fn script(self, base: &str, index: &str) -> Script<'static> {
         Script::new(&[("BASE", base), ("INDEX", index)])
             .part(TOKENIZE)
@@ -351,9 +296,8 @@ impl SearchFormat {
             .part(PALETTE)
     }
 
-    /// The served URL of this format's index for `lang`: what the generated
-    /// client fetches, and the single spelling shared by the emitted client and
-    /// the `baudelaire:search` virtual module.
+    /// The served URL of this format's index for `lang`, which the generated
+    /// client fetches.
     pub(crate) fn index(self, config: &Config, lang: &str) -> String {
         let dir = config.prefixed(&Permalink::join(&[&config.scope(lang, "")]));
         format!("{dir}{}", self.file())
@@ -365,39 +309,20 @@ mod tests {
     use super::*;
     use crate::engine::emit::Output;
 
-    /// The index key and the query key are computed in two languages, so nothing
-    /// can execute both here. What is pinned instead is each side of the
-    /// contract: the Rust normalization against the cases that broke, and the
-    /// text of the client rule that has to mirror it.
-    ///
-    /// Every case below is one where the two tokenizers *disagreed*. A `\p{L}`
+    /// Every case below is one where the two tokenizers *disagreed*: a `\p{L}`
     /// client, or a strip-then-lowercase index, fails this test.
     #[test]
     fn tokens_agree_with_the_client_tokenizer() {
-        // `İ` lowercases to `i` + U+0307 COMBINING DOT ABOVE. Both sides must
-        // drop the mark the lowercasing introduced.
         assert_eq!(Document::normalize("İstanbul"), "istanbul");
-        // Devanagari vowel signs are `Mc`/`Mn`, outside `\p{L}` but inside
-        // `Alphabetic`, so they are kept. The virama is neither, so it goes:
-        // what matters is that the client agrees, not which way it lands.
         assert_eq!(Document::normalize("हिन्दी"), "हिनदी");
-        // Same class, Arabic and Hebrew points, all of them retained.
         assert_eq!(Document::normalize("مُحَمَّد"), "مُحَمَّد");
         assert_eq!(Document::normalize("שָׁלוֹם"), "שָׁלוֹם");
-        // Precomposed accents survive; they are single alphabetic codepoints.
         assert_eq!(Document::normalize("ÅNGSTRÖM"), "ångström");
-        // A titlecase digraph lowercases to one codepoint, not two letters.
         assert_eq!(Document::normalize("ǅungla"), "ǆungla");
-        // Punctuation goes, including inside a word, so both sides join the
-        // halves rather than one splitting them.
         assert_eq!(Document::normalize("foo-bar!"), "foobar");
-        // `\p{N}` is wider than the digits: superscripts are numeric too.
         assert_eq!(Document::normalize("x²"), "x²");
-        // Nothing survivable leaves an empty token, which `tokens` drops.
         assert_eq!(Document::normalize("--"), "");
 
-        // The client rule, checked as text: these are the two edits that would
-        // silently reintroduce the split, and neither is visible from Rust.
         assert!(
             TOKENIZE.contains(r"[^\p{Alphabetic}\p{N}]"),
             "the client must retain exactly `char::is_alphanumeric`; `\\p{{L}}` \
@@ -422,9 +347,6 @@ mod tests {
         }
     }
 
-    /// Document ids index the inverted postings, so the corpus must not
-    /// inherit `site.outputs`' cache-split order: a cold and an incremental
-    /// build of identical content have to produce byte-identical indexes.
     #[test]
     fn corpus_is_ordered_by_url_not_by_cache_split() {
         use crate::config::Config;
@@ -497,16 +419,11 @@ mod tests {
         let json = corpus.inverted_json(&["is".into()], 2).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let postings = &value["postings"];
-        // "fast" appears in both docs; "rust" only in the first.
         assert_eq!(postings["fast"], serde_json::json!([0, 1]));
         assert_eq!(postings["rust"], serde_json::json!([0]));
-        // Stopword "is" and sub-min-length tokens are excluded.
         assert!(postings.get("is").is_none(), "stopword dropped: {json}");
     }
 
-    /// The index is built in chunks across the pool and merged, so a posting
-    /// list must come out sorted and duplicate-free however the chunks fall.
-    /// The client looks a term up and takes the ids as given.
     #[test]
     fn merged_posting_lists_stay_sorted_and_unique() {
         let postings = |pairs: &[(&str, &[usize])]| {
@@ -520,14 +437,9 @@ mod tests {
         let merged =
             |a: &[(&str, &[usize])], b: &[(&str, &[usize])]| postings(a).merge(postings(b)).0;
 
-        // The ordinary case: chunks cover contiguous ranges, so appending is all
-        // the merge is.
         assert_eq!(merged(&[("t", &[0, 1])], &[("t", &[2])])["t"], [0, 1, 2]);
-        // ...and the two that must not corrupt the list if the pool ever hands
-        // them over the other way round, or overlapping.
         assert_eq!(merged(&[("t", &[2])], &[("t", &[0, 1])])["t"], [0, 1, 2]);
         assert_eq!(merged(&[("t", &[0, 1])], &[("t", &[1, 2])])["t"], [0, 1, 2]);
-        // A term only one side has survives either way.
         let both = merged(&[("a", &[0])], &[("b", &[1])]);
         assert_eq!(
             (both["a"].as_slice(), both["b"].as_slice()),

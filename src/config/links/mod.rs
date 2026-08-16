@@ -13,40 +13,27 @@ use crate::config::{ExternalConfig, Named, UrlStyle};
 #[derive(Debug, Clone, Hash)]
 pub struct LinkConfig {
     /// How permalinks map onto output files: clean (directory-per-page) or flat
-    /// (`.html`). Set under `links { style "clean" | "flat" }`.
+    /// (`.html`).
     pub style: UrlStyle,
     /// Treat unresolved internal `.typ` links as errors (else warnings).
     pub strict: bool,
-    /// Verifying outbound `http(s)` links over the network: whether it happens,
-    /// and the manners it happens with.
     pub external: ExternalConfig,
     /// Hand each page the pages whose content links to it, as `page.backlinks`.
-    ///
-    /// Opt-in because it is the one page value that cannot be known before the
-    /// site has rendered: a page whose backlinks turn out wrong is compiled a
-    /// second time (see `engine::links::Graph`), which a site that shows none
-    /// should not pay for.
+    /// Opt-in: a page whose backlinks turn out wrong is compiled a second time.
     pub backlinks: bool,
     /// Report the pages nothing links to, and what counts as a link. `None`
     /// leaves the report off.
     pub orphans: Option<Linked>,
 }
 
-/// What counts as pointing at a page, for the orphan report.
-///
-/// A layout never does under either: a sidebar links every page from every page,
-/// so counting one would mean no page is ever an orphan. The difference is
-/// whether a page the *build* generated counts as a reader's way in.
+/// What counts as pointing at a page, for the orphan report. A layout's own
+/// links never count under either.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Linked {
-    /// Any page's link. A post reached from its paginated index or from a term
-    /// page is reached, so the report names only what a reader cannot get to at
-    /// all.
+    /// Any page's link, a generated index or term page included.
     #[default]
     Any,
-    /// Only a link on a page an author wrote. A post reached from its index and
-    /// from nowhere else is named, which is the question a documentation site
-    /// asks: did anyone write about this page?
+    /// Only a link on a page an author wrote.
     Authored,
 }
 
@@ -64,12 +51,8 @@ impl Linked {
 }
 
 impl LinkConfig {
-    /// Whether this build needs the site's link graph at all.
-    ///
-    /// The one gate the render pass records edges behind, and the one both
-    /// readers of them share: a page's backlinks and the orphan report are the
-    /// same graph asked two questions. Without it nothing walks a link's origin
-    /// and no page carries the edges in its cache entry.
+    /// Whether this build needs the site's link graph at all; the one gate the
+    /// render pass records edges behind.
     pub fn graph(&self) -> bool {
         self.backlinks || self.orphans.is_some()
     }
@@ -77,25 +60,16 @@ impl LinkConfig {
 
 impl Default for LinkConfig {
     fn default() -> Self {
-        // Strict internal links by default: a `.typ` link naming no page is a
-        // typo, and the build knows it for certain. External checking is opt-in
-        // and needs the network, so it can never be a default.
         Self {
             style: UrlStyle::default(),
             strict: true,
             external: ExternalConfig::default(),
-            // Off: a page whose backlinks change is compiled twice, which a
-            // site that shows none must not pay for.
             backlinks: false,
-            // Off: a page reachable only from a hand-written nav is a normal
-            // thing to have, so this is a question a site asks, not one it is
-            // asked on every build.
             orphans: None,
         }
     }
 }
 
-/// The `links { .. }` section: URL shape and link checking.
 impl Section for LinkConfig {
     const RULES: Block<Self> = Block(&[
         (

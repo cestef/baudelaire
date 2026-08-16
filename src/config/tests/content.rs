@@ -14,7 +14,6 @@ fn bundle_index_defaults_to_index_and_is_configurable() {
             .as_deref(),
         Some("_index")
     );
-    // an empty basename disables bundle slugs
     assert_eq!(parse("content {\n  index \"\"\n}").content.index, None);
 }
 
@@ -54,17 +53,14 @@ fn collections_overrides() {
     assert!(!notes.1.reverse);
 }
 
-/// `glob` is the field's name in the docs and in the struct, and it is now the
-/// parser's too. It used to be positional-only, so writing the documented thing
-/// failed with a help that listed every key except the one being written.
+/// The named form is read after the positional, so a line writing both takes
+/// the one it spelled out.
 #[test]
 fn a_collection_glob_can_be_named_as_well_as_positional() {
     let cfg = parse(r#"content { collections { posts { glob "p/**/*.typ" } } }"#);
     let posts = &cfg.content.collections[0].1;
     assert_eq!(posts.glob.as_deref(), Some("p/**/*.typ"));
 
-    // The named form is read after the positional, so a line writing both takes
-    // the one it spelled out.
     let cfg = parse(r#"content { collections { posts "a/*.typ" { glob "b/*.typ" } } }"#);
     assert_eq!(
         cfg.content.collections[0].1.glob.as_deref(),
@@ -106,7 +102,6 @@ fn err_bad_sort_key() {
     let err = Config::parse("content {\n  collections {\n    posts { sort \"wat\" }\n  }\n}\n")
         .unwrap_err();
     let rendered = format!("{:?}", miette::Report::from(err));
-    // an unknown enum *value* reads as "unknown value", not "unknown key"
     assert!(rendered.contains("unknown value `wat`"), "{rendered}");
     assert!(rendered.contains("`order`, `date`, `title`"), "{rendered}");
 }
@@ -152,9 +147,7 @@ fn err_duplicate_taxonomy() {
 }
 
 /// `index` names a stem, matched against `Stem::slug`, which never carries an
-/// extension. The docs shipped `index "index.typ"`, which matches no page: every
-/// bundle keeps its filename slug, `content/index.typ` publishes to `/index/`,
-/// and the build reports success with nothing at `/`.
+/// extension.
 #[test]
 fn index_rejects_a_filename_and_names_the_stem() {
     let err = Config::parse("content { index \"index.typ\" }").expect_err("should refuse");
@@ -165,11 +158,9 @@ fn index_rejects_a_filename_and_names_the_stem() {
         config.code().map(|c| c.to_string()).as_deref(),
         Some("baudelaire::config::index_extension")
     );
-    // The help has to carry the correction, not just the complaint.
     let help = config.help().expect("a help").to_string();
     assert!(help.contains("index"), "help should name the stem: {help}");
 
-    // The stem itself is what the key takes...
     assert_eq!(
         parse("content { index \"index\" }")
             .content
@@ -177,9 +168,7 @@ fn index_rejects_a_filename_and_names_the_stem() {
             .as_deref(),
         Some("index")
     );
-    // ...and the empty string stays the documented way to turn bundles off.
     assert_eq!(parse("content { index \"\" }").content.index, None);
-    // A stem that merely contains a dot is not a filename, and is left alone.
     assert_eq!(
         parse("content { index \"_index\" }")
             .content
@@ -189,9 +178,7 @@ fn index_rejects_a_filename_and_names_the_stem() {
     );
 }
 
-/// The two places a layout can be named, nearer first, and the root pages that
-/// reach the second through the collection they are discovered into: a theme
-/// binds `_root` and a page that names nothing still renders through it.
+/// Root pages reach `_root` through the collection they are discovered into.
 #[test]
 fn a_template_binding_resolves_nearest_first() {
     let config = parse(
@@ -211,13 +198,9 @@ fn a_template_binding_resolves_nearest_first() {
         config.template_for(crate::content::ROOT, None).as_deref(),
         Some("site.typ")
     );
-    // A collection nothing configures binds nothing: the page renders unwrapped.
     assert_eq!(config.template_for("notes", None), None);
 }
 
-/// The whole point of the shorthand: the one-boolean case, which is what a
-/// `dev` profile writes, does not have to open a block to say it, and every
-/// sibling key of the section it stands in for is left alone.
 #[test]
 fn drafts_takes_a_bare_flag_for_its_build_key() {
     assert!(!parse("").content.drafts.build, "off by default");
@@ -228,8 +211,6 @@ fn drafts_takes_a_bare_flag_for_its_build_key() {
     assert_eq!(cfg.content.drafts.suffix, ".draft", "sibling untouched");
 }
 
-/// The long spelling still reads, and an argument may carry a block: the
-/// shorthand is an extra spelling of one key, not a replacement for the block.
 #[test]
 fn drafts_still_takes_its_block_with_or_without_the_flag() {
     let cfg = parse("content { drafts { build #true; suffix \".wip\" } }");
@@ -250,9 +231,8 @@ fn a_non_boolean_draft_shorthand_is_a_type_error() {
     assert!(err.contains("expected boolean"), "{err}");
 }
 
-/// The key was `draft` through 0.0.11, and the rename is a hard error rather
-/// than a silent no-op: an ignored `draft { build #true }` is a production
-/// build that quietly drops every draft page.
+/// The rename from `draft` is a hard error rather than a silent no-op, an
+/// ignored `draft { build #true }` being a build that drops every draft page.
 #[test]
 fn the_old_draft_spelling_is_refused_with_a_suggestion() {
     let err = Config::parse("content { draft { build #true } }").expect_err("renamed key");
@@ -261,10 +241,7 @@ fn the_old_draft_spelling_is_refused_with_a_suggestion() {
 }
 
 /// A key that is part of a URL is held to the permalink rule whichever way it
-/// is written. `paginate { prefix ".." }` is a node and was refused; a
-/// taxonomy's `prefix` is an *attribute*, read as a plain string, so the
-/// identical mistake built green and published `href="/tags/x/../2/"` against a
-/// file that landed at `/tags/x/2/`.
+/// is written, a taxonomy's attribute as much as `paginate`'s node.
 #[test]
 fn a_taxonomy_prefix_is_a_permalink_piece_like_its_sibling() {
     for kdl in [
@@ -276,7 +253,6 @@ fn a_taxonomy_prefix_is_a_permalink_piece_like_its_sibling() {
             .to_string();
         assert!(err.contains(".."), "{kdl}: {err}");
     }
-    // An ordinary segment still parses, both ways.
     let config = Config::parse("content {\n  taxonomies {\n    tags prefix=\"seite\"\n  }\n}")
         .expect("an ordinary prefix");
     assert_eq!(config.content.taxonomies[0].1.prefix, "seite");

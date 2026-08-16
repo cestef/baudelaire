@@ -17,22 +17,15 @@ use crate::ui::{Paths, Ui};
 use crate::world::Project;
 
 /// A new content page `new` will scaffold: its target path plus the structure
-/// inferred for it: title from the filename, the ordering field from the
-/// collection (a `date` for a dated collection, the next `order` for an ordered
-/// one), the template, and the permalink it will occupy (with any existing
-/// occupant). The operation is a type, not a free function: [`plan`](Self::plan)
-/// reads the config and existing content to infer, then [`create`](Self::create)
-/// writes. Only standard frontmatter fields are written; content is the author's.
-// The type is the plan for a new page; the field is the `draft` frontmatter key
-// that plan writes. Same word, two different things, and the key is not ours to
-// rename.
+/// inferred for it. Only standard frontmatter fields are written; content is the
+/// author's.
+// `draft` is the frontmatter key the plan writes, not a repeat of the type name.
 #[allow(clippy::struct_field_names)]
 pub(crate) struct Draft {
     /// The file to write; a bundle resolves to `<dir>/index.typ`.
     path: PathBuf,
     title: String,
-    /// The layout to bind, absent when the config resolves none: the page then
-    /// carries no `template` key rather than one naming a file nothing wrote.
+    /// The layout to bind, absent when the config resolves none.
     template: Option<String>,
     date: Option<time::Date>,
     order: Option<i64>,
@@ -40,17 +33,14 @@ pub(crate) struct Draft {
     permalink: String,
     /// The source of an existing page already producing `permalink`, if any.
     collision: Option<String>,
-    /// Whether to open the created file in `$EDITOR`.
     edit: bool,
 }
 
 impl Draft {
     /// Infer everything for the page named by `args`, reading the collection
-    /// config and the existing content. Errors if the target already exists.
-    ///
-    /// `project` is what makes the existing content readable, and is `None`
-    /// when it could not be opened at all: the ordering and collision hints go
-    /// with it, the page is still written.
+    /// config and the existing content. `project` is `None` when the content
+    /// could not be opened: the ordering and collision hints go with it, and the
+    /// page is still written.
     pub(crate) fn plan(
         args: &NewArgs,
         config: &Config,
@@ -63,24 +53,13 @@ impl Draft {
         }
         let collection = config.collection_for(&path);
         let template = config.scaffold_template(collection.as_deref());
-        // The display name behind the slug: a bundle takes its directory's name.
         let raw = Self::raw_name(&path, config);
         let slug = Slug::parse(&raw).map_or_else(|| raw.clone(), Slug::into_string);
         let title = args.title.clone().unwrap_or_else(|| Self::titleize(&raw));
 
-        // The collection's sort decides which ordering field the page wants: a
-        // frozen `date` for a dated collection, the next `order` for an ordered
-        // one. An unconfigured collection sorts by `order` (the default).
         let sort = collection
             .as_deref()
             .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
-        // Discover once, reused for the next order and the collision check.
-        // A discovery failure (e.g. a broken sibling page) must not block `new`
-        // -- but it must not pass unmentioned either: the failure used to be
-        // dropped with `.ok()`, so one unparseable page anywhere in the project
-        // silently cost both the next `order` and the collision check. That is
-        // the same loss `Uninferred` already describes for a project that could
-        // not be opened at all, so it is the same warning.
         let discovered = match project.map(|p| crate::content::discover(config, p)) {
             Some(Ok(collections)) => collections,
             Some(Err(error)) => {
@@ -108,8 +87,6 @@ impl Draft {
             order,
             ..Frontmatter::default()
         };
-        // A root page (no collection) maps `index` to `/` and every other slug
-        // to `/{slug}/`; `permalink_of` owns that fallback, exactly as the build.
         let permalink =
             Page::permalink_of(collection.as_deref(), &frontmatter, &slug, &path, config);
 
@@ -197,7 +174,8 @@ impl Draft {
     }
 
     /// The next `order` for a collection: one past the highest already used, or
-    /// 1 for the first page, so a new chapter appends to the end.
+    /// 1 for the first page. Saturating, since `order` is authored and
+    /// `overflow-checks` is off in release.
     fn next_order(collection: &str, discovered: &[Collection]) -> i64 {
         discovered
             .iter()
@@ -205,9 +183,6 @@ impl Draft {
             .flat_map(|c| c.pages.iter())
             .filter_map(|p| p.frontmatter.order)
             .max()
-            // Saturating: `order` comes from authored frontmatter, and
-            // `overflow-checks` is off in release, so `i64::MAX` wrapped to
-            // `i64::MIN` and the new page sorted first instead of last.
             .map_or(1, |highest| highest.saturating_add(1))
     }
 
@@ -256,8 +231,7 @@ impl Draft {
     }
 }
 
-/// The user's configured text editor. Namespaces the "open a file in `$EDITOR`"
-/// action, in the unit-struct style of the rest of the codebase.
+/// The user's configured text editor.
 pub(super) struct Editor;
 impl Editor {
     /// Open `path` in `$VISUAL`/`$EDITOR`, best-effort: a missing or failing
@@ -315,9 +289,6 @@ mod order_tests {
         }
     }
 
-    /// `order` comes from authored frontmatter and `overflow-checks` is off in
-    /// release, so `i64::MAX + 1` wrapped to `i64::MIN` and the new page sorted
-    /// first instead of last.
     #[test]
     fn next_order_saturates_instead_of_wrapping() {
         assert_eq!(Draft::next_order("posts", &[collection(&[])]), 1);

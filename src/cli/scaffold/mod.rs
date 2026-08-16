@@ -23,10 +23,8 @@ pub(super) struct Scaffold<'a> {
 }
 
 impl<'a> Scaffold<'a> {
-    /// The ignore file every scaffold writes, and its contents. Unconditional,
-    /// because the two directories it names (`public/`, `.baudelaire/`) are
-    /// build output either way: it used to ride along with `--vcs`, so a
-    /// scaffold that ran `git init` itself, afterwards, committed both.
+    /// The ignore file every scaffold writes, whether or not version control is
+    /// set up: the directories it names are build output either way.
     const IGNORE: &'static str = ".gitignore";
     const IGNORED: &'static str = include_str!("../scaffold/gitignore");
 
@@ -50,8 +48,6 @@ impl<'a> Scaffold<'a> {
     fn apply(self, ui: &Ui) -> Result<()> {
         for (rel, contents) in &self.files {
             let full = self.root.join(rel);
-            // never clobber: `init` into an existing project must not overwrite
-            // its config or templates. existing files are skipped with a warning.
             if full.exists() {
                 ui.warn(ScaffoldExists { path: rel.clone() });
                 continue;
@@ -72,9 +68,8 @@ impl<'a> Scaffold<'a> {
 
 impl Config {
     /// The collection a content path falls into by convention: the top-level
-    /// directory under the content root. `None` for a file directly under it (a
-    /// root page, which belongs to no collection). Mirrors discovery's
-    /// convention so `new` infers the same collection the build later will.
+    /// directory under the content root. `None` for a file directly under it, a
+    /// root page belonging to no collection.
     fn collection_for(&self, path: &Path) -> Option<String> {
         let rel = path.strip_prefix(&self.paths.content).unwrap_or(path);
         let mut components = rel.components();
@@ -85,22 +80,14 @@ impl Config {
     }
 
     /// The basename `new` treats as a page bundle's index, both when writing one
-    /// (`--bundle`) and when reading a title back off one. The configured
-    /// [`crate::config::ContentConfig::index`], or the same `index` the build
-    /// falls back to, in one place rather than at each of the two call sites.
+    /// (`--bundle`) and when reading a title back off one.
     pub(super) fn bundle_index(&self) -> &str {
         self.index()
     }
 
     /// The template a scaffolded page names: whatever the build would resolve
-    /// for it ([`Config::template_for`]), so `new` writes the binding the build
-    /// will later pick rather than a second opinion about it. `None` when the
-    /// config binds none, in which case the page is written without the key
-    /// rather than against a filename this module made up.
-    ///
-    /// A root page resolves under [`ROOT`], the collection discovery puts it in,
-    /// so `_root { template }` reaches a scaffolded page as it reaches a built
-    /// one.
+    /// for it ([`Config::template_for`]). `None` when the config binds none, in
+    /// which case the page is written without the key.
     fn scaffold_template(&self, collection: Option<&str>) -> Option<String> {
         self.template_for(collection.unwrap_or(crate::content::ROOT), None)
     }

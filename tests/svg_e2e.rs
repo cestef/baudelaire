@@ -1,18 +1,13 @@
 //! `@baudelaire/html`'s `svg()` against a corpus of real-world SVG files.
 //!
 //! The fixtures in `tests/fixtures/svg` are the shapes an icon actually arrives
-//! in: hand-written, exported from Inkscape or Illustrator, carrying gradients,
-//! text, entities or an embedded raster. Each one is inlined into a page and the
-//! resulting markup checked, because the failure mode this guards against is
-//! silent: a dropped element leaves a smaller icon, not an error.
+//! in, and the failure mode is silent: a dropped element leaves a smaller icon.
 
 mod common;
 
 use common::Site;
 
 /// Build a site whose page inlines `fixture` with `attrs`, and return its HTML.
-/// The fixture is copied in under `icons/`, so the corpus stays real files that
-/// can be opened in a browser rather than strings in a test.
 fn inline(fixture: &str, attrs: &str) -> String {
     let site = site(fixture, attrs);
     site.stats();
@@ -44,8 +39,8 @@ fn refuses(fixture: &str) -> String {
     site(fixture, "").build_error().to_string()
 }
 
-/// A hand-written icon inlines verbatim: this is the shape the docs site ships,
-/// and `currentColor` is the whole reason for inlining rather than `<img>`.
+/// A hand-written icon inlines verbatim, `currentColor` being the whole reason
+/// for inlining rather than `<img>`.
 #[test]
 fn a_hand_written_icon_round_trips() {
     let html = inline("lucide.svg", ", class: \"icon\"");
@@ -57,15 +52,14 @@ fn a_hand_written_icon_round_trips() {
 
 /// An Inkscape export keeps its drawing and loses the editor's bookkeeping.
 ///
-/// The prefixes matter: roxmltree reports a name without one, so an unfiltered
-/// `sodipodi:docname` would land as a plain `docname` and `dc:title` as an SVG
-/// `<title>`, which is the icon's accessible name. A screen reader would then
-/// announce "Untitled".
+/// roxmltree reports a name without its prefix, so an unfiltered
+/// `sodipodi:docname` lands as a plain `docname` and `dc:title` as the icon's
+/// accessible name.
 #[test]
 fn an_inkscape_export_drops_editor_namespaces() {
     let html = inline("inkscape.svg", "");
-    // The id is scoped to the file (see the collision test below); what this
-    // pins is that the `<use>` beside it still names the same path.
+    // Ids are scoped to their file, so what is pinned is that the `<use>`
+    // beside it still names the same path.
     let path = scoped(&html, "p1");
     assert!(
         html.contains(&format!(r#"<path d="M1 1h22v22H1Z" id="{path}">"#)),
@@ -87,7 +81,6 @@ fn an_inkscape_export_drops_editor_namespaces() {
     ] {
         assert!(!html.contains(gone), "{gone} should be dropped: {html}");
     }
-    // The XML declaration and the generator comment are not DOM either.
     assert!(!html.contains("<?xml"), "{html}");
     assert!(!html.contains("Inkscape"), "{html}");
 }
@@ -129,9 +122,8 @@ fn gradients_and_filters_keep_their_camel_case() {
         html.contains(r##"<stop offset="0" stop-color="#f00">"##),
         "{html}"
     );
-    // The file's ids are scoped to it (see the collision test below), so what
-    // is pinned here is that each reference still names the definition beside
-    // it rather than the name the file wrote.
+    // Ids are scoped to their file, so each reference must still name the
+    // definition beside it.
     let clip = scoped(&html, "c");
     assert!(
         html.contains(&format!(r#"clip-path="url(#{clip})""#)),
@@ -146,9 +138,7 @@ fn gradients_and_filters_keep_their_camel_case() {
 
 /// The scoped spelling of the id the file wrote as `name`.
 ///
-/// An inlined icon's ids are suffixed with a hash of its path, so a test that
-/// wants to follow a reference asks for the name as served rather than as
-/// written.
+/// An inlined icon's ids are suffixed with a hash of its path.
 fn scoped(html: &str, name: &str) -> String {
     let open = format!("id=\"{name}");
     let at = html
@@ -221,9 +211,8 @@ fn an_embedded_raster_survives() {
     );
 }
 
-/// A file that is not an SVG fails by name. Every child would be dropped for
-/// being in a foreign namespace, so without this it would inline as an empty
-/// `<svg>` and look like a styling problem.
+/// A file that is not an SVG fails by name, rather than inlining as an empty
+/// `<svg>` once every foreign child is dropped.
 #[test]
 fn a_non_svg_root_is_refused() {
     let err = refuses("notsvg.svg");
@@ -239,8 +228,7 @@ fn a_malformed_file_is_refused() {
 }
 
 /// Inlining puts the file inside the document, so anything active in it runs
-/// with the page's origin. An icon set pulled from a package is exactly where
-/// that would be a surprise, so it is a loud error, not a silent strip.
+/// with the page's origin: a loud error, never a silent strip.
 #[test]
 fn active_content_is_refused() {
     for (fixture, what) in [
@@ -263,8 +251,7 @@ fn a_reserved_tag_is_refused_by_name() {
     assert!(err.contains("reserved"), "{err}");
 }
 
-/// Every fixture that should build, does: a guard against a future change that
-/// makes one of them fail for a reason no single test above would notice.
+/// Every fixture that should build, does.
 #[test]
 fn every_valid_fixture_builds() {
     for fixture in [
@@ -290,9 +277,7 @@ fn every_valid_fixture_builds() {
 /// A file carrying the transform's own marker must not be re-read.
 ///
 /// The marker is stripped from the caller's element before the file is spliced
-/// in, but the walk continues into the nodes just placed. Without skipping the
-/// marker while copying the file's attributes, a self-referencing icon recursed
-/// until the stack gave out and the process aborted with no diagnostic at all.
+/// in, but the walk continues into the nodes just placed.
 #[test]
 fn a_marker_inside_the_file_does_not_recurse() {
     let html = inline("marker-child.svg", "");
@@ -300,9 +285,8 @@ fn a_marker_inside_the_file_does_not_recurse() {
     assert!(!html.contains("data-baudelaire-svg"), "{html}");
 }
 
-/// The same on the root element, where the failure is silent rather than loud:
-/// the walk has already passed that element, so the marker is merged into the
-/// attributes and shipped.
+/// The same on the root element, which the walk has already passed, so the
+/// marker would be merged into the attributes and shipped.
 #[test]
 fn a_marker_on_the_files_root_does_not_leak() {
     let html = inline("marker-root.svg", ", class: \"icon\"");
@@ -312,8 +296,7 @@ fn a_marker_on_the_files_root_does_not_leak() {
 }
 
 /// A browser strips tabs and newlines out of a URL before deciding its scheme,
-/// so `java&#9;script:` navigates as `javascript:`. Comparing the raw text would
-/// pass exactly the spelling someone hiding a payload would use.
+/// so `java&#9;script:` navigates as `javascript:`.
 #[test]
 fn obfuscated_javascript_urls_are_refused() {
     for fixture in ["js-whitespace.svg", "js-xlink.svg"] {
@@ -323,8 +306,7 @@ fn obfuscated_javascript_urls_are_refused() {
 }
 
 /// An inlined `<style>` is an ordinary page stylesheet, so an Illustrator
-/// export's `.st0` would repaint every `.st0` on the page. Each rule is confined
-/// to the icon that carries it.
+/// export's `.st0` would otherwise repaint every `.st0` on the page.
 #[test]
 fn a_stylesheet_is_confined_to_its_icon() {
     let html = inline("illustrator.svg", "");
@@ -341,8 +323,7 @@ fn a_stylesheet_is_confined_to_its_icon() {
     );
 }
 
-/// An icon with no stylesheet gains no scope attribute: the marking exists only
-/// to give the confined rules something to match against.
+/// The marking exists only to give the confined rules something to match.
 #[test]
 fn an_icon_without_styles_is_not_marked() {
     let html = inline("lucide.svg", "");
@@ -350,8 +331,7 @@ fn an_icon_without_styles_is_not_marked() {
 }
 
 /// `@keyframes` names an animation rather than selecting elements, so confining
-/// its `from`/`to` would break the animation instead of scoping it. `@media`
-/// does hold style rules, and they are confined.
+/// its `from`/`to` would break it; `@media` does hold style rules.
 #[test]
 fn at_rules_are_confined_only_where_they_hold_selectors() {
     let html = inline("animated.svg", "");
@@ -369,12 +349,8 @@ fn at_rules_are_confined_only_where_they_hold_selectors() {
     );
 }
 
-/// Two icons drawn in the same editor both define `id="g"` and both point at it
-/// with `url(#g)`. Spliced verbatim, the page held two elements with one id,
-/// `url(#g)` resolved to whichever came first, and the second icon painted with
-/// the first's gradient and clip path. The ids are the file's own private
-/// names, so each is scoped to its file exactly as an inlined `<style>` already
-/// is, and every reference follows.
+/// The ids are the file's own private names, so each is scoped to its file
+/// exactly as an inlined `<style>` already is, and every reference follows.
 #[test]
 fn two_icons_defining_one_id_do_not_collide() {
     let site = Site::with("site \"T\"\n");
@@ -398,12 +374,9 @@ fn two_icons_defining_one_id_do_not_collide() {
     site.stats();
     let html = site.output("index.html");
 
-    // Neither file's names survive unscoped, so nothing can collide with the
-    // other's or with an id the page itself wrote.
     assert!(!html.contains(r#"id="g""#), "{html}");
     assert!(!html.contains("url(#g)"), "{html}");
 
-    // Two distinct definitions, and each icon's `fill` names its own.
     let ids: Vec<&str> = html
         .match_indices("<linearGradient id=\"")
         .map(|(at, open)| {

@@ -5,7 +5,6 @@ use clap::Args;
 use super::{CommonOverrides, Cx, Run, Toggle, group};
 use crate::error::Result;
 
-/// Arguments for `baudelaire check`.
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
     #[command(flatten)]

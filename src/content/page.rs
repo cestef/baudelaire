@@ -8,8 +8,7 @@ use crate::content::{Frontmatter, Slug, Strings};
 use crate::error::{ContentError, Result};
 use crate::world::Project;
 
-/// How a page's frontmatter reaches its layout template, the single encoding
-/// of where a page's data (and body) live.
+/// How a page's frontmatter reaches its layout template.
 #[derive(Debug, Clone)]
 pub enum Data {
     /// A real file exporting `#let frontmatter = (..)`: the layout wrapper
@@ -19,40 +18,24 @@ pub enum Data {
     /// `#include`s the file.
     Empty,
     /// A markdown file: the wrapper inlines the dict lowered from its KDL
-    /// frontmatter and the Typst its body lowered to. It has a real file, so
-    /// relative paths inside it still resolve against its own directory; what
-    /// it does not have is Typst the compiler could `#include`.
+    /// frontmatter and the Typst its body lowered to.
     #[cfg(feature = "markdown")]
     Lowered {
         dict: String,
-        /// Where the lowered body came from in the file the author wrote, so a
-        /// typst error and a `data-typst` stamp both name the `.md` line rather
-        /// than a line of generated source under a virtual path.
+        /// Where the lowered body came from in the file the author wrote, so
+        /// diagnostics name the `.md` line rather than generated source.
         sourcemap: std::sync::Arc<crate::content::SourceMap>,
         /// How long the page takes to read, measured on the markdown its author
-        /// wrote.
-        ///
-        /// Carried rather than derived later because the lowered body is the
-        /// only text a reader of this page has, and it is machinery to the last
-        /// line: every line of it opens with `#`, which
-        /// [`Reading::of`](crate::engine::text::Reading::of) reads as code, so
-        /// a page measured from it reported no words at all. Taken here, where
-        /// the authored body is in hand and has already been split from the
-        /// frontmatter block.
+        /// wrote, because every line of the lowered body opens with `#` and
+        /// reads as code.
         reading: crate::engine::text::Reading,
     },
     /// A generated listing with no file: the wrapper inlines `dict` (built by
     /// [`crate::codegen::Value`]) together with the generated body.
     Generated {
         dict: String,
-        /// The permalinks the listing lists.
-        ///
-        /// Carried structurally because the rendered page cannot be asked: a
-        /// listing with a template of its own draws its entries from the
-        /// template, so the links are the *template's* and are excluded from the
-        /// link graph exactly like a sidebar's. What a listing lists is a fact
-        /// about the plan, not about the markup, and the orphan report needs it
-        /// to know a reader can reach a page from an index.
+        /// The permalinks the listing lists, which the rendered markup cannot
+        /// be asked for because a listing's own template owns those links.
         lists: Vec<String>,
     },
 }
@@ -65,8 +48,8 @@ impl Data {
     }
 }
 
-/// A link to a neighbouring page: its URL and display title. Exposed to
-/// templates as `page.nav.prev`/`page.nav.next` for prev/next navigation.
+/// A link to a neighbouring page, exposed to templates as
+/// `page.nav.prev`/`page.nav.next`.
 #[derive(Debug, Clone, Default)]
 pub struct Sibling {
     pub url: String,
@@ -74,18 +57,16 @@ pub struct Sibling {
 }
 
 /// The previous and next pages within a page's collection, in the collection's
-/// sort order, the "older/newer post" links of a blog. Empty for pages with no
-/// neighbour and for generated listings.
+/// sort order. Empty for pages with no neighbour and for generated listings.
 #[derive(Debug, Clone, Default)]
 pub struct Siblings {
     pub prev: Option<Sibling>,
     pub next: Option<Sibling>,
 }
 
-/// One language edition of a page: its code, URL, and title, for a language
-/// switcher (`page.translations`) and `hreflang` alternates. A page's own
-/// edition is included, so a template can render the full set and mark the
-/// current one by `page.lang`.
+/// One language edition of a page, for a language switcher
+/// (`page.translations`) and `hreflang` alternates. A page's own edition is
+/// included.
 #[derive(Debug, Clone)]
 pub struct Translation {
     pub lang: String,
@@ -94,18 +75,13 @@ pub struct Translation {
 }
 
 /// Why a page discovery found is not in the build.
-///
-/// Named rather than folded into a boolean because the build reports it: the
-/// three are different situations, and the two that a flag brings back read
-/// very differently from the one that nothing does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Withheld {
     /// `draft: true`, and `content { drafts { build } }` is off.
     Draft,
     /// A `date` in the future, and `content { future }` is off.
     Future,
-    /// An `expiry` that has passed. No flag brings this one back: an expired
-    /// page was dated out of the site on purpose.
+    /// An `expiry` that has passed; no flag brings this one back.
     Expired,
 }
 
@@ -119,9 +95,6 @@ impl PageId {
     }
 
     /// The slug half, which is the page's own name within its collection.
-    ///
-    /// Spelled here rather than at the one call site, so the shape of the id is
-    /// known in exactly the place that builds it.
     pub fn slug(&self) -> &str {
         self.0
             .rsplit_once('/')
@@ -142,7 +115,6 @@ pub struct Page {
     pub source: PathBuf,
     pub frontmatter: Frontmatter,
     pub body: String,
-    /// How this page's frontmatter reaches a layout template.
     pub data: Data,
     pub collection: String,
     pub permalink: String,
@@ -151,23 +123,16 @@ pub struct Page {
     pub template: Option<String>,
     /// This page's language code (default `lang` on a single-language site).
     pub lang: String,
-    /// Prev/next pages within this page's collection, assigned by
-    /// [`crate::content::plan`]. Empty until then, and for generated listings.
+    /// Assigned by [`crate::content::plan`], empty until then and for generated
+    /// listings.
     pub siblings: Siblings,
-    /// This page's editions in every language (including its own), assigned by
-    /// [`crate::content::plan`]. Empty on a single-language site.
+    /// Assigned by [`crate::content::plan`], empty on a single-language site.
     pub translations: Vec<Translation>,
 }
 
 impl Page {
     /// Whether somebody wrote this page, as opposed to the plan having produced
     /// it.
-    ///
-    /// The single spelling of the question. Nine places asked it by matching
-    /// [`Data::Generated`] inline, which reads as a test of *how the
-    /// frontmatter is bound* rather than of who is answerable for the page, and
-    /// every one of them would have to be found again if a second generated
-    /// shape were added.
     pub fn authored(&self) -> bool {
         !matches!(self.data, Data::Generated { .. })
     }
@@ -182,19 +147,8 @@ impl Page {
         project: &Project,
         cache: &DiscoveryCache,
     ) -> Result<Self> {
-        // Loading a page evaluates its typst module to read frontmatter; the
-        // cache skips both the parse and the evaluation for a page whose source
-        // and dependencies are unchanged, returning the body straight from disk.
         let (mut frontmatter, data, body) = cache.load_page(collection, path, config, project)?;
-        // `source` replaces a page's body with a declared file's, which only a
-        // markdown page has a body to replace: a `.typ` page's is the module the
-        // frontmatter was just read out of, and typst's own `include` already
-        // reads a file and is tracked as that page's dependency. Checked here
-        // rather than in the loader so it holds whichever cache path answered.
         if frontmatter.source.is_some() && !Config::has_ext(path, Config::MARKDOWN) {
-            // The page is parsed again to underline the key: this is a terminal
-            // error, so the cost is one parse the build was about to stop
-            // paying anything at all, and the store has the file already.
             let source = project.source(path)?;
             let origin = crate::content::Origin::new(&source, path, collection);
             return Err(ContentError::source_on_typst(
@@ -204,20 +158,12 @@ impl Page {
             )
             .into());
         }
-        // Reject a name that is not text before decoding it. `Stem::of` falls
-        // back to `index` for one, which is the *bundle index* name: the file
-        // silently took its parent directory's slug and could overwrite the
-        // real page there.
         if path.file_stem().and_then(|s| s.to_str()).is_none() {
             return Err(ContentError::non_utf8_source(path).into());
         }
         let stem = Stem::of(path, config);
-        // A `draft_suffix` in the file stem (e.g. `post.draft.typ`) marks a draft.
         frontmatter.draft |= stem.is_draft();
         let lang = Self::lang(&frontmatter, &stem, path, config)?;
-        // explicit frontmatter slug, else the file stem, except a bundle index
-        // (`posts/hello/index.typ`) takes its parent dir name, so the directory is
-        // one page with colocated resources. reject a name yielding nothing URL-safe.
         let raw = frontmatter
             .slug
             .clone()
@@ -239,14 +185,9 @@ impl Page {
         ))
     }
 
-    /// A page's language: explicit frontmatter `lang`, else the filename suffix,
-    /// else the site default. The single resolution rule.
-    ///
-    /// An undeclared language is an error whichever way it was written. A
-    /// suffix only *resolves* when declared, so `post.fr.typ` on a site without
-    /// `fr` used to fall through and publish at `/post.fr/` as a
-    /// default-language page, while the very same typo spelled `lang: "fr"`
-    /// stopped the build: one mistake, two opposite outcomes.
+    /// A page's language: explicit frontmatter `lang`, else the filename
+    /// suffix, else the site default. An undeclared language is an error
+    /// whichever way it was written.
     fn lang(fm: &Frontmatter, stem: &Stem, path: &Path, config: &Config) -> Result<String> {
         let unknown =
             |code: &str| Err(ContentError::unknown_language(path, code, &config.langs()).into());
@@ -260,11 +201,9 @@ impl Page {
         }
     }
 
-    /// Assemble a page from its resolved parts, deriving the output path from the
-    /// permalink. The single `Page { .. }` constructor: real pages ([`Page::load`])
-    /// and synthetic listings ([`crate::content::listing::Listing::into_page`])
-    /// both build through here, so a new field can never be set in one and
-    /// forgotten in the other.
+    /// Assemble a page from its resolved parts, deriving the output path from
+    /// the permalink. The single `Page { .. }` constructor, shared by authored
+    /// pages and generated listings.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn assemble(
         id: PageId,
@@ -278,9 +217,6 @@ impl Page {
         lang: String,
         config: &Config,
     ) -> Self {
-        // Shape the URL for the site's style here, the one funnel every page
-        // (authored and generated) passes through, so the permalink and the
-        // file it maps to can never disagree.
         let permalink = config.links.style.url(permalink);
         Self {
             output: config.destination(&permalink),
@@ -298,8 +234,6 @@ impl Page {
         }
     }
 
-    /// This page as a neighbour link, its URL and display title, for a
-    /// sibling's prev/next navigation.
     pub(super) fn sibling(&self) -> Sibling {
         Sibling {
             url: self.permalink.clone(),
@@ -307,10 +241,8 @@ impl Page {
         }
     }
 
-    /// The default slug for a page: its parent directory's name when the file is
-    /// a bundle index (stem equals `config.content.index`) in a real collection, else
-    /// the file stem. The root `index.typ` keeps its stem, so it still maps to
-    /// `/` rather than to the content directory's name.
+    /// The default slug for a page: its parent directory's name when the file
+    /// is a bundle index in a real collection, else the file stem.
     fn bundle_slug(path: &Path, collection: &str, stem: &Stem, config: &Config) -> String {
         let dir = path
             .parent()
@@ -322,23 +254,15 @@ impl Page {
         }
     }
 
-    /// The chain of section names this page nests under, from its location in
-    /// the content tree, the basis for a nested nav. `content/guide/cli.typ`
-    /// yields `[guide]`; `content/guide/advanced/deep.typ` yields
-    /// `[guide, advanced]`. A bundle index (`posts/hello/index.typ`) owns its
-    /// final directory as its slug, so that directory is dropped and the page
-    /// nests under its parent (`[posts]`).
+    /// The chain of section names this page nests under:
+    /// `content/guide/cli.typ` yields `[guide]`. A bundle index owns its final
+    /// directory as its slug, so that directory is dropped.
     pub(crate) fn section_path(&self, config: &Config) -> Vec<String> {
         Self::nesting(&self.source, config)
     }
 
-    /// The same chain, computed from a source path alone.
-    ///
-    /// Split out from [`section_path`](Self::section_path) because the permalink
-    /// is rendered during [`Page::load`], before there is a `Page` to ask: the
-    /// nav tree nested while the URL did not, so a sidebar read
-    /// `guide -> deploy -> s3` for a page published at `/guide/s3/`. One rule
-    /// now answers both.
+    /// The same chain, computed from a source path alone, before there is a
+    /// [`Page`] to ask.
     pub(crate) fn nesting(source: &Path, config: &Config) -> Vec<String> {
         let rel = source.strip_prefix(&config.paths.content).unwrap_or(source);
         let mut dirs: Vec<String> = rel
@@ -356,15 +280,13 @@ impl Page {
         dirs
     }
 
-    /// Display title: frontmatter `title`, else the page id. The single
-    /// title-fallback rule for every listing and index.
+    /// Display title: frontmatter `title`, else the page id.
     pub fn title(&self) -> &str {
         self.frontmatter.title.as_deref().unwrap_or(&self.id.0)
     }
 
-    /// This page's taxonomies as the `(name: (term, ..))` value templates get as
-    /// `page.taxonomies`, the single serialization shared with the
-    /// `baudelaire:pages` module, so their shapes can't drift.
+    /// This page's taxonomies as the `(name: (term, ..))` value templates get
+    /// as `page.taxonomies`.
     pub fn taxonomies(&self) -> crate::codegen::Value {
         use crate::codegen::Value;
         Value::dict(
@@ -375,15 +297,9 @@ impl Page {
         )
     }
 
-    /// Two pages in a collection's or a taxonomy's declared order.
-    ///
-    /// The single comparator, because two listings of the same pages ordering
-    /// them differently is a bug a reader sees: a term page used to sort by
-    /// title unconditionally while the collection index beside it honoured
-    /// `sort`, so the same posts came in two orders on one site.
-    ///
-    /// Ties break on source path, so pages sharing a key (or lacking one) keep a
-    /// stable order across machines rather than inheriting directory order.
+    /// Two pages in a collection's or a taxonomy's declared order. Ties break
+    /// on source path, so pages sharing a key keep a stable order across
+    /// machines.
     pub fn compare(sort: crate::config::SortKey, a: &Self, b: &Self) -> std::cmp::Ordering {
         use crate::config::SortKey;
         match sort {
@@ -394,13 +310,8 @@ impl Page {
         .then_with(|| a.source.cmp(&b.source))
     }
 
-    /// Whether this page gets a generated social card.
-    ///
-    /// Three conditions, in one place because the renderer, the `og:image` tag,
-    /// and the prune all have to agree: cards are configured *and* compiled in,
-    /// the page named no image of its own (an authored one always wins), and it
-    /// is real content rather than a generated listing (nobody shares a tag
-    /// index, and one render per term would dominate the build).
+    /// Whether this page gets a generated social card, the one answer the
+    /// renderer, the `og:image` tag and the prune all read.
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
         config.generate.cards.active()
             && self.frontmatter.image.is_none()
@@ -408,12 +319,8 @@ impl Page {
             && !matches!(self.data, Data::Generated { .. })
     }
 
-    /// Whether this page gets a PDF beside its HTML.
-    ///
-    /// In one place for the same reason [`Page::wants_card`] is: the exporter,
-    /// the `<link rel="alternate">` that points at the file, and the prune all
-    /// have to agree. A generated listing is excluded: a tag index is a table of
-    /// contents for a site, not a document anyone prints.
+    /// Whether this page gets a PDF beside its HTML, the one answer the
+    /// exporter, the `<link rel="alternate">` and the prune all read.
     pub fn wants_pdf(&self, config: &crate::config::Config) -> bool {
         config.generate.pdf.pages.active()
             && !self.frontmatter.excludes(crate::content::Generated::Pdf)
@@ -421,14 +328,7 @@ impl Page {
     }
 
     /// The most recent dated pages of one language, newest first, capped at
-    /// `limit`: authored content carrying a date. The single "recent posts"
-    /// selection shared by the syndication feeds and the `baudelaire:feed`
-    /// module, so a language's feed lists only its own posts.
-    ///
-    /// `within` narrows it to one collection, which is what a collection's own
-    /// feed carries. Narrowed here rather than at the caller so a clause added
-    /// to this rule reaches every feed: a per-collection filter written beside
-    /// it would keep listing what the site feed had learned to leave out.
+    /// `limit`. `within` narrows the selection to a single collection.
     pub fn recent<'a>(
         pages: &'a [Self],
         config: &Config,
@@ -446,13 +346,8 @@ impl Page {
     }
 
     /// The collection this page belongs to, as the collection is named in the
-    /// config.
-    ///
-    /// A generated listing's [`collection`](Self::collection) is its
-    /// *language-scoped* section (`fr/tags`), which is what keeps two editions
-    /// of one listing distinct on disk. Everything that means "which collection
-    /// is this" wants the section itself, and each reader used to strip the
-    /// prefix again.
+    /// config, with the language scope a generated listing carries (`fr/tags`)
+    /// stripped back off.
     pub fn section(&self) -> &str {
         self.collection
             .strip_prefix(&format!("{}/", self.lang))
@@ -460,15 +355,7 @@ impl Page {
     }
 
     /// The newest `limit` dated pages among `pages`, newest first; undated ones
-    /// are dropped, and so is a page that excluded itself from the feeds. The
-    /// single ordering rule every feed is built on: the site feed hands it a
-    /// language's pages, a term feed hands it that term's members, and both come
-    /// out in the same order.
-    ///
-    /// The opt-out is applied *here* rather than by each caller because this is
-    /// the one function both of them reach. It lived on [`Page::recent`], which
-    /// a term feed does not go through, so a page that had left the site feed
-    /// was still syndicated by every tag it carried.
+    /// are dropped, and so is a page that excluded itself from the feeds.
     pub fn newest<'a>(pages: impl IntoIterator<Item = &'a Self>, limit: usize) -> Vec<&'a Self> {
         let mut dated: Vec<&Self> = pages
             .into_iter()
@@ -482,10 +369,8 @@ impl Page {
         dated
     }
 
-    /// Pages bucketed by language, preserving each language's relative order:
-    /// one group per language in first-seen order, a single group for a
-    /// single-language site. The single language-partition rule, shared wherever
-    /// per-language ordering matters (siblings, listings).
+    /// Pages bucketed by language, one group per language in first-seen order,
+    /// preserving each language's relative order.
     pub fn groups<'a>(pages: &[&'a Self]) -> Vec<Vec<&'a Self>> {
         let mut groups: Vec<(&str, Vec<&Self>)> = Vec::new();
         for &page in pages {
@@ -498,9 +383,8 @@ impl Page {
     }
 
     /// Fill each page's `translations` with the editions of the same logical
-    /// page in other languages, generated listings included. Only sets spanning
-    /// more than one language are recorded. Editions are ordered by the site's
-    /// language order (default first) for a stable switcher.
+    /// page in other languages, ordered by the site's language order. Only sets
+    /// spanning more than one language are recorded.
     pub(super) fn relate(pages: &mut [Self], config: &Config) {
         use std::collections::BTreeMap;
         let mut editions: BTreeMap<String, Vec<Translation>> = BTreeMap::new();
@@ -526,18 +410,9 @@ impl Page {
         }
     }
 
-    /// The key pairing this page with its editions in other languages.
-    ///
-    /// A `translation` in frontmatter is that key outright, which is what lets
-    /// a French edition live at `/fr/articles/bonjour/` instead of carrying the
-    /// English slug: without one, an edition that renamed its slug stopped
-    /// being an edition.
-    ///
-    /// Otherwise a page's [`PageId`] is `collection/slug`, which already matches
-    /// across languages for authored pages. A generated listing's collection is
-    /// the *scoped* section (`fr/tags`), so its id differed per language and no
-    /// listing ever had a translation: no language switcher, and no `hreflang`
-    /// in the sitemap. Stripping the scope back off restores the pairing.
+    /// The key pairing this page with its editions in other languages: a
+    /// frontmatter `translation` outright, else its [`PageId`] with the
+    /// language scope stripped off.
     fn identity(&self) -> String {
         if let Some(key) = &self.frontmatter.translation {
             return key.clone();
@@ -550,22 +425,14 @@ impl Page {
     }
 
     /// The site's authored pages as catalogue rows, keyed by language code and
-    /// in the site's own page order (collection order, then each collection's
-    /// sort).
-    ///
-    /// The single answer to "which pages does a catalogue contain": generated
-    /// listings are left out (a listing of listings is noise), and so is
-    /// anything [`Page::listed`] excludes. `@baudelaire/pages` serves one
-    /// language's rows, `baudelaire:pages` serves them all flattened, and
-    /// neither decides membership for itself.
+    /// in the site's own page order. Every built language is a key, so a
+    /// template asking for one with no pages reads an empty array.
     pub fn catalogue(
         pages: &[Self],
         config: &Config,
     ) -> std::collections::BTreeMap<String, Vec<crate::codegen::Value>> {
         let mut out: std::collections::BTreeMap<String, Vec<crate::codegen::Value>> =
             std::collections::BTreeMap::new();
-        // Every built language is a key, so a template asking for one that has
-        // no pages yet reads an empty array rather than failing.
         for lang in config.langs() {
             out.entry(lang.to_owned()).or_default();
         }
@@ -581,50 +448,29 @@ impl Page {
     }
 
     /// This page as one catalogue row, the value `@baudelaire/pages` and
-    /// `baudelaire:pages` are arrays of.
-    ///
-    /// Deliberately the same [`Item`] a generated listing is built from: a
-    /// theme that can render a collection index can render a home-page grid
-    /// with the same function, because the entries are the same shape.
-    ///
-    /// [`Item`]: crate::content::listing::Item
+    /// `baudelaire:pages` are arrays of, in the same shape a generated
+    /// listing's entries take.
     pub fn entry(&self, config: &Config) -> crate::codegen::Value {
         crate::content::listing::Item::of(self, &Strings::new(config, &self.lang)).value()
     }
 
-    /// Whether this page appears in the site's own navigation and indexes: a
-    /// neighbour's prev/next pager, the section tree, collection and taxonomy
-    /// listings, feeds, the sitemap, the search index, `llms.txt`, announces.
-    ///
-    /// The not-found page is the one exclusion, and builds either way. It is
-    /// what a host answers an unmatched URL with, not a destination: listed, it
-    /// sorted ahead of the home page in the root pager, and published a `/404/`
-    /// URL that nothing serves (the file is a flat `404.html`) to crawlers and
-    /// to search.
+    /// Whether this page appears in the site's own navigation and indexes. The
+    /// not-found page is the one exclusion, and builds either way.
     pub fn listed(&self, config: &Config) -> bool {
         config.not_found(&self.permalink).is_none()
     }
 
-    /// Whether this page builds under the current draft/future config, the
-    /// one eligibility predicate, shared by the engine and page generators.
+    /// Whether this page builds under the current draft/future config.
     pub fn eligible(&self, config: &Config) -> bool {
         self.withheld(config.content.drafts.build, config.content.future)
             .is_none()
     }
 
-    /// Whether this page should be skipped given draft/future flags.
     pub fn skipped(&self, drafts: bool, future: bool) -> bool {
         self.withheld(drafts, future).is_some()
     }
 
     /// Why this page is not published, or `None` when it is.
-    ///
-    /// The reason and the decision are one answer, because the build has to
-    /// report it: three pages in and one page out used to be a silent
-    /// `built 1 page`, with the strings `draft` and `expired` nowhere in the
-    /// output at any verbosity. An author's only signal was a 404 in
-    /// production, and for `expiry`, which no flag brings back, that is the
-    /// only signal there could ever be.
     pub fn withheld(&self, drafts: bool, future: bool) -> Option<Withheld> {
         match self {
             _ if self.frontmatter.draft && !drafts => Some(Withheld::Draft),
@@ -640,24 +486,17 @@ impl Page {
             .is_some_and(|d| d > time::OffsetDateTime::now_utc().date())
     }
 
-    /// Whether this page's `expiry` has passed.
-    ///
-    /// No flag brings it back, unlike a draft or a future date: those are pages
-    /// on their way in, and an expired one was dated out of the site on
-    /// purpose. `expiry` names the last day it is published, so the exclusion
-    /// starts the day after.
+    /// Whether this page's `expiry` has passed; it names the last day the page
+    /// is published, so the exclusion starts the day after.
     fn is_expired(&self) -> bool {
         self.frontmatter
             .expiry
             .is_some_and(|d| d < time::OffsetDateTime::now_utc().date())
     }
 
-    /// The permalink a page will resolve to for a given collection (or a root
-    /// page when `None`), the single rule shared by discovery and by `new`'s
-    /// preview, so a scaffolded page reports exactly the URL the build produces.
-    ///
-    /// `source` is where the file will live, which `{path}` reads: a preview
-    /// that guessed at it would print one URL and build another.
+    /// The permalink a page will resolve to for a given collection, or a root
+    /// page when `None`. `source` is where the file will live, which `{path}`
+    /// reads.
     pub(crate) fn permalink_of(
         collection: Option<&str>,
         fm: &Frontmatter,
@@ -665,7 +504,6 @@ impl Page {
         source: &Path,
         config: &Config,
     ) -> String {
-        // `new`'s preview is always for a default-language page.
         Self::permalink(
             collection.unwrap_or(ROOT),
             fm,
@@ -677,13 +515,7 @@ impl Page {
     }
 
     /// The stem that names a page for its container rather than for itself: a
-    /// bundle index, and at the content root the site's home page. Reads
-    /// `content { index }`, so a site spelling it `_index` publishes its root
-    /// page at `/` like any other; hardcoding `index` here sent that page to
-    /// `/_index/` and left the site without a home.
-    ///
-    /// The `index` fallback lives on [`Config::index`], with every other caller
-    /// that needs it.
+    /// bundle index, and at the content root the site's home page.
     fn index(config: &Config) -> &str {
         config.index()
     }
@@ -696,16 +528,8 @@ impl Page {
         source: &Path,
         config: &Config,
     ) -> String {
-        // A page may name its own URL outright, which beats both the
-        // collection's pattern and the slug. Normalized through `Permalink::join`
-        // like every generated one, so `about-us`, `/about-us` and `/about-us/`
-        // are the same URL and `links { style }` still decides the file it maps
-        // to. It is localized like any other permalink: a French edition that
-        // states no path of its own publishes under `/fr/`.
         if let Some(named) = fm.path.as_deref() {
             let segments: Vec<&str> = named.split('/').filter(|s| !s.is_empty()).collect();
-            // A path naming a file keeps its name; one naming a directory gets
-            // the trailing slash every other permalink carries.
             let url = if Config::names_a_file(named) {
                 format!("/{}", segments.join("/"))
             } else {
@@ -714,8 +538,6 @@ impl Page {
             return config.localize(lang, &url);
         }
         let path = if collection == ROOT {
-            // The root collection maps straight onto the site root: the bundle
-            // index becomes `/`, every other page a top-level `/{slug}/`.
             let segments: &[&str] = if slug == Self::index(config) {
                 &[]
             } else {
@@ -739,10 +561,8 @@ mod tests {
     use crate::config::Config;
     use crate::content::Frontmatter;
 
-    /// The root index page maps onto `/` under whatever name `content { index }`
-    /// gives it. Hardcoding `index` meant a site configured with `_index`
-    /// published its root page at `/_index/` and had no home page at all, while
-    /// the rest of the code (bundle slugs, section nesting) read the config.
+    /// The root index page maps onto `/` under whatever name `content { index
+    /// }` gives it.
     #[test]
     fn the_configured_root_index_maps_to_the_site_root() {
         let fm = Frontmatter::default();
@@ -751,15 +571,12 @@ mod tests {
             Page::permalink_of(None, &fm, "_index", Path::new("content/x.typ"), &renamed),
             "/"
         );
-        // ...and the default name is then just another top-level page.
         assert_eq!(
             Page::permalink_of(None, &fm, "index", Path::new("content/x.typ"), &renamed),
             "/index/"
         );
 
         let default = Config::parse("").expect("config");
-        // A frontmatter `path` beats the pattern and the slug both, and is
-        // normalized like any other permalink: the two spellings are one URL.
         let mut named = Frontmatter {
             path: Some("about-us".into()),
             ..Frontmatter::default()
@@ -785,8 +602,6 @@ mod tests {
             ),
             "/about-us/"
         );
-        // One naming a file stays a file: `/2019/post.html` is what a Jekyll
-        // site is preserving, and a trailing slash would make it a directory.
         named.path = Some("/2019/post.html".into());
         assert_eq!(
             Page::permalink_of(

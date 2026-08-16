@@ -1,10 +1,5 @@
-//! Interactive terminal prompts: small, styled, reusable widgets.
-//!
-//! [`Prompt`] is a "pick one" selector, generic over the value each option
-//! yields, so a caller gets a typed answer rather than a raw string; [`Input`] is
-//! a free-text question with an optional default. Both render the same
-//! `? question` prefix, and both fall back to their default on an empty line or
-//! closed input (EOF).
+//! Interactive terminal prompts: the typed single-choice [`Prompt`], the
+//! free-text [`Input`], and the hidden [`Secret`].
 
 use std::io::Write;
 
@@ -50,9 +45,7 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self
     }
 
-    /// Add an option chosen by one word, which is also its label. What a prompt
-    /// built from a table wants: each row is its own key, and a borrowed slice
-    /// per row would need somewhere to live for as long as the prompt does.
+    /// Add an option chosen by one word, which is also its label.
     pub fn one(self, key: &'a str, value: T) -> Self {
         self.option(std::slice::from_ref(&key), value)
     }
@@ -63,10 +56,8 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self
     }
 
-    /// Describe the most recently added option, in the [`Prompt::default`]
-    /// style. The line shows under the chips while that option is highlighted,
-    /// which is what makes a prompt over a table of names readable: the names
-    /// alone (`albatros`, `spleen`) say nothing to someone choosing.
+    /// Describe the most recently added option; the line shows under the chips
+    /// while that option is highlighted.
     pub fn about(mut self, line: &'a str) -> Self {
         if let Some(last) = self.options.last_mut() {
             last.about = Some(line);
@@ -75,9 +66,8 @@ impl<'a, T: Clone> Prompt<'a, T> {
     }
 
     /// Read a choice with the arrow keys: ←/→ (or ↑/↓) move, a letter jumps to a
-    /// matching option, Enter confirms, Esc takes the default. Redraws in place.
-    /// Without an interactive terminal (piped/CI) it returns the default at once.
-    /// Renders on stderr, like every other CLI line: stdout stays data-only.
+    /// matching option, Enter confirms, Esc takes the default. Without an
+    /// interactive terminal it returns the default at once.
     pub fn ask(&self) -> Result<T> {
         let term = Term::stderr();
         if !term.is_term() {
@@ -89,14 +79,9 @@ impl<'a, T: Clone> Prompt<'a, T> {
             .checked_sub(1)
             .expect("Prompt built with no options");
         let mut selected = self.default;
-        // How many lines the last draw left behind, so the next one can take
-        // them back: the chip row is one, and an option describing itself adds
-        // another.
         let mut drawn = 0;
         loop {
             self.render(&term, selected, false, &mut drawn)?;
-            // A read failure (EOF, closed terminal) falls back to the default,
-            // as the module contract promises: it must never error out of init.
             let Ok(key) = term.read_key() else {
                 self.render(&term, self.default, true, &mut drawn)?;
                 return Ok(self.chosen(self.default));
@@ -135,20 +120,13 @@ impl<'a, T: Clone> Prompt<'a, T> {
         self.options[i].value.clone()
     }
 
-    /// Redraw the prompt in place. While choosing, options render as a row of
-    /// chips with the selection highlighted, and the highlighted one's
-    /// description (if it has one) below them; once `done`, collapse to
-    /// `✓ question › choice`.
-    ///
-    /// `drawn` carries how many lines the previous draw wrote, since that is
-    /// what this one has to erase: a prompt whose options describe themselves
-    /// is two lines tall, and a fixed `clear_line` would leave every hint it
-    /// scrolled past on the screen.
+    /// Redraw the prompt in place, collapsing to `✓ question › choice` once
+    /// `done`. `drawn` carries how many lines the previous draw wrote, since
+    /// that is what this one has to erase.
     fn render(&self, term: &Term, selected: usize, done: bool, drawn: &mut usize) -> Result<()> {
         if *drawn > 0 {
             term.clear_last_lines(*drawn)?;
         }
-        // The final line stays on screen, so it counts as nothing to erase.
         *drawn = 0;
         if done {
             let label = self.options[selected].keys[0];
@@ -211,8 +189,6 @@ impl<'a> Secret<'a> {
         if !term.is_term() {
             return Ok(None);
         }
-        // through anstream so styling strips on a pipe and honors NO_COLOR like
-        // every other CLI line; read hidden via `Term`.
         anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         anstream::stderr().flush()?;
         let secret = term.read_secure_line()?;
@@ -246,8 +222,6 @@ impl<'a> Input<'a> {
     /// line, returning the trimmed answer or the default on an empty line or
     /// EOF.
     pub fn ask(&self) -> Result<String> {
-        // through anstream so styling strips on a pipe and honors NO_COLOR like
-        // every other CLI line.
         if self.default.is_empty() {
             anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         } else {
@@ -274,15 +248,12 @@ impl<'a> Input<'a> {
 }
 
 /// Terminal-backed [`Interaction`]: yes/no confirmation through [`Prompt`] and
-/// hidden secret entry through [`Secret`]. One impl, shared by every command
-/// that prompts, rather than a copy per command.
+/// hidden secret entry through [`Secret`].
 pub struct Tty;
 
 impl Interaction for Tty {
-    /// Whether a question would reach anyone. The same test [`Prompt::ask`] and
-    /// [`Secret::ask`] make before falling back to their defaults, so a caller
-    /// that refuses to accept a default refuses in exactly the cases they would
-    /// have invented one.
+    /// Whether a question would reach anyone: the same test [`Prompt::ask`] and
+    /// [`Secret::ask`] make before falling back to their defaults.
     fn interactive(&self) -> bool {
         Term::stderr().is_term()
     }

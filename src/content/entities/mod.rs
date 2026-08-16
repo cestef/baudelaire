@@ -1,16 +1,7 @@
-//! The named things a page refers to, and what is known about each.
-//!
-//! A page credits a person, belongs to a series, is published by an
-//! organization. All three are the same shape: a term the page writes, an id in
-//! a registry, and a set of fields the build can render. This module is that
-//! shape; nothing in it is about people.
-//!
+//! The named things a page refers to, and what is known about each: a term the
+//! page writes, an id in a registry, and a set of fields the build can render.
 //! [`Registries`] is built once per plan, from the
-//! [`entities`](crate::config::RegistryConfig) block: each registry loads its
-//! [`sources`](source) in order, merges what they declare, holds every entity to
-//! the fields the registry says they carry, and answers `who is "zoe"`. What
-//! *asks* is a taxonomy naming a registry, so the terms of `authors` are people
-//! while the terms of `tags` stay words.
+//! [`entities`](crate::config::RegistryConfig) block.
 
 pub mod credit;
 pub mod provenance;
@@ -38,35 +29,19 @@ pub struct Entity {
     fields: Vec<(String, Value)>,
     from: Provenance,
     /// The fields each language's edition declares, over the base ones.
-    ///
-    /// One entity, several editions: a profile page has an edition per language
-    /// exactly as any other page does, and a French post credits the same
-    /// person an English one does. Without this the merge kept one edition's
-    /// name and every language rendered it, so a French byline read `Zoe` while
-    /// the page beside it read `Zoé`.
     editions: BTreeMap<String, Vec<(String, Value)>>,
-    /// The page that declares this entity, per language.
-    ///
-    /// A map and not one path, because a profile has an edition per language
-    /// exactly as any other page does, and the two editions are one entity: a
-    /// French post credits the same person an English one does. Which page
-    /// *describes* a term is therefore a question with one answer per language,
-    /// and asking it without one silently answered every language with the
-    /// first edition read.
+    /// The page that declares this entity, one per language.
     pages: BTreeMap<String, std::path::PathBuf>,
 }
 
 impl Entity {
-    /// The field naming the other spellings that resolve to this entity.
-    ///
-    /// Read out of the fields rather than declared beside them, so every source
-    /// carries aliases without a shape of its own: a page writes
-    /// `alias: ("cstef",)`, a roster writes `alias "cstef"`, and neither
-    /// source has to know what the key means.
+    /// The field naming the other spellings that resolve to this entity, read
+    /// out of the fields so every source carries aliases without a shape of its
+    /// own.
     pub const ALIAS: &'static str = "alias";
 
-    /// An entity built from what a source read: an already-slugged id, and the
-    /// fields under it, with the aliases lifted out.
+    /// An entity built from what a source read, with the aliases lifted out of
+    /// its fields.
     pub fn new(id: &str, fields: Vec<(String, Value)>, from: Provenance) -> Result<Self> {
         Self::declared(id, fields, from, BTreeMap::new(), BTreeMap::new())
     }
@@ -125,11 +100,8 @@ impl Entity {
         &self.from
     }
 
-    /// One field, by name, as `lang` declares it.
-    ///
-    /// The language's own edition wins, and falls back to the base fields for
-    /// anything it did not declare: a French profile that writes only a name
-    /// still carries the homepage the roster gave it.
+    /// One field, by name, as `lang` declares it: the language's own edition
+    /// wins, falling back to the base fields for anything it did not declare.
     pub fn field(&self, key: &str, lang: &str) -> Option<&Value> {
         Self::look(self.editions.get(lang), key).or_else(|| Self::look(Some(&self.fields), key))
     }
@@ -158,10 +130,6 @@ impl Entity {
 
     /// Fill from a source read later: what `self` already carries wins, and
     /// what it lacks is taken.
-    ///
-    /// The [`Section::fill`](crate::config::dispatch) policy, applied to an
-    /// entity: a roster file can carry an email while a profile page carries
-    /// the name, and declaring one does not silently drop the other.
     fn fill(&mut self, other: Self) {
         for (key, value) in other.fields {
             if Self::look(Some(&self.fields), &key).is_none() {
@@ -181,20 +149,14 @@ impl Entity {
                 self.aliases.push(alias);
             }
         }
-        // Every language's page, not just the first read: a later source may be
-        // the one that declares the French edition, and which source came first
-        // must not decide whether a term has a page in a given language.
         for (lang, page) in other.pages {
             self.pages.entry(lang).or_insert(page);
         }
     }
 
-    /// The language whose edition a lookup reads when there is no edition for
-    /// the language asked about: the base fields, as every source but `pages`
-    /// declares them.
-    ///
-    /// Not a real language code, and it cannot be one: a source that is not a
-    /// page has no language at all.
+    /// The language a lookup falls back to: the base fields, as every source
+    /// but `pages` declares them. Not a real language code, and it cannot be
+    /// one, since a source that is not a page has no language at all.
     pub const BASE: &'static str = "";
 
     /// Every language this entity has an edition for.
@@ -264,20 +226,14 @@ impl Registry {
         Ok(registry)
     }
 
-    /// Hold every entity to the fields the registry says its entities carry.
-    ///
-    /// Through the very checker a collection's frontmatter schema goes through,
-    /// so a `list<dict>` means the same thing in both places and a mismatch
-    /// reads the same way whichever declared it. The fault is underlined where
-    /// the entity was written, whichever source that was.
+    /// Hold every entity, in every edition, to the fields the registry says its
+    /// entities carry, through the checker a collection's frontmatter schema
+    /// goes through.
     fn check(&self, config: &RegistryConfig, project: &Project) -> Result<()> {
         if config.fields.is_empty() {
             return Ok(());
         }
         for entity in self.entities.values() {
-            // Every edition, not just the base: a French profile that omits a
-            // field the registry requires is as broken as an English one, and
-            // it is the edition a French page renders.
             for lang in entity.langs() {
                 let dict = entity
                     .fields(lang)
@@ -299,9 +255,6 @@ impl Registry {
                 .map(|(key, value)| (key.into(), value.into()))
                 .collect();
             if let Some(fault) = Check::default().dict(&config.fields, &dict) {
-                // The same rule a page's schema failure follows: a mismatch
-                // underlines the value, and a missing field whatever should
-                // have held it, since what is absent has no place of its own.
                 let steps = match &fault {
                     Fault::Missing { .. } => fault.parent(),
                     Fault::Mismatch { .. } => fault.path(),
@@ -313,11 +266,8 @@ impl Registry {
         Ok(())
     }
 
-    /// Build the alias index, refusing a name that would reach two entities.
-    ///
-    /// Both directions matter: two entities claiming one alias is a name with
-    /// no answer, and an alias equal to another entity's id is worse, because
-    /// it resolves in silence to whichever the lookup happens to try first.
+    /// Build the alias index, refusing a name that would reach two entities,
+    /// an alias equal to another entity's own id included.
     fn index(&mut self, project: &Project) -> Result<()> {
         for entity in self.entities.values() {
             for alias in entity.aliases() {
@@ -326,8 +276,6 @@ impl Registry {
                     None => self.aliases.get(alias).map(String::as_str),
                 };
                 if let Some(first) = clash {
-                    // Underlined at the entity that claimed the alias second,
-                    // which is the one an author is looking at.
                     let snippet = entity.from().snippet(project, &[]);
                     return Err(
                         EntityError::alias(&self.id, alias, first, entity.id(), snippet).into(),
@@ -343,13 +291,11 @@ impl Registry {
         &self.id
     }
 
-    /// Which field answers each question a renderer asks here.
     pub fn slots(&self) -> &Slots {
         &self.slots
     }
 
-    /// The named field set this registry took, if it took one: what says
-    /// whether its entities are people or something else.
+    /// The named field set this registry took, if it took one.
     pub fn shape(&self) -> Option<crate::config::Shape> {
         self.shape
     }
@@ -367,22 +313,15 @@ impl Registry {
             .or_else(|| self.aliases.get(&id).and_then(|id| self.entities.get(id)))
     }
 
-    /// The page that declares the entity a term names, in `lang`.
-    ///
-    /// What makes a term describable: an entity written as a profile page has a
-    /// page of its own to be the term's, while one written in a roster has only
-    /// fields. Per language, so a French term is described by the French
-    /// edition or by nothing.
+    /// The page that declares the entity a term names, in `lang`; an entity
+    /// written in a roster has none.
     pub fn page(&self, term: &str, lang: &str) -> Option<&std::path::Path> {
         self.get(term)?.page(lang)
     }
 
     /// The id `term` resolves to: its own, or the entity an alias reaches.
-    ///
-    /// What every consumer that *groups* by term has to call first. Grouping on
-    /// the raw string splits one person across two terms the moment a page
-    /// spells them by an alias, which is two term pages, two feeds and two rows
-    /// in the index for one entity.
+    /// Every consumer that *groups* by term has to call it first, or an alias
+    /// splits one entity across two terms.
     pub fn canonical<'a>(&'a self, term: &'a str) -> &'a str {
         self.get(term).map_or(term, Entity::id)
     }
@@ -403,11 +342,8 @@ impl Registry {
 pub struct Registries(BTreeMap<String, Registry>);
 
 impl Registries {
-    /// Build every registry from its sources.
-    ///
-    /// Runs inside [`crate::content::plan`], after discovery: a `pages` source
-    /// draws its entities from pages the plan has already read, so no file is
-    /// opened twice and a profile page is an ordinary page in every other way.
+    /// Build every registry from its sources, after discovery, so a `pages`
+    /// source draws its entities from pages the plan has already read.
     pub fn build(config: &Config, project: &Project, pages: &[Page]) -> Result<Self> {
         let mut registries = BTreeMap::new();
         for (id, registry) in &config.content.entities {
@@ -441,28 +377,19 @@ impl Registries {
 
     /// The empty set: a site that declared no registry, and what a consumer
     /// assembled outside a plan reads.
-    ///
-    /// Borrowed rather than constructed, because every reader holds a
-    /// reference: the alternative is each of them owning an empty map of its
-    /// own for the life of the build.
     pub fn none() -> &'static Self {
         static NONE: std::sync::LazyLock<Registries> =
             std::sync::LazyLock::new(Registries::default);
         &NONE
     }
 
-    /// One registry, by id.
     pub fn get(&self, id: &str) -> Option<&Registry> {
         self.0.get(id)
     }
 
     /// Resolve every reference every page writes, under each registry's own
-    /// policy for a term nobody declared.
-    ///
-    /// Separate from [`Registries::build`] and given the [`Ui`], because two of
-    /// the three policies do not fail: a site can ask to be *told* that a page
-    /// credits somebody who is not in the roster, and a site with no roster
-    /// means the term as written and is told nothing at all.
+    /// policy for a term nobody declared; under `unknown "synthesize"` the term
+    /// is the entity, so nothing is reported.
     pub fn check(&self, config: &Config, project: &Project, pages: &[Page], ui: &Ui) -> Result<()> {
         if !self.any() {
             return Ok(());
@@ -473,8 +400,6 @@ impl Registries {
                     continue;
                 }
                 match reference.registry.unknown() {
-                    // The term is the entity: nothing was ever declared about
-                    // it, and nothing claimed otherwise.
                     Unknown::Synthesize => {}
                     Unknown::Warn => ui.warn(reference.unresolved(page, project)),
                     Unknown::Error => {
@@ -486,17 +411,13 @@ impl Registries {
         Ok(())
     }
 
-    /// Whether a site declared any registry at all: what lets every consumer
-    /// skip the whole mechanism on a site that never asked for it.
+    /// Whether a site declared any registry at all.
     pub fn any(&self) -> bool {
         !self.0.is_empty()
     }
 
-    /// Every term of `page` that names an entity.
-    ///
-    /// The single reader of the taxonomy-to-registry wiring, so the check
-    /// below and everything that renders a reference agree on which terms are
-    /// ids.
+    /// Every term of `page` that names an entity, the single reader of the
+    /// taxonomy-to-registry wiring.
     pub fn references<'a>(
         &'a self,
         config: &'a Config,
@@ -529,34 +450,27 @@ impl Registries {
 
 /// One term of one page, against the registry its taxonomy names.
 pub struct Reference<'a> {
-    /// The taxonomy the term was written under.
     pub taxonomy: &'a str,
     /// The frontmatter key it was written under, which is what locates it in
-    /// the page: a taxonomy may read a key that is not its own id.
+    /// the page; a taxonomy may read a key that is not its own id.
     pub key: &'a str,
     /// Which term of that key this is.
     pub index: usize,
-    /// The registry its ids are drawn from.
     pub registry: &'a Registry,
     /// The term, as the page wrote it.
     pub term: &'a str,
-    /// What the page claims about it, if the taxonomy says: `zoe` under
-    /// `authors` wrote the page, while `rust` under `tags` claims nothing.
+    /// What the page claims about it, where the taxonomy says; a term under a
+    /// taxonomy with no credit claims nothing.
     pub credit: Option<Credit>,
 }
 
 impl Reference<'_> {
-    /// The entity this term names, if the registry holds one.
     pub fn entity(&self) -> Option<&Entity> {
         self.registry.get(self.term)
     }
 
     /// This reference as the failure it is when nothing answers it, underlined
-    /// at the term itself rather than at the page that carries it.
-    ///
-    /// At the severity the registry asked for, so `unknown "warn"` and
-    /// `unknown "error"` report the same thing and differ only in whether the
-    /// build survives it.
+    /// at the term itself and at the severity the registry asked for.
     pub fn unresolved(&self, page: &Page, project: &Project) -> Unresolved {
         let steps = [Step::Key(self.key.to_owned()), Step::Index(self.index)];
         let snippet = Provenance::Page {

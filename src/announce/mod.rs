@@ -1,11 +1,7 @@
 //! Announcing the built site to external destinations.
 //!
-//! The layer is backend-neutral: [`Backend`] is the one interface a
-//! destination implements, and it receives a [`SiteView`]: the site reduced to
-//! portable metadata, with no knowledge of any particular protocol. Concrete
-//! backends (e.g. [`standard`], which speaks AT Protocol) map that view onto
-//! their own records. Adding a destination is one `impl Backend` plus one line
-//! in [`configured`]; nothing else in the codebase learns about it.
+//! A destination is one [`Backend`] impl over a [`SiteView`], plus one line in
+//! [`Announce::configured`].
 
 pub mod standard;
 
@@ -25,37 +21,21 @@ use self::standard::Standard;
 
 /// A backend-neutral view of the built site handed to every [`Backend`].
 pub struct SiteView<'a> {
-    /// The full resolved config: a backend reads the base `url`, `site` name,
-    /// output directory, and its own `announce` block from here.
     pub config: &'a Config,
-    /// Every publishable page, reduced to portable metadata.
     pub documents: Vec<Doc>,
 }
 
 /// One publishable page, reduced to the metadata any destination might want.
-/// Typed throughout (dates stay [`time::Date`], not strings), so a backend
-/// formats them however its wire format requires.
 pub struct Doc {
     /// Root-relative permalink, e.g. `/posts/hello/`.
     pub path: String,
-    /// Display title.
     pub title: String,
-    /// Short description/summary, if the page carries one.
     pub description: Option<String>,
-    /// Publication date, if dated.
     pub date: Option<time::Date>,
     /// Taxonomy terms across every taxonomy, flattened.
     pub tags: Vec<String>,
 }
 
-/// A page reduced to what a destination might publish.
-///
-/// The summary is [`crate::content::Frontmatter::description`],
-/// never a second reading of the same keys: the head tags, the feed entry and
-/// the announced record answer one question, and a reader who saw a preview in
-/// a `<meta>` tag but not in the record would be reading a bug. This used to
-/// spell the `description`-else-`summary` rule out again here, which is exactly
-/// how the three could drift.
 impl From<&Page> for Doc {
     fn from(page: &Page) -> Self {
         let fm = &page.frontmatter;
@@ -71,16 +51,11 @@ impl From<&Page> for Doc {
 
 /// The `announce` command: which destinations a run targets, and what it hands
 /// them.
-///
-/// A namespace rather than a value, like [`crate::deploy::Deploy`] beside it:
-/// everything a run needs is on the [`Config`] it is given, so there is nothing
-/// to hold.
 pub struct Announce;
 
 impl Announce {
-    /// Announce to every configured destination in turn. Errors if none is
-    /// configured, so `baudelaire announce` on an unconfigured project explains
-    /// itself rather than silently doing nothing.
+    /// Announces to every configured destination in turn, erroring if none is
+    /// configured.
     pub fn run(config: &Config, opts: &Options, ui: &Ui) -> Result<()> {
         let backends = Self::configured(config);
         if backends.is_empty() {
@@ -97,8 +72,7 @@ impl Announce {
         )
     }
 
-    /// The enabled destinations, from config alone. THE single source of what
-    /// an `announce` run targets: add a backend by adding one line here.
+    /// The enabled destinations, from config alone.
     fn configured(config: &Config) -> Vec<Box<dyn Backend<SiteView<'_>>>> {
         let mut out: Vec<Box<dyn Backend<SiteView<'_>>>> = Vec::new();
         if let Some(standard) = &config.announce.standard {
@@ -107,9 +81,8 @@ impl Announce {
         out
     }
 
-    /// Reduce the discovered, eligible content pages to a [`SiteView`]. Only
-    /// real content pages are included: generated index and taxonomy pages are
-    /// site navigation, not publishable documents.
+    /// The eligible content pages as a [`SiteView`]; generated index and
+    /// taxonomy pages are navigation, not publishable documents.
     fn view(config: &Config) -> Result<SiteView<'_>> {
         let theme = crate::theme::Theme::of(config)?;
         let project =
@@ -125,21 +98,17 @@ impl Announce {
     }
 }
 
-/// A disposable, per-backend skip-cache mapping a record identifier to a
-/// fingerprint of the content last sent, so an unchanged record is not re-sent.
-///
-/// Kept under [`Config::SCRATCH`], so `clean` wipes it, deliberately. Its loss
-/// only costs a re-send (which is idempotent), never correctness: a backend
-/// diffs against the *remote* to decide deletions, so nothing is ever orphaned
-/// because a local cache went missing.
+/// A disposable, per-backend map from record identifier to a fingerprint of
+/// the content last sent, so an unchanged record is not re-sent; losing it
+/// costs an idempotent re-send, never correctness.
 #[derive(Default, Serialize, Deserialize)]
 pub struct SkipCache {
     hashes: BTreeMap<String, Hash>,
 }
 
 impl SkipCache {
-    /// Load the cache for `backend`, treating any read/parse failure as empty:
-    /// a stale or missing cache is never fatal.
+    /// Loads the cache for `backend`, treating any read or parse failure as
+    /// empty.
     pub fn load(backend: &str) -> Self {
         crate::fs::read(Self::path(backend))
             .ok()
@@ -152,18 +121,15 @@ impl SkipCache {
         self.hashes.get(id) == Some(fingerprint)
     }
 
-    /// Record that `id` now holds content of `fingerprint`.
     pub fn set(&mut self, id: String, fingerprint: Hash) {
         self.hashes.insert(id, fingerprint);
     }
 
-    /// Drop every entry whose id is not in `keep`: the records that no longer
-    /// exist after this announce.
+    /// Drops every entry whose id is not in `keep`.
     pub fn retain(&mut self, keep: &BTreeSet<String>) {
         self.hashes.retain(|id, _| keep.contains(id));
     }
 
-    /// Persist the cache for `backend`.
     pub fn save(&self, backend: &str) -> Result<()> {
         let bytes = serde_json::to_vec(self).map_err(|e| {
             crate::error::SerializeError::new(crate::error::Artifact::AnnounceCache, e)

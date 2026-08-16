@@ -1,7 +1,7 @@
 //! `llms.txt` generation: a Markdown index of the site for LLMs.
 //!
-//! Follows [llmstxt.org]: an H1 site title, an optional blockquote summary, then
-//! one `##` section per collection listing its pages as Markdown links.
+//! Follows [llmstxt.org]: an H1 site title, an optional blockquote summary,
+//! then one `##` section per collection listing its pages as Markdown links.
 //!
 //! [llmstxt.org]: https://llmstxt.org
 
@@ -28,10 +28,6 @@ impl Processor for Llms {
                 effect: "emitted with relative links",
             },
         );
-        // One file per language, beside that language's feeds and search index.
-        // A single flat file interleaved every language under one `## blog`
-        // heading, and split taxonomies into `## tags` and `## fr/tags` because
-        // generated listings carry the scoped collection id.
         for lang in site.config.langs() {
             let scope = site.config.scope(lang, "");
             let pages: Vec<&Page> = site
@@ -44,9 +40,6 @@ impl Processor for Llms {
             }
             let mut md = Lines::default();
             md.line().lit("# ").value(site.config.title(lang));
-            // Its own `summary` first, then the site's `description`: the two
-            // answer the same question, and a site that stated one should not
-            // have to state it twice to fill this line.
             if let Some(summary) = site
                 .config
                 .generate
@@ -60,11 +53,6 @@ impl Processor for Llms {
             }
             for (collection, pages) in Self::sections(&pages) {
                 md.blank();
-                // The root collection is a real id a site can configure, but it
-                // is not a section *name*: `## _root` was an internal sentinel
-                // in a document written to be read. Its pages belong to no
-                // section, so they are listed with no heading at all, ahead of
-                // the ones that do.
                 if collection != ROOT {
                     md.line().lit("## ").value(collection);
                     md.blank();
@@ -91,12 +79,12 @@ impl Llms {
     const FILE: &'static str = "llms.txt";
 
     /// Group pages by collection, preserving first-seen order for both the
-    /// sections and the pages within them.
+    /// sections and the pages within them, with the unsectioned pages leading
+    /// since a heading-less list after a `##` would read as part of it.
     ///
-    /// A generated listing's collection is the language-scoped section
-    /// (`fr/tags`), which [`Page::section`] is what strips: within one
-    /// language's file the scope is noise, and it split one section into two
-    /// headings.
+    /// Keyed by [`Page::section`], which strips the language scope a generated
+    /// listing's collection carries (`fr/tags`) and would otherwise split one
+    /// section into two headings.
     fn sections<'a>(pages: &[&'a Page]) -> Vec<(&'a str, Vec<&'a Page>)> {
         let mut sections: Vec<(&str, Vec<&Page>)> = Vec::new();
         for page in pages {
@@ -106,8 +94,6 @@ impl Llms {
                 None => sections.push((name, vec![page])),
             }
         }
-        // The unsectioned pages lead, since they are written without a heading
-        // and a heading-less list after a `##` would read as part of it.
         sections.sort_by_key(|(name, _)| *name != ROOT);
         sections
     }
@@ -159,8 +145,6 @@ mod tests {
             .expect("no llms.txt")
     }
 
-    /// One `##` per collection, one bullet per page, and the blank lines the
-    /// format is read by.
     #[test]
     fn every_page_is_a_link_under_its_collection() {
         let md = index(&[page("a", "A"), page("b", "B")]);
@@ -168,18 +152,12 @@ mod tests {
         assert!(md.ends_with("- [A](/a/)\n- [B](/b/)\n"), "{md}");
     }
 
-    /// Both halves of `[text](url)` are site values, and both used to be written
-    /// raw: a title carrying a bracket wrote `- [A [draft] note](/x/)`, which a
-    /// reader parses as a different link or as none, and a permalink may carry a
-    /// paren because a URL is allowed one.
     #[test]
     fn a_link_cannot_be_ended_early_by_either_half() {
         let md = index(&[page("a", "A [draft] note")]);
         assert!(md.contains(r"- [A \[draft\] note](/a/)"), "{md}");
     }
 
-    /// A title carrying a line break used to end its bullet early and leave the
-    /// rest of itself as a paragraph between two links.
     #[test]
     fn a_title_cannot_break_out_of_its_bullet() {
         let md = index(&[page("a", "Two\nLines")]);

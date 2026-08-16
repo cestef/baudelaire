@@ -23,8 +23,6 @@ fn init_config_is_valid() {
     let t = Site::new();
     t.run(&["init", "-r", t.root.to_str().unwrap()]);
     let cfg = t.read("config.kdl");
-    // The site name is templated from the directory, and every placeholder is
-    // filled (no `{{..}}` left behind).
     assert!(cfg.contains("site \""), "has a site name: {cfg}");
     assert!(!cfg.contains("{{"), "placeholders filled: {cfg}");
     assert!(cfg.contains("prune #true"));
@@ -57,10 +55,8 @@ fn new_scaffolds_content_file() {
     assert!(t.exists("content/posts/my-post.typ"));
     let body = t.read("content/posts/my-post.typ");
     assert!(body.contains("frontmatter"));
-    // Title is derived from the filename, not a fixed "Untitled".
     assert!(body.contains("title: \"My Post\""), "{body}");
     assert!(body.contains("draft: true"));
-    // The permalink the page will occupy is reported.
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("/posts/my-post/"),
@@ -75,7 +71,6 @@ fn new_infers_frontmatter_from_the_collection() {
         "config.kdl",
         "site \"T\"\ncontent {\n  collections {\n    blog { sort \"date\" }\n    guide { sort \"order\" }\n  }\n}\n",
     );
-    // A dated collection gets today's date stamped; no order field.
     let blog = t.run(&["new", "blog/launch-day"]);
     assert!(
         blog.status.success(),
@@ -93,7 +88,6 @@ fn new_infers_frontmatter_from_the_collection() {
         "dated collection has no order: {body}"
     );
 
-    // An ordered collection gets the next order; first page is 1.
     t.run(&["new", "guide/intro"]);
     assert!(t.read("content/guide/intro.typ").contains("order: 1"));
     t.run(&["new", "guide/second"]);
@@ -117,7 +111,6 @@ fn new_bundle_creates_index_in_a_directory() {
         t.exists("content/posts/my-post/index.typ"),
         "bundle dir with index.typ"
     );
-    // The bundle takes its title from the directory, not "Index".
     assert!(
         t.read("content/posts/my-post/index.typ")
             .contains("title: \"My Post\"")
@@ -125,8 +118,6 @@ fn new_bundle_creates_index_in_a_directory() {
 }
 
 /// A bundle's name is a directory name, and a directory may hold a dot.
-/// Stripping "the extension" cut at the last one whatever followed it, so
-/// `new -b posts/v1.2` asked for `v1.2` and silently got `v1`.
 #[test]
 fn new_bundle_keeps_a_dot_in_its_name() {
     let t = Site::new();
@@ -145,7 +136,6 @@ fn new_bundle_keeps_a_dot_in_its_name() {
         !t.exists("content/posts/v1/index.typ"),
         "truncated at the dot"
     );
-    // ...and a `.typ` suffix is still the one thing dropped.
     let out = t.run(&["new", "posts/other.typ", "--bundle"]);
     assert!(out.status.success());
     assert!(t.exists("content/posts/other/index.typ"));
@@ -181,8 +171,6 @@ fn verbose_shows_per_page_progress() {
     let out = t.run(&["-v", "build"]);
     assert!(out.status.success());
     let verbose = String::from_utf8_lossy(&out.stderr).into_owned();
-    // The per-page lines are what `-v` adds; asserting on the summary alone
-    // would pass with `-v` wired to nothing.
     assert!(verbose.contains("index.typ"), "no per-page line: {verbose}");
 
     let quiet = t.run(&["build"]);
@@ -212,8 +200,6 @@ fn build_reports_timing() {
     // The summary ends `.. in 132ms` / `.. in 1.24s`.
     let logs = String::from_utf8_lossy(&out.stderr);
     assert!(
-        // `contains("s")` matched almost anything; require a digit followed by a
-        // unit, which is what a duration actually looks like.
         logs.split(" in ").skip(1).any(|tail| {
             let unit = tail.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
             tail.starts_with(|c: char| c.is_ascii_digit())

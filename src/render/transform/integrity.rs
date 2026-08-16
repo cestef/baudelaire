@@ -1,15 +1,6 @@
-//! Subresource integrity, and the digests a content security policy needs.
-//!
-//! One walk, two halves of the same idea: what a page loads and what it
-//! inlines, each named by its digest. A `<script src>` gets an `integrity` a
-//! browser checks after fetching it; an inline `<script>` is never fetched, so
-//! its digest goes into the policy instead ([`crate::render::inline`]), which
-//! is what lets a page keep its inline blocks under a policy that forbids
-//! inline script in general.
-//!
-//! Only files *this build wrote* are stamped. A script on someone else's host
-//! would need `crossorigin` and a digest of bytes this build never saw, and
-//! stamping a guess would block the resource rather than protect it.
+//! Subresource integrity, and the digests a content security policy needs: a
+//! fetched resource gets an `integrity`, an inline one's digest goes into the
+//! policy. Only files this build wrote are stamped.
 
 use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 
@@ -28,6 +19,8 @@ impl Transform for Integrity {
         config.sri() || config.hashes()
     }
 
+    /// A `style` attribute is checked on every element, not just the ones the
+    /// match names, since a policy has to name each one by digest.
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let sri = cx.config.sri();
         let hashes = cx.config.hashes();
@@ -44,10 +37,6 @@ impl Transform for Integrity {
                 _ if sri && element.stylesheet() => Self::stamp(element, attr::href, emitted),
                 _ => {}
             }
-            // On any element, not just the ones above: a `style` attribute is
-            // inline style, a policy has to name it by digest, and this build
-            // emits them all over (typst resolves an element's CSS properties
-            // into one, as do the image rule and the highlighter).
             if hashes && let Some(style) = element.attrs.get(attr::style) {
                 inline.attr(style);
             }
@@ -57,11 +46,8 @@ impl Transform for Integrity {
 }
 
 impl Integrity {
-    /// Stamp the digest of the file `key` points at, if this build wrote it.
-    ///
-    /// An element that already carries an `integrity` is left alone: the author
-    /// pinned a specific digest, and overwriting it would silently undo the one
-    /// thing the attribute is for.
+    /// Stamp the digest of the file `key` points at, if this build wrote it and
+    /// the author has not already pinned an `integrity`.
     fn stamp(element: &mut HtmlElement, key: typst_html::HtmlAttr, emitted: &Emitted) {
         if element.attrs.get(attr::integrity).is_some() {
             return;

@@ -7,7 +7,6 @@ use clap::Args;
 use super::{Cx, Run, group, scaffold};
 use crate::error::{Result, ScaffoldError};
 
-/// Arguments for `baudelaire init`.
 #[derive(Args, Debug, Clone)]
 pub struct InitArgs {
     /// Directory to scaffold into (default: current directory).
@@ -67,8 +66,6 @@ pub struct InitArgs {
     /// Take the default answer to every prompt instead of asking.
     #[arg(short = 'y', long)]
     pub yes: bool,
-    // The accepted values are not spelled out: `value_enum` already lists them
-    // from [`scaffold::vcs::Vcs`] itself, so a new variant documents itself.
     /// Set up this version-control system without asking.
     #[arg(long, value_enum)]
     pub vcs: Option<scaffold::vcs::Vcs>,
@@ -76,10 +73,6 @@ pub struct InitArgs {
 
 impl Run for InitArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        // The two globals `init` cannot honour: it writes the config every other
-        // command reads, so `--config` names the file to write rather than one
-        // to read, and there is no profile to select in a project that does not
-        // exist yet. Both used to be accepted and ignored.
         if cx.cli.global.profile.is_some() {
             return Err(ScaffoldError::Profile.into());
         }

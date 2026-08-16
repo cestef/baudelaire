@@ -12,20 +12,18 @@ use crate::content::{Rebased, SourceMap};
 use crate::ui::Text;
 
 /// A typst diagnostic bridged to miette, with span resolution via the world
-/// that produced it. [`src`](Self::src) holds one file's text; [`file`](Self::file)
-/// records which file that is, so a label is only drawn for spans in that same
-/// file: a span reaching into another file (a bound template, a shared module)
-/// would otherwise overrun this text and panic miette with `OutOfBounds`.
+/// that produced it. A label is drawn only for spans in the one file
+/// [`src`](Self::src) holds: a span reaching into another file would overrun
+/// that text and panic miette with `OutOfBounds`.
 pub struct TypstSourceDiagnostic {
     inner: SourceDiagnostic,
     src: NamedSource<String>,
     file: Option<FileId>,
     world: Arc<dyn World + Send + Sync>,
-    /// Set only for a page lowered from another language, and only when this
-    /// diagnostic's own span was written by its author. Then `src` is that
-    /// authored file and every label is translated into it; a label that does
-    /// not translate is dropped rather than drawn at an offset measured against
-    /// a different text.
+    /// Set only for a page lowered from another language whose own span was
+    /// authored: then `src` is that authored file, and a label that does not
+    /// translate into it is dropped rather than drawn at an offset measured
+    /// against a different text.
     rebased: Option<Rebased>,
 }
 
@@ -49,8 +47,12 @@ impl TypstSourceDiagnostic {
     /// Bridge a batch of typst diagnostics, resolving each against the file its
     /// span belongs to (a bound template, a shared module, the page itself) so
     /// the snippet always matches the span. Spanless diagnostics fall back to
-    /// the `fallback` name and text. The single conversion the engine and
-    /// content discovery share.
+    /// the `fallback` name and text.
+    ///
+    /// Only a span in the main file is translated through `sourcemap`:
+    /// [`Rebased::new`] cannot tell a bound template from the page it was bound
+    /// into, and would report a template's typo against a line of the page's
+    /// prose.
     pub fn bridge(
         errs: impl IntoIterator<Item = SourceDiagnostic>,
         fallback: (&str, &str),
@@ -69,20 +71,7 @@ impl TypstSourceDiagnostic {
                             NamedSource::new(name, src.text().to_owned())
                         },
                     );
-                // Translate only when this diagnostic's own span was authored.
-                // A span in generated code keeps the wrapper as its source, so
-                // a lowering bug still reports somewhere real instead of
-                // silently losing its position.
                 let mapped = sourcemap.and_then(|(map, name)| {
-                    // The page's own file, and only it, lowered through this
-                    // map. A diagnostic in a bound template or a shared module
-                    // is a different file entirely, and `Rebased::new` cannot
-                    // tell: it only checks that the text is at least as long as
-                    // the lowered body, which any template of a similar size
-                    // passes. A typo in a 618-byte template was reported against
-                    // a short `.md` page, underlining a line of prose that had
-                    // nothing to do with it and never naming the template at
-                    // all. `Origins::locate` makes the same test in `render`.
                     let id = file?;
                     if id != world.main() {
                         return None;
@@ -109,14 +98,10 @@ impl TypstSourceDiagnostic {
         label: Option<&str>,
     ) -> Option<miette::LabeledSpan> {
         let span = span.into();
-        // Only spans in the file `src` holds can be measured against its text.
         if span.id() != self.file {
             return None;
         }
         let range = self.world.range(span)?;
-        // With a translation in force, `src` is the authored file: a label that
-        // does not map into it has no place there, so it is dropped rather than
-        // drawn at an offset that means something else.
         let range = match &self.rebased {
             Some(rebased) => rebased.locate(&range)?,
             None => range,
@@ -138,8 +123,8 @@ impl std::fmt::Debug for TypstSourceDiagnostic {
     }
 }
 
-/// typst's own message, escaped: it is foreign text, and a compiler that
-/// quotes an identifier in backticks is not writing this crate's markup.
+/// typst's own message, escaped: a compiler quoting an identifier in backticks
+/// is not writing this crate's markup.
 impl std::fmt::Display for TypstSourceDiagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Text(&self.inner.message))
@@ -150,9 +135,6 @@ impl std::error::Error for TypstSourceDiagnostic {}
 
 impl miette::Diagnostic for TypstSourceDiagnostic {
     fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        // Namespaced like every other code, and keyed on the error class, not
-        // on severity: severity already has its own field, and an unnamespaced
-        // code is not greppable alongside the rest.
         Some(Box::new("baudelaire::typst::diagnostic"))
     }
 
@@ -186,8 +168,6 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .hints
             .iter()
             .filter_map(|h| self.labeled(h.span, Some(h.v.as_str())));
-        // call stack leading to the error, annotated per frame: surfaces which
-        // page/template a shared-module error flowed through.
         let trace = self
             .inner
             .trace

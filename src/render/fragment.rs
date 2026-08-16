@@ -1,12 +1,6 @@
-//! Pieces of a page's markup, re-serialized out of the typed DOM.
-//!
-//! Two consumers, with the same two needs: markup without the document wrapper
-//! typst-html always writes, and markup that survives for a cache-served page,
-//! long after the DOM is gone. [`Fragments`] is what the single-file export
-//! assembles; [`Syndicated`] is the prose a full-content feed publishes.
-//!
-//! Captured here, at compile time, rather than sliced out of the finished page,
-//! so nothing ever takes a rendered page apart as text.
+//! Pieces of a page's markup, re-serialized out of the typed DOM: [`Fragments`]
+//! is what the single-file export assembles, [`Syndicated`] the prose a
+//! full-content feed publishes.
 
 use serde::{Deserialize, Serialize};
 use typst::diag::SourceResult;
@@ -17,9 +11,7 @@ use crate::config::{BaseUrl, RegionConfig};
 use super::transform::ElementExt;
 
 /// The doctype [`typst_html::html`] writes ahead of any root element, and the
-/// wrapper this module serializes through. Both are strings *we* produced one
-/// call earlier, so stripping them is unwrapping our own envelope, not parsing
-/// markup.
+/// wrapper this module serializes through.
 const DOCTYPE: &str = "<!DOCTYPE html>";
 const OPEN: &str = "<template>";
 const CLOSE: &str = "</template>";
@@ -27,29 +19,21 @@ const CLOSE: &str = "</template>";
 /// One page's contents, split into the pieces a shared document is built from.
 ///
 /// Every field defaults, so a manifest written by an older layout still parses
-/// and the cache's own schema decides whether to trust it (see
-/// [`crate::graph::Renderer`]), rather than warning every user once per upgrade.
+/// and the cache's own schema decides whether to trust it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Fragments {
-    /// The `<head>` contents: the charset, the meta tags, the title.
+    /// The `<head>` contents.
     pub head: String,
     /// The page's external resource elements (`<link>`, and `<script src>`),
     /// wherever they sat, one serialized element per entry.
-    ///
-    /// Lifted out because a typst template cannot emit `<head>` and so writes
-    /// its stylesheet link and its bundle into the body. Left where they were,
-    /// every route of the export would carry its own copy: with `html { embed }`
-    /// on, that is the whole stylesheet and the whole bundle, inlined per page.
     pub resources: Vec<String>,
     /// The `<body>` contents, with those elements taken out.
     pub body: String,
 }
 
 impl Fragments {
-    /// Capture a compiled page's markup. Serialization is the same pass
-    /// typst-html runs for the page itself, over a cheap clone of the document,
-    /// so links and frames resolve exactly as they do in the real output.
+    /// Capture a compiled page's markup.
     pub fn capture(doc: &HtmlDocument, options: &HtmlOptions) -> SourceResult<Self> {
         let mut doc = doc.clone();
         let mut lifted = Vec::new();
@@ -75,8 +59,7 @@ impl Fragments {
     ///
     /// A lifted script is marked `defer`: it may end up in the exported file's
     /// `<head>`, where a classic script would otherwise run before the page it
-    /// expects to find. `defer` puts it back after parsing, which is where it
-    /// ran when it sat in the body.
+    /// expects to find.
     fn lift(element: &mut HtmlElement, out: &mut Vec<HtmlElement>) {
         let mut kept = Vec::with_capacity(element.children.len());
         for node in &element.children {
@@ -116,12 +99,7 @@ impl Fragments {
 /// Loose DOM nodes, re-serialized by typst-html's own pass.
 ///
 /// typst-html serializes a *document*, so a piece of one is handed to it as the
-/// root of a bare `<template>` and that wrapper peeled back off. Both ends of
-/// the envelope are constants this module asked for one call earlier, so it is
-/// unwrapping its own output rather than parsing markup.
-///
-/// One owner, because both captures in this module need it and the peeling is
-/// the part that would quietly cut into real markup if the two drifted.
+/// root of a bare `<template>` and that wrapper peeled back off.
 struct Markup;
 
 impl Markup {
@@ -138,8 +116,7 @@ impl Markup {
     }
 
     /// Peel the doctype and the attribute-less wrapper element back off the
-    /// serializer's output. Every affix is a constant we just asked for, so an
-    /// unexpected shape leaves the text alone rather than cutting into it.
+    /// serializer's output, leaving an unexpected shape alone.
     fn unwrap(html: &str) -> &str {
         let html = html.trim();
         let html = html.strip_prefix(DOCTYPE).unwrap_or(html).trim();
@@ -151,24 +128,14 @@ impl Markup {
 /// One page's prose as a full-content feed publishes it: the markup of the
 /// region `html { region }` names, with the site's chrome taken out and every
 /// URL made absolute.
-///
-/// Captured from the DOM rather than sliced out of the finished page, and that
-/// is the whole point. A feed entry travels to a reader that has no page to
-/// resolve `/posts/b/` or `/assets/app.abc.css` against, so the URLs have to be
-/// rewritten, and rewriting serialized markup as a string is what the typed DOM
-/// exists to avoid. It is the same argument the social card's `og:image` is
-/// absolutized under.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Syndicated(pub String);
 
 impl Syndicated {
-    /// Capture the prose a feed carries for this page.
-    ///
-    /// The region, or `<body>` when the layout emits no such element. Never the
-    /// whole document: it begins `<!DOCTYPE html><head>`, and a layout that
-    /// names no region would otherwise publish its every `<meta>` tag as the
-    /// entry's body. The search index makes the opposite choice, because it
-    /// would rather index a page whole than not at all.
+    /// Capture the prose a feed carries for this page: the region, or `<body>`
+    /// when the layout emits no such element. URLs are rebased rather than
+    /// resolved, the base path being already on every root-relative URL of a
+    /// finished page.
     pub fn capture(
         doc: &HtmlDocument,
         options: &HtmlOptions,
@@ -179,8 +146,6 @@ impl Syndicated {
         let root = doc.root_mut();
         Self::prune(root, &region.ignore);
         root.walk(&mut |element| {
-            // `rebase`, not `resolve`: this is the finished page, so the base
-            // path is already on every root-relative URL.
             element.assets(|url| Some(BaseUrl::rebase(base, url)));
         });
         let found = HtmlTag::intern(&region.element)
@@ -194,13 +159,6 @@ impl Syndicated {
 
     /// Whether an element is chrome rather than prose, and so goes with its
     /// contents.
-    ///
-    /// The same three rules the search index applies to the finished text
-    /// (`Text::skipped`), stated here against the typed DOM because the two see
-    /// different things: a raw element a reader never reads, one the site named
-    /// in `region { ignore }`, and one that declares itself hidden from
-    /// assistive technology. That last covers a heading's own self link, which
-    /// says nothing the heading has not and would travel as a stray `#`.
     fn chrome(element: &HtmlElement, ignore: &[String]) -> bool {
         element.silent()
             || ignore
@@ -221,9 +179,6 @@ impl Syndicated {
     }
 
     /// The children of the first `which` element anywhere in the tree.
-    ///
-    /// Anywhere, not just under the root: a layout is free to put its `<main>`
-    /// inside a wrapper, and typst-html's own `<body>` is a child of the root.
     fn find(element: &HtmlElement, which: HtmlTag) -> Option<Vec<HtmlNode>> {
         if element.tag == which {
             return Some(element.children.to_vec());
@@ -251,9 +206,6 @@ mod tests {
         );
     }
 
-    /// Anything that is not the envelope we wrote is returned untouched, so a
-    /// changed serializer degrades to "too much markup" rather than to markup
-    /// with its first tag sliced off.
     #[test]
     fn unwrap_leaves_unrecognized_output_alone() {
         assert_eq!(Markup::unwrap("<p>hi</p>"), "<p>hi</p>");

@@ -1,6 +1,5 @@
-//! Filesystem facade over `std::fs` that attaches path + operation context to
-//! every error (see [`crate::error::FsError`]). Prefer these over `std::fs`
-//! wherever a failure should tell the user *which* file and *what* operation.
+//! Filesystem facade over `std::fs` that attaches path and operation context to
+//! every error (see [`crate::error::FsError`]).
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
@@ -8,25 +7,12 @@ use std::path::{Component, Path, PathBuf};
 use crate::error::fs::FsError;
 use crate::error::{Op, Result};
 
-/// A relative path that cannot reach outside the tree it is joined to: the one
-/// place "this must not escape the project" is decided.
+/// A relative path that cannot reach outside the tree it is joined to: at least
+/// one component, every component an ordinary name.
 ///
-/// A theme directory, an inlined SVG's path and a generated file's name all come
-/// from text a config file or a template wrote, so each is a way to name a file
-/// the project does not own. Each site used to spell its own variant of the same
-/// component walk, which is the worst possible shape for a check whose whole job
-/// is to be identical everywhere.
-///
-/// Contained means: at least one component, and every component an ordinary
-/// name. No root, no drive prefix, no `..`, no leading `.`. Callers that accept
-/// a project-absolute spelling (`/assets/x.svg`) strip the leading `/`
-/// themselves and hand over what is left, so the leading slash is a caller's
-/// syntax rather than a hole here.
-///
-/// The test is lexical, and deliberately so: these paths need not exist yet, so
-/// nothing here touches the filesystem. A component that happens to be a symlink
-/// out of the tree is judged by its name; a caller that must also refuse those
-/// has to canonicalize after joining.
+/// The test is lexical, so these paths need not exist yet and a component that
+/// happens to be a symlink out of the tree is judged by its name; a caller that
+/// must refuse those has to canonicalize after joining.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Contained<'a>(&'a Path);
 
@@ -39,16 +25,12 @@ impl<'a> Contained<'a> {
         for component in path.components() {
             match component {
                 Component::Normal(_) => named = true,
-                // `..`, `.`, a root, or a `C:` prefix: each either climbs out of
-                // the tree or discards the root the path is joined to.
                 _ => return None,
             }
         }
-        // An empty path names the root itself, which is not a file inside it.
         named.then_some(Self(path))
     }
 
-    /// The relative path, as written.
     pub fn path(&self) -> &'a Path {
         self.0
     }
@@ -59,26 +41,22 @@ impl<'a> Contained<'a> {
     }
 }
 
-/// Read a file to a string.
 pub fn read_to_string(path: impl AsRef<Path>) -> Result<String> {
     let path = path.as_ref();
     std::fs::read_to_string(path).map_err(|e| FsError::new(Op::Read, path, e).into())
 }
 
-/// Read a file to bytes.
 pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>> {
     let path = path.as_ref();
     std::fs::read(path).map_err(|e| FsError::new(Op::Read, path, e).into())
 }
 
-/// Write bytes to a file, creating it if needed.
 pub fn write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
     let path = path.as_ref();
     std::fs::write(path, contents).map_err(|e| FsError::new(Op::Write, path, e).into())
 }
 
-/// Write bytes to a file, creating any missing parent directories first: the
-/// one shared "emit an output file" path.
+/// Write bytes to a file, creating any missing parent directories first.
 pub fn write_all(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
@@ -87,15 +65,13 @@ pub fn write_all(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<(
     write(path, contents)
 }
 
-/// Resolve a path to its canonical, absolute form.
 pub fn canonicalize(path: impl AsRef<Path>) -> Result<PathBuf> {
     let path = path.as_ref();
     std::fs::canonicalize(path).map_err(|e| FsError::new(Op::Canonicalize, path, e).into())
 }
 
 /// Canonicalize best-effort: the canonical path when resolvable, else the
-/// lexical path unchanged. For sites where an unresolvable path must not fail
-/// (dependency capture, display, watch filters).
+/// lexical path unchanged.
 pub fn canonical(path: impl AsRef<Path>) -> PathBuf {
     let path = path.as_ref();
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
@@ -104,14 +80,8 @@ pub fn canonical(path: impl AsRef<Path>) -> PathBuf {
 /// One spelling for a path whose file need not exist: the canonical form of its
 /// deepest existing ancestor, with the components below it appended as written.
 ///
-/// [`canonical`] cannot serve here, because its fallback is the *whole* lexical
-/// path: a file that is not there yet keeps every symlinked ancestor and every
-/// `..` unresolved, and so spells differently from the very same file once it
-/// appears. Anything keyed on both spellings (the build cache records a link
-/// probe at a page that does not exist, then meets that page on the next build)
-/// silently fails to match itself. Climbing to the deepest ancestor that *does*
-/// resolve makes the two converge by construction, since the ancestor's
-/// canonical form is the same either way.
+/// Unlike [`canonical`], this answers the same before and after the file
+/// appears, so anything keyed on the path still matches itself.
 pub fn resolved(path: impl AsRef<Path>) -> PathBuf {
     let path = path.as_ref();
     if let Ok(canonical) = std::fs::canonicalize(path) {
@@ -119,39 +89,29 @@ pub fn resolved(path: impl AsRef<Path>) -> PathBuf {
     }
     match (path.parent(), path.file_name()) {
         (Some(parent), Some(name)) => resolved(parent).join(name),
-        // Nothing left to climb to (a filesystem root, `..`, the empty path):
-        // lexical is the only answer there is.
         _ => path.to_path_buf(),
     }
 }
 
-/// Remove a file.
 pub fn remove_file(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     std::fs::remove_file(path).map_err(|e| FsError::new(Op::Remove, path, e).into())
 }
 
-/// Rename a file, naming both source and destination on failure.
 pub fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
     std::fs::rename(from, to).map_err(|e| FsError::between(Op::Rename, from, to, e).into())
 }
 
-/// Recursively create a directory and all its parents.
 pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     std::fs::create_dir_all(path).map_err(|e| FsError::new(Op::CreateDir, path, e).into())
 }
 
-/// List a directory's immediate entries as paths, sorted by path. The open *and*
-/// each entry are context-wrapped, so a mid-iteration failure still names the
-/// directory.
+/// List a directory's immediate entries as paths, sorted by path.
 ///
-/// The sort is load-bearing: the OS returns entries in an arbitrary order that
-/// differs between machines and shifts as a directory is edited, and that order
-/// otherwise reaches feeds, listings, pagination membership and the layout
-/// wrapper text, making output nondeterministic and refingerprinting pages that
-/// did not change.
+/// The sort is load-bearing: the OS order differs between machines and would
+/// otherwise reach feeds, listings and page fingerprints.
 pub fn read_dir(path: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     let read = std::fs::read_dir(path).map_err(|e| FsError::new(Op::ReadDir, path, e))?;
@@ -164,7 +124,6 @@ pub fn read_dir(path: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-/// Copy a file, reporting the source path on failure.
 pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     let from = from.as_ref();
     std::fs::copy(from, to)
@@ -172,24 +131,17 @@ pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
         .map_err(|e| FsError::new(Op::Copy, from, e).into())
 }
 
-/// Recursively remove a directory and its contents.
 pub fn remove_dir_all(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     std::fs::remove_dir_all(path).map_err(|e| FsError::new(Op::Remove, path, e).into())
 }
 
-/// A recursive walk of a directory tree: the one implementation behind "every
-/// file under here", shared by content discovery, the asset and static
-/// pipelines, embed fingerprinting, deploy scanning and the `dist` prune.
+/// A recursive walk of a directory tree.
 ///
 /// Symlinked directories are followed, but each directory is entered at most
-/// once by canonical path, so a link pointing at an ancestor (`ln -s .
-/// content/loop`) ends that branch instead of recursing until the stack
-/// overflows. Release builds are `panic = "abort"` and stripped, so that
-/// overflow would be a bare SIGSEGV with no diagnostic at all.
-///
-/// Yielded paths are `root`-joined, never canonicalized, so they keep the
-/// spelling the caller asked for and always strip back to a relative path.
+/// once by canonical path, so a link pointing at an ancestor ends that branch
+/// instead of recursing forever. Yielded paths are `root`-joined and never
+/// canonicalized, so they keep the caller's spelling.
 pub struct Walk<'a> {
     root: &'a Path,
     skip: Option<Skip<'a>>,
@@ -198,7 +150,6 @@ pub struct Walk<'a> {
 /// A predicate over directories a walk must not enter: see [`Walk::skipping`].
 type Skip<'a> = Box<dyn Fn(&Path) -> bool + 'a>;
 
-/// The result of a [`Walk`].
 #[derive(Debug, Default)]
 pub struct Tree {
     /// Every file found, parents before children.
@@ -213,9 +164,8 @@ impl<'a> Walk<'a> {
         Self { root, skip: None }
     }
 
-    /// Do not enter directories for which `skip` holds, nor list their
-    /// contents: a subtree owned by another stage, or one that escapes the tree
-    /// being walked. Skipped directories are absent from the result entirely.
+    /// Do not enter directories for which `skip` holds; they are absent from
+    /// the result entirely, contents included.
     #[must_use]
     pub fn skipping(mut self, skip: impl Fn(&Path) -> bool + 'a) -> Self {
         self.skip = Some(Box::new(skip));
@@ -230,7 +180,6 @@ impl<'a> Walk<'a> {
         Ok(tree)
     }
 
-    /// Every file under the root.
     pub fn files(&self) -> Result<Vec<PathBuf>> {
         Ok(self.tree()?.files)
     }
@@ -248,7 +197,7 @@ impl<'a> Walk<'a> {
     }
 
     /// Whether to descend into `dir`: not skipped, and not already visited by
-    /// canonical path (the cycle guard).
+    /// canonical path.
     fn enters(&self, dir: &Path, seen: &mut BTreeSet<PathBuf>) -> bool {
         !self.skip.as_ref().is_some_and(|skip| skip(dir)) && seen.insert(canonical(dir))
     }
@@ -268,9 +217,6 @@ mod tests {
         }
     }
 
-    /// Every shape that would resolve somewhere other than under the root: the
-    /// traversals, the absolute spellings, and the empty path, which names the
-    /// root itself rather than a file in it.
     #[test]
     fn contained_rejects_anything_that_could_leave_the_tree() {
         for path in [
@@ -287,8 +233,6 @@ mod tests {
         }
     }
 
-    /// A drive prefix discards the root it would be joined to, so it is refused
-    /// where the platform recognises one.
     #[test]
     #[cfg(windows)]
     fn contained_rejects_a_drive_prefix() {
@@ -297,10 +241,6 @@ mod tests {
         }
     }
 
-    /// Containment is lexical: a component that happens to be a symlink out of
-    /// the tree passes, because these paths need not exist yet. Anything that
-    /// must refuse those has to canonicalize after joining, which is a different
-    /// check and a deliberate one.
     #[test]
     #[cfg(unix)]
     fn contained_judges_a_symlinked_component_by_name() {
@@ -318,8 +258,6 @@ mod tests {
         assert!(!super::canonical(rel.under(&project)).starts_with(super::canonical(&project)));
     }
 
-    /// A symlinked directory pointing at an ancestor used to recurse until the
-    /// stack overflowed, which release builds report as a bare SIGSEGV.
     #[test]
     #[cfg(unix)]
     fn walk_terminates_on_a_symlink_cycle() {
@@ -335,8 +273,6 @@ mod tests {
         assert!(files[0].ends_with("posts/a.typ"), "{files:?}");
     }
 
-    /// A skipped directory is neither entered nor reported, so a caller that
-    /// deletes what the walk returns cannot reach into it.
     #[test]
     fn walk_omits_skipped_subtrees() {
         let tmp = tempfile::tempdir().unwrap();
@@ -355,8 +291,6 @@ mod tests {
         assert_eq!(tree.dirs, [root.join("keep")]);
     }
 
-    /// Directories come back deepest-first, so removing them in order drops a
-    /// parent only once its children are gone.
     #[test]
     fn walk_reports_directories_children_first() {
         let tmp = tempfile::tempdir().unwrap();
@@ -390,9 +324,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The property everything keyed on a path relies on: `resolved` answers
-    /// the same before and after the file exists, where `canonical` cannot,
-    /// because its fallback keeps the symlinked ancestor unresolved.
     #[test]
     #[cfg(unix)]
     fn resolved_answers_the_same_before_and_after_a_file_appears() {
@@ -407,8 +338,6 @@ mod tests {
 
         assert_eq!(before, root.join("real/a.typ"));
         assert_eq!(before, super::resolved(&path));
-        // Nothing to climb to: the lexical path is the only answer, as it is
-        // for `canonical`.
         assert_eq!(
             super::resolved("no/such/dir/a.typ"),
             Path::new("no/such/dir/a.typ")

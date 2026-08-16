@@ -1,21 +1,14 @@
-//! Plumbing shared by the destinations baudelaire pushes to: [`crate::announce`]
-//! (metadata records) and [`crate::deploy`] (files). Both confirm mutating
-//! actions, honor `--dry-run`/`--yes`, and resolve a secret the same way, so
-//! that lives here once behind a terminal-agnostic [`Interaction`] seam.
+//! Plumbing shared by the destinations baudelaire pushes to: the HTTP agent,
+//! consent for a mutating action, and secret resolution, all behind a
+//! terminal-agnostic [`Interaction`] seam.
 
 use ureq::tls::{TlsConfig, TlsProvider};
 
 use crate::error::{RemoteError, Result, Unattended};
 use crate::ui::Ui;
 
-/// Whether a 4xx/5xx is a failure or an answer.
-///
-/// ureq surfaces a non-2xx as a transport error by default, which is right for
-/// a caller with nothing to say about the body and wrong for one whose whole
-/// job is to read it. Spelled as a choice at each call rather than left to the
-/// default, because the default is the surprising one: S3's agent took it, so
-/// the branch that reads the bucket's own `<Error><Code>` body was unreachable
-/// and every refused request reported a bare status instead of the reason.
+/// Whether a 4xx/5xx is a failure or an answer, spelled at every call rather
+/// than left to ureq's default, which is [`Fatal`](Status::Fatal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     /// A non-2xx is the answer, delivered as an ordinary response.
@@ -26,21 +19,11 @@ pub enum Status {
 
 /// The one `ureq::Agent` constructor: one TLS policy, one deadline, one user
 /// agent naming the tool and what it is doing.
-///
-/// It was three builders with three policies, and the drift went the wrong way
-/// round: the link checker, which only reads other people's sites, had a
-/// deadline, while deploy and announce, which push credentials and mutate
-/// remote state, had none at all. A PUT to a black-holed endpoint blocked the
-/// process for ever with nothing to cancel it.
 pub struct Http;
 
 impl Http {
-    /// Per-request ceiling. Generous enough for a slow host, short enough that
-    /// one black hole does not hold up the run.
-    ///
-    /// Public because it is also what `links { external { timeout } }` defaults
-    /// to: the configurable deadline and the fixed one are the same number, and
-    /// stating it twice is how they would come to disagree.
+    /// Per-request ceiling, which `links { external { timeout } }` also
+    /// defaults to.
     pub const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
     /// An agent for the work `doing` describes, which is what an administrator
@@ -49,9 +32,8 @@ impl Http {
         Self::within(doing, status, Self::TIMEOUT)
     }
 
-    /// The same agent on a caller-chosen deadline, for the one caller a site can
-    /// set one for. Everything else takes [`Http::TIMEOUT`]: pushing credentials
-    /// to a black hole is not a wait anyone should be able to lengthen.
+    /// The same agent on a caller-chosen deadline, for the one caller a site
+    /// can set one for.
     pub fn within(doing: &str, status: Status, timeout: std::time::Duration) -> ureq::Agent {
         ureq::Agent::config_builder()
             .http_status_as_error(status == Status::Fatal)
@@ -64,13 +46,9 @@ impl Http {
 
     /// The TLS configuration every agent must use.
     ///
-    /// ureq 3 defaults its provider to rustls, but we compile it with only the
-    /// `native-tls` backend (so the musl release can statically link a vendored
-    /// OpenSSL). Left at the default, any `https://` request panics at connect
-    /// time with "provider is Rustls but feature is not enabled". Pinning the
-    /// provider to native-tls is what makes HTTPS actually work; verification
-    /// stays on (ureq's default), so this only selects the backend, it does not
-    /// weaken trust.
+    /// The provider is pinned because ureq defaults to rustls and this crate
+    /// compiles only its `native-tls` backend, so the default panics at connect
+    /// time; verification is untouched.
     fn tls() -> TlsConfig {
         TlsConfig::builder()
             .provider(TlsProvider::NativeTls)
@@ -78,11 +56,9 @@ impl Http {
     }
 }
 
-/// What asking permission for a destructive action came back with.
-///
-/// [`Unattended`](Consent::Unattended) is separate from a plain refusal because
-/// the two want different treatment and one typed error cannot serve both: a
-/// refusal is the user's answer, an unattended run is the absence of one.
+/// What asking permission for a destructive action came back with; a refusal is
+/// the user's answer, and [`Unattended`](Consent::Unattended) the absence of
+/// one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Consent {
     Granted,
@@ -91,15 +67,10 @@ pub enum Consent {
     Unattended,
 }
 
-/// How a run talks to the user: confirmations and interactive secret entry. The
-/// remote layers depend only on this, never on the terminal, so the CLI backs it
-/// with the shared prompt widgets and tests pass a headless stub.
+/// How a run talks to the user: confirmations and interactive secret entry.
 pub trait Interaction {
-    /// Whether this seam can actually put a question to someone.
-    ///
-    /// `false` means [`confirm`](Interaction::confirm) would answer on the
-    /// user's behalf rather than ask, so a caller needing real consent has to
-    /// fail instead of accepting an answer it invented.
+    /// Whether this seam can actually put a question to someone; `false` means
+    /// [`confirm`](Interaction::confirm) would answer on the user's behalf.
     fn interactive(&self) -> bool;
 
     /// Confirm a mutating action; `Ok(false)` cancels it. Called only when
@@ -114,10 +85,8 @@ pub trait Interaction {
     /// every build directory`) may go ahead: `yes` grants it outright, a
     /// terminal is asked, and anything else is [`Consent::Unattended`].
     ///
-    /// THE consent policy, so nothing re-derives it. Distinguishing the third
-    /// case is the point: the prompt answers with its default off a terminal,
-    /// and that default is "no", so a CI run that forgot `--yes` used to skip
-    /// every deploy backend and exit 0 having published nothing.
+    /// `action` is the phrase alone: the question mark belongs to the prompt,
+    /// so the same phrase reads correctly in a diagnostic.
     fn consent(&self, action: &str, yes: bool) -> Result<Consent> {
         if yes {
             return Ok(Consent::Granted);
@@ -125,8 +94,6 @@ pub trait Interaction {
         if !self.interactive() {
             return Ok(Consent::Unattended);
         }
-        // The `?` is the prompt's, added here: what callers pass is the action
-        // itself, so it reads correctly in a diagnostic too.
         Ok(if self.confirm(&format!("{action}?"))? {
             Consent::Granted
         } else {
@@ -135,9 +102,7 @@ pub trait Interaction {
     }
 }
 
-/// Cross-cutting options for a push, backend-neutral. A backend reads `dry_run`
-/// to preview without writing and resolves its own secret through [`Options::secret`];
-/// confirmation runs generically before a backend does.
+/// Cross-cutting options for a push, backend-neutral.
 pub struct Options<'a> {
     /// Report what would change without writing to any destination.
     pub dry_run: bool,
@@ -146,21 +111,19 @@ pub struct Options<'a> {
     /// A secret supplied on the command line, preferred over the environment
     /// variable and the interactive prompt.
     pub secret: Option<String>,
-    /// The user-interaction backend (terminal in the CLI, a stub in tests).
     pub interaction: &'a dyn Interaction,
 }
 
 impl Options<'_> {
     /// Resolve a secret: the CLI value (or stdin when it is the conventional
-    /// `-`), else the `env` variable, else an interactive prompt labeled `label`.
-    /// The one place credential acquisition lives, shared by every backend.
+    /// `-`), else the `env` variable, else an interactive prompt labeled
+    /// `label`. An empty value from any source is no secret, never an empty
+    /// password.
     pub fn secret(&self, env: &str, label: &str) -> Result<String> {
         if let Some(secret) = &self.secret {
             if secret != "-" {
                 return Ok(secret.clone());
             }
-            // A closed or blank stdin is "no secret", not an empty password:
-            // matches the env and prompt branches, which both reject empty.
             let line = Self::stdin_line()?;
             if line.is_empty() {
                 return Err(Self::missing(label));
@@ -177,9 +140,8 @@ impl Options<'_> {
             .ok_or_else(|| Self::missing(label))
     }
 
-    /// Consent to a mutating `action`, resolved by [`Interaction::consent`].
-    /// An unattended run is an error rather than a skip: a publish nobody
-    /// authorized must not report success.
+    /// Consent to a mutating `action`, resolved by [`Interaction::consent`], an
+    /// unattended run being an error rather than a skip.
     pub fn confirm(&self, action: &str) -> Result<bool> {
         match self.interaction.consent(action, self.yes)? {
             Consent::Granted => Ok(true),
@@ -191,7 +153,6 @@ impl Options<'_> {
         }
     }
 
-    /// The "no secret could be found" error for `label`.
     fn missing(label: &str) -> crate::error::BaudelaireErrorKind {
         RemoteError::MissingSecret {
             label: label.to_owned(),
@@ -199,9 +160,8 @@ impl Options<'_> {
         .into()
     }
 
-    /// Read one line from stdin as a secret: the conventional `-` value for a
-    /// secret flag, for piping without exposing it in argv. The trailing newline
-    /// is stripped; the rest is taken verbatim.
+    /// Read one line from stdin as a secret, stripping the trailing newline and
+    /// taking the rest verbatim.
     fn stdin_line() -> Result<String> {
         use std::io::BufRead;
         let mut line = String::new();
@@ -212,15 +172,12 @@ impl Options<'_> {
 
 /// One publishing destination for a payload of type `P` (the built files for a
 /// deploy, the publishable documents for an announce).
-///
-/// Generic over the payload because `announce` and `deploy` had a trait, a
-/// registry and a run loop each, identical but for what they carried.
 pub trait Backend<P> {
     /// Stable, human-facing name, shown in progress output.
     fn name(&self) -> &'static str;
 
-    /// Publish `payload` under `opts`, reporting progress. Honors
-    /// `opts.dry_run` by computing and reporting the plan without writing.
+    /// Publish `payload` under `opts`, reporting the plan without writing under
+    /// `opts.dry_run`.
     fn run(&self, payload: &P, opts: &Options, ui: &Ui) -> Result<()>;
 }
 
@@ -237,7 +194,6 @@ pub fn publish<P>(
 ) -> Result<()> {
     for backend in backends {
         ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
-        // Consent before any network mutation, unless previewing.
         if !opts.dry_run && !opts.confirm(&format!("{verb} to {}", backend.name()))? {
             ui.detail(format_args!("skipped {}", backend.name()));
             continue;
@@ -252,8 +208,6 @@ mod tests {
     use super::*;
     use crate::error::{BaudelaireErrorKind, RemoteError};
 
-    /// The consent policy is shared, so `clean` gets the same three answers to
-    /// the same question, and the tests below exercise it through `Options`.
     #[test]
     fn consent_separates_a_refusal_from_nobody_being_there() {
         let attended = Stub {
@@ -273,8 +227,7 @@ mod tests {
     }
 
     /// A headless [`Interaction`]: a fixed confirmation answer and an optional
-    /// prompt secret. `interactive` stands in for having a terminal, so the
-    /// refusal path can be exercised without one.
+    /// prompt secret.
     struct Stub {
         confirm: bool,
         secret: Option<String>,
@@ -360,9 +313,6 @@ mod tests {
         assert!(opts.confirm("deploy to s3").unwrap());
     }
 
-    /// The CI shape: no terminal, no `--yes`. This used to take the prompt's
-    /// default, which is `no`, so every backend was skipped and the run exited
-    /// 0 having published nothing.
     #[test]
     fn confirm_refuses_rather_than_assuming_an_answer_off_a_terminal() {
         let stub = Stub {
@@ -376,8 +326,6 @@ mod tests {
         ));
     }
 
-    /// ...and `--yes` is still the way through, terminal or not: the refusal
-    /// must not have made non-interactive use impossible, only explicit.
     #[test]
     fn yes_still_carries_a_non_interactive_run() {
         let stub = Stub {

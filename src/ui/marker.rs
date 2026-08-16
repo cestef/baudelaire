@@ -1,16 +1,10 @@
 //! The glyphs the CLI prints in front of a line, and the colour each carries.
-//!
-//! One table, so a marker means the same thing wherever it appears and no
-//! caller hand-rolls a glyph or a colour of its own. Every variant renders
-//! already styled: the `anstream` writer behind [`crate::ui::Ui`] strips the
-//! colour on pipes and under `NO_COLOR`.
 
 use std::fmt::Display;
 
 use owo_colors::OwoColorize;
 
-/// A status glyph. Rendering is [`Display`], so a marker drops into any format
-/// string without allocating a styled `String` first.
+/// A status glyph, rendered already styled.
 #[derive(Debug, Clone, Copy)]
 pub enum Marker {
     /// Heads a stage: `◆ standard.site - 24 documents`.
@@ -22,20 +16,18 @@ pub enum Marker {
     /// A row of a hanging tree, and the rounded connector its last row uses.
     Branch,
     End,
-    /// Points at a value the reader will want (a URL, the watch list).
+    /// Points at a value the reader will want, such as a URL.
     Pointer,
     /// Work in progress, on the transient status line.
     Working,
-    /// An item deliberately not processed.
     Skipped,
     /// A file changed on disk, in the dev-server event log.
     Changed,
-    /// A page that was compiled, served from the cache, or failed.
     Built,
     Cached,
     Failed,
-    /// A file sent to, or removed from, a deploy destination. Uncoloured: they
-    /// come one per file under a result line that is already coloured.
+    /// A file sent to, or removed from, a deploy destination; uncoloured
+    /// because it hangs under a result line that already carries the colour.
     Uploaded,
     Removed,
 }
@@ -61,8 +53,7 @@ impl Display for Marker {
     }
 }
 
-/// Per-page build status for progress reporting: its marker plus the word that
-/// follows the path.
+/// Per-page build status, as the progress output reports it.
 #[derive(Debug, Clone, Copy)]
 pub enum PageStatus {
     Built,
@@ -71,7 +62,6 @@ pub enum PageStatus {
 }
 
 impl PageStatus {
-    /// The glyph this status prints with.
     pub(super) fn marker(self) -> Marker {
         match self {
             Self::Built => Marker::Built,

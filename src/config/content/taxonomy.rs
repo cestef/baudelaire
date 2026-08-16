@@ -11,80 +11,48 @@ use crate::content::Credit;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
 
-/// Taxonomy definition.
 #[derive(Debug, Clone, Hash)]
 pub struct TaxonomyConfig {
     /// Frontmatter key to read terms from.
     pub key: String,
     /// What a page claims about the entities it names here: `authors` credits
-    /// them with writing it, `translators` with translating it.
-    ///
-    /// Only meaningful with `entities`, and only read by the surfaces that can
-    /// spell the role. A taxonomy naming a registry without a credit is a
-    /// reference and claims nothing, which is what `part-of="series"` is.
+    /// them with writing it. Only meaningful with `entities`.
     pub credit: Option<Credit>,
     /// The `content { entities { } }` registry this taxonomy's terms are ids
-    /// in, if they are ids at all.
-    ///
-    /// A taxonomy naming one is a *reference*: `rust` under `tags` is a word,
-    /// while `zoe` under `authors` is somebody the site knows other things
-    /// about. `None` is the plain taxonomy every site already has.
+    /// in. `None` is a plain taxonomy, whose terms are words.
     pub entities: Option<String>,
     /// Generate a page per term, plus one listing every term appears on.
     pub listing: bool,
     /// Let a term that names an entity written as a *page* be described by that
     /// page, instead of generating a listing of its own.
-    ///
-    /// An author's archive is a listing with a body: a bio, and the posts under
-    /// it. Rather than emit a second page beside the profile and leave a site
-    /// with two URLs for one person, the profile page *is* the term page: it
-    /// keeps its own permalink, the term index links to it, and it is handed
-    /// the term's members as `page.members`.
     pub describe: bool,
     /// Template for the generated taxonomy index + term pages.
     pub template: Option<String>,
-    /// Members per term page. `None` puts every member on one page, which is
-    /// what a term listing used to do unconditionally, beside a collection
-    /// index that paginated the same pages.
+    /// Members per term page. `None` puts every member on one page.
     pub paginate: Option<usize>,
     /// Path segment before a term page's number (`/tags/rust/page/2/`); empty
-    /// drops it. Spelled like a collection's, since it is the same thing.
+    /// drops it.
     pub prefix: String,
     /// What a term's members are ordered by.
-    ///
-    /// Spelled like a collection's, and read by the same comparator: a term page
-    /// used to sort by title unconditionally, so the same posts came in two
-    /// orders on one site depending on which listing a reader arrived at.
     pub sort: SortKey,
-    /// Reverse that order, which is what a dated term listing wants: newest
-    /// first, as a blog index has.
+    /// Reverse that order.
     pub reverse: bool,
 }
 
-/// A taxonomy reads the frontmatter key that shares its id unless it names
-/// another, so its defaults depend on that id: the conversion *is* the
-/// `Default` impl it cannot have.
+/// A taxonomy's defaults depend on its id, since it reads the frontmatter key
+/// of that name unless it names another: the conversion *is* the `Default` impl
+/// it cannot have.
 impl From<String> for TaxonomyConfig {
     fn from(id: String) -> Self {
         Self {
             key: id,
-            // a taxonomy is a set of words until a site says its terms name
-            // something the build knows more about
             entities: None,
             credit: None,
-            // opt-in: term pages and their index are extra output
             listing: false,
-            // opt-in, and only meaningful with `entities`: a term is described
-            // by a page only where a page declared it in the first place
             describe: false,
             template: None,
-            // un-paginated until asked, like a collection with no `paginate`
             paginate: None,
             prefix: "page".into(),
-            // Title, and not the collection default: a term spans collections,
-            // so `order` (a number each collection assigns for itself) orders
-            // one term's members against numbers that mean different things.
-            // This is also the order term listings have always come in.
             sort: SortKey::Title,
             reverse: false,
         }
@@ -102,13 +70,8 @@ impl TaxonomyConfig {
         Ok((id, taxonomy))
     }
 
-    /// Refuse a key that only means something beside another.
-    ///
-    /// `credit` says what a page claims about entities, so without `entities`
-    /// there is nothing to claim it about; `describe` hands a term to the page
-    /// that declared it, which takes both a registry to declare it in and the
-    /// `listing` that puts a term index in front of it. Each parses, and each
-    /// would otherwise configure nothing at all.
+    /// Refuse a key that only means something beside another, and would
+    /// otherwise parse and configure nothing.
     fn check(&self, id: &str, node: &KdlNode, text: &str) -> Result<()> {
         let entities = self.entities.is_some();
         let required = [
@@ -201,8 +164,6 @@ impl Attributed for TaxonomyConfig {
                 if n < 1 {
                     return Err(ConfigError::paginate_too_small(t, n, s).into());
                 }
-                // `n` is proved positive above; a page size wider than `usize`
-                // (only reachable on a 32-bit target) still means "one page".
                 c.paginate = Some(usize::try_from(n).unwrap_or(usize::MAX));
                 Ok(())
             },

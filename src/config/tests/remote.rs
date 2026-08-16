@@ -23,7 +23,6 @@ fn announce_standard_did_and_verify_toggles() {
     );
     let standard = cfg.announce.standard.expect("configured");
     assert_eq!(standard.did.as_deref(), Some("did:plc:abc"));
-    // toggled off explicitly; the untouched sibling keeps its default
     assert!(!standard.verify.links);
     assert!(standard.verify.wellknown);
 }
@@ -44,9 +43,8 @@ fn deploy_s3_block_enables_backend_with_defaults() {
     assert!(s3.delete, "delete defaults on");
 }
 
-/// An unstated region follows the target. A custom `endpoint` is not AWS, and
-/// signing such a request as `us-east-1` is a 403 whose body never mentions the
-/// region; AWS itself keeps its own default.
+/// A custom `endpoint` is not AWS, and signing such a request as `us-east-1` is
+/// a 403 whose body never mentions the region.
 #[test]
 fn an_unstated_s3_region_follows_the_endpoint() {
     let r2 =

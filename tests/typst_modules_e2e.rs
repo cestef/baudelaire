@@ -1,20 +1,18 @@
 //! The `@baudelaire/*` virtual Typst modules: a template imports one and the
-//! compiler resolves it from memory, with nothing on disk and no package
-//! registry involved.
+//! compiler resolves it from memory, with nothing on disk.
 
 mod common;
 
 use common::Site;
 
-/// A failed build's diagnostics as one string. The top-level error only says
-/// "typst compilation failed"; the message that matters is on the nested
-/// per-source diagnostic.
+/// A failed build's diagnostics as one string, the message that matters being
+/// on the nested per-source diagnostic.
 fn diagnostics(site: &Site) -> String {
     format!("{:?}", site.build_error())
 }
 
-/// A failed build's top-level message. Typed baudelaire errors carry their text
-/// in `Display`; only the typst-compile variant hides it in a nested field.
+/// A failed build's top-level message; only the typst-compile variant hides
+/// its text in a nested field.
 fn message(site: &Site) -> String {
     site.build_error().to_string()
 }
@@ -34,9 +32,8 @@ fn site(template: &str) -> Site {
     site
 }
 
-/// The headline case: named arguments become attributes, positional ones
-/// children, and a hyphenated name needs no quoting (an `attrs` dict is always
-/// a mix of bare and quoted keys otherwise).
+/// Named arguments become attributes, positional ones children, and a
+/// hyphenated name needs no quoting.
 #[test]
 fn named_arguments_become_attributes() {
     let site = site(
@@ -55,8 +52,7 @@ fn named_arguments_become_attributes() {
 }
 
 /// Booleans and absent values resolve the way HTML wants: `true` writes a bare
-/// attribute, `false` and `none` drop it, and anything else is coerced, so
-/// neither a conditional attribute nor a number needs ceremony.
+/// attribute, `false` and `none` drop it, and anything else is coerced.
 #[test]
 fn values_coerce_and_absent_attributes_disappear() {
     let site = site(
@@ -121,9 +117,7 @@ fn site_identity_is_bound() {
 }
 
 /// `@baudelaire/pages` hands a template the site's own catalogue, in the same
-/// row shape a generated listing's `entries` carry, so a theme renders a home
-/// grid and a collection index with one function. Generated listings are not in
-/// it: a catalogue of catalogues is noise.
+/// row shape a generated listing's `entries` carry, listings excluded.
 #[test]
 fn the_page_catalogue_is_bound_per_language() {
     let site = Site::with(
@@ -157,27 +151,21 @@ fn the_page_catalogue_is_bound_per_language() {
         html.contains("_root/Home//-/0/-/gone"),
         "root page row: {html}"
     );
-    // `description` is resolved from the `summary` alias, so a row shows the
-    // preview whichever spelling the page used. `summary` is a declared key, so
-    // it is *not* also in `extra`: a template reading `extra.summary` would see
-    // only its own spelling, which is why the resolved field exists.
+    // `description` resolves from the `summary` alias, and a declared key is
+    // *not* also in `extra`.
     assert!(
         html.contains("posts/Hello/2026-07-14/cover.png/1/A summary./gone"),
         "post row carries date, extra, taxonomies and the resolved description: {html}"
     );
-    // The taxonomy index at `/tags/` is a generated listing, so it is absent.
     assert!(
         !html.contains("/Tags/"),
         "generated listings excluded: {html}"
     );
 }
 
-/// A *content* page may read the catalogue too, and it is a harder case than a
-/// template: discovery evaluates a page whole to reach its `frontmatter`, so the
-/// import lands before the build has written the table it is asking for. The
-/// read is answered empty and re-read once the real table is on disk, so a first
-/// build in a fresh checkout counts every page rather than failing on a missing
-/// file or reporting zero.
+/// Discovery evaluates a page whole to reach its `frontmatter`, so a content
+/// page's import lands before the build has written the table it asks for; the
+/// read is answered empty and re-read once the real table is on disk.
 #[test]
 fn a_content_page_reads_the_catalogue_on_a_first_build() {
     let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
@@ -198,8 +186,8 @@ fn a_content_page_reads_the_catalogue_on_a_first_build() {
     assert!(html.contains("Pages: 3"), "{html}");
 }
 
-/// ...and the count moves with the site: adding a page invalidates the pages
-/// that read the catalogue, in the build that added it.
+/// ...and adding a page invalidates the pages that read the catalogue, in the
+/// build that added it.
 #[test]
 fn the_catalogue_a_content_page_reads_tracks_the_page_set() {
     let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
@@ -224,10 +212,8 @@ fn the_catalogue_a_content_page_reads_tracks_the_page_set() {
 /// ...and a page whose *frontmatter* reads the catalogue tracks it too.
 ///
 /// The table is read during discovery, before the build has written it, so a
-/// cold build legitimately sees the empty one. The discovery cache dropped that
-/// read instead of recording it (there was no file to hash), so the entry
-/// depended on nothing: the frontmatter it derived on the first build was
-/// carried forward for ever, and the page's own title said zero.
+/// cold build legitimately sees the empty one and the discovery cache has to
+/// record a read of a file that does not exist yet.
 #[test]
 fn frontmatter_derived_from_the_catalogue_re_evaluates_once_it_exists() {
     let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
@@ -242,31 +228,26 @@ fn frontmatter_derived_from_the_catalogue_re_evaluates_once_it_exists() {
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nx\n");
     site.stats();
 
-    // Nothing was written when discovery ran, so the empty table is the honest
-    // answer for this build.
+    // Nothing was written when discovery ran, so the empty table is honest.
     assert!(
         site.output("index.html").contains("Home: 0"),
         "{}",
         site.output("index.html")
     );
 
-    // The table now exists, and the page that read it must see it.
     site.stats();
     let html = site.output("index.html");
     assert!(html.contains("Home: 2"), "{html}");
     assert!(!html.contains("Home: 0"), "{html}");
 }
 
-/// A misspelled module suggests the real one rather than sending the reader off
-/// to install a package that was never meant to exist.
 #[test]
 fn an_unknown_module_suggests_the_nearest() {
     let site = site("import \"@baudelaire/htlm:0.1.0\": h\n[x]");
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     assert!(err.contains("did you mean `html`?"), "{err}");
-    // `markdown` is served only by a binary that can lower markdown, so the
-    // list it appears in is the one the running flavor actually serves.
+    // The list names what the running flavor actually serves.
     let valid = if cfg!(feature = "markdown") {
         "valid modules: `html`, `markdown`, `pages`, `sections`, `site`"
     } else {
@@ -276,21 +257,18 @@ fn an_unknown_module_suggests_the_nearest() {
 }
 
 /// A version the registry does not serve fails at the import instead of
-/// reaching for the network, and answers with the line to write rather than
-/// leaving the reader to derive it.
+/// reaching for the network, and answers with the line to write.
 #[test]
 fn an_unserved_version_is_rejected() {
     let site = site("import \"@baudelaire/html:9.9.9\": h\n[x]");
     let err = diagnostics(&site);
     assert!(err.contains("@baudelaire/html:0.1.0"), "{err}");
-    // The natural wrong guess is baudelaire's own version, so the message has
-    // to say the two are unrelated.
+    // The natural wrong guess is baudelaire's own version.
     assert!(err.contains("not baudelaire's own version"), "{err}");
 }
 
 /// A page importing a virtual module still caches: the module resolves to no
-/// file, and a dependency that cannot be hashed must not be mistaken for one
-/// that changed.
+/// file, and a dependency that cannot be hashed must not read as one that did.
 #[test]
 fn a_page_importing_a_module_still_caches() {
     let site = site("import \"@baudelaire/html:0.1.0\": h\nh(\"p\")[x]");
@@ -305,8 +283,8 @@ fn icons(icon: &str, call: &str) -> Site {
     site
 }
 
-/// The headline case: the file's own nodes land in the page as real DOM, which
-/// is what lets `stroke=\"currentColor\"` resolve and a theme toggle recolour it.
+/// The file's own nodes land in the page as real DOM, which is what lets
+/// `stroke=\"currentColor\"` resolve and a theme toggle recolour it.
 #[test]
 fn an_svg_file_is_inlined_as_dom() {
     let site = icons(
@@ -339,7 +317,6 @@ fn caller_attributes_override_the_files() {
     let html = site.output("index.html");
     assert!(html.contains(r#"width="16" height="16""#), "{html}");
     assert!(!html.contains(r#"width="24""#), "{html}");
-    // Untouched attributes still come through as authored.
     assert!(html.contains(r#"fill="none""#), "{html}");
 }
 
@@ -364,9 +341,8 @@ fn camel_case_svg_tags_inline() {
     );
 }
 
-/// The SVG 1.1 tags typst's HTML writer refuses, each by name. These are real
-/// elements a font-bearing SVG can carry, so the failure has to say which one
-/// and why rather than silently dropping it.
+/// The SVG 1.1 tags typst's HTML writer refuses, each named by the failure
+/// rather than silently dropped.
 #[test]
 fn reserved_svg_tags_fail_by_name() {
     for tag in [
@@ -389,9 +365,8 @@ fn reserved_svg_tags_fail_by_name() {
     }
 }
 
-/// A hyphenated tag that is not reserved but is still unwriteable: to typst a
-/// hyphen means a custom element, and a custom element name may not carry
-/// uppercase. Valid XML, valid SVG, no legal HTML spelling.
+/// To typst a hyphen means a custom element, and a custom element name may not
+/// carry uppercase: valid XML, valid SVG, no legal HTML spelling.
 #[test]
 fn an_unwriteable_hyphenated_tag_fails_by_name() {
     let site = icons(
@@ -403,8 +378,8 @@ fn an_unwriteable_hyphenated_tag_fails_by_name() {
     assert!(err.contains("uppercase"), "should explain: {err}");
 }
 
-/// A tag that is not even valid XML is the parser's to reject, not the tag
-/// check's, so the message points at the syntax rather than at HTML rules.
+/// A tag that is not even valid XML is the parser's to reject, so the message
+/// points at the syntax rather than at HTML rules.
 #[test]
 fn an_invalid_xml_name_is_caught_while_parsing() {
     let site = icons(
@@ -464,8 +439,7 @@ fn a_missing_icon_names_itself() {
 }
 
 /// typst never reads an inlined icon, so the engine records it as a page
-/// dependency itself. Without that, editing an icon would leave every page
-/// showing it a cache hit on the old drawing.
+/// dependency itself.
 #[test]
 fn editing_an_icon_invalidates_the_page() {
     let site = icons(

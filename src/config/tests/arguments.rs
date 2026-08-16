@@ -1,20 +1,11 @@
 //! What a config node's own line may carry: the arguments a key reads, and the
 //! ones nothing reads.
-//!
-//! Every refusal here used to be silent. A node-keyed rule dispatched on the
-//! name alone, so a value or a `key=value` written beside it parsed green and
-//! configured nothing -- or, where the section was turned on by its own
-//! presence, the exact opposite of what it said.
 
 use super::{err, parse};
 
 /// A section with no switch of its own is configured from its block, so a value
-/// on its line is read by nobody. Each of these parsed, and configured nothing.
-///
-/// A section that *does* have a switch reads one boolean there and nothing else
-/// (`switches.rs`), which is why `lint`, `generate { cards }` and
-/// `security { csp }` were taken off this list: they used to be refused here,
-/// having no way to say "off" at all.
+/// on its line is read by nobody; one that has a switch reads a boolean there
+/// instead (`switches.rs`).
 #[test]
 fn err_a_value_on_a_section_line_is_refused() {
     for (config, node) in [
@@ -42,15 +33,12 @@ fn err_a_value_on_a_section_line_is_refused() {
     }
 }
 
-/// A scalar key reads one value, and the second was dropped in silence.
 #[test]
 fn err_a_second_value_on_a_scalar_key_is_refused() {
     for (config, node) in [
         ("serve {\n  port 1 2\n}", "port"),
         ("site \"a\" \"b\"", "site"),
         ("prune #false #true", "prune"),
-        // A key naming one of a fixed set is a scalar like any other. It was
-        // exempt only because three multi-value keys were declared as one.
         ("links {\n  style \"clean\" \"flat\"\n}", "style"),
         (
             "content {\n  markdown {\n    html \"drop\" \"refuse\"\n  }\n}",
@@ -74,9 +62,7 @@ fn err_a_second_value_on_a_scalar_key_is_refused() {
 }
 
 /// A node-keyed scope spells its keys as child nodes, so a `key=value` beside
-/// one is read by nobody -- and the key is usually a real one, written in the
-/// single spelling its scope does not take. The help writes the line the author
-/// meant, values and all.
+/// one is read by nobody, and the help writes the line the author meant.
 #[test]
 fn err_a_key_value_on_a_node_keyed_line_shows_the_block_spelling() {
     for (config, message, example) in [
@@ -100,8 +86,6 @@ fn err_a_key_value_on_a_node_keyed_line_shows_the_block_spelling() {
             "unexpected attribute `port` on `serve`",
             "serve { port 8080 }",
         ),
-        // The value is quoted back as KDL, not printed: written bare, a value
-        // with a space is a line the help offers and the parser refuses.
         (
             "content {\n  drafts suffix=\".x y\"\n}",
             "unexpected attribute `suffix` on `drafts`",
@@ -116,11 +100,6 @@ fn err_a_key_value_on_a_node_keyed_line_shows_the_block_spelling() {
 
 /// A list key has no block to move a `key=value` into, so it is refused as the
 /// value it is not, rather than helped towards a line that does not parse.
-///
-/// These were exempt from the check on the grounds that their reader refuses a
-/// pair itself. Only `toggled` does: `words`, `bounds` and `mapped` filtered
-/// named entries out, so the pair configured nothing and reported nothing --
-/// exactly what this layer exists to prevent.
 #[test]
 fn err_a_key_value_on_a_list_key_is_refused() {
     for (config, node) in [
@@ -150,8 +129,7 @@ fn err_a_key_value_on_a_list_key_is_refused() {
     }
 }
 
-/// `typst { features }` is an open set with a reader of its own, and it dropped
-/// a pair as quietly as the rest.
+/// `typst { features }` is an open set with a reader of its own.
 #[test]
 fn err_a_key_value_among_typst_features_is_refused() {
     let rendered = err("typst {\n  features \"math\" pdf=#true\n}");
@@ -160,7 +138,7 @@ fn err_a_key_value_among_typst_features_is_refused() {
 }
 
 /// The one list whose reader owns its whole line keeps its own message, which
-/// names the grammar it does take rather than the one it does not.
+/// names the grammar it does take.
 #[test]
 fn a_toggled_list_speaks_for_itself() {
     let rendered =
@@ -169,9 +147,8 @@ fn a_toggled_list_speaks_for_itself() {
     assert!(rendered.contains("footnotes=#true"), "{rendered}");
 }
 
-/// Every shipped theme turns highlighting on and `highlight { enabled }` is not
-/// a key, so until the flag was read there was no spelling at all that turned it
-/// back off.
+/// `highlight { enabled }` is not a key, so the flag on its line is the only
+/// spelling that turns highlighting back off.
 #[test]
 fn highlight_reads_the_flag_that_turns_it_off() {
     assert!(!parse("").html.highlight.enabled, "off by default");
@@ -187,9 +164,6 @@ fn highlight_reads_the_flag_that_turns_it_off() {
     );
 }
 
-/// The scope table the key used to take is refused rather than ignored: a site
-/// still carrying one names scopes where the block now takes keys, and the key
-/// table is what says so.
 #[test]
 fn err_a_class_for_no_token_is_refused_at_the_word() {
     let rendered = err("html {\n  highlight {\n    classes {\n      kewyord \"kw\"\n    }\n  }\n}");
@@ -205,8 +179,7 @@ fn err_the_retired_scope_table_says_so() {
 }
 
 /// The rule is arity, not prohibition: every shape a key legitimately takes has
-/// to keep parsing, including the three that read a whole line of values and the
-/// two scopes whose entries belong to somebody else's reader.
+/// to keep parsing.
 #[test]
 fn the_shapes_a_key_does_take_still_parse() {
     let cfg = parse("generate {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}");
@@ -252,10 +225,8 @@ fn the_shapes_a_key_does_take_still_parse() {
     );
 }
 
-/// A list key written with no values at all. The rule is one, and it is on
-/// `NodeExt`: a list that *replaces* what the key holds reads a bare node as
-/// the empty list, which is the only spelling a profile has for undoing an
-/// inherited one.
+/// A list that *replaces* what the key holds reads a bare node as the empty
+/// list, which is the only spelling a profile has for undoing an inherited one.
 #[test]
 fn a_bare_list_key_is_the_empty_list_where_a_list_replaces() {
     assert!(parse("serve {\n  exclude\n}").serve.exclude.is_empty());
@@ -278,9 +249,8 @@ fn a_bare_list_key_is_the_empty_list_where_a_list_replaces() {
     );
 }
 
-/// The other half of that rule: a list written in the `-name` grammar amends
-/// the key's defaults, so one naming nothing amends nothing, and a line that
-/// configures nothing is the silent no-op this layer exists to prevent.
+/// A list written in the `-name` grammar amends the key's defaults instead, so
+/// one naming nothing would amend nothing.
 #[test]
 fn err_a_bare_list_key_is_refused_where_a_list_amends() {
     for config in [

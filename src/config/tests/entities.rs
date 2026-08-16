@@ -5,7 +5,6 @@ use crate::config::{Config, RegistryConfig, SourceConfig, Unknown};
 use crate::error::BaudelaireErrorKind;
 use miette::Diagnostic;
 
-/// The one registry a config declares, by id.
 fn registry<'a>(config: &'a Config, id: &str) -> &'a RegistryConfig {
     config
         .content
@@ -27,8 +26,7 @@ fn code(text: &str) -> String {
         .unwrap_or_default()
 }
 
-/// A shape is a field set and its slots, and naming one is the whole of what a
-/// registry has to write for the common case.
+/// A shape is a field set and its slots.
 #[test]
 fn a_shape_seeds_the_fields_and_the_slots() {
     let config = parse("content {\n  entities {\n    people { shape \"person\" }\n  }\n}");
@@ -40,8 +38,6 @@ fn a_shape_seeds_the_fields_and_the_slots() {
     assert_eq!(people.slots.image.as_deref(), Some("avatar"));
 }
 
-/// A slot the registry spells itself wins, and its siblings still come from the
-/// shape: the fill-in-place policy every config section follows.
 #[test]
 fn a_declared_slot_overrides_the_shape_and_keeps_its_siblings() {
     let config = parse(
@@ -61,9 +57,6 @@ fn a_declared_slot_overrides_the_shape_and_keeps_its_siblings() {
     assert_eq!(people.slots.image.as_deref(), Some("avatar"));
 }
 
-/// Fields fill in place over the shape's, key by key: a shape *is* a field
-/// set, so replacing the set wholesale would make naming both keys a
-/// contradiction.
 #[test]
 fn declared_fields_fill_over_the_shapes_own() {
     let config = parse(
@@ -101,9 +94,6 @@ fn declared_fields_fill_over_the_shapes_own() {
     );
 }
 
-/// Sources are read in the order they are written, and every kind is one of
-/// them: what makes "a roster fills what the pages left out" a matter of which
-/// line came first.
 #[test]
 fn sources_keep_the_order_they_were_written_in() {
     let config = parse(
@@ -131,8 +121,6 @@ fn sources_keep_the_order_they_were_written_in() {
     assert_eq!(names, ["pages", "data", "inline"]);
 }
 
-/// An inline entity is a free table, so a registry's own fields need no config
-/// key of their own and a list is written as a list.
 #[test]
 fn an_inline_entity_carries_whatever_fields_it_writes() {
     let config = parse(
@@ -157,14 +145,10 @@ fn an_inline_entity_carries_whatever_fields_it_writes() {
     assert_eq!(zoe.id, "zoe");
     let keys: Vec<&str> = zoe.fields.iter().map(|(key, _)| key.as_str()).collect();
     assert_eq!(keys, ["name", "alias"]);
-    // Every field is located, so a fault found while the registry is built can
-    // still underline the line that wrote it.
     let located: Vec<&str> = zoe.spans.iter().map(|(key, _)| key.as_str()).collect();
     assert_eq!(located, keys);
 }
 
-/// A registry with a source is a roster, and a name that is not in it is a
-/// typo. One with no source knows nobody, so every term is taken as written.
 #[test]
 fn the_unknown_policy_defaults_to_whether_there_is_a_roster() {
     let bare = parse("content {\n  entities {\n    people { shape \"person\" }\n  }\n}");
@@ -196,8 +180,8 @@ fn the_unknown_policy_defaults_to_whether_there_is_a_roster() {
     assert_eq!(registry(&asked, "people").unknown(), Unknown::Warn);
 }
 
-/// A slot pointing at a field nobody declares renders every entity without it,
-/// out of a green build. It is refused at the line that wrote it instead.
+/// A slot pointing at a field nobody declares would render every entity without
+/// it, so it is refused at the line that wrote it.
 #[test]
 fn a_slot_must_name_a_declared_field() {
     assert_eq!(
@@ -215,8 +199,6 @@ fn a_slot_must_name_a_declared_field() {
         ),
         "baudelaire::config::entity_slot"
     );
-    // ..but a registry that declares no fields constrains nothing, so its slots
-    // name whatever its sources happen to carry.
     let loose = parse(
         r#"
         content {

@@ -1,12 +1,6 @@
 //! The site-wide half of linting: reporting what the per-page DOM pass found,
-//! and weighing each page against its budgets.
-//!
-//! Both run over every page a build produced, cache hits included, for the same
-//! reason [`super::Links`] does: a gate that reports on the first build and
-//! stays quiet on the second is not a gate. What the pages recorded is replayed
-//! from their cached outputs; what this build emitted is read fresh, so
-//! shipping a fatter stylesheet fails the pages that load it without any of
-//! them having changed.
+//! and weighing each page against its budgets. Both run over every page a build
+//! produced, cache hits included, or a gate reports only on the first build.
 
 use crate::config::{BudgetConfig, Severity};
 use crate::error::{Flaw, Flaws, Overweight, Overweights, Result, Sources};
@@ -16,9 +10,7 @@ use crate::ui::{Bytes, Ui};
 use super::{CheckedPage, Compiled};
 
 /// The findings of the per-page lint pass, gathered into one report. Fatal
-/// under `lint { strict }`, otherwise the identical diagnostic as a warning:
-/// the same policy [`super::Links`] applies to a broken link, and for the same
-/// reason, that whether a finding stops a build belongs to the site.
+/// under `lint { strict }`, otherwise the identical diagnostic as a warning.
 pub(in crate::engine) struct Lints;
 
 impl Lints {
@@ -43,15 +35,10 @@ impl Lints {
         if flaws.is_empty() {
             return Ok(());
         }
-        // Split by the severity each finding's *rule* carries, so a site can
-        // keep `strict` and still let one rule warn. A finding whose rule names
-        // no severity takes `strict`, which is the whole of the old behaviour.
         let (fatal, warned): (Vec<_>, Vec<_>) = flaws
             .into_iter()
             .partition(|(severity, _)| *severity == Severity::Error);
         let unwrap = |v: Vec<(Severity, Flaw)>| v.into_iter().map(|(_, flaw)| flaw).collect();
-        // Warnings first: a build that is about to fail should still say
-        // everything it found, not only the half that failed it.
         let warned: Vec<Flaw> = unwrap(warned);
         if !warned.is_empty() {
             ui.warn(Flaws::warning(warned));
@@ -65,18 +52,11 @@ impl Lints {
 }
 
 /// Per-page weight budgets.
-///
-/// Always fatal, unlike a lint finding: a budget is a limit the author wrote
-/// down, and a limit that only warns is a number in a config file.
 pub(in crate::engine) struct Budgets;
 
 impl Budgets {
     pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
         let budget = &site.config.lint.budget;
-        // Nothing to weigh against, or nothing to weigh with. The second case
-        // is `check`, which processes no assets: it can see what a page loads
-        // but not how large any of it is, and a budget checked against zero
-        // bytes of stylesheet would pass everything and mean nothing.
         let (Some(emitted), true) = (site.emitted, Self::declared(budget)) else {
             return Ok(());
         };
@@ -98,8 +78,6 @@ impl Budgets {
     /// Whether the site set any budget at all.
     fn declared(budget: &BudgetConfig) -> bool {
         let BudgetConfig {
-            // Not a budget: it says what a budget *does*, and a site setting
-            // only this has still set none.
             strict: _,
             html,
             js,
@@ -111,13 +89,9 @@ impl Budgets {
     }
 }
 
-/// One page on the scales: what each class of its output weighs.
-///
-/// Inline bytes are held apart from loaded ones because they belong to two
-/// answers at once. A page's inline `<script>` counts against `js`, which is
-/// about how much JavaScript the visitor runs, *and* it is already inside the
-/// markup `html` measures. Adding both into `total` billed those bytes twice:
-/// a 1.5 kB page reported 2.5 kB and failed a 2 kB budget it was well inside.
+/// One page on the scales: what each class of its output weighs. Inline bytes
+/// are held apart from loaded ones because they count against their class *and*
+/// sit inside the markup `html` measures, so `total` must not bill them twice.
 struct Scale {
     /// The page's own markup, inline bodies included.
     html: u64,
@@ -136,8 +110,7 @@ struct Class {
 }
 
 impl Class {
-    /// Everything of this kind the visitor gets, wherever it came from: what
-    /// the class's own budget is about.
+    /// Everything of this kind the visitor gets, wherever it came from.
     fn shipped(&self) -> u64 {
         self.loaded + self.inline
     }
@@ -181,8 +154,7 @@ impl Scale {
         self.html + self.js.loaded + self.css.loaded + self.images
     }
 
-    /// Every budget this page breaks. The key is spelled exactly as it is in
-    /// the config, so a report names the line to edit.
+    /// Every budget this page breaks, keyed as the config spells it.
     fn against(&self, budget: &BudgetConfig, page: &str) -> Vec<Overweight> {
         [
             ("html", self.html, budget.html),
@@ -213,7 +185,6 @@ mod tests {
     use crate::config::Config;
     use crate::render::{Finding, Reference};
 
-    /// A page carrying one weight ledger and the given markup.
     fn page<'a>(html: &'a str, weight: &'a Weight, lints: &'a [Finding]) -> CheckedPage<'a> {
         CheckedPage {
             outbound: crate::render::Outbound::EMPTY,
@@ -243,7 +214,6 @@ mod tests {
         Config::parse(text).expect("should parse")
     }
 
-    /// A loaded script counts against `js`, and so does an inline one.
     #[test]
     fn a_page_is_weighed_by_what_it_loads_and_what_it_inlines() {
         let weight = Weight {
@@ -257,12 +227,9 @@ mod tests {
         let scale = Scale::of(&page("<p>hi</p>", &weight, &[]), &emitted());
         assert_eq!(scale.js.shipped(), 1000);
         assert_eq!(scale.html, 9);
-        // ...and the inline hundred is *not* added to the total a second time:
-        // those bytes are part of the nine-byte markup already counted.
         assert_eq!(scale.total(), 909);
     }
 
-    /// The report names the budget that broke, and only that one.
     #[test]
     fn only_the_budgets_a_page_breaks_are_reported() {
         let weight = Weight::default();
@@ -276,9 +243,6 @@ mod tests {
         assert_eq!(over[0].weighed, Bytes(10));
     }
 
-    /// With no asset sizes to hand there is nothing honest to say, so a build
-    /// that cannot weigh (`check`) reports nothing rather than passing every
-    /// page against a stylesheet it measured as zero bytes.
     #[test]
     fn a_build_with_nothing_emitted_weighs_nothing() {
         let config = config("lint { budget { html 1 } }");
@@ -292,7 +256,6 @@ mod tests {
         Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).unwrap();
     }
 
-    /// The same site, weighed: the page is over and the build fails.
     #[test]
     fn an_oversized_page_fails_the_build() {
         let config = config("lint { budget { html 1 } }");
@@ -307,8 +270,6 @@ mod tests {
         assert!(Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).is_err());
     }
 
-    /// A site with no budget declared never weighs anything, however much it
-    /// ships.
     #[test]
     fn a_site_with_no_budget_is_never_over_one() {
         let config = config("lint { }");
@@ -323,8 +284,6 @@ mod tests {
         Budgets::run(&site, &Ui::new(crate::ui::Level::Silent)).unwrap();
     }
 
-    /// Strictness decides whether a finding stops the build, exactly as it does
-    /// for a broken link.
     #[test]
     fn findings_warn_or_fail_by_the_strict_gate() {
         let lints = [Finding {

@@ -1,12 +1,6 @@
 //! The [standard.site] record shapes: the lexicon ids, the `at://` URIs a
 //! record lives at, and the JSON each serializes to.
 //!
-//! Kept apart from the backend that writes them, because the build reads them
-//! too: an engine processor emits `.well-known` verification from
-//! [`publication_uri`], a render transform emits a `<link>` from
-//! [`document_uri`], and neither goes near a PDS. This module is the one
-//! definition of the shapes both sides agree on.
-//!
 //! [standard.site]: https://standard.site
 
 use serde::Serialize;
@@ -17,24 +11,19 @@ use crate::graph::Hash;
 
 use super::super::{Doc, SiteView};
 
-/// The lexicon ids, which double as repository collection names. Public so the
-/// build-time verification artifacts (an engine processor for `.well-known`, a
-/// render transform for `<link>` tags) share this one source of the record
-/// shapes instead of re-spelling the NSIDs and key scheme.
+/// The lexicon ids, which double as repository collection names.
 pub const PUBLICATION: Nsid = Nsid::new("site.standard.publication");
 pub const DOCUMENT: Nsid = Nsid::new("site.standard.document");
 /// The conventional single record key for a site's publication.
 pub(super) const PUBLICATION_RKEY: &str = "self";
 
-/// The publication record's `at://` URI under `did`: the single definition of
-/// where a site's publication lives, shared by announcing and verification.
+/// The publication record's `at://` URI under `did`.
 pub fn publication_uri(did: &str) -> AtUri {
     AtUri::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
 }
 
-/// A document's `at://` URI under `did`, keyed by its page `path`. The key is a
-/// pure function of the path (see [`Rkey::derived`]), so the build names the
-/// same record the backend writes, without any coordination.
+/// A document's `at://` URI under `did`, keyed by a pure function of its page
+/// `path`, so the build names the same record the backend writes.
 pub fn document_uri(did: &str, path: &str) -> AtUri {
     AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
 }
@@ -54,8 +43,7 @@ pub(super) struct Publication {
 }
 
 impl Publication {
-    /// The site's publication record. The display name falls back to the site's
-    /// label when `site` is unset.
+    /// The display name falls back to the site's label when `site` is unset.
     pub(super) fn new(site: &SiteView, base: &BaseUrl, icon: Option<Blob>, discover: bool) -> Self {
         Self {
             kind: PUBLICATION.as_str(),
@@ -98,13 +86,12 @@ pub(super) struct Document {
 }
 
 impl Document {
-    /// The record's structural digest, keyed into the skip-cache so an unchanged
-    /// document is not re-sent.
+    /// The record's structural digest, keyed into the skip-cache so an
+    /// unchanged document is not re-sent.
     pub(super) fn fingerprint(&self) -> Hash {
         Hash::of(self)
     }
 
-    /// A document record for a `doc` published on `date`, under `publication`.
     /// The caller filters undated pages: standard.site requires `publishedAt`.
     pub(super) fn new(doc: &Doc, publication: &AtUri, date: time::Date) -> Self {
         Self {
@@ -119,10 +106,8 @@ impl Document {
     }
 }
 
-/// A date as an RFC 3339 timestamp at midnight UTC: the format `publishedAt`
-/// requires. A [`Display`](std::fmt::Display) adapter over
-/// [`Iso`](crate::content::Iso), so it formats on demand without allocating a
-/// field.
+/// A date as an RFC 3339 timestamp at midnight UTC, the format `publishedAt`
+/// requires.
 struct Rfc3339(time::Date);
 
 impl std::fmt::Display for Rfc3339 {

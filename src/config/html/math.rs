@@ -9,23 +9,16 @@ use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
 /// Where the CSS that MathML output depends on lives.
-///
-/// typst-html injects it into the `<head>` of every page holding an equation,
-/// which is the same block written again on each of them. The three answers a
-/// site can give are a served file, that inline block, and nothing at all; they
-/// are not degrees of one setting, which is why this is not a switch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MathStyles {
     /// Lift the rules into one stylesheet under the asset root and link it from
-    /// the pages that need it. Cacheable, fingerprinted, and one copy.
+    /// the pages that need it.
     #[default]
     Link,
-    /// Leave typst's block where it put it. What every page got before the
-    /// stylesheet existed, and what a site wanting no extra request keeps.
+    /// Leave typst's block where it put it.
     Inline,
     /// Drop the block and serve nothing: the site's own stylesheet states the
-    /// rules. For a theme that already bundles them and would otherwise ship
-    /// them twice.
+    /// rules.
     None,
 }
 
@@ -38,18 +31,10 @@ impl Named for MathStyles {
 }
 
 impl MathStyles {
-    /// Where this build's equation rules land: the configured answer, with the
-    /// one setting that overrides it applied.
-    ///
-    /// `html { embed }` makes a page self-contained by inlining what it
-    /// references, and for these rules the self-contained form is the block
-    /// typst already wrote. Serving a file so that the embed pass can read it
-    /// back and inline it is a round trip with the same page at the end of it,
-    /// and it puts a file in `dist` that nothing then points at.
-    ///
-    /// Resolved in one place because both sides ask: the asset pipeline decides
-    /// whether to name the file, and the render pass whether to link it. Two
-    /// readings of `styles` would be two chances to disagree.
+    /// Where this build's equation rules land: the configured answer, except
+    /// that under `html { embed }` the self-contained form is typst's own
+    /// inline block, so serving a file would leave one in `dist` that nothing
+    /// points at.
     pub fn of(html: &super::HtmlConfig) -> Self {
         if html.embed && html.math.styles == Self::Link {
             Self::Inline
@@ -58,9 +43,7 @@ impl MathStyles {
         }
     }
 
-    /// Whether the build writes the stylesheet at all. Asked by the asset
-    /// pipeline, which runs before any page has rendered and so cannot know
-    /// whether one holds an equation.
+    /// Whether the build writes the stylesheet at all.
     pub fn served(self) -> bool {
         self == Self::Link
     }
@@ -71,18 +54,10 @@ impl MathStyles {
     }
 }
 
-/// Math output options.
 #[derive(Debug, Clone, Hash)]
 pub struct MathConfig {
-    /// Where the MathML rules live.
     pub styles: MathStyles,
     /// The path the stylesheet is served from, relative to the asset root.
-    ///
-    /// The name is the site's, not this crate's: it is written under
-    /// `paths { assets }`, linked from every page that needs it, and replaced
-    /// whole by a site or theme shipping its own file at the same path. A theme
-    /// that keeps its stylesheets in one directory moves this there rather than
-    /// living with a file at the asset root.
     pub path: PathBuf,
 }
 

@@ -1,16 +1,8 @@
 //! `content { entities { } }`: the registries a page's references resolve into.
 //!
-//! An entity is an id and a bag of typed fields, and a registry is a named set
-//! of them: `people`, `organizations`, `series`. Nothing here is about any one
-//! of those. A registry declares what its entities carry ([`shape`] or its own
-//! `fields { }`), which field answers each question a renderer asks
-//! ([`slots`]), and where they come from ([`source`]).
-//!
-//! What points *at* a registry is a taxonomy, through
-//! [`TaxonomyConfig::entities`](crate::config::TaxonomyConfig): the terms a page
-//! writes under `authors` are ids in the `people` registry. So a site gets term
-//! pages, per-term feeds and listings from machinery that already exists, and
-//! this block only has to answer "who is `zoe`".
+//! An entity is an id and typed fields; a registry declares what it carries
+//! ([`shape`] or `fields`), which field answers each renderer question
+//! ([`slots`]), and where entities come from ([`source`]).
 
 pub mod shape;
 pub mod slots;
@@ -29,22 +21,19 @@ pub use shape::Shape;
 pub use slots::Slots;
 pub use source::{Declared, SourceConfig, SourcesConfig};
 
-/// One registry: what its entities carry, where they come from, and what a
-/// reference to one nobody declared means.
+/// One registry: what its entities carry, where they come from, and what an
+/// undeclared reference means.
 #[derive(Debug, Clone, Default, Hash)]
 pub struct RegistryConfig {
-    /// The named field set this registry took, if it took one.
     pub shape: Option<Shape>,
-    /// What every entity carries, in declaration order: the `shape`'s fields
-    /// with the registry's own filled over them. Empty constrains nothing.
+    /// Every entity's fields, in declaration order: the `shape`'s fields with
+    /// the registry's own filled over them. Empty constrains nothing.
     pub fields: Vec<(String, FieldSchema)>,
-    /// Which field answers each question a renderer asks.
     pub slots: Slots,
-    /// Where the entities come from, in declaration order.
+    /// In declaration order.
     pub sources: Vec<SourceConfig>,
-    /// What a reference nobody declared means. `None` until the site says,
-    /// which is what lets the default depend on whether there is a roster to
-    /// be missing from: see [`RegistryConfig::unknown`].
+    /// `None` until the site says; see [`RegistryConfig::unknown`] for the
+    /// default.
     unknown: Option<Unknown>,
 }
 
@@ -55,9 +44,7 @@ pub enum Unknown {
     Error,
     /// Report it and carry on, rendering the reference as its own text.
     Warn,
-    /// Take the reference at face value: the id is the display name, and there
-    /// is nothing else to know. What a site with no roster at all means, and
-    /// what `author "Camille"` has always meant.
+    /// Take the reference at face value: the id is the display name.
     Synthesize,
 }
 
@@ -70,13 +57,8 @@ impl Named for Unknown {
 }
 
 impl RegistryConfig {
-    /// What a reference nobody declared means here.
-    ///
-    /// A registry with a source defaults to refusing one: it is a roster of
-    /// who exists, and naming somebody who is not in it is the typo the roster
-    /// exists to catch. A registry with no source at all knows nobody, so every
-    /// reference is taken at face value, which is what a site that never
-    /// declared a registry has always done with `author "Camille"`.
+    /// What a reference nobody declared means here: refused when there is a
+    /// source to be missing from, synthesized when there is none.
     pub fn unknown(&self) -> Unknown {
         let default = if self.sources.is_empty() {
             Unknown::Synthesize
@@ -96,17 +78,8 @@ impl RegistryConfig {
         Ok((id, registry))
     }
 
-    /// Take from the named shape whatever the registry did not spell out.
-    ///
-    /// Fields fill in place, key by key, exactly as a config section does: a
-    /// field the registry declares replaces the shape's of that name, and one
-    /// the shape never had is added. So `shape "person"` with
-    /// `fields { name "str" }` is person, with the name required, and the
-    /// avatar and the socials still typed. Replacing the set wholesale would
-    /// make naming both keys a contradiction, since a shape *is* a field set.
-    ///
-    /// Slots fill the same way, one at a time, which is what lets a registry
-    /// spell one of them differently and inherit the rest.
+    /// Take from the named shape whatever the registry did not spell out,
+    /// field by field rather than replacing the set.
     fn seed(&mut self) {
         let Some(shape) = self.shape else {
             return;
@@ -122,15 +95,8 @@ impl RegistryConfig {
         self.slots.under(&shape.slots());
     }
 
-    /// Refuse a slot naming a field the registry does not declare.
-    ///
-    /// Checked here rather than where a renderer reads the slot, because there
-    /// the answer is simply "no value": a `slots image="protrait"` would render
-    /// every entity without its picture, out of a green build, and nothing
-    /// would ever say the word.
-    ///
-    /// A registry declaring no fields at all constrains nothing, so its slots
-    /// name whatever its sources happen to carry.
+    /// Refuse a slot naming a field the registry does not declare. Checked
+    /// here, since to a renderer a missing field is silently "no value".
     fn check(&self, id: &str, node: &KdlNode, text: &str) -> Result<()> {
         if self.fields.is_empty() {
             return Ok(());
@@ -156,7 +122,6 @@ impl RegistryConfig {
     }
 }
 
-/// One registry's block: what its entities carry, and where they come from.
 impl Section for RegistryConfig {
     const RULES: Block<Self> = Block(&[
         (

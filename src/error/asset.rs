@@ -1,15 +1,11 @@
-//! Precise asset-pipeline errors.
-//!
-//! A minifier or bundler failure names *which* asset and *what* step failed:
-//! `failed to minify CSS asset `assets/app.css`` with the underlying tool's
-//! message as the actionable hint, rather than being folded into a generic I/O
-//! error.
+//! Asset-pipeline errors, each naming which asset failed and at which step,
+//! with the underlying tool's own message as the hint.
 
 use miette::Diagnostic;
 use thiserror::Error;
 
-// Every variant here is gated, so the `slim` flavor has no message to build.
-// `sass` is not named: it enables `css`, so a build that has it has this.
+// Every variant is gated, so the `slim` flavor has no message to build; `sass`
+// is not named because it enables `css`.
 #[cfg(any(
     feature = "css",
     feature = "js",
@@ -18,29 +14,17 @@ use thiserror::Error;
 ))]
 use crate::ui::{Code, Text};
 
-/// A failure while processing a static asset (minify or bundle).
 #[derive(Debug, Error, Diagnostic)]
 pub enum AssetError {
-    /// lightningcss could not parse or print the stylesheet.
     #[cfg(feature = "css")]
     #[error("failed to minify CSS asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::css))]
     Css {
         path: String,
-        /// The tool's own message, escaped: it is foreign text, not markup this
-        /// crate wrote.
         #[help]
         detail: Text<String>,
     },
 
-    /// grass could not compile the Sass source. Its own class rather than
-    /// [`AssetError::Css`]'s, because the file that failed is not CSS and the
-    /// message quotes Sass syntax: folding the two would name a stylesheet the
-    /// author never wrote.
-    ///
-    /// The compiler's error is kept whole rather than flattened to its text:
-    /// `grass` is a direct dependency of the feature that reads the file, so
-    /// the cause is nameable here, and it carries the span it underlined.
     #[cfg(feature = "sass")]
     #[error("failed to compile Sass asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::sass))]
@@ -50,7 +34,6 @@ pub enum AssetError {
         source: Box<grass::Error>,
     },
 
-    /// The encre-css configuration a site pinned could not be read or parsed.
     /// The generator itself cannot fail: a class name it does not know is not
     /// one, and it writes no rule for it.
     #[cfg(feature = "tailwind")]
@@ -62,21 +45,15 @@ pub enum AssetError {
         source: encre_css::Error,
     },
 
-    /// rolldown could not bundle the JavaScript entry.
     #[cfg(feature = "js")]
     #[error("failed to bundle JavaScript asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::js))]
     Js {
         path: String,
-        /// The tool's own message, escaped: it is foreign text, not markup this
-        /// crate wrote.
         #[help]
         detail: Text<String>,
     },
 
-    /// The bundler's async runtime could not be started, so no entry was ever
-    /// reached: its own class, since there is no asset to name and the cause is
-    /// an `io::Error` worth keeping whole.
     #[cfg(feature = "js")]
     #[error("failed to start the JavaScript bundler")]
     #[diagnostic(
@@ -91,10 +68,6 @@ pub enum AssetError {
         source: std::io::Error,
     },
 
-    /// The site pinned a `tsconfig.json` that is not there. Caught before the
-    /// first entry is bundled, so the message names the setting rather than
-    /// arriving as a bundler failure under whichever script happened to be
-    /// reached first.
     #[cfg(feature = "js")]
     #[error("no TypeScript config at {}", Code(.path))]
     #[diagnostic(
@@ -105,14 +78,11 @@ pub enum AssetError {
     )]
     Tsconfig { path: String },
 
-    /// oxipng could not optimize the PNG.
     #[cfg(feature = "images")]
     #[error("failed to optimize image asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::image))]
     Image {
         path: String,
-        /// The tool's own message, escaped: it is foreign text, not markup this
-        /// crate wrote.
         #[help]
         detail: Text<String>,
     },
@@ -158,8 +128,6 @@ impl AssetError {
         }
     }
 
-    /// The OS failure kept whole, rather than flattened into a hint under a
-    /// made-up asset path.
     #[cfg(feature = "js")]
     pub fn runtime(source: std::io::Error) -> Self {
         Self::Runtime { source }

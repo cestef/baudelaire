@@ -1,11 +1,7 @@
-//! AWS Signature Version 4, hand-rolled on `sha2`/`hmac` so it can be pinned to
-//! AWS's own test vectors (see the tests). The S3 deploy backend signs its
-//! `ureq` requests with a [`Signer`]; nothing here is async or S3-specific.
-//!
-//! A [`Request`] carries its `payload_hash` ready-made (the hex SHA-256 of the
-//! body, or `"UNSIGNED-PAYLOAD"`) rather than the body itself, so [`Signer::sign`]
-//! is a pure function of its inputs, which is what lets the vectors match to the
-//! byte.
+//! AWS Signature Version 4, hand-rolled on `sha2`/`hmac` and pinned to AWS's
+//! own test vectors. A [`Request`] carries its `payload_hash` (the hex SHA-256
+//! of the body, or `"UNSIGNED-PAYLOAD"`) rather than the body itself, so
+//! [`Signer::sign`] is a pure function of its inputs.
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
@@ -13,8 +9,8 @@ use time::OffsetDateTime;
 
 use super::digest::Digest;
 
-/// The signing algorithm, named identically in the string-to-sign and in the
-/// `Authorization` header, so it is spelled once.
+/// The signing algorithm, spelled once for both the string-to-sign and the
+/// `Authorization` header.
 const ALGORITHM: &str = "AWS4-HMAC-SHA256";
 
 /// The fixed last element of both the credential scope and the signing-key
@@ -69,17 +65,16 @@ impl Signer<'_> {
         )
     }
 
-    /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`, the shape a
-    /// [`Signer::timestamp`] must carry: [`Signer::date`] slices its date out,
-    /// so the two cannot disagree.
+    /// Format an instant as SigV4's `YYYYMMDDTHHMMSSZ`, the shape
+    /// [`Signer::date`] slices the credential scope's date out of.
     pub fn timestamp(now: OffsetDateTime) -> String {
         let (year, month, day) = (now.year(), now.month() as u8, now.day());
         let (hour, minute, second) = (now.hour(), now.minute(), now.second());
         format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
     }
 
-    /// The canonical request and its `;`-joined signed-header list. `host` and
-    /// `x-amz-date` are folded in; values are whitespace-collapsed and the set is
+    /// The canonical request and its `;`-joined signed-header list; `host` and
+    /// `x-amz-date` are folded in, values whitespace-collapsed, and the set
     /// sorted by lowercase name.
     fn canonical(&self, req: &Request) -> (String, String) {
         let mut headers = vec![
@@ -138,12 +133,10 @@ impl Signer<'_> {
             })
     }
 
-    /// The `YYYYMMDD` date, sliced from the timestamp.
     fn date(&self) -> &str {
         &self.timestamp[..8]
     }
 
-    /// HMAC-SHA256 of `message` under `key`.
     fn hmac(key: &[u8], message: &[u8]) -> Vec<u8> {
         let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(message);
@@ -181,9 +174,6 @@ mod tests {
             .1
     }
 
-    /// A session token has to be a *signed* header, not just a sent one:
-    /// temporary credentials (GitHub OIDC, instance roles, `aws sso login`)
-    /// otherwise produce a well-formed signature the server rejects.
     #[test]
     fn a_session_token_is_covered_by_the_signature() {
         fn request<'a>(headers: &'a [(&'a str, &'a str)]) -> Request<'a> {
@@ -220,7 +210,6 @@ mod tests {
             "GET\n/\n\nhost:example.amazonaws.com\nx-amz-date:20150830T123600Z\n\nhost;x-amz-date\n"
                 .to_owned() + EMPTY
         );
-        // the suite publishes the hash of the canonical request (its string-to-sign line)
         assert_eq!(
             Digest::sha256(canonical.as_bytes()),
             "bb579772317eb040ac9ed261061d46c1f17a8133879d6129b6e1c25292927e63"
@@ -233,7 +222,6 @@ mod tests {
 
     #[test]
     fn get_vanilla_query_matches_the_suite() {
-        // the caller supplies the already-sorted canonical query.
         let req = Request {
             method: "GET",
             host: "example.amazonaws.com",
@@ -250,7 +238,6 @@ mod tests {
 
     #[test]
     fn get_header_value_trim_matches_the_suite() {
-        // mixed-case names, out of order, and a value with collapsible runs.
         let req = Request {
             method: "GET",
             host: "example.amazonaws.com",
@@ -288,10 +275,9 @@ mod tests {
 
     #[test]
     fn timestamp_formats_utc_and_carries_its_own_date() {
-        let t = OffsetDateTime::from_unix_timestamp(1_440_938_160).unwrap(); // 2015-08-30T12:36:00Z
+        let t = OffsetDateTime::from_unix_timestamp(1_440_938_160).unwrap();
         let timestamp = Signer::timestamp(t);
         assert_eq!(timestamp, "20150830T123600Z");
-        // the scope's date is sliced out of it, so the two always agree.
         let mut signer = signer();
         signer.timestamp = &timestamp;
         assert_eq!(signer.date(), "20150830");

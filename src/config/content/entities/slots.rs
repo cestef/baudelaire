@@ -2,9 +2,8 @@
 //! a renderer asks of an entity.
 //!
 //! The one indirection that keeps everything downstream from being written
-//! about people. A renderer asks for a display name, a canonical URL, an image;
-//! a registry says which of *its* fields holds each. A `series` binds `display`
-//! to `title` and `image` to `cover`, and the same code renders it.
+//! about people: a `series` binds `display` to `title` and `image` to `cover`,
+//! and the same code renders it.
 
 use crate::config::dispatch::Kind::Text;
 use crate::config::dispatch::{Attributed, Attrs};
@@ -21,18 +20,15 @@ pub struct Slots {
     pub url: Option<String>,
     /// A picture of it: an avatar, a logo, a cover.
     pub image: Option<String>,
-    /// A contact address, for the vocabularies that carry one.
+    /// A contact address.
     pub email: Option<String>,
     /// Other URLs that are also this entity, for `sameAs` and the like.
     pub same_as: Option<String>,
 }
 
 impl Slots {
-    /// Every slot this registry fills, as `(slot, field)`.
-    ///
-    /// Destructures the whole struct, so a new slot fails to compile until it
-    /// is listed here: this is what the "a slot must name a declared field"
-    /// check walks, and a slot missing from it would be checked by nobody.
+    /// Every slot this registry fills, as `(slot, field)`. Destructures the
+    /// whole struct, so a new slot fails to compile until it is listed here.
     pub fn filled(&self) -> Vec<(&'static str, &str)> {
         let Self {
             display,
@@ -54,8 +50,7 @@ impl Slots {
     }
 
     /// Fill every slot `self` leaves empty from `defaults`, which is how a
-    /// registry naming a `shape` inherits that shape's slots while overriding
-    /// the one it spells differently.
+    /// registry naming a `shape` inherits that shape's slots.
     pub fn under(&mut self, defaults: &Self) {
         let Self {
             display,
@@ -134,9 +129,8 @@ mod tests {
     use super::Slots;
     use crate::config::dispatch::Attributed;
 
-    /// Every slot [`Slots::filled`] reports has to be a key the block accepts:
-    /// that name goes into the diagnostic for a slot naming an undeclared
-    /// field, and a name the config would refuse is advice nobody can take.
+    /// Every slot [`Slots::filled`] reports has to be a key the block accepts,
+    /// since that name goes into a diagnostic as advice.
     #[test]
     fn every_reported_slot_is_a_key_the_block_takes() {
         let filled = Slots {

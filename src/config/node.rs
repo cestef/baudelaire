@@ -1,6 +1,6 @@
 //! Typed accessors over [`KdlNode`] and [`KdlEntry`]: the primitives every
 //! config rule is written in terms of. The [`KdlValue`] half lives in
-//! [`super::value`], the schema those primitives spell out in [`super::parse`].
+//! [`super::value`].
 
 use std::time::Duration;
 
@@ -21,8 +21,7 @@ impl Loopback {
     /// Whether a URL's post-scheme remainder names loopback.
     ///
     /// Userinfo is stripped at the *last* `@` first: the authority of
-    /// `http://localhost:9000@evil.com` is `evil.com`, and matching the prefix
-    /// would have shipped credentials there in cleartext.
+    /// `http://localhost:9000@evil.com` is `evil.com`, not loopback.
     fn at(rest: &str) -> bool {
         let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
         let host = authority
@@ -44,27 +43,12 @@ impl Loopback {
 ///
 /// # What a list key written with no values means
 ///
-/// One rule, here rather than restated by each reader, because spread over five
-/// of them it reads as arbitrary:
-///
-/// - A list that **replaces** what the key holds ([`words`](NodeExt::words),
-///   [`bounds`](NodeExt::bounds), [`mapped`](NodeExt::mapped)) reads a bare node
-///   as the *empty list*. That is the one spelling for clearing a list, and a
-///   profile needs it: config lists replace wholesale, so a profile that could
-///   not write the empty one could never undo an inherited one. Omitting the key
-///   is how a scope says it has no opinion; writing it bare is how it says the
-///   answer is none, and `generate { search { formats } }` turns search off by
-///   saying exactly that.
-/// - A list that **amends** the key's defaults, in the `-name` grammar
-///   ([`toggled`](NodeExt::toggled), [`features`](NodeExt::features)), refuses a
-///   bare node. There "no names" is not a way of saying none: it is a line that
-///   amends nothing and so configures nothing, which is the silent no-op this
-///   layer exists to prevent. Nothing is lost by refusing it, because that
-///   grammar already says "none" by naming what it removes.
-///
-/// The split is [`Kind`](super::dispatch::Kind)'s own: `Texts`, `Numbers` and
-/// `Choices` replace, `Toggled` and `Toggles` amend, and `Toggle::required` is
-/// the one place the second rule is enforced.
+/// A list that **replaces** what the key holds ([`words`](NodeExt::words),
+/// [`bounds`](NodeExt::bounds), [`mapped`](NodeExt::mapped)) reads a bare node
+/// as the *empty list*, which is the one spelling a profile has for clearing an
+/// inherited list. A list that **amends** defaults in the `-name` grammar
+/// ([`toggled`](NodeExt::toggled), [`features`](NodeExt::features)) refuses a
+/// bare node, since it would amend nothing.
 pub(super) trait NodeExt {
     fn span(&self) -> SourceSpan;
     fn string(&self, text: &str, idx: usize) -> Result<String>;
@@ -77,16 +61,12 @@ pub(super) trait NodeExt {
     /// string carrying a unit (`html "50kB"`).
     fn size(&self, text: &str, idx: usize) -> Result<Bytes>;
     /// A length of time, written either as a plain integer of seconds
-    /// (`timeout 30`) or as a string carrying a unit (`fresh "7d"`). The
-    /// [`NodeExt::size`] counterpart, reading the same two spellings.
+    /// (`timeout 30`) or as a string carrying a unit (`fresh "7d"`).
     fn duration(&self, text: &str, idx: usize) -> Result<Duration>;
-    /// A browser version, `major[.minor[.patch]]`, read by [`Version::parse`]:
-    /// the [`NodeExt::size`] counterpart for the one other packed scalar the
-    /// config accepts.
+    /// A browser version, `major[.minor[.patch]]`, read by [`Version::parse`].
     fn version(&self, text: &str, idx: usize) -> Result<Version>;
-    /// A lint rule's loudness, written either as the boolean the key has always
-    /// taken (`alt #false`) or as a severity naming itself (`alt "warn"`). The
-    /// [`NodeExt::size`] shape once more: one key, two spellings, one reader.
+    /// A lint rule's loudness, written either as a boolean (`alt #false`) or as
+    /// a severity naming itself (`alt "warn"`).
     fn level(&self, text: &str, idx: usize) -> Result<Level>;
     fn url(&self, text: &str, idx: usize) -> Result<String>;
     /// The path a generated asset is served from, relative to the asset root
@@ -97,18 +77,15 @@ pub(super) trait NodeExt {
     /// an unknown placeholder, an unterminated `{`, and any `..` segment are
     /// errors at the span the author wrote.
     ///
-    /// The single owner of that rule for the config surface, so the keys that
-    /// are *parts* of an index's permalink (`paginate { mount }`, `prefix`) are
-    /// held to it too. A `..` there escapes no file -- `Config::segments` drops
-    /// one before anything is written -- but it does publish a page at a URL
-    /// nobody asked for, out of a build that reported success.
+    /// The keys that are *parts* of an index's permalink (`paginate { mount }`,
+    /// `prefix`) are held to the same rule, so a `..` there cannot publish a
+    /// page at a URL nobody asked for.
     ///
     /// [`Permalink::parse`]: crate::config::Permalink::parse
     fn template(&self, text: &str, idx: usize) -> Result<String>;
     fn block(&self, text: &str) -> Result<&KdlDocument>;
     /// The node's `{ .. }` children parsed as `(id, item)` pairs, erroring on a
-    /// duplicate id: the single dedup rule for collections, taxonomies, and
-    /// profiles, where a repeated id would otherwise silently lose one side.
+    /// duplicate id rather than silently losing one side.
     fn unique<T>(
         &self,
         text: &str,
@@ -124,11 +101,7 @@ pub(super) trait NodeExt {
     fn features(&self, text: &str) -> Result<Vec<String>>;
     fn words(&self, text: &str) -> Result<Vec<String>>;
     /// The node's positional integer args, each range-checked by
-    /// [`ValueExt::bounded`]: `widths 480 960 1440`, `accept 401 429`.
-    ///
-    /// The single reader for a list of numbers, so an out-of-range one is
-    /// reported the same way whatever key it was written under, at the span of
-    /// the value rather than of the line.
+    /// [`ValueExt::bounded`] at the span of the value: `widths 480 960 1440`.
     fn bounds<T>(&self, text: &str, min: T, max: T) -> Result<Vec<T>>
     where
         T: TryFrom<i64> + Into<i64> + Copy;
@@ -136,24 +109,16 @@ pub(super) trait NodeExt {
     /// A list of names over a fixed set, where `-name` removes one from
     /// `defaults` and a bare name adds one: `extensions "math" "-tables"`.
     ///
-    /// The shape a setting takes when it has defaults worth keeping. Spelling
-    /// the whole set out would mean a site that wants one extra silently loses
-    /// every default it did not repeat, which is the trap `typst { features }`
-    /// exists to avoid, generalised over any [`Named`](super::Named) table.
+    /// The shape a setting takes when it has defaults worth keeping, so naming
+    /// one extra does not drop every default the line did not repeat.
     fn toggled<T: super::Named>(&self, text: &str, defaults: &[T]) -> Result<Vec<T>>;
     /// This node's first argument as a file name that stays inside the output
-    /// directory, judged by [`crate::fs::Contained`] (the one owner of that
-    /// rule, shared with theme roots and inlined SVG paths).
+    /// directory, judged by [`crate::fs::Contained`].
     fn contained(&self, text: &str) -> Result<String>;
 }
 
-/// One name in a toggled list, and whether it is being added or removed.
-///
-/// The `-name` / `+name` / `name` grammar, in the one place that knows it. Two
-/// keys are written in it -- `typst { features }` over an open set of names it
-/// forwards, and any [`Named`](super::Named) list through
-/// [`NodeExt::toggled`] -- and spelling the prefixes twice is how they would
-/// come to disagree about `+`.
+/// One name in a toggled list, and whether it is being added or removed: the
+/// `-name` / `+name` / `name` grammar, in the one place that knows it.
 struct Toggle<'a> {
     name: &'a str,
     /// `false` for `-name`.
@@ -172,10 +137,7 @@ impl<'a> Toggle<'a> {
     }
 
     /// A list in this grammar amends the key's defaults, so one naming nothing
-    /// amends nothing: refused, rather than parsed as a line that configures
-    /// nothing. Both keys written in it are held to it here, which is what keeps
-    /// them from disagreeing about it (see [`NodeExt`] for the rule, and why
-    /// every *replacing* list key reads the same spelling as "none").
+    /// is refused rather than parsed as a line that configures nothing.
     fn required(node: &KdlNode, text: &str, named: usize) -> Result<()> {
         if named > 0 {
             return Ok(());
@@ -186,9 +148,7 @@ impl<'a> Toggle<'a> {
 
 impl NodeExt for KdlNode {
     /// Bridge kdl's `miette::SourceSpan` (its own miette 7) to ours.
-    // `use_self` wants `Self::span`, which reads as a call to the very function
-    // it sits in. It resolves to kdl's inherent method either way, but the type
-    // name is what says so.
+    // The spelled-out type shows this is kdl's inherent method, not a recursion.
     #[allow(clippy::use_self)]
     fn span(&self) -> SourceSpan {
         let s = KdlNode::span(self);
@@ -238,9 +198,7 @@ impl NodeExt for KdlNode {
         u16::try_from(n).map_err(|_| ConfigError::port_range(text, n, NodeExt::span(self)).into())
     }
 
-    /// A byte size. An integer is bytes and is range-checked like any other
-    /// count; a string is read by [`Bytes::parse`], the same rule that formats
-    /// one, so a budget can be written in the units the build summary prints.
+    /// An integer is bytes, and a string is read by [`Bytes::parse`].
     fn size(&self, text: &str, idx: usize) -> Result<Bytes> {
         let span = NodeExt::span(self);
         let value = self.arg(text, idx)?;
@@ -251,9 +209,7 @@ impl NodeExt for KdlNode {
         Ok(Bytes(self.count(text, idx)? as u64))
     }
 
-    /// A length of time. An integer is seconds and is range-checked like any
-    /// other count; a string is read by [`Dur::parse`], so a duration can be
-    /// written in the unit that says what it means.
+    /// An integer is seconds, and a string is read by [`Dur::parse`].
     fn duration(&self, text: &str, idx: usize) -> Result<Duration> {
         let span = NodeExt::span(self);
         let value = self.arg(text, idx)?;
@@ -269,9 +225,7 @@ impl NodeExt for KdlNode {
     /// "off"; a string names the severity and so overrides `strict`.
     ///
     /// Everything that is not a string goes through [`NodeExt::boolean`], which
-    /// is what keeps the bare spelling working: these keys were flags before
-    /// they took a severity, `lint { alt }` is how every site already writes
-    /// one, and reading the argument first turned that into a hard error.
+    /// keeps the bare `lint { alt }` spelling working.
     fn level(&self, text: &str, idx: usize) -> Result<Level> {
         let span = NodeExt::span(self);
         match self.get(idx) {
@@ -286,17 +240,13 @@ impl NodeExt for KdlNode {
     /// and `15.10` would round-trip as `15.1`.
     ///
     /// A value that is not a string is reported as a bad *version* rather than
-    /// as a type mismatch, because writing one unquoted is the whole mistake
-    /// this key has: `safari 15.4` is the natural spelling, and the help that
-    /// explains the quoting reached only an author who had already got it right.
+    /// as a type mismatch, so the help explaining the quoting reaches the author
+    /// who wrote it unquoted.
     fn version(&self, text: &str, idx: usize) -> Result<Version> {
         let span = NodeExt::span(self);
         let value = self.arg(text, idx)?;
         let written = match value.as_string() {
             Some(written) => written.to_owned(),
-            // Quoted back as the KDL that was written, not printed: `15.10` is
-            // already `15.1` by the time it is a float, and the message has to
-            // show what the file says.
             None => {
                 return Err(ConfigError::bad_version(text, &Kdl(value).to_string(), span).into());
             }
@@ -308,10 +258,8 @@ impl NodeExt for KdlNode {
     /// A generated asset's served path: relative to the asset root, and inside
     /// it.
     ///
-    /// Checked here rather than where the file is written, because by then the
-    /// same string has already been linked from every page that carries the
-    /// asset: what is rejected is a path the two halves of the build would read
-    /// differently, and the config is the one place both of them read.
+    /// Checked here rather than where the file is written, because by then every
+    /// page carrying the asset has already linked the same string.
     fn asset(&self, text: &str, idx: usize) -> Result<std::path::PathBuf> {
         let value = self.string(text, idx)?;
         let path = std::path::PathBuf::from(&value);
@@ -330,12 +278,8 @@ impl NodeExt for KdlNode {
     /// A base-URL argument, required to be `https://` unless it names the
     /// loopback interface.
     ///
-    /// Credentials travel to these hosts: the app password in an atproto
-    /// `createSession` body and every Bearer token after it, an AWS signature
-    /// and its headers. A plaintext scheme puts them on the wire, and nothing
-    /// downstream re-checks: `remote::tls()` keeps verification on and then
-    /// hands the URL to `ureq` unexamined. Loopback stays allowed so a local
-    /// MinIO or PDS on `http://localhost:9000` still works.
+    /// Credentials travel to these hosts and nothing downstream re-checks the
+    /// scheme. Loopback stays allowed so a local MinIO or PDS still works.
     fn url(&self, text: &str, idx: usize) -> Result<String> {
         let value = self.string(text, idx)?;
         let bad = || ConfigError::insecure_url(text, &value, NodeExt::span(self)).into();
@@ -351,10 +295,8 @@ impl NodeExt for KdlNode {
 
     /// The site's own base URL: a scheme and a host, any scheme.
     ///
-    /// Separate from [`url`](NodeExt::url) because the two answer different
-    /// questions. That one guards a host credentials are sent to and demands
-    /// https; this one guards the shape everything downstream joins onto, and a
-    /// site served over plain http is the author's business.
+    /// Separate from [`url`](NodeExt::url), which guards a host credentials are
+    /// sent to and so demands https.
     fn base_url(&self, text: &str, idx: usize) -> Result<String> {
         let value = self.string(text, idx)?;
         if BaseUrl::absolute(&value) {
@@ -401,9 +343,6 @@ impl NodeExt for KdlNode {
             .iter()
             .map(|child| {
                 let span = NodeExt::span(child);
-                // One argument is that value; several are a list. Only the
-                // first used to be read, so `months "janvier" "février" ..`
-                // kept January and dropped the year.
                 let mut values = Vec::new();
                 let mut index = 0;
                 while let Some(arg) = child.get(index) {
@@ -411,8 +350,6 @@ impl NodeExt for KdlNode {
                     index += 1;
                 }
                 let value = match values.len() {
-                    // No argument at all: report it the way every other missing
-                    // argument is reported.
                     0 => child.arg(text, 0)?.scalar(text, span)?,
                     1 => values.remove(0),
                     _ => crate::codegen::Value::Array(values),
@@ -443,15 +380,9 @@ impl NodeExt for KdlNode {
                 let span = EntryExt::span(*entry);
                 let raw = entry.value().as_str(text, span)?;
                 let toggle = Toggle::of(&raw);
-                // `html` underpins the whole HTML pipeline, so it is always on
-                // and refusing `-html` is clearer than silently keeping it.
                 if !toggle.add && toggle.name == "html" {
                     return Err(ConfigError::feature_removal(text, toggle.name, span).into());
                 }
-                // Normalized: a leading `-` survives for `world.rs` to resolve
-                // in order, and the optional `+` is dropped. This list is an
-                // *open* set forwarded to typst, which is why it stays strings
-                // rather than going through `toggled`.
                 Ok(if toggle.add {
                     toggle.name.to_owned()
                 } else {
@@ -471,8 +402,6 @@ impl NodeExt for KdlNode {
             .collect()
     }
 
-    /// The positional integer arguments of a `widths 480 960 ..` node, each
-    /// held to `min..=max`. Mirrors [`NodeExt::words`] for the integer case.
     fn bounds<T>(&self, text: &str, min: T, max: T) -> Result<Vec<T>>
     where
         T: TryFrom<i64> + Into<i64> + Copy,
@@ -485,16 +414,12 @@ impl NodeExt for KdlNode {
     }
 
     /// The node's positional string args mapped through `T`'s name table,
-    /// erroring on the first unknown name with a nearest-match hint. The single
-    /// source for parsing enum lists (feed formats, search formats/fields): the
-    /// table on the enum drives both the mapping and the "valid names" in
-    /// errors.
+    /// erroring on the first unknown name with a nearest-match hint.
     fn mapped<T: super::Named>(&self, text: &str) -> Result<Vec<T>> {
         let mut out: Vec<T> = Vec::new();
         for entry in self.entries().iter().filter(|e| e.name().is_none()) {
             let span = EntryExt::span(entry);
             let value: T = entry.value().one(text, span)?;
-            // a repeated entry would silently emit the output twice
             if out.contains(&value) {
                 let name = entry.value().as_str(text, span)?;
                 return Err(
@@ -507,10 +432,6 @@ impl NodeExt for KdlNode {
     }
 
     fn toggled<T: super::Named>(&self, text: &str, defaults: &[T]) -> Result<Vec<T>> {
-        // Every entry, not just the positional ones: `extensions tables=#false`
-        // is a plausible spelling (the config language has `key=value` lines
-        // elsewhere), and quietly keeping the defaults while ignoring it is the
-        // silent no-op this dispatch layer exists to prevent.
         let mut out = defaults.to_vec();
         let mut seen: Vec<T> = Vec::new();
         for entry in self.entries() {
@@ -518,8 +439,6 @@ impl NodeExt for KdlNode {
             if let Some(key) = entry.name() {
                 return Err(ConfigError::unexpected_argument(
                     text,
-                    // Through `Kdl`, so the pair the message quotes back is the
-                    // pair the author wrote rather than an unquoted lookalike.
                     &format!("{}={}", key.value(), Kdl(entry.value())),
                     self.name().value(),
                     span,
@@ -528,13 +447,9 @@ impl NodeExt for KdlNode {
             }
             let raw = entry.value().as_str(text, span)?;
             let toggle = Toggle::of(&raw);
-            // The same resolution and the same near-miss suggestion that naming
-            // one of these anywhere else gives; only the `-`/`+` is ours.
             let value: T = T::of(toggle.name).ok_or_else(|| {
                 crate::config::dispatch::Keys::unknown_value(T::NAMES, text, toggle.name, span)
             })?;
-            // Naming one twice is a contradiction to resolve by reading, not by
-            // silently taking the last word: `"math" "-math"` says two things.
             if seen.contains(&value) {
                 return Err(
                     ConfigError::duplicate_entry(text, &raw, self.name().value(), span).into(),
@@ -548,11 +463,6 @@ impl NodeExt for KdlNode {
             }
         }
         Toggle::required(self, text, seen.len())?;
-        // Canonical order, so a set is stored the way it is *named* rather than
-        // the way it was reached. `"-tables" "tables"` and the defaults are the
-        // same set and must hash the same: this value reaches the build
-        // fingerprint, and a reorder that changes nothing would otherwise cost
-        // a cold rebuild of the whole site.
         out.sort_by_key(|value| T::NAMES.iter().position(|(_, v)| v == value));
         Ok(out)
     }
@@ -573,8 +483,7 @@ pub(super) trait EntryExt {
 }
 
 impl EntryExt for KdlEntry {
-    // As on `NodeExt::span` above: the spelled-out type is what shows this is
-    // kdl's inherent method and not a recursive call.
+    // The spelled-out type shows this is kdl's inherent method, not a recursion.
     #[allow(clippy::use_self)]
     fn span(&self) -> SourceSpan {
         let s = KdlEntry::span(self);
@@ -586,9 +495,8 @@ impl EntryExt for KdlEntry {
 mod tests {
     use crate::config::Config;
 
-    /// An out-of-range SSH port is rejected with the port diagnostic, not
-    /// truncated into a different, reachable port (`70000` used to parse as
-    /// `4464`).
+    /// An out-of-range port is rejected rather than truncated into a different,
+    /// reachable one.
     #[test]
     fn an_out_of_range_ssh_port_is_rejected() {
         let err = Config::parse("deploy {\n  ssh {\n    host \"h\"\n    port 70000\n  }\n}")
@@ -597,8 +505,6 @@ mod tests {
         assert!(err.contains("port"), "{err}");
     }
 
-    /// Credentials travel to `pds` and `endpoint`, so a plaintext scheme is
-    /// rejected where the span can point at it, not silently honoured.
     #[test]
     fn a_plaintext_credential_host_is_rejected() {
         for kdl in [
@@ -610,9 +516,7 @@ mod tests {
         }
     }
 
-    /// A host that merely *starts* with a loopback spelling is not loopback:
-    /// URL userinfo made `http://localhost:9000@evil.com` pass, which shipped
-    /// the credentials to `evil.com` in cleartext.
+    /// A host that merely *starts* with a loopback spelling is not loopback.
     #[test]
     fn userinfo_cannot_forge_a_loopback_host() {
         for host in [
@@ -627,7 +531,6 @@ mod tests {
         }
     }
 
-    /// A local service is the one case plaintext is legitimate.
     #[test]
     fn a_loopback_url_stays_plaintext() {
         let config = Config::parse(

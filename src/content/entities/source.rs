@@ -1,14 +1,5 @@
-//! Where a registry's entities are read from.
-//!
-//! One loader per [`SourceConfig`] variant, and the dispatcher that pairs them.
-//! Adding a source is a payload struct beside its siblings in
-//! [`crate::config::content::entities::source`], one variant, one row in that
-//! module's table, one `impl Source` here, and one arm in [`SourceConfig::loader`],
-//! which the compiler will demand.
-//!
-//! What a loader must not do is read a file behind the build's back. A `pages`
-//! source draws on pages the plan already read; a `data` source goes through the
-//! project's file store, the way every other tracked read does.
+//! Where a registry's entities are read from: one loader per [`SourceConfig`]
+//! variant, and the dispatcher that pairs them.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,7 +29,6 @@ pub trait Source {
 }
 
 impl SourceConfig {
-    /// The loader for this declaration.
     pub(super) fn loader(&self) -> &dyn Source {
         match self {
             Self::Pages(source) => source,
@@ -50,12 +40,6 @@ impl SourceConfig {
 
 /// The frontmatter keys a profile page contributes as fields under their own
 /// names, beside everything it declares that this crate does not name.
-///
-/// Three, and each because a profile would otherwise have to write the same
-/// thing twice: a page's title is its name, its description is its blurb, its
-/// image is its picture. Everything else a shape asks for (`url`, `avatar`,
-/// `socials`) is not a built-in frontmatter key, so it already arrives as
-/// declared.
 type Builtin = (&'static str, fn(&Frontmatter) -> Option<String>);
 
 const BUILTIN: &[Builtin] = &[
@@ -64,19 +48,12 @@ const BUILTIN: &[Builtin] = &[
     ("image", |fm| fm.image.clone()),
 ];
 
-/// Entities are the content pages under a directory.
-///
-/// Their frontmatter is the fields and their body is the prose, which is what
-/// makes a profile an ordinary page: it has a permalink, an edition per
-/// language, a card, and per-page cache tracking, none of which a roster format
-/// could give it.
+/// Entities are the content pages under a directory, their frontmatter the
+/// fields and their body the prose. The default language's edition sorts
+/// first, so its fields are the ones a merge keeps.
 impl Source for PagesSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
         let dir = crate::fs::resolved(cx.project.root().join(&self.dir));
-        // The default language's edition first, so its fields are the ones a
-        // merge keeps. A profile has an edition per language and the two are
-        // one entity; without an order, whose name a byline carried was
-        // whichever edition discovery happened to read first.
         let mut profiles: Vec<&Page> = cx
             .pages
             .iter()
@@ -108,15 +85,9 @@ impl Source for PagesSource {
     }
 }
 
-/// Entities are the nodes of a KDL roster file.
-///
-/// Read through [`Project::source`], so the file is opened by the same store
-/// every other build input goes through.
-///
-/// The dev server does *not* watch it on its own: a roster is read once at plan
-/// time and so lands in no page's dependency set, and the watcher registers the
-/// four `paths` trees plus whatever those dependencies name. A site editing its
-/// roster under `serve` names it in `serve { include }`.
+/// Entities are the nodes of a KDL roster file, read through
+/// [`Project::source`]. The dev server does not watch it on its own: a site
+/// editing its roster under `serve` names it in `serve { include }`.
 impl Source for DataSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
         let path: PathBuf = cx.project.root().join(&self.path);
@@ -140,11 +111,9 @@ impl Source for InlineSource {
     }
 }
 
-/// What a KDL roster's declarations become, for the two sources that read one.
-///
-/// On [`Provenance`] because that is what it produces: every entity keeps the
-/// text it was read from, so a fault found while the registry is assembled --
-/// long after either file was closed -- still underlines the node that wrote it.
+/// What a KDL roster's declarations become, for the two sources that read one;
+/// every entity keeps the text it was read from, so a fault found long after
+/// the file was closed still underlines the node that wrote it.
 trait Roster {
     fn entities(
         declared: Vec<Declared>,

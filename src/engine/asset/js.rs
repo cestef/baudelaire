@@ -22,19 +22,12 @@ use super::module::{ModuleCx, Virtual};
 use super::{Ctx, Handler, PathExt, Phase, Produced};
 
 /// Every extension the bundler reads as a script, which is rolldown's own
-/// module-type table for the ECMAScript family. An extension left out of this
-/// list is not "unsupported": it falls through to the verbatim copy, so a
-/// `.tsx` entry used to ship its unstripped types to the browser.
+/// module-type table for the ECMAScript family; one left out falls through to
+/// the verbatim copy.
 const SCRIPTS: &[&str] = &["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"];
 
-/// JavaScript entries: bundled when `bundle` is on. With bundling off, plain
-/// JavaScript is left to the verbatim copy.
-///
-/// A partial (`_name.ts`) and a type declaration (`name.d.ts`) never reach a
-/// handler at all: [`Private`](super::handler::Private) keeps the whole asset
-/// tree's inputs out of the pipeline, whether or not this bundles them.
-///
-/// Runs in [`Phase::Bundle`], the last phase, so a bundle importing
+/// JavaScript entries: bundled when `bundle` is on, left to the verbatim copy
+/// otherwise. Runs in [`Phase::Bundle`], the last phase, so a bundle importing
 /// `baudelaire:assets` sees the finalized fingerprint map.
 pub(super) struct Script;
 
@@ -62,15 +55,13 @@ impl Handler for Script {
     }
 }
 
-/// A rolldown-backed JavaScript bundler. Owns a Tokio runtime to drive
-/// rolldown's async build, reused across every entry in the site, and the
-/// [`Virtual`] plugin that serves baudelaire's virtual modules.
+/// A rolldown-backed JavaScript bundler, owning the Tokio runtime that drives
+/// rolldown's async build and the [`Virtual`] plugin serving the virtual
+/// modules.
 pub(super) struct Js {
     runtime: tokio::runtime::Runtime,
     cwd: PathBuf,
     minify: bool,
-    /// What becomes of a bundle's source map, which decides whether rolldown is
-    /// asked for one at all.
     sourcemap: SourceMaps,
     /// The site's pinned `tsconfig.json`, absolute. `None` leaves rolldown on
     /// its own discovery, which walks up from each module as `tsc` does.
@@ -81,16 +72,13 @@ pub(super) struct Js {
 impl Js {
     /// Build the bundler against the finalized site context: call once the
     /// asset map is complete, so `baudelaire:assets` resolves every asset.
-    /// Fallible: building the runtime spawns threads, which a constrained CI
-    /// container refuses (EMFILE, `RLIMIT_NPROC`). That used to abort the whole
-    /// build with a bare SIGABRT and no message, release builds being
-    /// `panic = "abort"` and stripped.
+    /// Fallible because the runtime spawns threads, which a constrained
+    /// container refuses.
     pub(super) fn new(cx: &ModuleCx) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .map_err(AssetError::runtime)?;
-        // Absolute so rolldown resolves entries regardless of its `cwd`.
         let cwd = fs::canonical(&cx.config.paths.assets);
         Ok(Self {
             runtime,
@@ -109,9 +97,7 @@ impl Js {
     }
 
     /// Pin the configured `tsconfig.json`, absolute. Resolved against the
-    /// project root rather than left as written: the bundler's `cwd` is the
-    /// asset directory, which is the one base a root-relative path is *not*
-    /// written against.
+    /// project root, not the bundler's `cwd`, which is the asset directory.
     fn tsconfig(root: &Path, path: &Path) -> Result<TsConfig> {
         let full = root.join(path);
         match fs::canonicalize(&full) {
@@ -120,7 +106,9 @@ impl Js {
         }
     }
 
-    /// Bundle a single entry to its output code.
+    /// Bundle a single entry to its output code: one entry in, one file out,
+    /// since the pipeline has nowhere to write the extra chunks code splitting
+    /// would produce.
     pub(super) fn bundle(&self, entry: &Path) -> Result<Produced> {
         let import = fs::canonical(entry);
         let options = BundlerOptions {
@@ -130,24 +118,8 @@ impl Js {
             }]),
             cwd: Some(self.cwd.clone()),
             format: Some(OutputFormat::Esm),
-            // One entry in, one file out. With splitting on, a dynamic
-            // `import()` produced extra chunks the pipeline had no place to
-            // write, so they were dropped and the emitted entry imported files
-            // that did not exist in `dist`.
             code_splitting: Some(CodeSplittingMode::Bool(false)),
             minify: self.minify.then(|| RawMinifyOptions::Bool(true)),
-            // `File`, so the map is its own file rather than a base64 blob
-            // inside the bundle: the map is the larger of the two by far, and
-            // inlining it would put it in front of every visitor instead of
-            // only the one who opens devtools. The `sourceMappingURL` rolldown
-            // would write names the file it thinks it is emitting, which is not
-            // the fingerprinted name this pipeline writes, so it is stripped
-            // and the pipeline writes the link itself.
-            // Always `File`, whatever the posture: the pipeline decides where
-            // the map ends up, because only it knows the fingerprinted name and
-            // whether anything should point at it. `Inline` here would hand back
-            // a bundle with the map already fused into it, past the point where
-            // that choice can still be made.
             sourcemap: self.sourcemap.wanted().then_some(SourceMapType::File),
             tsconfig: self.tsconfig.clone(),
             ..BundlerOptions::default()
@@ -161,18 +133,11 @@ impl Js {
             .runtime
             .block_on(bundler.generate())
             .map_err(|e| AssetError::js(entry.display(), e))?;
-        // Code splitting is off, so exactly one chunk is expected, plus its map
-        // when one was asked for. Anything else would be silently discarded, so
-        // say so instead.
         let mut code = None;
         let mut map = None;
         for asset in &output.assets {
             match asset {
                 Output::Chunk(chunk) if chunk.is_entry && code.is_none() => {
-                    // Without the trailing `sourceMappingURL`: rolldown writes
-                    // one naming the file it believes it is emitting, and the
-                    // name this pipeline serves it under is not settled until it
-                    // has been fingerprinted. The pipeline appends the real one.
                     code = Some(Self::unlinked(&chunk.code).into_bytes());
                     if let Some(chunk) = chunk.map.as_ref() {
                         map = Some(chunk.to_json_string().into_bytes());
@@ -181,8 +146,6 @@ impl Js {
                 Output::Asset(asset)
                     if self.sourcemap.wanted() && asset.filename.ends_with(".map") =>
                 {
-                    // A map rolldown chose to emit as a separate asset rather
-                    // than hang off the chunk. Same file either way.
                     map.get_or_insert_with(|| match asset.source.clone() {
                         StrOrBytes::Str(text) => text.into_bytes(),
                         StrOrBytes::Bytes(bytes) => bytes,
@@ -208,12 +171,9 @@ impl Js {
         })
     }
 
-    /// `code` with any trailing `sourceMappingURL` comment removed.
-    ///
-    /// The bundler names the map after the filename it was told to write, which
-    /// is not the fingerprinted one this pipeline serves. Left in place there
-    /// would be two such comments, and a browser reads the last, so the wrong
-    /// one would win exactly when fingerprinting is on.
+    /// `code` with any trailing `sourceMappingURL` comment removed: the bundler
+    /// names the map after the file it was told to write, and the pipeline
+    /// appends a link to the fingerprinted name it actually serves.
     fn unlinked(code: &str) -> String {
         match code.rfind("//# sourceMappingURL=") {
             Some(at) => code[..at].to_owned(),

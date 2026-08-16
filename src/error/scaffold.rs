@@ -28,8 +28,7 @@ pub enum ScaffoldError {
     UnknownExtra { name: String, help: String },
 
     /// `--profile` is global, so it reaches `init` too, and `init` has nothing
-    /// to apply it to. It used to be accepted and ignored: the run reported
-    /// success having done none of what was asked.
+    /// to apply it to.
     #[error("{} does not apply to {}", Code("--profile"), Code("baudelaire init"))]
     #[diagnostic(
         code(baudelaire::scaffold::profile),
@@ -37,17 +36,6 @@ pub enum ScaffoldError {
     )]
     Profile,
 
-    /// `--config` names where the scaffolded config lands, and only a filename
-    /// can: every `paths { }` entry resolves against the working directory
-    /// rather than against the config file, so a config nested a directory down
-    /// would name a content tree outside the project.
-    /// The base URL a scaffold was given, or answered with, that the config it
-    /// writes would refuse.
-    ///
-    /// `--url` answers to the value parser every base-taking flag does; an
-    /// interactive answer reaches the same config key by another road, and a
-    /// scaffold that writes a `url` the first build rejects is a project that
-    /// has never worked.
     #[error("{} is not an absolute URL", Code(.url))]
     #[diagnostic(
         code(baudelaire::scaffold::relative_url),
@@ -55,6 +43,9 @@ pub enum ScaffoldError {
     )]
     RelativeUrl { url: String },
 
+    /// Every `paths { }` entry resolves against the working directory rather
+    /// than against the config file, so a config nested a directory down would
+    /// name a content tree outside the project.
     #[error("{} names a path, not a filename", Code(.path))]
     #[diagnostic(
         code(baudelaire::scaffold::config_path),
@@ -73,9 +64,6 @@ impl ScaffoldError {
         }
     }
 
-    /// The `--with` counterpart of [`Self::unknown_template`], its own class so
-    /// the message names a feature rather than a starter template; `help` again
-    /// comes from the table that defines what is valid.
     pub fn unknown_extra(name: &str, help: String) -> Self {
         Self::UnknownExtra {
             name: name.to_owned(),

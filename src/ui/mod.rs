@@ -1,29 +1,5 @@
 //! Terminal output: one shared, thread-safe [`Ui`] behind every line the CLI
-//! prints.
-//!
-//! Layers:
-//! - **Reporting** ([`Ui`]): banners, results, per-page progress, dev-server
-//!   event lines. Human-facing, on stderr, level-gated.
-//! - **Warnings** ([`Ui::warn`]): full [`miette::Diagnostic`]s with codes,
-//!   spans, and help, collected during a run and rendered together by
-//!   [`Ui::flush`], so a build's noise never interleaves with its progress.
-//! - **Errors** ([`Ui::fail`]): the diagnostic that ended the run, through the
-//!   same renderer. `main` returns an exit code rather than a
-//!   [`miette::Result`] so there is one of these and not two.
-//! - **Debug logs** ([`trace`]): `tracing` events for `-v`/`-vv`/`RUST_LOG`,
-//!   strictly diagnostic.
-//!
-//! What a line is made of lives beside it: `marker` is the one table of status
-//! glyphs and their colours, `fmt` the count, size, duration and path adapters
-//! every line formats through, `markup` the `` `code` `` / `*bold*` grammar
-//! diagnostics are written in (with the [`Text`] and [`Code`] adapters that keep
-//! an interpolated value from being read as markup), and `progress` the compile
-//! bar.
-//!
-//! Everything goes to stderr (stdout stays reserved for data), through
-//! `anstream` so color strips on pipes and under `NO_COLOR`. Output is
-//! best-effort by design: a failed terminal write never fails a build, so every
-//! method here is infallible.
+//! prints, on stderr, since stdout stays reserved for `--json` data.
 
 mod fmt;
 mod marker;
@@ -46,53 +22,40 @@ pub(crate) use markup::markup;
 pub use markup::{Code, Markup, Styled, Text};
 pub use progress::Progress;
 
-/// Return the cursor to column 0 and erase the line: what makes a transient
-/// status line transient. Written raw because it is cursor control rather than
-/// styling, so `anstream` has nothing to strip; every use is guarded by a tty
-/// check, since on a pipe it would strand the escape in the log.
+/// Return the cursor to column 0 and erase the line; only ever written to a
+/// tty, where on a pipe it would strand the escape in the log.
 const CLEAR_LINE: &str = "\r\x1b[2K";
 
-/// The width `➜` labels are padded to, so consecutive arrows line their values
-/// up. Sized to the longest label in use, which is `collections` in `theme
-/// info`; it read 9 (`watching`) while that block printed two labels wider than
-/// itself, so those two rows alone were pushed out of the column.
+/// The width `➜` labels are padded to, sized to the longest label in use.
 const ARROW_LABEL: usize = 11;
 
-/// The column an arrow's value starts at: the two-space indent, the glyph, a
-/// space, the padded label, a space. A caller laying out a multi-line value
-/// aligns its continuations here.
+/// The column an arrow's value starts at, where a caller aligns the
+/// continuations of a multi-line value.
 pub const ARROW_VALUE_COLUMN: usize = 2 + 1 + 1 + ARROW_LABEL + 1;
 
 /// The band the diagnostic renderer's width is clamped into, and what it uses
-/// when the terminal size is unavailable (piped output). Narrower than 60
-/// columns shreds the help text; past 120 the prose is hard to track back.
+/// when the terminal size is unavailable.
 const REPORT_MIN_WIDTH: usize = 60;
 const REPORT_MAX_WIDTH: usize = 120;
 const REPORT_NO_TERMINAL_WIDTH: usize = 96;
 
-/// Columns [`Ui::flush`] spends indenting each rendered line into the report
-/// column, counted twice so the box keeps the same margin on its right.
+/// Columns [`Ui::flush`] indents a rendered line by, counted twice so the box
+/// keeps the same margin on its right.
 const REPORT_MARGIN: usize = 4;
 
-/// Output verbosity level.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
-    /// Nothing but collected warnings: used internally while the dev server
-    /// rebuilds, so a rebuild reads as one concise log line, not a full build
-    /// block.
+    /// Nothing but collected warnings.
     Silent,
     /// Only warnings and the final result.
     Quiet,
-    /// Default: banner, results, warnings.
+    /// Banner, results, warnings.
     #[default]
     Default,
-    /// Verbose: + per-page progress and detail. Debug *logs* are separate:
-    /// `-v` also enables them, via [`trace`].
+    /// Adds per-page progress and detail.
     Verbose,
 }
 
-/// A started stopwatch, for the operation summaries. Explicit: the caller
-/// times what it means to time, rather than the writer guessing.
 pub struct Timer(Instant);
 
 impl Timer {
@@ -105,17 +68,9 @@ impl Timer {
     }
 }
 
-/// What a run produced, as data rather than as prose: what `--json` writes to
-/// stdout.
-///
-/// stdout was already reserved for exactly this and had never carried anything,
-/// so a CI job could get a page count, a broken-link list or a warning set only
-/// by scraping styled text off stderr.
+/// What a run produced, as `--json` writes it to stdout.
 #[derive(serde::Serialize)]
 pub struct Report {
-    /// The shape of this object, so a consumer can refuse one it does not
-    /// understand instead of silently reading a field that moved. First, so it
-    /// is the first thing in the output as well as the first thing to check.
     pub schema: u32,
     /// Whether the run succeeded. A `--strict` failure is still `false`.
     pub ok: bool,
@@ -125,32 +80,17 @@ pub struct Report {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cached: Option<usize>,
     pub warnings: usize,
-    /// Every diagnostic collected, warnings and advice alike, in the order they
-    /// were reported.
+    /// Every diagnostic collected, in the order they were reported.
     pub diagnostics: Vec<Diagnostics>,
 }
 
 impl Report {
-    /// The version of the `--json` contract, carried in every report as
-    /// [`schema`](Report::schema).
-    ///
-    /// Bumped when an existing field changes meaning, changes type, or goes
-    /// away. Adding a field does *not* bump it: a consumer reading by name is
-    /// unaffected by a new sibling, and treating additions as breaking would
-    /// train everyone to ignore the number.
-    ///
-    /// The reason it exists before anyone parses this output is that it cannot
-    /// be added afterwards. A consumer written against an unversioned object
-    /// has no way to tell a v1 report from a v2 one, so the first breaking
-    /// change breaks it silently; a consumer that has always seen `schema` can
-    /// refuse what it does not know.
+    /// The version of the `--json` contract, bumped when an existing field
+    /// changes meaning, changes type, or goes away, never when one is added.
     pub const SCHEMA: u32 = 1;
 
-    /// Write this report to stdout, the one thing that ever goes there.
-    ///
-    /// A serialization failure is swallowed rather than replacing the run's
-    /// real outcome: the report describes what happened, and losing the
-    /// description is not the same as the thing having failed.
+    /// Write this report to stdout; a serialization failure is swallowed
+    /// rather than replacing the run's real outcome.
     pub fn emit(&self) {
         if let Ok(text) = serde_json::to_string(self) {
             let mut out = std::io::stdout().lock();
@@ -160,11 +100,10 @@ impl Report {
     }
 }
 
-/// One collected diagnostic, reduced to what a machine can act on: which class
-/// it is, how much it matters, and what it said.
+/// One collected diagnostic, reduced to what a machine can act on.
 #[derive(serde::Serialize, Clone)]
 pub struct Diagnostics {
-    /// The `baudelaire::..` code, absent only for a diagnostic carrying none.
+    /// Absent for a diagnostic carrying no code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
     pub severity: &'static str,
@@ -180,21 +119,17 @@ impl Diagnostics {
                 Severity::Warning => "warning",
                 Severity::Error => "error",
             },
-            // The plain rendering, not the styled one: a JSON consumer wants the
-            // text, and markup delimiters are this terminal's business.
             message: Markup::new(&diagnostic.to_string(), false).to_string(),
         }
     }
 }
 
-/// A collected diagnostic and how it counts: warnings tally into the build
-/// summary, advice is informational only.
+/// A collected diagnostic; warnings tally into the build summary, advice does
+/// not.
 struct Note(Box<dyn Diagnostic + Send + Sync>);
 
 impl Note {
     fn is_warning(&self) -> bool {
-        // Diagnostics default to `Error` severity when unset; anything at
-        // warning-or-worse counts against the build (advice does not).
         self.0.severity().unwrap_or(Severity::Error) >= Severity::Warning
     }
 }
@@ -204,28 +139,19 @@ struct State {
     level: Level,
     notes: Vec<Note>,
     warned: usize,
-    /// What the run produced, when it produced anything countable. Recorded by
-    /// the commands that build, read only by [`Ui::summary`].
+    /// What the run produced, absent for a command that counts nothing.
     built: Option<(usize, usize)>,
-    /// Every diagnostic collected this run, in machine-readable form.
-    ///
-    /// Kept apart from `notes` because `flush` drains those, and a build flushes
-    /// its own warnings well before the CLI assembles the `--json` report: read
-    /// from `notes`, the report came out empty while the count said otherwise.
+    /// Kept apart from `notes` because [`Ui::flush`] drains those long before
+    /// the `--json` report is assembled.
     collected: Vec<Diagnostics>,
 }
 
-/// The shared terminal reporter. All methods take `&self` (state sits behind a
-/// mutex), so one `Ui` threads freely through rayon workers and the dev
-/// server's request thread.
+/// The shared terminal reporter, threaded by `&self` through every worker.
 pub struct Ui {
     state: Mutex<State>,
     tty: bool,
-    /// Whether the writer will keep colour, asked of `anstream` with the same
-    /// question it answers for itself. Diagnostics need it up front rather than
-    /// after the fact: [`Markup`] renders a span *structurally*, styling it here
-    /// and writing its delimiters back out there, so stripping the escapes off a
-    /// coloured render would leave a path with no quotes around it at all.
+    /// Whether the writer will keep colour, needed up front because [`Markup`]
+    /// renders a span structurally rather than stripping escapes afterwards.
     color: bool,
 }
 
@@ -245,8 +171,6 @@ impl Ui {
         }
     }
 
-    /// The current verbosity, so callers can quiet a sub-operation and restore
-    /// it (the dev server silences the full build block during a rebuild).
     pub fn level(&self) -> Level {
         self.state.lock().level
     }
@@ -255,37 +179,23 @@ impl Ui {
         self.state.lock().level = level;
     }
 
-    /// Total warnings collected so far. Diffed across a build for its summary.
     pub fn warnings(&self) -> usize {
         self.state.lock().warned
     }
 
-    /// Record what a build produced, for `--json`. Called by the commands that
-    /// build; everything else reports no counts rather than zero ones, which
-    /// are different claims.
+    /// Record what a build produced, for `--json`.
     pub fn built(&self, pages: usize, cached: usize) {
         self.state.lock().built = Some((pages, cached));
     }
 
-    /// Record the failure that ended this run, for the machine-readable report
-    /// alone.
-    ///
-    /// Collected rather than reported, because a fatal error is rendered by
-    /// `main` through this same reporter and queueing it here would print it
-    /// twice. Without this the one run a `--json` consumer most needs to
-    /// understand, the one that failed, came out as `ok: false` with an empty
-    /// `diagnostics` array and nothing on stdout to say why: every *warning*
-    /// passes through [`warn`](Ui::warn) and is collected, and the error that
-    /// actually stopped the build passed through neither.
+    /// Record the failure that ended this run, for the `--json` report alone:
+    /// printing it is `main`'s job.
     pub fn failed(&self, error: &dyn Diagnostic) {
         self.state.lock().collected.push(Diagnostics::of(error));
     }
 
-    /// The machine-readable record of this run.
-    ///
-    /// Built *before* [`flush`](Ui::flush) drains the notes, and written to
-    /// stdout, which is why nothing else here ever writes there: a caller
-    /// piping `--json` gets one object and no prose mixed into it.
+    /// The machine-readable record of this run, which the caller must build
+    /// before [`flush`](Ui::flush) drains the notes.
     pub fn summary(&self, ok: bool) -> Report {
         let s = self.state.lock();
         Report {
@@ -298,8 +208,7 @@ impl Ui {
         }
     }
 
-    /// The command banner: `baudelaire v0.1.0  building my-site`. Printed once
-    /// per invocation, before any work.
+    /// The command banner: `baudelaire v0.1.0  building my-site`.
     pub fn banner(&self, action: impl Display) {
         let mut s = self.state.lock();
         if s.level < Level::Default {
@@ -323,14 +232,12 @@ impl Ui {
         let _ = writeln!(s.out, "\n  {} {}", Marker::Section, msg.bold());
     }
 
-    /// A result line: `✓ built 24 pages .. in 132ms`. Shown even at `--quiet`
-    /// (it is the final result); only [`Level::Silent`] suppresses it.
+    /// A result line: `✓ built 24 pages .. in 132ms`.
     pub fn done(&self, msg: impl Display) {
         self.done_inner(msg, true);
     }
 
-    /// Like [`done`](Self::done) but flush left, for a result that stands on its
-    /// own rather than closing an indented stage.
+    /// Like [`done`](Self::done) but flush left.
     pub fn done_plain(&self, msg: impl Display) {
         self.done_inner(msg, false);
     }
@@ -365,8 +272,7 @@ impl Ui {
         let _ = writeln!(s.out, "    {} {}", Marker::Item, msg);
     }
 
-    /// Rows hung off the preceding result as a dimmed tree: each row gets a
-    /// `├─` connector, the last a rounded `╰─`, aligned under the result glyph.
+    /// Rows hung off the preceding result as a tree, the last one rounded.
     pub fn tree(&self, rows: &[String]) {
         let mut s = self.state.lock();
         if s.level < Level::Default {
@@ -383,20 +289,13 @@ impl Ui {
         }
     }
 
-    /// A vite-style pointer line: `➜ local  http://..`. Labels align across
-    /// consecutive arrows (padded to the widest expected label).
+    /// A vite-style pointer line: `➜ local  http://..`, its label padded so
+    /// consecutive arrows align.
     pub fn arrow(&self, label: &str, value: impl Display) {
         self.arrow_inner(label, value, Level::Default);
     }
 
-    /// The same line, shown at every level but [`Level::Silent`], like
-    /// [`done`](Ui::done).
-    ///
-    /// For the one arrow a quiet run still has to carry: the address the dev
-    /// server bound. `serve --port 0` asks the OS for a free port, so with this
-    /// line suppressed the port a caller has to connect to was not in the
-    /// output at all, and `-q` is exactly what a script wrapping the server
-    /// passes.
+    /// The same line, shown at every level but [`Level::Silent`].
     pub fn arrow_kept(&self, label: &str, value: impl Display) {
         self.arrow_inner(label, value, Level::Quiet);
     }
@@ -406,8 +305,6 @@ impl Ui {
         if s.level < least {
             return;
         }
-        // pad before styling: a width applied to the styled value would count
-        // its escape codes and misalign the column.
         let _ = writeln!(
             s.out,
             "  {} {} {}",
@@ -417,7 +314,7 @@ impl Ui {
         );
     }
 
-    /// A blank line, for vertical grouping. Suppressed when quiet.
+    /// A blank line, for vertical grouping.
     pub fn blank(&self) {
         let mut s = self.state.lock();
         if s.level < Level::Default {
@@ -456,15 +353,13 @@ impl Ui {
         );
     }
 
-    /// Collect a warning: a full diagnostic with code, spans, and help,
-    /// rendered by the next [`Ui::flush`] and counted in the build summary.
+    /// Collect a warning, rendered by the next [`Ui::flush`] and counted in
+    /// the build summary.
     pub fn warn(&self, warning: impl Diagnostic + Send + Sync + 'static) {
         self.report(Box::new(warning));
     }
 
-    /// Collect an already-boxed warning, for callers reached through a trait
-    /// object that cannot name the concrete type (see
-    /// [`crate::engine::process::Emit::warn`]).
+    /// Collect an already-boxed warning.
     pub fn report(&self, warning: Box<dyn Diagnostic + Send + Sync>) {
         let mut s = self.state.lock();
         let note = Note(warning);
@@ -473,17 +368,14 @@ impl Ui {
         s.notes.push(note);
     }
 
-    /// Collect an informational note (severity `Advice`): rendered with the
-    /// warnings but never counted against the build.
+    /// Collect an informational note, rendered with the warnings but never
+    /// counted against the build.
     pub fn advice(&self, advice: impl Diagnostic + Send + Sync + 'static) {
         self.warn(advice);
     }
 
-    /// Render everything collected since the last flush, miette-formatted and
-    /// indented into the report column. Shown at every level: a warning
-    /// survives `--quiet` and the dev server's silent rebuilds. Identical
-    /// renders collapse into one block with a repeat count, so the same
-    /// missing font across fifty pages reads as one warning, not fifty.
+    /// Render everything collected since the last flush, identical renders
+    /// collapsed into one block with a repeat count.
     pub fn flush(&self) {
         let mut s = self.state.lock();
         let notes = std::mem::take(&mut s.notes);
@@ -498,7 +390,6 @@ impl Ui {
                 None => seen.push((text, 1)),
             }
         }
-        // clear any pending transient status line so the first block starts clean.
         if self.tty {
             let _ = write!(s.out, "{CLEAR_LINE}");
         }
@@ -514,13 +405,7 @@ impl Ui {
         let _ = writeln!(s.out);
     }
 
-    /// Render the error that ended the run, into the same report column its
-    /// warnings use. Printed at every level: an error is never quieted, and
-    /// [`Ui::flush`] has already emptied the warnings above it.
-    ///
-    /// The one place a failure prints. `main` returns an exit code rather than a
-    /// [`miette::Result`] so that this renderer, not miette's global hook,
-    /// decides the width, the colour and the markup.
+    /// Render the error that ended the run; the one place a failure prints.
     pub fn fail(&self, error: &dyn Diagnostic) {
         let text = self.render(error);
         let mut s = self.state.lock();
@@ -534,13 +419,8 @@ impl Ui {
         let _ = writeln!(s.out);
     }
 
-    /// A diagnostic rendered as plain text, for a reader that is not this
-    /// terminal.
-    ///
-    /// The dev server's browser overlay is the caller: a page cannot interpret
-    /// ANSI escapes, and the point of putting the diagnostic on screen is that
-    /// it reads exactly like the one in the terminal, spans and all. Fixed
-    /// width for the same reason: the browser's viewport is not this terminal's.
+    /// A diagnostic rendered at a fixed width and without ANSI escapes, for a
+    /// reader that is not this terminal.
     pub fn plain(diagnostic: &dyn Diagnostic) -> String {
         let styled = Styled::new(diagnostic, false);
         let mut text = String::new();
@@ -552,8 +432,8 @@ impl Ui {
         }
     }
 
-    /// One diagnostic, formatted: its markup rendered by [`Styled`], the rest by
-    /// miette. Falls back to the bare message if the handler itself fails.
+    /// One diagnostic, formatted, falling back to the bare message if the
+    /// handler itself fails.
     fn render(&self, diagnostic: &dyn Diagnostic) -> String {
         let styled = Styled::new(diagnostic, self.color);
         let mut text = String::new();
@@ -563,9 +443,7 @@ impl Ui {
         }
     }
 
-    /// The renderer for collected diagnostics, sized to the terminal. Colors
-    /// are always emitted: the `anstream` writer strips them on pipes and
-    /// under `NO_COLOR`, same as every other line.
+    /// The renderer for collected diagnostics, sized to the terminal.
     fn handler() -> GraphicalReportHandler {
         let width =
             console::Term::stderr()
@@ -579,11 +457,9 @@ impl Ui {
     }
 
     /// A transient, in-place status line (no newline), overwritten by the next
-    /// output. Used by the dev server while a rebuild is running.
+    /// output and skipped on a pipe, which cannot take it back.
     pub fn status(&self, msg: impl Display) {
         let mut s = self.state.lock();
-        // A transient overwrite only makes sense on a terminal; on a pipe it
-        // would leave a stranded line (and raw cursor escapes) in the log.
         if s.level < Level::Default || !self.tty {
             return;
         }
@@ -592,8 +468,7 @@ impl Ui {
     }
 
     /// A dev-server event line: wall clock, change glyph, the file that
-    /// triggered the rebuild, and what it cost. Clears any pending
-    /// [`Ui::status`] line first, so rebuilds read as a tidy vite-style log.
+    /// triggered the rebuild, and what it cost.
     pub fn event(&self, path: impl Display, pages: usize, elapsed: Duration) {
         let mut s = self.state.lock();
         let clear = if self.tty { CLEAR_LINE } else { "" };
@@ -609,7 +484,7 @@ impl Ui {
         );
     }
 
-    /// A dev-server request that missed (verbose+): `12:31:02  404 /favicon.ico`.
+    /// A dev-server request that missed (verbose+): `12:31:02 404 /x.ico`.
     pub fn request(&self, code: u16, url: &str) {
         let mut s = self.state.lock();
         if s.level < Level::Verbose {
@@ -624,9 +499,8 @@ impl Ui {
         );
     }
 
-    /// A progress bar labeled `verb` over `len` items: visible only on a
-    /// terminal at the default level (verbose prints per-page lines instead,
-    /// quiet prints nothing).
+    /// A progress bar labeled `verb` over `len` items, visible only on a
+    /// terminal at the default level.
     pub fn progress(&self, verb: &'static str, len: usize) -> Progress {
         if self.tty && self.level() == Level::Default && len > 0 {
             Progress::bar(verb, len as u64)

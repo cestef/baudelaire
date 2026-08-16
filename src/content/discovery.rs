@@ -1,10 +1,5 @@
-//! Walking the content tree into collections.
-//!
-//! Every `.typ` file under `content/` is assigned to exactly one [`Collection`]:
-//! a collection configuring a `glob` claims what it matches, and whatever is
-//! left falls back to convention (its top directory, or [`ROOT`] for a file
-//! sitting directly under `content/`). Assignment is pure bookkeeping, so the
-//! expensive part (loading and evaluating each page) runs in parallel.
+//! Walking the content tree into collections: every content file under
+//! `content/` is assigned to exactly one [`Collection`].
 
 use std::path::{Path, PathBuf};
 
@@ -18,14 +13,10 @@ use crate::content::cache::DiscoveryCache;
 use crate::error::{ContentError, Result};
 use crate::world::Project;
 
-/// Special collection id for root-level pages (directly under `content/`).
-///
-/// A real id, not an internal marker: it is what a `content { collections {
-/// _root { .. } } }` block configures, and how a site (or a theme) binds a
-/// layout to the pages no other collection claims.
+/// Collection id for root-level pages (directly under `content/`); a real id a
+/// `content { collections { _root { .. } } }` block can configure.
 pub const ROOT: &str = "_root";
 
-/// A collection of pages.
 #[derive(Debug, Clone)]
 pub struct Collection {
     pub id: String,
@@ -34,8 +25,6 @@ pub struct Collection {
 }
 
 impl Collection {
-    /// Build a collection for `id`, applying its config override (or convention
-    /// default) and sorting its pages accordingly.
     fn new(id: String, pages: Vec<Page>, config: &Config) -> Self {
         let cfg = config.collection(&id).cloned().unwrap_or_default();
         Self {
@@ -46,8 +35,6 @@ impl Collection {
         .sorted()
     }
 
-    /// Sort by the collection's declared key, through [`Page::compare`]: the one
-    /// comparator, shared with a taxonomy's term listings.
     fn sorted(mut self) -> Self {
         let sort = self.config.sort;
         self.pages.sort_by(|a, b| Page::compare(sort, a, b));
@@ -65,21 +52,12 @@ impl Collection {
 /// convention: one in a subdirectory joins a collection named after that top
 /// directory; one directly under `content/` joins `_root` (mapped to `/`).
 ///
-/// A content directory that is not there is two different situations, and only
-/// one of them is a mistake. A site that never named one is either mid-scaffold
-/// or has no pages at all (a site of nothing but `static` files is a site too):
-/// it builds to nothing, quietly, and the prune declines to sweep a `dist` no
-/// page backs. A site that *named* one has made a claim about its own layout,
-/// and a name resolving to nothing is a typo -- `paths { content "conten" }`
-/// reported a successful build of zero pages, and with `prune` on, that swept
-/// the published site away. So the walk below is left to report it, naming the
-/// directory it could not read.
+/// A missing content directory is an empty site when nothing named one, and an
+/// error the walk reports when something did.
 pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
     if !config.paths.content.exists() && !Discovery::named(config) {
         return Ok(Vec::new());
     }
-    // Owned here because the analyzer's roots borrow them, and it lives as long
-    // as the cache does.
     let tracked = project.tracked();
     let cache = DiscoveryCache::load(config, project, &tracked);
     let collections = Discovery::new(config, project).run(&cache)?;
@@ -110,9 +88,6 @@ impl<'a> Discovery<'a> {
             .into_iter()
             .map(|path| (path, false))
             .collect();
-        // resolve owners first (cheap, serial), then load + evaluate frontmatter in
-        // parallel (the expensive part). `Page::load` records its collection, so the
-        // flat result regroups losslessly (rayon preserves input order).
         let assignments = self.assign()?;
         let pages: Vec<Page> = assignments
             .par_iter()
@@ -133,19 +108,9 @@ impl<'a> Discovery<'a> {
 
     /// Whether the site named its content directory something other than the
     /// default, which is what makes a missing one an error rather than an empty
-    /// site.
-    ///
-    /// Compared against [`Paths::default`], the one place that default is
-    /// written, rather than recorded as the key having been present: a site
-    /// spelling out the default spelling reads as not having named it, and the
-    /// only case that loses is a typo whose result is the default itself, which
-    /// is not a typo anyone makes.
-    ///
-    /// The comparison is on the final component alone, because a configured path
-    /// does not always reach here as it was written: a caller that resolves the
-    /// layout against a project root hands over an absolute path, and one
-    /// compared whole would then read as named on every site there is. What a
-    /// directory is *called* survives that.
+    /// site. Compared on the final component alone, because a path resolved
+    /// against a project root arrives absolute and would otherwise read as
+    /// named on every site there is.
     fn named(config: &Config) -> bool {
         let default = Paths::default().content;
         config.paths.content.file_name() != default.file_name()
@@ -167,10 +132,9 @@ impl<'a> Discovery<'a> {
             .collect())
     }
 
-    /// Resolve each content file to its owning collection as `(id, path)` pairs,
-    /// in the same order pages are grouped: glob-configured collections first
-    /// (config order), then convention for whatever remains. Pure bookkeeping:
-    /// no file is read here, so the expensive load can run in parallel.
+    /// Resolve each content file to its owning collection as `(id, path)`
+    /// pairs, in the same order pages are grouped: glob-configured collections
+    /// first (config order), then convention for whatever remains.
     fn assign(&mut self) -> Result<Vec<(String, PathBuf)>> {
         let mut out = Vec::new();
         let globs: Vec<(String, String)> = self

@@ -1,10 +1,6 @@
-//! Content discovery and the site's page set.
-//!
-//! [`discover`] walks the content root into [`Collection`]s of [`Page`]s;
-//! [`plan`] turns those into the full build set (eligible content pages plus
-//! generated taxonomy and paginated index pages) with permalink uniqueness
-//! enforced. Submodules own the pieces: frontmatter, permalinks, slugs,
-//! listings, taxonomy, and pagination.
+//! Content discovery and the site's page set: [`discover`] walks the content
+//! root into [`Collection`]s of [`Page`]s, and [`plan`] turns those into the
+//! full build set.
 
 pub mod cache;
 pub mod date;
@@ -45,11 +41,6 @@ use crate::ui::markup;
 use crate::world::Project;
 
 /// How many pages discovery found that the build left out, by reason.
-///
-/// Counted rather than merely filtered, because a page that is not published is
-/// something an author has to be told about. Three pages in and one page out
-/// was a silent `built 2 pages`, with the strings `draft` and `expired` nowhere
-/// in the output at any verbosity.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Held {
     pub drafts: usize,
@@ -73,14 +64,12 @@ impl Held {
         held
     }
 
-    /// Whether anything was held back at all.
     pub fn any(self) -> bool {
         self.drafts + self.future + self.expired > 0
     }
 }
 
-/// `2 drafts, 1 expired`: only the reasons that apply, each with its count, so
-/// the line reads as a sentence in the diagnostic that carries it.
+/// `2 drafts, 1 expired`: only the reasons that apply, each with its count.
 impl std::fmt::Display for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let counts = [
@@ -104,15 +93,10 @@ impl std::fmt::Display for Held {
 }
 
 /// The site's full page set: eligible content pages plus generated taxonomy and
-/// paginated index pages, with permalink collisions rejected. The single entry
-/// point the engine calls: all page-set assembly lives here, not in the engine.
+/// paginated index pages, with permalink collisions rejected.
 pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
     let collections = discover(config, project)?;
     let held = Held::of(&collections, config);
-    // Within each collection, the eligible pages sit in the collection's sort
-    // order; adjacent ones become each other's prev/next siblings (a blog's
-    // older/newer links). Computed per collection so navigation never crosses a
-    // boundary, and before taxonomy/pagination pages join the set.
     let mut pages: Vec<Page> = Vec::new();
     for collection in &collections {
         let eligible: Vec<&Page> = collection
@@ -120,12 +104,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
             .iter()
             .filter(|p| p.eligible(config))
             .collect();
-        // Siblings link within a language as well as a collection: prev/next
-        // never cross a language boundary. A single-language site is one group.
         for group in Page::groups(&eligible) {
-            // A pager links the pages a reader navigates between, which the
-            // not-found page is not: it neither appears in a neighbour's pager
-            // nor gets neighbours of its own.
             let (linked, rest): (Vec<&Page>, Vec<&Page>) =
                 group.into_iter().partition(|p| p.listed(config));
             for (i, page) in linked.iter().enumerate() {
@@ -139,13 +118,7 @@ pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
             pages.extend(rest.into_iter().cloned());
         }
     }
-    // The registries every reference resolves against, built from the content
-    // snapshot before anything derives pages from it: a `pages` source draws
-    // its entities from pages the plan has already read, and a generated
-    // listing is never one of them.
     let entities = Registries::build(config, project, &pages)?;
-    // Synthetic pages (taxonomy indexes, paginated listings) derive from the
-    // content snapshot above; each generator runs against the same `pages`.
     let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
         config,
         entities: &entities,
@@ -164,18 +137,13 @@ pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
 
 /// What planning produced: the pages a build renders, what it left out, and the
 /// entity registries every one of them resolves references against.
-///
-/// A struct rather than a tuple, because the registries are a third thing the
-/// engine carries the length of a build and a two-tuple was already one thing
-/// too many to read at the call site.
 pub struct Plan {
     pub pages: Vec<Page>,
     pub held: Held,
     pub entities: Registries,
 }
 
-/// One claim on an output file, and where it came from, the single accounting
-/// of everything a page writes into `dist`.
+/// One claim on an output file, and where it came from.
 struct Claim {
     output: std::path::PathBuf,
     origin: String,
@@ -185,9 +153,7 @@ impl Claim {
     /// Reject two claimants of one output file; otherwise the second silently
     /// overwrites the first. Keyed on the destination *file*, not the permalink
     /// string: [`Config::destination`] normalizes segments, so distinct
-    /// permalinks can still meet on disk. Covers colliding slugs, a
-    /// `posts/index.typ` shadowing a paginated `/posts/`, nested files that
-    /// flatten to one URL, and a redirect stub aimed at a real page's file.
+    /// permalinks can still meet on disk.
     fn unique(pages: &[Page], config: &Config) -> Result<()> {
         let mut seen: std::collections::HashMap<std::path::PathBuf, String> =
             std::collections::HashMap::new();
@@ -208,17 +174,8 @@ impl Claim {
         Ok(())
     }
 
-    /// Every file the config's own `redirect { }` pairs will write.
-    ///
-    /// An old path with no page behind it is still a file in `dist`, so it
-    /// belongs in the same accounting as the pages: a pair aimed at a path some
-    /// page does own would otherwise bury that page under a stub forwarding
-    /// away from it, and the site would lose a page to a config line. Last, so
-    /// a page is always the claim reported as the first.
-    ///
-    /// A wildcard pair claims nothing: it is written as a rule and never as a
-    /// file, so reserving `dist/latest/*/index.html` for it would be accounting
-    /// for a file no build writes, and colliding over one.
+    /// Every file the config's own `redirect { }` pairs will write; a wildcard
+    /// pair claims nothing, being written as a rule and never as a file.
     fn declared(config: &Config) -> impl Iterator<Item = Self> + '_ {
         config
             .redirect
@@ -231,19 +188,13 @@ impl Claim {
     }
 
     /// Every file `page` will write: its own HTML, plus one stub per
-    /// frontmatter `redirect` entry.
+    /// frontmatter `redirect` entry, each localized exactly as the emitter
+    /// localizes it or this check compares paths the build never writes.
     fn of<'a>(page: &'a Page, config: &'a Config) -> impl Iterator<Item = Self> + 'a {
         let own = Self {
             output: page.output.clone(),
             origin: page.source.display().to_string(),
         };
-        // Localized exactly as the emitter localizes it, or this check answers a
-        // question the build never asks. Translating a page by copying its
-        // frontmatter carries the `redirect` list along, and each edition
-        // forwards an old path under its own language prefix: `/old/a/` and
-        // `/fr/old/a/` are two files. Compared unlocalized they looked like one,
-        // and the documented workflow failed the build on a collision that does
-        // not exist.
         let stubs = page
             .frontmatter
             .redirect

@@ -29,8 +29,6 @@ use clap::{Args, Parser, Subcommand};
 use crate::config::Config;
 use crate::error::{BaudelaireErrorKind, ConfigError, FsError, Op, Result, StrictWarnings};
 use crate::ui::{Level, Ui};
-// Counted output lives in the theme verbs alone, which a slim build does not
-// carry.
 use crate::version::Version;
 
 #[cfg(feature = "announce")]
@@ -50,10 +48,7 @@ pub use serve::ServeArgs;
 #[cfg(feature = "themes")]
 pub use theme::ThemeArgs;
 
-/// Help colouring, matched to the terminal UI palette: cyan for structure
-/// (section headers, usage), green for the literals you type (commands and
-/// flags), and dimmed `<VALUE>` placeholders, so a glance separates the words
-/// to type from the slots to fill.
+/// Help colouring, matched to the terminal UI palette.
 const HELP_STYLES: Styles = Styles::styled()
     .header(AnsiColor::Cyan.on_default().bold())
     .usage(AnsiColor::Cyan.on_default().bold())
@@ -63,9 +58,7 @@ const HELP_STYLES: Styles = Styles::styled()
     .invalid(AnsiColor::Yellow.on_default())
     .error(AnsiColor::Red.on_default().bold());
 
-/// Help-heading names, so the shared global flags cluster by concern instead of
-/// piling into one long `Options` list. Single source, referenced by every
-/// grouped `#[arg(help_heading = ..)]`.
+/// Help-heading names, referenced by every grouped `#[arg(help_heading = ..)]`.
 mod group {
     pub const PROJECT: &str = "Project";
     pub const OUTPUT: &str = "Output";
@@ -77,8 +70,7 @@ mod group {
 }
 
 /// The usage examples appended to the top-level help, as `(command, what it
-/// does)`. A table rather than a sequence of calls, so the description column is
-/// computed from the rows instead of hand-tuned to the longest one.
+/// does)`.
 const EXAMPLES: &[(&str, &str)] = &[
     ("baudelaire", "Build the site from ./config.kdl"),
     (
@@ -97,12 +89,6 @@ const EXAMPLES: &[(&str, &str)] = &[
 ];
 
 /// What the process exits with, as `(code, when)`.
-///
-/// Two, and only two: `main` maps a run to success or failure and nothing
-/// finer, so a script branches on zero rather than on a taxonomy of numbers
-/// this would otherwise have to keep true. Listed because a reader cannot know
-/// that without being told, and a wrapper written against invented codes is
-/// worse than one written against these.
 const EXIT_CODES: &[(&str, &str)] = &[
     ("0", "Everything asked for was done"),
     (
@@ -111,10 +97,8 @@ const EXIT_CODES: &[(&str, &str)] = &[
     ),
 ];
 
-/// The environment a run reads, as `(name, what it decides)`.
-///
-/// A flag always beats the variable beside it, which is the precedence the
-/// whole CLI follows: --color over the two colour variables, -v over RUST_LOG.
+/// The environment a run reads, as `(name, what it decides)`; a flag always
+/// beats the variable beside it.
 const ENVIRONMENT: &[(&str, &str)] = &[
     ("RUST_LOG", "Debug-log filter, for a run that passed no -v"),
     ("NO_COLOR", "Set to anything, colour is off"),
@@ -123,17 +107,13 @@ const ENVIRONMENT: &[(&str, &str)] = &[
     ("${VAR}", "Expanded in every config.kdl string value"),
 ];
 
-/// The absolute project root: the directory `--root` selected (into which the
-/// process changes so relative config paths resolve under it) or the launch
-/// directory. Captured once and threaded, so nothing re-derives the root from
-/// the process cwd.
+/// The absolute project root: the directory `--root` selected, or the launch
+/// directory.
 pub(crate) struct Root(PathBuf);
 
 impl Root {
-    /// Enter and capture the project root. A `--root` argument changes the
-    /// process cwd (the single side effect that makes every relative path in
-    /// the config resolve under the chosen directory), then the absolute root
-    /// is read once, here, and passed by value everywhere else.
+    /// Enter and capture the project root, changing the process cwd so that
+    /// every relative path in the config resolves under it.
     fn enter(dir: Option<&Path>) -> Result<Self> {
         if let Some(dir) = dir {
             std::env::set_current_dir(dir).map_err(|e| FsError::new(Op::Enter, dir, e))?;
@@ -162,9 +142,6 @@ impl Root {
 #[derive(Parser, Debug)]
 #[command(
     name = "baudelaire",
-    // `-V` is the one-line form a script greps; `--version` is the full report,
-    // which is also what answers "does this binary even have the feature my
-    // config is asking for".
     version = Version::SEMVER,
     long_version = Version::long(),
     about,
@@ -184,13 +161,9 @@ pub struct Cli {
 }
 
 /// Arguments shared across *every* subcommand: project location and logging.
-/// The build-shaping overrides live in [`BuildOverrides`], flattened only into
-/// the commands that actually build, so `new`/`init`/`clean` help stays clean.
 #[derive(Args, Debug, Clone)]
 pub struct GlobalArgs {
     /// Path to config.kdl.
-    // The default is the one spelling of the file name, not a second copy of
-    // it: clap takes anything that converts to an `OsStr`.
     #[arg(short, long, global = true, default_value = Config::FILE, help_heading = group::PROJECT)]
     pub config: PathBuf,
 
@@ -238,18 +211,12 @@ pub struct GlobalArgs {
     /// Layers over the automatic detection rather than replacing it: `auto`
     /// leaves `NO_COLOR`, `CLICOLOR_FORCE` and the terminal check to decide,
     /// and naming `always` or `never` overrules all three.
-    // Under `Logging` rather than `Output`: that heading is where the build
-    // writes its files, and this is about what the terminal reads.
     #[arg(long, global = true, value_name = "WHEN", value_enum, default_value = "auto", help_heading = group::LOGGING)]
     pub color: Color,
 }
 
-/// Config overrides that only make sense for a build: `build` and `serve`, and
-/// equally `deploy`/`announce`, which build the site before publishing it and
-/// so want the same levers (a preview `--base-url`, a staging `--drafts`, a
-/// `--no-cache` clean artifact). Flattened per-command rather than made global
-/// so scaffolding commands don't advertise irrelevant `--drafts`/`--no-cache`
-/// flags.
+/// Config overrides that only make sense for a command that builds: `build`,
+/// `serve`, and the publishing commands that build first.
 #[derive(Args, Debug, Clone, Default)]
 pub struct BuildOverrides {
     #[command(flatten)]
@@ -267,9 +234,7 @@ pub struct BuildOverrides {
 }
 
 /// The overrides that apply to any command reading the config, including the
-/// ones that write nothing. `--out` and `--no-cache` are *not* here: `check`
-/// writes no file and loads no cache, so advertising them there offered
-/// settings that did nothing.
+/// ones that write nothing.
 #[derive(Args, Debug, Clone, Default)]
 pub struct CommonOverrides {
     /// Override the base URL.
@@ -307,18 +272,7 @@ pub struct CommonOverrides {
     pub no_strict_links: bool,
 }
 
-/// Every command carries a short alias, and they are *visible* aliases: they
-/// appear in `--help` beside the full name, because a shorthand nobody can find
-/// is not a shorthand.
-///
-/// The letters are first-come by frequency, not by spelling, which is why
-/// `check` takes `c` and `clean` takes `cl`: `check` runs in a loop while
-/// writing, `clean` runs when something has gone wrong. A single letter for the
-/// destructive one, next to the letter for the harmless one, is also how a
-/// slipped keystroke deletes a build.
-///
-/// These are an API the moment they ship. A future command cannot claim a
-/// letter already listed here, so the table is worth reading before adding one.
+/// The subcommands, each with a visible short alias.
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
     /// Build the site (default when no subcommand given).
@@ -365,10 +319,7 @@ pub enum Command {
 
 impl Cli {
     /// The blocks under the top-level help: [`EXAMPLES`], [`EXIT_CODES`] and
-    /// [`ENVIRONMENT`], each through the one help-block layout so the three
-    /// agree about their column and their accent. owo-colors gates the colour
-    /// on the stdout stream itself (`if_supports_color`), so escapes never leak
-    /// when piped or under `NO_COLOR`: the same policy [`crate::ui`] uses.
+    /// [`ENVIRONMENT`], through the one help-block layout.
     fn help() -> String {
         format!(
             "{}\n{}\n{}",
@@ -382,21 +333,16 @@ impl Cli {
     }
 
     /// The parsed config: read from `--config`, then narrowed by the active
-    /// profile. Build-time overrides ([`BuildOverrides`]) are applied per-command
-    /// by the caller, not here, so `new`/`clean` load the same untouched config.
+    /// profile. Build-time overrides ([`BuildOverrides`]) are the caller's to
+    /// apply per-command, not this.
     pub fn config(&self) -> Result<Config> {
         let text = self.read()?;
-        // Name every config diagnostic after the file actually loaded, the one
-        // place the path is known: otherwise no config error says which file it
-        // came from, and `--config prod.kdl` reported `config.kdl`.
         let named = |e: BaudelaireErrorKind| match e {
             BaudelaireErrorKind::Config(config) => {
                 BaudelaireErrorKind::Config(Box::new(config.named(&self.global.config)))
             }
             other => other,
         };
-        // `Root::enter` has already made the project directory the cwd, so a
-        // directory-theme resolves against it.
         let mut config =
             Config::load(&text, Path::new("."), self.global.theme.as_deref()).map_err(named)?;
         if let Some(profile) = &self.global.profile {
@@ -406,9 +352,7 @@ impl Cli {
     }
 
     /// Read the config file, mapping only a genuinely missing file to a
-    /// [`ConfigError::not_found`]. Every other failure (permission denied, a
-    /// directory, invalid UTF-8) keeps its precise [`FsError`] diagnostic rather
-    /// than being flattened into "config not found".
+    /// [`ConfigError::not_found`]; every other failure keeps its [`FsError`].
     fn read(&self) -> Result<String> {
         let path = &self.global.config;
         crate::fs::read_to_string(path).map_err(|e| match e {
@@ -422,11 +366,7 @@ impl Cli {
     /// The UI verbosity, from the two counted flags.
     ///
     /// `-vv` and beyond only deepen the `tracing` filter (see
-    /// [`crate::ui::trace`]): the terminal report itself has one verbose level.
-    /// Downward there are two, because they suppress different things: `-q`
-    /// drops the narration and keeps the result line, `-qq` drops that too and
-    /// leaves only what went wrong. Nothing silences a diagnostic; that is what
-    /// the exit code and `--json` are for.
+    /// [`crate::ui::trace`]); the terminal report itself has one verbose level.
     fn level(&self) -> Level {
         let g = &self.global;
         match (g.quiet, g.verbose) {
@@ -439,17 +379,6 @@ impl Cli {
 }
 
 /// What `--color` says about styled output.
-///
-/// Layered *over* the detection `anstream` and owo-colors already do, never
-/// replacing it: [`Auto`](Self::Auto) leaves both to their own answer (is it a
-/// terminal, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `TERM=dumb`), and the
-/// other two settle it outright.
-///
-/// An explicit flag beats every environment signal, `CLICOLOR_FORCE` included.
-/// That is the case a bare environment policy cannot express: a script that
-/// inherits the variable and wants plain text has nothing else to say, and
-/// unsetting a variable it did not set is not something a caller can be asked
-/// to do.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Color {
     /// Colour when the stream is a terminal that wants it.
@@ -460,14 +389,9 @@ pub enum Color {
 }
 
 impl Color {
-    /// Install this choice for the process: the `anstream` writers every
-    /// [`Ui`] line goes through, and the owo-colors override the help blocks
-    /// and the prompts consult (`if_supports_color`).
-    ///
-    /// Both, because the two detect independently: anstream's global choice
-    /// does not reach `if_supports_color`, and owo's override does not reach a
-    /// stream's own stripping. Setting them together here is what keeps one
-    /// flag from colouring half the output.
+    /// Install this choice for the process, in both `anstream` and owo-colors:
+    /// the two detect independently, so one flag would otherwise colour half
+    /// the output.
     fn install(self) {
         use anstream::ColorChoice;
         match self {
@@ -488,9 +412,8 @@ impl Color {
 
     /// The `--color` value on a raw command line, before clap has parsed it.
     ///
-    /// Deliberately lenient: a value it cannot read is left alone, so clap
-    /// reports the usage error rather than this quietly picking something. The
-    /// last spelling wins, as it does for every other flag.
+    /// A value it cannot read is `None`, leaving clap to report the usage
+    /// error; the last spelling wins, as it does for every other flag.
     fn declared<'a>(args: impl IntoIterator<Item = &'a str>) -> Option<Self> {
         let mut args = args.into_iter();
         let mut chosen = None;
@@ -511,7 +434,7 @@ impl Color {
     }
 
     /// The variant `value` names, off clap's own value table, so the pre-scan
-    /// and the parse cannot disagree about what `always` means.
+    /// and the parse cannot disagree.
     fn named(value: &str) -> Option<Self> {
         use clap::ValueEnum as _;
         Self::from_str(value, true).ok()
@@ -519,20 +442,7 @@ impl Color {
 }
 
 /// What a `--x` / `--no-x` flag pair says about a boolean setting: turn it on,
-/// turn it off, or leave whatever the config decided.
-///
-/// Every overridable boolean in the CLI is spelled as such a pair, resolved
-/// here. Three idioms used to coexist, and each was wrong in its own way:
-///
-/// - A tri-state `Option<bool>` taking an optional value (`--strict-links
-///   [<bool>]`). It read the *next* argument as its value, so the natural
-///   `baudelaire new --draft posts/foo` failed with "invalid value 'posts/foo'
-///   for '--draft'", an error that never mentions the real cause.
-/// - A plain `bool` that could only push a setting on (`--drafts`, `--future`),
-///   so `drafts #true` in config had no CLI route back to a production
-///   build, and `serve { watch #false }` no way to turn watching on.
-/// - One that accumulated with `|=` (`--external`), which is the same one-way
-///   street with the reasoning buried in a code comment.
+/// turn it off, or (`None`) leave whatever the config decided.
 #[derive(Debug, Clone, Copy, Default)]
 struct Toggle(Option<bool>);
 
@@ -544,14 +454,14 @@ impl Toggle {
     }
 
     /// Overlay onto a config field, leaving it untouched when neither flag was
-    /// passed, which is what makes the config the default rather than the flag.
+    /// passed.
     fn apply(self, target: &mut bool) {
         if let Some(value) = self.0 {
             *target = value;
         }
     }
 
-    /// The value, or `default` when neither flag was passed. For a toggle with
+    /// The value, or `default` when neither flag was passed, for a toggle with
     /// no config field behind it.
     fn or(self, default: bool) -> bool {
         self.0.unwrap_or(default)
@@ -574,13 +484,9 @@ impl Overrides for BuildOverrides {
 }
 
 impl CommonOverrides {
-    /// The value parser for every flag that takes a site base: a URL that is
-    /// absolute, by the same rule the config's own `url` answers to.
-    ///
-    /// `pub(super)` because `init --url` writes the very config key this
-    /// validates and did not answer to it: `init --url example.com` exited 0
-    /// and wrote a project whose first build fails, naming a line the scaffold
-    /// had just written rather than the flag that put it there.
+    /// The value parser for every flag that takes a site base, `init --url`
+    /// included: a URL that is absolute, by the same rule the config's own
+    /// `url` answers to.
     pub(super) fn absolute(value: &str) -> std::result::Result<String, String> {
         if crate::config::BaseUrl::absolute(value) {
             Ok(value.to_owned())
@@ -602,14 +508,9 @@ impl Overrides for CommonOverrides {
 }
 
 impl Cli {
-    /// Parse the command line with the colour choice already in force.
-    ///
-    /// The process entry point, in place of `Cli::parse`. `--help` and
-    /// `--version` are written by clap during the parse and never reach
-    /// [`Cli::run`], so a `--color` that only took effect afterwards would
-    /// colour every line of a run and none of its help. The value is read off
-    /// the raw arguments first; clap then parses it properly, and reports a
-    /// misspelling as the usage error it is.
+    /// Parse the command line with the colour choice already in force, in place
+    /// of `Cli::parse`: clap writes `--help` during the parse, so a `--color`
+    /// installed afterwards would miss it.
     #[must_use]
     pub fn parsed() -> Self {
         let args: Vec<String> = std::env::args().collect();
@@ -620,23 +521,17 @@ impl Cli {
     }
 
     /// Run this parsed CLI: install the debug-log subscriber, dispatch, and
-    /// flush any collected warnings, on success and failure alike, so a failed
-    /// run still shows what it warned about before dying.
-    // The process entry point owns the parsed CLI for the whole run and drops
-    // it at the end; borrowing here would only push that ownership back into
-    // `main`.
+    /// flush any collected warnings, on success and failure alike.
+    ///
+    /// Installs the colour choice again, for a `Cli` built without
+    /// [`Cli::parsed`]; the call is idempotent.
+    // The entry point owns the parsed CLI for the whole run.
     #[allow(clippy::needless_pass_by_value)]
     pub fn run(self) -> Result<()> {
-        // Again, and not only in `parsed`: a `Cli` built any other way (a test,
-        // an embedder) has had nothing installed for it yet, and the choice is
-        // idempotent.
         self.global.color.install();
         crate::ui::trace::Logs::new(self.global.verbose).install();
         let ui = Ui::new(self.level());
         let result = self.dispatch(&ui);
-        // Counted before the flush empties them, and reported after, so
-        // `--strict` fails *behind* the warnings that explain it rather than in
-        // front of them.
         let warned = ui.warnings();
         let outcome = result.and_then(|()| {
             if self.global.strict && warned > 0 {
@@ -645,10 +540,6 @@ impl Cli {
                 Ok(())
             }
         });
-        // Built while the diagnostics are still collected, and written before
-        // the flush, so the JSON object lands on stdout uninterleaved with the
-        // prose on stderr. Not at all for a command whose own document owns
-        // stdout: see [`Command::owns_stdout`].
         if self.global.json && !self.command.as_ref().is_some_and(Command::owns_stdout) {
             if let Err(error) = &outcome {
                 ui.failed(error);
@@ -659,9 +550,7 @@ impl Cli {
         outcome
     }
 
-    /// Dispatch to the matching subcommand. Each command owns its wiring in a
-    /// [`Run`] impl; this only picks the variant (defaulting to `build`) and
-    /// hands it the shared [`Cx`].
+    /// Dispatch to the matching subcommand, defaulting to `build`.
     fn dispatch(&self, ui: &Ui) -> Result<()> {
         let root = Root::enter(self.global.root.as_deref())?;
         let command = self
@@ -689,17 +578,13 @@ impl Cx<'_> {
     /// command that operates on an existing project.
     fn announced(&self, verb: &str) -> Result<Config> {
         let mut config = self.cli.config()?;
-        // `Root::enter` has already moved the cwd, so every relative config path
-        // resolves under it; record it so nothing has to re-derive the root from
-        // one of those paths.
         config.root = self.root.path().to_path_buf();
         self.ui.banner(format_args!("{verb} {}", config.label()));
         Ok(config)
     }
 
     /// [`Cx::announced`] plus the build-shaping overrides: the front matter of
-    /// the build-shaped commands (`build`, `check`). Overrides never touch the
-    /// site name, so applying them after the banner leaves its text unchanged.
+    /// the build-shaped commands.
     fn configured(&self, overrides: &impl Overrides, verb: &str) -> Result<Config> {
         let mut config = self.announced(verb)?;
         overrides.apply(&mut config);
@@ -714,21 +599,9 @@ trait Run {
 }
 
 impl Command {
-    /// Whether this command's own document *is* the stdout payload.
-    ///
-    /// THE list of them, read by [`run`] to decide whether a `--json` report may
-    /// be appended. `completions`, `man` and `reference` describe the CLI rather
-    /// than a site: they read no config, build nothing, and write one document
-    /// to stdout meant to be redirected into a completion directory, a `man1/`
-    /// or a file. A summary object printed after it corrupts that file, and
-    /// `baudelaire completions bash --json > _bd` produced a script the shell
-    /// chokes on.
-    ///
-    /// Skipped rather than refused as a usage error, because `--json` is global:
-    /// a wrapper that sets it once for every invocation would otherwise fail on
-    /// the three commands that have no summary to report in the first place.
-    /// The run still warns on stderr, and `--strict` still decides the exit
-    /// code, so nothing is swallowed but the report.
+    /// Whether this command's own document *is* the stdout payload, in which
+    /// case a `--json` summary is skipped rather than appended: it would
+    /// corrupt a redirected completion script, man page or reference.
     fn owns_stdout(&self) -> bool {
         matches!(
             self,
@@ -736,7 +609,6 @@ impl Command {
         )
     }
 
-    /// Delegate to the selected subcommand's [`Run`] impl.
     fn run(&self, cx: &Cx) -> Result<()> {
         match self {
             Self::Build(args) => args.run(cx),
@@ -771,9 +643,6 @@ mod tests {
         }
     }
 
-    /// A target that would take the project with it is refused: `paths { dist
-    /// "." }` used to delete the whole project, `cache { dir "/" }` everything
-    /// above it.
     #[test]
     fn a_target_containing_the_project_is_not_removable() {
         let root = Path::new("/home/me/site");
@@ -784,13 +653,9 @@ mod tests {
             Path::new("/home/me/site/public"),
             root
         ));
-        // A dist deliberately placed outside the project stays cleanable.
         assert!(CleanArgs::removable(Path::new("/srv/www"), root));
     }
 
-    /// `deploy` and `announce` build before they publish, so they take the same
-    /// levers as `build`. Without them the only way to publish a preview was a
-    /// named profile per permutation.
     #[test]
     fn a_publishing_command_takes_the_build_overrides() {
         use clap::Parser;
@@ -812,8 +677,6 @@ mod tests {
         assert!(!config.cache.incremental);
     }
 
-    /// The flag answers to the same rule the config's `url` does: a preview
-    /// deploy must not be able to set a base the config would have refused.
     #[test]
     fn a_base_url_override_must_be_absolute() {
         use clap::Parser;
@@ -831,10 +694,6 @@ mod tests {
         );
     }
 
-    /// ...and so must `init --url`, which writes that very config key. It did
-    /// not: `init --url example.com` exited 0 and left a project whose first
-    /// build fails, naming a line the scaffold had just written rather than the
-    /// flag that put it there.
     #[test]
     fn the_scaffolded_url_answers_to_the_same_rule() {
         use clap::Parser;
@@ -844,13 +703,6 @@ mod tests {
         );
     }
 
-    /// The three commands whose document *is* the stdout payload keep it to
-    /// themselves; everything else still reports.
-    ///
-    /// `baudelaire completions bash --json > _bd` used to write a completion
-    /// script with a JSON object on the end of it, which a shell refuses to
-    /// source. The same appended object would corrupt a man page and the
-    /// config reference.
     #[test]
     fn a_document_command_keeps_stdout_to_itself() {
         use clap::Parser;
@@ -871,8 +723,6 @@ mod tests {
         assert!(!owns(&["baudelaire", "new", "posts/a"]));
     }
 
-    /// The two counted flags between them name four levels, and `-qq` is the
-    /// one that could not be spelled at all while `--quiet` was a boolean.
     #[test]
     fn the_two_counted_flags_name_four_levels() {
         use clap::Parser;
@@ -883,13 +733,9 @@ mod tests {
         assert_eq!(level(&["baudelaire", "-q", "build"]), Level::Quiet);
         assert_eq!(level(&["baudelaire", "-qq", "build"]), Level::Silent);
         assert_eq!(level(&["baudelaire", "-qqq", "build"]), Level::Silent);
-        // The two still refuse each other.
         assert!(Cli::try_parse_from(["baudelaire", "-q", "-v", "build"]).is_err());
     }
 
-    /// The flag is read off the raw arguments as well as parsed, so `--help`,
-    /// which clap writes and exits on, is coloured by it too. Both spellings,
-    /// because clap accepts both.
     #[test]
     fn a_colour_choice_is_read_before_clap_sees_it() {
         assert_eq!(Color::declared(["baudelaire", "build"]), None);
@@ -901,22 +747,16 @@ mod tests {
             Color::declared(["baudelaire", "--color", "always", "build"]),
             Some(Color::Always)
         );
-        // The last one wins, as everywhere else.
         assert_eq!(
             Color::declared(["baudelaire", "--color=always", "--color=never"]),
             Some(Color::Never)
         );
-        // A value it cannot read is clap's to report, not this to guess at.
         assert_eq!(Color::declared(["baudelaire", "--color=maybe"]), None);
         assert_eq!(Color::declared(["baudelaire", "--colorful"]), None);
     }
 
-    /// `--color` is what a run has to say when the environment has already
-    /// decided: `never` has to beat `CLICOLOR_FORCE`, which nothing else can.
-    ///
-    /// Installs process-global state, which is what makes it worth stating that
-    /// the suite runs one process per test (nextest). Everything that renders
-    /// colour in a test strips it before asserting, for the same reason.
+    /// Installs process-global state; the suite runs one process per test
+    /// (nextest).
     #[test]
     fn an_explicit_choice_overrules_the_environment() {
         use anstream::ColorChoice;
@@ -924,7 +764,6 @@ mod tests {
         assert_eq!(ColorChoice::global(), ColorChoice::Never);
         Color::Always.install();
         assert_eq!(ColorChoice::global(), ColorChoice::Always);
-        // ..and `auto` hands the question back.
         Color::Auto.install();
         assert_eq!(ColorChoice::global(), ColorChoice::Auto);
     }
@@ -944,10 +783,6 @@ mod tests {
         }
     }
 
-    /// The wholesale wipe asks; a narrowed sweep does not. `clean` with no flag
-    /// takes the output directory *and* announce state, which decides what the
-    /// next `announce` does to a live repository, so an unattended run has to
-    /// stop rather than answer for itself. `clean --cache` costs a rebuild.
     #[test]
     fn only_a_full_sweep_asks_for_consent() {
         assert!(args(false, true, false).consented(&Headless, 1).unwrap());
@@ -962,8 +797,6 @@ mod tests {
         assert!(yes.consented(&Headless, 3).unwrap());
     }
 
-    /// `--all` is the sweep a script can state outright, so the most
-    /// destructive invocation stops being the shortest one by accident.
     #[test]
     fn all_is_explicit_as_well_as_implicit() {
         assert!(CleanArgs::default().all());
@@ -982,8 +815,6 @@ mod tests {
         let targets = args(false, false, false).targets(&config);
         assert!(targets.contains(&config.paths.dist));
         assert!(targets.contains(&PathBuf::from(Config::SCRATCH)));
-        // The default cache lives under the scratch root, so it is not named
-        // separately: the root sweep already covers it.
         assert!(!targets.contains(&config.cache.dir));
     }
 

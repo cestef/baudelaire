@@ -36,14 +36,12 @@ fn schema_reads_the_type_as_a_positional_or_an_attribute() {
     );
     let schema = cfg.schema("blog");
     assert_eq!(schema.len(), 3);
-    // A bare field constrains presence and nothing else, and is still required.
     assert_eq!(schema[0].0, "title");
     assert_eq!(schema[0].1.ty, FieldType::Any);
     assert!(!schema[0].1.optional);
     assert_eq!(schema[1].1.ty, FieldType::List(Box::new(FieldType::Str)));
     assert_eq!(schema[2].1.ty, FieldType::Str);
     assert!(schema[2].1.optional);
-    // A collection with no schema, and one with no config at all, constrain nothing.
     assert!(cfg.schema("notes").is_empty());
 }
 
@@ -90,7 +88,6 @@ fn schema_reads_nested_types_and_the_fields_of_a_dict() {
         "a nested field is optional on its own"
     );
 
-    // The block attaches to the dictionary inside the list, not to the list.
     let FieldType::List(inner) = &schema[2].1.ty else {
         panic!("expected a list, got {:?}", schema[2].1.ty);
     };
@@ -101,7 +98,6 @@ fn schema_reads_nested_types_and_the_fields_of_a_dict() {
     assert_eq!(fields[0].0, "name");
 }
 
-/// The type language's two failures, each at the line that wrote it.
 #[test]
 fn schema_refuses_a_broken_type_and_a_block_with_nowhere_to_go() {
     let code = |kdl: &str| {
@@ -119,8 +115,6 @@ fn schema_refuses_a_broken_type_and_a_block_with_nowhere_to_go() {
         code("content { collections { blog { schema { hero \"list<nope>\" } } } }"),
         "baudelaire::config::unknown_value"
     );
-    // A block declares what a dictionary holds, so a type with none has no use
-    // for one: the mistake fails here rather than being silently dropped.
     assert_eq!(
         code("content { collections { blog { schema { hero \"list<int>\" { name \"str\" } } } } }"),
         "baudelaire::config::field_not_dict"
@@ -128,8 +122,7 @@ fn schema_refuses_a_broken_type_and_a_block_with_nowhere_to_go() {
 }
 
 /// A built-in key's type is fixed by the frontmatter reader, so a schema
-/// declaring another one could never be satisfied: it fails at the config line
-/// rather than on every page of the collection.
+/// declaring another one could never be satisfied.
 #[test]
 fn schema_refuses_a_type_a_builtin_key_cannot_hold() {
     let err = Config::parse("content { collections { blog { schema { title \"int\" } } } }")
@@ -141,7 +134,6 @@ fn schema_refuses_a_type_a_builtin_key_cannot_hold() {
         config.code().map(|c| c.to_string()).as_deref(),
         Some("baudelaire::config::field_conflict")
     );
-    // Declaring the type it does hold, or none at all, is how you require it.
     assert_eq!(
         parse("content { collections { blog { schema { title \"str\" } } } }").schema("blog")[0]
             .1

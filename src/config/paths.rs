@@ -12,50 +12,30 @@ use crate::error::ConfigError;
 /// Directory layout, every entry relative to [`Config::root`](crate::config::Config::root).
 #[derive(Debug, Clone, Hash)]
 pub struct Paths {
-    /// Content source directory.
     pub content: PathBuf,
-    /// Output (distribution) directory.
     pub dist: PathBuf,
-    /// Asset pipeline source directory (minified, bundled, fingerprinted).
+    /// Assets that go through the pipeline: minified, bundled, fingerprinted.
     pub assets: PathBuf,
-    /// Static passthrough directory: copied verbatim to the `dist` root, with no
-    /// processing, no fingerprint, no URL prefix.
+    /// Copied verbatim to the `dist` root: no processing, no fingerprint, no
+    /// URL prefix.
     pub r#static: PathBuf,
-    /// Layout / template directory.
     pub templates: PathBuf,
     /// Files a page may adopt as its body, each under a name of the site's
     /// choosing: `sources { changelog "../CHANGELOG.md" }`.
     ///
-    /// Declared here and named nowhere else, which is the whole security model
-    /// of the feature. A page selects a source *by name*, so content -- the part
-    /// of a site a pull request can touch -- can never name a path, and cannot
-    /// reach a file the config did not already offer it. `paths` is also one of
-    /// the sections a theme is refused ([`Config::OWNED`]), so a fetched theme
-    /// cannot introduce one either.
-    ///
-    /// Unlike every other entry here, a value may climb out of the project: a
-    /// repository whose site lives in `docs/` publishes its `../CHANGELOG.md`,
-    /// and refusing that would leave the copy-it-in workaround the feature
-    /// exists to remove. It is the config's to allow, on the same footing as
-    /// `hooks`, which can already run any command at all.
-    ///
-    /// [`Config::OWNED`]: crate::config::Config
+    /// A page selects a source by name, never by path, so content can only
+    /// reach files the config already offered it. Unlike every other entry
+    /// here, a value may climb out of the project.
     pub sources: Vec<(String, PathBuf)>,
 }
 
 impl Paths {
     /// Every configured directory the build *reads*, paired with the key that
-    /// names it. THE list of the source trees, so a new `paths` entry is
-    /// covered by adding it here alone.
+    /// names it, so a new `paths` entry is covered by adding it here alone.
     ///
-    /// Four things read it: what [`dist`](Paths::dist) must stay clear of
-    /// ([`swallowed`]), the prune sweep, the trees the dev server watches
-    /// ([`Filter::roots`]), and the trees it therefore need not watch a second
-    /// time ([`Engine::outside`]). The last two used to spell the four names
-    /// out again, and two of the three lists each claimed to be the only one.
-    ///
-    /// The order is the order a reader meets them, which is what the dev
-    /// server's startup banner lists.
+    /// Read by [`swallowed`], the prune sweep, [`Filter::roots`] and
+    /// [`Engine::outside`]. The order is the order a reader meets them, which is
+    /// what the dev server's startup banner lists.
     ///
     /// [`swallowed`]: Paths::swallowed
     /// [`Filter::roots`]: crate::cli::serve::watch::Filter
@@ -72,13 +52,10 @@ impl Paths {
     /// The first source directory `dist` would contain, if any.
     ///
     /// The prune sweep deletes everything under `dist` the build did not write,
-    /// so a `dist` holding the sources deletes the sources: `paths { dist "." }`
-    /// took `config.kdl` and the whole content tree with it, and reported a
-    /// successful build. Refusing the config is the only place this can be
-    /// caught, since by the time the sweep runs every path looks alike.
+    /// so a `dist` holding the sources deletes the sources; by the time the
+    /// sweep runs every path looks alike, so the config is where it is caught.
     ///
-    /// Entries resolve against `root` rather than the process cwd, so a caller
-    /// that has not changed into the project still gets the right answer.
+    /// Entries resolve against `root` rather than the process cwd.
     pub fn swallowed(&self, root: &Path) -> Option<(&'static str, &Path)> {
         let dist = crate::fs::resolved(root.join(&self.dist));
         self.trees()
@@ -90,10 +67,9 @@ impl Paths {
     /// root, which is how a span, a dependency path and an import all name a
     /// file.
     ///
-    /// Both sides go through [`crate::fs::resolved`], the spelling the link map
-    /// and the dependency tracker already key on, because either can be reached
-    /// through a symlink: comparing them lexically leaves a configured directory
-    /// looking like it sits outside the very root it is under.
+    /// Both sides go through [`crate::fs::resolved`], because either can be
+    /// reached through a symlink and a lexical comparison would leave a
+    /// configured directory looking like it sits outside its own root.
     pub fn under(&self, root: &Path) -> Rooted {
         let root = crate::fs::resolved(root);
         let relative = |dir: &Path| {
@@ -109,11 +85,10 @@ impl Paths {
 }
 
 /// The configured source directories in the compiler's spelling, from
-/// [`Paths::under`]. Only the two typst reads: `dist`, `assets` and `static` are
-/// walked by the build itself and never named in a span or an import.
+/// [`Paths::under`]. Only the two typst reads.
 ///
-/// A directory outside the root keeps its absolute path: there is no
-/// root-relative spelling of it, and inventing one would name a different place.
+/// A directory outside the root keeps its absolute path, there being no
+/// root-relative spelling of it.
 pub struct Rooted {
     /// Where pages are authored: what a link's origin is tested against to tell
     /// an author's own reference from a layout's chrome.
@@ -136,7 +111,6 @@ impl Default for Paths {
     }
 }
 
-/// The `paths { .. }` section: directory layout knobs.
 impl Section for Paths {
     const RULES: Block<Self> = Block(&[
         (
@@ -189,13 +163,6 @@ impl Section for Paths {
             Table,
             "Files a page may take as its body, each under a name: a page names the name, never the path.",
             |c, n, t| {
-                // Both checks are here because both failures are silent
-                // otherwise, and both land far from the line that caused them.
-                // A name is emitted as a `#let` in `@baudelaire/sources`, so one
-                // typst cannot bind breaks that module rather than this config;
-                // and a name declared twice resolves to the *first* file for a
-                // page's `source` and to the *last* for an import, which is one
-                // name meaning two files on the same build.
                 let mut seen: Vec<String> = Vec::new();
                 for entry in n.block(t)?.nodes() {
                     let name = entry.name().value();
@@ -221,9 +188,6 @@ impl Section for Paths {
 
 impl Paths {
     /// The file declared under `name`, if the site declared one.
-    ///
-    /// A linear scan: a site declares a handful of these, and the order they
-    /// were written in is worth keeping for the diagnostic that lists them.
     pub fn source(&self, name: &str) -> Option<&Path> {
         self.sources
             .iter()

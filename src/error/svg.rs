@@ -5,11 +5,9 @@ use thiserror::Error;
 
 use crate::ui::{Code, Text};
 
-/// An SVG that `svg()` asked for but baudelaire could not turn into DOM nodes.
-///
-/// Fatal rather than a warning: the element is already in the page, so a
-/// failure here would ship an empty `<svg>` where an icon was asked for, and
-/// nothing downstream would notice.
+/// An SVG that `svg()` asked for but baudelaire could not turn into DOM nodes,
+/// fatal because the element is already in the page and a warning would ship an
+/// empty `<svg>` nothing downstream would notice.
 #[derive(Debug, Error, Diagnostic)]
 pub enum SvgError {
     #[error("{} is not a path inside the project", Code(.path))]
@@ -45,9 +43,7 @@ pub enum SvgError {
     #[diagnostic(code(baudelaire::svg::unreadable))]
     Unreadable {
         path: String,
-        /// The read failure, kept whole rather than stringified: it is
-        /// baudelaire's own typed diagnostic and already carries the resolved
-        /// path and the OS reason. Boxed only to break the type cycle through
+        /// Boxed only to break the type cycle through
         /// [`crate::error::BaudelaireErrorKind`].
         #[source]
         source: Box<crate::error::BaudelaireErrorKind>,
@@ -102,9 +98,9 @@ impl SvgError {
         }
     }
 
-    /// `what` names the offending construct and is already marked up (see
-    /// [`crate::ui::markup!`]): it is written at the call site, not read off the
-    /// file, so it is interpolated as-is rather than escaped.
+    /// `what` is written at the call site, not read off the file, so it is
+    /// already marked up (see [`crate::ui::markup!`]) and interpolated as-is
+    /// rather than escaped.
     pub fn active(path: &str, what: impl std::fmt::Display) -> Self {
         Self::Active {
             path: path.to_owned(),
@@ -126,9 +122,6 @@ impl SvgError {
         }
     }
 
-    /// The XML parser's own message, kept as text: `roxmltree::Error` already
-    /// carries the position, and naming the type here would put a parsing crate
-    /// in the error API for one string.
     pub fn malformed(path: &str, why: impl std::fmt::Display) -> Self {
         Self::Malformed {
             path: path.to_owned(),

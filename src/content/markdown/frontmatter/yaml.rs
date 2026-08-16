@@ -1,10 +1,4 @@
-//! YAML frontmatter: what a bare `---` fence means.
-//!
-//! The default, because it is what every other generator puts between fences,
-//! so a post pasted out of one already parses here. It is also the only dialect
-//! of the three that resolves a scalar's type as it reads it, which is why
-//! nothing below infers one: `2026-08-05` arrives as a string, which is what the
-//! date reader takes, and `3` as an integer.
+//! YAML frontmatter, between `---` fences.
 
 use std::ops::Range;
 
@@ -27,28 +21,14 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
         dialect: "YAML".to_owned(),
         hint: HINT.to_owned(),
         src: miette::NamedSource::new(path, source.to_owned()),
-        // One fault, always: saphyr stops at the first thing it cannot read.
         faults: vec![FrontmatterFault::at(message, span)],
     };
-    let documents = MarkedYaml::load_from_str(text).map_err(|error| {
-        // saphyr's own wording, escaped: it is foreign text, so a `*` or a
-        // backtick in it is a character and not markup this crate opened.
-        fault(Text(error.info()).to_string(), reader.point(error.marker()))
-    })?;
+    let documents = MarkedYaml::load_from_str(text)
+        .map_err(|error| fault(Text(error.info()).to_string(), reader.point(error.marker())))?;
 
     let dict = match documents.first() {
-        // Nothing at all: an empty block, or one that is only comments. Not an
-        // error - the empty dict still goes through the field walk, which is
-        // what reports a collection's required field as missing.
-        //
-        // A second document cannot be reached from here anyway: the fence
-        // reader ends the block at the `---` line that would have started one.
         None => Dict::new(),
         Some(root) => {
-            // Valid YAML, but not fields: a bare `title` line, or a list.
-            // Reported rather than read as nothing, because the alternative is
-            // every field the page meant to declare going missing at once, with
-            // nothing saying why.
             let YamlData::Mapping(mapping) = &root.data else {
                 let span = reader.span(root);
                 return Err(fault("frontmatter is not a block of fields".to_owned(), span).into());
@@ -62,43 +42,32 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
     })
 }
 
-/// One block being read: what the walk down it needs, and what it collects.
 struct Reader<'a> {
     /// Where a marker in this block lands in the file.
     bytes: Bytes,
-    /// The file, which every span recorded here indexes into. Held because a
-    /// key YAML did not resolve to a string is named by what the author wrote.
+    /// The file, which every span recorded here indexes into.
     source: &'a str,
     spans: Spans,
 }
 
 impl<'a> Reader<'a> {
-    /// A reader over `text`, which sits at `offset` in `source`.
+    /// A reader over `text`, recording the block's own span so a field the page
+    /// never wrote underlines the block rather than nothing.
     fn new(text: &str, offset: usize, source: &'a str) -> Self {
         let mut reader = Self {
             bytes: Bytes::new(text, offset),
             source,
             spans: Spans::default(),
         };
-        // The block itself, so a field the page never wrote underlines the
-        // block rather than nothing.
         let block = reader.trim(offset..offset + text.len());
         reader.spans.insert(Vec::new(), block);
         reader
     }
 
-    /// Every entry of a mapping as a `(key, value)` pair, recording where each
-    /// was written on the way down.
-    ///
-    /// An entry is recorded from its key to the end of its value, so a fault in
-    /// `title` underlines `title: A page` and not one half of it.
+    /// Every entry of a mapping as a `(key, value)` pair, recorded from its key
+    /// to the end of its value so a fault in `title` underlines the whole of
+    /// `title: A page`.
     fn fields(&mut self, mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>, at: &[String]) -> Dict {
-        // No duplicate check, unlike the other two dialects: saphyr collapses a
-        // repeated key while loading, so by the time this walks the mapping
-        // there is one entry and no way to tell it was written twice. TOML
-        // refuses such a page and KDL now does too; YAML takes the last one in
-        // silence, and closing that would mean re-scanning the block outside
-        // the parser that just read it.
         mapping
             .iter()
             .map(|(key, value)| {
@@ -120,8 +89,6 @@ impl<'a> Reader<'a> {
                     .iter()
                     .enumerate()
                     .map(|(i, item)| {
-                        // An element is indexed, so a fault in one underlines
-                        // that element and not the whole list.
                         let path = Spans::path(at, &i.to_string());
                         let span = self.span(item);
                         self.spans.insert(path.clone(), span);
@@ -130,30 +97,15 @@ impl<'a> Reader<'a> {
                     .collect(),
             ),
             YamlData::Mapping(mapping) => Value::Dict(self.fields(mapping, at)),
-            // A tag says what a node is, which saphyr has already applied to the
-            // node underneath. Nothing here distinguishes `!!str 42` from `"42"`.
             YamlData::Tagged(_, inner) => self.read(inner, at),
-            // Three the loader never hands back: a representation is the
-            // unresolved scalar lazy parsing would leave, an alias is resolved
-            // to its anchor's value before this sees it, and `BadValue` marks a
-            // node whose contents were taken. Mapped rather than a `panic`, so a
-            // saphyr change costs one field its value and not a build.
             YamlData::Representation(text, ..) => Value::Str(text.as_ref().into()),
             YamlData::Alias(_) | YamlData::BadValue => Value::None,
         }
     }
 
-    /// What a mapping entry is keyed by.
-    ///
-    /// A typst dict is keyed by strings, and YAML resolves a key like any other
-    /// node, so `1:` and `true:` arrive as an integer and a boolean. Naming one
-    /// by what the author wrote keeps the entry: dropping it would report the
-    /// field as missing rather than as the one that is spelled oddly, and the
-    /// name then matches the span underlined beside it.
-    ///
-    /// A key YAML *did* resolve to a string is taken as resolved. Its span
-    /// covers the quotes it may have been written with, and `"title"` is not a
-    /// field anyone has.
+    /// What a mapping entry is keyed by: a key YAML resolved to something other
+    /// than a string (`1:`, `true:`) is named by what the author wrote, so the
+    /// entry is kept and reported under that spelling.
     fn name(&self, key: &MarkedYaml<'_>) -> String {
         match &key.data {
             YamlData::Value(Scalar::String(text)) => text.as_ref().to_owned(),
@@ -165,11 +117,8 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A YAML scalar as its typst counterpart.
-    ///
-    /// Total over the variants rather than read through accessors, because
-    /// saphyr resolves every scalar as it parses: there is no representation
-    /// left to re-interpret, and a new variant should fail to compile here.
+    /// A YAML scalar as its typst counterpart, taking the type saphyr resolved
+    /// as it parsed.
     fn scalar(scalar: &Scalar<'_>) -> Value {
         match scalar {
             Scalar::Null => Value::None,
@@ -180,15 +129,11 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Where a node sits in the file.
+    /// Where a node sits in the file; a flow collection ends *at* its closing
+    /// delimiter rather than past it, so that delimiter is put back.
     fn span(&self, node: &MarkedYaml<'_>) -> Range<usize> {
         let start = self.bytes.at(node.span.start.index());
         let mut end = self.bytes.at(node.span.end.index());
-        // A flow collection ends *at* its closing delimiter rather than past
-        // it, so `[rust, typst]` would underline `[rust, typst` and a nested
-        // one would drop a `}` off the end of every ancestor. Block style ends
-        // past its last character, hence the check on the delimiter itself
-        // rather than on the style.
         let flow = matches!(node.data, YamlData::Sequence(_) | YamlData::Mapping(_))
             && matches!(self.source[end..].chars().next(), Some(']' | '}'));
         if flow {
@@ -202,35 +147,28 @@ impl<'a> Reader<'a> {
         self.bytes.point(marker.index())
     }
 
-    /// The same span with trailing whitespace dropped.
-    ///
-    /// A block collection ends at the line break that closed it, and a label
-    /// covering a line break is drawn onto the line after it, under text that
-    /// has nothing to do with the fault.
+    /// The same span with trailing whitespace dropped, since a label covering a
+    /// line break is drawn onto the line after it.
     fn trim(&self, span: Range<usize>) -> Range<usize> {
         let text = self.source.get(span.clone()).unwrap_or_default();
         span.start..span.end - (text.len() - text.trim_end().len())
     }
 }
 
-/// A block's char-index-to-file-offset table.
+/// A block's char-index-to-file-offset table, with the block's own offset in
+/// the file folded in.
 ///
 /// saphyr reports every position as a *char* index, though its own accessor
-/// says bytes. Without this, one accented character earlier in a block shifts
-/// every span after it, and one inside a value panics on a slice that is not a
-/// char boundary. Built once per block rather than counted per marker, because
-/// a block has a marker per key, per value and per list element.
-///
-/// The block's own offset in the file is folded in, so no caller can convert a
-/// position and forget to shift it.
+/// says bytes, so without this an accented character shifts every span after it
+/// and a slice lands off a char boundary.
 struct Bytes {
     /// The file offset each character of the block starts at.
     offsets: Vec<usize>,
     /// Where the block ends, which is where a marker past its last character
-    /// points: the end marker of a value that runs to the end of the block.
+    /// points.
     end: usize,
     /// The character index of the last thing the author actually wrote, which
-    /// is as far as a *label* may reach. See [`Bytes::point`].
+    /// is as far as a *label* may reach.
     last: usize,
 }
 
@@ -253,15 +191,9 @@ impl Bytes {
         self.offsets.get(chars).copied().unwrap_or(self.end)
     }
 
-    /// The one character at a character index, as the span to underline.
-    ///
-    /// Clamped to the block's last written character, which the end of a *span*
-    /// is not: a scan error's marker sits past everything the block holds, and
-    /// clamping both ends of it to the block's end produced an empty span that
-    /// miette draws at the first column of the line after -- the closing fence,
-    /// which the author did not write and cannot fix. Clamping to the closing
-    /// line break instead is the same fault, since a label covering one is
-    /// drawn onto the following line too.
+    /// The one character at a character index, as the span to underline,
+    /// clamped to the block's last written character so a scan error's marker
+    /// does not land on the closing fence.
     fn point(&self, chars: usize) -> Range<usize> {
         let at = chars.min(self.last);
         self.at(at)..self.at(at + 1)
@@ -276,8 +208,6 @@ mod tests {
         parse(source, 0, "a.md", source).expect("valid yaml").dict
     }
 
-    /// No inference here: every type is the one saphyr resolved as it read the
-    /// scalar, which is what keeps a date a string for the date reader.
     #[test]
     fn a_scalar_keeps_the_type_yaml_resolved() {
         let d = dict("title: A page\norder: 3\nratio: 1.5\ndraft: true\ndate: 2026-08-05\n");
@@ -291,8 +221,6 @@ mod tests {
         );
     }
 
-    /// Both styles, and a one-element list, which is the thing KDL cannot spell
-    /// and pages come here for.
     #[test]
     fn a_list_is_an_array_in_either_style() {
         for source in ["tags:\n  - rust\n  - typst\n", "tags: [rust, typst]\n"] {
@@ -327,38 +255,29 @@ mod tests {
             dict("summary: null\n").at("summary".into(), None),
             Ok(Value::None)
         );
-        // A key with nothing after it is the same thing written shorter.
         assert_eq!(
             dict("summary:\n").at("summary".into(), None),
             Ok(Value::None)
         );
     }
 
-    /// A block with no fields is not an error: the walk still runs, and it is
-    /// the walk that reports what a collection required and never got.
     #[test]
     fn a_block_with_nothing_in_it_declares_nothing() {
         assert_eq!(dict("").len(), 0);
         assert_eq!(dict("# just a comment\n").len(), 0);
     }
 
-    /// YAML resolves a key like any other node, so these are not strings. The
-    /// entry is kept under what the author wrote, which is the name the field
-    /// walk then reports as unknown.
     #[test]
     fn a_key_yaml_did_not_resolve_to_a_string_keeps_its_spelling() {
         let d = dict("1: one\ntrue: yes\n");
         assert_eq!(d.at("1".into(), None), Ok(Value::Str("one".into())));
         assert_eq!(d.at("true".into(), None), Ok(Value::Str("yes".into())));
-        // A quoted key is resolved, so it does not arrive wearing its quotes.
         assert_eq!(
             dict("\"title\": A\n").at("title".into(), None),
             Ok(Value::Str("A".into()))
         );
     }
 
-    /// Every value knows where it was written, nested ones included, and the
-    /// spans are file offsets: a block does not start at the top of the file.
     #[test]
     fn spans_point_into_the_file_and_reach_nested_keys() {
         let source = "---\nauthor:\n  name: cstef\ntags:\n  - rust\n  - typst\n---\n";
@@ -371,13 +290,9 @@ mod tests {
         assert_eq!(at(&["author", "name"]).as_deref(), Some("name: cstef"));
         assert_eq!(at(&["author"]).as_deref(), Some("author:\n  name: cstef"));
         assert_eq!(at(&["tags", "1"]).as_deref(), Some("typst"));
-        // A key nobody wrote falls back to the block, which is where it goes.
         assert_eq!(at(&["title"]).as_deref(), Some(text.trim_end()));
     }
 
-    /// A flow collection's end marker points at its closing delimiter rather
-    /// than past it, so the delimiter has to be put back or the underline stops
-    /// one character short.
     #[test]
     fn a_flow_collection_keeps_its_closing_delimiter() {
         let source = "tags: [rust, typst]\n";
@@ -386,9 +301,6 @@ mod tests {
         assert_eq!(&source[span], "tags: [rust, typst]");
     }
 
-    /// saphyr counts characters and calls them bytes. Without the table, the
-    /// two-byte `é` before `tags` shifts every span after it, and a span
-    /// landing mid-character panics on the slice rather than misreporting.
     #[test]
     fn a_multi_byte_character_does_not_shift_the_spans_after_it() {
         let source = "---\ntitle: Café\ntags:\n  - café\n---\n";
@@ -401,8 +313,6 @@ mod tests {
         assert_eq!(at(&["tags", "0"]).as_deref(), Some("café"));
     }
 
-    /// saphyr reports the first fault and stops, so there is one, and its
-    /// position is rebased onto the file like every other span here.
     #[test]
     fn a_block_that_is_not_yaml_is_an_error() {
         let source = "---\ntitle: [unclosed\n---\n";
@@ -413,11 +323,6 @@ mod tests {
         assert!(rendered.contains("YAML"), "{rendered}");
     }
 
-    /// A scan error runs out of input, so its marker sits past every character
-    /// of the block. The label has to come back inside it: clamped to the
-    /// block's end it was an empty span, which miette draws at the first column
-    /// of the closing `---`, and clamped to the closing line break it would be
-    /// drawn onto that line too.
     #[test]
     fn a_marker_past_the_block_underlines_its_last_written_character() {
         let source = "---\ntitle: Café\nbad: [unclosed\n---\n";
@@ -425,16 +330,11 @@ mod tests {
         let bytes = Bytes::new(text, 4);
         let span = bytes.point(text.chars().count() + 3);
         assert_eq!(&source[span.clone()], "d");
-        // Inside the block, and so before the fence that closes it.
         assert!(span.end <= 4 + text.trim_end().len(), "{span:?}");
-        // A marker that does name a character still names that one, accents
-        // included: the clamp is a ceiling, not a redirection.
         let at = text.find("Café").expect("in the block") + "Caf".len();
         assert_eq!(&source[bytes.point(text[..at].chars().count())], "é");
     }
 
-    /// Valid YAML that is not a mapping declares no fields at all, which is
-    /// worth saying once rather than leaving every field to go missing.
     #[test]
     fn a_block_that_is_not_a_mapping_is_an_error() {
         assert!(parse("just a title\n", 0, "a.md", "just a title\n").is_err());

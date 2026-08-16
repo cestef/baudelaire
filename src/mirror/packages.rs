@@ -20,10 +20,6 @@ impl Target for Typst {
     fn mirrored(&self, mirror: &Mirror) -> Result<Mirrored> {
         let packages = Packages::new(mirror.config).packages();
         let modules = packages.iter().map(Package::specifier).collect();
-        // The file-backed tables are built from the site's own pages, so before
-        // a first build there is nothing to copy and they mirror empty. Symbols
-        // resolve either way; only the values are missing, and the next run
-        // after a build fills them in.
         let unbuilt: Vec<Code<&str>> = packages
             .iter()
             .filter(|package| package.empty)
@@ -36,12 +32,6 @@ impl Target for Typst {
                 modules: List(&unbuilt).to_string(),
             }));
         }
-        // Anywhere but typst's own directory has to be pointed at, which is the
-        // price of a per-project copy: typst reads one path, and only that one
-        // needs no telling. Absolute, and deliberately: this value is pasted
-        // into an editor's settings, where there is no cwd to be relative to.
-        // Through `resolved`, since the directory is computed before it is
-        // written and `canonical` would hand back the relative path unchanged.
         let setup = if mirror.global {
             Vec::new()
         } else {
@@ -63,9 +53,8 @@ impl Target for Typst {
         })
     }
 
-    /// The package directory is shared with whatever else a reader keeps in it,
-    /// `@local` packages included, so only baudelaire's own namespace directory
-    /// is ever removed.
+    /// Only baudelaire's own namespace directory, since the package directory
+    /// is shared with a reader's `@local` packages.
     fn owned(&self, mirror: &Mirror) -> Result<PathBuf> {
         Ok(Packages::namespace(&Self::directory(mirror)?))
     }

@@ -3,9 +3,8 @@
 //! Parsed from `config.kdl`. See [`Config::parse`] and [`Config::default`].
 //!
 //! One module per config block, nested as the blocks are: a section's struct,
-//! its conventional defaults and its `Section` key table sit together, so
-//! adding a key is one edit in one file rather than three in three. Every type
-//! is re-exported here, so the rest of the crate names them flatly.
+//! its conventional defaults and its `Section` key table sit together. Every
+//! type is re-exported here, so the rest of the crate names them flatly.
 
 pub mod announce;
 pub mod assets;
@@ -114,59 +113,41 @@ pub use typst::TypstConfig;
 pub use typst::fonts::FontConfig;
 pub use url::{BaseUrl, Basename, Percent, UrlStyle};
 
-/// Top-level site configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Site title.
     pub site: Option<String>,
     /// Canonical base URL, e.g. `https://example.net`.
     pub url: Option<String>,
     /// Default language code.
     pub lang: String,
-    /// Default author.
     pub author: Option<String>,
-    /// What the site is, in one line. A feed channel needs one, and RSS makes
-    /// it mandatory, so without this a reader shows the site title twice.
+    /// What the site is, in one line, for the feed channel.
     ///
     /// Deliberately not a fallback for a page's `<meta name="description">`:
-    /// the same sentence stamped on every page is what search engines read as
-    /// duplicate metadata. A page describes itself, or says nothing.
+    /// the same sentence on every page reads as duplicate metadata.
     pub description: Option<String>,
     /// The project root: what every other path is relative to, and what typst
-    /// resolves `/`-absolute imports against. Explicit rather than inferred from
-    /// `content`'s parent, which is only the root when `content` sits directly
-    /// under it.
+    /// resolves `/`-absolute imports against.
     pub root: PathBuf,
-    /// Directory layout: where each kind of source lives, and where the build
-    /// lands.
     pub paths: Paths,
     /// A theme package supplying templates, assets, and config defaults, named
-    /// like any Typst dependency (`@preview/plume:1.0.0`). Everything it
-    /// provides is a default the project overrides.
+    /// like any Typst dependency (`@preview/plume:1.0.0`), each of which the
+    /// project may override.
     pub theme: Option<String>,
     /// What the content tree contains and how it is read: bundles, drafts,
     /// future dating, collections, taxonomies.
     pub content: ContentConfig,
-    /// Declared languages keyed by code, for a multi-language site. Empty means
-    /// a single-language site (only `lang`); a non-empty block turns on i18n:
-    /// filename suffixes (`post.fr.typ`) are recognized, non-default languages
-    /// get a `/{code}` URL prefix, and each language can carry a display name,
-    /// text direction, and a UI-string table. The default `lang` is always a
+    /// Declared languages keyed by code. Empty is a single-language site (only
+    /// `lang`); a non-empty block turns on i18n, and the default `lang` is a
     /// known language whether or not it appears here.
     pub languages: Vec<(String, LanguageConfig)>,
-    /// Asset pipeline options (minify, bundle, fingerprint, images).
     pub assets: AssetConfig,
-    /// HTML output options.
     pub html: HtmlConfig,
-    /// Link shape and link checking.
     pub links: LinkConfig,
     /// Old paths with no page behind them, each paired with where it moved.
     ///
-    /// A frontmatter `redirect` covers a page that still exists and can speak
-    /// for itself. This covers everything else that used to be a URL: a
-    /// paginated `page/1/` another generator wrote, a renamed term listing, a
-    /// section that is gone. Neither a generated index nor a deleted page has
-    /// frontmatter to declare anything in, so the claim has to live here.
+    /// A frontmatter `redirect` covers a page that still exists; this covers a
+    /// URL with nothing left to declare it (a deleted page, a generated index).
     pub redirect: Vec<(String, RedirectConfig)>,
     /// Post-render linting of the built pages: accessibility and structure
     /// rules over the typed DOM, and per-page weight budgets.
@@ -181,10 +162,8 @@ pub struct Config {
     /// export, browser speculation hints.
     pub navigation: NavigationConfig,
     /// Remove orphaned outputs from `dist` on each build: files a previous
-    /// build wrote that this one no longer produces (a deleted page, a renamed
-    /// permalink, a dropped taxonomy term). The asset tree and build cache are
-    /// never touched. Set with `prune #true | #false`, and narrowed with
-    /// `prune { keep .. }`.
+    /// build wrote that this one no longer produces. The asset tree and build
+    /// cache are never touched.
     pub prune: PruneConfig,
     /// Typst engine knobs (`sys.inputs`, experimental features).
     pub typst: TypstConfig,
@@ -192,27 +171,22 @@ pub struct Config {
     /// virtual module: arbitrary scalars keyed by name.
     pub client: Vec<(String, crate::codegen::Value)>,
     /// Build cache options: where the incremental manifest lives, and whether
-    /// it is consulted. Not to be confused with `caching`, which is what a
-    /// *browser* is told about the built files.
+    /// it is consulted. Not `caching`, which is what a *browser* is told.
     pub cache: CacheConfig,
     /// The `Cache-Control` the built files are served with, applied by every
     /// destination that can say so.
     pub caching: CacheControl,
-    /// External command hooks run around the build.
     pub hooks: HooksConfig,
-    /// Announce destinations for the built site.
     pub announce: AnnounceConfig,
-    /// Deploy destinations for the built files.
     pub deploy: DeployConfig,
-    /// Dev server options.
     pub serve: ServeConfig,
     /// The active profile name, if one was applied (exposed to pages).
     pub profile: Option<String>,
-    /// Named profile partials (raw KDL, applied over base in [`Config::with_profile`]).
+    /// Named profile partials, applied over the base in
+    /// [`Config::with_profile`].
     pub profiles: Vec<(String, KdlDocument)>,
-    /// The raw `config.kdl` text this config was parsed from. Profile overlay
-    /// errors are reported against it: the retained profile nodes carry spans
-    /// into this exact string.
+    /// The raw `config.kdl` text this config was parsed from: the retained
+    /// profile nodes carry spans into this exact string.
     pub(crate) source: String,
 }
 
@@ -221,22 +195,14 @@ impl Config {
     ///
     /// Two passes, because the config is what names the theme: the site's own
     /// text is read once to learn that, then re-applied over the theme's
-    /// `theme.kdl` so every key the site states wins and every key it leaves out
-    /// falls back. A site with no theme parses exactly once.
+    /// `theme.kdl`. A site with no theme parses exactly once.
     ///
     /// `root` is the project directory a directory-theme is resolved against,
-    /// passed rather than taken from the process cwd so a caller that has not
-    /// changed into the project (a test, an embedding) resolves correctly. It is
-    /// recorded on the returned config, so the theme the engine later resolves
-    /// is the one resolved here.
+    /// passed rather than taken from the process cwd.
     ///
-    /// `theme` is the `--theme` override, and it is a parameter rather than an
-    /// [`crate::cli::Overrides`] field because of where in this function it has
-    /// to land: between learning which theme to fetch and reading its defaults.
-    /// Applied to the result instead, it would name a theme whose `theme.kdl`
-    /// floor was never read. It is re-applied after the second pass for the same
-    /// reason it cannot be applied only there: that pass re-reads the site's own
-    /// text, which names the theme the override is replacing, or names none.
+    /// `theme` is the `--theme` override, a parameter because it has to land
+    /// between learning which theme to fetch and reading its defaults, and to be
+    /// re-applied after the second pass, which re-reads the site's own text.
     pub fn load(text: &str, root: &std::path::Path, theme: Option<&str>) -> Result<Self> {
         let requested = |config: Self| match theme {
             Some(theme) => Self {
@@ -260,35 +226,11 @@ impl Config {
 
     /// A theme's `theme.kdl`, read as the floor the site's own config stands on.
     ///
-    /// Two things it does not get a say in. The first is `root`: the theme's
-    /// defaults are a floor for what the site *builds*, and where it is being
-    /// built is the project's, so the project's root is passed in rather than
-    /// taken from the parse.
-    ///
-    /// The second is anything that decides what the machine does, or what the
-    /// browser trusts in the site's name. A theme is *fetched*: a package theme
-    /// is downloaded at build time, so its `theme.kdl` need never appear in the
-    /// site's repository, and a section of it naming a command or a destination
-    /// would be an instruction the site never wrote and cannot read.
-    /// [`HooksConfig`] runs each entry through a shell, `deploy` and `announce`
-    /// say where the built site goes and with which credentials, `paths`
-    /// decides which trees the build reads and which it prunes, and `profiles`
-    /// is raw KDL that can carry any of them.
-    ///
-    /// So do three that read like presentation and are not. `serve { editor }`
-    /// is a command line the dev server runs on the author's machine when a
-    /// preview element is alt-clicked, which is arbitrary execution as the
-    /// author from installing a theme. `typst { registry }` redirects package
-    /// downloads, and they land in the *machine-global* typst cache keyed only
-    /// on name and version, so one theme's mirror is then served to every other
-    /// project on the machine and to the plain `typst` CLI. `security` is the
-    /// policy the browser enforces: a `csp { report }` collects violation
-    /// reports from every visitor in the site's name, and the fetch directives
-    /// beside it decide where the page may connect and submit.
-    ///
-    /// Every one is refused rather than dropped, so a theme author finds out
-    /// their block does nothing instead of shipping one that silently never
-    /// applies.
+    /// `root` is the project's and is passed in rather than taken from the
+    /// parse. Everything in [`OWNED`](Config::OWNED) is refused outright, since
+    /// a theme is fetched at build time and those sections decide what the
+    /// machine runs or what the browser trusts in the site's name. Refused
+    /// rather than dropped, so a theme author finds out.
     fn floor(at: &Path, root: PathBuf) -> Result<Self> {
         let text = crate::fs::read_to_string(at)?;
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(&text, e))?;
@@ -314,24 +256,13 @@ impl Config {
     }
 
     /// What a theme's defaults may not carry from *inside* a section it is
-    /// otherwise allowed: read off the parsed values, because these are keys
-    /// within `generate` and `redirect` rather than sections of their own, and
-    /// [`OWNED`](Config::OWNED) refuses whole sections by name.
+    /// otherwise allowed, read off the parsed values because these are keys
+    /// rather than whole sections ([`OWNED`](Config::OWNED) refuses those).
     ///
-    /// Both are ways for a fetched theme to speak to the browser in the site's
-    /// name, which is the line `OWNED` draws:
-    ///
-    /// - A `generate { headers { } }` rule is an arbitrary response header on an
-    ///   arbitrary path. `Refresh` forwards every page somewhere else and
-    ///   `Access-Control-Allow-Origin` hands the site's content to any origin
-    ///   that asks. The derived halves of that file stay a theme's to enable,
-    ///   since a `Cache-Control` and a policy are computed from the site's own
-    ///   `caching` and `csp` blocks and say nothing a theme chose.
-    /// - A *wildcard* `redirect` claims no output file, so the accounting that
-    ///   stops a theme's redirect burying a real page ([`crate::content`]) has
-    ///   nothing to compare: `"/*"` is a rule over the whole site that no
-    ///   collision can catch. A literal old path stays allowed, and is still
-    ///   refused if it lands on a path some page publishes.
+    /// Both let a fetched theme speak to the browser in the site's name: a
+    /// `generate { headers { } }` rule is an arbitrary response header on an
+    /// arbitrary path, and a *wildcard* `redirect` claims no output file, so
+    /// nothing can catch it burying a real page.
     fn usurped(&self) -> Option<&'static str> {
         if !self.generate.headers.rules.is_empty() {
             return Some("generate { headers { .. } }");
@@ -347,8 +278,6 @@ impl Config {
     /// own config stands on.
     fn parse_over(base: Self, text: &str) -> Result<Self> {
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
-        // The site's text, not the theme's: every span a later error points at
-        // has to land in the file the author is editing.
         let mut config = Self {
             source: text.to_owned(),
             ..base
@@ -361,23 +290,14 @@ impl Config {
     /// Root of all machine-local, regenerable build state, one subdirectory per
     /// subsystem. [`Scratch`] names them and says what each holds.
     ///
-    /// Everything here is derivable, never authored: it is gitignored, wiped by
-    /// `clean`, and safe to delete at any time. Single source for the location so
-    /// defaults, `clean`, and each subsystem agree; join a subdir via [`scratch`].
-    ///
-    /// [`scratch`]: Config::scratch
+    /// Everything here is derivable, never authored: gitignored, wiped by
+    /// `clean`, and safe to delete at any time.
     pub const SCRATCH: &'static str = ".baudelaire";
 
     /// Whether `path` carries `ext`, compared without case.
     ///
-    /// One question, asked wherever a file's kind decides what happens to it:
-    /// whether discovery claims it as a page, which reader loads it, whether a
-    /// `source` may replace its body, and whether the feature gate thinks the
-    /// site has markdown in it. Case-insensitive because the asset pipeline
-    /// already is (every handler lowercases before it claims a file), and the
-    /// two halves of one build disagreeing meant a `README.MD` was an asset
-    /// there and not a page here: copied to `dist` verbatim, absent from the
-    /// site, and diagnosed nowhere.
+    /// Case-insensitive because the asset pipeline already is, and the two
+    /// halves of one build must not disagree about what a `README.MD` is.
     pub fn has_ext(path: &Path, ext: &str) -> bool {
         path.extension()
             .and_then(|e| e.to_str())
@@ -385,47 +305,34 @@ impl Config {
     }
 
     /// The extension of a typst page, and of a markdown one.
-    ///
-    /// Written once because four things ask: what [`sources`](Config::sources)
-    /// counts as a page, which loader a page goes to, whether a `source` may
-    /// replace its body, and whether a declared source is the markdown that
-    /// `source` reads.
     pub const TYPST: &'static str = "typ";
     pub const MARKDOWN: &'static str = "md";
 
     /// The extensions of a Sass source, SCSS and the indented syntax.
     ///
-    /// Here rather than beside the compiler that reads them, because a build
-    /// without that compiler still has to recognize one: the asset pipeline to
-    /// know it is an input and not a file to publish, and the feature gate to
-    /// say that this binary would have compiled it.
+    /// Here rather than beside the compiler, because a build without that
+    /// compiler still has to recognize one as an input and not a file to
+    /// publish.
     pub const SASS: &'static [&'static str] = &["scss", "sass"];
 
-    /// The not-found page's output file. Flat at the dist root, the name
-    /// static hosts serve for unmatched URLs, and what the dev server falls
-    /// back to; single source for both.
+    /// The not-found page's output file: flat at the dist root, the name static
+    /// hosts serve for unmatched URLs and what the dev server falls back to.
     pub const NOT_FOUND: &'static str = "404.html";
 
     /// The config file, by the one name it is spelled: the `--config` default,
-    /// what `init` writes, and what a diagnostic names its source until the
-    /// loader supplies the path actually read.
+    /// what `init` writes, and what a diagnostic names until the loader supplies
+    /// the path actually read.
     pub const FILE: &'static str = "config.kdl";
 
     /// The file a URL ending in `/` is served from, and so the one a clean URL
     /// is written to: `index` plus [`UrlStyle::PAGE`].
-    ///
-    /// Single source for both ends of that agreement. The build writes it
-    /// ([`Config::destination`]) and the dev server looks for it, and a
-    /// disagreement is a page that builds and 404s.
     pub const INDEX: &'static str = "index.html";
 
     /// The key holding the profile partials, shared by the top-level rule that
     /// parses it and the guard refusing one *inside* a profile.
     pub(crate) const PROFILES: &'static str = "profiles";
 
-    /// The seven other keys named twice: once by their row in the `RULES` table
-    /// below, once by `OWNED`. Spelled once each so the table and the guard
-    /// cannot drift apart.
+    /// The other keys named twice, by their row in `RULES` and by `OWNED`.
     const PATHS: &'static str = "paths";
     const HOOKS: &'static str = "hooks";
     const ANNOUNCE: &'static str = "announce";
@@ -436,8 +343,7 @@ impl Config {
     const SECURITY: &'static str = "security";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
-    /// may not carry: see `Config::floor`, which is the only thing that reads
-    /// this and the only place the reason is written.
+    /// may not carry; `Config::floor` says why.
     const OWNED: [&'static str; 8] = [
         Self::PATHS,
         Self::HOOKS,
@@ -449,20 +355,19 @@ impl Config {
         Self::SECURITY,
     ];
 
-    /// The path of a named scratch subdirectory (e.g. `cache`, `announce`): the
-    /// one builder every subsystem uses to locate its local state under
+    /// The path of a named scratch subdirectory under
     /// [`SCRATCH`](Config::SCRATCH).
     pub fn scratch(sub: Scratch) -> PathBuf {
         PathBuf::from(Self::SCRATCH).join(sub.dir())
     }
 
-    /// Human-readable site label for CLI output.
+    /// The site's name, or `"unnamed"` when it declares none.
     pub fn label(&self) -> &str {
         self.site.as_deref().unwrap_or("unnamed")
     }
 
     /// The site title in a given language: the language's `site` override if it
-    /// has one, else the site-wide title. Used for per-language feed titles.
+    /// has one, else the site-wide title.
     pub fn title(&self, code: &str) -> &str {
         self.language(code)
             .and_then(|lang| lang.site.as_deref())
@@ -479,34 +384,21 @@ impl Config {
     }
 
     /// The file stem that makes a page a *bundle*: it takes its slug from its
-    /// parent directory, and the files beside it belong to it.
-    ///
-    /// THE fallback for an unset `content { index }`. It was spelled at three
-    /// call sites (the slug reader, `new --bundle`, the page assembler), each
-    /// with its own `"index"` literal, which is three places to change a default
-    /// that has to be one.
+    /// parent directory, and the files beside it belong to it. The fallback for
+    /// an unset `content { index }`.
     pub fn index(&self) -> &str {
         self.content.index.as_deref().unwrap_or("index")
     }
 
     /// The extensions a content file may carry, for this site. One entry per
     /// source dialect, so adding one is a line here and an arm in
-    /// [`DiscoveryCache::load_page`](crate::content::DiscoveryCache), not a new
-    /// pipeline.
+    /// [`DiscoveryCache::load_page`](crate::content::DiscoveryCache).
     ///
-    /// Two subsystems ask, and they have to agree: discovery, deciding what is
-    /// a page, and [`LinkMap::classify`](crate::render::LinkMap::classify),
-    /// deciding whether a link names one. When they disagreed, a `.md` page was
-    /// built and published and a link to it was left as authored, so the site
-    /// served a dead relative href out of a green build.
-    ///
-    /// Markdown answers to two things, and both have to say yes: the binary has
-    /// to have been built with it, and the site has to want it. A site that says
-    /// `content { markdown #false }` keeps its `.md` files as files, and a link
-    /// to one stays the file link it was written as.
+    /// Discovery and [`LinkMap::classify`](crate::render::LinkMap::classify)
+    /// both read it and have to agree, or a link to a built page is left as
+    /// authored. Markdown needs both the binary built with it and the site
+    /// wanting it.
     pub fn sources(&self) -> Vec<&'static str> {
-        // Answered once, per flavor, so neither build carries a branch the
-        // other's `cfg` leaves dangling.
         #[cfg(feature = "markdown")]
         let markdown = self.content.markdown.enabled;
         #[cfg(not(feature = "markdown"))]
@@ -526,10 +418,6 @@ impl Config {
 
     /// How fast prose reads in a given language: the language's own `wpm` if it
     /// declares one, else the site's `content { reading { wpm } }`.
-    ///
-    /// The one resolver, so a page's badge and anything else measuring the same
-    /// page cannot disagree. Mirrors [`Config::author`], which resolves the same
-    /// way for the same reason.
     pub fn wpm(&self, code: &str) -> usize {
         self.language(code)
             .and_then(|lang| lang.wpm)
@@ -555,7 +443,6 @@ impl Config {
         self.language(code).map_or(&[], |lang| &lang.strings)
     }
 
-    /// The declared config for a language code, if any.
     fn language(&self, code: &str) -> Option<&LanguageConfig> {
         self.languages
             .iter()
@@ -572,13 +459,9 @@ impl Config {
     /// Whether this build stamps `integrity` attributes: asked for, *and*
     /// backed by content-addressed names.
     ///
-    /// The single gate, shared by the asset pipeline (which pays for the digest
-    /// only if one is going to be used), the transform that stamps it, and the
-    /// [`Inert`] row that explains the silence. Without `fingerprint` an asset
-    /// URL names whatever is at that path today, so a page cached from
-    /// yesterday would pin a digest the file no longer has and block it.
-    ///
-    /// [`Inert`]: crate::engine
+    /// Without `fingerprint` an asset URL names whatever is at that path today,
+    /// so a page cached from yesterday would pin a digest the file no longer has
+    /// and block it.
     pub fn sri(&self) -> bool {
         self.security.sri && self.assets.fingerprint
     }
@@ -586,10 +469,8 @@ impl Config {
     /// Whether this build takes the digest of every inline script, style and
     /// `style` attribute for the generated policy.
     ///
-    /// Conditional on the policy having somewhere to go. The digests are read
-    /// by exactly one thing, the `_headers` writer, so a site that generates no
-    /// `_headers` would pay for them, and pay again in [`Config::pretty`], to
-    /// produce a policy nobody is ever served.
+    /// Conditional on the policy having somewhere to go: the `_headers` writer
+    /// is the only reader of those digests.
     pub fn hashes(&self) -> bool {
         self.generate.headers.enabled && self.security.csp.enabled && self.security.csp.hashes
     }
@@ -597,21 +478,17 @@ impl Config {
     /// Whether the HTML is pretty-printed: `html { pretty }`, unless this build
     /// is hashing what it inlines.
     ///
-    /// The two cannot both be had. A browser digests the bytes between
-    /// `<script>` and `</script>` exactly as they are served, and typst's pretty
-    /// printer re-indents a script or style body on its way out, *after* the DOM
-    /// this build took its digest from. A policy built that way names a body
-    /// that was never served, and the browser refuses to run the page's own
-    /// script: a site broken in production and nowhere else. Printing the
-    /// markup unindented costs nothing but the look of the source.
+    /// The two cannot both be had: the pretty printer re-indents a script body
+    /// *after* the DOM the digest was taken from, so the browser would refuse to
+    /// run the page's own script.
     pub fn pretty(&self) -> bool {
         self.html.pretty && !self.hashes()
     }
 
     /// The path the site is served under, from the `url`'s path component
     /// (`url "https://host/docs"` -> `/docs`); empty for a root-hosted site.
-    /// Every on-page root-absolute URL is prefixed with it so the site works
-    /// under a subdirectory, leaving the on-disk layout unchanged.
+    /// Every on-page root-absolute URL is prefixed with it, leaving the on-disk
+    /// layout unchanged.
     pub fn base_path(&self) -> &str {
         self.url.as_deref().map_or("", BaseUrl::path)
     }
@@ -629,9 +506,6 @@ impl Config {
     /// The DID a `standard.site` verification artifact should reference, present
     /// only when the backend is configured *with* a `did` and the artifact's
     /// `verify` flag is on; `artifact` selects that flag (e.g. `|v| v.links`).
-    /// The single gate the render transform and the well-known processor share,
-    /// so both agree on when an artifact is emitted and neither re-checks the
-    /// `did` after gating.
     #[cfg(feature = "announce")]
     pub(crate) fn verify_did(&self, artifact: impl Fn(&VerifyConfig) -> bool) -> Option<&str> {
         let standard = self.announce.standard.as_ref()?;
@@ -640,7 +514,6 @@ impl Config {
             .flatten()
     }
 
-    /// Look up a collection override by id.
     pub fn collection(&self, id: &str) -> Option<&CollectionConfig> {
         self.content
             .collections
@@ -649,19 +522,12 @@ impl Config {
             .map(|(_, c)| c)
     }
 
-    /// Collection `id`'s own feed in `lang`, or `None` when it has none.
+    /// Collection `id`'s own feed in `lang`, or `None` when it has none: the
+    /// collection did not ask, it publishes no index for the feed to sit
+    /// beside, or a *site* feed already occupies that scope.
     ///
-    /// The single answer, because two things have to agree about it: the
-    /// processor that writes the file and the `<head>` tag every member
-    /// advertises it with. A page pointing at a feed no build wrote is a dead
-    /// subscribe button, and nothing downstream would notice. Both facts come
-    /// back together for the same reason.
-    ///
-    /// Three ways to have none: the collection did not ask, it publishes no
-    /// index for the feed to sit beside (a feed's `<link>` would name a page
-    /// nobody wrote), or it sits exactly where a *site* feed already does, in
-    /// which case that file is taken and the site feed, the more inclusive of
-    /// the two, keeps it.
+    /// The one answer the file writer and the advertising `<head>` tag share, so
+    /// no page points at a feed no build wrote.
     pub fn channel(&self, id: &str, lang: &str) -> Option<Channel> {
         let collection = self.collection(id)?;
         (collection.feed && collection.paginate.enabled)
@@ -684,11 +550,7 @@ impl Config {
     /// page's own markup is the document.
     ///
     /// Root pages resolve through this like any other, under the [`ROOT`]
-    /// collection they are discovered into, which is what lets a config (or a
-    /// theme's) bind them without every one of them naming a file by hand.
-    ///
-    /// The one place the order is written, so `new` scaffolds the template the
-    /// build will later pick rather than a second opinion about it.
+    /// collection they are discovered into.
     ///
     /// [`ROOT`]: crate::content::ROOT
     pub fn template_for(&self, collection: &str, own: Option<String>) -> Option<String> {
@@ -696,15 +558,14 @@ impl Config {
     }
 
     /// The frontmatter schema a collection's pages must satisfy, empty when it
-    /// declares none (and for a collection with no config block at all).
+    /// declares none.
     pub fn schema(&self, collection: &str) -> &[(String, FieldSchema)] {
         self.collection(collection)
             .map_or(&[], |c| c.schema.as_slice())
     }
 
-    /// The served name of the assets directory: its final path segment, and
-    /// the leading segment of every asset URL. The single derivation shared by
-    /// the asset pipeline and the embed transform.
+    /// The served name of the assets directory: its final path segment, and the
+    /// leading segment of every asset URL.
     pub fn asset_name(&self) -> &str {
         self.paths
             .assets
@@ -713,9 +574,7 @@ impl Config {
             .unwrap_or("assets")
     }
 
-    /// The URL prefix every processed asset is served under. The single source
-    /// for it: the pipeline builds its map keys from this, and the render layer
-    /// decides from it whether a reference could name an asset at all.
+    /// The URL prefix every processed asset is served under.
     pub fn asset_prefix(&self) -> String {
         format!("/{}", self.asset_name())
     }
@@ -723,11 +582,6 @@ impl Config {
     /// The URL a processed asset is served at, given its path relative to the
     /// asset root. Separators become `/` whatever the host filesystem writes,
     /// since this is a URL and not a path.
-    ///
-    /// One derivation, because two layers build these: the pipeline keys its
-    /// map with them, and the render pass points an `<img>` at one when the
-    /// picture it found is a file the pipeline already owns. A URL built two
-    /// ways is a `srcset` that silently stops matching its source.
     pub fn asset_url(&self, rel: &Path) -> String {
         format!(
             "{}/{}",
@@ -736,8 +590,7 @@ impl Config {
         )
     }
 
-    /// The processed assets directory under `dist`: the *published* location,
-    /// read by the dev server and by whatever hosts `dist`.
+    /// The processed assets directory under `dist`: the *published* location.
     pub fn asset_dist(&self) -> PathBuf {
         self.paths.dist.join(self.asset_name())
     }
@@ -754,10 +607,9 @@ impl Config {
 
     /// A URL's path segments, joined back with the empty ones dropped.
     ///
-    /// `..` segments are dropped here: permalink *templates* are already
-    /// rejected at config parse, and this filter owns the defense for every
-    /// other URL source (e.g. a frontmatter slug), so no page can ever be
-    /// written outside `dist`.
+    /// `..` segments are dropped here, which is the defense for every URL source
+    /// a permalink template's own check does not cover (a frontmatter slug), so
+    /// no page can be written outside `dist`.
     fn segments(url: &str) -> String {
         url.split('/')
             .filter(|segment| !segment.is_empty() && *segment != "..")
@@ -768,21 +620,13 @@ impl Config {
     /// The file `url` is written to when it names the not-found page, and
     /// `None` for every other URL.
     ///
-    /// 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't
-    /// served as not-found. A translated `404.fr.typ` localizes to
-    /// `/{lang}/404/` and belongs at `{lang}/404.html` for the same reason.
-    /// Only a language scope counts: `/notes/404/` is an ordinary page.
-    ///
-    /// The single test for "is this the not-found page", shared by
-    /// [`destination`](Config::destination) and [`Page::listed`], so the page
-    /// held out of navigation is exactly the one written where a host looks for
-    /// an unmatched URL.
-    ///
-    /// [`Page::listed`]: crate::content::Page::listed
+    /// 404 must be a flat `404.html`; under clean URLs a `404/` dir isn't served
+    /// as not-found, and a translated `404.fr.typ` belongs at `{lang}/404.html`
+    /// for the same reason. Only a language scope counts: `/notes/404/` is an
+    /// ordinary page.
     pub fn not_found(&self, url: &str) -> Option<PathBuf> {
         let trimmed = Self::segments(url);
         let stem = trimmed.strip_suffix(UrlStyle::PAGE).unwrap_or(&trimmed);
-        // the not-found page's URL stem, derived so its name is written once
         let not_found = Self::NOT_FOUND
             .strip_suffix(UrlStyle::PAGE)
             .unwrap_or(Self::NOT_FOUND);
@@ -798,25 +642,18 @@ impl Config {
     /// The file a root-relative URL names under `dist`, for a URL that already
     /// names a file: a card, a page's PDF, a bundled document.
     ///
-    /// [`Config::destination`] is its counterpart for a *page* URL, which has
-    /// no extension and so has to be given one according to `links { style }`.
-    /// Both exist because the two questions have different answers, and every
-    /// artifact asking either of them asks it here: three of them derived their
-    /// own `dist.join(..)` and nothing tied the answers together.
+    /// [`Config::destination`] is its counterpart for a *page* URL, which has no
+    /// extension and so has to be given one according to `links { style }`.
     pub fn file(&self, url: &str) -> PathBuf {
         self.paths.dist.join(url.trim_start_matches('/'))
     }
 
-    /// The file a page URL is written to under `dist`, honoring clean URLs.
-    /// Single source for the URL-to-file mapping, shared by page output and
-    /// redirect stubs.
+    /// The file a page URL is written to under `dist`, honoring clean URLs:
+    /// the URL-to-file mapping page output and redirect stubs share.
     pub fn destination(&self, url: &str) -> PathBuf {
         if url == "/" {
             return self.paths.dist.join(Self::INDEX);
         }
-        // A URL that already names a file is one: a page whose frontmatter
-        // `path` spells the old `/2019/post.html` a migration is preserving
-        // must not be given a directory and an `index.html` inside it.
         if Self::names_a_file(url) {
             return self.file(url);
         }
@@ -826,8 +663,6 @@ impl Config {
         let trimmed = Self::segments(url);
         match self.links.style {
             UrlStyle::Clean => self.paths.dist.join(&trimmed).join(Self::INDEX),
-            // A flat page URL already names its file; a raw path (a frontmatter
-            // `redirect` old-path) still needs the extension.
             UrlStyle::Flat => self
                 .paths
                 .dist
@@ -850,16 +685,9 @@ impl Config {
     /// Whether a `redirect` old path is a pattern rather than a path: it
     /// carries a `*`, so it matches a family of URLs and names no file.
     ///
-    /// The one place that decides this, because three things have to agree
-    /// about it: the accounting that reserves an output file per redirect
-    /// ([`crate::content`]), the emitter that writes either a rule or a stub,
-    /// and the gate that warns when a pattern has no rule file to go in. A
-    /// wildcard can only ever be a rule: an HTML stub is a file at one path, and
-    /// a family of URLs has no one path to put it at.
-    ///
-    /// What the *target* may say in return (`/:splat`, `/:placeholder`) is the
-    /// host's grammar and is passed through untouched, so nothing here has to
-    /// know it.
+    /// A wildcard can only ever be a rule, since an HTML stub is a file at one
+    /// path. What the *target* may say in return (`/:splat`) is the host's
+    /// grammar and passes through untouched.
     pub(crate) fn wildcard(old: &str) -> bool {
         old.contains('*')
     }
@@ -879,9 +707,7 @@ impl Config {
     /// finished markup: an EPUB chapter, which is the region with the chrome
     /// gone and every URL absolute.
     ///
-    /// Read by the render pass to decide whether to capture it, beside the
-    /// full-content feed that asks the same question. One place, because the
-    /// capture is a second pass over the DOM and a site that asked for neither
+    /// The capture is a second pass over the DOM, so a site that asked for none
     /// must not pay for it.
     pub fn binds_prose(&self) -> bool {
         self.generate
@@ -891,8 +717,7 @@ impl Config {
     }
 
     /// Every language the site builds, default first then declared ones in
-    /// config order (default deduplicated). A single-language site yields just
-    /// the default. The single source for iterating languages.
+    /// config order (default deduplicated).
     pub fn langs(&self) -> Vec<&str> {
         let declared = self.languages.iter().map(|(id, _)| id.as_str());
         std::iter::once(self.lang.as_str())
@@ -901,8 +726,7 @@ impl Config {
     }
 
     /// A root-relative `path` under `code`: prefixed with `/{code}` for a
-    /// non-default language, unchanged for the default (which keeps clean root
-    /// URLs). The single localization rule for permalinks and every generator.
+    /// non-default language, unchanged for the default.
     pub fn localize(&self, code: &str, path: &str) -> String {
         match code == self.lang {
             true => path.to_owned(),
@@ -912,11 +736,9 @@ impl Config {
     }
 
     /// The language path segment for `code`: empty for the default, the code
-    /// otherwise. It prefixes a generated page's identity (its
-    /// [`crate::content::PageId`] and virtual source path) and names a
-    /// language's output subdirectory (feeds, sitemaps), so both mirror the
-    /// localized URL. `id` is an optional trailing segment. Derived from
-    /// [`Config::localize`], its single source.
+    /// otherwise. It prefixes a generated page's identity and names a language's
+    /// output subdirectory, so both mirror the localized URL. `id` is an
+    /// optional trailing segment.
     pub fn scope(&self, code: &str, id: &str) -> String {
         self.localize(code, &format!("/{id}"))
             .trim_matches('/')
@@ -925,14 +747,13 @@ impl Config {
 }
 
 /// Feeds every build-affecting setting into the hasher so a config change
-/// invalidates the build cache (a permalink or template tweak can alter every
-/// page). Destructuring means a newly added field fails to compile until it is
-/// accounted for here: no field can be silently forgotten.
+/// invalidates the build cache. Destructuring means a newly added field fails to
+/// compile until it is accounted for here.
 impl std::hash::Hash for Config {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
-            // where the project sits, not what it builds: including it would
-            // undo the portable manifest keys (`mv site site2` must still hit)
+            // Where the project sits, not what it builds: hashing it would undo
+            // the portable manifest keys (`mv site site2` must still hit).
             root: _,
             site,
             url,
@@ -948,14 +769,8 @@ impl std::hash::Hash for Config {
             links,
             redirect,
             // Shapes no markup, but decides what a page *records* while it
-            // renders: with linting off a page stores no findings and no
-            // weight. Leaving it out would let a build with the rules turned on
-            // serve those pages from cache and report nothing, which is the one
-            // failure mode a gate must not have.
+            // renders: with linting off a page stores no findings and no weight.
             lint,
-            // Shapes the markup (an `integrity` attribute) and the digests a
-            // page records, so a page built under one policy must not be served
-            // under another.
             security,
             generate,
             navigation,
@@ -963,22 +778,21 @@ impl std::hash::Hash for Config {
             typst,
             client,
             cache,
-            // `Cache-Control` shapes no page. The one file it does shape,
-            // `_headers`, is written by a processor, and processors run on
-            // every build whatever the cache says; keying pages on it would
-            // cold-rebuild the site over a header string.
+            // `Cache-Control` shapes no page, and the one file it does shape is
+            // written by a processor, which runs whatever the cache says.
             caching: _,
             hooks,
             announce,
             deploy,
-            // dev-server settings never affect output, so they must not key the cache;
-            // else `serve` on a custom port would invalidate a `build`'s cache
+            // Dev-server settings never affect output, so `serve` on a custom
+            // port must not invalidate a `build`'s cache.
             serve: _,
             profile,
-            // raw unapplied partials: only the resolved config drives the build, and
-            // applying a profile mutates the fields above, so any change is already captured
+            // Applying a profile mutates the fields above, so any change to the
+            // raw partials is already captured.
             profiles: _,
-            // raw config text, kept only for error spans; a comment-only edit must not bust the cache
+            // Kept only for error spans; a comment-only edit must not bust the
+            // cache.
             source: _,
         } = self;
         (
@@ -1003,10 +817,6 @@ impl std::hash::Hash for Config {
 
 /// A collection's own syndication feed: where its file goes and what it calls
 /// itself, from [`Config::channel`].
-///
-/// One value rather than two lookups, because the file the build writes and the
-/// tag a page advertises it with are the same feed, and a reader sees the tag's
-/// title before ever fetching the file.
 pub struct Channel {
     /// The directory the feed files are written to, under the output root and
     /// under the site's own path (`posts`, `fr/posts`).
@@ -1057,7 +867,6 @@ impl Default for Config {
 impl Config {
     pub fn parse(text: &str) -> Result<Self> {
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
-        // keep the raw text: profile overlay reports errors against it, its nodes carry spans into it
         let mut cfg = Self {
             source: text.to_owned(),
             ..Self::default()
@@ -1074,13 +883,8 @@ impl Config {
     }
 }
 
-/// One subdirectory of [`Config::SCRATCH`], and what lives in it.
-///
-/// A type rather than a string, because the layout was prose in one doc comment
-/// and a literal at each of eight call sites, and the prose had already gone
-/// stale: it named `cache/` and `announce/` while `generated/` and `links/` had
-/// been added without it. The set is now the type, so a new one cannot be
-/// created without appearing here, and `clean` cannot miss one.
+/// One subdirectory of [`Config::SCRATCH`], and what lives in it, as a type so
+/// that a new one cannot be created without appearing here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scratch {
     /// Incremental build cache: loss forces a full rebuild.
@@ -1096,7 +900,6 @@ pub enum Scratch {
 }
 
 impl Scratch {
-    /// The directory name.
     pub const fn dir(self) -> &'static str {
         match self {
             Self::Cache => "cache",
@@ -1107,8 +910,6 @@ impl Scratch {
     }
 }
 
-/// The top-level config schema. This table is the *single source of truth* for
-/// what keys are valid: dispatch and "unknown key" suggestions both read it.
 impl Section for Config {
     const RULES: Block<Self> = Block(&[
         (

@@ -1,6 +1,5 @@
 //! Subpath hosting: a site whose `url` carries a path is served under that
-//! directory. On-page URLs shift under the prefix; the on-disk layout and the
-//! canonical absolute URLs stay correct.
+//! directory.
 
 mod common;
 
@@ -42,7 +41,6 @@ fn on_page_urls_shift_under_the_base_path() {
     site.stats();
     let html = site.output("posts/hello/index.html");
 
-    // Internal `.typ` link and a raw absolute link both gain the prefix.
     assert!(
         html.contains("href=\"/docs/posts/world/\""),
         "internal link not prefixed: {html}"
@@ -57,7 +55,6 @@ fn on_page_urls_shift_under_the_base_path() {
 fn disk_layout_is_unprefixed() {
     let site = subsite();
     site.stats();
-    // Files land at their canonical path, never under a `docs/` directory.
     assert!(site.exists("public/posts/hello/index.html"));
     assert!(!site.exists("public/docs"));
 }
@@ -98,7 +95,6 @@ fn search_client_carries_the_base() {
         js.contains("const BASE = \"/docs\""),
         "no BASE in client: {js}"
     );
-    // The index data stays canonical; the client applies the base.
     let json = site.output("search.json");
     assert!(
         json.contains("\"/posts/hello/\""),
@@ -129,14 +125,12 @@ fn serve_previews_under_the_base_path() {
     site.stats();
     let server = Serve::start(&site, &["--no-watch"]);
     assert!(wait_for_port(server.port(), 5000));
-    // The prefixed request resolves to the unprefixed file on disk.
     assert_eq!(server.get("/docs/posts/hello/").0, 200);
     assert_eq!(server.get("/docs/posts/world/").0, 200);
 }
 
-/// Fingerprint rewriting inside CSS emits a root-absolute URL, and the
-/// `BasePath` transform only walks the DOM, so without prefixing here every
-/// rewritten `url()` / `@import` 404s on a subpath-hosted site.
+/// `BasePath` only walks the DOM, so a root-absolute URL rewritten inside CSS
+/// has to be prefixed separately.
 #[test]
 #[cfg(feature = "css")]
 fn css_references_carry_the_subpath() {
@@ -171,9 +165,7 @@ fn css_references_carry_the_subpath() {
     assert!(css.contains("/docs/assets/logo."), "{css}");
 }
 
-/// `og:image` carries its URL in a `content` attribute, which only the
-/// fingerprint transform used to look at: the social card pointed at an
-/// unprefixed path on a subpath-hosted site.
+/// `og:image` carries its URL in a `content` attribute rather than an `href`.
 #[test]
 fn og_image_carries_the_subpath() {
     let site = Site::with(
@@ -199,10 +191,8 @@ fn og_image_carries_the_subpath() {
     assert!(html.contains("/docs/assets/card.png"), "{html}");
 }
 
-/// ...and nothing else in a `content` attribute is a URL. Every `<meta>` the
-/// page carries has one, and prose that happens to start with `/` is prose: a
-/// title, a description, a tag. They were all prefixed, so a page titled
-/// `/etc/hosts, annotated` published `og:title` as `/docs/etc/hosts, annotated`.
+/// ...and nothing else in a `content` attribute is a URL: a title or a
+/// description that happens to start with `/` is prose.
 #[test]
 fn a_base_path_leaves_a_meta_tag_s_prose_alone() {
     let site = Site::with(

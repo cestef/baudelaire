@@ -1,9 +1,6 @@
-//! Minimal EXIF orientation reader for JPEG.
-//!
-//! Re-encoding a JPEG strips its metadata, including the Orientation tag a
-//! camera used instead of rotating pixels, so the optimizer must bake that
-//! rotation into the pixels first or phone photos come out sideways. This
-//! reads just the one tag; anything missing or malformed is [`Upright`].
+//! Minimal EXIF orientation reader for JPEG: re-encoding strips the tag a
+//! camera set instead of rotating pixels, so the optimizer has to bake that
+//! rotation in or phone photos come out sideways.
 
 use image::DynamicImage;
 
@@ -88,7 +85,6 @@ impl Jpeg<'_> {
                 return None;
             }
             let marker = b[i + 1];
-            // metadata lives before the scan; standalone markers carry no length
             if marker == Self::SOS {
                 return None;
             }
@@ -126,14 +122,14 @@ impl<'a> Tiff<'a> {
         (tiff.u16(2)? == 42).then_some(tiff)
     }
 
-    /// The inline `SHORT` value of `tag` in IFD0, if present.
+    /// The inline `SHORT` value of `tag` in IFD0, if present. An entry is
+    /// tag(2) type(2) count(4) value(4), the `SHORT` stored in the value field.
     fn short(&self, tag: u16) -> Option<u16> {
         let ifd = usize::try_from(self.u32(4)?).ok()?;
         let count = usize::from(self.u16(ifd)?);
         (0..count)
             .map(|n| ifd + 2 + n * 12)
             .find(|&entry| self.u16(entry) == Some(tag))
-            // entry layout: tag(2) type(2) count(4) value(4, SHORT stored inline)
             .and_then(|entry| self.u16(entry + 8))
     }
 
@@ -170,12 +166,17 @@ mod tests {
         };
         let word = |v: u16| if be { v.to_be_bytes() } else { v.to_le_bytes() };
         let long = |v: u32| if be { v.to_be_bytes() } else { v.to_le_bytes() };
-        tiff.extend(word(1)); // one IFD0 entry
-        tiff.extend(word(0x0112)); // orientation tag
-        tiff.extend(word(3)); // type SHORT
-        tiff.extend(long(1)); // count
+        let entries = 1;
+        let orientation_tag = 0x0112;
+        let short_type = 3;
+        let count = 1;
+        let padding = 0;
+        tiff.extend(word(entries));
+        tiff.extend(word(orientation_tag));
+        tiff.extend(word(short_type));
+        tiff.extend(long(count));
         tiff.extend(word(orientation));
-        tiff.extend(word(0)); // value padding to 4 bytes
+        tiff.extend(word(padding));
         let payload = [b"Exif\0\0".as_slice(), &tiff].concat();
         let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
         out.extend(

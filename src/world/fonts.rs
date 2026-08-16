@@ -10,27 +10,20 @@ use typst_kit::fonts::FontStore;
 use crate::config::FontConfig;
 use crate::graph::Hash;
 
-/// The initializer a [`Fonts`] defers. Boxed because it captures the site's own
-/// directories, which a plain `fn()` cannot.
+/// The initializer a [`Fonts`] defers.
 type Discover = Box<dyn FnOnce() -> FontStore + Send + Sync>;
 
-/// The files under a site's own font directories, by path, each with the hash of
-/// its contents (`None` for one that could not be read). Ordered, because it is
-/// hashed: a set would fingerprint the same directory differently each build.
+/// The files under a site's own font directories, each with the hash of its
+/// contents (`None` for one that could not be read), ordered because it is
+/// hashed.
 type Faces = std::collections::BTreeMap<PathBuf, Option<Hash>>;
 
-/// Every face a compile can resolve a glyph to, discovered on first lookup.
-///
-/// Lazy because scanning font directories and parsing fontconfig is not cheap
-/// and a fully-cached rebuild compiles nothing: a site whose pages all hit the
-/// cache never pays for a single directory walk.
+/// Every face a compile can resolve a glyph to, discovered on first lookup so
+/// a fully-cached rebuild never walks a font directory.
 pub(super) struct Fonts {
     store: LazyLock<FontStore, Discover>,
-    /// The site's own directories, resolved against the root.
-    ///
-    /// Kept beside the store rather than only inside its initializer so
-    /// [`Fonts::digest`] can fingerprint what they hold without forcing the
-    /// scan, which is the whole point of the laziness above.
+    /// The site's own directories, resolved against the root, kept out of the
+    /// initializer so [`Fonts::digest`] can read them without forcing the scan.
     dirs: Vec<PathBuf>,
 }
 
@@ -38,15 +31,8 @@ impl Fonts {
     /// The store this site asks for, resolved against `root`, with nothing
     /// scanned yet.
     ///
-    /// Search order is the whole of what this decides, and it runs from most
-    /// specific to least: typst's own bundled faces, then the directories the
+    /// Searched most specific first: typst's bundled faces, then the ones the
     /// site ships, then the machine's.
-    ///
-    /// The bundled faces lead so a glyph resolves the way it does under `typst`
-    /// itself rather than falling back to whatever the system offers (which can
-    /// rasterize digits as colour-font images). A site's own directories come
-    /// next, ahead of the machine's, because shipping a face is how a site says
-    /// it means *that* one and not a same-named installed version of it.
     pub(super) fn of(config: &FontConfig, root: &Path) -> Self {
         let dirs: Vec<PathBuf> = config.paths.iter().map(|dir| root.join(dir)).collect();
         let paths = dirs.clone();
@@ -55,9 +41,7 @@ impl Fonts {
             dirs,
             store: LazyLock::new(Box::new(move || {
                 let mut fonts = FontStore::new();
-                // Without the `embedded-fonts` feature the defaults are not
-                // bundled, so resolution depends entirely on the other two
-                // sources.
+                // Without this feature the defaults are not bundled at all.
                 #[cfg(feature = "embedded-fonts")]
                 fonts.extend(typst_kit::fonts::embedded());
                 for dir in &paths {
@@ -71,26 +55,12 @@ impl Fonts {
         }
     }
 
-    /// A fingerprint of the faces the site itself ships, or `None` when it ships
-    /// none.
+    /// A fingerprint of the faces the site itself ships, or `None` when it
+    /// ships none.
     ///
-    /// A build dependency the tracker cannot see. A face is resolved by *name*
-    /// out of a store built by walking a directory, never opened through
-    /// [`World::file`](typst::World::file), so no page ever records reading one.
-    /// Naming a directory is in the config hash, but replacing a file inside one
-    /// already named was invisible: every page hit the cache, and the social
-    /// cards and PDFs typeset with the old face were served out of a green
-    /// build, indefinitely.
-    ///
-    /// Content, not mtime: a checkout gives every file the same fresh timestamp,
-    /// which would cold-rebuild every CI run while still missing a face restored
-    /// from a backup. The walk is the site's own directory, and blake3 over a few
-    /// megabytes of faces is noise beside one page compile.
-    ///
-    /// The other two sources need nothing. Typst's bundled faces are pinned by
-    /// the `typst` version, which [`Renderer`](crate::graph::Renderer) already
-    /// carries, and the machine's are not part of the project: a site that wants
-    /// its build to depend on nothing outside the repo writes `system #false`.
+    /// A face is resolved by *name* out of a directory walk, never opened
+    /// through [`World::file`](typst::World::file), so no page records reading
+    /// one and nothing else invalidates a build when a face is replaced.
     pub(super) fn digest(&self) -> Option<Hash> {
         if self.dirs.is_empty() {
             return None;
@@ -102,13 +72,8 @@ impl Fonts {
         Some(Hash::of(&faces))
     }
 
-    /// Every file under `dir`, recursively, with the hash of its contents.
-    ///
-    /// A directory that cannot be read contributes nothing rather than failing:
-    /// one that is not there is already refused by
-    /// [`FontConfig::missing`](crate::config::FontConfig::missing) before
-    /// anything compiles, and a build must not die over a permission on a
-    /// subdirectory it may not even have wanted.
+    /// Every file under `dir`, recursively, with the hash of its contents; a
+    /// directory that cannot be read contributes nothing rather than failing.
     fn walk(dir: &Path, into: &mut Faces) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -148,18 +113,12 @@ mod tests {
         Fonts::of(&config, root)
     }
 
-    /// A site that ships no faces pays nothing: there is no directory to walk,
-    /// and no digest to fold into the fingerprint every build.
     #[test]
     fn a_site_shipping_no_faces_has_no_digest() {
         let root = tempfile::tempdir().expect("tempdir");
         assert!(fonts(root.path(), &[]).digest().is_none());
     }
 
-    /// The bug this exists for: the directory is named in the config either way,
-    /// so replacing a face inside it changed nothing the cache could see, and
-    /// every page (with its cards and PDFs, typeset with the old face) stayed a
-    /// hit.
     #[test]
     fn replacing_a_face_changes_the_digest() {
         let root = tempfile::tempdir().expect("tempdir");
@@ -174,14 +133,10 @@ mod tests {
         let after = fonts(root.path(), &["faces"]).digest();
         assert_ne!(before, after, "a face's contents are the fingerprint");
 
-        // A face in a subdirectory counts too: the scan recurses, so the digest
-        // must as well or half the tree is unwatched.
         std::fs::write(dir.join("italic/slanted.ttf"), b"three").expect("write");
         assert_ne!(after, fonts(root.path(), &["faces"]).digest());
     }
 
-    /// Same bytes, same digest: an unchanged directory must not cold-rebuild the
-    /// site on every build.
     #[test]
     fn an_unchanged_directory_digests_the_same() {
         let root = tempfile::tempdir().expect("tempdir");

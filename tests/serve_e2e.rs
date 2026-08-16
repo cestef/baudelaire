@@ -46,8 +46,8 @@ fn serve_rejects_path_traversal() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhome",
     );
-    // A secret sibling of `dist`, inside the project root but outside the
-    // served tree. `config.kdl` itself is such a file.
+    // `config.kdl` is a sibling of `dist`: inside the project root, outside
+    // the served tree.
     let srv = Serve::start(&t, &["--no-watch"]);
     for attack in ["/../config.kdl", "/../../etc/hostname", "/..%2fconfig.kdl"] {
         let (code, body) = srv.get_raw(attack);
@@ -79,8 +79,6 @@ fn serve_404_for_missing() {
 
 #[test]
 fn serve_falls_back_to_the_site_404_page() {
-    // A site emitting a `404.html` gets it served for unmatched URLs (with
-    // the 404 status intact) matching what a static host would do.
     let t = Site::new();
     t.write(
         "config.kdl",
@@ -107,9 +105,8 @@ fn serve_falls_back_to_the_site_404_page() {
 
 #[test]
 fn serve_answers_inside_a_language_with_that_language_s_404() {
-    // The build writes one not-found page per language, and a static host picks
-    // by directory. The dev server used to answer every unmatched URL with the
-    // default language's, so a French page's broken link previewed in English.
+    // The build writes one not-found page per language, and a static host
+    // picks by directory.
     let t = Site::new();
     t.write(
         "config.kdl",
@@ -187,7 +184,6 @@ fn live_reload_script_injected_only_when_watching() {
         "#let frontmatter = (title: \"H\",)\nhome",
     );
 
-    // Watching -> the SSE client is injected.
     let srv = Serve::start(&t, &[]);
     let (_, body) = srv.get("/");
     assert!(
@@ -196,7 +192,6 @@ fn live_reload_script_injected_only_when_watching() {
     );
     drop(srv);
 
-    // --no-watch -> no injection.
     let srv = Serve::start(&t, &["--no-watch"]);
     let (_, body) = srv.get("/");
     assert!(
@@ -231,10 +226,6 @@ fn sse_stream_pushes_reload_on_change() {
 
 #[test]
 fn a_data_file_a_page_read_is_watched_without_being_configured() {
-    // The build records what each compile read, which is how a page whose data
-    // file changed recompiles. The watcher ignored that and watched four fixed
-    // trees, so editing `data/authors.yaml` did nothing until the site repeated
-    // itself in `serve { include }`.
     let t = Site::new();
     t.write(
         "config.kdl",
@@ -264,12 +255,6 @@ fn a_data_file_a_page_read_is_watched_without_being_configured() {
 }
 
 /// Editing a `.md` page reaches the dev server.
-///
-/// The watcher accepted a path under `content/` only when it ended in `.typ`,
-/// so a markdown edit produced no rebuild line, no reload, and no change in
-/// `dist` -- until an unrelated `.typ` was touched, at which point the markdown
-/// edit landed too. The compile cache was right all along; the watcher was the
-/// whole bug, and it meant markdown did not work in `serve` at all.
 #[test]
 #[cfg(feature = "markdown")]
 fn a_markdown_page_edit_rebuilds_and_reloads() {
@@ -296,7 +281,6 @@ fn a_markdown_page_edit_rebuilds_and_reloads() {
         );
     });
     assert!(pushed, "editing a `.md` page pushed no reload");
-    // ...and the edit reached `dist`, not just the stream.
     let (_, body) = srv.get("/posts/hello/");
     assert!(
         !body.contains("markdown v0"),
@@ -306,12 +290,8 @@ fn a_markdown_page_edit_rebuilds_and_reloads() {
 
 /// A non-`.typ` file a page reads from *inside* `content/` triggers a rebuild.
 ///
-/// `Engine::outside` drops every directory lying inside the four watched trees
-/// from the tracked set, on the premise that those trees are watched wholesale.
-/// The watcher then narrowed `content/` and `templates/` to `.typ`, so a data
-/// file colocated with a page was watched by nobody: it was neither tracked
-/// (inside a watched tree) nor relevant (not a `.typ`). Same hole covered a
-/// bundle's colocated images.
+/// `Engine::outside` drops a directory lying inside a watched tree from the
+/// tracked set, so narrowing that tree to `.typ` leaves such a file unwatched.
 #[test]
 fn a_data_file_beside_a_page_is_watched() {
     let t = Site::new();
@@ -342,14 +322,12 @@ fn a_data_file_beside_a_page_is_watched() {
     assert!(body.contains("later "), "rebuilt page: {body}");
 }
 
-/// A declared source, which is the one input that typically sits *outside* every
-/// watched tree: `paths { sources }` may name a file above the project root, and
-/// nothing else looks there.
+/// A declared source, the one input that typically sits *outside* every
+/// watched tree: `paths { sources }` may name a file above the project root,
+/// and nothing else looks there.
 ///
 /// Markdown on purpose, and gated with it: a `.md` source is read by baudelaire
-/// rather than opened by typst, so it is no page's tracked dependency and
-/// `Filter::sourced` is the only thing watching it. A `.typ` source would be
-/// watched twice over and prove less.
+/// rather than opened by typst, so `Filter::sourced` is all that watches it.
 #[cfg(feature = "markdown")]
 #[test]
 fn a_declared_source_outside_the_project_is_watched() {
@@ -379,10 +357,9 @@ fn a_declared_source_outside_the_project_is_watched() {
     assert!(body.contains("Later "), "rebuilt page: {body}");
 }
 
-/// The same declaration, but the file is not there when the session starts:
-/// the build fails, the server stays up, and creating the file has to be what
-/// fixes it. A path that does not resolve spells differently from the same path
-/// once it does, so this is the case a lexical fallback loses.
+/// The same declaration, but the file is not there when the session starts: a
+/// path that does not resolve spells differently from the same path once it
+/// does, which is the case a lexical fallback loses.
 #[cfg(feature = "markdown")]
 #[test]
 fn a_declared_source_created_after_the_session_starts_is_watched() {
@@ -410,9 +387,6 @@ fn a_declared_source_created_after_the_session_starts_is_watched() {
 }
 
 /// The same hole in `templates/`: a template's own data file.
-///
-/// Identical to the tracked-`data/` case above except for where the file sits,
-/// which is exactly what used to decide whether it was watched.
 #[test]
 fn a_data_file_a_template_reads_from_its_own_tree_is_watched() {
     let t = Site::new();
@@ -456,9 +430,7 @@ fn config_edit_reloads_and_pushes_reload() {
     );
     let srv = Serve::start(&t, &[]);
 
-    // Only the config file is edited: it sits at the project root, outside the
-    // content/templates/assets watch roots, so this proves the config file
-    // itself is watched and reloads the session.
+    // Only the config file is edited, and it sits outside every watch root.
     let mut n = 0;
     let pushed = awaits_reload(&srv, || {
         n += 1;
@@ -495,8 +467,7 @@ fn serve_serves_index_at_root() {
 }
 
 /// A `config.kdl` reload that moves `paths { dist }` must reach the request
-/// thread: the handler captured the served root at startup and kept serving the
-/// old directory for the rest of the session.
+/// thread, which captures the served root.
 #[test]
 fn a_config_reload_moves_the_served_root() {
     let t = Site::new();
@@ -511,8 +482,8 @@ fn a_config_reload_moves_the_served_root() {
     let srv = Serve::start(&t, &[]);
     assert!(srv.get("/").1.contains("first dist"));
 
-    // The rebuild is debounced, and an edit made before the watcher is up is
-    // seen by nobody, so the edit is re-issued until it lands.
+    // An edit made before the watcher is up is seen by nobody, so it is
+    // re-issued until it lands.
     let edit = || {
         t.write(
             "content/index.typ",
@@ -531,9 +502,7 @@ fn a_config_reload_moves_the_served_root() {
     );
 }
 
-/// A build failure is a warning whether it is the first build or a later one:
-/// the same typo used to kill the server or merely warn, depending only on
-/// whether it predated `serve`.
+/// A build failure is a warning whether it is the first build or a later one.
 #[test]
 fn a_failing_first_build_keeps_the_server_up() {
     let t = Site::new();
@@ -587,10 +556,6 @@ fn a_unicode_url_is_served() {
 }
 
 /// Open the live-reload stream, then apply `trigger` until a reload arrives.
-///
-/// Repeating the edit rather than sleeping once before it removes the race
-/// between the SSE client connecting and the change landing, which a loaded
-/// runner loses.
 fn awaits_reload(srv: &Serve, trigger: impl FnMut()) -> bool {
     awaits_event(srv, "data: reload", trigger)
 }
@@ -632,8 +597,7 @@ fn awaits_event(srv: &Serve, needle: &str, mut trigger: impl FnMut()) -> bool {
 }
 
 /// A rebuild that fails puts its diagnostic on the stream, so the browser can
-/// say so. Before this the tab kept showing the last good page and nothing
-/// distinguished a broken save from a slow one or a missed one.
+/// say so.
 #[test]
 fn a_failed_rebuild_pushes_its_diagnostic_to_the_stream() {
     let t = Site::new();
@@ -649,8 +613,7 @@ fn a_failed_rebuild_pushes_its_diagnostic_to_the_stream() {
 
     let mut n = 0;
     let pushed = awaits_event(&srv, "event: failed", || {
-        // Unclosed code block: typst refuses it, so the rebuild fails while the
-        // previously built page stays served.
+        // An unclosed code block, so the rebuild fails.
         n += 1;
         t.write(
             "content/index.typ",
@@ -668,9 +631,8 @@ fn alt_click_opens_the_stamped_location_in_the_editor() {
     let t = Site::new();
     t.write(
         "config.kdl",
-        // The "editor" is a shell that records what it was handed: the program
-        // and each argument are separate words, so this is an ordinary command,
-        // not a command line the server had to parse.
+        // The "editor" records what it was handed, as separate words: an
+        // ordinary command, not a command line the server had to parse.
         "site \"S\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n\
          serve {\n  open #false\n  editor \"sh\" \"-c\" \"echo {file}:{line}:{column} > opened.txt\"\n}",
     );
@@ -751,10 +713,8 @@ fn the_open_endpoint_says_when_no_editor_is_configured() {
 
 /// `-q` still says where the server is listening.
 ///
-/// The arrow lines are suppressed below the default level, and this one is not
-/// a decoration: `--port 0` asks the OS for a free port, so with the line gone
-/// the address a caller has to connect to appeared nowhere at all -- and `-q`
-/// is exactly what a script wrapping the server passes.
+/// `--port 0` asks the OS for a free port, so without the line the address a
+/// caller has to connect to appears nowhere.
 #[test]
 fn a_quiet_server_still_names_the_address_it_bound() {
     let t = Site::new();
@@ -775,7 +735,7 @@ fn a_quiet_server_still_names_the_address_it_bound() {
     );
 
     // Spawned here rather than through `Serve`, which picks its own port and
-    // does not capture stderr: the point is what a `--port 0` run prints.
+    // captures no stderr.
     let mut child = Command::new(env!("CARGO_BIN_EXE_baudelaire"))
         .current_dir(&t.root)
         .args(["-q", "serve", "--port", "0", "--no-open", "--no-watch"])

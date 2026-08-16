@@ -10,7 +10,6 @@ use crate::error::Result;
 use crate::error::warning::MirrorDefaults;
 use crate::mirror::Mirror;
 
-/// Arguments for `baudelaire mirror`.
 #[derive(Args, Debug, Clone)]
 #[command(after_help = MirrorArgs::help())]
 pub struct MirrorArgs {
@@ -27,8 +26,7 @@ pub struct MirrorArgs {
 }
 
 impl MirrorArgs {
-    /// Appended to `mirror --help`: the command exists for one reason, and a
-    /// reader who does not know that reason cannot guess it from the name.
+    /// Appended to `mirror --help`.
     fn help() -> String {
         format!(
             "{}\n{}",
@@ -65,19 +63,8 @@ impl MirrorArgs {
     }
 
     /// The project whose data the modules are generated from, announced under
-    /// the verb of the run.
-    ///
-    /// Optional, and deliberately: `html` and `site` are worth mirroring from
-    /// anywhere (after an upgrade, say, with no project in sight), and the two
-    /// table modules mirror empty outside a project exactly as they do inside
-    /// one that has never been built.
-    ///
-    /// A config that *exists* and does not parse is the case worth reporting,
-    /// exactly as `clean` reports it: the diagnostic used to be discarded
-    /// outright, so the `site` module an editor resolves against carried the
-    /// default title and url with no word to the reader, while `baudelaire
-    /// build` failed on the same project. No project at all stays silent, since
-    /// there is nothing there to have got wrong.
+    /// the verb of the run. A config that exists and does not parse is reported;
+    /// no project at all stays silent.
     fn config(&self, cx: &Cx) -> Config {
         let verb = if self.uninstall {
             "removing modules for"
@@ -107,10 +94,6 @@ impl Run for MirrorArgs {
         let config = self.config(cx);
         let mirror = Mirror::new(&config, self.path.as_deref(), self.global);
         if self.uninstall {
-            // The inverse of mirroring belongs to the command that mirrors, not
-            // to `clean`: an install is machine-global state that no config
-            // locates, and `--path` means only the run that wrote it knows
-            // where it went. `clean` stays what it says it is, project state.
             mirror.uninstall()?.render(cx.ui);
             return Ok(());
         }

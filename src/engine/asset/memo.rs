@@ -1,13 +1,5 @@
-//! Cross-build memo for processed asset bytes.
-//!
-//! Without it the pipeline is fully non-incremental: every build re-runs oxipng
-//! and a Lanczos3 downscale over every image, even one where nothing changed,
-//! while page compilation right next to it is both cached and parallel.
-//!
-//! Only handlers whose output is a pure function of their own bytes and the
-//! config are memoized (see [`super::Handler::pure`]). A stylesheet rewrites
-//! references to *other* assets' hashed names and a script bundles a whole
-//! import graph, so neither is keyed by its own bytes.
+//! Cross-build memo for the bytes a pure handler ([`super::Handler::pure`])
+//! produced, keyed by its source bytes and the config.
 //!
 //! Layout under the cache directory:
 //!
@@ -133,10 +125,9 @@ impl Memo {
         self.dir.join(format!("{}.json", key.hex()))
     }
 
-    /// Content-addressed blob path. The layout is [`Hash::object`]'s, shared
-    /// with the page store: the constant, the split and the directory name were
-    /// spelled here too, and two stores that disagree about layout are a
-    /// `clean` that walks one and not the other.
+    /// Content-addressed blob path, in [`Hash::object`]'s layout, which the
+    /// page store shares: two stores that disagree about it are a `clean` that
+    /// walks one and not the other.
     fn object(&self, blob: &Hash) -> PathBuf {
         blob.object(&self.dir)
     }

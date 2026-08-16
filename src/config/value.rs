@@ -16,29 +16,17 @@ use crate::error::{ConfigError, Result};
 #[derive(Debug)]
 struct MissingVar(String);
 
-/// A [`KdlValue`] written back as the KDL source that parses to it: the adapter
-/// a diagnostic echoes an author's own value through, and the only correct one
-/// where the message is a *line to write*.
+/// A [`KdlValue`] written back as the KDL source that parses to it, for a
+/// diagnostic echoing an author's own value.
 ///
 /// `KdlValue`'s own `Display` writes a string bare wherever KDL's grammar would
-/// take it as an identifier, so a help offering `drafts { suffix .x }` hands
-/// back a line whose value has a different shape than the one written -- and
-/// for a value carrying a space, a quote or an `=`, a line that does not parse
-/// at all. A help whose whole promise is "write this instead" cannot be a line
-/// that fails, so the quoting is not optional and the escaping is this
-/// adapter's.
-///
-/// The [`Typst`](crate::codegen::Typst) and [`Js`](crate::codegen::Js) adapters
-/// are the same shape for the same reason: a value crossing into another
-/// language is written by a type that knows that language's quoting, never by
-/// `to_string`.
+/// take it as an identifier, so a help offering a line to write hands back one
+/// whose value has a different shape, or that does not parse at all.
 pub(super) struct Kdl<'a>(pub(super) &'a KdlValue);
 
 impl Display for Kdl<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(string) = self.0.as_string() else {
-            // Every other scalar has exactly one spelling, and KDL's own
-            // `Display` writes it: `#false`, `3`, `1.5`, `#null`.
             return write!(f, "{}", self.0);
         };
         f.write_char('"')?;
@@ -59,24 +47,18 @@ impl Display for Kdl<'_> {
 /// same question in both passes that read a config.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Unset {
-    /// Every read whose value is going to be used: an unset variable is an
-    /// error rather than an empty string, so a missing secret fails the build
-    /// instead of shipping a blank value.
+    /// Every read whose value is going to be used, so a missing secret fails
+    /// the build instead of shipping a blank value.
     Fails,
-    /// A [`Structural`] pass: the reference stands in as
-    /// [`PLACEHOLDER`](Unset::PLACEHOLDER), because the pass is checking which
-    /// keys are written and not what they say.
+    /// A [`Structural`] pass, which checks which keys are written and not what
+    /// they say: the reference stands in as [`PLACEHOLDER`](Unset::PLACEHOLDER).
     Stands,
 }
 
 impl Unset {
-    /// What an unset variable stands in as during a structural pass.
-    ///
-    /// A syntactically complete https URL, and a legal relative path: the keys
-    /// most often written as a bare `${VAR}` are exactly the ones carrying a
-    /// shape check of their own (`deploy { s3 { endpoint } }` demands https, a
-    /// generated file name has to stay under `dist`), and a pass checking
-    /// structure must not fail on a value it invented itself.
+    /// What an unset variable stands in as during a structural pass: a
+    /// syntactically complete https URL and a legal relative path, so the shape
+    /// checks downstream cannot fail on a value the pass invented itself.
     const PLACEHOLDER: &'static str = "https://example.invalid";
 
     /// The value an unset reference takes, or `None` when there is none and the
@@ -90,11 +72,7 @@ impl Unset {
 }
 
 thread_local! {
-    /// Whether this thread is inside a [`Structural`] pass. A thread-local
-    /// rather than a parameter because the two passes differ at exactly one
-    /// call site and agree at every other, while the value is read under a
-    /// hundred handler signatures that have no business knowing which pass they
-    /// are in.
+    /// Whether this thread is inside a [`Structural`] pass.
     static STRUCTURAL: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -102,27 +80,13 @@ thread_local! {
 /// long as the guard is alive, an unset `${VAR}` with no `:-default` stands in
 /// as a placeholder instead of failing.
 ///
-/// [`Config::check`](crate::config::Config) applies every profile -- selected or
-/// not -- to a throwaway clone, so a typo in a profile nobody asked for is
-/// caught by the parse that read it. That is a check of *structure*. A
-/// profile's values belong to the environment of the build that selects it:
-/// `profiles { prod { deploy { s3 { bucket "${S3_BUCKET}" } } } }` is the
-/// documented shape, and reading it as a value made every local `build` fail
-/// for want of a production secret.
-///
-/// Selecting a profile for real is the other path and is left exactly as it
-/// was: `Config::with_profile` runs outside this guard, the value is about to
-/// be used, and an unset variable is still a hard error. Nothing reaches a
-/// deploy with a placeholder in it.
+/// `Config::with_profile` runs outside this guard, so nothing reaches a deploy
+/// with a placeholder in it.
 pub(super) struct Structural(bool);
 
 impl Structural {
-    /// Begin a structural pass on the current thread. The previous mode is
-    /// restored when the guard drops, so an error raised inside one cannot
-    /// leave a later real read resolving against a placeholder.
-    ///
-    /// The guard has to be bound: dropped where it is made, it would turn the
-    /// mode on and off again before a single value was read.
+    /// Begin a structural pass on the current thread; the previous mode is
+    /// restored when the guard drops, so the guard has to be bound.
     #[must_use]
     pub(super) fn begin() -> Self {
         Self(STRUCTURAL.replace(true))
@@ -145,10 +109,8 @@ impl Drop for Structural {
 }
 
 /// Expands `${VAR}` references in config string values from the process
-/// environment, with an optional `${VAR:-default}` fallback. An unset variable
-/// with no default is an error ([`MissingVar`]) rather than a silent empty
-/// string. The single place the config surface reads the environment, so the
-/// rule is uniform across every string.
+/// environment, with an optional `${VAR:-default}` fallback. The single place
+/// the config surface reads the environment.
 struct Env;
 
 impl Env {
@@ -156,10 +118,8 @@ impl Env {
         Self::expand_with(raw, |name| std::env::var(name).ok(), Structural::mode())
     }
 
-    /// Expansion against an arbitrary variable lookup: the core logic, kept
-    /// free of the process environment so it is testable without mutating global
-    /// state (unsound under multi-threaded test runners). `unset` is passed in
-    /// for the same reason.
+    /// Expansion against an arbitrary variable lookup, kept free of the process
+    /// environment so a test never has to mutate it.
     fn expand_with(
         raw: &str,
         lookup: impl Fn(&str) -> Option<String>,
@@ -171,7 +131,6 @@ impl Env {
             out.push_str(&rest[..start]);
             let after = &rest[start + 2..];
             let Some(end) = after.find('}') else {
-                // no closing brace: not a reference, emit verbatim
                 out.push_str(&rest[start..]);
                 return Ok(out);
             };
@@ -179,9 +138,6 @@ impl Env {
                 Some((name, default)) => (name.trim(), Some(default)),
                 None => (after[..end].trim(), None),
             };
-            // The `:-default` the author wrote outranks any stand-in: it is a
-            // real value, and a structural pass should see the one that a
-            // selected build would.
             let value = lookup(name)
                 .or_else(|| default.map(str::to_owned))
                 .or_else(|| unset.stand_in())
@@ -197,36 +153,26 @@ impl Env {
 pub(super) trait ValueExt {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String>;
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64>;
-    /// An integer required to fall within `min..=max`, erroring (never clamping)
-    /// when it does not: the same policy as `port` and `paginate`.
+    /// An integer required to fall within `min..=max`, erroring rather than
+    /// clamping when it does not.
     fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64>;
     /// The [`ValueExt::ranged`] case where the bounds are already values of the
-    /// narrow field type. The range check *is* the narrowing check, so the
-    /// conversion back to `T` cannot fail and no site has to spell out a cast
-    /// whose safety argument lives one line above it.
+    /// narrow field type, so the range check *is* the narrowing check.
     fn bounded<T>(&self, text: &str, span: SourceSpan, min: T, max: T) -> Result<T>
     where
         T: TryFrom<i64> + Into<i64> + Copy;
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool>;
     fn kind(&self) -> &'static str;
     /// Read a string value as one of `T`'s configured names, erroring on an
-    /// unknown one with a nearest-match hint: the single-value counterpart of
-    /// `NodeExt::mapped`, so [`Named::NAMES`] drives both parsing and error help.
+    /// unknown one with a nearest-match hint.
     fn one<T: Named>(&self, text: &str, span: SourceSpan) -> Result<T>;
-    /// Read a string value as a schema field's type expression (`list<dict>`).
-    /// Its own reader and not [`ValueExt::one`] because a type is a shape rather
-    /// than a name: the set it is drawn from is infinite.
+    /// Read a string value as a schema field's type expression (`list<dict>`),
+    /// which is a shape rather than one of a finite set of names.
     fn ty(&self, text: &str, span: SourceSpan) -> Result<FieldType>;
     /// A permalink template, or a piece of one, checked by `Permalink::parse`:
     /// the attribute-value counterpart of
-    /// [`NodeExt::template`](super::node::NodeExt::template), which owns the
-    /// rule and states why it exists.
-    ///
-    /// Its own reader because a key that is part of a URL is written both ways:
-    /// `paginate { prefix ".." }` is a node and is refused, while
-    /// `taxonomies { tags prefix=".." }` is an attribute and read as a plain
-    /// string, so the identical mistake built green and published
-    /// `href="/tags/x/../2/"` against a file at `/tags/x/2/`.
+    /// [`NodeExt::template`](super::node::NodeExt::template), so the same
+    /// mistake is refused whichever way the key is written.
     fn template(&self, text: &str, span: SourceSpan) -> Result<String>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
     /// straight through to client JS (`baudelaire:config`). Strings expand
@@ -254,7 +200,6 @@ impl ValueExt for KdlValue {
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {
-        // kdl 6 integers are i128: a literal beyond i64 must not wrap.
         match self.as_integer() {
             Some(n) => {
                 i64::try_from(n).map_err(|_| ConfigError::integer_overflow(text, n, span).into())
@@ -332,10 +277,8 @@ mod tests {
     use super::{Env, Kdl, Structural, Unset};
     use kdl::KdlValue;
 
-    /// A help that says "write this instead" is copied, so what it prints has to
-    /// parse. KDL's own `Display` writes a string bare wherever the grammar
-    /// takes an identifier, which turns `suffix ".x"` into `suffix .x` and a
-    /// value with a space into no line at all.
+    /// A help that says "write this instead" is copied, so what it prints has
+    /// to parse.
     #[test]
     fn a_value_is_written_back_as_the_kdl_that_parses_to_it() {
         let written = |value: KdlValue| Kdl(&value).to_string();
@@ -345,7 +288,6 @@ mod tests {
         assert_eq!(written(string("say \"hi\"")), r#""say \"hi\"""#, "a quote");
         assert_eq!(written(string("c:\\x")), r#""c:\\x""#, "a backslash");
         assert_eq!(written(string("one\ntwo")), r#""one\ntwo""#, "a newline");
-        // Every other scalar has one spelling, and KDL already writes it.
         assert_eq!(written(KdlValue::Bool(true)), "#true");
         assert_eq!(written(KdlValue::Integer(3)), "3");
         assert_eq!(written(KdlValue::Null), "#null");
@@ -353,7 +295,6 @@ mod tests {
 
     #[test]
     fn env_expands_variables_defaults_and_literals() {
-        // fixed lookup, no real env touched: sound under any test runner
         let env = |name: &str| (name == "APP_ENV").then(|| "prod".to_owned());
         let fails = Unset::Fails;
         assert_eq!(
@@ -368,7 +309,6 @@ mod tests {
             Env::expand_with("no vars here", env, fails).unwrap(),
             "no vars here"
         );
-        // An unterminated reference is not a reference: left verbatim.
         assert_eq!(
             Env::expand_with("half ${OPEN", env, fails).unwrap(),
             "half ${OPEN"
@@ -382,9 +322,6 @@ mod tests {
         assert_eq!(err.0, "MISSING");
     }
 
-    /// A structural pass reads shapes, not secrets: an unset variable stands in
-    /// rather than failing, and the placeholder is something the shape checks
-    /// downstream (https, containment) accept.
     #[test]
     fn env_unset_stands_in_for_a_structural_pass() {
         let env = |_: &str| None;
@@ -392,22 +329,18 @@ mod tests {
             Env::expand_with("${MISSING}", env, Unset::Stands).unwrap(),
             Unset::PLACEHOLDER
         );
-        // ...and a default the author wrote still outranks the stand-in.
         assert_eq!(
             Env::expand_with("${MISSING:-fallback}", env, Unset::Stands).unwrap(),
             "fallback"
         );
     }
 
-    /// The guard is scoped: a read after it drops fails again, so nothing but
-    /// the pass that asked for it ever sees a placeholder.
     #[test]
     fn the_structural_guard_restores_the_previous_mode() {
         assert_eq!(Structural::mode(), Unset::Fails);
         {
             let _shape = Structural::begin();
             assert_eq!(Structural::mode(), Unset::Stands);
-            // Nesting is the shape a profile check inside a theme parse takes.
             let _inner = Structural::begin();
             assert_eq!(Structural::mode(), Unset::Stands);
         }

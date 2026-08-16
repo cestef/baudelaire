@@ -1,15 +1,6 @@
-//! Every error the crate can fail with, and the one enum that carries them.
-//!
-//! One module per error class, each a typed [`miette::Diagnostic`] with a
-//! `baudelaire::..` code, its own fields, and a `help` that says what to do
-//! about it. What was being done is a typed label ([`fs::Op`],
-//! [`serialize::Artifact`], [`deploy::Step`]) rather than a message the call
-//! site spells out. A foreign error is never flattened into a message or folded
-//! into a neighbouring variant to save writing one: it is kept as a `#[source]`
-//! under a variant of its own. [`fs`] is the model to copy.
-//!
-//! [`warning`] holds the same thing at `severity(warning)`: diagnostics that
-//! report without failing the run.
+//! Every error the crate can fail with, and the one enum that carries them: one
+//! module per error class, each a typed [`miette::Diagnostic`]. [`warning`]
+//! holds the same at `severity(warning)`, which reports without failing a run.
 
 use typst::syntax::VirtualizeError;
 
@@ -81,19 +72,9 @@ pub enum BaudelaireErrorKind {
     #[diagnostic(code(baudelaire::typst::virtualize))]
     Virtualize(#[from] VirtualizeError),
 
-    /// The terminal itself failed, reading or writing. The one remaining
-    /// implicit `io::Error` conversion: every filesystem operation goes through
-    /// [`crate::fs`] and carries path + operation context as [`FsError`], so
-    /// the only bare `io::Error`s left are the two ends of the terminal,
-    /// [`crate::cli::prompt`] drawing a prompt and reading the answer back, and
-    /// [`crate::remote::Options`] reading a piped secret from stdin. ([`crate::ui`]
-    /// itself never reaches here: its writes are infallible by design.)
-    ///
-    /// Still a blanket conversion, and so still a finding: each of those is its
-    /// own error class and wants its own variant, with the `#[from]` dropped
-    /// once the last `?` on an `io::Error` is gone. Until then the message at
-    /// least names what actually failed, rather than calling a failed stdin
-    /// read a failed write.
+    /// The one remaining blanket `io::Error` conversion: every filesystem
+    /// operation goes through [`crate::fs`] and arrives as [`FsError`], so what
+    /// reaches here is the two ends of the terminal.
     #[error("terminal I/O failed")]
     #[diagnostic(code(baudelaire::terminal))]
     Terminal(#[from] std::io::Error),
@@ -241,38 +222,18 @@ pub enum BaudelaireErrorKind {
     Unattended(#[from] Unattended),
 }
 
-/// A mutating action needed confirming, with no terminal to confirm at.
-///
-/// Reached only once the action is known to need an answer: `--yes` and
-/// `--dry-run` are both settled before anything asks. Answering on the user's
-/// behalf instead is what let a CI run that forgot `--yes` skip every deploy
-/// backend and exit 0 having published nothing.
-///
-/// Not remote-specific, which is why it does not live on [`RemoteError`]:
-/// A page's source, ready for the snippet a diagnostic renders: named by its
-/// path, and tagged with the language it is actually written in.
-///
-/// The tag used to be the literal `"Typst"` at each of the three sites that
-/// render a page, which was true until a `.md` file became a page and then
-/// labelled every markdown snippet as Typst. Derived from the extension here,
-/// once, so a new source dialect is a row rather than three call sites nobody
-/// remembers to visit.
-/// Both halves owned: every caller here is on a failure path that already
-/// copies the page text to hand it to miette, so borrowing would buy a lifetime
-/// and nothing else.
+/// A page's name and text, ready for the snippet a diagnostic renders, tagged
+/// with the language its extension names.
 pub struct PageSource(pub String, pub String);
 
 impl PageSource {
-    /// What each content extension is written in, for a renderer that
-    /// highlights the snippet. Anything unrecognized is left untagged rather
-    /// than guessed: a wrong tag highlights the line as the wrong language,
-    /// which reads worse than no highlighting at all.
+    /// Anything unrecognized is left untagged rather than guessed, since a
+    /// wrong tag highlights the snippet as the wrong language.
     const LANGUAGES: &'static [(&'static str, &'static str)] = &[
         (crate::config::Config::TYPST, "Typst"),
         (crate::config::Config::MARKDOWN, "Markdown"),
     ];
 
-    /// The language `name` is written in, by its extension.
     fn language(name: &str) -> Option<&'static str> {
         let extension = std::path::Path::new(name).extension()?.to_str()?;
         Self::LANGUAGES
@@ -293,8 +254,8 @@ impl From<PageSource> for miette::NamedSource<String> {
     }
 }
 
-/// `clean` sweeps the output directory and every scrap of local build state,
-/// and wants the same answer to the same question.
+/// Reached only once the action is known to need an answer: `--yes` and
+/// `--dry-run` are both settled before anything asks.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("cannot confirm {} without a terminal", crate::ui::Text(.action))]
 #[diagnostic(
@@ -305,13 +266,6 @@ pub struct Unattended {
     pub action: String,
 }
 
-/// A run that warned, under `--strict`.
-///
-/// Warnings are what baudelaire says instead of failing: a missing font, an
-/// untaken permalink, a capability this binary lacks. Every one is a thing the
-/// author probably wants to know and possibly wants to block on, and until
-/// `--strict` existed the only warning CI could gate on was broken links
-/// (`--strict-links`). Grepping stderr for the rest is not a gate.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{count} warning{} in a strict run", if *.count == 1 { "" } else { "s" })]
 #[diagnostic(
@@ -322,9 +276,6 @@ pub struct StrictWarnings {
     pub count: usize,
 }
 
-/// Several pages failed to compile in one build. Each page's own diagnostics
-/// are attached as related errors, so a build with three broken pages renders
-/// all three instead of only the first.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("{} pages failed to compile", errors.len())]
 #[diagnostic(code(baudelaire::build::failed))]
@@ -334,9 +285,8 @@ pub struct BuildFailed {
 }
 
 impl BuildFailed {
-    /// Collapse per-page failures into one error: a single failure propagates
-    /// unchanged (its diagnostic is already precise), several aggregate under
-    /// one [`BuildFailed`]. `None` when nothing failed.
+    /// A single failure propagates unchanged, several aggregate under one
+    /// [`BuildFailed`]; `None` when nothing failed.
     pub fn aggregate(errors: Vec<BaudelaireErrorKind>) -> Option<BaudelaireErrorKind> {
         match errors.len() {
             0 => None,
@@ -346,9 +296,6 @@ impl BuildFailed {
     }
 }
 
-/// A page date that a feed's mandated timestamp format cannot represent:
-/// RFC 2822 (RSS `pubDate`) only covers years 1900–9999, RFC 3339 (Atom
-/// `updated`) years 0–9999.
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("date {} of {} cannot be formatted as {standard}", Code(.date), Code(.page))]
 #[diagnostic(
@@ -382,12 +329,8 @@ impl FeedDateError {
 }
 
 impl BaudelaireErrorKind {
-    /// Name the file a config diagnostic points into, for the config texts that
-    /// are not `config.kdl`: a roster read as a file of its own is parsed by
-    /// the same reader and has to report itself under its own name.
-    ///
-    /// Everything else passes through: an error that already knows where it
-    /// came from must not be relabelled by whoever happens to be holding it.
+    /// Names the file a config diagnostic points into, for the config texts
+    /// that are not `config.kdl`; everything else passes through untouched.
     pub fn named(self, path: &std::path::Path) -> Self {
         match self {
             Self::Config(error) => Self::Config(Box::new(error.named(path))),

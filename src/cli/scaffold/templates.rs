@@ -1,7 +1,5 @@
-//! The files `init` and `new` write, and the placeholder substitution over them.
-//!
-//! Embedded from `scaffold/` at build time. Editing those files (not string
-//! literals here) changes what `init`/`new` produce.
+//! The files `init` and `new` write, and the placeholder substitution over
+//! them; the bodies are embedded from `scaffold/` at build time.
 
 use std::fmt::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -9,15 +7,8 @@ use std::path::{Path, PathBuf};
 use include_dir::{Dir, include_dir};
 use itertools::Itertools as _;
 
-/// One starter project shape.
-///
-/// The directory *is* the manifest: every file under it is written at the
-/// same relative path, so adding a file to a template is adding a file, not
-/// a file plus a table entry.
-///
-/// Reaches out of the directory only as far as [`Template::help`] does: `init`
-/// renders its `--template` help from this table, so the type has to be
-/// nameable there and nowhere wider.
+/// One starter project shape. The directory *is* the manifest: every file under
+/// it is written at the same relative path.
 pub(in crate::cli) struct Template {
     /// What `--template` accepts, and what the summary reports.
     pub(super) name: &'static str,
@@ -27,11 +18,6 @@ pub(in crate::cli) struct Template {
 }
 
 /// The registered starter templates.
-///
-/// Single source of truth: the flag's default, its help listing, the
-/// resolution of a given name and the "did you mean" on a typo all read this
-/// one table, so a new template is one entry and cannot drift out of the
-/// help text.
 pub(super) const TEMPLATES: &[Template] = &[
     Template {
         name: "blog",
@@ -56,28 +42,17 @@ pub(super) const TEMPLATES: &[Template] = &[
 ];
 
 /// One optional feature `--with` switches on.
-///
-/// `pub(in crate::cli)` for the same reason [`Template`] is: `init` renders its
-/// `--with` help from this table.
 pub(in crate::cli) struct Extra {
     /// What `--with` accepts.
     pub(super) name: &'static str,
-    /// The KDL appended verbatim to the rendered config. A duplicate
-    /// top-level block is not a conflict: [`crate::config`] dispatches every
-    /// node in order and a nested section fills in place, so a second
-    /// `generate { .. }` merges into the first rather than replacing it.
+    /// The KDL appended verbatim to the rendered config; a duplicate top-level
+    /// block merges into the first rather than replacing it.
     pub(super) fragment: &'static str,
-    /// Whether the starter shape already asked for this. A shape that
-    /// configures the feature itself (the `docs` one configures search, with
-    /// fields and a palette) would otherwise be handed a second, barer block
-    /// saying the same thing.
+    /// Whether the starter shape already asked for this.
     pub(super) present: fn(&crate::config::Config) -> bool,
 }
 
 /// The registered optional features.
-///
-/// Single source of truth for what `--with` accepts, exactly as
-/// [`TEMPLATES`] is for `--template`.
 pub(super) const EXTRAS: &[Extra] = &[
     Extra {
         name: "spa",
@@ -106,12 +81,8 @@ pub(super) const EXTRAS: &[Extra] = &[
     },
 ];
 
-/// The shape `--theme` scaffolds: identity, paths and a preview, and no
-/// opinion about anything a theme declares. Deliberately not in
-/// [`TEMPLATES`]: it is not a shape to choose, it is what choosing a theme
-/// leaves for the project to say. A starter shape here instead would write
-/// its own `collections` over the theme's (a list replaces rather than
-/// merges) and bind layouts the theme does not ship.
+/// The shape `--theme` scaffolds: identity, paths and a preview, and no opinion
+/// about anything a theme declares.
 pub(super) const THEMED: Template = Template {
     name: "themed",
     about: "templates, assets and collections from the theme",
@@ -123,13 +94,9 @@ impl Template {
     /// registered one, so the flag's default cannot name a missing table row.
     pub(super) const DEFAULT: &'static str = TEMPLATES[0].name;
 
-    /// The shape a run scaffolds: [`THEMED`] whenever a theme was named,
-    /// else the chosen starter, else the default one.
-    ///
-    /// Naming both is not an error, since `--template` is how the four
-    /// shapes are usually reached, but the theme wins and says so: what a
-    /// starter shape would have contributed is exactly what the theme
-    /// already declares.
+    /// The shape a run scaffolds: [`THEMED`] whenever a theme was named, else
+    /// the chosen starter, else the default one. Naming both is not an error,
+    /// but a named shape is still resolved, so a typo still fails.
     pub(super) fn select(
         chosen: Option<&str>,
         themed: bool,
@@ -137,8 +104,6 @@ impl Template {
     ) -> crate::error::Result<&'static Self> {
         if themed {
             if let Some(name) = chosen {
-                // Resolved first, so a typo is still an error rather than
-                // something the theme silently excuses.
                 let shape = Self::find(name)?;
                 ui.detail(format_args!(
                     "the theme supplies the shape; `{}` is not used",
@@ -166,11 +131,7 @@ impl Template {
         TEMPLATES.iter().map(|t| t.name).collect()
     }
 
-    /// The `--template` help line, listing the table's own rows so a new
-    /// shape cannot ship undocumented.
-    ///
-    /// One of the two things in this module that `init` reads; everything else
-    /// here is the directory's own business.
+    /// The `--template` help line, listing the table's own rows.
     pub(in crate::cli) fn help() -> String {
         format!("Starter shape: {}", Self::names().iter().format(", "))
     }
@@ -186,8 +147,6 @@ impl Template {
 
     fn walk(dir: &Dir<'_>, vars: &Vars<'_>, out: &mut Vec<File>) {
         for file in dir.files() {
-            // Every scaffolded file is text we authored, so a non-UTF-8 one
-            // is a bug here rather than something to degrade over.
             let body = file.contents_utf8().expect("scaffold files are UTF-8");
             out.push(File {
                 rel: file.path().to_path_buf(),
@@ -201,21 +160,14 @@ impl Template {
 }
 
 impl Extra {
-    /// The extras `names` selects, or an error naming the valid ones. A typo
-    /// is refused rather than dropped: an unmatched `--with` used to
-    /// scaffold a site missing the very feature it asked for, silently.
+    /// The extras `names` selects, or an error naming the valid ones.
     pub(super) fn resolve(names: &[String]) -> crate::error::Result<Vec<&'static Self>> {
         names.iter().map(|name| Self::find(name)).collect()
     }
 
     /// The extras that still have something to add, given what the starter
-    /// shape's own config already declares. A shape that configures the
-    /// feature is left alone and reported, rather than handed a second block
-    /// that says less than the one already there.
-    ///
-    /// A config that does not parse yields every extra: appending is then
-    /// the honest thing to do, and the parse error is not this function's to
-    /// report (a test parses every shipped shape).
+    /// shape's own config already declares. A config that does not parse yields
+    /// every extra, the parse error being reported elsewhere.
     pub(super) fn wanted(
         extras: &[&'static Self],
         files: &[File],
@@ -256,8 +208,7 @@ impl Extra {
         EXTRAS.iter().map(|e| e.name).collect()
     }
 
-    /// The `--with` help line, listing the table's own rows. The other item
-    /// `init` reads from here.
+    /// The `--with` help line, listing the table's own rows.
     pub(in crate::cli) fn help() -> String {
         format!(
             "Switch on optional features: {}",
@@ -274,10 +225,8 @@ pub(super) struct File {
 }
 
 impl File {
-    /// The fixed layout every starter shape shares. The flags that skip or
-    /// rewrite a scaffolded file all decide from these, not from the
-    /// configured `paths { }`: these are the paths the shipped `config.kdl`
-    /// declares.
+    /// The fixed layout every starter shape shares, as the shipped `config.kdl`
+    /// declares it rather than as `paths { }` configures it.
     const HOME: &'static str = "content/index.typ";
     const CONTENT: &'static str = "content";
 
@@ -286,15 +235,9 @@ impl File {
         self.rel == Path::new(crate::config::Config::FILE)
     }
 
-    /// Where the scaffolded config lands: whatever the global `--config`
-    /// names, so a project initialized under one name is one every later
-    /// command finds under the same flag. The flag used to be accepted and
-    /// ignored, writing `config.kdl` and reporting success.
-    ///
-    /// Only a bare filename can serve: a `paths { }` entry resolves against
-    /// the working directory rather than against the config file, so a
-    /// config nested a directory down would name a content tree outside its
-    /// own project.
+    /// Where the scaffolded config lands: whatever the global `--config` names.
+    /// Only a bare filename can serve, since a `paths { }` entry resolves
+    /// against the working directory rather than against the config file.
     pub(super) fn config_at(path: &Path) -> crate::error::Result<PathBuf> {
         if path.file_name().is_none_or(|name| name != path.as_os_str()) {
             return Err(crate::error::ScaffoldError::config_path(path).into());
@@ -317,11 +260,9 @@ impl<'a> Vars<'a> {
         Self(pairs.into_iter().collect())
     }
 
-    /// Substitute `{{key}}` placeholders in a template, in a single left-to-
-    /// right pass: a substituted value is never rescanned, so a site name
-    /// containing `{{author}}` stays literal. Values are escaped for the
-    /// double-quoted string context they land in, so a quote in a site name
-    /// yields valid config. Unknown placeholders are left untouched.
+    /// Substitute `{{key}}` placeholders in one left-to-right pass, so a
+    /// substituted value is never rescanned. Values are escaped for the
+    /// double-quoted context they land in; unknown placeholders are left alone.
     pub(super) fn render(&self, template: &str) -> String {
         let mut out = String::with_capacity(template.len());
         let mut rest = template;
@@ -329,7 +270,6 @@ impl<'a> Vars<'a> {
             out.push_str(&rest[..open]);
             let after = &rest[open + 2..];
             let Some(close) = after.find("}}") else {
-                // No closing braces anywhere ahead: emit the rest verbatim.
                 out.push_str(&rest[open..]);
                 return out;
             };
@@ -349,8 +289,7 @@ impl<'a> Vars<'a> {
 }
 
 /// A value escaped for the double-quoted string literal it is interpolated
-/// into. KDL and typst share `\` and `"` escapes, so one adapter serves both
-/// the rendered templates and the config fragments `init` appends.
+/// into; KDL and typst share the `\` and `"` escapes.
 pub(super) struct Quoted<'a>(pub(super) &'a str);
 
 impl fmt::Display for Quoted<'_> {
@@ -378,9 +317,6 @@ mod tests {
         ])
     }
 
-    /// A starter config is what a new site begins from, so every one has to
-    /// stay valid against the dispatch tables. Nothing else reads them,
-    /// which is exactly how a key rename ships a broken `init`.
     #[test]
     fn every_scaffolded_config_parses() {
         for template in TEMPLATES {
@@ -392,7 +328,6 @@ mod tests {
                 .body;
             let config = crate::config::Config::parse(text)
                 .unwrap_or_else(|e| panic!("`{}` config: {e}", template.name));
-            // every declared profile has to apply, not merely parse
             for (name, _) in config.profiles.clone() {
                 config
                     .clone()
@@ -402,9 +337,6 @@ mod tests {
         }
     }
 
-    /// `--config` names the file `init` writes, and only a bare name can:
-    /// a nested one would leave every `paths { }` entry pointing outside
-    /// the project it was scaffolded into.
     #[test]
     fn the_scaffolded_config_takes_a_name_not_a_path() {
         use std::path::Path;
@@ -417,8 +349,6 @@ mod tests {
         assert!(File::config_at(Path::new("../site.kdl")).is_err());
     }
 
-    /// Every template ships a home page and a template to render it with,
-    /// the two files without which the scaffold does not build.
     #[test]
     fn every_template_is_complete() {
         for template in TEMPLATES {
@@ -450,8 +380,6 @@ mod tests {
         }
     }
 
-    /// A `--with` fragment is appended to a config that may already carry
-    /// the same section, so each has to survive the merge on its own.
     #[test]
     fn every_extra_parses_onto_every_template() {
         for template in TEMPLATES {
@@ -465,10 +393,6 @@ mod tests {
         }
     }
 
-    /// The theme shape states nothing a theme declares. A `collections` list
-    /// of its own would replace the theme's whole set rather than merge
-    /// with it, and a `template` key would name a file the theme never
-    /// ships: between them, that was a scaffold whose first build failed.
     #[test]
     fn the_theme_shape_leaves_the_theme_its_own_declarations() {
         let files = THEMED.files(&vars());
@@ -491,9 +415,6 @@ mod tests {
         }
     }
 
-    /// Naming a theme picks the theme shape whatever `--template` says,
-    /// since a starter shape's config is exactly what the theme declares.
-    /// A misspelled shape is still an error: the theme does not excuse it.
     #[test]
     fn a_theme_selects_the_theme_shape_over_any_starter() {
         let ui = crate::ui::Ui::new(crate::ui::Level::Silent);
@@ -513,9 +434,6 @@ mod tests {
         assert!(Template::select(Some("blogg"), true, &ui).is_err());
     }
 
-    /// A feature the shape already configures is dropped rather than
-    /// appended: the `docs` shape sets `search` with its fields and its
-    /// palette, and a second, barer block underneath said less.
     #[test]
     fn an_extra_the_shape_already_configures_is_dropped() {
         let ui = crate::ui::Ui::new(crate::ui::Level::Silent);
@@ -529,7 +447,6 @@ mod tests {
         );
     }
 
-    /// An unknown template names the real ones rather than failing bare.
     #[test]
     fn an_unknown_template_suggests_a_real_one() {
         let Err(err) = Template::find("blogg") else {
@@ -543,8 +460,6 @@ mod tests {
         );
     }
 
-    /// An unknown `--with` feature is refused the same way, rather than
-    /// scaffolding a site quietly missing what it asked for.
     #[test]
     fn an_unknown_extra_suggests_a_real_one() {
         let Err(err) = Extra::resolve(&["serach".to_owned()]) else {

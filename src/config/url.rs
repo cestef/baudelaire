@@ -1,37 +1,26 @@
 //! URL shape: how a page's permalink maps onto a served path, how a
 //! root-relative path becomes absolute, and how either is percent-encoded.
-//! Configured through `links { style }` and `url`, but the algebra itself is
-//! independent of the config tree.
 
 use std::fmt::Write as _;
 
 use super::Named;
 
-/// The site base URL with its trailing slash normalized away: the single
-/// join rule for every consumer that makes root-relative paths absolute
-/// (sitemap, feeds, robots, llms, meta tags).
+/// The site base URL with its trailing slash normalized away: the single join
+/// rule for every consumer that makes root-relative paths absolute.
 #[derive(Debug, Clone)]
 pub struct BaseUrl(String);
 
 impl BaseUrl {
-    /// The normalized base for a configured `url`.
     pub(super) fn new(url: &str) -> Self {
         Self(url.trim_end_matches('/').to_owned())
     }
 
-    /// Whether `url` is an absolute base: a scheme, `://`, and a non-empty host.
+    /// Whether `url` is an absolute base: a scheme, `://`, and a non-empty
+    /// host, which everything downstream assumes.
     ///
-    /// Everything downstream assumes it. [`join`](Self::join) concatenates, and
-    /// [`Config::base_path`](super::Config::base_path) reads the path component
-    /// by splitting on `://`, so `url "example.com"` produced
-    /// `<loc>example.com/a/</loc>` in the sitemap, the same in every feed `<id>`
-    /// and canonical tag: not a URI, and rejected by consumers. Here rather than
-    /// on the node reader because a `--base-url` flag sets the same field and
-    /// must answer to the same rule.
-    ///
-    /// Deliberately *not* [`NodeExt::url`](super::node::NodeExt::url)'s check:
-    /// that one demands https because credentials travel to those hosts. A site
-    /// is served to readers, and `http://` is theirs to choose.
+    /// Not [`NodeExt::url`](super::node::NodeExt::url)'s check: that one demands
+    /// https because credentials travel to those hosts, while a site is served
+    /// to readers and `http://` is theirs to choose.
     pub fn absolute(url: &str) -> bool {
         let Some((scheme, rest)) = url.split_once("://") else {
             return false;
@@ -48,10 +37,9 @@ impl BaseUrl {
     /// Absolute URL for a root-relative path (a permalink or `/file`),
     /// percent-encoded.
     ///
-    /// Slugs keep Unicode letters, so a permalink carries raw UTF-8. Browsers
-    /// cope, but an XML sitemap's `<loc>` and a feed's `<id>`/`<link>` are
-    /// specified as URIs and consumers reject or mangle raw bytes there. Every
-    /// absolute URL the site emits goes through here, so it is encoded once.
+    /// Slugs keep Unicode letters, so a permalink carries raw UTF-8, which a
+    /// sitemap `<loc>` and a feed `<id>` may not: every absolute URL the site
+    /// emits goes through here, so it is encoded once.
     pub fn join(&self, path: impl AsRef<str>) -> String {
         format!("{}{}", self.0, Percent::encode(path.as_ref()))
     }
@@ -63,9 +51,7 @@ impl BaseUrl {
     }
 
     /// Make a root-relative `path` absolute when a base is configured, else
-    /// leave it as-is: the one "absolutize if we can, otherwise stay relative"
-    /// rule shared by every URL emitter. Non-root-relative refs (external URLs)
-    /// pass through untouched.
+    /// leave it as-is. External URLs pass through untouched.
     pub fn resolve(base: Option<&Self>, path: &str) -> String {
         match base {
             Some(base) if path.starts_with('/') => base.join(path),
@@ -75,10 +61,6 @@ impl BaseUrl {
 
     /// The path component of a configured `url`, trailing slash normalized away
     /// (`https://host/docs/` -> `/docs`); empty for a root-hosted site.
-    ///
-    /// The algebra, not the config: [`Config::base_path`](super::Config::base_path)
-    /// is this, read off the same string, and the two spellings had to agree
-    /// because one prefixes a page's URLs and the other absolutizes them.
     pub fn path(url: &str) -> &str {
         let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
         rest.find('/')
@@ -87,12 +69,8 @@ impl BaseUrl {
 
     /// The scheme and host, without the site's own path component.
     ///
-    /// What absolutizes a URL that already carries the base path. A permalink
-    /// does not (`/posts/a/`), so every emitter joins it to the whole base; the
-    /// markup a feed captures does, because it is the finished page, shifted
-    /// under the base path by the transform that runs last. Joining that to the
-    /// whole base spelled it twice, and a subpath-hosted site published a feed
-    /// whose every link and image was `https://host/docs/docs/...`.
+    /// What absolutizes a URL that already carries the base path, as captured
+    /// page markup does and a permalink does not.
     pub fn origin(&self) -> &str {
         let path = Self::path(&self.0);
         if path.is_empty() {
@@ -121,17 +99,10 @@ impl std::fmt::Display for BaseUrl {
 }
 
 /// The file name a permalink's paged artifacts hang off: `/posts/a/` is
-/// `posts/a`, `/about.html` is `about` (a flat-URL permalink already names a
-/// file, and `about.html.pdf` would be an odd thing to serve), and the home
-/// page, whose permalink is just `/`, is `index`.
+/// `posts/a`, `/about.html` is `about`, and the home page is `index`.
 ///
-/// One derivation, because every such file is named three times over: while it
-/// is still being made (the meta transform points a tag at it), when it is
-/// written, and when the prune decides to keep it. All three have to agree.
-///
-/// Not to be confused with [`crate::content::Stem`], which is the other end of
-/// the pipeline: what a *source* filename says about a page (its slug, its
-/// language suffix, whether it is a draft).
+/// Not [`crate::content::Stem`], which is what a *source* filename says about a
+/// page.
 pub struct Basename<'a>(pub &'a str);
 
 impl std::fmt::Display for Basename<'_> {
@@ -216,14 +187,7 @@ impl Named for UrlStyle {
 }
 
 impl UrlStyle {
-    /// Shape a page URL for this style.
-    ///
-    /// This is the half that used to be missing: the style only decided the
-    /// output *file*, while every permalink kept the clean trailing-slash form.
-    /// A flat site wrote `about.html` and then told the canonical tag, `og:url`,
-    /// the sitemap, the feeds, the redirects and every rewritten `.typ` link
-    /// that the page lived at `/about/`, which nothing serves. The site root is
-    /// `/` under both styles.
+    /// Shape a page URL for this style. The site root is `/` under both.
     pub fn url(self, path: &str) -> String {
         match self {
             Self::Clean => path.to_owned(),
@@ -241,8 +205,6 @@ impl UrlStyle {
 mod tests {
     use super::BaseUrl;
 
-    /// The two halves of a configured `url`, which two callers had each been
-    /// splitting for themselves.
     #[test]
     fn a_base_splits_into_an_origin_and_a_path() {
         for (url, origin, path) in [
@@ -257,10 +219,8 @@ mod tests {
         }
     }
 
-    /// A permalink carries no base path, so it joins the whole base. Markup a
-    /// feed captures is the finished page, whose URLs the base-path transform
-    /// has already prefixed, so it joins the origin alone: joining the whole
-    /// base spelled the path twice and every link in the entry 404'd.
+    /// A permalink carries no base path, so it joins the whole base; captured
+    /// markup already carries one, so it joins the origin alone.
     #[test]
     fn a_prefixed_path_is_absolutised_against_the_origin_alone() {
         let base = BaseUrl::new("https://host.test/docs");
@@ -272,13 +232,11 @@ mod tests {
             BaseUrl::rebase(Some(&base), "/docs/posts/b/"),
             "https://host.test/docs/posts/b/"
         );
-        // With no base path the two are the same question.
         let root = BaseUrl::new("https://host.test");
         assert_eq!(
             BaseUrl::rebase(Some(&root), "/posts/b/"),
             BaseUrl::resolve(Some(&root), "/posts/b/")
         );
-        // An external URL is nobody's to rewrite.
         assert_eq!(
             BaseUrl::rebase(Some(&base), "https://elsewhere.test/x"),
             "https://elsewhere.test/x"

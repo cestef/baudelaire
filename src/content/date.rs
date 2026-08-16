@@ -4,9 +4,8 @@ use std::fmt;
 
 use crate::content::Strings;
 
-/// A date as an ISO-8601 day (`2026-07-15`), the single date rendering used by
-/// listings, the JS `baudelaire:pages`/`baudelaire:feed` modules, and (with a
-/// midnight-UTC suffix) publish timestamps.
+/// A date as an ISO-8601 day (`2026-07-15`), the single machine-readable date
+/// rendering.
 pub struct Iso(pub time::Date);
 
 impl fmt::Display for Iso {
@@ -21,21 +20,9 @@ impl fmt::Display for Iso {
     }
 }
 
-/// The inverse, so the rendering and the reading of a day are one type. A
-/// markdown page writes `date "2026-07-15"` in KDL, which has no date literal;
-/// a typst page may write the same string rather than `datetime(..)`.
-///
 /// Strict on purpose: `YYYY-MM-DD`, the form [`Iso`] emits, optionally followed
-/// by a time of day. Anything looser would make a plain string that merely
-/// resembles a date silently become one.
-///
-/// The time is validated and then dropped, because a page is dated to a day:
-/// this is what a typst page's `datetime(..)` has always done, and reading it
-/// only there made one rule differ by dialect. A pasted Hugo or Zola post
-/// writes `date = 2024-01-01T10:00:00Z`, which every doc comment here promised
-/// would parse and which failed the build instead. The literal day is taken,
-/// offset and all, so a timestamp late enough to fall on the next day in UTC is
-/// still the day its author wrote.
+/// by a time of day, or a string that merely resembles a date would become one.
+/// The time is validated and dropped, taking the literal day offset and all.
 impl std::str::FromStr for Iso {
     type Err = ();
 
@@ -64,13 +51,8 @@ impl std::str::FromStr for Iso {
 }
 
 impl Iso {
-    /// Whether `text` is a time of day, with an optional fraction and an
-    /// optional zone: `10:00`, `10:00:00`, `10:00:00.5`, `10:00:00Z`,
-    /// `10:00:00+02:00`.
-    ///
-    /// Shape only, since the value is dropped: what it has to rule out is prose
-    /// that happens to follow a date (`2026-01-01 was a good day`), which is the
-    /// case the strictness above exists for.
+    /// Whether `text` is shaped like a time of day, with an optional fraction
+    /// and an optional zone: `10:00`, `10:00:00.5`, `10:00:00+02:00`.
     fn is_time(text: &str) -> bool {
         let mut chars = text.chars();
         let hours = matches!((chars.next(), chars.next(), chars.next()),
@@ -80,34 +62,23 @@ impl Iso {
 }
 
 /// A date written the way its language writes one: `30 juillet 2026` beside
-/// `July 30, 2026`.
-///
-/// ISO-8601 is the right answer for a machine (a feed, a sitemap, a `datetime`
-/// attribute) and the wrong one for a reader, which is what every listing showed
-/// them. Typst cannot fix it in a template either: its own `datetime.display`
-/// knows English month names only.
-///
-/// Both halves come from the per-language `strings` table, so a language
-/// declares its own without any locale database: `months` names the twelve, and
-/// `date` is the pattern they slot into.
+/// `July 30, 2026`. Both halves come from the per-language `strings` table,
+/// `months` naming the twelve and `date` the pattern they slot into.
 pub struct Localized<'a> {
     date: time::Date,
     strings: &'a Strings<'a>,
 }
 
-/// One `{name}` a date pattern accepts, and what fills it. Mirrors the
-/// permalink placeholders: one table drives substitution and the documented
-/// list alike.
+/// One `{name}` a date pattern accepts, and what fills it.
 type Placeholder = (&'static str, fn(&Localized) -> String);
 
 impl<'a> Localized<'a> {
-    /// The pattern's placeholders, as `(name, renderer)`. The single source of
-    /// truth: substitution and the documented list both read it.
+    /// The pattern's placeholders, as `(name, renderer)`, a padded form always
+    /// before its bare one so `{day}` cannot match inside `{day2}` and leave a
+    /// stray `2`.
     const PLACEHOLDERS: &'static [Placeholder] = &[
         ("month", |d| d.month()),
         ("year", |d| d.date.year().to_string()),
-        // Zero-padded before the bare day, so `{day}` inside `{day2}` cannot
-        // match first and leave a stray `2`.
         ("day2", |d| format!("{:02}", d.date.day())),
         ("day", |d| d.date.day().to_string()),
     ];
@@ -116,9 +87,8 @@ impl<'a> Localized<'a> {
         Self { date, strings }
     }
 
-    /// This date's month name, from the language's `months` list. A list that
-    /// is absent or the wrong length falls back to the English name, which
-    /// beats printing a number where a word belongs.
+    /// This date's month name from the language's `months` list, falling back
+    /// to the English name when that list is absent or the wrong length.
     fn month(&self) -> String {
         let number = u8::from(self.date.month()) as usize;
         self.strings
@@ -156,7 +126,6 @@ mod tests {
         assert_eq!(Iso(date(2026, 7, 5)).to_string(), "2026-07-05");
     }
 
-    /// The built-in default, for a site that declares nothing.
     #[test]
     fn an_undeclared_language_reads_english() {
         let config = Config::default();
@@ -165,8 +134,6 @@ mod tests {
         assert_eq!(shown, "July 30, 2026");
     }
 
-    /// A language names its own months and orders them its own way, with no
-    /// locale database in the binary.
     #[test]
     fn a_language_declares_its_own_months_and_order() {
         let config = Config::parse(
@@ -189,8 +156,6 @@ mod tests {
         assert_eq!(shown, "30 juillet 2026");
     }
 
-    /// `{day}` sits inside `{day2}`, so the padded form has to substitute
-    /// first or a `{day2}` would render as `30` followed by a stray `2`.
     #[test]
     fn the_padded_day_is_not_eaten_by_the_bare_one() {
         let config = Config::parse(
@@ -207,11 +172,6 @@ mod tests {
         );
     }
 
-    /// A pasted Hugo or Zola post writes its date with a time of day, in every
-    /// dialect that has a date literal and in the strings the others write. It
-    /// was refused outright, while a typst page's `datetime(..)` had always
-    /// been accepted and truncated: one rule that differed by dialect, and
-    /// three doc comments promising the paste would work.
     #[test]
     fn a_day_may_carry_a_time_of_day() {
         for text in [
@@ -224,14 +184,10 @@ mod tests {
             "2024-01-01T23:00:00-05:00",
         ] {
             let parsed: Iso = text.parse().unwrap_or_else(|()| panic!("{text}"));
-            // The literal day, offset and all: a timestamp late enough to fall
-            // on the next day in UTC is still the day its author wrote.
             assert_eq!(parsed.to_string(), "2024-01-01", "{text}");
         }
     }
 
-    /// And the strictness the truncation must not cost: a string that merely
-    /// starts with something date-shaped is still not a date.
     #[test]
     fn prose_after_a_day_is_not_a_time() {
         for text in [

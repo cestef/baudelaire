@@ -15,29 +15,22 @@ use crate::config::{
 };
 use crate::error::{ConfigError, ConfigErrorKind};
 
-/// What the content tree holds and how it is read. The directory itself is
-/// [`Paths::content`](crate::config::Paths::content); everything here is about
-/// the pages inside it.
+/// What the content tree holds and how it is read; the directory itself is
+/// [`Paths::content`](crate::config::Paths::content).
 #[derive(Debug, Clone, Hash)]
 pub struct ContentConfig {
-    /// Bundle index basename. A content file with this stem takes its slug from
-    /// its parent directory instead of its filename, so `posts/hello/index.typ`
-    /// becomes `/posts/hello/` (the "page bundle" layout, with colocated
-    /// resources). `None` disables it: every page is keyed by its filename.
+    /// Bundle index basename: a file with this stem takes its slug from its
+    /// parent directory, so `posts/hello/index.typ` becomes `/posts/hello/`.
+    /// `None` keys every page by its own filename.
     pub index: Option<String>,
     /// Build future-dated posts.
     pub future: bool,
-    /// Draft handling.
     pub drafts: DraftConfig,
-    /// Collection overrides keyed by id.
     pub collections: Vec<(String, CollectionConfig)>,
-    /// Taxonomy definitions.
     pub taxonomies: Vec<(String, TaxonomyConfig)>,
     /// The registries a taxonomy's terms resolve into, keyed by id.
     pub entities: Vec<(String, RegistryConfig)>,
-    /// How markdown pages are read.
     pub markdown: MarkdownConfig,
-    /// How a page's reading estimate is measured.
     pub reading: ReadingConfig,
 }
 
@@ -56,8 +49,6 @@ impl Default for ContentConfig {
     }
 }
 
-/// The `content { .. }` section: what the content tree holds and how it is
-/// read. The directory it lives in is `paths { content }`.
 impl Section for ContentConfig {
     const RULES: Block<Self> = Block(&[
         (
@@ -66,11 +57,6 @@ impl Section for ContentConfig {
             "The filename stem that publishes at its directory's own URL, without extension.",
             |c, n, t| {
                 let stem = n.string(t, 0)?;
-                // A stem, matched against `Stem::slug`, which never carries an
-                // extension. `index "index.typ"` therefore matches nothing: every
-                // bundle keeps its filename slug, `content/index.typ` publishes to
-                // `/index/`, and the site builds green with no home page at all.
-                // The docs shipped that exact spelling, so refuse it by name.
                 if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
                     return Err(ConfigError::at(
                         t,

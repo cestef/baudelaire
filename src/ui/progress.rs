@@ -5,18 +5,13 @@ use std::borrow::Cow;
 
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
-/// The bar's own width in columns: wide enough to show progress at a glance,
-/// narrow enough that the label, the counter and the current item still fit on
-/// one line of a narrow terminal.
+/// The bar's own width, in columns.
 const WIDTH: usize = 24;
 
-/// The 256-colour index the unfilled part of the bar is drawn in: a dark grey
-/// that reads as "not yet" without competing with the magenta fill.
+/// The 256-colour index the unfilled part of the bar is drawn in.
 const TRACK: u8 = 238;
 
-/// A transient progress bar over a known amount of work. Safe to tick from
-/// rayon workers (`indicatif`'s bar is `Sync`); it erases itself when finished
-/// so the summary line is the only trace a build leaves.
+/// A transient progress bar over a known amount of work, erased when finished.
 pub struct Progress(ProgressBar);
 
 impl Progress {
@@ -39,13 +34,12 @@ impl Progress {
         Self(ProgressBar::hidden())
     }
 
-    /// One item done; `msg` names it (shown dimmed beside the bar).
+    /// One item done; `msg` names it.
     pub fn tick(&self, msg: impl Into<Cow<'static, str>>) {
         self.0.set_message(msg);
         self.0.inc(1);
     }
 
-    /// Erase the bar.
     pub fn finish(&self) {
         self.0.finish_and_clear();
     }

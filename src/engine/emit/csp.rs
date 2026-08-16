@@ -1,17 +1,6 @@
-//! The generated `Content-Security-Policy`.
-//!
-//! Assembled from two halves the site cannot write down by itself: the source
-//! lists it configured, and the digest of every inline script and style this
-//! build actually produced. [`headers`](super::headers) writes the result; this
-//! only knows how to say it.
-//!
-//! One policy covers the whole site, with the digests of every page unioned and
-//! deduplicated. Per-page rules would be tighter, but `_headers` applies every
-//! matching rule, so a page carrying its own policy would be served two of them
-//! and a browser enforces the intersection: the catch-all, which does not name
-//! that page's inline blocks, would block them. The looseness this trades away
-//! is small, since a digest allows one exact body and nothing else, and the
-//! bodies are the build's own.
+//! The generated `Content-Security-Policy`: the source lists the site
+//! configured, plus the digest of every inline script and style this build
+//! produced, unioned over the whole site.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -61,10 +50,8 @@ impl<'a> Policy<'a> {
         }
     }
 
-    /// The directives, in the order they are written.
-    ///
-    /// Destructured, so a directive added to the config cannot be silently left
-    /// out of the policy: the compiler asks for it here.
+    /// The directives, in the order they are written, destructured so a
+    /// directive added to the config cannot be silently left out.
     fn directives(&self) -> Vec<(&'static str, String)> {
         let CspConfig {
             enabled: _,
@@ -89,12 +76,6 @@ impl<'a> Policy<'a> {
             }
         };
         push("default-src", default.as_ref());
-        // `script-src` and `style-src` are the two a build has something to add
-        // to. Each is emitted when it is configured *or* when the build has
-        // digests to name, falling back to whatever `default-src` says, since a
-        // directive that is present replaces the fallback rather than extending
-        // it: naming the digests alone would have dropped `'self'` and blocked
-        // every file the page loads.
         push(
             "script-src",
             Self::sources(
@@ -105,11 +86,6 @@ impl<'a> Policy<'a> {
             )
             .as_ref(),
         );
-        // A style *attribute* is allowed by digest only in the company of
-        // `'unsafe-hashes'`, which is what its name says it is: it lets a hash
-        // match somewhere the syntax otherwise never looks. It is still an
-        // allowlist of exact strings this build produced, and the alternative
-        // is `'unsafe-inline'`, which allows every inline style there could be.
         let unsafe_hashes: &[&str] = if self.digests.attrs.is_empty() {
             &[]
         } else {
@@ -154,12 +130,8 @@ impl<'a> Policy<'a> {
     }
 }
 
-/// `default-src 'self'; script-src 'self' 'sha256-..'`, the header value itself.
-///
-/// Each directive's source list is written through [`Plain`], the same door
-/// every other value bound for `_headers` goes through: this is one line of
-/// that file, and a configured source carrying a line break would end it and
-/// leave the rest of the policy where the host reads a path pattern.
+/// `default-src 'self'; script-src 'self' 'sha256-..'`, each source list
+/// written through [`Plain`] since it becomes one line of `_headers`.
 impl fmt::Display for Policy<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let directives = self.directives();
@@ -189,16 +161,11 @@ mod tests {
         Policy::new(&config.security.csp, &digests).to_string()
     }
 
-    /// A bare block is a real policy: everything falls back to `'self'`.
     #[test]
     fn a_silent_block_restricts_everything_to_the_site() {
         assert_eq!(policy("security { csp { } }", &[]), "default-src 'self'");
     }
 
-    /// An inline script's digest joins `script-src`, and the fallback comes
-    /// with it: naming the digest alone would have blocked every *file* the
-    /// page loads, since a stated directive replaces `default-src` rather than
-    /// extending it.
     #[test]
     fn an_inline_digest_extends_the_directive_it_belongs_to() {
         let mut page = Inline::default();
@@ -208,8 +175,6 @@ mod tests {
         assert!(!value.contains("style-src"), "{value}");
     }
 
-    /// The same body on two pages is one digest, and the whole site's policy is
-    /// one header.
     #[test]
     fn digests_are_unioned_across_pages_and_deduplicated() {
         let mut first = Inline::default();
@@ -221,8 +186,6 @@ mod tests {
         assert_eq!(value.matches("'sha256-").count(), 2, "{value}");
     }
 
-    /// A configured directive is written verbatim, and the digests extend it
-    /// rather than the fallback.
     #[test]
     fn a_configured_directive_is_what_the_digests_extend() {
         let mut page = Inline::default();
@@ -238,10 +201,6 @@ mod tests {
         );
     }
 
-    /// A `style` attribute is inline style, and this build emits them without
-    /// being asked: typst resolves an element's CSS properties into one. Naming
-    /// only `<style>` elements dropped every one of them, silently, in the
-    /// browser and nowhere else.
     #[test]
     fn a_style_attribute_is_named_and_takes_unsafe_hashes_with_it() {
         let mut page = Inline::default();
@@ -254,8 +213,6 @@ mod tests {
         assert!(!value.contains("script-src"), "{value}");
     }
 
-    /// `'unsafe-hashes'` is what a style *attribute* needs, so a page with only
-    /// a `<style>` element does not get it.
     #[test]
     fn a_style_element_alone_needs_no_keyword() {
         let mut page = Inline::default();
@@ -265,8 +222,6 @@ mod tests {
         assert!(!value.contains("unsafe-hashes"), "{value}");
     }
 
-    /// The policy is one line of `_headers`, so a configured source list that
-    /// carries a line break cannot be allowed to become two.
     #[test]
     fn a_configured_source_cannot_break_the_line_it_is_written_on() {
         let mut config = config("security { csp { } }");
@@ -276,7 +231,6 @@ mod tests {
         assert_eq!(value, "default-src 'self'X-Frame-Options: ALLOWALL");
     }
 
-    /// Rolling a policy out means reporting without blocking.
     #[test]
     fn report_only_is_a_different_header_and_the_same_policy() {
         let config = config("security { csp { enforce #false } }");

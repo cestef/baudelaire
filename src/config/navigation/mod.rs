@@ -12,16 +12,11 @@ use crate::config::{SpaConfig, SpeculationConfig, StandaloneConfig};
 /// each enabled by the presence of its block.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct NavigationConfig {
-    /// Client-side navigation between the built pages.
     pub spa: SpaConfig,
-    /// Single-file (standalone) HTML export.
     pub standalone: StandaloneConfig,
-    /// Browser-native prefetch/prerender hints.
     pub speculation: SpeculationConfig,
 }
 
-/// The `navigation { .. }` section: how a visitor moves between the built
-/// pages. Each child block's presence enables that strategy.
 impl Section for NavigationConfig {
     const RULES: Block<Self> = Block(&[
         (

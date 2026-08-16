@@ -13,34 +13,24 @@ pub struct FeedConfig {
     pub formats: Vec<FeedKind>,
     /// Maximum items in a feed.
     pub limit: usize,
-    /// How much of each page an entry carries.
     pub content: Content,
     /// Also emit a feed per taxonomy term, beside that term's listing page
-    /// (`/tags/rust/rss.xml`), so a reader can follow one tag rather than the
-    /// whole site. Follows the term pages, so it needs `listing` on the
-    /// taxonomy.
+    /// (`/tags/rust/rss.xml`). Follows the term pages, so it needs `listing` on
+    /// the taxonomy.
     pub terms: bool,
     /// What each format's file is called, when the conventional name is not the
-    /// one a site already publishes under. A moved feed is the one move a
-    /// redirect stub cannot rescue, since a reader fetches the file and never
-    /// renders the meta refresh.
+    /// one a site already publishes under.
     pub names: FeedNames,
 }
 
 /// How much of a page a feed entry carries.
-///
-/// A feed used to carry the one-line `description` and nothing else, so a reader
-/// that renders entries in place had nothing to render and every subscriber had
-/// to open the site. The summary is not dropped when the body joins it: both
-/// have a place in all three formats, and a list view wants the short one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Content {
     /// The page's `description` alone.
     #[default]
     Summary,
-    /// Its rendered prose as well, taken from `html { region }`: the same part
-    /// of the page the search index reads, so a feed never carries the site
-    /// chrome around it.
+    /// Its rendered prose as well, taken from `html { region }`, so a feed
+    /// never carries the site chrome around it.
     Full,
 }
 
@@ -58,23 +48,14 @@ pub struct FeedNames {
 }
 
 impl FeedConfig {
-    /// Whether an entry carries the page's prose as well as its summary.
-    ///
-    /// The single spelling of the question, because two layers apart ask it and
-    /// must agree: the render pass decides whether to capture a page's prose at
-    /// all, and the feed emitter decides whether to write it. Were they to
-    /// disagree, a site would pay for a capture nothing reads, or worse write
-    /// feeds whose bodies are all empty.
+    /// Whether an entry carries the page's prose as well as its summary; the
+    /// render pass and the feed emitter both ask it and must agree.
     pub fn full(&self) -> bool {
         self.content == Content::Full
     }
 
     /// This format's file name: the configured override, else the conventional
     /// one.
-    ///
-    /// The single answer, because a feed names its own file in three places and
-    /// an aggregator would notice them disagreeing: the file the build writes,
-    /// the `<id>`/`feed_url` inside it, and every page's autodiscovery tag.
     pub fn file(&self, kind: FeedKind) -> &str {
         let named = match kind {
             FeedKind::Rss => &self.names.rss,
@@ -85,10 +66,9 @@ impl FeedConfig {
     }
 
     /// This feed's absolute URL under `base`, for a language `scope` (empty for
-    /// the default language).
-    ///
-    /// The file name is appended to the scope's directory URL rather than
-    /// joined as a path segment, which would give it a trailing slash.
+    /// the default language). The file name is appended to the scope's
+    /// directory URL rather than joined as a path segment, which would give it
+    /// a trailing slash.
     pub fn url(&self, kind: FeedKind, base: &BaseUrl, scope: &str) -> String {
         format!(
             "{}{}",
@@ -125,10 +105,7 @@ impl FeedKind {
         }
     }
 
-    /// The media type a `<link rel="alternate">` announces this format under,
-    /// and how a reader tells the three apart when a page advertises several.
-    /// Beside [`file`](Self::file) because a format's name and its type are the
-    /// same fact, and an autodiscovery tag needs both.
+    /// The media type a `<link rel="alternate">` announces this format under.
     pub fn mime(self) -> &'static str {
         match self {
             Self::Rss => "application/rss+xml",
@@ -141,14 +118,10 @@ impl FeedKind {
 impl Default for FeedConfig {
     fn default() -> Self {
         Self {
-            // opt-in like search: no feed until a format is named
             formats: Vec::new(),
             limit: 20,
             content: Content::default(),
-            // off by default: one more file per term per format multiplies the
-            // output of a heavily tagged site
             terms: false,
-            // each format's conventional file name until a site says otherwise
             names: crate::config::FeedNames::default(),
         }
     }
@@ -202,15 +175,9 @@ impl Section for FeedConfig {
 }
 
 /// The `feed { names { .. } }` section: one key per format, each naming the
-/// file that format is written to and advertised under. A site arriving from a
-/// generator that named them differently keeps its subscribers by stating the
-/// old names here.
-///
-/// Each name is a *path*, and the emitter extends `dist` with it, so each is
-/// read through [`NodeExt::contained`] like every other generated file name
-/// (`navigation { standalone { file } }` is the same rule): `rss
-/// "../../pwned.xml"` used to write two directories above the project root and
-/// report a green build.
+/// file that format is written to and advertised under. Each name is a *path*
+/// the emitter extends `dist` with, so each is read through
+/// [`NodeExt::contained`] to keep `rss "../../pwned.xml"` inside the project.
 impl Section for FeedNames {
     const RULES: Block<Self> = Block(&[
         (
@@ -249,16 +216,8 @@ mod tests {
     use crate::config::FeedKind;
     use crate::config::dispatch::Section;
 
-    /// A format's spelling reaches four places: [`FeedKind::NAMES`], the
-    /// `FeedNames` field holding its override, the match in
-    /// [`FeedConfig::file`], and the `Section` row that lets a site write the
-    /// override. The compiler forces the first three (both matches are
-    /// exhaustive), and nothing forces the fourth: a format could exist,
-    /// be written, and be impossible to rename.
-    ///
-    /// Cheaper than folding `FeedNames` into a map keyed by the enum, which
-    /// would trade a per-key documented reference entry, and its path
-    /// containment check, for the removal of a coincidence.
+    /// Nothing forces a new format to get a `FeedNames` key, so one could
+    /// exist, be written, and be impossible to rename.
     #[test]
     fn every_format_can_be_renamed() {
         for (name, _) in FeedKind::NAMES {

@@ -13,22 +13,14 @@ impl Mime {
     /// What an unrecognized extension, or none at all, is served as.
     const BINARY: &'static str = "application/octet-stream";
 
-    /// The type a page's PDF is served and advertised as. Named because two
-    /// places state it: the extension table below, and the
-    /// `<link rel="alternate">` the meta transform points at the file.
+    /// The type a page's PDF is served and advertised as.
     pub const PDF: &'static str = "application/pdf";
 
-    /// The MIME type named by `path`'s extension, matched case-insensitively:
-    /// `Photo.PNG` names the same type as `photo.png`, as it must, since
-    /// [`ImageFormat`] has always classified the two alike and a file the asset
-    /// pipeline optimized as a PNG cannot then be served as a generic binary.
+    /// The MIME type named by `path`'s extension, matched case-insensitively.
     pub fn of(path: impl AsRef<Path>) -> Self {
         let Some(ext) = path.as_ref().extension().and_then(|e| e.to_str()) else {
             return Self(Self::BINARY);
         };
-        // Rasters resolve through `ImageFormat`, not through a second list of
-        // extensions here: `.jfif` and `.jpe` were JPEG to the optimizer and
-        // `application/octet-stream` to everything that served them.
         if let Some(format) = ImageFormat::from_ext(ext) {
             return format.mime();
         }
@@ -44,8 +36,6 @@ impl Mime {
             "woff2" => "font/woff2",
             "woff" => "font/woff",
             "ttf" => "font/ttf",
-            // A source map is JSON, and the dev server has to say so: served as
-            // a generic binary, a browser fetches it and declines to parse it.
             "json" | "map" => "application/json",
             "webmanifest" => "application/manifest+json",
             "xml" => "application/xml",
@@ -56,17 +46,10 @@ impl Mime {
     }
 
     /// The `Content-Type` header value: the type, plus a UTF-8 charset for the
-    /// types that define one.
+    /// types that register one.
     ///
-    /// Read off the media type rather than listed beside the table above, so a
-    /// type added there cannot be forgotten here. It is *not* every type a
-    /// human would call textual: `application/json` and the `+json` suffix
-    /// register no `charset` parameter at all (RFC 8259 is explicit that adding
-    /// one has no effect), while XML does (RFC 7303), which is what puts
-    /// `image/svg+xml` on this side of the line and leaves
-    /// `application/manifest+json` off it. The doc used to say "textual types"
-    /// and the code tested `text/`, so `application/xml` and every SVG the dev
-    /// server sent went out with no encoding declared.
+    /// Not every type a human would call textual: XML registers a `charset`
+    /// parameter (RFC 7303) and JSON registers none (RFC 8259).
     pub fn header(self) -> String {
         let charset =
             self.0.starts_with("text/") || self.0 == "application/xml" || self.0.ends_with("+xml");
@@ -77,8 +60,8 @@ impl Mime {
         }
     }
 
-    /// Whether this is HTML: the dev server injects its live-reload client
-    /// into exactly these responses.
+    /// Whether this is HTML: the dev server injects its live-reload client into
+    /// exactly these responses.
     pub fn html(self) -> bool {
         self.0 == "text/html"
     }
@@ -91,11 +74,6 @@ impl fmt::Display for Mime {
 }
 
 /// A raster format the asset pipeline can decode and re-encode.
-///
-/// Lives here, beside [`Mime`], because classifying a file by extension is one
-/// question with one answer: the optimizer used to keep its own wider list
-/// (`jpe`, `jfif`) while `Mime` kept a narrower one, so the same file was
-/// re-encoded as a JPEG and then served as a generic binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
     Png,
@@ -103,18 +81,15 @@ pub enum ImageFormat {
 }
 
 impl ImageFormat {
-    /// Each format's media type and the extensions naming it. The single table
-    /// both [`from_ext`](Self::from_ext) and [`Mime::of`] read, so the pipeline
-    /// and everything that serves a file can never disagree about what it is.
+    /// Each format's media type and the extensions naming it, read by both
+    /// [`from_ext`](Self::from_ext) and [`Mime::of`].
     const FORMATS: &'static [(Self, &'static str, &'static [&'static str])] = &[
         (Self::Png, "image/png", &["png"]),
         (Self::Jpeg, "image/jpeg", &["jpg", "jpeg", "jpe", "jfif"]),
     ];
 
-    /// The raster format a file extension names, matched case-insensitively.
-    /// `None` when unrecognized. The single source for classifying a raster,
-    /// independent of whether any optimization or responsive processing is
-    /// enabled for it.
+    /// The raster format a file extension names, matched case-insensitively,
+    /// and `None` when unrecognized.
     pub fn from_ext(ext: &str) -> Option<Self> {
         let ext = ext.to_ascii_lowercase();
         Self::FORMATS
@@ -123,7 +98,6 @@ impl ImageFormat {
             .map(|(format, ..)| *format)
     }
 
-    /// This format's media type.
     pub fn mime(self) -> Mime {
         Mime(
             Self::FORMATS
@@ -174,9 +148,6 @@ mod tests {
         assert_eq!(Mime::of("Makefile").to_string(), "application/octet-stream");
     }
 
-    /// Matching ignores case. It used to not, so `Photo.PNG` was optimized as a
-    /// PNG by the asset pipeline (which has always lowercased) and then served
-    /// as `application/octet-stream` by everything downstream.
     #[test]
     fn extensions_match_regardless_of_case() {
         assert_eq!(Mime::of("INDEX.HTML").to_string(), "text/html");
@@ -184,9 +155,6 @@ mod tests {
         assert_eq!(Mime::of("Style.CSS").to_string(), "text/css");
     }
 
-    /// Every extension the optimizer classifies as a raster is served as one.
-    /// Two tables used to answer this, and they disagreed: `.jfif` and `.jpe`
-    /// were JPEG to `ImageFormat` and a generic binary to `Mime`.
     #[test]
     fn every_raster_extension_agrees_with_the_optimizer() {
         for ext in ["png", "jpg", "jpeg", "jpe", "jfif", "JFIF"] {
@@ -199,7 +167,6 @@ mod tests {
         }
         assert_eq!(Mime::of("pic.jfif").to_string(), "image/jpeg");
         assert_eq!(Mime::of("pic.jpe").to_string(), "image/jpeg");
-        // A non-raster is still not one.
         assert_eq!(ImageFormat::from_ext("svg"), None);
     }
 
@@ -208,16 +175,13 @@ mod tests {
         assert_eq!(Mime::of("i.html").header(), "text/html; charset=utf-8");
         assert_eq!(Mime::of("a.js").header(), "text/javascript; charset=utf-8");
         assert_eq!(Mime::of("n.txt").header(), "text/plain; charset=utf-8");
-        // XML defines a charset parameter, so a suffixed type carries one too.
         assert_eq!(Mime::of("f.xml").header(), "application/xml; charset=utf-8");
         assert_eq!(Mime::of("s.svg").header(), "image/svg+xml; charset=utf-8");
-        // JSON registers none, however textual it reads.
         assert_eq!(Mime::of("d.json").header(), "application/json");
         assert_eq!(
             Mime::of("m.webmanifest").header(),
             "application/manifest+json"
         );
-        // A binary carries none either.
         assert_eq!(Mime::of("p.png").header(), "image/png");
     }
 

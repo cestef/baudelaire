@@ -1,6 +1,5 @@
-//! URL-safe slugs, the single normalization rule for every URL segment, so
-//! page slugs (from a filename or frontmatter) and taxonomy terms cannot drift
-//! into two different policies.
+//! URL-safe slugs: the single normalization rule for every URL segment, page
+//! slugs and taxonomy terms alike.
 
 use std::fmt;
 
@@ -8,28 +7,19 @@ use crate::error::{ContentError, Result};
 
 /// A URL-safe slug: lowercased letters and digits, with each run of other
 /// characters collapsed to a single `-` and no leading or trailing `-`.
-///
-/// Letters and digits are Unicode, not ASCII. Dropping non-ASCII turned `café`
-/// into `caf`, made `Café` and `Cafe` collide, and left `日本語` with no slug at
-/// all: a wall for exactly the sites the i18n support exists for. Punctuation,
-/// symbols and emoji are still separators, so a slug stays a single readable
-/// path segment. A name with no letters or digits has no slug and the caller
-/// errors. Constructed only through [`Slug::parse`].
+/// Letters and digits are Unicode, not ASCII.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Slug(String);
 
 impl Slug {
     /// Normalize `raw` into a slug, or `None` when nothing URL-safe survives
-    /// (e.g. `"!!!"` or `""`), the caller turns that into a precise error.
+    /// (`"!!!"`, `""`). Composed to NFC first, or a decomposed accent is a
+    /// combining mark, not alphanumeric, and slugs away as a separator.
     pub fn parse(raw: &str) -> Option<Self> {
         use unicode_normalization::UnicodeNormalization;
 
         let mut out = String::with_capacity(raw.len());
         let mut pending_dash = false;
-        // NFC first: a decomposed `e` + U+0301 (what macOS hands back for a
-        // filename) is a letter followed by a *mark*, and a mark is not
-        // alphanumeric, so it would be dropped as a separator and `café` would
-        // slug to `cafe` on one machine and `café` on another.
         for c in raw.nfc() {
             if c.is_alphanumeric() {
                 if pending_dash && !out.is_empty() {
@@ -44,8 +34,8 @@ impl Slug {
         (!out.is_empty()).then_some(Self(out))
     }
 
-    /// Parse `raw`, or a precise error naming it when nothing URL-safe survives.
-    /// The single "a name must yield a slug" rule, shared by pages and terms.
+    /// Parse `raw`, or a precise error naming it when nothing URL-safe
+    /// survives.
     pub fn require(raw: &str) -> Result<Self> {
         Self::parse(raw).ok_or_else(|| ContentError::empty_slug(raw).into())
     }
@@ -80,8 +70,6 @@ mod tests {
         );
     }
 
-    /// Letters keep their identity whatever the script; emoji and punctuation
-    /// are separators like any other symbol.
     #[test]
     fn keeps_unicode_letters_and_digits() {
         assert_eq!(Slug::parse("café 🎉 page").unwrap().as_str(), "café-page");
@@ -93,17 +81,12 @@ mod tests {
         );
     }
 
-    /// ...so an accented letter survives instead of being dropped, which is what
-    /// made `Café` and `Cafe` differ only by a truncation.
     #[test]
     fn accents_are_kept_not_dropped() {
         assert_eq!(Slug::parse("Café").unwrap().as_str(), "café");
         assert_eq!(Slug::parse("Cafe").unwrap().as_str(), "cafe");
     }
 
-    /// The same name in either normalization form slugs identically. macOS
-    /// hands back decomposed filenames, so without this a site built there and
-    /// the same site built on Linux produced different URLs.
     #[test]
     fn normalization_form_does_not_change_the_slug() {
         let composed = "caf\u{e9}";

@@ -1,7 +1,6 @@
 //! Errors from reading the content tree: frontmatter that is not the shape a
 //! page must declare, names that cannot become URLs, and two outputs claiming
-//! one file. Each names the page it came from, since a build reports them long
-//! after the file was opened.
+//! one file.
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
@@ -9,7 +8,6 @@ use thiserror::Error;
 use crate::error::Annotated;
 use crate::ui::{Code, Text, markup};
 
-/// A failure while discovering or interpreting a content file.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ContentError {
     #[error(transparent)]
@@ -59,9 +57,8 @@ pub enum ContentError {
         help: Option<String>,
         #[source_code]
         page: Option<NamedSource<String>>,
-        // What the key holds, not what the value is: the message already says
-        // the latter, and `expected` is one of this crate's own literals rather
-        // than authored text, which a label renders raw.
+        // `expected` is one of this crate's own literals, never authored text:
+        // a label is rendered raw rather than as markup.
         #[label("must be {expected}")]
         span: Option<SourceSpan>,
     },
@@ -116,11 +113,8 @@ pub enum ContentError {
         help: String,
     },
 
-    /// A page named a `source` the config does not declare.
-    ///
-    /// Deliberately not a fallback to reading the name as a path: that would be
-    /// the hole this design exists to close, since a page could then reach any
-    /// file the build can open. The name is either declared or it is nothing.
+    /// Never a fallback to reading the name as a path: a page could then reach
+    /// any file the build can open.
     #[error("{} names source {}, which the config does not declare", Text(.path), Code(.name))]
     #[diagnostic(code(baudelaire::content::unknown_source))]
     UnknownSource {
@@ -134,7 +128,6 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
-    /// A page carrying both a `source` and a body of its own.
     #[error("{} has both a {} and a body of its own", Text(.path), Code("source"))]
     #[diagnostic(
         code(baudelaire::content::source_and_body),
@@ -150,11 +143,6 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
-    /// A `source` naming a file of a kind nothing here can read as a body.
-    ///
-    /// The reader used to be the *page's* rather than the file's: a sourced body
-    /// was lowered as markdown whatever it was, so a file of another kind came
-    /// out as prose with its own syntax in it and the build stayed green.
     #[error("source {} names {}, which is not a body this build can read", Code(.name), Text(.path))]
     #[diagnostic(code(baudelaire::content::source_unreadable))]
     SourceUnreadable {
@@ -168,7 +156,6 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
-    /// A `.typ` page carrying a `source`.
     #[error("{} is a typst page, so its {} would replace what typst compiles", Text(.path), Code("source"))]
     #[diagnostic(
         code(baudelaire::content::source_on_typst),
@@ -217,10 +204,9 @@ pub enum ContentError {
 }
 
 impl ContentError {
-    /// Lower wax's own span-annotated glob error into an [`Annotated`] so its
-    /// labels point straight at the offending part of the pattern.
-    /// `noun` names what the pattern configures, so a bad `serve { exclude }`
-    /// does not report itself as a collection glob.
+    /// Lowers wax's span-annotated glob error into an [`Annotated`]; `noun`
+    /// names what the pattern configures, so a bad `serve { exclude }` does not
+    /// report itself as a collection glob.
     pub fn bad_glob(noun: &'static str, pattern: &str, error: wax::BuildError) -> Self {
         let mut diag = Annotated::new(
             "baudelaire::content::bad_glob",
@@ -231,7 +217,6 @@ impl ContentError {
             let (offset, len) = location.span();
             diag = diag.label(location.to_string(), offset, len);
         }
-        // wax's own message: foreign text, escaped rather than read as markup.
         Self::BadGlob(diag.help(Text(error).to_string()))
     }
 
@@ -244,10 +229,8 @@ impl ContentError {
         }
     }
 
-    /// A known frontmatter key whose value has the wrong type; previously
-    /// dropped silently (`title: 3` vanished, `draft: "yes"` became `false`).
-    ///
-    /// `span` is where the value sits in `source`; see [`Self::located`].
+    /// A known frontmatter key whose value has the wrong type; `span` is where
+    /// the value sits in `source`.
     pub fn frontmatter_field(
         path: &std::path::Path,
         source: &str,
@@ -270,15 +253,8 @@ impl ContentError {
     }
 
     /// A name a frontmatter key does not know, where the key takes names from a
-    /// fixed set rather than free text.
-    ///
-    /// Distinct from [`ContentError::frontmatter_field`], which is about the
-    /// value's *shape*: here the shape is right and the word is not one this
-    /// crate answers to, so the help is the list of words that are.
-    ///
-    /// `help` arrives as *authored markup* from
-    /// [`Keys::help`](crate::config::dispatch::Keys::help), which owns this
-    /// shape for every name set in the project.
+    /// fixed set rather than free text; `help` arrives as *authored markup*
+    /// from [`Keys::help`](crate::config::dispatch::Keys::help).
     pub fn frontmatter_name(
         path: &std::path::Path,
         source: &str,
@@ -298,11 +274,8 @@ impl ContentError {
         }
     }
 
-    /// A frontmatter key that is a near-miss of a known one (a typo). Unknown
-    /// keys with no close match pass through to `extra` untouched.
-    ///
-    /// `span` is where the key itself was written, not its value: the mistake
-    /// is in the key, and that is what the label underlines.
+    /// A frontmatter key that is a near-miss of a known one; `span` is where
+    /// the key itself was written, not its value.
     pub fn unknown_frontmatter(
         path: &std::path::Path,
         source: &str,
@@ -320,15 +293,9 @@ impl ContentError {
         }
     }
 
-    /// The page source a snippet renders from and the span into it, as the one
-    /// pair a located diagnostic is built from.
-    ///
-    /// A page may compute its frontmatter rather than spell it out
-    /// (`#let frontmatter = load(..)`), and then no offset in the source is the
-    /// thing at fault: the source is dropped along with the span, so the snippet
-    /// is suppressed rather than aimed at an arbitrary offset. Both come back
-    /// together so no variant can carry one without the other. `SchemaError`
-    /// draws the same line, by hand.
+    /// The page source a snippet renders from and the span into it; both are
+    /// `None` when the frontmatter was computed rather than written, so the
+    /// snippet is suppressed rather than aimed at an arbitrary offset.
     fn located(
         path: &std::path::Path,
         source: &str,
@@ -338,29 +305,25 @@ impl ContentError {
         (page, span)
     }
 
-    /// The pre-export `#frontmatter(..)` call form, pointed at the binding syntax.
     pub fn frontmatter_call(path: &std::path::Path) -> Self {
         Self::FrontmatterCall {
             path: path.display().to_string(),
         }
     }
 
-    /// A name (filename stem, frontmatter slug, or taxonomy term) with no
-    /// URL-safe characters.
+    /// `name` is a filename stem, a frontmatter slug, or a taxonomy term.
     pub fn empty_slug(name: &str) -> Self {
         Self::EmptySlug {
             name: name.to_owned(),
         }
     }
 
-    /// A content file whose name cannot be read as text.
     pub fn non_utf8_source(path: &std::path::Path) -> Self {
         Self::NonUtf8Source {
             path: path.display().to_string(),
         }
     }
 
-    /// A page's resolved language is not among the declared `languages`.
     pub fn unknown_language(path: &std::path::Path, lang: &str, known: &[&str]) -> Self {
         Self::UnknownLanguage {
             path: path.display().to_string(),
@@ -372,11 +335,11 @@ impl ContentError {
         }
     }
 
-    /// A page naming a declared source of a kind no reader claims. Named by the
-    /// key rather than by the page: the declaration is what has to change, and
-    /// it is in the config, which the page cannot see. The help lists the
-    /// extensions there are readers for, out of the table that dispatches them,
-    /// so it cannot name a set the build does not have.
+    /// A page naming a declared source of a kind no reader claims, named by the
+    /// key rather than the page: the declaration is what has to change.
+    ///
+    /// The snippet is the *page's* text, so `page` is what [`Self::located`]
+    /// gets and `declared` only ever reaches the message.
     pub fn source_unreadable(
         page: &std::path::Path,
         name: &str,
@@ -390,11 +353,6 @@ impl ContentError {
             .map(|ext| format!(".{ext}"))
             .collect::<Vec<_>>()
             .join(", ");
-        // The *page*, because `source` is the page's text: labelling that
-        // snippet with the declared file's path printed the page's frontmatter
-        // under the name of a file containing none of it. The three sibling
-        // refusals from the same commit all pass the page; this one call site
-        // passed what it was complaining about instead.
         let (page, span) = Self::located(page, source, span);
         Self::SourceUnreadable {
             name: name.to_owned(),
@@ -408,9 +366,6 @@ impl ContentError {
         }
     }
 
-    /// A page naming a source the config never declared. The help lists what it
-    /// did declare, since the name is the only thing a page may write and a
-    /// typo is otherwise indistinguishable from a missing declaration.
     pub fn unknown_source(
         path: &std::path::Path,
         name: &str,
@@ -439,9 +394,8 @@ impl ContentError {
         }
     }
 
-    /// A sourced page that also wrote a body under its frontmatter. Refused
-    /// rather than resolved either way: one of the two would be dropped, and
-    /// dropping the prose somebody wrote is not something to do quietly.
+    /// A sourced page that also wrote a body under its frontmatter; refused
+    /// rather than resolved, since either resolution silently drops prose.
     pub fn source_and_body(path: &std::path::Path, source: &str, span: Option<SourceSpan>) -> Self {
         let (page, span) = Self::located(path, source, span);
         Self::SourceAndBody {
@@ -451,7 +405,6 @@ impl ContentError {
         }
     }
 
-    /// A `source` on a `.typ` page, where typst's own `include` is the answer.
     pub fn source_on_typst(path: &std::path::Path, source: &str, span: Option<SourceSpan>) -> Self {
         let (page, span) = Self::located(path, source, span);
         Self::SourceOnTypst {
@@ -461,7 +414,6 @@ impl ContentError {
         }
     }
 
-    /// Two outputs resolving to the same file (a silent overwrite otherwise).
     pub fn collision(target: &str, first: &str, second: &str) -> Self {
         Self::Collision {
             target: target.to_owned(),
@@ -470,7 +422,6 @@ impl ContentError {
         }
     }
 
-    /// Two taxonomy terms slugging to the same URL.
     pub fn term_collision(taxonomy: &str, slug: &str, first: &str, second: &str) -> Self {
         Self::TermCollision {
             taxonomy: taxonomy.to_owned(),

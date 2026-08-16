@@ -1,20 +1,15 @@
-//! Decoding a source filename.
-//!
-//! A content file's name carries more than a slug: an optional language and an
-//! optional draft marker, in either order. This is the single place a filename
-//! is decoded, shared by slugging, language resolution, and section nesting.
+//! Decoding a source filename: the slug it carries, plus an optional language
+//! and an optional draft marker, in either order.
 
 use std::path::Path;
 
 use crate::config::Config;
 
 /// The parsed stem of a source path: its language and draft markers peeled off,
-/// leaving the slug. `post.fr.typ` carries language `fr`; `post.draft.typ` is a
-/// draft; the two stack in either order (`post.draft.fr.typ`, `post.fr.draft.typ`).
+/// leaving the slug. The two markers stack in either order, so
+/// `post.draft.fr.typ` and `post.fr.draft.typ` both name a French draft.
 pub(super) struct Stem<'a> {
-    /// The stem with both markers peeled: what the page's slug derives from.
     slug: &'a str,
-    /// Whether the stem carried the draft marker.
     draft: bool,
     /// Declared non-default language named by a trailing `.{code}`, if any.
     lang: Option<&'a str>,
@@ -29,12 +24,6 @@ impl<'a> Stem<'a> {
         let mut slug = full;
         let mut lang = None;
         let mut draft = false;
-        // Peel the two optional trailing markers in whichever order the author
-        // wrote them: `post.draft.fr` and `post.fr.draft` both name a French
-        // draft. Reading only one order left the other decoding as a
-        // default-language page whose slug embedded the code (`post-fr`), so a
-        // translated draft published. Two passes, each marker peeled at most
-        // once, so a stem that genuinely ends in a language code keeps it.
         for _ in 0..2 {
             if let (None, Some((head, code))) = (lang, Self::language(slug, config)) {
                 slug = head;
@@ -50,7 +39,7 @@ impl<'a> Stem<'a> {
     }
 
     /// The declared, non-default language a trailing `.{code}` names, with the
-    /// stem before it. The default language uses bare filenames, so `.en` on an
+    /// stem before it; the default language uses bare filenames, so `.en` on an
     /// en site stays put.
     fn language(stem: &'a str, config: &Config) -> Option<(&'a str, &'a str)> {
         match stem.rsplit_once('.') {
@@ -72,19 +61,14 @@ impl<'a> Stem<'a> {
         self.draft
     }
 
-    /// The declared language named by the filename, if any.
     pub(super) fn lang(&self) -> Option<&'a str> {
         self.lang
     }
 
     /// A trailing segment that looks like a language code but is not declared,
-    /// on a site that declares languages at all.
-    ///
-    /// Deliberately narrow: two or three lowercase ASCII letters, so an
-    /// ordinary dotted filename (`notes.v2.typ`, `report.2024.typ`) is
-    /// untouched. Within that shape it is a misspelt or forgotten `languages`
-    /// entry far more often than a filename, and silently publishing it as a
-    /// default-language page is the worst of the available answers.
+    /// on a site that declares languages at all. Deliberately narrow: two or
+    /// three lowercase ASCII letters, so an ordinary dotted filename
+    /// (`notes.v2.typ`) is untouched.
     pub(super) fn undeclared(&self, config: &Config) -> Option<&'a str> {
         if !config.multilingual() || self.lang.is_some() {
             return None;
@@ -119,9 +103,6 @@ mod tests {
         Config::parse("lang \"en\"\nlanguages {\n  fr { }\n}\n").expect("config")
     }
 
-    /// A stem decodes the same whichever order the author stacked the markers
-    /// in: `post.fr.draft.typ` used to decode as a default-language page slugged
-    /// `post-fr`, so a French draft published at a real URL.
     #[test]
     fn draft_and_language_markers_decode_in_either_order() {
         let config = config();
@@ -142,7 +123,6 @@ mod tests {
         assert!(!stem.is_draft());
     }
 
-    /// An undeclared trailing segment is part of the slug, not a language.
     #[test]
     fn an_undeclared_trailing_code_stays_in_the_slug() {
         let config = config();
@@ -151,9 +131,6 @@ mod tests {
         assert_eq!(stem.lang(), None);
     }
 
-    /// ...but on a multilingual site it is flagged rather than published as a
-    /// default-language page: `post.de.typ` without a `de` entry is a typo the
-    /// same way `lang: "de"` is, and that one always stopped the build.
     #[test]
     fn an_undeclared_code_is_reported_on_a_multilingual_site() {
         let config = config();
@@ -161,7 +138,6 @@ mod tests {
             Stem::of(Path::new("post.de.typ"), &config).undeclared(&config),
             Some("de")
         );
-        // A declared one resolves, and the default language is always known.
         assert_eq!(
             Stem::of(Path::new("post.fr.typ"), &config).undeclared(&config),
             None
@@ -170,7 +146,6 @@ mod tests {
             Stem::of(Path::new("post.en.typ"), &config).undeclared(&config),
             None
         );
-        // An ordinary dotted filename is left alone.
         for name in [
             "notes.v2.typ",
             "report.2024.typ",
@@ -185,8 +160,6 @@ mod tests {
         }
     }
 
-    /// A single-language site never guesses: it has no `languages` block to
-    /// compare against.
     #[test]
     fn a_monolingual_site_never_flags_a_suffix() {
         let config = Config::parse("lang \"en\"\n").expect("config");

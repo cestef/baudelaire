@@ -1,9 +1,5 @@
-//! Improves `<img>` loading behaviour.
-//!
-//! When `html { images true }` is set (the default), every image gains
-//! `loading="lazy"` (defer offscreen images) and `decoding="async"` (never block
-//! rendering on decode) unless the author already set them. Best-effort and
-//! attribute-only: the image bytes are untouched.
+//! Improves `<img>` loading behaviour: `loading="lazy"` and `decoding="async"`
+//! on every image that does not already carry them.
 
 use typst_html::{HtmlDocument, attr, tag};
 
@@ -22,7 +18,6 @@ impl Transform for Images {
     fn apply(&self, doc: &mut HtmlDocument, _cx: &mut Cx<'_>) {
         doc.walk(|element| {
             if element.tag == tag::img {
-                // only fill what the author left unset
                 if element.attrs.get(attr::loading).is_none() {
                     element.attrs.push(attr::loading, "lazy");
                 }

@@ -10,18 +10,13 @@ use crate::config::node::NodeExt;
 use crate::config::{BudgetConfig, Level, Named, Severity};
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a
-/// finding is, and how many bytes a page may weigh.
-///
-/// Off until a `lint { }` block says otherwise. A lint is a claim about what the
-/// site *should* look like, and inventing one for a site that never asked is the
-/// same opinionated-default problem as a generated page nobody wanted.
+/// finding is, and how many bytes a page may weigh. Off until a `lint { }`
+/// block says otherwise.
 #[derive(Debug, Clone, Hash)]
 pub struct LintConfig {
-    /// Whether the DOM lint pass runs at all; flipped by the block's presence,
-    /// and back off again by `lint #false`.
+    /// Whether the DOM lint pass runs at all.
     pub enabled: bool,
-    /// The severity a rule that names none takes, exactly as
-    /// [`LinkConfig::strict`](crate::config::LinkConfig::strict) does for a broken link.
+    /// The severity a rule that names none takes.
     pub strict: bool,
     /// Report a heading that skips a level (`h2` straight to `h4`).
     pub headings: Level,
@@ -39,12 +34,6 @@ pub struct LintConfig {
 
 impl Default for LintConfig {
     fn default() -> Self {
-        // opt-in as a whole: the presence of a `lint { }` block flips `enabled`.
-        // Every rule is then on, because a block that turns nothing on is not
-        // what an author writing one meant; each is switched off by name.
-        // `strict` follows `links`' lenient half rather than its strict one: a
-        // broken link is a certainty, whereas a missing `alt` is a judgement
-        // about content this tool did not write.
         Self {
             enabled: false,
             strict: false,
@@ -57,8 +46,6 @@ impl Default for LintConfig {
     }
 }
 
-/// The `lint { .. }` section: the rules run over each built page's DOM, and how
-/// loud a finding is. The block's presence is what turns linting on.
 impl Section for LintConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 
@@ -117,13 +104,9 @@ impl Section for LintConfig {
     ]);
 }
 
-/// Which lint rule a finding came from, so a report can ask the config how loud
-/// that rule is.
-///
-/// A finding is cached with the page that produced it and its severity is not:
-/// the severity is config, and config a site can change between builds without
-/// recompiling a page. Resolving it from the rule at report time is what keeps a
-/// cache hit reporting what the *current* config asks for.
+/// Which lint rule a finding came from. A finding is cached with its page and
+/// its severity is not, so resolving the severity from the rule at report time
+/// is what keeps a cache hit reporting what the current config asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ruled {
     Headings,

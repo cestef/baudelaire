@@ -60,8 +60,6 @@ fn err_insecure_registry_rejected() {
     assert!(err.to_string().contains("https"), "{err}");
 }
 
-/// A site that names no directory still sees the machine's fonts, which is the
-/// only behaviour there has ever been.
 #[test]
 fn fonts_default_to_the_machines_own() {
     let cfg = Config::default();
@@ -82,8 +80,7 @@ fn font_directories_and_the_system_switch_are_read() {
 }
 
 /// A directory that is not there yields no faces and no error at compile time,
-/// so the typo has to be caught while it can still be told from a directory that
-/// simply holds no fonts.
+/// so the typo has to be caught here.
 #[test]
 fn a_font_directory_that_is_not_there_is_named() {
     let root = std::path::Path::new("/nowhere-at-all");
@@ -92,7 +89,6 @@ fn a_font_directory_that_is_not_there_is_named() {
         cfg.typst.fonts.missing(root),
         Some(std::path::Path::new("fonts"))
     );
-    // The project root itself is a directory, so naming it is not a mistake.
     let cfg = parse("typst {\n  fonts {\n    paths \".\"\n  }\n}\n");
     assert_eq!(cfg.typst.fonts.missing(std::path::Path::new(".")), None);
 }

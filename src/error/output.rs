@@ -5,11 +5,9 @@ use thiserror::Error;
 
 use crate::ui::Code;
 
-/// An opt-in output was enabled on a site with no `url`.
-///
-/// Absolute URLs are not optional in a sitemap or a feed, so there is nothing
-/// to emit. An error rather than a warning because the feature was asked for:
-/// warning let a build "succeed" with the feed silently missing.
+/// An opt-in output was enabled on a site with no `url`, an error rather than a
+/// warning because a warning let the build succeed with the output silently
+/// missing.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{} needs a site `url`", Code(.feature))]
 #[diagnostic(

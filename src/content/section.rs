@@ -1,8 +1,5 @@
 //! The site's section tree: content directories nested as they appear under
-//! `content/`, each carrying the pages filed directly in it and its child
-//! directories. Built once from the planned pages and shared by both consumers
-//! of a site nav (the template `page.sections` value and the
-//! `baudelaire:sections` JS module) so the two can never disagree.
+//! `content/`, each carrying the pages filed directly in it.
 
 use crate::codegen::Value;
 use crate::config::Config;
@@ -24,10 +21,8 @@ pub struct Section {
 
 impl Section {
     /// The forest of top-level sections built from the authored pages of one
-    /// language; generated listings (taxonomy and paginated indexes) and pages
-    /// a nav never links ([`Page::listed`]) are excluded. Each page is filed
-    /// under its [`Page::section_path`], so a language's nav lists only its own
-    /// pages.
+    /// language; generated listings and pages a nav never links
+    /// ([`Page::listed`]) are excluded.
     pub fn tree(pages: &[Page], config: &Config, lang: &str) -> Vec<Self> {
         let mut root = Self::new("");
         for page in pages {
@@ -65,8 +60,7 @@ impl Section {
     }
 
     /// This section as a [`Value`]: `(id, pages: ((url, title), ..),
-    /// children: (..))`. One representation, rendered to Typst for
-    /// `page.sections` and to JavaScript for the `baudelaire:sections` module.
+    /// children: (..))`.
     pub fn value(&self) -> Value {
         Value::dict([
             ("id", Value::str(&self.id)),

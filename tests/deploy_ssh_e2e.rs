@@ -1,8 +1,8 @@
 //! End-to-end SSH deploy tests: the real `russh`-backed backend driven through
-//! the public [`baudelaire::deploy::Deploy::run`], against an in-process SSH/SFTP
-//! server. Split out from `deploy_e2e.rs` (which keeps the S3 half) because the
-//! backend under test is compiled in only by the `ssh` feature, and a whole file
-//! is the one granularity cargo will skip building outright.
+//! the public [`baudelaire::deploy::Deploy::run`], against an in-process
+//! SSH/SFTP server.
+// Split from `deploy_e2e.rs` because a whole file is the one granularity cargo
+// will skip building outright.
 #![cfg(feature = "ssh")]
 
 mod common;
@@ -65,10 +65,8 @@ fn ssh_config(site: &Site, port: u16) -> Config {
     config
 }
 
-/// A random source implementing the exact `rand_core` `ssh-key` pins (which
-/// differs from the `rand` crate's own), backed by `rand` for entropy. In
-/// rand_core 0.10 the fallible `TryRng`/`TryCryptoRng` are the base traits;
-/// with `Error = Infallible` the infallible `Rng`/`CryptoRng` follow by blanket.
+/// A random source implementing the exact `rand_core` `ssh-key` pins, which
+/// differs from the `rand` crate's own.
 struct Rng;
 
 impl russh::keys::signature::rand_core::TryRng for Rng {
@@ -101,8 +99,8 @@ fn options(dry_run: bool, headless: &Headless) -> Options<'_> {
 }
 
 /// Start an in-process SSH server whose `exec` answers with `listing` (the
-/// canned `sha256sum` output) and whose SFTP subsystem reads and writes `store`.
-/// Returns its port.
+/// canned `sha256sum` output) and whose SFTP subsystem reads and writes
+/// `store`. Returns its port.
 fn spawn_ssh(store: SftpStore, listing: String) -> u16 {
     let std_listener = TcpListener::bind("127.0.0.1:0").unwrap();
     std_listener.set_nonblocking(true).unwrap();
@@ -172,7 +170,7 @@ impl Handler for SshServer {
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         self.channels.insert(channel.id(), channel);
-        // Dropping the handle without accepting sends AdministrativelyProhibited.
+        // Dropping the handle unaccepted sends AdministrativelyProhibited.
         reply.accept().await;
         Ok(())
     }
@@ -209,9 +207,8 @@ impl Handler for SshServer {
     }
 }
 
-/// An in-memory SFTP backend: create/write/close upload a file, remove deletes
-/// one, mkdir is a no-op. Paths are stored dist-relative (the `/upload` base
-/// stripped), matching the object keys the tests assert on.
+/// An in-memory SFTP backend, storing paths dist-relative (the `/upload` base
+/// stripped) to match the object keys the tests assert on.
 struct Sftp {
     store: SftpStore,
 }
@@ -249,8 +246,8 @@ impl russh_sftp::server::Handler for Sftp {
         id: u32,
         path: String,
     ) -> Result<russh_sftp::protocol::Name, StatusCode> {
-        // Echo the path back as its own canonical form: enough for a client
-        // that only ever opens absolute paths.
+        // Echoing the path back is enough for a client that only opens
+        // absolute paths.
         Ok(russh_sftp::protocol::Name {
             id,
             files: vec![russh_sftp::protocol::File::dummy(if path == "." {
@@ -364,8 +361,8 @@ fn ssh_refuses_a_changed_host_key() {
     let store: SftpStore = Arc::new(Mutex::new(BTreeMap::new()));
     let port = spawn_ssh(Arc::clone(&store), String::new());
 
-    // A known_hosts that records a *different* key for this host:port, so the
-    // server's ephemeral key reads as changed: the man-in-the-middle guard.
+    // A known_hosts recording a *different* key for this host:port, so the
+    // server's ephemeral key reads as changed.
     set_home(&site.root);
     let other = PrivateKey::random(&mut Rng, Algorithm::Ed25519).unwrap();
     site.write(

@@ -1,11 +1,5 @@
-//! Assembly of the generated JavaScript clients.
-//!
-//! Every client this crate emits (the SPA runtime, the search client, the
-//! single-file export's inline router) is the same shape: a prelude of
-//! build-time constants, one or more embedded sources from `js/`, and a tail
-//! that either mounts the thing or exports it. [`Script`] is that shape, so the
-//! prelude escaping, the part separator, the auto-mount guard, and the export
-//! list each exist once instead of once per emitter.
+//! Assembly of the generated JavaScript clients: a prelude of build-time
+//! constants, embedded sources from `js/`, and a tail that mounts or exports.
 
 use std::fmt::Write;
 
@@ -18,11 +12,9 @@ pub(super) struct Script<'a> {
 }
 
 impl<'a> Script<'a> {
-    /// Open a script with the constants its sources close over.
-    ///
-    /// Each value is written through the codegen escaper rather than
-    /// interpolated, so a configured container selector or index URL carrying a
-    /// quote cannot break out of its literal.
+    /// Open a script with the constants its sources close over, each written
+    /// through the codegen escaper so a configured value carrying a quote
+    /// cannot break out of its literal.
     pub(super) fn new(consts: &[(&str, &str)]) -> Self {
         let mut prelude = String::new();
         for (name, value) in consts {
@@ -34,16 +26,14 @@ impl<'a> Script<'a> {
         }
     }
 
-    /// Append one embedded source. Parts share a single module scope, which is
-    /// how an engine's helpers are visible to the UI concatenated after it.
+    /// Append one embedded source; parts share a single module scope.
     pub(super) fn part(mut self, source: &'a str) -> Self {
         self.parts.push(source);
         self
     }
 
-    /// Finish with a call to `name`, guarded on there being a document: that is
-    /// what makes the emitted file work by dropping one `<script>` in, while the
-    /// same sources stay importable somewhere without a DOM.
+    /// Finish with a call to `name`, guarded on there being a document so the
+    /// same sources stay importable where there is no DOM.
     pub(super) fn mount(self, name: &str) -> String {
         self.tail(&format!("if (typeof document !== \"undefined\") {name}();"))
     }

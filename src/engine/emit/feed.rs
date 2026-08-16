@@ -11,13 +11,12 @@ use crate::content::{Page, Taxonomy};
 use crate::error::warning::FeedMounted;
 use crate::error::{Artifact, FeedDateError, Result};
 
-/// The timestamp behavior each feed standard mandates: RSS wants RFC 2822
-/// `pubDate`s, Atom and JSON Feed RFC 3339. An inherent extension here (rather
-/// than in config) because only the feed writer cares how a kind formats time.
+/// The timestamp behavior each feed standard mandates: RFC 2822 for RSS,
+/// RFC 3339 for Atom and JSON Feed.
 impl FeedKind {
-    /// Format a moment as this feed standard requires. Fallible: the formats
-    /// have year ranges (RFC 2822: 1900–9999, RFC 3339: 0–9999) a page date
-    /// can fall outside of.
+    /// Format a moment as this feed standard requires, fallible since the
+    /// formats have year ranges (RFC 2822: 1900-9999, RFC 3339: 0-9999) a page
+    /// date can fall outside of.
     fn timestamp(self, moment: OffsetDateTime) -> Result<String, time::error::Format> {
         match self {
             Self::Rss => moment.format(&Rfc2822),
@@ -34,27 +33,17 @@ impl FeedKind {
     }
 }
 
-/// Each page's prose, as the markup a full-content feed carries.
+/// Each page's prose, as the markup a full-content feed carries, keyed by
+/// permalink.
 ///
-/// Built once per run and keyed by permalink, because every feed a site writes
-/// draws from the same pages: a site feed, one per collection and one per term
-/// all list the same posts, and slicing each page's region again per feed is the
-/// same work three times.
-///
-/// Empty for a summary feed, which is what makes `Feed::body` a lookup rather
-/// than a branch: nothing is in the map, so nothing is found.
+/// Empty for a summary feed, which is what makes [`Feed::body`] a lookup
+/// rather than a branch: nothing is in the map, so nothing is found.
 #[derive(Default)]
 struct Bodies<'a>(std::collections::HashMap<&'a str, &'a str>);
 
 impl<'a> Bodies<'a> {
-    /// The prose of every built page, or nothing at all when the site asked for
-    /// summaries.
-    ///
-    /// A lookup rather than work: the markup was captured off the typed DOM at
-    /// compile time and replayed here for a cached page just the same, so this
-    /// only indexes it by the permalink a feed entry knows the page by. Empty
-    /// for a summary feed, which is what makes [`Feed::body`] a lookup rather
-    /// than a branch: nothing is in the map, so nothing is found.
+    /// The prose of every built page, or nothing at all when the site asked
+    /// for summaries.
     fn of(site: &'a Site<'a>) -> Self {
         Self(
             site.outputs
@@ -75,26 +64,20 @@ impl<'a> Bodies<'a> {
 }
 
 /// What every feed on one site shares.
-///
-/// Grouped because each of the four is identical at all three call sites and
-/// was passed through by hand: the site-wide feed, the per-collection ones and
-/// the per-term ones differ only in what they are called, what they list and
-/// where they sit.
 #[derive(Clone, Copy)]
 struct Shared<'a> {
     /// The site's config, for resolving a page's byline.
     config: &'a Config,
     /// Where the site is served, for the absolute links every format mandates.
     base: &'a BaseUrl,
-    /// The `feed { }` config, for what each format's file is called: the id a
-    /// feed writes about itself has to be the file it is served from.
+    /// The `feed { }` config, for what each format's file is called.
     names: &'a FeedConfig,
     /// Each page's prose, when the site asked its feeds to carry it.
     bodies: &'a Bodies<'a>,
     /// The site's own `author`, for Atom's mandatory feed-level `<author>`.
     author: Option<&'a str>,
-    /// Everything the site knows about who is behind a page, so an entry names
-    /// its own people rather than the site's one name.
+    /// Who is behind a page, so an entry names its own people rather than the
+    /// site's one name.
     entities: &'a crate::content::Registries,
 }
 
@@ -118,8 +101,6 @@ impl Processor for Feeds {
             author: site.config.author.as_deref(),
             entities: site.entities,
         };
-        // One feed set per language: the default at `/rss.xml`, others under
-        // `/{code}/rss.xml`, each listing only its language's recent posts.
         for lang in site.config.langs() {
             let dated = Page::recent(
                 site.pages,
@@ -148,18 +129,14 @@ impl Processor for Feeds {
 
 impl Feeds {
     /// A feed per collection that asked for one, written beside that
-    /// collection's index, so a reader can follow the essays without also
-    /// taking the release notes.
+    /// collection's index.
     ///
-    /// Where each one goes, what it calls itself, and whether it has one at
-    /// all is [`Config::channel`]: the same answer the `<head>` tag advertising
-    /// it is built from, so a page can never point at a file this pass declined
-    /// to write, nor name it something else.
+    /// Where each one goes and whether it has one at all is
+    /// [`Config::channel`], the same answer the `<head>` tag advertising it is
+    /// built from, so a page can never point at a file this pass declined to
+    /// write.
     fn collections(site: &Site, out: &mut dyn Emit, shared: Shared<'_>) -> Result<()> {
         for (id, collection) in &site.config.content.collections {
-            // The `paginate` half is what `engine::gate` warns about, and the
-            // warning states that no feed is written: it has to be true here or
-            // the diagnostic describes a build that did not happen.
             if !collection.feed || !collection.paginate.enabled {
                 continue;
             }
@@ -169,9 +146,6 @@ impl Feeds {
                 .into_iter()
                 .filter_map(|lang| Some((lang, site.config.channel(id, lang)?)))
                 .collect();
-            // Asked for, able to have one, and yet no language places it
-            // anywhere: the collection sits where a site feed already does, and
-            // that file is taken. Said once, since the mount is one config line.
             if channels.is_empty() {
                 out.warn(FeedMounted {
                     collection: id.clone(),
@@ -203,12 +177,8 @@ impl Feeds {
         Ok(())
     }
 
-    /// A feed per taxonomy term, written beside that term's listing page, so a
-    /// reader can follow one tag instead of the whole site.
-    ///
-    /// Terms come from the same grouping that generated those listings, so a
-    /// term always has its feed at its own URL and neither can disagree with the
-    /// other about which pages belong to it.
+    /// A feed per taxonomy term, written beside that term's listing page, from
+    /// the same grouping that generated the listing.
     fn terms(site: &Site, out: &mut dyn Emit, shared: Shared<'_>) -> Result<()> {
         for group in Taxonomy::groups(site.config, site.entities, site.pages) {
             let lang = group.lang();
@@ -217,8 +187,6 @@ impl Feeds {
                     term.members.iter().copied(),
                     site.config.generate.feed.limit,
                 );
-                // The term's own URL is the feed's home, so its scope is that
-                // URL's path: `/fr/tags/rust/` -> `fr/tags/rust`.
                 let scope = term.url.trim_matches('/');
                 let title = format!("{} - {}", site.config.title(lang), group.title(&term));
                 Self::emit(
@@ -246,15 +214,8 @@ impl Feeds {
     }
 }
 
-/// Whether a feed with nothing dated in it is still written.
-///
-/// The two answers are not a preference: they follow from whether anything
-/// points at the file. A page carries `<link rel="alternate">` for the
-/// site-wide feed and for its own collection's, built from the config alone, so
-/// skipping those left every page of an undated site advertising a `rss.xml`
-/// the build had declined to write. Nothing points at a term's feed but the
-/// term listing beside it, so an empty one there is a file per term that no
-/// reader would ever open.
+/// Whether a feed with nothing dated in it is still written, which follows
+/// from whether anything advertises the file.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
     /// Written anyway, because a page advertises it.
@@ -266,19 +227,14 @@ enum Empty {
 /// Renders a feed of the given items (already selected, newest-first) with
 /// absolute links under `base`.
 struct Feed<'a> {
-    /// What every feed on this site shares.
     site: Shared<'a>,
     title: &'a str,
-    /// What the site is, from `description` in the feed's own language. RSS
+    /// What the site is, from `description` in the feed's own language; RSS
     /// makes the channel element mandatory, so unset it falls back to the
-    /// title, which is what every feed said before there was a key for it.
+    /// title.
     description: Option<&'a str>,
     items: &'a [&'a Page],
-    /// This feed's language path segment (empty for the default language).
-    ///
-    /// Every feed used to advertise the site root as its `<link>` and `<id>`.
-    /// Atom requires a unique feed id, so to an aggregator `/rss.xml` and
-    /// `/fr/rss.xml` were one feed with two sets of entries.
+    /// This feed's language path segment, empty for the default language.
     scope: &'a str,
 }
 
@@ -300,8 +256,7 @@ impl<'a> Feed<'a> {
     }
 
     /// This page's prose as a feed entry carries it, or `None` for a summary
-    /// feed. The one reader of [`Bodies`], so the three formats cannot disagree
-    /// about which pages have a body.
+    /// feed.
     fn body(&self, page: &Page) -> Option<&'a str> {
         self.site.bodies.get(page)
     }
@@ -316,9 +271,8 @@ impl<'a> Feed<'a> {
         self.items.is_empty()
     }
 
-    /// Serialize in the requested format. Item timestamps are rendered up
-    /// front: for XML the only fallible step, so the building itself stays
-    /// infallible.
+    /// Serialize in the requested format; item timestamps are rendered up
+    /// front, being the only fallible step.
     fn render(&self, kind: FeedKind) -> Result<String> {
         let stamps = self.stamps(kind)?;
         match kind {
@@ -335,9 +289,7 @@ impl<'a> Feed<'a> {
         xml.finish()
     }
 
-    /// This feed's language home, the site root for the default language (whose
-    /// scope is empty, and which [`Permalink::join`] already reads as "no
-    /// segment" rather than as a bare separator).
+    /// This feed's language home, the site root for the default language.
     fn home(&self) -> String {
         self.site.base.join(Permalink::join(&[self.scope]))
     }
@@ -351,9 +303,8 @@ impl<'a> Feed<'a> {
         self.site.base.join(&page.permalink)
     }
 
-    /// The namespace `content:encoded` lives in, declared on `<rss>` whenever a
-    /// full feed is written: an undeclared prefix is not well-formed XML, and
-    /// several readers drop the whole document over it.
+    /// The namespace `content:encoded` lives in, declared on `<rss>` whenever
+    /// a full feed is written: an undeclared prefix is not well-formed XML.
     const CONTENT_NS: (&'static str, &'static str) =
         ("xmlns:content", "http://purl.org/rss/1.0/modules/content/");
 
@@ -373,23 +324,15 @@ impl<'a> Feed<'a> {
                         xml.leaf("title", page.title());
                         xml.leaf("link", &link);
                         xml.leaf("guid", &link);
-                        // What a reader renders in its list view. Without it
-                        // that column is empty and a subscriber sees a wall of
-                        // bare titles.
                         if let Some(description) = page.frontmatter.blurb() {
                             xml.leaf("description", description);
                         }
-                        // Beside the summary, never instead of it: a list view
-                        // wants the short one, and `description` is where every
-                        // reader looks for it.
                         if let Some(body) = self.body(page) {
                             xml.leaf("content:encoded", body);
                         }
                         for term in Self::categories(page) {
                             xml.leaf("category", term);
                         }
-                        // RSS has no "last changed": `pubDate` is publication,
-                        // and an `updated` has nowhere to go in this format.
                         if let Some(published) = &stamp.published {
                             xml.leaf("pubDate", published);
                         }
@@ -402,9 +345,8 @@ impl<'a> Feed<'a> {
     /// The people one entry credits, as Atom writes a person: a name, and the
     /// two optional children it allows beside it.
     ///
-    /// Falls back to nothing rather than to the site's author: the feed already
-    /// carries that, and repeating it on every entry would claim the site wrote
-    /// each post rather than merely publishing it.
+    /// Falls back to nothing rather than to the site's author, which the feed
+    /// itself already carries.
     fn people(&self, xml: &mut Xml, page: &Page) {
         let byline = crate::content::Byline::of(self.site.entities, self.site.config, page);
         for (role, credited) in byline.roles() {
@@ -426,7 +368,6 @@ impl<'a> Feed<'a> {
     }
 
     fn atom(&self, xml: &mut Xml, stamps: &[Stamps]) {
-        // Items are newest-first, so the first dated one dates the feed.
         let updated = stamps.iter().find_map(Stamps::latest);
         xml.nest("feed", &[("xmlns", "http://www.w3.org/2005/Atom")], |xml| {
             xml.leaf("title", self.title);
@@ -435,14 +376,10 @@ impl<'a> Feed<'a> {
             }
             xml.leaf("id", &self.url(FeedKind::Atom));
             xml.empty("link", &[("href", &self.home())]);
-            // `rel="self"`: where this feed is served, which is how an
-            // aggregator that was handed the bytes finds its way back to them.
             xml.empty(
                 "link",
                 &[("rel", "self"), ("href", &self.url(FeedKind::Atom))],
             );
-            // Mandatory on the feed unless every entry carries one, and no
-            // entry does: RFC 4287 4.1.1, and validators enforce it.
             if let Some(author) = self.site.author {
                 xml.nest("author", &[], |xml| xml.leaf("name", author));
             }
@@ -455,19 +392,12 @@ impl<'a> Feed<'a> {
                     xml.leaf("title", page.title());
                     xml.leaf("id", &link);
                     xml.empty("link", &[("href", &link)]);
-                    // Atom separates the two moments, so both are said:
-                    // `updated` is mandatory on an entry and falls back to the
-                    // publication date, `published` is emitted when known.
                     if let Some(updated) = stamp.latest() {
                         xml.leaf("updated", updated);
                     }
                     if let Some(published) = &stamp.published {
                         xml.leaf("published", published);
                     }
-                    // Whom this entry is by, in the two person constructs Atom
-                    // has (RFC 4287 4.2.1). A role it cannot spell is not
-                    // written: the vocabulary has no field for a translator,
-                    // and inventing one would not be Atom.
                     self.people(xml, page);
                     if let Some(description) = page.frontmatter.blurb() {
                         xml.leaf("summary", description);
@@ -484,8 +414,8 @@ impl<'a> Feed<'a> {
     }
 
     /// Every taxonomy term on a page, flattened: a feed's categories are a flat
-    /// keyword list in all three standards, with nowhere to say which taxonomy a
-    /// term came from.
+    /// keyword list in all three standards, with nowhere to say which taxonomy
+    /// a term came from.
     fn categories(page: &Page) -> impl Iterator<Item = &str> {
         page.frontmatter
             .taxonomies
@@ -549,11 +479,8 @@ impl<'a> Feed<'a> {
     }
 }
 
-/// One item's two moments, each already in its feed's format.
-///
-/// Kept apart because the standards do: `published` is when the page went up
-/// and orders the feed, `updated` is when it last changed. Feeding one date to
-/// both is what left a rewritten post looking untouched to every reader.
+/// One item's two moments, each already in its feed's format: `published` is
+/// when the page went up and orders the feed, `updated` when it last changed.
 struct Stamps {
     published: Option<String>,
     updated: Option<String>,
@@ -561,15 +488,14 @@ struct Stamps {
 
 impl Stamps {
     /// The moment that dates this item at all: its `updated` if it has one,
-    /// else when it was published. What Atom's `<updated>` requires (it is
-    /// mandatory on an entry) and what the feed's own `<updated>` is taken from.
+    /// else when it was published.
     fn latest(&self) -> Option<&String> {
         self.updated.as_ref().or(self.published.as_ref())
     }
 }
 
-/// The JSON Feed 1.1 top-level object: just the required members plus the
-/// item list; optional members are omitted, not emitted empty.
+/// The JSON Feed 1.1 top-level object; optional members are omitted, not
+/// emitted empty.
 #[derive(Serialize)]
 struct JsonFeed<'a> {
     version: &'static str,
@@ -581,9 +507,7 @@ struct JsonFeed<'a> {
     items: Vec<JsonItem<'a>>,
 }
 
-/// One JSON Feed item. `id` doubles as the canonical `url`, mirroring the
-/// `guid`/`link` pairing in the XML formats. Absent members are omitted rather
-/// than emitted empty, which the spec asks for and readers rely on.
+/// One JSON Feed item, whose `id` doubles as the canonical `url`.
 #[derive(Serialize)]
 struct JsonItem<'a> {
     id: String,
@@ -592,8 +516,7 @@ struct JsonItem<'a> {
     title: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<String>,
-    /// The entry's prose, when the site asked its feeds to carry it. JSON Feed
-    /// names it `content_html`, beside `summary` rather than instead of it.
+    /// The entry's prose, when the site asked its feeds to carry it.
     #[serde(skip_serializing_if = "Option::is_none")]
     content_html: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

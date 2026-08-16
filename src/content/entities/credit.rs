@@ -1,16 +1,6 @@
-//! What a reference *claims*, and how each output surface spells it.
-//!
-//! A taxonomy pointing at a registry says its terms are entities. Saying it
-//! carries a `credit` says what the page is claiming about them: `zoe` under
-//! `authors` wrote the page, `ada` under `translators` translated it. A taxonomy
-//! with no credit claims nothing at all, which is what `part-of="series"` is.
-//!
-//! Where that lands is [`SPELLINGS`], one row per role and one column per
-//! surface. It is a table and not a trait because the surfaces share no
-//! signature: one appends DOM nodes, one writes XML elements, one fills a PDF
-//! info dict. What they do share is exactly this -- whether they can say a role
-//! at all, and under what name -- so that is what is written once. Adding a role
-//! is a row; teaching a surface a role it could not say is a cell.
+//! What a reference *claims* about an entity a page names, and how each output
+//! surface spells it: one row per role and one column per surface, in
+//! [`SPELLINGS`].
 
 use crate::config::{Config, Named, Slots};
 use crate::content::{Page, entities::Registries};
@@ -57,13 +47,9 @@ pub enum Vocabulary {
     Document,
 }
 
-/// How each surface spells each role, and what it simply cannot say.
-///
-/// The blanks are the point. Atom has `<author>` and `<contributor>` and
-/// nothing else (RFC 4287 4.2.1); OpenGraph has one `article:author`; a PDF info
-/// dict has one `/Author`. A surface handed a role it cannot spell writes
-/// nothing rather than inventing a field, which is what a per-surface `if` at
-/// each call site used to decide differently in each of five places.
+/// How each surface spells each role, and what it simply cannot say; a surface
+/// handed a role it has no name for writes nothing rather than inventing a
+/// field.
 const SPELLINGS: &[(Credit, &[(Vocabulary, &str)])] = &[
     (
         Credit::Author,
@@ -104,31 +90,21 @@ impl Credit {
     }
 }
 
-/// The kind of thing a registry with no shape holds, for the one vocabulary
-/// that types its objects.
-///
-/// A credit is somebody who did something, and schema.org's word for that,
-/// absent anything more specific, is a person. A registry that holds companies
-/// says so with `shape "organization"`.
+/// The schema.org kind a registry that declares no `shape` holds.
 const KIND: &str = "Person";
 
 /// One entity as a page named it: what the registry knows, resolved through the
-/// registry's slots.
-///
-/// A term the registry does not hold is still one of these. `unknown
-/// "synthesize"` means the term is all there is to know, and every surface then
-/// renders exactly what a bare `author "Camille"` has always rendered.
+/// registry's slots. A term the registry does not hold is still one of these,
+/// with the term itself as all there is to know.
 #[derive(Clone, Copy)]
 pub struct Resolved<'a> {
     /// The term the page wrote, which is the display name when nothing else is.
     pub term: &'a str,
     entity: Option<&'a Entity>,
     slots: &'a Slots,
-    /// The language of the page that named it, so an entity written as a
-    /// profile answers in the language the page is written in.
+    /// The language of the page that named it, which is the language a profile
+    /// answers in.
     lang: &'a str,
-    /// What the registry says this kind of thing *is*, for the one vocabulary
-    /// that types its objects.
     kind: &'static str,
 }
 
@@ -143,8 +119,7 @@ impl<'a> Resolved<'a> {
         }
     }
 
-    /// A synthesized entity: a name and nothing else, which is what the site's
-    /// own `author` is and what a page's `author` string has always been.
+    /// A synthesized entity: a name and nothing else.
     pub fn bare(term: &'a str, slots: &'a Slots) -> Self {
         Self {
             term,
@@ -155,17 +130,12 @@ impl<'a> Resolved<'a> {
         }
     }
 
-    /// What schema.org calls this kind of thing.
     pub fn kind(&self) -> &'static str {
         self.kind
     }
 
-    /// The name a reader sees.
-    ///
-    /// The display slot, else the two field names that mean a name whether or
-    /// not a slot was declared, else the term itself. The fallback chain is
-    /// here and nowhere else: a surface that resolved a display name its own
-    /// way would render a different byline from its neighbour on one page.
+    /// The name a reader sees: the display slot, else a `name` or `title`
+    /// field, else the term itself.
     pub fn display(&self) -> &str {
         self.slot(self.slots.display.as_deref())
             .or_else(|| self.text("name"))
@@ -178,12 +148,10 @@ impl<'a> Resolved<'a> {
         self.slot(self.slots.url.as_deref())
     }
 
-    /// A picture of it: an avatar, a logo, a cover.
     pub fn image(&self) -> Option<&str> {
         self.slot(self.slots.image.as_deref())
     }
 
-    /// A contact address.
     pub fn email(&self) -> Option<&str> {
         self.slot(self.slots.email.as_deref())
     }
@@ -213,7 +181,6 @@ impl<'a> Resolved<'a> {
         }
     }
 
-    /// A field, by name.
     pub fn field(&self, key: &str) -> Option<&'a crate::codegen::Value> {
         self.entity?.field(key, self.lang)
     }
@@ -234,8 +201,7 @@ impl<'a> Resolved<'a> {
         self.text(key?)
     }
 
-    /// A field's string value, empty treated as absent: a surface writing an
-    /// empty `href` is worse than one writing none.
+    /// A field's string value, an empty one treated as absent.
     fn text(&self, key: &str) -> Option<&'a str> {
         self.field(key)
             .and_then(crate::codegen::Value::as_str)
@@ -245,27 +211,18 @@ impl<'a> Resolved<'a> {
 
 /// One credited entity, as a surface writes it: the slots resolved to owned
 /// strings.
-///
-/// Owned, and flat, because the three surfaces that render a byline do not
-/// share a lifetime with the page set: a feed entry is written long after the
-/// page rendered, and a bundled document is compiled by a different pass. What
-/// they must share is *what the byline says*, which is this.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribution {
-    /// The name a reader sees.
     pub display: String,
     /// Its own canonical URL, off this site.
     pub url: Option<String>,
-    /// A picture of it.
     pub image: Option<String>,
-    /// A contact address.
     pub email: Option<String>,
     /// The other URLs that are also this entity.
     pub same_as: Vec<String>,
     /// What schema.org calls it.
     pub kind: &'static str,
-    /// Everything the registry holds about it, under the names it holds them:
-    /// what a template reaches for when it wants a field no slot answers.
+    /// Everything the registry holds about it, under the names it holds them.
     pub fields: crate::codegen::Value,
 }
 
@@ -283,11 +240,8 @@ impl From<&Resolved<'_>> for Attribution {
     }
 }
 
-/// One credited entity as a template reads it.
-///
-/// The slot answers under fixed names, plus the entity's own fields under
-/// theirs: a layout writes `credit.name` whatever registry it came from, and
-/// still reaches `credit.fields.pronouns` for what only that site declared.
+/// One credited entity as a template reads it: the slot answers under fixed
+/// names, plus the entity's own fields under theirs.
 impl From<&Attribution> for crate::codegen::Value {
     fn from(credited: &Attribution) -> Self {
         Self::dict([
@@ -304,10 +258,8 @@ impl From<&Attribution> for crate::codegen::Value {
     }
 }
 
-/// A page's byline as a template reads it: one key per role it credits.
-///
-/// A role with nobody in it is absent rather than empty, so a template writes
-/// `if "translator" in page.credits` and never has to know which roles exist.
+/// A page's byline as a template reads it: one key per role it credits, a role
+/// with nobody in it absent rather than empty.
 impl From<&Byline> for crate::codegen::Value {
     fn from(byline: &Byline) -> Self {
         Self::dict(
@@ -318,25 +270,16 @@ impl From<&Byline> for crate::codegen::Value {
     }
 }
 
-/// Who is behind one page, by role, as every surface reads it.
-///
-/// Resolved once and then spelled five ways, so the name in the head, the one
-/// in the feed entry and the one on the card cannot disagree. The site-wide
-/// fallback is applied here and nowhere else, which is what keeps a site that
-/// declares no registry rendering exactly the byline it always did.
+/// Who is behind one page, by role, resolved once and then spelled by every
+/// surface.
 #[derive(Debug, Clone, Default)]
 pub struct Byline(Vec<(Credit, Vec<Attribution>)>);
 
 impl Byline {
     /// The byline of `page`: every entity it credits, plus the page's own
-    /// `author` field where it credits no author through a taxonomy.
-    ///
-    /// The site-wide floor is *not* applied here. It is a different claim --
-    /// "whoever runs this site" rather than "whoever wrote this page" -- and
-    /// only some surfaces want it: a `<meta name="author">` with nothing else
-    /// to say falls back to it, while an Atom entry does not, since the feed
-    /// already carries the site's author and repeating it on every entry would
-    /// claim the site wrote each post. [`Byline::or_site`] adds it.
+    /// `author` field where it credits no author through a taxonomy. The
+    /// site-wide floor is *not* applied here; [`Byline::or_site`] adds it for
+    /// the surfaces that want it.
     pub fn of(registries: &Registries, config: &Config, page: &Page) -> Self {
         let mut byline = Self::default();
         for reference in registries.references(config, page) {
@@ -352,9 +295,6 @@ impl Byline {
                 ))],
             );
         }
-        // The name a page has always been able to give, whatever registries
-        // exist. Only where it credits no author through a taxonomy, so a
-        // roster always wins.
         if byline.authors().is_empty()
             && let Some(name) = page.frontmatter.author.as_deref()
         {
@@ -365,9 +305,6 @@ impl Byline {
 
     /// Fill in the site's own `author` for this page's language, where the page
     /// names no author of its own.
-    ///
-    /// The floor, and the reason a site that declares no registry keeps exactly
-    /// the byline it always had.
     pub fn or_site(mut self, config: &Config, page: &Page) -> Self {
         if self.authors().is_empty()
             && let Some(name) = config.author(&page.lang)
@@ -377,19 +314,14 @@ impl Byline {
         self
     }
 
-    /// An entity that is a name and nothing else: what a bare `author "Camille"`
-    /// has always been.
+    /// An entity that is a name and nothing else.
     fn bare(name: &str) -> Attribution {
         let slots = Slots::default();
         Attribution::from(&Resolved::bare(name, &slots))
     }
 
-    /// The same byline with every picture rewritten by `resolve`.
-    ///
-    /// An entity's image is an asset like any other: it has to be named at the
-    /// URL the pipeline serves it from, and made absolute for the vocabularies
-    /// a crawler reads. The rewrite belongs to whoever owns that resolution, so
-    /// it is handed in rather than reached for.
+    /// The same byline with every picture rewritten by `resolve`, which is how
+    /// an entity's image reaches the URL the pipeline serves it from.
     #[must_use]
     pub fn images(mut self, mut resolve: impl FnMut(&str) -> String) -> Self {
         for (_, credited) in &mut self.0 {
@@ -401,9 +333,6 @@ impl Byline {
     }
 
     /// Credit `role` to `named`, keeping roles in declaration order.
-    ///
-    /// The one way a byline grows, so the fallback author and a test's fixture
-    /// build the same value the resolution does.
     pub fn push(&mut self, role: Credit, named: Vec<Attribution>) {
         match self.0.iter_mut().find(|(credit, _)| *credit == role) {
             Some((_, known)) => known.extend(named),
@@ -427,8 +356,7 @@ impl Byline {
             .map(|(credit, named)| (*credit, named.as_slice()))
     }
 
-    /// Who wrote it: the role every surface can spell, and the only one the
-    /// document-level vocabularies have.
+    /// Who wrote it: the one role every surface can spell.
     pub fn authors(&self) -> &[Attribution] {
         self.get(Credit::Author)
     }
@@ -456,9 +384,6 @@ mod tests {
     use super::{Credit, SPELLINGS, Vocabulary};
     use crate::config::Named;
 
-    /// A role no surface can spell renders nowhere, silently. The table is the
-    /// only thing standing between a new variant and that, so it is held to
-    /// [`Credit::NAMES`] rather than to a reader's memory.
     #[test]
     fn every_role_has_a_row_and_says_something_somewhere() {
         for (name, credit) in Credit::NAMES {
@@ -477,8 +402,6 @@ mod tests {
         }
     }
 
-    /// The two person constructs Atom has, and no third: a role written into a
-    /// feed under an element RFC 4287 does not define is not Atom.
     #[test]
     fn atom_spells_only_the_two_roles_it_has() {
         let atom: Vec<&str> = Credit::NAMES

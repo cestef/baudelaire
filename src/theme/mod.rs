@@ -1,16 +1,5 @@
 //! Themes: a site's templates, assets, and defaults, shipped as one unit.
 //!
-//! A published theme is named the way any Typst dependency is
-//! (`@preview/plume:1.0.0`) and resolved through the same package store the
-//! compiler already uses, so it is downloaded once, cached across projects, and
-//! versioned by the registry. No second package manager, no vendoring, no
-//! submodule. A theme being *written* is named by its directory instead, so the
-//! author can edit it in place and rebuild.
-//!
-//! Inside, a theme is laid out like a site, with fixed directory names: the
-//! project's `paths` configure the *project*, and a theme cannot know what they
-//! were changed to.
-//!
 //! ```text
 //! templates/   layouts a page can be bound to
 //! assets/      stylesheets, scripts, images
@@ -18,13 +7,8 @@
 //! theme.kdl    config defaults the site's own config overrides
 //! ```
 //!
-//! Everything a theme provides is a *default*: the project's file at the same
+//! Everything a theme provides is a default: the project's file at the same
 //! relative path wins, and its config wins key by key.
-//!
-//! This module resolves the theme a *build* uses. Getting one into a project in
-//! the first place is [`source`] (where the files come from) and [`install`]
-//! (writing them in, and telling your bytes from ours) — both behind the
-//! `themes` feature, with the command that drives them.
 
 use std::path::{Path, PathBuf};
 
@@ -61,18 +45,11 @@ use crate::world::Registry;
 /// A resolved theme: where its files are, and how Typst names them.
 #[derive(Debug, Clone)]
 pub struct Theme {
-    /// Where the theme's files live, for the layered asset and static trees.
     root: PathBuf,
-    /// How a layout of this theme is imported.
     import: Import,
 }
 
 /// How Typst reaches a theme's files.
-///
-/// The two cases are not two spellings of one path. A directory theme is inside
-/// the project, so its layouts import by project path; a package's files are not
-/// reachable by *any* import string, so they are served under a project path
-/// instead: see [`Theme::mount`].
 #[derive(Debug, Clone)]
 enum Import {
     /// A directory inside the project, as a root-absolute project path.
@@ -89,13 +66,11 @@ impl Theme {
     const STATIC: &'static str = "static";
     pub const CONFIG: &'static str = "theme.kdl";
 
-    /// The scratch subdirectory a *package* theme's own root is served under,
-    /// so that its layouts can be imported at all. See [`Theme::mount`].
+    /// The scratch subdirectory a package theme's root is served under, so its
+    /// layouts can be imported at all.
     const MOUNT: &'static str = "theme";
 
-    /// The theme a config names, if it names one: every field the resolution
-    /// reads lives on the config, so the two callers (the config's own theme
-    /// layering, and the engine) cannot disagree about how a spec is read.
+    /// The theme a config names, if it names one.
     pub fn of(config: &Config) -> Result<Option<Self>> {
         config
             .theme
@@ -104,11 +79,8 @@ impl Theme {
             .transpose()
     }
 
-    /// Resolve the configured `theme` value.
-    ///
-    /// A leading `@` means a package, resolved (and downloaded if needed)
-    /// through the package store. Anything else is a directory inside the
-    /// project, which is how a theme is developed before it is published.
+    /// Resolve the configured `theme` value: a leading `@` is a package,
+    /// anything else a directory inside the project.
     fn resolve(theme: &str, project: &Path, registry: Option<&str>) -> Result<Self> {
         if theme.starts_with('@') {
             Self::package(theme, registry)
@@ -134,9 +106,7 @@ impl Theme {
 
     /// A theme being developed, from a directory inside the project.
     ///
-    /// Inside, because a Typst import cannot reach outside the project root: a
-    /// theme elsewhere on the disk would resolve its assets but fail on its very
-    /// first template, which is a worse way to find out.
+    /// Inside, because a Typst import cannot reach outside the project root.
     fn directory(path: &str, project: &Path) -> Result<Self> {
         let rel = Contained::new(path).ok_or_else(|| ThemeError::outside(path))?;
         let root = rel.under(project);
@@ -149,7 +119,6 @@ impl Theme {
         })
     }
 
-    /// Where the theme's files are.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -158,20 +127,9 @@ impl Theme {
     /// directory it is served from: `None` for a directory theme, whose files
     /// are already in the project.
     ///
-    /// A Typst import string cannot name a file *inside* a package: everything
-    /// after the `:` is read as a version, so
-    /// `@local/plume:0.1.0/templates/page.typ` fails as `0/templates/page is
-    /// not a valid patch version`, and a package theme's layouts would be
-    /// unreachable. The package's root is mounted under the project instead, so
-    /// a layout import is an ordinary path import and everything a theme does
-    /// relative to itself (`../parts.typ`, a `show raw` palette) keeps working.
-    ///
-    /// Nothing is copied: the mount is served straight out of the package store
-    /// by [`crate::world::Project`], so there is no vendored second copy to go
-    /// stale and nothing to clean up.
-    ///
-    /// It lives under the scratch directory, the one path a project has already
-    /// ceded to baudelaire, and shadows anything a site put there.
+    /// A Typst import string cannot name a file inside a package, since
+    /// everything after the `:` is read as a version, so the package's root is
+    /// mounted under the project instead.
     pub fn mount(&self) -> Option<(String, &Path)> {
         match self.import {
             Import::Project(_) => None,
@@ -180,8 +138,7 @@ impl Theme {
     }
 
     /// The mount point as Typst spells a path: project-rooted, `/`-joined, no
-    /// leading slash, so it can be both matched against a file id's virtual
-    /// path and written into an import.
+    /// leading slash.
     fn mounted() -> String {
         format!("{}/{}", Config::SCRATCH, Self::MOUNT)
     }
@@ -202,14 +159,12 @@ impl Theme {
         path.is_file().then_some(path)
     }
 
-    /// Whether the theme carries `templates/<file>`, which decides whether a
-    /// page's layout import points into the theme or into the project.
+    /// Whether the theme carries `templates/<file>`.
     pub fn has_template(&self, file: &str) -> bool {
         self.root.join(Self::TEMPLATES).join(file).is_file()
     }
 
-    /// The Typst import root for the theme's templates: its own root plus the
-    /// template directory, which is what a layout import is written against.
+    /// The Typst import root a layout import of this theme is written against.
     pub fn templates(&self) -> String {
         let root = match &self.import {
             Import::Project(path) => path.clone(),
@@ -229,8 +184,6 @@ mod tests {
         tmp
     }
 
-    /// A malformed package spec is rejected where it is written, not as a
-    /// mysterious package-not-found later on.
     #[test]
     fn a_malformed_package_spec_is_an_error() {
         let tmp = project();
@@ -242,8 +195,6 @@ mod tests {
         }
     }
 
-    /// A directory theme imports by project-relative path, which is what the
-    /// compiler can actually resolve.
     #[test]
     fn a_directory_theme_imports_by_project_path() {
         let tmp = project();
@@ -252,10 +203,8 @@ mod tests {
         assert_eq!(theme.root(), tmp.path().join("themes/plume"));
     }
 
-    /// A Typst import cannot leave the project root, so a theme that would sit
-    /// outside it is refused up front rather than half-working. An empty name is
-    /// refused with them: it used to resolve the theme to the project root
-    /// itself, making every project file a theme file.
+    /// An empty name is refused with them: it resolves the theme to the project
+    /// root itself, making every project file a theme file.
     #[test]
     fn a_theme_outside_the_project_is_refused() {
         let tmp = project();

@@ -7,7 +7,6 @@ use common::{Site, free_port, project, wait_for_port};
 #[test]
 fn root_flag_builds_from_that_directory() {
     let sb = Site::new();
-    // The site lives in a subdirectory; we invoke from the sandbox root.
     sb.write(
         "site/config.kdl",
         "site \"R\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
@@ -23,7 +22,6 @@ fn root_flag_builds_from_that_directory() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(sb.exists("site/public/index.html"));
-    // Nothing leaked into the invocation cwd.
     assert!(!sb.exists("public"));
 }
 
@@ -33,23 +31,18 @@ fn help_groups_global_flags_and_shows_examples() {
     let out = sb.run(&["--help"]);
     assert!(out.status.success());
     let help = String::from_utf8_lossy(&out.stdout);
-    // Global flags cluster under concern headings rather than one long list.
-    // Build-shaping flags live on the build-like subcommands, not the top level.
     for heading in ["Project:", "Logging:", "Examples:"] {
         assert!(
             help.contains(heading),
             "missing `{heading}` in help:\n{help}"
         );
     }
-    // The examples block is present.
     assert!(
         help.contains("baudelaire serve --open"),
         "help shows an example invocation"
     );
-    // Piped output must not leak raw ANSI escapes.
     assert!(!help.contains('\x1b'), "no escape codes when not a TTY");
 
-    // Build-shaping overrides are grouped under `build --help`, not global help.
     let build = sb.run(&["build", "--help"]);
     assert!(build.status.success());
     let build_help = String::from_utf8_lossy(&build.stdout);
@@ -74,9 +67,8 @@ fn clean_removes_dist_and_cache() {
     let cfg = sb.config();
     assert!(cfg.paths.dist.exists());
     assert!(cfg.cache.dir.exists());
-    // call the clean logic directly via the CLI. `-y` because a full sweep off
-    // a terminal refuses rather than answering for itself, which the test below
-    // pins down.
+    // `--yes` because a full sweep off a terminal refuses rather than
+    // answering for itself.
     let out = sb.run(&[
         "-c",
         sb.path("config.kdl").to_str().unwrap(),
@@ -93,9 +85,7 @@ fn clean_removes_dist_and_cache() {
 }
 
 /// The wholesale sweep takes announce state with it, which is what the next
-/// `announce` reconciles a live repository against. With no terminal to ask and
-/// no `--yes`, it stops: answering for itself is how a stray `clean` in CI
-/// silently changed what a later announce would do.
+/// `announce` reconciles a live repository against.
 #[test]
 fn clean_refuses_a_full_sweep_it_cannot_confirm() {
     let sb = Site::new();
@@ -106,8 +96,6 @@ fn clean_refuses_a_full_sweep_it_cannot_confirm() {
     assert!(!out.status.success(), "expected a refusal");
     assert!(cfg.paths.dist.exists(), "dist was removed anyway");
 
-    // ...and a narrowed sweep still runs unasked: it costs a rebuild, nothing
-    // more.
     let out = sb.run(&[
         "-c",
         sb.path("config.kdl").to_str().unwrap(),
@@ -123,8 +111,7 @@ fn clean_refuses_a_full_sweep_it_cannot_confirm() {
 }
 
 /// `clean` is the recovery command, so it must not depend on the artifact most
-/// likely to be broken: a config syntax error used to block the very wipe that
-/// would let you start over.
+/// likely to be broken.
 #[test]
 fn clean_falls_back_to_the_defaults_when_the_config_does_not_parse() {
     let sb = Site::new();
@@ -144,9 +131,8 @@ fn clean_falls_back_to_the_defaults_when_the_config_does_not_parse() {
     assert!(!sb.path("public").exists(), "default dist still exists");
 }
 
-/// A config that is missing entirely still fails: sweeping `public` and
-/// `.baudelaire` out of whatever directory you happened to be standing in is
-/// not a recovery.
+/// A config that is missing entirely still fails: sweeping `public` out of
+/// whatever directory you were standing in is not a recovery.
 #[test]
 fn clean_still_refuses_a_missing_config() {
     let sb = Site::new();
@@ -190,9 +176,7 @@ fn new_scaffolds_without_a_readable_project() {
 }
 
 /// `--version` answers "what am I holding": the version, where it was built
-/// from, and which optional capabilities are compiled in. A user whose `js`
-/// config silently did nothing could not tell a config mistake from a slim
-/// binary, because nothing reported which one they had.
+/// from, and which optional capabilities are compiled in.
 #[test]
 fn version_reports_the_build_and_its_features() {
     let sb = Site::new();
@@ -203,14 +187,11 @@ fn version_reports_the_build_and_its_features() {
     for label in ["commit", "rustc", "target", "flavor", "features"] {
         assert!(stdout.contains(label), "no `{label}` row: {stdout}");
     }
-    // Piped, so nothing styled survives: the report is plain text a script can
-    // read.
     assert!(
         !stdout.contains('\u{1b}'),
         "escapes survived a pipe: {stdout}"
     );
 
-    // `-V` stays the one line a script greps.
     let out = sb.run(&["-V"]);
     assert!(out.status.success());
     let short = String::from_utf8_lossy(&out.stdout);
@@ -299,15 +280,13 @@ fn default_build_works_no_content() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // Human-facing logs live on stderr; stdout stays data-only.
     let logs = String::from_utf8_lossy(&out.stderr);
     assert!(logs.contains("built") || logs.contains("building"));
 }
 
 #[test]
 fn profile_flag_applied() {
-    // `serve` blocks, so it can't be run with `output()`. Spawn it, prove the
-    // profile's port override took effect by connecting to it, then reap.
+    // `serve` blocks, so it cannot be run with `output()`.
     let port = free_port();
     let sb = Site::new();
     sb.write(
@@ -333,7 +312,7 @@ fn profile_flag_applied() {
         "--no-watch",
         "--no-open",
     ]);
-    // Default port is 1821; reachability on `port` proves the `ci` profile won.
+    // The default port is 1821, so reaching `port` proves the profile won.
     assert!(
         wait_for_port(port, 5000),
         "server never bound profile port {port}"
@@ -369,9 +348,8 @@ fn discover_with_collection_override() {
     assert_eq!(posts.pages[0].permalink, "/blog/hello/");
 }
 
-/// `--strict` turns the warning tally into an exit code. Without it a warning is
-/// something CI can only find by grepping stderr, and `--strict-links` gated one
-/// warning class out of the whole set.
+/// `--strict` turns the warning tally into an exit code, which CI can otherwise
+/// only find by grepping stderr.
 #[test]
 fn strict_fails_a_run_that_warned() {
     let sb = Site::new();
@@ -380,8 +358,7 @@ fn strict_fails_a_run_that_warned() {
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",
     );
     // A broken internal link, demoted to a warning by `--no-strict-links`: a
-    // run that warns and would otherwise succeed, which is exactly what
-    // `--strict` is for.
+    // run that warns and would otherwise succeed.
     sb.write(
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\n#link(\"/content/gone.typ\")[gone]\n",
@@ -430,9 +407,8 @@ fn strict_passes_a_run_that_did_not_warn() {
     );
 }
 
-/// A publishing command builds the site it is about to send, and reported none
-/// of it: `--json` came back with no `pages` and no `cached`, which reads as
-/// "this command built nothing" rather than "this command did not say".
+/// A publishing command builds the site it is about to send, so `--json` has to
+/// count those pages.
 #[test]
 fn json_counts_the_pages_a_publishing_command_built() {
     let sb = Site::new();
@@ -457,11 +433,8 @@ fn json_counts_the_pages_a_publishing_command_built() {
     assert_eq!(report["cached"], 0, "{report}");
 }
 
-/// The run a `--json` consumer most needs to understand is the one that failed,
-/// and that was the one it could learn nothing from: every *warning* passes
-/// through `Ui::warn` and is collected, while the error that actually stopped
-/// the build passed through neither, so a failure was `ok: false` with an empty
-/// `diagnostics` array and nothing on stdout to say why.
+/// A warning reaches the report through `Ui::warn`; the error that stopped the
+/// build passes through neither, so it has to be added on its own.
 #[test]
 fn json_reports_the_error_that_failed_the_run() {
     let sb = Site::new();
@@ -513,16 +486,13 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
 
     let report: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("stdout should be one JSON object");
-    // The contract's own version, so a consumer can refuse a shape it does not
-    // know. Asserted against the constant rather than a literal: bumping it is
-    // meant to be a deliberate edit in one place, not a test to chase.
+    // Asserted against the constant, so bumping it stays one deliberate edit.
     assert_eq!(report["schema"], baudelaire::ui::Report::SCHEMA);
     assert_eq!(report["ok"], true);
     assert_eq!(report["pages"], 2);
     assert_eq!(report["warnings"], 1);
-    // The broken link is reachable as data, codes and all: this is what `check`
-    // being "a fast CI gate" was missing. Found by code rather than by position,
-    // since a build may also report advice this test is not about.
+    // Found by code rather than by position, since a build may also report
+    // advice this test is not about.
     let broken = report["diagnostics"]
         .as_array()
         .expect("diagnostics array")
@@ -537,11 +507,9 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
 }
 
 /// Every shell the value list offers produces a script, and it goes to stdout
-/// clean: a banner or a progress line in front of it would be sourced by the
-/// shell along with the completions.
+/// clean: a banner in front of it would be sourced along with the completions.
 ///
-/// Driven off clap's own value list rather than a list written here, so a shell
-/// added to `Shell` is covered without this test being touched.
+/// Driven off clap's own value list, so a shell added to `Shell` is covered.
 #[test]
 fn completions_are_generated_for_every_offered_shell() {
     use clap::ValueEnum;
@@ -561,8 +529,6 @@ fn completions_are_generated_for_every_offered_shell() {
             script.contains("baudelaire"),
             "{name}: script never names the binary: {script}"
         );
-        // The subcommands it completes are the ones this build actually has,
-        // because both come from the same `Cli` derive.
         assert!(script.contains("serve"), "{name}: no subcommands: {script}");
     }
 }
@@ -582,8 +548,8 @@ fn an_unknown_shell_is_a_usage_error() {
 
 /// Every short alias reaches the command it names, and none of them collide.
 ///
-/// The pairs are written out rather than derived, on purpose: an alias is an
-/// API the moment it ships, so a change to one should have to be made here too.
+/// The pairs are written out rather than derived, so changing one is an edit
+/// here too: an alias is an API the moment it ships.
 #[test]
 fn short_aliases_reach_their_commands() {
     let sb = Site::new();
@@ -636,9 +602,6 @@ fn man_writes_a_roff_page_to_stdout() {
 /// the stdout payload.
 ///
 /// `--json` is global, so a wrapper that sets it once reaches these three too.
-/// `baudelaire completions bash --json > _bd` used to write a completion script
-/// with a summary object on the end of it, which a shell refuses to source; the
-/// same appended object corrupts a man page and the config reference.
 #[test]
 fn json_leaves_a_document_commands_stdout_alone() {
     let sb = Site::new();
@@ -666,8 +629,6 @@ fn json_leaves_a_document_commands_stdout_alone() {
         );
     }
 
-    // ...and a command that does have a run to report still reports it, so the
-    // fix is a reservation and not a blanket suppression.
     sb.write(
         "config.kdl",
         "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n",

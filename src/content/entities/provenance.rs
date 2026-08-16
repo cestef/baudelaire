@@ -1,9 +1,5 @@
-//! Where an entity was declared, and how to point at it.
-//!
-//! A registry is assembled from several sources, so "which file said this" is
-//! the first thing a diagnostic has to answer, and "where in it" is the second.
-//! Both live here, so an error type never has to know that a roster is KDL and a
-//! profile is frontmatter.
+//! Where an entity was declared, and how to point at it, so an error type never
+//! has to know that a roster is KDL and a profile is frontmatter.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -22,12 +18,8 @@ pub struct Snippet {
 }
 
 impl Snippet {
-    /// The two halves a diagnostic carries, for a snippet that may not exist.
-    ///
-    /// Every entity error is optional in both, and pairing them here is what
-    /// keeps a variant from being given a source with no span or a span with no
-    /// source: miette renders the first as an unmarked file and the second as
-    /// nothing at all.
+    /// The two halves a diagnostic carries, for a snippet that may not exist,
+    /// paired so a variant is never given a span without its source.
     pub fn parts(snippet: Option<Self>) -> (Option<NamedSource<String>>, Option<SourceSpan>) {
         snippet.map_or((None, None), |it| (Some(it.source), it.span))
     }
@@ -36,11 +28,11 @@ impl Snippet {
 /// Where an entity came from.
 #[derive(Debug, Clone)]
 pub enum Provenance {
-    /// A profile page's frontmatter. The page is not held open: it is re-read
-    /// only if something needs to point inside it.
+    /// A profile page's frontmatter, re-read only if something needs to point
+    /// inside it.
     Page { path: PathBuf },
-    /// A KDL roster: a `data` file, or the `inline` block of the config. Both
-    /// are read once, so both keep their text and the spans they were read at.
+    /// A KDL roster: a `data` file, or the `inline` block of the config, each
+    /// keeping the text and spans it was read at.
     Roster {
         /// The source key, as config spells it.
         source: &'static str,
@@ -56,10 +48,6 @@ pub enum Provenance {
 
 impl Provenance {
     /// The source that declared it, spelled as its config key.
-    ///
-    /// Two accessors rather than one assembled phrase: a diagnostic escapes
-    /// what it interpolates, so a label that arrived carrying its own markup
-    /// would render its delimiters as text.
     pub fn source(&self) -> &'static str {
         match self {
             Self::Page { .. } => "pages",
@@ -76,11 +64,9 @@ impl Provenance {
     }
 
     /// The file and span to underline for the value `steps` names, falling back
-    /// to the entity itself where the value has no place of its own.
-    ///
-    /// `None` leaves the diagnostic snippet-less, which is what a frontmatter
-    /// that cannot be read into (computed, imported) has always produced: a
-    /// message with no snippet beats one underlining an arbitrary offset.
+    /// to the entity itself where the value has no place of its own. `None`
+    /// leaves the diagnostic snippet-less, as a frontmatter that cannot be read
+    /// into does.
     pub(crate) fn snippet(&self, project: &Project, steps: &[Step]) -> Option<Snippet> {
         match self {
             Self::Page { path } => {
@@ -98,8 +84,6 @@ impl Provenance {
                 fields,
                 ..
             } => Some(Snippet {
-                // A roster records a span per field, so a nested step resolves
-                // to the field that holds it rather than to nothing.
                 span: Some(match steps.first() {
                     Some(Step::Key(key)) => fields.get(key).copied().unwrap_or(*entity),
                     _ => *entity,

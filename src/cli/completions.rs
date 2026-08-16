@@ -6,7 +6,6 @@ use super::{Cli, Cx, Run, help};
 use crate::error::Result;
 use crate::error::cli::Generated;
 
-/// Arguments for `baudelaire completions`.
 #[derive(Args, Debug, Clone)]
 #[command(after_help = Shell::help())]
 pub struct CompletionsArgs {
@@ -15,12 +14,9 @@ pub struct CompletionsArgs {
     pub shell: Shell,
 }
 
-/// A shell `completions` can generate for.
-///
-/// Its own enum rather than [`clap_complete::Shell`] because nushell's
-/// generator ships in a separate crate and so cannot be a variant of that one.
-/// This is the single table mapping the name a user types to the generator that
-/// answers it, and [`Shell::script`] is the only place that mapping is written.
+/// A shell `completions` can generate for; its own enum rather than
+/// [`clap_complete::Shell`] because nushell's generator ships in a separate
+/// crate and so cannot be a variant of that one.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shell {
     Bash,
@@ -33,12 +29,8 @@ pub enum Shell {
 }
 
 impl Shell {
-    /// Where this shell wants the script.
-    ///
-    /// An exhaustive match rather than a lookup table, so adding a shell fails
-    /// to compile until its install line is written; the `--help` text is
-    /// rendered from these, and the value list clap prints comes from the same
-    /// enum, so the two cannot drift.
+    /// Where this shell wants the script; an exhaustive match, so adding a
+    /// shell fails to compile until its install line is written.
     const fn install(self) -> &'static str {
         match self {
             Self::Bash => {
@@ -61,12 +53,6 @@ impl Shell {
     }
 
     /// The per-shell install lines, appended to `completions --help`.
-    ///
-    /// Rendered by the one help-block layout ([`help::Table`]), keyed by shell:
-    /// the line to type is the value here rather than the key, which is the
-    /// only thing that differs from an ordinary `Examples:` table. It used to
-    /// lay the same table out itself, so the column width and the accent colour
-    /// were decided twice.
     fn help() -> String {
         use clap::ValueEnum;
         use owo_colors::{OwoColorize, Stream::Stdout};
@@ -106,24 +92,14 @@ impl Shell {
     }
 }
 
-/// Both of these describe the CLI rather than a site, so they read no config,
-/// touch no project, and write their one document to stdout, which `--json`
-/// otherwise reserves. Nothing else is printed: the output is meant to be
-/// redirected into a completion directory or `man1/`, and a banner in front of
-/// it would corrupt the file.
-///
-/// `Command::owns_stdout` is what enforces the reservation. This paragraph used
-/// to describe it and nothing implemented it, so `completions bash --json`
-/// appended its summary object to the script.
+/// Writes its one document to stdout and nothing else: the output is meant to
+/// be redirected into a completion directory, and a banner would corrupt it.
 impl Run for CompletionsArgs {
     fn run(&self, _cx: &Cx) -> Result<()> {
         use clap::CommandFactory;
 
         let mut command = Cli::command();
         let name = command.get_name().to_owned();
-        // Rendered into memory first so the whole script reaches stdout in one
-        // write, and so a failed write is one error rather than a half-written
-        // completion file that a shell would happily source.
         let script = self.shell.script(&mut command, name);
         Generated::Completions.emit(&script)?;
         Ok(())

@@ -5,9 +5,8 @@ use typst_html::{HtmlDocument, attr};
 use crate::config::Config;
 use crate::render::transform::{Cx, ElementExt, Transform};
 
-/// Stamps `<html lang="..">` (and `dir="rtl"` for a right-to-left language) from
-/// the page's language. typst emits a fixed `lang="en"`, so this corrects it for
-/// every non-English default and every translation. Always runs.
+/// Stamps `<html lang="..">` (and `dir="rtl"` for a right-to-left language)
+/// from the page's language, correcting the fixed `lang="en"` typst emits.
 pub(super) struct Lang;
 
 impl Transform for Lang {

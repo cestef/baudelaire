@@ -6,14 +6,9 @@ use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
-/// Browser-native navigation hints: a `<script type="speculationrules">` telling
-/// the browser to fetch, or fully render, an internal link's target before it is
-/// clicked. Enabled by the presence of a `navigation { speculation { .. } }`
-/// block.
-///
-/// The zero-JavaScript neighbour of [`SpaConfig`](crate::config::SpaConfig): the browser does the work, so
-/// nothing has to be shipped, mounted, or maintained. Unsupported browsers
-/// ignore the script.
+/// Browser-native navigation hints: a `<script type="speculationrules">`
+/// telling the browser to fetch, or fully render, an internal link's target
+/// before it is clicked.
 #[derive(Debug, Clone, Hash)]
 pub struct SpeculationConfig {
     /// Whether to emit the rules.
@@ -21,7 +16,7 @@ pub struct SpeculationConfig {
     /// How eagerly to fetch a link's target (cheap: bytes only).
     pub prefetch: Eagerness,
     /// How eagerly to render it in full (expensive: a hidden page, its scripts
-    /// running), so the click paints instantly.
+    /// running).
     pub prerender: Eagerness,
 }
 
@@ -32,9 +27,9 @@ pub enum Eagerness {
     /// Emit no rule: this action is off.
     #[default]
     None,
-    /// On pointer-down: the last moment before a navigation.
+    /// On pointer-down.
     Conservative,
-    /// On hover, roughly, once intent looks real.
+    /// On hover, roughly.
     Moderate,
     /// As soon as a link looks like a plausible next step.
     Eager,
@@ -54,9 +49,6 @@ impl Named for Eagerness {
 
 impl Default for SpeculationConfig {
     fn default() -> Self {
-        // opt-in like its neighbours. When the block is present but silent:
-        // prefetch on hover (cheap, near-certain to be used) and no prerender,
-        // which costs a full hidden page render and runs the target's scripts.
         Self {
             enabled: false,
             prefetch: Eagerness::Moderate,
@@ -65,8 +57,6 @@ impl Default for SpeculationConfig {
     }
 }
 
-/// The `speculation { prefetch ..; prerender .. }` block. Its presence enables
-/// the navigation hints.
 impl Section for SpeculationConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 

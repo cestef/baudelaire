@@ -1,14 +1,5 @@
-//! An S3-compatible deploy backend, hand-rolled on `ureq` + [SigV4](super::sigv4)
-//! to match the codebase's blocking, no-async HTTP. It reconciles a bucket with
-//! the built `dist` directory: upload what changed, delete what the build no
-//! longer produces.
-//!
-//! The moving parts are kept pure and tested (key encoding, the listing parse)
-//! while the `ureq` calls stay a thin shell around them, driven by the shared
-//! [`Dist::reconcile`] loop. Change detection is stateless: S3 returns each
-//! object's ETag, which for a single-part upload is the hex MD5 of its bytes,
-//! so a local file whose MD5 matches the remote ETag is skipped without any
-//! local record.
+//! An S3-compatible deploy backend on `ureq` + [SigV4](super::sigv4),
+//! reconciling a bucket with the built `dist` against the ETag S3 reports.
 
 use md5::{Digest as _, Md5};
 use time::OffsetDateTime;
@@ -24,19 +15,13 @@ use crate::mime::Mime;
 use crate::remote::Options;
 use crate::ui::Ui;
 
-/// The S3 deploy backend: resolves credentials, reconciles the bucket against
-/// the built `dist`, and reports the plan. Holds only config; the live client is
-/// built per run once credentials are in hand.
+/// The S3 deploy backend, holding only config; the live client is built per run
+/// once credentials are in hand.
 pub struct S3 {
     config: S3Config,
-    /// The `Cache-Control` the site is served with. A site-wide policy rather
-    /// than a per-destination one: `_headers` states the same thing to a Pages
-    /// host, and two spellings of one policy could disagree.
+    /// Site-wide rather than per-destination, so it cannot disagree with what
+    /// `_headers` states.
     caching: CacheControl,
-    /// How to tell a content-addressed upload from an ordinary one: the asset
-    /// URL prefix, and whether this build hashes the names under it. Both come
-    /// from the *build's* config, not the destination's, because "may this be
-    /// cached forever" is a question about the file, not about the bucket.
     assets: Fingerprinted,
 }
 
@@ -66,9 +51,6 @@ impl Backend<Dist> for S3 {
         if let Some(warning) = Self::plaintext(self.config.endpoint.as_deref()) {
             ui.warn(warning);
         }
-        // The access key id is an identifier, read straight from the environment;
-        // the secret key flows through the shared resolver so `--password`, stdin,
-        // and the interactive prompt all work.
         let access_key = Self::credential(ACCESS_KEY_ENV)?;
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(
@@ -84,12 +66,8 @@ impl Backend<Dist> for S3 {
 }
 
 impl S3 {
-    /// Refuse a `s3 { }` block that names no bucket.
-    ///
-    /// An empty `bucket` is not a default: it builds a host of
-    /// `.s3.<region>.amazonaws.com` for AWS addressing, or a path-style root of
-    /// `/`, and every request under it is signed against an authority nobody
-    /// meant. Checked once, before a client exists.
+    /// An empty `bucket` is not a default: it would sign every request against
+    /// an authority nobody meant.
     pub(super) fn check(config: &S3Config) -> Result<()> {
         if config.bucket.trim().is_empty() {
             Err(DeployError::required(Required::S3Bucket).into())
@@ -98,13 +76,8 @@ impl S3 {
         }
     }
 
-    /// Whether `endpoint` is spelled over plain HTTP, in which case the signed
-    /// request, its `x-amz-security-token` included, travels in clear.
-    ///
-    /// The scheme the author typed, not the transport: TLS is configured and
-    /// verified for every `https://` request (see [`crate::remote::Http`]).
-    /// `http://` in `config.kdl` is what opts out of all of it. Reported rather
-    /// than refused, because a MinIO on `localhost` is how this gets tested.
+    /// Whether `endpoint` is plain HTTP, so the signed request travels in
+    /// clear; reported rather than refused, since MinIO on `localhost` exists.
     fn plaintext(endpoint: Option<&str>) -> Option<PlaintextEndpoint> {
         let endpoint = endpoint?;
         endpoint.starts_with("http://").then(|| PlaintextEndpoint {
@@ -114,9 +87,8 @@ impl S3 {
         })
     }
 
-    /// Read a required credential from the environment, erroring with the
-    /// variable's name when it is unset or empty.
-    /// The session token accompanying temporary credentials, if any.
+    /// The session token accompanying temporary credentials, `None` without
+    /// them.
     fn session_token() -> Option<String> {
         std::env::var(SESSION_TOKEN_ENV)
             .ok()
@@ -134,50 +106,40 @@ impl S3 {
     }
 }
 
-/// Credential environment variables, in AWS's conventional names so existing CI
-/// secrets and `~/.aws` tooling carry over.
+/// AWS's conventional names, so existing CI secrets and `~/.aws` tooling carry
+/// over.
 pub const ACCESS_KEY_ENV: &str = "AWS_ACCESS_KEY_ID";
 pub const SECRET_KEY_ENV: &str = "AWS_SECRET_ACCESS_KEY";
 
-/// Session token for temporary credentials. Set by every mechanism that issues
-/// them: GitHub OIDC, EC2/ECS instance roles, `aws sso login`, `sts
-/// assume-role`. Without sending it, those credentials produce a
-/// perfectly-formed signature the server rejects as `SignatureDoesNotMatch`.
+/// Session token for temporary credentials, without which they produce a
+/// well-formed signature the server rejects as `SignatureDoesNotMatch`.
 pub const SESSION_TOKEN_ENV: &str = "AWS_SESSION_TOKEN";
 
-/// An S3-compatible bucket client.
 pub struct Bucket {
     agent: ureq::Agent,
-    /// The bucket's name, as the deploy summary reports the destination.
     name: String,
     access_key: String,
     secret_key: String,
-    /// Present only for temporary credentials; signed and sent as
+    /// `None` for long-lived credentials; otherwise signed and sent as
     /// `x-amz-security-token`.
     token: Option<String>,
     region: String,
-    /// Key prefix every object is placed under (no leading/trailing slash).
+    /// No leading or trailing slash.
     prefix: String,
-    /// Scheme and host a request URL hangs off, no trailing slash:
-    /// `https://bucket.s3.region.amazonaws.com` for AWS virtual-hosting,
-    /// `https://endpoint` for a custom endpoint. A signing URI is appended to it.
+    /// Scheme and host a request URL hangs off, no trailing slash.
     authority: String,
-    /// Host header the signature commits to.
     host: String,
     /// The leading path every signing URI carries: empty for virtual-hosted,
     /// `/bucket` for path-style.
     root: String,
-    /// The `Cache-Control` policy, and how to tell which side of it a key falls
-    /// on. Carried here because the header is set at upload, one object at a
-    /// time.
     cache: CacheControl,
     assets: Fingerprinted,
 }
 
 impl Bucket {
-    /// Build a client for `config` with credentials resolved from the
-    /// environment. A custom `endpoint` selects path-style addressing (R2,
-    /// MinIO); its absence targets AWS virtual-hosted addressing.
+    /// A custom `endpoint` selects path-style addressing, its absence AWS
+    /// virtual-hosted; the agent reads error bodies, since the status alone
+    /// cannot tell `SignatureDoesNotMatch` from `NoSuchBucket`.
     pub fn new(
         config: &S3Config,
         cache: CacheControl,
@@ -198,10 +160,6 @@ impl Bucket {
             (format!("https://{host}"), host, String::new())
         };
         Self {
-            // `Status::Read`, because `check` below reads the bucket's own
-            // error body: that is where `SignatureDoesNotMatch` and
-            // `NoSuchBucket` are written, and the status alone cannot tell them
-            // apart.
             agent: crate::remote::Http::agent("deploy", crate::remote::Status::Read),
             name: config.bucket.clone(),
             access_key,
@@ -217,15 +175,12 @@ impl Bucket {
         }
     }
 
-    /// Every object currently under the prefix, keyed by object key with its
-    /// ETag, following continuation tokens to the end. Keys the deploy will not
-    /// act on are kept in the [`Inventory`] rather than dropped, so the caller
-    /// can report them.
+    /// Every object under the prefix with its ETag, following continuation
+    /// tokens to the end.
+    ///
+    /// Running out of pages is an error and not a short listing: the objects
+    /// never mentioned would read as absent and be swept.
     fn objects(&self) -> Result<Inventory> {
-        // A host that keeps answering with the same continuation token (buggy
-        // or hostile) fails loudly instead of looping for ever with `out`
-        // growing. The same ceiling reasoning as `atproto::Repo`'s page limit;
-        // at 1000 keys/page this admits ten million objects.
         const MAX_PAGES: usize = 10_000;
         let mut out = Inventory::default();
         let mut token: Option<String> = None;
@@ -245,10 +200,6 @@ impl Bucket {
             )?;
             let listing = Listing::parse(&body)?;
             for (key, etag) in listing.objects {
-                // The key came off the network and feeds a delete request, so
-                // it only travels on once `Listed` has admitted it; one it
-                // refuses is recorded, because a key nothing here can name is
-                // still a key sitting in the bucket.
                 if Listed::try_from(key.as_str()).is_ok() {
                     out.admit(self.relative(key), etag);
                 } else {
@@ -260,14 +211,9 @@ impl Bucket {
                 None => return Ok(out),
             }
         }
-        // Fell off the ceiling with a token still pending: the listing never
-        // reached the end, and a short one here would read as a bucket missing
-        // the objects it never mentioned, which the sweep would then delete.
         Err(DeployError::Pagination { pages: MAX_PAGES }.into())
     }
 
-    /// The signing URI for an object at relative `key`: the root, the prefix, and
-    /// the URI-encoded key.
     fn object(&self, key: &str) -> String {
         format!(
             "{}/{}",
@@ -276,9 +222,8 @@ impl Bucket {
         )
     }
 
-    /// Strip the configured prefix from a listed object key, so the whole client
-    /// speaks one namespace, dist-relative paths, with the prefix an internal
-    /// detail of addressing.
+    /// Strip the configured prefix from a listed object key, so the whole
+    /// client speaks one namespace of dist-relative paths.
     fn relative(&self, key: String) -> String {
         if self.prefix.is_empty() {
             return key;
@@ -288,7 +233,9 @@ impl Bucket {
             .unwrap_or(key)
     }
 
-    /// A signed GET returning the response body as a string (listings).
+    /// A signed GET returning the response body; a body that cannot be read is
+    /// an error, never an empty listing the sweep would read as a bucket to
+    /// empty.
     fn send(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Result<String> {
         let url = if query.is_empty() {
             self.url(uri)
@@ -301,17 +248,14 @@ impl Bucket {
             .call()
             .map_err(DeployError::from)?;
         Self::check(method, uri, response.status().as_u16(), &mut response)?;
-        // Unlike the error body in `check`, this one is the answer itself: a
-        // body that cannot be read is a transport failure, not an empty listing
-        // (which would read as a bucket with nothing in it).
         response
             .body_mut()
             .read_to_string()
             .map_err(|e| DeployError::from(e).into())
     }
 
-    /// A signed PUT (with a body) or DELETE (without). ureq types the two builders
-    /// differently, so each drives its own call.
+    /// A signed PUT (with a body) or DELETE (without); ureq types the two
+    /// builders differently, so each drives its own call.
     fn write(
         &self,
         method: Method,
@@ -334,7 +278,6 @@ impl Bucket {
         Self::check(method, uri, response.status().as_u16(), &mut response)
     }
 
-    /// Attach the SigV4 authorization header trio to any request builder.
     fn signed<Any>(
         &self,
         request: ureq::RequestBuilder<Any>,
@@ -350,12 +293,13 @@ impl Bucket {
         }
     }
 
-    /// The full URL for a signing `uri` (which already carries the root/prefix).
+    /// `uri` already carries the root and prefix.
     fn url(&self, uri: &str) -> String {
         format!("{}{uri}", self.authority)
     }
 
-    /// Sign a request, returning the header trio to attach.
+    /// The session token is part of the signature and not just a header: one
+    /// computed without it is rejected.
     fn authorize(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Authorization {
         let timestamp = Signer::timestamp(OffsetDateTime::now_utc());
         let payload_hash = Digest::sha256(body);
@@ -366,8 +310,6 @@ impl Bucket {
             service: SERVICE,
             timestamp: &timestamp,
         };
-        // The session token is part of the signature, not just a header: a
-        // signature computed without it is rejected.
         let mut headers = vec![(CONTENT_SHA_HEADER, payload_hash.as_str())];
         if let Some(token) = &self.token {
             headers.push((TOKEN_HEADER, token.as_str()));
@@ -387,8 +329,6 @@ impl Bucket {
         }
     }
 
-    /// Turn a non-2xx status into a [`DeployError::Request`] carrying the host's
-    /// own error body.
     fn check(
         method: Method,
         uri: &str,
@@ -398,17 +338,13 @@ impl Bucket {
         if (200..300).contains(&status) {
             return Ok(());
         }
-        // The host's error body is a courtesy: if it cannot be read, report the
-        // status on its own rather than replacing the real failure with the
-        // failure to read its explanation.
         let body = response.body_mut().read_to_string().unwrap_or_default();
         Err(DeployError::request(method, uri, status, &body).into())
     }
 }
 
 impl Store for Bucket {
-    /// S3 returns each object's ETag, which for a single-part upload is the hex
-    /// MD5 of its bytes, so change detection needs no local record.
+    /// A single-part upload's ETag is the hex MD5 of its bytes.
     fn digest(&self, bytes: &[u8]) -> String {
         Self::etag(bytes)
     }
@@ -417,8 +353,8 @@ impl Store for Bucket {
         Ok(self.objects()?.report(ui, &self.target()))
     }
 
-    /// Upload `body` to `key` (a relative dist path), with its content type from
-    /// the extension and its cache policy from whether the name is a hash.
+    /// Content type comes from the extension, cache policy from whether the
+    /// name is a hash.
     fn upload(&self, key: &str, body: &[u8]) -> Result<()> {
         let content_type = Mime::of(key).header();
         let mut headers = vec![("Content-Type", content_type.as_str())];
@@ -431,7 +367,6 @@ impl Store for Bucket {
         self.write(Method::Put, &self.object(key), body, &headers)
     }
 
-    /// Delete the object at `key` (a relative dist path).
     fn delete(&self, key: &str) -> Result<()> {
         self.write(Method::Delete, &self.object(key), &[], &[])
     }
@@ -441,44 +376,31 @@ impl Store for Bucket {
     }
 }
 
-/// The header carrying a temporary credential's session token, signed and sent
-/// together so the two can never disagree.
 const TOKEN_HEADER: &str = "x-amz-security-token";
 
-/// The header carrying the payload digest. S3 requires it on every signed
-/// request, and it is part of the signature, so it is named once and both
-/// signed and sent from that one name.
+/// Required on every signed request.
 const CONTENT_SHA_HEADER: &str = "x-amz-content-sha256";
 
-/// The service name a signature's credential scope binds to. Every
-/// S3-compatible host expects `s3` here, whatever it calls itself.
+/// The credential scope's service name; every S3-compatible host expects `s3`,
+/// whatever it calls itself.
 const SERVICE: &str = "s3";
 
-/// The signed-request headers to attach.
 struct Authorization {
     header: String,
     timestamp: String,
     payload_hash: String,
 }
 
-/// A parsed bucket listing: the objects on this page and the continuation token
-/// for the next, if the result was truncated.
-///
-/// Keys are exactly as the bucket named them. Deciding which of them this
-/// client may act on belongs to [`Bucket::objects`], which is where a refusal
-/// can be recorded: the check used to live inside an `.ok()?` here, so a key it
-/// turned down vanished between the XML and the reconcile.
+/// Keys are exactly as the bucket named them; deciding which this client may
+/// act on belongs to [`Bucket::objects`], where a refusal can be recorded.
 struct Listing {
     objects: Vec<(String, String)>,
     next: Option<String>,
 }
 
-/// Wire-format helpers: key normalization, encoding, and the values a request
-/// signs with. Kept as associated functions so they stay pure and testable while
-/// living under the client they serve.
+/// Wire-format helpers: key normalization, encoding, and signing values.
 impl Bucket {
-    /// The object key for a dist-relative path under `prefix`: forward-slashed,
-    /// no leading slash, prefix folded in.
+    /// Forward-slashed, no leading slash, prefix folded in.
     fn object_key(prefix: &str, path: &str) -> String {
         let path = path.replace('\\', "/");
         let path = path.trim_start_matches('/');
@@ -489,9 +411,8 @@ impl Bucket {
         }
     }
 
-    /// Percent-encode per the S3 signing rules: unreserved bytes pass through,
-    /// everything else becomes uppercase `%XX`. A path keeps its `/` separators;
-    /// a query component encodes them too.
+    /// Percent-encode per the S3 signing rules; `keep_slash` is set for a path
+    /// and clear for a query component, which encodes its separators too.
     fn encode(value: &str, keep_slash: bool) -> String {
         const HEX: &[u8; 16] = b"0123456789ABCDEF";
         let mut out = String::with_capacity(value.len());
@@ -511,7 +432,7 @@ impl Bucket {
         out
     }
 
-    /// Canonical query string: each name and value URI-encoded, sorted by name.
+    /// Each name and value URI-encoded, sorted by name.
     fn canonical_query(params: &[(&str, String)]) -> String {
         let mut params: Vec<(String, String)> = params
             .iter()
@@ -525,7 +446,7 @@ impl Bucket {
             .join("&")
     }
 
-    /// The ETag S3 assigns a single-part upload: the lowercase hex MD5 of `bytes`.
+    /// The ETag S3 assigns a single-part upload: the lowercase hex MD5.
     fn etag(bytes: &[u8]) -> String {
         Digest::hex(&Md5::digest(bytes))
     }
@@ -578,8 +499,6 @@ mod tests {
         }
     }
 
-    /// A build that content-addresses its assets under `/assets`, the shape the
-    /// cache policy is decided against.
     fn fingerprinted() -> Fingerprinted {
         Fingerprinted {
             prefix: "assets".into(),
@@ -598,9 +517,6 @@ mod tests {
         )
     }
 
-    /// A hashed name can be cached forever, because a change produces a
-    /// different name; everything else keeps its name across builds and has to
-    /// be revalidated. Without a `cache` block, nothing is sent at all.
     #[test]
     fn only_content_addressed_keys_are_immutable() {
         let mut policy = CacheControl::default();
@@ -617,13 +533,10 @@ mod tests {
             policy.header("index.html", "assets", true),
             Some("revalidate")
         );
-        // A leading slash is the same key.
         assert_eq!(
             policy.header("/assets/app.abc.css", "assets", true),
             Some("immutable")
         );
-        // Without fingerprinting an asset keeps its authored name across
-        // builds, so it is exactly as mutable as a page.
         assert_eq!(
             policy.header("assets/app.css", "assets", false),
             Some("revalidate")
@@ -650,7 +563,6 @@ mod tests {
         assert_eq!(b.authority, "https://acct.r2.cloudflarestorage.com");
         assert_eq!(b.root, "/my-site");
         assert_eq!(b.object("a.html"), "/my-site/a.html");
-        // the full URL recomposes to the object.
         assert_eq!(
             b.url(&b.object("a.html")),
             "https://acct.r2.cloudflarestorage.com/my-site/a.html"
@@ -668,9 +580,7 @@ mod tests {
     fn relative_strips_the_prefix_from_listed_keys() {
         let b = bucket(None, "sub/dir");
         assert_eq!(b.relative("sub/dir/a.html".into()), "a.html");
-        // A key outside the prefix is passed through unchanged.
         assert_eq!(b.relative("other/a.html".into()), "other/a.html");
-        // With no prefix, keys are already relative.
         assert_eq!(bucket(None, "").relative("a.html".into()), "a.html");
     }
 
@@ -691,7 +601,6 @@ mod tests {
         assert_eq!(Bucket::encode("a b.html", true), "a%20b.html");
         assert_eq!(Bucket::encode("caf\u{e9}.html", true), "caf%C3%A9.html");
         assert_eq!(Bucket::encode("a+b&c.html", true), "a%2Bb%26c.html");
-        // A query component encodes the slash too.
         assert_eq!(Bucket::encode("a/b", false), "a%2Fb");
     }
 
@@ -727,9 +636,6 @@ mod tests {
         assert_eq!(listing.next.as_deref(), Some("TOKEN=="));
     }
 
-    /// A key the client will not act on still comes out of the parse: refusing
-    /// it is the listing's caller's job, and dropping it here is what made a
-    /// key with `//` in it permanently invisible to the reconcile.
     #[test]
     fn listing_keeps_the_keys_the_bucket_named() {
         let xml = r#"<ListBucketResult>
@@ -739,21 +645,16 @@ mod tests {
             </ListBucketResult>"#;
         let listing = Listing::parse(xml).unwrap();
         assert_eq!(listing.objects.len(), 3);
-        // ...and the guard that used to live here still refuses them.
         assert!(Listed::try_from("posts//a.html").is_err());
         assert!(Listed::try_from("../etc/passwd").is_err());
     }
 
-    /// A bucket nobody named is not a default: it signs against
-    /// `.s3.<region>.amazonaws.com`, an authority no one meant.
     #[test]
     fn an_unnamed_bucket_is_refused() {
         assert!(S3::check(&config(None, "")).is_ok());
         assert!(S3::check(&S3Config::default()).is_err());
     }
 
-    /// The signed request carries the credentials and, for a temporary one, the
-    /// session token. Over `http://` all of it is on the wire in clear.
     #[test]
     fn a_plaintext_endpoint_is_reported() {
         assert!(S3::plaintext(None).is_none());

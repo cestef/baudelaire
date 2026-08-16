@@ -1,6 +1,5 @@
-//! SSH authentication: an explicit private key, the ssh-agent, or a password,
-//! tried in that order. A configured key is used exclusively; without one the
-//! agent is offered every identity it holds before falling back to a password.
+//! SSH authentication: a configured private key is used exclusively, and
+//! without one the agent's identities are offered before a password.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,7 +21,6 @@ use crate::remote::Options;
 /// passphrase of an encrypted key.
 pub const PASSWORD_ENV: &str = "BAUDELAIRE_SSH_PASSWORD";
 
-/// Authenticates a connection against the config and environment.
 pub struct Auth<'a> {
     config: &'a SshConfig,
     opts: &'a Options<'a>,
@@ -36,7 +34,6 @@ impl<'a> Auth<'a> {
     /// Authenticate `handle` as `user`, erroring only if every applicable method
     /// is exhausted without success.
     pub async fn run(&self, handle: &mut Handle<Client>, user: &str) -> Result<()> {
-        // RSA keys need a negotiated SHA-2 hash; other key types ignore it.
         let hash = handle
             .best_supported_rsa_hash()
             .await
@@ -56,7 +53,6 @@ impl<'a> Auth<'a> {
         })
     }
 
-    /// Authenticate with the configured private key.
     async fn key(
         &self,
         handle: &mut Handle<Client>,
@@ -71,8 +67,7 @@ impl<'a> Auth<'a> {
         )
     }
 
-    /// Authenticate through the ssh-agent, offering each identity it holds. Any
-    /// agent hiccup (no socket, no keys, a rejected identity) simply yields
+    /// Any agent hiccup (no socket, no keys, a rejected identity) yields
     /// `false`, so the caller falls back to a password.
     async fn agent(
         &self,
@@ -89,7 +84,6 @@ impl<'a> Auth<'a> {
         Self::ok(handle.authenticate_password(user, password).await)
     }
 
-    /// Whether an authentication attempt succeeded, mapping a transport failure.
     fn ok(result: Result<AuthResult, russh::Error>) -> Result<bool> {
         Ok(result
             .map_err(|e| DeployError::transfer(Step::Authenticate, e))?
@@ -98,36 +92,23 @@ impl<'a> Auth<'a> {
 
     /// Load the configured private key, prompting for a passphrase only if the
     /// key turns out to be encrypted.
-    ///
-    /// The four ways this can go are told apart, because they were not: every
-    /// failure to read the key was answered by asking for a passphrase, so a
-    /// path with a typo in it, and a key the process may not open, both came
-    /// back as a prompt for the passphrase of a file that had never been read.
-    /// Whatever was typed then failed a second time, and the diagnostic blamed
-    /// the decoding.
     fn load(&self) -> Result<PrivateKey> {
         let key = self.config.key.as_ref().expect("key configured");
         let path = Self::expand(key, std::env::var_os("HOME"));
         match load_secret_key(&path, None) {
             Ok(key) => Ok(key),
-            // `load_secret_key` opens and reads the file itself, so its I/O
-            // failures are the file's: not found, not readable, not text.
             Err(KeyError::IO(why)) => Err(Self::unreadable(&path, why)),
-            // The one case a passphrase can answer.
             Err(KeyError::KeyIsEncrypted) => {
                 let passphrase = self.opts.secret(PASSWORD_ENV, "ssh key passphrase")?;
                 load_secret_key(&path, Some(&passphrase))
                     .map_err(|e| DeployError::local(Setup::PrivateKey, e).into())
             }
-            // Read, and not a key: an unsupported type, a corrupt body. Asking
-            // for a passphrase here only postpones the same answer.
             Err(why) => Err(DeployError::local(Setup::PrivateKey, why).into()),
         }
     }
 
-    /// Which of the two file-level failures this is. They want different
-    /// answers (fix the path, or fix the mode) and neither wants a passphrase
-    /// prompt, which is what both used to get.
+    /// Which of the two file-level failures this is: they want different
+    /// answers (fix the path, or fix the mode) and neither wants a passphrase.
     fn unreadable(path: &Path, why: std::io::Error) -> crate::error::BaudelaireErrorKind {
         let path = path.display().to_string();
         match why.kind() {
@@ -137,8 +118,8 @@ impl<'a> Auth<'a> {
         .into()
     }
 
-    /// Expand a leading `~` in a key path against `home`, leaving other paths
-    /// untouched (and a `~` path unchanged when there is no home to resolve).
+    /// Expand a leading `~` against `home`, leaving other paths untouched, and
+    /// a `~` path unchanged when there is no home to resolve.
     fn expand(path: &Path, home: Option<std::ffi::OsString>) -> PathBuf {
         match (path.strip_prefix("~"), home) {
             (Ok(rest), Some(home)) => PathBuf::from(home).join(rest),
@@ -149,12 +130,6 @@ impl<'a> Auth<'a> {
 
 /// The ssh-agent, and the one thing about reaching it that is not portable:
 /// where it listens.
-///
-/// Unix has a single answer, the socket `SSH_AUTH_SOCK` names. Windows has two
-/// agents worth trying and each speaks over its own transport, so
-/// `AgentClient` is a different concrete type on each. Only the connecting is
-/// written per platform; [`identities`](Agent::identities), which is all of the
-/// actual protocol, is generic over the transport and written once.
 struct Agent;
 
 impl Agent {
@@ -167,9 +142,8 @@ impl Agent {
         }
     }
 
-    /// OpenSSH for Windows serves the agent on a named pipe, and is what a
-    /// `ssh` on `PATH` there talks to; Pageant is the other agent people
-    /// actually run, so it is tried after.
+    /// OpenSSH's named pipe is what a `ssh` on `PATH` talks to, so Pageant is
+    /// only tried after it.
     #[cfg(windows)]
     async fn offer(handle: &mut Handle<Client>, user: &str, hash: Option<HashAlg>) -> Result<bool> {
         const PIPE: &str = r"\\.\pipe\openssh-ssh-agent";
@@ -184,8 +158,7 @@ impl Agent {
         }
     }
 
-    /// Offer each identity a connected agent holds. Generic over the transport,
-    /// so every platform runs this exact loop.
+    /// Offer each identity a connected agent holds.
     async fn identities<S>(
         agent: &mut AgentClient<S>,
         handle: &mut Handle<Client>,
@@ -217,10 +190,6 @@ mod tests {
     use super::*;
     use crate::error::BaudelaireErrorKind;
 
-    /// A path that names nothing, and a file that cannot be read, are told
-    /// apart and neither is called encrypted. Both used to fall into the same
-    /// `or_else`, which prompted for the passphrase of a file it had never
-    /// opened.
     #[test]
     fn a_key_that_was_never_read_is_not_called_encrypted() {
         let key = Path::new("/does/not/exist/id_ed25519");
@@ -248,7 +217,6 @@ mod tests {
             Auth::expand(Path::new("/etc/key"), home),
             PathBuf::from("/etc/key")
         );
-        // No home to resolve against: the `~` path is left as-is.
         assert_eq!(Auth::expand(Path::new("~/k"), None), PathBuf::from("~/k"));
     }
 }

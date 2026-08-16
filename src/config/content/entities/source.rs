@@ -2,15 +2,9 @@
 //! come from.
 //!
 //! Each source is a declaration here and a loader in
-//! [`crate::content::entities::source`]: this module says what a site wrote,
-//! that one says how to read it. Adding a source is a payload struct, a variant,
-//! a row in the table below, and one `impl Source` beside its siblings.
-//!
-//! Sources are read in the order they are written, and a later one *fills* an
-//! entity an earlier one already declared rather than replacing it: the same
-//! policy `Section::fill` states for config sections. So a checked-in roster can
-//! carry contact details while profile pages carry the prose, and neither source
-//! has to know the other exists.
+//! [`crate::content::entities::source`]. Sources are read in the order written,
+//! and a later one *fills* an entity an earlier one declared rather than
+//! replacing it.
 
 use std::ops::Range;
 use std::path::PathBuf;
@@ -24,17 +18,9 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::error::{ConfigError, Result};
 
-/// One entity as a roster declares it: an id, the fields written under it, and
-/// where each of them sits.
-///
-/// The shape both the `inline` block and a `data` file produce, because they are
-/// the same KDL read twice: an entity written in `config.kdl` and one written in
-/// `people.kdl` cannot come out differently.
-///
-/// The ranges are what lets a fault found much later -- a field that is not the
-/// shape the registry declares -- underline the line that wrote it, in the file
-/// that wrote it. Kept as ranges rather than `SourceSpan`s so the whole config
-/// stays hashable by destructuring, which is what fingerprints a build.
+/// One entity as either roster declares it: an id, the fields written under it,
+/// and where each of them sits. The positions are ranges rather than
+/// `SourceSpan`s so the config they live in stays hashable.
 #[derive(Debug, Clone, Hash)]
 pub struct Declared {
     pub id: String,
@@ -46,11 +32,9 @@ pub struct Declared {
 }
 
 impl Declared {
-    /// The noun a duplicate id is reported as, in either roster.
+    /// The noun a duplicate id is reported as.
     const NOUN: &'static str = "entity";
 
-    /// A span as the byte range it covers: what a declaration stores, so that
-    /// the config it lives in stays hashable.
     fn range(span: SourceSpan) -> Range<usize> {
         span.offset()..span.offset() + span.len()
     }
@@ -91,12 +75,8 @@ impl Declared {
     }
 
     /// Every entity written in a whole KDL document: a `data` roster, which is
-    /// the `inline` block with the braces around it removed.
-    ///
-    /// Read through the very same node reader, by hanging the document off a
-    /// node nobody wrote. The alternative is a second reader that has to agree
-    /// with the first about what one argument means against several, and about
-    /// which duplicate is reported.
+    /// the `inline` block with the braces around it removed. Read through the
+    /// same node reader, by hanging the document off a node nobody wrote.
     pub(crate) fn document(text: &str) -> Result<Vec<Self>> {
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(text, e))?;
         let mut node = KdlNode::new("entities");
@@ -118,8 +98,7 @@ pub enum SourceConfig {
 }
 
 impl SourceConfig {
-    /// How this source is spelled in config, for a diagnostic naming where an
-    /// entity came from.
+    /// How this source is spelled in config.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Pages(_) => "pages",
@@ -137,7 +116,8 @@ pub struct PagesSource {
     pub dir: PathBuf,
 }
 
-/// Entities are the KDL nodes of a file: a roster checked in beside the content.
+/// Entities are the KDL nodes of a file: a roster checked in beside the
+/// content.
 #[derive(Debug, Clone, Hash)]
 pub struct DataSource {
     /// The file, relative to the project root.
@@ -150,9 +130,8 @@ pub struct InlineSource {
     pub entities: Vec<Declared>,
 }
 
-/// The `sources { .. }` block. Every key appends, so the block reads top to
-/// bottom, and the whole block replaces whatever a base config declared: a list
-/// replaces wholesale, which is the policy every other config list follows.
+/// The `sources { .. }` block: every key appends, so it reads top to bottom,
+/// and the block as a whole replaces whatever a base config declared.
 impl Section for SourcesConfig {
     const RULES: Block<Self> = Block(&[
         (

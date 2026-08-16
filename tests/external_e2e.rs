@@ -1,7 +1,6 @@
 //! Outbound link checking: `check --external`.
 //!
-//! Every request goes to a server this test owns, so nothing here depends on
-//! the public internet.
+//! Every request goes to a server this test owns, never the public internet.
 
 mod common;
 
@@ -24,8 +23,6 @@ struct Host {
 
 impl Host {
     fn start() -> Self {
-        // Bind an ephemeral port first, so the test never races another for a
-        // fixed one.
         let addr = TcpListener::bind("127.0.0.1:0")
             .expect("bind")
             .local_addr()
@@ -36,8 +33,7 @@ impl Host {
             for request in worker.incoming_requests() {
                 let head = request.method() == &tiny_http::Method::Head;
                 let status = match request.url() {
-                    // Rejects the method, not the URL: the checker has to ask
-                    // again with GET before calling this link dead.
+                    // Rejects the method, not the URL.
                     "/method" if head => 405,
                     "/ok" | "/method" => 200,
                     _ => 404,
@@ -93,8 +89,6 @@ fn a_live_outbound_link_passes() {
     site.try_check(|_| {}).expect("check");
 }
 
-/// A host that answers with an error status is the site's problem to fix, so it
-/// fails the check and names the page to fix it in.
 #[test]
 fn a_dead_outbound_link_fails_the_check() {
     let host = Host::start();
@@ -106,8 +100,6 @@ fn a_dead_outbound_link_fails_the_check() {
     assert!(report.contains("1 dead outbound link"), "{report}");
 }
 
-/// A server that refuses HEAD still serves the page; asking once and giving up
-/// would report half the web as dead.
 #[test]
 fn a_head_rejection_is_retried_with_get() {
     let host = Host::start();
@@ -115,13 +107,10 @@ fn a_head_rejection_is_retried_with_get() {
     site.try_check(|_| {}).expect("check");
 }
 
-/// Off by default, and never in a build: a build must produce the same bytes
-/// with the network unplugged.
 #[test]
 fn a_build_never_reaches_the_network() {
     let host = Host::start();
     let site = site(&host, &["/gone"]);
-    // `links { external #true }` is set, and the build still succeeds: only
-    // `check` acts on it.
+    // `links { external #true }` is set, and only `check` acts on it.
     site.stats();
 }

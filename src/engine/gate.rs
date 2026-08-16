@@ -1,26 +1,13 @@
-//! What this binary cannot do, and what this site's own config withholds.
-//!
-//! Two tables, and nothing else. [`GATES`] is the single source of truth for
-//! feature degradation: every `#[cfg(feature)]` in the tree removes capability
-//! in silence, and a row here is what turns that into a diagnostic. [`INERT`]
-//! is its counterpart for settings gated by *each other* rather than by the
-//! build: a site can ask for something its own config withholds, and be told.
-//!
-//! Both are read once, by `Engine::new`, before anything else looks at the
-//! config: the whole build has to agree on one answer rather than disagreeing
-//! file by file.
+//! What this binary cannot do ([`GATES`]) and what this site's own config
+//! withholds ([`INERT`]), both read once by `Engine::new` so the whole build
+//! agrees on one answer.
 
 use crate::config::{Config, SearchConfig};
 use crate::error::warning::{FeatureMissing, SettingInert};
 
 /// One optional capability, the config that asks for it, and what a binary
-/// built without it does instead.
-///
-/// The single source of truth for feature degradation. Every `#[cfg(feature)]`
-/// in the tree removes capability in silence: a `.css` file is copied verbatim,
-/// a card is never drawn, an image is never re-encoded, and the build is green
-/// either way. One row here is what turns that into a diagnostic, instead of a
-/// warning hand-written at each site that happens to notice.
+/// built without it does instead: the single source of truth for feature
+/// degradation.
 pub(crate) struct Gate {
     /// The cargo feature that compiles the capability in.
     cargo: &'static str,
@@ -34,10 +21,8 @@ pub(crate) struct Gate {
     /// What the build produces instead.
     effect: &'static str,
     /// Whether this capability is what rewrites the references *inside* the
-    /// files it owns. Content-hashing renames files that other files name, so a
-    /// build that lost such a rewriter serves a stylesheet still naming its
-    /// assets by their pre-hash spelling: 404s out of a green build. Losing one
-    /// turns `assets { fingerprint }` off for the whole build instead.
+    /// files it owns; losing one turns `assets { fingerprint }` off for the
+    /// whole build, since a hashed asset would be named by its old spelling.
     rewrites: bool,
 }
 
@@ -46,14 +31,6 @@ const GATES: &[Gate] = &[
         cargo: "markdown",
         compiled: cfg!(feature = "markdown"),
         setting: "content { markdown }",
-        // Asked by writing a `.md` page, not by writing the node: markdown is on
-        // by default and a `.md` file under `content/` is simply a page, so the
-        // documented way to want it is to say nothing at all. Reading the node
-        // instead, a slim binary on such a site discovered no markdown pages,
-        // warned about nothing, and let the prune delete the HTML a
-        // full-featured build had written for them. A site that says
-        // `markdown #false` has decided against the capability, and warning that
-        // it is missing would answer a question it did not ask.
         asked: Gate::markdown,
         effect: "`.md` files under `content/` are not pages, and are left where they lie",
         rewrites: false,
@@ -62,16 +39,10 @@ const GATES: &[Gate] = &[
         cargo: "css",
         compiled: cfg!(feature = "css"),
         setting: "assets { minify }",
-        // The stylesheet half: the JavaScript half is the bundler's, which has
-        // its own row and its own feature.
         asked: |config| config.assets.minify.css(),
         effect: "stylesheets are copied unminified",
         rewrites: false,
     },
-    // lightningcss is also what compiles a sheet down to named browsers, and
-    // without it the nesting a site wrote reaches a browser that cannot read it.
-    // Its own row rather than sharing `minify`'s, because the two are separate
-    // asks and a site may make either one alone.
     Gate {
         cargo: "css",
         compiled: cfg!(feature = "css"),
@@ -92,12 +63,6 @@ const GATES: &[Gate] = &[
         cargo: "css",
         compiled: cfg!(feature = "css"),
         setting: "assets { sourcemap }",
-        // Keyed to `css` rather than to `js`, though both write maps, because
-        // this is the half that always has work to do: a stylesheet is processed
-        // on every site that has one, while a script is only bundled when the
-        // site asks, and `assets { bundle }` says so on its own row. A binary
-        // with `js` but not `css` genuinely ships no stylesheet map, and this
-        // says exactly that.
         asked: |config| config.assets.sourcemap.styles.wanted(),
         effect: "no source map is written beside a processed stylesheet",
         rewrites: false,
@@ -105,11 +70,6 @@ const GATES: &[Gate] = &[
     Gate {
         cargo: "sass",
         compiled: cfg!(feature = "sass"),
-        // A filesystem probe, like markdown's and for the same reason: a Sass
-        // source asks for nothing, it is a file. Without the compiler such a
-        // file is a build input the pipeline steps over, so a site whose only
-        // stylesheet is `app.scss` ships no stylesheet at all -- silently, and
-        // out of a green build.
         setting: "a `.scss` or `.sass` file under the asset tree",
         asked: Gate::sass,
         effect: "Sass sources are left where they lie, and no stylesheet is written from them",
@@ -163,10 +123,6 @@ const GATES: &[Gate] = &[
         effect: "no PDF is written beside a page, and nothing links to one",
         rewrites: false,
     },
-    // Unlike its neighbours this names a capability of `deploy`, not of the
-    // build. It sits here anyway so the table stays the single place a gated
-    // capability is declared, and so a build warns about a destination it will
-    // not be able to reach rather than waiting for the deploy to say so.
     Gate {
         cargo: "ssh",
         compiled: cfg!(feature = "ssh"),
@@ -175,10 +131,6 @@ const GATES: &[Gate] = &[
         effect: "the SSH destination is skipped",
         rewrites: false,
     },
-    // Announcing is a command, but it also shapes the *build*: a pinned `did`
-    // emits a `.well-known` record and a per-page backlink. Both vanish here,
-    // which a site that pinned a `did` very much wants to hear about, since
-    // their absence is what makes a publication unverifiable.
     Gate {
         cargo: "announce",
         compiled: cfg!(feature = "announce"),
@@ -189,13 +141,9 @@ const GATES: &[Gate] = &[
     },
 ];
 
-/// One config setting that does nothing unless another is also set.
-///
-/// The counterpart of [`Gate`] for settings gated by *each other* rather than
-/// by a cargo feature, and the single source of truth for that class the same
-/// way. Each of these was accepted by the parser, changed nothing about the
-/// build, and said nothing: a `stopwords` list tuning an index format the site
-/// does not emit, a `terms` feed over taxonomies that publish no term page.
+/// One config setting that does nothing unless another is also set: the
+/// counterpart of [`Gate`] for settings gated by each other rather than by a
+/// cargo feature.
 pub(super) struct Inert {
     /// The setting that was asked for, as the author writes it in `config.kdl`.
     setting: &'static str,
@@ -212,8 +160,6 @@ pub(super) struct Inert {
 }
 
 const INERT: &[Inert] = &[
-    // A bundle naming neither a collection nor the site binds no pages, so it
-    // wrote no document and said nothing about it.
     Inert {
         setting: "generate { bundles }",
         asked: |config| !config.generate.bundles.is_empty(),
@@ -222,29 +168,14 @@ const INERT: &[Inert] = &[
         effect: "that bundle binds no pages, so no document is written",
         help: "name the collections to bind (`collections \"guide\"`), or set `site #true` for the whole site",
     },
-    // `assets { minify }` has no row of its own. It minifies stylesheets on its
-    // own, which is the whole of what a site with no JavaScript asked for, and
-    // this table is for settings that produce *nothing*. The row that used to
-    // sit here fired on every such site, including the `docs` starter, and the
-    // only way to silence it was to turn on a bundler the site had no use for.
-    // The bundle-only half of `minify` is documented on the asset pipeline page.
-    //
-    // The bundler is the only thing that reads a tsconfig: with `bundle` off,
-    // scripts are copied verbatim and the pinned file is never opened.
     Inert {
         setting: "assets { tsconfig }",
         asked: |config| config.assets.tsconfig.is_some(),
         needs: "assets { bundle }",
-        // The raw flag, not `bundling()`: this row is for a setting the *site*
-        // left inert. A binary with no bundler is the `js` row's business, and
-        // answering here too would fire both for one cause, with a help telling
-        // the author to turn on the setting they already turned on.
         met: |config| config.assets.bundle,
         effect: "TypeScript and JSX are copied verbatim, untransformed",
         help: "turn on `assets { bundle }`, or drop the `tsconfig` path",
     },
-    // Term feeds sit beside term listing pages, and a taxonomy publishes none
-    // unless it asks: `terms` alone wrote no files and warned about nothing.
     Inert {
         setting: "generate { feed { terms } }",
         asked: |config| config.generate.feed.terms,
@@ -253,9 +184,6 @@ const INERT: &[Inert] = &[
         effect: "no per-term feed is written",
         help: "set `listing` on the taxonomy whose terms should carry a feed",
     },
-    // A collection feed is written beside the collection's index and takes that
-    // index as its home, so a collection with none has nowhere to put one: the
-    // feed would advertise a `<link>` no page answers.
     Inert {
         setting: "content { collections { feed } }",
         asked: |config| config.content.collections.iter().any(|(_, c)| c.feed),
@@ -267,15 +195,9 @@ const INERT: &[Inert] = &[
                 .iter()
                 .all(|(_, c)| !c.feed || c.paginate.enabled)
         },
-        // One row cannot name which collection, so it says "that collection"
-        // rather than claiming none was written: with two asking and one
-        // paginated, the paginated one does get its feed.
         effect: "that collection's feed is not written",
         help: "add `paginate { }` to the collection, which is the page its feed points at",
     },
-    // Both kinds of subsidiary feed ride on the formats the site writes, and
-    // naming none turns feeds off wholesale: the collection key sits far from
-    // `generate { feed { } }`, so asking there and nowhere else was silence.
     Inert {
         setting: "a `feed` beside a collection or a term",
         asked: |config| {
@@ -286,8 +208,6 @@ const INERT: &[Inert] = &[
         effect: "no feed of any kind is written",
         help: "name the formats to write (`formats \"rss\"`), or drop the `feed` that asked",
     },
-    // Both tune the prebuilt inverted index and reach no other format, so a
-    // site on `formats \"json\"` tuned nothing at all.
     Inert {
         setting: "generate { search { stopwords } }",
         asked: |config| !config.generate.search.stopwords.is_empty(),
@@ -304,9 +224,6 @@ const INERT: &[Inert] = &[
         effect: "the flat `json` index carries every token",
         help: "add `inverted` to `formats`, or drop the minimum",
     },
-    // The verification artifacts are the point of pinning a `did`: without one
-    // there is nothing to reference, and `verify` defaults on, so a site could
-    // ask for both and get neither in silence.
     Inert {
         setting: "announce { standard { verify } }",
         asked: |config| {
@@ -327,15 +244,6 @@ const INERT: &[Inert] = &[
         effect: "no `.well-known` record and no per-page backlink are emitted, so the publication cannot be verified",
         help: "pin the account's `did`, or turn `verify` off",
     },
-    // An `integrity` pins a digest to a URL. Where the URL is not
-    // content-addressed, the file behind it changes while the pages naming it
-    // stay cached, and every one of them then blocks the very stylesheet it
-    // asked for. Stamping nothing is the safe half of that bargain.
-    // A wildcard matches a family of URLs, and the only thing that can answer a
-    // family is a rule the host reads. An HTML stub is a file at one path, so
-    // there is nowhere to write one: without the rule file the pattern is
-    // dropped, and dropping it in silence is a redirect the author believes is
-    // live.
     Inert {
         setting: "a `redirect` old path carrying `*`",
         asked: |config| {
@@ -349,11 +257,6 @@ const INERT: &[Inert] = &[
         effect: "the pattern is dropped, since a wildcard cannot be an HTML stub",
         help: "turn on `generate { redirects }`, or write the old paths out one by one",
     },
-    // A status other than the default is a claim only the rule file carries: an
-    // HTML stub is a meta refresh, which forwards a browser and tells a crawler
-    // nothing about *how* the page moved. Without the file the redirect still
-    // works and still says 301, which is the wrong answer to a question the
-    // author took the trouble to answer.
     Inert {
         setting: "a `redirect` naming a `status`",
         asked: |config| config.redirect.iter().any(|(_, rule)| rule.needs_rules()),
@@ -362,9 +265,6 @@ const INERT: &[Inert] = &[
         effect: "the HTML stub forwards the browser, and no host is told the status",
         help: "turn on `generate { redirects }`, or drop the `status` and let it be a permanent move",
     },
-    // The policy is written into `_headers` and nowhere else: it is a header,
-    // and a static build has no other way to send one. Without that file the
-    // whole block is a paragraph of config that produces nothing.
     Inert {
         setting: "security { csp }",
         asked: |config| config.security.csp.enabled,
@@ -407,23 +307,13 @@ impl From<&Inert> for SettingInert {
 }
 
 impl Gate {
-    /// The setting the SSH destination is asked for by.
-    ///
-    /// Named because two places need it: the row below, and `deploy`, which
-    /// never constructs an `Engine` and so never reaches [`Gate::resolve`].
-    /// The literal used to be spelled at both, beside a hand-written copy of
-    /// the row's other two fields.
+    /// The setting the SSH destination is asked for by, named because `deploy`
+    /// needs it too and never constructs an `Engine`.
     pub(crate) const SSH: &'static str = "deploy { ssh }";
 
     /// The gap this binary has at `setting`, or `None` when it has the
-    /// capability.
-    ///
-    /// For the callers that are not the build: the table's own rows are the
-    /// only description of a missing capability, and a command that cannot
-    /// reach [`Gate::resolve`] must still derive its warning from them rather
-    /// than restate them. `asked` is deliberately not consulted, because such
-    /// a caller has already established that the site asked, in whatever way
-    /// its own config makes sense of.
+    /// capability. For a caller that cannot reach [`Gate::resolve`] and has
+    /// already established that the site asked, so `asked` is not consulted.
     pub(crate) fn missing_for(setting: &str) -> Option<FeatureMissing> {
         GATES
             .iter()
@@ -431,15 +321,10 @@ impl Gate {
             .map(FeatureMissing::from)
     }
 
-    /// Whether this site has markdown pages to lose: the capability is on (it
-    /// is, unless the site turned it off) and at least one `.md` file sits under
-    /// the content tree.
-    ///
-    /// A filesystem probe rather than a config read, because a markdown page
-    /// asks for nothing: it is a file. It costs one walk of the content tree,
-    /// and only in a binary that cannot do markdown, since [`Gate::resolve`]
-    /// tests `compiled` first and never reaches this in the full-featured build.
-    /// An unreadable tree answers no: discovery reports that, with the path.
+    /// Whether this site has markdown pages to lose: the capability is on and
+    /// at least one `.md` file sits under the content tree. A filesystem probe
+    /// rather than a config read, because a markdown page asks for nothing: it
+    /// is a file.
     fn markdown(config: &Config) -> bool {
         config.content.markdown.enabled
             && crate::fs::Walk::new(&config.paths.content)
@@ -449,13 +334,9 @@ impl Gate {
                 .any(|path| Config::has_ext(path, Config::MARKDOWN))
     }
 
-    /// Whether this site has a Sass source to lose.
-    ///
-    /// A probe of the asset tree, for the reason [`Gate::markdown`] probes the
-    /// content tree: nothing in the config asks for Sass, a file does. It costs
-    /// one walk, and only in a binary that cannot compile one, since
-    /// [`Gate::resolve`] tests `compiled` first. The theme's tree is not walked:
-    /// a theme states the binary it needs, and this answers for the site.
+    /// Whether this site has a Sass source to lose, probed the way
+    /// [`Gate::markdown`] probes the content tree. The theme's tree is not
+    /// walked: a theme states the binary it needs.
     fn sass(config: &Config) -> bool {
         crate::fs::Walk::new(&config.paths.assets)
             .files()
@@ -466,13 +347,8 @@ impl Gate {
 
     /// Walk the table once against a site's config: name every capability it
     /// asked for that this binary lacks, and turn `assets { fingerprint }` off
-    /// when what would have kept it honest is missing.
-    ///
-    /// Turning it off rather than refusing the build is the same bargain every
-    /// other gate strikes: the capability goes, the site still stands. It is
-    /// applied here, before anything reads the config, so the whole build (the
-    /// pipeline's renames, the render pass's rewrites, the cache fingerprint)
-    /// agrees on one answer rather than disagreeing file by file.
+    /// when what would have kept it honest is missing. Applied before anything
+    /// reads the config, so the whole build agrees on one answer.
     pub(super) fn resolve(mut config: Config) -> (Config, Vec<FeatureMissing>) {
         let missing: Vec<&Self> = GATES
             .iter()
@@ -507,10 +383,6 @@ mod tests {
         Config::parse(text).expect("should parse")
     }
 
-    /// Content-hashing renames a file that other files name. Without the `css`
-    /// feature nothing rewrites the `url()` inside a stylesheet, so the sheet is
-    /// served naming assets that no longer exist: a green build and a 404 site.
-    /// Fingerprinting is turned off for the whole build instead, and said so.
     #[test]
     fn fingerprinting_without_the_stylesheet_rewriter_is_turned_off_and_reported() {
         let asked = config("assets { fingerprint #true }");
@@ -529,8 +401,6 @@ mod tests {
         );
     }
 
-    /// The walk only ever fires on a setting the site opted into, so a config
-    /// that asks for nothing optional is untouched whatever this binary lacks.
     #[test]
     fn a_site_asking_for_nothing_optional_is_untouched() {
         let (resolved, gaps) = Gate::resolve(config(""));
@@ -538,11 +408,6 @@ mod tests {
         assert!(gaps.is_empty());
     }
 
-    /// Markdown is asked for by writing a page, not by writing a config node:
-    /// `.md` files are pages by default, so the documented way to want them is
-    /// to say nothing at all. Reading the node instead, a binary without the
-    /// feature discovered no markdown pages on such a site, said nothing, and
-    /// let the prune delete the HTML a full-featured build had written.
     #[test]
     fn markdown_is_asked_for_by_a_page_on_disk_not_by_a_config_node() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -553,21 +418,14 @@ mod tests {
             config.paths.content.clone_from(&content);
             config
         };
-        // A site with no markdown, and no config about it, is asking for nothing.
         assert!(!Gate::markdown(&site("")));
         std::fs::write(content.join("posts/a.typ"), "= a\n").expect("typst page");
         assert!(!Gate::markdown(&site("")));
-        // One `.md` file is the whole of the ask, config or no config.
         std::fs::write(content.join("posts/b.md"), "# b\n").expect("markdown page");
         assert!(Gate::markdown(&site("")));
-        // ...and a site that turned the capability off has decided against it,
-        // whatever is lying in its content tree.
         assert!(!Gate::markdown(&site("content { markdown #false }")));
     }
 
-    /// The lookup `deploy` reads its own warning out of. It answers for a row
-    /// the binary lacks and for nothing else, so the full build is silent about
-    /// the very same setting.
     #[test]
     fn a_gap_is_looked_up_by_the_setting_that_asks_for_it() {
         let ssh = Gate::missing_for(Gate::SSH);
@@ -579,8 +437,6 @@ mod tests {
         assert!(Gate::missing_for("deploy { carrier-pigeon }").is_none());
     }
 
-    /// A gate names the config that asks for it, and codes read as identity, so
-    /// two rows describing the same setting would report the same gap twice.
     #[test]
     fn every_gate_names_a_distinct_setting() {
         for (i, gate) in GATES.iter().enumerate() {
@@ -592,9 +448,6 @@ mod tests {
         }
     }
 
-    /// Every row fires on the config it describes, and stops once the setting
-    /// it depends on is there. Written as the pair, because a warning that
-    /// cannot be silenced by doing what it asks is worse than none.
     #[test]
     fn each_inert_setting_reports_until_its_dependency_is_set() {
         let cases = [
@@ -638,7 +491,6 @@ mod tests {
         }
     }
 
-    /// The counterpart of [`every_gate_names_a_distinct_setting`].
     #[test]
     fn every_inert_row_names_a_distinct_setting() {
         for (i, inert) in INERT.iter().enumerate() {

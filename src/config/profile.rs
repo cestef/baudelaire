@@ -8,16 +8,17 @@ use crate::config::value::Structural;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
 impl Config {
+    /// This config with the named profile overlaid on it.
+    ///
+    /// Overlay errors report against the *original* config text: retained nodes
+    /// carry spans into it, so labels point at the real `config.kdl` lines.
     pub fn with_profile(mut self, name: &str) -> Result<Self> {
-        // take the partials out instead of cloning the subtree; restored after overlay
         let profiles = std::mem::take(&mut self.profiles);
         let partial = profiles
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, doc)| doc)
             .ok_or_else(|| ConfigError::missing_profile(name, &profiles))?;
-        // overlay errors report against the *original* config text: retained nodes
-        // carry spans into it, so labels point at the real config.kdl lines
         let text = self.source.clone();
         for node in partial.nodes() {
             if node.name().value() == Self::PROFILES {
@@ -31,22 +32,11 @@ impl Config {
     }
 
     /// Apply every configured profile once and throw the result away, so a
-    /// profile is checked by the parse that read it.
+    /// profile nobody selected is still checked by the parse that read it.
     ///
-    /// A profile block is retained as raw KDL and dispatched only when
-    /// selected, which left an unselected one entirely unchecked: a typo in
-    /// `profiles { dev { content { draft #true } } }` parsed green, reloaded
-    /// green under `serve`, and set nothing whenever `--profile dev` was
-    /// finally passed. The check is the real overlay rather than a separate
-    /// walk of the tables, so what it accepts and what selection accepts cannot
-    /// drift.
-    ///
-    /// What it does *not* check is values: the check runs as a
-    /// [`Structural`] pass, so an unset `${VAR}` with no `:-default` stands in
-    /// as a placeholder here and is a hard error only where the profile is
-    /// really selected. A `prod` profile naming `${S3_BUCKET}` is the
-    /// documented shape, and demanding it of every local `build` failed every
-    /// build on a machine that has no production secrets.
+    /// It runs as a [`Structural`] pass, so an unset `${VAR}` with no
+    /// `:-default` stands in as a placeholder and is a hard error only where
+    /// the profile is really selected.
     pub(super) fn check(&self) -> Result<()> {
         let _shape = Structural::begin();
         for (name, _) in &self.profiles {
@@ -142,7 +132,6 @@ mod tests {
 
     #[test]
     fn profile_override_preserves_sibling_fields() {
-        // overriding one field of a nested section must inherit the base's others, not reset them
         let cfg = parse(
             r"
             html { pretty #true; embed #true; meta #true }
@@ -159,10 +148,8 @@ mod tests {
         assert!(prod.html.meta.enabled, "meta inherited from base");
     }
 
-    /// Fill-in-place has to hold all the way down, not just one level: the
-    /// grouped tree makes `a { b { c .. } }` the common shape (a `dev` profile
-    /// flipping `content { drafts { build } }`), and an override there must leave
-    /// every untouched sibling at *each* level alone.
+    /// Fill-in-place holds all the way down: an override deep in the tree
+    /// leaves every untouched sibling at *each* level alone.
     #[test]
     fn profile_overrides_three_levels_deep() {
         let cfg = parse(
@@ -262,14 +249,9 @@ mod tests {
             rendered.contains("expected boolean, got string"),
             "{rendered}"
         );
-        // The label must excerpt the original config.kdl, not a re-serialized
-        // profile subtree with mismatched offsets.
         assert!(rendered.contains("prune \"yes\""), "{rendered}");
     }
 
-    /// A profile nobody selected is still config, and used to be dispatched
-    /// only on selection: a key no scope has parsed green, survived a `serve`
-    /// reload, and then quietly configured nothing.
     #[test]
     fn an_unselected_profile_is_checked_at_parse() {
         let err = Config::parse("profiles {\n  dev {\n    content { draft #true }\n  }\n}\n")
@@ -284,9 +266,6 @@ mod tests {
 
     /// The check reads a profile for its *structure*, so a `${VAR}` naming a
     /// secret the selecting build will supply is nobody's problem until then.
-    /// It used to be everyone's: a `prod` profile with `${S3_BUCKET}` in it
-    /// failed every `build` on every machine that had no production secrets,
-    /// including the one the docs recommend writing.
     #[test]
     fn an_unset_variable_in_an_unselected_profile_is_not_a_build_failure() {
         let text = "site \"T\"\nprofiles {\n  prod {\n    url \"${BAUDELAIRE_TEST_UNSET_URL}\"\n    deploy { s3 { bucket \"${BAUDELAIRE_TEST_UNSET_BUCKET}\"; endpoint \"${BAUDELAIRE_TEST_UNSET_ENDPOINT}\" } }\n  }\n}\n";
@@ -294,8 +273,6 @@ mod tests {
         assert_eq!(cfg.site.as_deref(), Some("T"), "the base is untouched");
         assert_eq!(cfg.url, None, "and no placeholder leaked into it");
 
-        // Selecting it is the other path, and there the value is about to be
-        // used: it still errors, naming the variable.
         let err = cfg.with_profile("prod").expect_err("unset at selection");
         let rendered = format!("{:?}", miette::Report::from(err));
         assert!(

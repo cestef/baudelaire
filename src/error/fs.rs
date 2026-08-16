@@ -1,9 +1,6 @@
-//! Path-aware filesystem errors.
-//!
-//! `std::io::Error` alone says *what* went wrong but not *which file* or *which
-//! operation*. [`FsError`] carries the operation and path so a failure reads
-//! `failed to read `content/post.typ`: No such file or directory` with a hint
-//! keyed off the OS error kind. Produced by the [`crate::fs`] facade.
+//! Path-aware filesystem errors: [`FsError`] carries the operation and path an
+//! `io::Error` does not, with a hint keyed off the OS error kind. Produced by
+//! the [`crate::fs`] facade.
 
 use std::fmt;
 use std::io;
@@ -30,9 +27,9 @@ pub enum Op {
 }
 
 impl Op {
-    /// The verb a message reads with and the suffix its diagnostic code carries,
-    /// in one arm each: the code used to be the message with its spaces
-    /// substituted, so rewording a sentence renamed the code a user filters on.
+    /// The verb a message reads with and the suffix its diagnostic code
+    /// carries, in one arm each: rewording a message must never rename the code
+    /// a user filters on.
     const fn spellings(self) -> (&'static str, &'static str) {
         match self {
             Self::Read => ("read", "read"),
@@ -47,7 +44,6 @@ impl Op {
         }
     }
 
-    /// The stable identifier this operation contributes to a diagnostic code.
     const fn code(self) -> &'static str {
         self.spellings().1
     }
@@ -97,8 +93,7 @@ impl FsError {
         }
     }
 
-    /// The path portion of the message: a single ``\`path\``` or, for a two-path
-    /// operation, ``\`from\` → \`to\```. Built through [`markup!`] so a path
+    /// The path portion of the message, built through [`markup!`] so a path
     /// carrying a delimiter of its own cannot open a span.
     fn location(&self) -> String {
         match &self.dest {
@@ -107,8 +102,6 @@ impl FsError {
         }
     }
 
-    /// The OS error kind of the underlying failure, so callers can special-case
-    /// one condition (e.g. a missing config file) without discarding the rest.
     pub fn kind(&self) -> io::ErrorKind {
         self.source.kind()
     }
@@ -119,8 +112,6 @@ impl Diagnostic for FsError {
         Some(Box::new(format!("baudelaire::fs::{}", self.op.code())))
     }
 
-    /// A remedy keyed off the OS error kind, far more actionable than the raw
-    /// `io::Error` message.
     fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
         let hint = match self.source.kind() {
             io::ErrorKind::NotFound => {

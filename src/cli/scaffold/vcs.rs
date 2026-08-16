@@ -21,8 +21,7 @@ pub enum Vcs {
 
 /// What setting up one [`Vcs`] takes: the program to run and its arguments, the
 /// marker directory whose presence means a repository already exists, and the
-/// name to report. One row per variant, so a new VCS is one row and nothing
-/// about it can be declared in one match and forgotten in another.
+/// name to report.
 pub(super) struct Tool {
     command: &'static str,
     args: &'static [&'static str],
@@ -51,10 +50,7 @@ impl Vcs {
     }
 }
 
-/// Optional version-control setup for a freshly scaffolded project. Opt-in,
-/// because not every scaffold wants a repository; the `.gitignore` both systems
-/// read is written unconditionally by [`Scaffold::ignore`], since it describes
-/// the build output rather than the repository.
+/// Optional version-control setup for a freshly scaffolded project.
 pub(super) struct Repo<'a> {
     root: &'a Path,
     vcs: Vcs,
@@ -64,16 +60,9 @@ impl<'a> Repo<'a> {
         Self { root, vcs }
     }
 
-    /// Which VCS to set up, if any. An explicit `--vcs` wins; otherwise ask,
-    /// but only when the session is `interactive` (decided once, in `init`);
-    /// piped or CI input sets up nothing, so a scaffold never blocks nor
-    /// creates a repo unbidden.
-    ///
-    /// `--yes` means only "do not prompt". It used to also create a git
-    /// repository, so the one flag every script reaches for to silence the
-    /// prompts wrote a repository nobody asked for, and its help line ("skip the
-    /// prompt and set up version control") was doing two jobs at once. Naming
-    /// `--vcs` is now the only way to ask.
+    /// Which VCS to set up, if any: an explicit `--vcs` wins, otherwise ask,
+    /// and only when `interactive`, so a piped or CI run sets up nothing
+    /// unbidden.
     pub(super) fn wanted(interactive: bool, explicit: Option<Vcs>) -> Result<Option<Vcs>> {
         if explicit.is_some() {
             return Ok(explicit);
@@ -81,7 +70,6 @@ impl<'a> Repo<'a> {
         if !interactive {
             return Ok(None);
         }
-        // git is the default (empty answer); every option lists its aliases.
         Prompt::new("set up version control?")
             .option(&["git", "g", "y", "yes"], Some(Vcs::Git))
             .default()
@@ -98,9 +86,6 @@ impl<'a> Repo<'a> {
         if self.root.join(tool.marker).exists() {
             return;
         }
-        // Capture the tool's output rather than inherit it: jj in particular
-        // prints an "Initialized repo" line and a hint that would clutter the
-        // scaffold log. Surface it only if the command actually failed.
         match Command::new(tool.command)
             .args(tool.args)
             .current_dir(self.root)
@@ -117,10 +102,6 @@ impl<'a> Repo<'a> {
                     detail: (!detail.is_empty()).then(|| detail.to_owned()),
                 });
             }
-            // Only "no such program" advises installing one: every other spawn
-            // failure (a permission error, a broken exec bit) is a tool that is
-            // already there, and telling the reader to install it again is
-            // advice that cannot help.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 ui.warn(VcsMissing { tool: tool.command });
             }
@@ -136,9 +117,6 @@ impl<'a> Repo<'a> {
 mod repo_tests {
     use super::{Repo, Vcs};
 
-    /// A non-interactive scaffold sets up nothing unless `--vcs` names it.
-    /// `--yes` used to mean git as well as "do not prompt", so the flag scripts
-    /// reach for to silence the prompts left a repository behind.
     #[test]
     fn only_an_explicit_vcs_sets_one_up_without_a_prompt() {
         assert_eq!(Repo::wanted(false, None).unwrap(), None);

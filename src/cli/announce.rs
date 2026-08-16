@@ -7,7 +7,6 @@ use super::{BuildOverrides, Cx, Run};
 use crate::config::AnnounceConfig;
 use crate::error::{AnnounceError, Result};
 
-/// Arguments for `baudelaire announce`.
 #[derive(Args, Debug, Clone)]
 pub struct AnnounceArgs {
     #[command(flatten)]
@@ -18,9 +17,9 @@ pub struct AnnounceArgs {
 }
 
 impl AnnounceArgs {
-    /// Where `announce` sends the site's metadata. Destructured for the same
-    /// reason `deploy`'s is: a new backend has to be answered for here or the
-    /// check refuses a config that names it.
+    /// Where `announce` sends the site's metadata; `named` destructures
+    /// [`AnnounceConfig`] so a new backend fails to compile until it is
+    /// answered for here.
     pub(super) const DESTINATION: Destination = Destination {
         named: |config| {
             let AnnounceConfig { standard } = &config.announce;

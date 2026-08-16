@@ -10,15 +10,12 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::ui::{Count, Paths};
 
-/// Arguments for `baudelaire theme`.
 #[derive(Args, Debug, Clone)]
 pub struct ThemeArgs {
     #[command(subcommand)]
     pub what: ThemeCommand,
 }
 
-/// What `baudelaire theme` does, in the shape the verbs already have elsewhere:
-/// read the shelf, take one, see what it is, bring it forward, put it back.
 #[derive(Subcommand, Debug, Clone)]
 pub enum ThemeCommand {
     /// List the themes this binary ships, and what the project has installed.
@@ -36,8 +33,6 @@ pub enum ThemeCommand {
     Remove(ThemeUpdateArgs),
 }
 
-/// Arguments for `baudelaire theme add`, which is the one verb that says where
-/// a theme comes from rather than which copy to act on.
 #[derive(Args, Debug, Clone)]
 pub struct ThemeAddArgs {
     #[command(flatten)]
@@ -50,7 +45,6 @@ pub struct ThemeAddArgs {
     pub subdir: Option<PathBuf>,
 }
 
-/// Arguments for the `theme` verbs that name one theme.
 #[derive(Args, Debug, Clone)]
 pub struct ThemeArgsFor {
     /// Which theme: a name `baudelaire theme list` prints, or, for `add`, where
@@ -64,7 +58,6 @@ pub struct ThemeArgsFor {
     pub dir: Option<PathBuf>,
 }
 
-/// Arguments for the two `theme` verbs that write over what is there.
 #[derive(Args, Debug, Clone)]
 pub struct ThemeUpdateArgs {
     #[command(flatten)]
@@ -76,15 +69,8 @@ pub struct ThemeUpdateArgs {
     pub force: bool,
 }
 
-/// The shipped themes: what they are, and how one gets into a project.
-///
-/// A theme is files, and until this existed the answer to "where do I get one"
-/// was to clone the repository: the docs said so, and `init --theme` scaffolded
-/// a config naming a directory nobody had put anything in yet.
 impl Run for ThemeArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
-        // Read once for the whole run, so every verb resolves the same
-        // directory and every fetch goes to the same registry.
         let says = Says::of(cx);
         match &self.what {
             ThemeCommand::List => {
@@ -100,13 +86,9 @@ impl Run for ThemeArgs {
 }
 
 /// What the project's config says to a theme verb: where a theme lives, and
-/// where a fetch may go for one.
-///
-/// The verbs operate on files, so a config that is missing or will not parse is
-/// not their business: it simply says nothing, and every question falls back to
-/// its default.
+/// where a fetch may go for one. A config that is missing or will not parse
+/// says nothing, and every question falls back to its default.
 struct Says {
-    /// The `theme` line, if there is one.
     theme: Option<String>,
     fetching: crate::theme::Fetching,
 }
@@ -120,7 +102,6 @@ impl Says {
         }
     }
 
-    /// The `theme` line as the directory resolution reads it.
     fn theme(&self) -> Option<&str> {
         self.theme.as_deref()
     }
@@ -140,10 +121,6 @@ impl ThemeArgs {
             }
         }
 
-        // Themes this binary does not carry. Since a copy can come from
-        // anywhere, the shelf is no longer the whole answer, and a `list` that
-        // printed only it reported nothing about the theme a project actually
-        // uses.
         let mut mine: Vec<(PathBuf, Lock)> = Self::vendored(cx, says)
             .into_iter()
             .filter(|(_, lock)| Bundled::find(&lock.theme).is_err())
@@ -186,14 +163,9 @@ impl ThemeArgs {
             .collect()
     }
 
-    /// One copy's line: where it is, and how much of it is yours now.
-    ///
-    /// Styled for the terminal, not marked up. `markup!` is the grammar
-    /// *diagnostics* are written in, rendered by `Styled` just before miette
-    /// sees one; the reporting methods write an `impl Display` straight out, so
-    /// a marked-up string reached the reader with its backticks still on it, and
-    /// with every `\` in a Windows path doubled by the escaping `markup!`
-    /// applies to its arguments.
+    /// One copy's line: where it is, and how much of it is yours now. Styled for
+    /// the terminal, never marked up: the reporting methods write an
+    /// `impl Display` straight out, backticks and all.
     fn installed(cx: &Cx, rel: &Path, lock: &crate::theme::Lock) -> String {
         use crate::theme::State;
 
@@ -210,12 +182,9 @@ impl ThemeArgs {
     }
 }
 
-/// A shipped theme and where this project keeps its copy: what every verb
-/// resolves before it can do anything, in one place, so none of them can act on
-/// a directory another one reports.
+/// A shipped theme and where this project keeps its copy, resolved once so no
+/// two verbs act on different directories.
 struct Vendored {
-    /// What the copy is known by: its directory's name, and the word every
-    /// message uses for it.
     name: String,
     /// Relative to the project, as every message spells it.
     rel: PathBuf,
@@ -224,14 +193,12 @@ struct Vendored {
 }
 
 impl Vendored {
-    /// The path a message names.
     fn at(&self) -> String {
         self.rel.display().to_string()
     }
 
-    /// The files a run left alone. `update` and `remove` keep different things
-    /// for different reasons, but a kept file reads the same way in both, so
-    /// only the reason is the caller's.
+    /// The files a run left alone; `why` is the caller's, since `update` and
+    /// `remove` keep them for different reasons.
     fn kept(cx: &Cx, files: &[&crate::theme::Tracked], why: String) {
         if files.is_empty() {
             return;
@@ -246,14 +213,9 @@ impl Vendored {
 
 impl ThemeArgsFor {
     /// Where this project keeps the theme called `name`: `--dir` when the run
-    /// says so, otherwise what the config's `theme` line names, so the two
-    /// halves of adopting a theme agree without the reader holding a path in
-    /// mind.
-    /// `--dir` is checked here, and here only: it is the one path in this
-    /// command a project did not resolve for itself, and it addresses a
-    /// directory the verbs write to and delete from. The build refuses a theme
-    /// outside the root anyway (a Typst import cannot reach one), so a `--dir`
-    /// that climbs out could only ever write files nothing would read.
+    /// says so, otherwise what the config's `theme` line names. `--dir` is
+    /// checked here and only here, since the verbs write to and delete from the
+    /// directory it addresses and a Typst import cannot reach outside the root.
     fn vendored(&self, cx: &Cx, configured: Option<&str>, name: &str) -> Result<Vendored> {
         let rel = match &self.dir {
             None => crate::theme::Bundled::directory(name, configured),
@@ -274,9 +236,6 @@ impl ThemeAddArgs {
     fn add(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::Origin;
 
-        // Fetched before the directory is known, because the theme names
-        // itself: a spec is a repository, an archive or a path as often as it
-        // is one of the four words this binary answers to.
         let origin = Origin::parse(&self.theme.name)?.within(self.subdir.clone());
         let fetched = origin.fetch(&says.fetching)?;
         let this = self.theme.vendored(cx, says.theme(), &fetched.name)?;
@@ -300,14 +259,8 @@ impl ThemeAddArgs {
 }
 
 impl ThemeArgsFor {
-    /// What the theme is, and what this project's copy of it has become: the
-    /// layouts it declares, the config it carries, and the files you have
-    /// changed.
-    ///
-    /// Read from the copy in the project whenever there is one, never by
-    /// fetching: a report on what is already on disk must not put a clone or a
-    /// download in front of itself. A theme this binary ships can still be
-    /// described before it is installed, because describing it costs nothing.
+    /// What the theme is, and what this project's copy of it has become. Read
+    /// off the copy in the project whenever there is one, never by fetching.
     fn info(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::{Bundled, Lock, State};
 
@@ -319,9 +272,6 @@ impl ThemeArgsFor {
         }
 
         let Some(lock) = Lock::read(&this.dir) else {
-            // Not here. The shelf can still say what it would write; anything
-            // else would have to be fetched to be described, and `add` is the
-            // command that fetches.
             if let Some(theme) = carried {
                 Ships::of(&theme.fetched()).print(cx);
             }
@@ -359,13 +309,11 @@ impl ThemeArgsFor {
 }
 
 /// What a theme declares, however it is being read: out of the binary, or off
-/// the copy in the project. One reader, so the two cannot describe the same
-/// theme differently.
+/// the copy in the project.
 struct Ships {
     templates: Vec<String>,
     files: usize,
-    /// The theme's own `theme.kdl`, parsed as the build parses it, so this
-    /// cannot describe a theme the build would read differently.
+    /// The theme's own `theme.kdl`, parsed as the build parses it.
     defaults: Option<Config>,
 }
 
@@ -402,8 +350,6 @@ impl Ships {
         let Some(config) = &self.defaults else {
             return;
         };
-        // Each is a list of `(id, settings)`, and only the ids are wanted; the
-        // "say nothing about what it declares none of" rule is written once.
         let say = |label: &str, names: Vec<&str>| {
             if !names.is_empty() {
                 cx.ui.arrow(label, names.join(", "));
@@ -431,12 +377,9 @@ impl Ships {
 }
 
 impl ThemeUpdateArgs {
-    /// Bring a copy up to what its source has now.
-    ///
-    /// The copy's own record says where it came from, so a theme fetched from
-    /// anywhere updates from the same anywhere without being told again. A copy
-    /// with no record has never said, so the name on the command line is read as
-    /// a spec, which is what it was when `add` ran.
+    /// Bring a copy up to what its source has now. The copy's own record says
+    /// where it came from; a copy with no record reads the name on the command
+    /// line as a spec.
     fn update(&self, cx: &Cx, says: &Says) -> Result<()> {
         use crate::theme::{Lock, Origin, State};
 
@@ -453,8 +396,6 @@ impl ThemeUpdateArgs {
             Paths(&this.at()),
             crate::VERSION.cyan()
         ));
-        // A file baudelaire wrote and you changed, and one that was here before
-        // it ever ran, are kept for the same reason and reported together.
         let kept: Vec<_> = if self.force {
             Vec::new()
         } else {
@@ -484,8 +425,6 @@ impl ThemeUpdateArgs {
             this.name.cyan(),
             Paths(&this.at())
         ));
-        // What `remove` refuses to delete: an edit, unless forced, and a file it
-        // never wrote, at any force.
         let kept: Vec<_> = tracked
             .iter()
             .filter(|file| match file.state {

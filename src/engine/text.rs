@@ -1,21 +1,10 @@
 //! Plain-text extraction from rendered HTML, and the reading estimate taken
-//! from a page's typst source before it is rendered at all.
-//!
-//! Read by the search index, the one processor that needs a page's prose as
-//! text. A small tag-aware scanner, deliberately *not* a structure-aware rewrite
-//! (that is the render layer's job on the typed DOM) and not a full HTML parser.
-//! It drops tags and the raw contents of `script`/`style`, decodes the five
-//! predefined entities, and collapses runs of whitespace.
-//!
-//! Extraction is scoped to one region of the page ([`Region`]): by default the
-//! `<main>` landmark, so site chrome (header, sidebar, footer) never pollutes
-//! the prose. Otherwise every page indexes the same navigation text and search
-//! relevance collapses. A layout that names its content region something else,
-//! or that puts chrome *inside* it, says so in config rather than losing.
+//! from a page's typst source before it is rendered at all. A tag-aware
+//! scanner, not an HTML parser, scoped to one region of the page ([`Region`])
+//! so site chrome never pollutes the prose.
 
 /// The predefined HTML/XML entities as `(char, name)`, read when decoding
-/// `&name;` back to its character during extraction. Escaping the other way is
-/// the markup builder's job (`engine/xml.rs`), so there is one escaping surface.
+/// `&name;` back to its character during extraction.
 const ENTITIES: &[(char, &str)] = &[
     ('<', "lt"),
     ('>', "gt"),
@@ -25,12 +14,7 @@ const ENTITIES: &[(char, &str)] = &[
 ];
 
 /// Which part of a page is prose: the element its text is taken from, and the
-/// elements inside it that are not text at all.
-///
-/// Both are tag names rather than selectors. A selector engine would be a
-/// second HTML parser, and the thing being answered is "which landmark", which
-/// a name answers: `main` for the default layout, `article` for one that binds
-/// its prose to that, `body` for a page that is nothing but prose.
+/// elements inside it that are not text at all, both as tag names.
 #[derive(Debug, Clone, Copy)]
 pub struct Region<'a> {
     /// The element whose contents are the page's prose, by tag name.
@@ -40,8 +24,6 @@ pub struct Region<'a> {
 }
 
 impl Default for Region<'_> {
-    /// What a site that has configured nothing gets, read from the config type
-    /// that owns the setting rather than spelled again here.
     fn default() -> Self {
         Self {
             element: crate::config::RegionConfig::MAIN,
@@ -67,14 +49,9 @@ impl Text {
     }
 
     /// The inner HTML of the first `element`, or the whole document when there
-    /// is none. Keeps a consumer focused on primary content, and leaves a page
-    /// that does not have the region counted whole rather than not at all: a 404
-    /// page or a bare feed page is prose too.
-    ///
-    /// A feed makes the opposite choice, narrowing to `<body>` rather than
-    /// publishing a `<head>`; see [`Syndicated`](crate::render::Syndicated).
+    /// is none, so a page without the region is read whole rather than not at
+    /// all. An empty `element` is every element there is.
     pub fn region<'a>(html: &'a str, element: &str) -> &'a str {
-        // A region named as nothing is every element there is.
         if element.is_empty() {
             return html;
         }
@@ -139,24 +116,17 @@ impl Text {
     }
 
     /// Strip tags and raw `script`/`style` bodies, decode entities, and collapse
-    /// whitespace in a single forward pass writing once into the output.
-    ///
-    /// An `ignore`d element is skipped whole, contents and all, the way a
-    /// `<script>` is: it is chrome that happens to sit inside the prose, and
-    /// indexing it would put a sidebar's every link into every page's text.
+    /// whitespace in a single forward pass, skipping an `ignore`d element whole
+    /// the way a `<script>` is. Content runs are sliced at ASCII markers only,
+    /// which keeps every slice on a UTF-8 boundary.
     fn scan(html: &str, ignore: &[String]) -> String {
         let bytes = html.as_bytes();
         let mut out = String::with_capacity(html.len() / 2);
-        // Deferred separator: a run of whitespace or a tag boundary emits at
-        // most one space, and only once a following word is written (so leading
-        // and trailing whitespace vanish for free).
         let mut gap = false;
         let mut i = 0;
         while i < bytes.len() {
             match bytes[i] {
                 b'<' => {
-                    // skip a raw element's body (`<script>`/`<style>`), and any
-                    // element the site excludes, wholesale.
                     if let Some(tag) = Self::skipped(&html[i..], ignore)
                         && let Some(close) = Self::closing(html, i + 1 + tag.len(), tag)
                     {
@@ -182,9 +152,6 @@ impl Text {
                     i += 1;
                 }
                 _ => {
-                    // copy a run of plain content at once. stopping only at ASCII
-                    // markers keeps the slice on a UTF-8 boundary (multi-byte
-                    // scalars never contain these bytes).
                     let start = i;
                     while i < bytes.len()
                         && !matches!(bytes[i], b'<' | b'&')
@@ -219,17 +186,8 @@ impl Text {
 
     /// The name of the element opening at `tag` whose contents are skipped
     /// rather than read: a raw-text element, always; one the site excludes; or
-    /// one marked `aria-hidden="true"`.
-    ///
-    /// That last rule is what keeps a heading's own self link
-    /// (`html { anchors { link } }`) out of the prose. It is markup this crate
-    /// injects, saying nothing a reader has not just been told by the heading
-    /// around it, and its `#` would otherwise be a word in every page's search
-    /// index and a stray character in every feed body. Honouring the attribute
-    /// rather than the class covers a theme's own decorative markup too, which
-    /// `ignore` cannot: a name matches every element that has it.
-    ///
-    /// Case-insensitive without allocating (HTML tag names are ASCII).
+    /// one marked `aria-hidden="true"`, which keeps a heading's own self link
+    /// out of the prose.
     fn skipped<'a>(tag: &'a str, ignore: &[String]) -> Option<&'a str> {
         const RAW: [&str; 2] = ["script", "style"];
         let name = Self::name(tag)?;
@@ -294,35 +252,18 @@ impl Text {
     }
 }
 
-/// How long a page takes to read, as the prose words it carries.
-///
-/// Counted from the page's *source*, not from its rendered HTML, because that is
-/// the only version available when a template is handed its page: the render has
-/// not happened yet, and a listing entry is built earlier still. The cost is that
-/// it is an estimate, which a reading time is anyway.
-///
-/// Source means the text the author wrote, in the dialect they wrote it: one
-/// constructor per dialect, because what counts as machinery is exactly what
-/// differs between them, and a page measured by the other one's rule reads as
-/// nothing at all.
-///
-/// Words and not minutes, because the rate is the *site's* and this is measured
-/// before a page knows which language it is in: [`Reading::minutes`] applies it
-/// where both are in hand. Storing the minutes meant baking a constant into a
-/// value carried across the build.
+/// How long a page takes to read, as the prose words it carries, counted from
+/// the page's *source*: the render has not happened when a template is handed
+/// its page. Words and not minutes, because the rate is the site's and this is
+/// measured before a page knows its language; [`Reading::minutes`] applies it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub words: usize,
 }
 
 impl Reading {
-    /// Estimate `body`, a page's typst source.
-    ///
-    /// Code lines are dropped: in typst markup a leading `#` starts code, so an
-    /// `#import` or a `#let` is machinery rather than prose, and counting it
-    /// would inflate a short page most. Everything else is counted as prose,
-    /// markup and all: an inline `#emph[word]` is one word, which is what it
-    /// reads as.
+    /// Estimate `body`, a page's typst source. A leading `#` starts code, so
+    /// such a line is machinery; everything else is prose, markup and all.
     pub fn of(body: &str) -> Self {
         Self::counted(
             body.lines()
@@ -333,28 +274,16 @@ impl Reading {
         )
     }
 
-    /// Estimate `body`, the markdown an author wrote, rather than the typst it
-    /// lowers to.
-    ///
-    /// It has to be the authored text. Every line the lowering emits begins with
-    /// `#` (`#"prose"`, `#heading(level: 2)[`, `#list(`), which is the very
-    /// shape [`Reading::of`] reads as machinery, so a lowered page counted as
-    /// nothing at all and every markdown page shipped "0 min read".
-    ///
-    /// The rule is [`Reading::of`]'s, translated: a fenced code block is what a
-    /// `#`-line is there, machinery rather than prose, and everything else is
-    /// counted with its markup, an inline `**word**` reading as the one word it
-    /// is. A heading is prose here, unlike in typst, because `#` opens one
-    /// rather than opening code.
+    /// Estimate `body`, the markdown an author wrote: it has to be the authored
+    /// text, since every line the lowering emits begins with `#` and would read
+    /// as machinery. A fenced code block is what a `#`-line is in typst, and a
+    /// heading is prose here.
     #[cfg(feature = "markdown")]
     pub fn markdown(body: &str) -> Self {
         let mut fence: Option<&str> = None;
         let mut words = 0;
         for line in body.lines() {
             let line = line.trim_start();
-            // Inside a block, the only line that matters is the one closing it,
-            // and a closing fence is at least as long as the one it closes: the
-            // opening run is the needle rather than the whole line.
             if let Some(open) = fence {
                 if line.starts_with(open) {
                     fence = None;
@@ -370,12 +299,12 @@ impl Reading {
     }
 
     /// The fence a line opens a code block with: a run of three or more
-    /// backticks or tildes, without whatever info string follows it.
+    /// backticks or tildes, without whatever info string follows it. Both
+    /// markers are one byte, so the run's length in bytes is its length in
+    /// characters.
     #[cfg(feature = "markdown")]
     fn opens(line: &str) -> Option<&str> {
         let marker = line.chars().next().filter(|c| *c == '`' || *c == '~')?;
-        // Both markers are one byte, so the trimmed difference is the run's
-        // length in characters as well as in bytes.
         let run = line.len() - line.trim_start_matches(marker).len();
         if run < 3 {
             return None;
@@ -394,14 +323,10 @@ impl Reading {
 
     /// The minutes this many words imply at `wpm`, rounded up: the one place a
     /// rate is applied, so the two dialects cannot round differently.
-    ///
-    /// A rate of nothing is refused at config parse, so the division is safe;
-    /// the guard is belt and braces against a caller that built one by hand.
     pub fn minutes(self, wpm: usize) -> usize {
         self.words.div_ceil(wpm.max(1))
     }
 
-    /// A word count as a reading estimate.
     fn counted(words: usize) -> Self {
         Self { words }
     }
@@ -411,8 +336,7 @@ impl Reading {
 mod tests {
     use super::{Region, Text};
 
-    /// The default region, for the cases that are about the scanner rather than
-    /// about which part of the page it reads.
+    /// The default region, for the cases that are about the scanner.
     fn text(html: &str) -> String {
         Text::extract(html, Region::default())
     }
@@ -425,8 +349,6 @@ mod tests {
 
     #[test]
     fn skips_uppercase_script_and_style_bodies() {
-        // HTML tag names are case-insensitive: an uppercase raw element must
-        // still have its body skipped, not indexed as prose.
         let html = "<p>a</p><SCRIPT>leak()</SCRIPT><STYLE>.x{}</STYLE><p>b</p>";
         assert_eq!(text(html), "a b");
     }
@@ -441,12 +363,9 @@ mod tests {
         let html = "<nav>Home About Contact</nav>\
                     <main><h1>Title</h1><p>real content</p></main>\
                     <footer>copyright</footer>";
-        // Chrome outside <main> is excluded from the indexed text.
         assert_eq!(text(html), "Title real content");
     }
 
-    /// A layout that binds its prose to something else says so, and the whole
-    /// page is still the answer for a page that has no such region.
     #[test]
     fn the_region_is_whatever_the_site_names() {
         let html = "<nav>chrome</nav><article><p>prose</p></article>";
@@ -455,10 +374,7 @@ mod tests {
             ..Region::default()
         };
         assert_eq!(Text::extract(html, article), "prose");
-        // ...and `main`, which this page does not have, falls back to all of it.
         assert_eq!(text(html), "chrome prose");
-        // A region named as nothing is the whole document, deliberately: it is
-        // how a site says it has no chrome to keep out.
         let all = Region {
             element: "",
             ..Region::default()
@@ -466,27 +382,18 @@ mod tests {
         assert_eq!(Text::extract(html, all), "chrome prose");
     }
 
-    /// A name is a whole tag name: an element that merely starts with it is a
-    /// different element, and reading it as the region would index the wrong
-    /// half of the page.
     #[test]
     fn a_region_matches_a_whole_tag_name() {
         let html = "<main-menu>chrome</main-menu><main>prose</main>";
         assert_eq!(text(html), "prose");
     }
 
-    /// The region closes at *its* closing tag, not at the first one that looks
-    /// like it: a nested element of the same name used to end the scan early and
-    /// truncate every page that had one.
     #[test]
     fn a_nested_region_does_not_end_the_outer_one() {
         let html = "<main>before <main>inner</main> after</main><footer>chrome</footer>";
         assert_eq!(text(html), "before inner after");
     }
 
-    /// Chrome a layout puts *inside* its content region: skipped whole, the way
-    /// a script is, because a sidebar's links in every page's text is exactly
-    /// what scoping to a region exists to prevent.
     #[test]
     fn ignored_elements_are_dropped_from_the_region() {
         let html = "<main><nav>Home About</nav><p>prose</p><aside>related</aside></main>";
@@ -495,14 +402,10 @@ mod tests {
             ignore: &["nav".to_owned(), "aside".to_owned()],
         };
         assert_eq!(Text::extract(html, region), "prose");
-        // ...and nesting is counted here too, so an inner one does not end the
-        // skip early and leak the rest of the outer element.
         let nested = "<main><nav>a<nav>b</nav>c</nav><p>prose</p></main>";
         assert_eq!(Text::extract(nested, region), "prose");
     }
 
-    /// Prose counts, machinery does not, and the minutes round up so a page
-    /// that takes any time at all never reads as zero.
     #[test]
     fn reading_counts_prose_and_skips_typst_code() {
         use super::Reading;
@@ -512,9 +415,6 @@ mod tests {
                     \n\
                     = A heading\n\
                     Three plain words, plus #emph[one] more.\n";
-        // The heading contributes `A heading` (the bare `=` is punctuation, not
-        // a word), and the sentence six, counting `#emph[one]` as the one word
-        // it reads as.
         assert_eq!(Reading::of(body).words, 8);
         assert_eq!(Reading::of(body).minutes(200), 1);
         assert_eq!(Reading::of("").words, 0);
@@ -527,9 +427,6 @@ mod tests {
         );
     }
 
-    /// A markdown page is estimated from the markdown, never from the typst it
-    /// lowers to: every line of that starts with `#`, so reading the lowered
-    /// body counted nothing at all and every `.md` page shipped `0 min read`.
     #[test]
     #[cfg(feature = "markdown")]
     fn reading_counts_markdown_prose_and_skips_its_code_fences() {
@@ -544,21 +441,14 @@ mod tests {
                     ```\n\
                     \n\
                     - a list item\n";
-        // The heading contributes `A heading` (the `##` is punctuation, not a
-        // word), the sentence six, the list item three, and the fence none.
         assert_eq!(Reading::markdown(body).words, 11);
         assert_eq!(Reading::markdown(body).minutes(200), 1);
-        // ...and the lowered typst of the very same page reads as nothing,
-        // which is what makes the authored text the only thing worth counting.
         let lowered = "#heading(level: 2)[#\"A heading\"]\n\
                        #\"Three plain words, plus \"#strong[#\"one\"]#\" more.\"\n";
         assert_eq!(Reading::of(lowered).words, 0);
         assert_eq!(Reading::markdown("").words, 0);
     }
 
-    /// A fence closes on a run at least as long as the one that opened it, and
-    /// an unterminated one runs to the end of the page rather than counting the
-    /// rest of it as prose.
     #[test]
     #[cfg(feature = "markdown")]
     fn a_longer_fence_closes_a_shorter_one_and_an_unclosed_fence_ends_the_page() {
@@ -569,24 +459,15 @@ mod tests {
         );
         assert_eq!(Reading::markdown("~~~\ncode here\n~~~\nprose\n").words, 1);
         assert_eq!(Reading::markdown("prose\n```\nnever closed\n").words, 1);
-        // Two backticks are inline code, not a fence: the line is prose.
         assert_eq!(Reading::markdown("`` a b ``\n").words, 2);
     }
 
-    /// Markup that announces itself as hidden is not prose. A heading's self
-    /// link is the case this exists for: it says nothing the heading has not, so
-    /// its `#` has no business in the index.
-    ///
-    /// The feed's half of this rule lives on
-    /// [`Syndicated`](crate::render::Syndicated), which applies it to the typed
-    /// DOM rather than to the finished text.
     #[test]
     fn what_a_reader_is_told_to_ignore_is_not_indexed() {
         let html = "<main><h2 id=\"one\">One\
                     <a class=\"anchor\" href=\"#one\" aria-hidden=\"true\" tabindex=\"-1\">#</a>\
                     </h2><p>Some prose.</p></main>";
         assert_eq!(text(html), "One Some prose.");
-        // `aria-hidden="false"` is the author saying the opposite.
         let shown = "<main><span aria-hidden=\"false\">kept</span></main>";
         assert_eq!(text(shown), "kept");
     }

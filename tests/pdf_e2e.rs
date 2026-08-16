@@ -6,8 +6,7 @@ mod common;
 
 use common::Site;
 
-/// A PDF's own header, so a test asserts on a real document rather than on the
-/// file merely existing.
+/// A PDF's own header.
 fn is_pdf(bytes: &[u8]) -> bool {
     bytes.starts_with(b"%PDF-")
 }
@@ -58,10 +57,8 @@ fn a_pdf_is_written_beside_the_page_and_linked_from_it() {
     assert!(html.contains(r#"type="application/pdf""#), "{html}");
 }
 
-/// The bytes must not move on their own. Typst stamps an export timestamp and a
-/// document identifier, both of which default to the instant of the export: two
-/// builds of an unchanged page produced two different files, so every deploy
-/// re-uploaded every PDF on the site.
+/// Typst stamps an export timestamp and a document identifier, both of which
+/// default to the instant of the export.
 #[test]
 fn an_unchanged_page_exports_the_same_bytes() {
     let site = site(r#"pdf { pages { template "print.typ" } }"#);
@@ -72,8 +69,7 @@ fn an_unchanged_page_exports_the_same_bytes() {
     site.stats();
     let before = std::fs::read(site.path("public/posts/hello.pdf")).expect("pdf");
 
-    // Force a recompile rather than a cache hit: a hit would keep the file
-    // untouched and prove nothing about the exporter.
+    // A cache hit would leave the file untouched and prove nothing.
     site.write(
         "content/posts/hello.typ",
         "#let frontmatter = (title: \"Hello\",)\nbody ",
@@ -112,8 +108,6 @@ fn the_paged_template_gets_the_page_bindings() {
     ));
 }
 
-/// Generated listings get no PDF: a tag index is a table of contents for a
-/// site, not a document anyone prints.
 #[test]
 fn generated_listings_get_no_pdf() {
     let site = site(r#"pdf { pages { template "print.typ" } }"#);
@@ -136,8 +130,6 @@ fn generated_listings_get_no_pdf() {
     assert!(!site.exists("public/tags/rust.pdf"));
 }
 
-/// The sidecar rules apply: a deleted PDF makes its page stale, and a page
-/// nothing touched keeps the file the last build wrote.
 #[test]
 fn a_deleted_pdf_is_re_exported_and_an_untouched_one_survives() {
     let site = site(r#"pdf { pages { template "print.typ" } }"#);
@@ -162,8 +154,8 @@ fn a_deleted_pdf_is_re_exported_and_an_untouched_one_survives() {
     assert!(site.exists("public/posts/hello.pdf"), "re-exported");
 }
 
-/// Editing a module the paged template imports has to re-export the PDF: the
-/// page's own compile never read it, so nothing else would notice.
+/// The page's own compile never reads what the paged template imports, so
+/// nothing else would notice the edit.
 #[test]
 fn editing_a_module_the_paged_template_imports_re_exports_the_pdf() {
     let site = site(r#"pdf { pages { template "print.typ" } }"#);
@@ -230,14 +222,11 @@ fn a_collection_and_the_site_bind_into_documents_of_their_own() {
     assert!(is_pdf(
         &std::fs::read(site.path("public/site.pdf")).expect("the site")
     ));
-    // The per-page half is a separate block, so asking for a bundle alone
-    // writes no per-page PDF.
+    // The per-page half is a separate block.
     assert!(!site.exists("public/posts/a.pdf"));
 }
 
-/// A bundle belongs to no page, so it cannot ride a page's cache entry: editing
-/// any bound page has to re-export it, and a build that changed nothing must
-/// not.
+/// A bundle belongs to no page, so it cannot ride a page's cache entry.
 #[test]
 fn a_bundle_re_exports_when_any_of_its_pages_changes() {
     let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
@@ -290,12 +279,6 @@ fn a_new_page_joins_the_bundle() {
 
 /// A markdown page joins a bundle as the Typst it lowered to, exactly as it
 /// reaches its own compile and its own sidecar.
-///
-/// Bound by `#include` instead, typst was handed raw markdown: a page carrying a
-/// heading line failed the build outright (`expected expression`, pointed into
-/// the `.md`), and one without built green and bound the file verbatim, fences
-/// and all, with no frontmatter -- so the document had no title for it. The
-/// template here refuses the second outcome, and the build refuses the first.
 #[test]
 #[cfg(feature = "markdown")]
 fn a_markdown_page_binds_as_the_typst_it_lowered_to() {
@@ -327,8 +310,6 @@ fn a_markdown_page_binds_as_the_typst_it_lowered_to() {
     ));
 }
 
-/// The sidecar rule applies to bundles too: a file deleted from `dist` while the
-/// cache stays warm has to come back.
 #[test]
 fn a_deleted_bundle_is_re_exported() {
     let site = bound(r#"bundles { posts { template "book.typ"; collections "posts" } }"#);
@@ -344,9 +325,7 @@ fn a_deleted_bundle_is_re_exported() {
     assert!(site.exists("public/posts.pdf"), "re-exported");
 }
 
-/// Every starter shape ships a `print.typ`, and `--with pdf` is what turns it
-/// on. The template is inert until then, which is exactly how one ships broken:
-/// scaffold a site, ask for PDFs, and build it.
+/// Every starter shape ships a `print.typ`, and `--with pdf` turns it on.
 #[test]
 fn the_scaffolded_print_template_builds() {
     for shape in ["blog", "docs", "book", "minimal"] {
@@ -378,8 +357,6 @@ fn the_scaffolded_print_template_builds() {
             &std::fs::read(t.path("public/index.pdf")).expect("pdf")
         ));
 
-        // The shapes a bundle is *for* ship a template for it, and it is inert
-        // until a target is named: the same way one ships broken.
         if !t.exists("templates/book.typ") {
             continue;
         }
@@ -399,8 +376,6 @@ fn the_scaffolded_print_template_builds() {
     }
 }
 
-/// Off unless asked for: this is a second compile of every page, and this one
-/// lays the whole document out.
 #[test]
 fn no_pdf_without_the_block() {
     let site = site("");

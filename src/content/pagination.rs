@@ -1,10 +1,6 @@
-//! Collection index pages, optionally paginated.
-//!
-//! A collection that configures a `list` template or a `paginate = N` count
-//! gets a generated index [`Listing`] at `/{collection}/`. With `paginate` its
-//! members are chunked across `/{collection}/`, `/{collection}/page/2/`, .. each
-//! with prev/next navigation; without it, all members sit on the single index
-//! page. A collection that configures neither gets no index at all.
+//! Collection index pages, optionally paginated: a collection that configures
+//! `paginate { }` gets a generated index [`Listing`] at `/{collection}/`, its
+//! members chunked across `/{collection}/page/2/`, .. when it names a size.
 
 use crate::config::{Config, Permalink};
 use crate::content::generate::{Generate, PlanCtx};
@@ -13,38 +9,29 @@ use crate::content::{Collection, Page, Strings};
 use crate::error::Result;
 
 /// A membership chunked into numbered pages, with the URL and slug rules that
-/// follow from where the listing sits.
-///
-/// THE pagination rule, so the two things that paginate cannot disagree about
-/// what page 2 is called. A collection index and a taxonomy term listing differ
-/// only in what they list and where page 1 sits, and only the first of them
-/// used to chunk at all: a blog with three years of `#rust` posts rendered all
-/// 400 on one term page, beside a collection index that paginated the very same
-/// pages.
+/// follow from where the listing sits; the single pagination rule, shared by
+/// collection indexes and taxonomy term listings.
 pub(crate) struct Paged<'a> {
     /// The segments page 2 and later hang under, unlocalized: `["blog"]` for a
     /// collection, `["tags", "rust"]` for a term.
     root: &'a [&'a str],
-    /// Where page 1 sits, unlocalized. `None` puts it at `root`, which is what
-    /// a taxonomy term does; a collection passes
-    /// [`CollectionConfig::home`](crate::config::CollectionConfig::home), the
-    /// single answer to where that collection lives.
+    /// Where page 1 sits, unlocalized; `None` puts it at `root`, which is what
+    /// a taxonomy term does.
     mount: Option<&'a str>,
     /// Path segment before the number (`/blog/page/2/`); empty drops it.
     prefix: &'a str,
     /// The slug page 1 takes within its section; later pages extend it. Empty
     /// means the section index.
     slug: &'a str,
-    /// Members per page. Never zero, since `chunks(0)` panics: a listing that
-    /// does not paginate passes its whole membership.
+    /// Members per page; never zero, since `chunks(0)` panics.
     per_page: usize,
     lang: &'a str,
     config: &'a Config,
 }
 
 impl<'a> Paged<'a> {
-    /// The page-number segment when no `prefix` names one. A slug has to stay a
-    /// valid identifier, so it cannot simply be the bare number.
+    /// The page-number segment when no `prefix` names one, since a slug has to
+    /// stay a valid identifier and cannot be the bare number.
     const WORD: &'static str = "page";
 
     pub(crate) fn new(
@@ -67,9 +54,8 @@ impl<'a> Paged<'a> {
         }
     }
 
-    /// The members split across pages. Never empty: a memberless listing still
-    /// gets its page 1, since nav links point at it and an empty listing beats
-    /// a 404.
+    /// The members split across pages; never empty, so a memberless listing
+    /// still gets the page 1 its nav links point at.
     pub(crate) fn chunks<'m, T>(&self, members: &'m [T]) -> Vec<&'m [T]> {
         let mut chunks: Vec<&[T]> = members.chunks(self.per_page).collect();
         if chunks.is_empty() {
@@ -111,7 +97,6 @@ impl<'a> Paged<'a> {
         }
     }
 
-    /// Prev/next for page `number` of `total`.
     pub(crate) fn nav(&self, number: usize, total: usize) -> Nav {
         Nav {
             prev: (number > 1).then(|| self.url(number - 1)),
@@ -136,14 +121,11 @@ impl<'a> Paged<'a> {
 pub struct Pagination;
 
 impl Generate for Pagination {
-    /// Generate index pages for every collection that asks for one (via a
-    /// `list` template or a `paginate` count) over its build-eligible members.
-    /// Never fails; the `Result` satisfies the shared [`Generate`] signature.
+    /// Generate index pages for every collection that asks for one, over its
+    /// build-eligible members, one index per language.
     fn generate(&self, ctx: &PlanCtx) -> Result<Vec<Page>> {
         let mut out = Vec::new();
         for collection in ctx.collections {
-            // One index per language: members are partitioned by language, so a
-            // collection's `/blog/` and `/fr/blog/` list only their own pages.
             for lang in ctx.config.langs() {
                 if let Some(section) = Section::of(collection, ctx.config, lang) {
                     section.build(&mut out);
@@ -162,20 +144,18 @@ struct Section<'a> {
     /// Permalink of page 1 ([`crate::config::CollectionConfig::home`]); later
     /// pages hang under it.
     mount: String,
-    /// Path segment before a page number (`/{id}/{prefix}/{n}/`); empty drops it.
+    /// Path segment before a page number (`/{id}/{prefix}/{n}/`); empty drops
+    /// it.
     prefix: &'a str,
     members: Vec<&'a Page>,
     per_page: usize,
-    /// The language this index covers; localizes every URL.
     lang: &'a str,
     config: &'a Config,
 }
 
 impl<'a> Section<'a> {
     /// The index section for a collection, or `None` when it configures no
-    /// index. The `paginate { }` block's presence is what generates one; its
-    /// `size` chunks the members, and without one every member sits on a single
-    /// page (`per_page` = the whole membership).
+    /// index; without a `paginate { size }` every member sits on a single page.
     fn of(collection: &'a Collection, config: &'a Config, lang: &'a str) -> Option<Self> {
         let paginate = &collection.config.paginate;
         if !paginate.enabled {
@@ -186,8 +166,6 @@ impl<'a> Section<'a> {
             .iter()
             .filter(|p| p.eligible(config) && p.listed(config) && p.lang == lang)
             .collect();
-        // A single un-paginated page holds every member; guard against a zero
-        // chunk size for an empty collection (`chunks(0)` panics).
         let per_page = paginate.size.unwrap_or(members.len()).max(1);
         Some(Self {
             id: &collection.id,
@@ -201,9 +179,9 @@ impl<'a> Section<'a> {
         })
     }
 
+    /// Push one page per chunk; an empty collection gets an index only in the
+    /// default language, so a memberless `/fr/` is never listed.
     fn build(&self, out: &mut Vec<Page>) {
-        // Only the default language gets an index for an empty collection: a
-        // memberless language simply has no listing rather than an empty /fr/.
         if self.members.is_empty() && self.lang != self.config.lang {
             return;
         }
@@ -225,7 +203,6 @@ impl<'a> Section<'a> {
         }
     }
 
-    /// The listing for page `number` of `total`.
     fn page(&self, paged: &Paged, number: usize, members: &[&Page], total: usize) -> Listing {
         let strings = Strings::new(self.config, self.lang);
         let items = members.iter().map(|p| Item::of(p, &strings)).collect();

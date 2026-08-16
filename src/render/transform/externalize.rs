@@ -1,12 +1,6 @@
 //! Resolves the `baudelaire:asset:` image markers left by
-//! [`crate::world::rules`].
-//!
-//! The image show rule replaces typst's inline base64 with a marker carrying the
-//! source file's project-relative path. This transform rewrites each marked
-//! `<img src>` to the URL the file is served at (`/assets/<name>`) and records
-//! the `(name, source)` pair so the engine can copy the file into `dist`. Naming
-//! follows the asset pipeline: fingerprinted (`photo.<hash>.png`) when
-//! `assets { fingerprint }` is on, else the plain filename.
+//! [`crate::world::rules`], rewriting each marked `<img src>` to the URL the
+//! file is served at and recording the source so the engine can copy it.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -23,23 +17,23 @@ use crate::render::Candidate;
 use super::{Cx, DocumentExt, ElementExt, Transform};
 use crate::world::rules::MARKER;
 
-/// A typst-embedded image lifted out to a file: the filename it is served under
-/// (relative to the asset directory), the source file to copy from, and the
-/// widths the page's `srcset` promised. Recorded per page so a cache hit can
-/// re-copy the file, and re-cut its variants, without recompiling.
+/// A typst-embedded image lifted out to a file, recorded per page so a cache
+/// hit can re-copy it, and re-cut its variants, without recompiling.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageRef {
     pub name: String,
     pub source: PathBuf,
     /// Downscaled widths to write beside it, ascending, empty when the site
-    /// asks for no variants or the source is too small to have any. The names
-    /// are not carried: they are this one's, spliced per width, and a second
-    /// list of them is a second chance to disagree with the page.
+    /// asks for no variants or the source is too small to have any.
     #[serde(default)]
     pub widths: Vec<u32>,
 }
 
-/// The [`Transform`] that turns image markers into served asset references.
+/// Turns image markers into served asset references.
+///
+/// typst checks neither join a marker's path takes, so a hand-written marker
+/// that escapes the root is refused rather than allowed around the compiler's
+/// sandbox.
 pub(super) struct Externalize;
 
 impl Transform for Externalize {
@@ -50,8 +44,6 @@ impl Transform for Externalize {
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
         let config = cx.config;
         let root = cx.root;
-        // Gather markers while walking, then record: the walk borrows the DOM
-        // mutably, so the `cx` accumulator is written after it finishes.
         let mut refs = Vec::new();
         let mut failed = Vec::new();
         let mut variants = BTreeMap::new();
@@ -61,36 +53,15 @@ impl Transform for Externalize {
             }
             element.rewrite(&[attr::src], |src| {
                 let vpath = src.strip_prefix(MARKER)?;
-                // The marker is baudelaire's own, but nothing stops evaluated
-                // typst from writing one by hand
-                // (`html.elem("img", attrs: (src: ..))`), and the path below is
-                // joined onto the root to read from and onto the asset
-                // directory to write to. Neither join is checked by typst,
-                // which refuses `#read("../..")` in the author's own file, so
-                // without this the marker is a way around the compiler's
-                // sandbox rather than a spelling inside it.
-                //
-                // Nothing legitimate is refused: the show rule emits a vpath
-                // typst has already resolved, which carries no `..` and no
-                // root.
                 if Contained::new(vpath).is_none() {
                     failed.push(ImageError::escaping(vpath));
                     return None;
                 }
-                // A picture the asset pipeline already owns is referenced where
-                // the pipeline put it, not copied a second time: extracting it
-                // wrote the source bytes over (or beside) the processed ones,
-                // warned that two images claimed one name, and left the page
-                // pointing at whichever won.
                 if let Some(url) = ImageRef::pipelined(vpath, root, config) {
                     return Some(url);
                 }
                 let image = ImageRef::of(vpath, root, config);
                 let url = image.url(config);
-                // The variants this image is about to be given, named before
-                // they exist: the copy pass cuts exactly these widths, and the
-                // `srcset` writer reads them from here as it reads the
-                // pipeline's manifest for an image in the asset tree.
                 if !image.widths.is_empty() {
                     variants.insert(url.clone(), image.candidates(config));
                 }
@@ -106,13 +77,8 @@ impl Transform for Externalize {
 
 impl ImageRef {
     /// The URL an image *inside the asset tree* is already served at, or `None`
-    /// for one anywhere else.
-    ///
-    /// The pipeline reads that tree, so such a file has been optimized, given
-    /// its responsive variants and (with `fingerprint`) renamed, and is on disk
-    /// under the URL its own relative path spells. The authored URL is what is
-    /// emitted, so the `srcset` and fingerprint transforms match it exactly as
-    /// they match a `src` written by hand.
+    /// for one anywhere else; such a file must be referenced where the pipeline
+    /// put it rather than copied a second time under a name of its own.
     fn pipelined(vpath: &str, root: &Path, config: &Config) -> Option<String> {
         let rel = Path::new(vpath)
             .strip_prefix(Self::rooted(&config.paths.assets, root))
@@ -121,30 +87,16 @@ impl ImageRef {
     }
 
     /// A configured directory spelled the way a marker's `vpath` is: relative
-    /// to the project root.
-    ///
-    /// A resolved config carries these absolute, and no root-relative path
-    /// begins with an absolute one, so stripping the configured form as it
-    /// stands matches nothing. [`ImageRef::of`] read the content directory this
-    /// way and [`ImageRef::pipelined`] read the asset directory the other,
-    /// which made the pipelined branch unreachable under an absolute
-    /// `paths { assets }` and externalized every image in it a second time.
+    /// to the project root. A resolved config carries these absolute, so
+    /// stripping the configured form as it stands matches nothing.
     fn rooted<'a>(dir: &'a Path, root: &Path) -> &'a Path {
         dir.strip_prefix(root).unwrap_or(dir)
     }
 
-    /// The reference for a marker's virtual path. The name is fingerprinted
-    /// (content hash spliced in) when asset fingerprinting is on, so
-    /// externalized images cache far-future like every other asset; otherwise
-    /// the authored name is kept. A hash read that fails falls back to the
-    /// plain name; the engine's copy then surfaces the unreadable source.
-    ///
-    /// The name keeps the directories the image was authored under, relative to
-    /// the content root, so `posts/a/cover.png` and `posts/b/cover.png` are two
-    /// files. They used to be served flat out of the asset root under their bare
-    /// base name, which is one name for both: a page bundle tree, where naming
-    /// an image for its role is the convention Hugo and Jekyll both encourage,
-    /// collided on every post and served one picture for all of them.
+    /// The reference for a marker's virtual path, fingerprinted when asset
+    /// fingerprinting is on. The name keeps the directories the image was
+    /// authored under, so `posts/a/cover.png` and `posts/b/cover.png` are two
+    /// files rather than one name claimed twice.
     fn of(vpath: &str, root: &Path, config: &Config) -> Self {
         let source = root.join(vpath);
         let digest = config
@@ -153,11 +105,6 @@ impl ImageRef {
             .then(|| crate::fs::read(&source).ok())
             .flatten()
             .map(|bytes| AssetName::digest(&bytes));
-        // Under the content root the content-relative path, else the
-        // project-relative one: an image loaded from elsewhere in the project
-        // (a `data/` tree) still gets a name nothing else can claim.
-        // `vpath` is root-relative, so the content directory has to be read the
-        // same way (see [`ImageRef::rooted`]).
         let content = Self::rooted(&config.paths.content, root);
         let rel = Path::new(vpath)
             .strip_prefix(content)
@@ -174,17 +121,14 @@ impl ImageRef {
 
     /// The widths a `srcset` for this image can offer: the configured ones
     /// below the source's own, read from the file's header rather than by
-    /// decoding it. Empty when the site asks for no variants, when the flavor
-    /// has no encoder to cut them with, or when the file is not a raster this
-    /// build can read.
+    /// decoding it. Empty when the site asks for no variants or the file is not
+    /// a raster this build can read.
     #[cfg(feature = "images")]
     fn widths(source: &Path, config: &Config) -> Vec<u32> {
         let responsive = &config.assets.images.responsive;
         if !responsive.enabled {
             return Vec::new();
         }
-        // Header only: the copy pass decodes, and this runs for every image on
-        // every page that shows one.
         let Ok((width, _)) = image::image_dimensions(source) else {
             return Vec::new();
         };
@@ -198,25 +142,13 @@ impl ImageRef {
         Vec::new()
     }
 
-    /// The URL this image is served at: the asset prefix and the name, the two
-    /// pieces every processed asset's URL is made of.
-    ///
-    /// Through [`Config::asset_url`] rather than spelled here, because the name
-    /// already carries the directories the image was authored under: taking a
-    /// directory off the finished URL and putting the whole name back after it
-    /// said `gallery/` twice, and every downscale in a subdirectory's `srcset`
-    /// 404'd while the `src` fallback quietly worked.
     fn url(&self, config: &Config) -> String {
         config.asset_url(Path::new(&self.name))
     }
 
-    /// This image's `srcset` candidates: one per width, named by splicing the
-    /// width into the served name the way the pipeline splices it into an
-    /// asset's, plus the source itself as the largest.
-    ///
-    /// The names are derived here and again where the files are written, from
-    /// this one rule ([`Self::variant`]), because the page is served before the
-    /// bytes are cut.
+    /// This image's `srcset` candidates: one per width, plus the source itself
+    /// as the largest. Named through [`Self::variant`], the one rule the copy
+    /// pass also names by, because the page is served before the bytes are cut.
     fn candidates(&self, config: &Config) -> Vec<Candidate> {
         self.widths
             .iter()
@@ -228,7 +160,7 @@ impl ImageRef {
             .collect()
     }
 
-    /// The source itself, the largest candidate, with the intrinsic width a
+    /// The source itself as the largest candidate, with the intrinsic width a
     /// browser needs to choose between it and the downscales.
     #[cfg(feature = "images")]
     fn source_candidate(&self, config: &Config) -> Option<Candidate> {
@@ -239,10 +171,9 @@ impl ImageRef {
         })
     }
 
-    /// The signature mirrors the `images`-on one, which is why it takes a
-    /// `self` it has nothing to read: with no encoder there are no variants to
-    /// be the largest of.
+    /// With no encoder there are no variants to be the largest of.
     #[cfg(not(feature = "images"))]
+    // The signature mirrors the `images`-on one.
     #[allow(clippy::unused_self)]
     fn source_candidate(&self, _config: &Config) -> Option<Candidate> {
         None
@@ -250,15 +181,9 @@ impl ImageRef {
 
     /// The served name of one width variant: `photo-480.png`, or
     /// `photo-480.<digest>.png` where the name it is cut from is fingerprinted.
-    ///
-    /// The digest is the *source's*, carried over from the primary rather than
-    /// taken over the variant's own bytes: the two change together, and the
-    /// page names the file before those bytes exist.
+    /// The extension is split off the file name alone, since a directory the
+    /// image was authored under may itself hold a dot.
     pub fn variant(name: &str, width: u32) -> String {
-        // Split the *file name*, not the whole name: it carries the directories
-        // the image was authored under, and one of those may hold a dot
-        // (`posts/my.site/cover.png`), which splitting the whole string would
-        // read as the start of the extension.
         let (dir, file) = match name.rsplit_once('/') {
             Some((dir, file)) => (format!("{dir}/"), file),
             None => (String::new(), name),
@@ -277,16 +202,6 @@ mod tests {
     use crate::config::Config;
     use std::path::PathBuf;
 
-    /// A picture authored in a content subdirectory keeps that directory once,
-    /// not twice.
-    ///
-    /// The candidate used to be built from the primary URL's *directory* plus
-    /// the whole name, which already carried that directory: every downscale of
-    /// `content/gallery/cover.png` was published as
-    /// `/assets/gallery/gallery/cover-30.png` and 404'd, while the `src`
-    /// fallback kept working and hid it. Nothing caught it because every
-    /// scenario put its image at the content root, where the two spellings
-    /// coincide.
     #[test]
     fn a_content_subdirectory_appears_once_in_every_candidate() {
         let config = Config::default();
@@ -297,8 +212,6 @@ mod tests {
         };
 
         assert_eq!(image.url(&config), "/assets/gallery/cover.png");
-        // The source candidate reads the file's header for its intrinsic width
-        // and there is no file here, so what is left is the downscales.
         let urls: Vec<String> = image
             .candidates(&config)
             .into_iter()
@@ -313,8 +226,6 @@ mod tests {
         );
     }
 
-    /// An image at the content root is named by its file alone, and the URL is
-    /// the prefix and that name: the case that always worked, kept honest.
     #[test]
     fn an_image_at_the_content_root_gains_no_directory() {
         let config = Config::default();

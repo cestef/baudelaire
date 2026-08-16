@@ -1,15 +1,5 @@
-//! ARIA that says nothing.
-//!
-//! Three failures, all silent in a browser: a `role` that is not a role, an
-//! `aria-*` attribute that ARIA does not define, and one of the id-referencing
-//! attributes pointing at an element that is not on the page. Each reads as
-//! working markup and none of it reaches the accessibility tree, which is why
-//! they are worth a build's attention rather than a reviewer's.
-//!
-//! The vocabularies below are WAI-ARIA 1.2. Roles from the DPUB and Graphics
-//! modules are namespaced (`doc-`, `graphics-`) and accepted by prefix rather
-//! than listed: they are extensions to this vocabulary, and treating an
-//! unlisted one as a typo would be a false positive on a correct page.
+//! ARIA that says nothing: a `role` that is not a role, an `aria-*` attribute
+//! ARIA does not define, and an id reference pointing at no element.
 
 use crate::config::LintConfig;
 use crate::error::Lint;
@@ -112,8 +102,8 @@ impl Aria {
         "treeitem",
     ];
 
-    /// The role vocabularies carried by ARIA's own extension modules, which a
-    /// correct page may use and this list does not enumerate.
+    /// The role vocabularies ARIA's extension modules add, accepted by prefix
+    /// rather than enumerated.
     const NAMESPACES: &'static [&'static str] = &["doc-", "graphics-"];
 
     /// Every state and property WAI-ARIA 1.2 defines, without the `aria-`
@@ -216,8 +206,6 @@ impl Rule for Aria {
             };
             if !Self::ATTRS.contains(&name) {
                 found.push(*span, Lint::Attr(attr.clone()));
-                // An attribute ARIA does not define has no defined value
-                // either, so there is nothing further to say about it.
                 continue;
             }
             if !Self::IDREFS.contains(&attr.as_str()) {

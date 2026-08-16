@@ -14,58 +14,32 @@ use crate::config::node::NodeExt;
 use crate::config::{ImagesConfig, MinifyConfig, SourceMapConfig, TailwindConfig, TargetConfig};
 
 /// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
-///
-/// CSS is minified with lightningcss, independently of bundling. JavaScript is
-/// only processed (bundled *and* minified, via rolldown) when
-/// [`AssetConfig::bundle`] is set: the bundler owns the whole JS step.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct AssetConfig {
-    /// What the pipeline minifies: stylesheets (lightningcss) and, when
-    /// bundling, JavaScript (rolldown).
     pub minify: MinifyConfig,
-    /// The oldest browsers the stylesheets must run on. Naming any turns
-    /// lightningcss's transform on (nesting, prefixes, colour fallbacks), which
-    /// is independent of whether the output is minified.
+    /// The oldest browsers the stylesheets must run on.
     pub targets: TargetConfig,
-    /// Bundle JavaScript entry points through rolldown (resolves imports and
-    /// tree-shakes). Required for any JavaScript processing.
+    /// Bundle JavaScript entry points through rolldown. Required for any
+    /// JavaScript processing at all.
     pub bundle: bool,
     /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
     /// rewrite references, for far-future caching.
     pub fingerprint: bool,
-    /// What becomes of the source map for each kind of processed asset.
-    ///
-    /// Off for every kind by default, and it has to be: a map is only usable if
-    /// it carries the original sources inside it, because the sources
-    /// themselves are build inputs the pipeline deliberately never publishes.
-    /// Asking for one therefore publishes the TypeScript, JSX and unminified
-    /// CSS a site is written in.
+    /// What becomes of the source map for each kind of processed asset. Off by
+    /// default, and has to be: a usable map carries the original sources, so
+    /// asking for one publishes them.
     pub sourcemap: SourceMapConfig,
     /// The `tsconfig.json` the bundler transforms TypeScript and JSX against,
-    /// relative to the project root. `None` means the bundler discovers one per
-    /// module, walking up from the file as `tsc` does; a path pins the whole
-    /// site to one file, wherever the scripts live.
+    /// relative to the project root. `None` means one is discovered per module,
+    /// walking up from the file as `tsc` does.
     pub tsconfig: Option<PathBuf>,
-    /// Image handling (lazy loading, extraction, optimization, responsive
-    /// variants), for both pipeline assets and typst-embedded rasters.
     pub images: ImagesConfig,
     /// The generated utility stylesheet, off unless the block is written.
     pub tailwind: TailwindConfig,
 }
 
-/// The `assets { .. }` section: the pipeline applied to `paths { assets }`.
 impl AssetConfig {
     /// Whether JavaScript is actually bundled: configured *and* compiled in.
-    ///
-    /// The same shape as [`CardsConfig::active`](crate::config::CardsConfig::active),
-    /// and for the same reason. A binary built without the `js` feature has no
-    /// bundler, so a site that asks for one gets its scripts copied verbatim.
-    /// Reading the raw flag instead meant a slim build treated a `.ts` file as
-    /// an *input* to a build step that does not exist: nothing claimed it,
-    /// nothing transformed it, and it was published as TypeScript under its own
-    /// name while every page went on referencing the `.js` that was never
-    /// written. [`crate::engine::gate`] warns about the gap; this is what
-    /// closes it.
     pub fn bundling(&self) -> bool {
         self.bundle && cfg!(feature = "js")
     }

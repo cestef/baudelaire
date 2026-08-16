@@ -7,12 +7,6 @@ use crate::ui::Bytes;
 
 /// Per-page weight limits, in bytes. Each is the ceiling for one class of what
 /// a page ships; `None` is no limit.
-///
-/// A budget fails the build by default, unlike the rules in
-/// [`LintConfig`](super::LintConfig): it is an assertion the author wrote down,
-/// not an opinion this tool holds. `strict #false` makes it a report instead,
-/// which is what a site adopting one on an existing set of pages needs: a number
-/// to aim at before it is a number to be held to.
 #[derive(Debug, Clone, Hash)]
 pub struct BudgetConfig {
     /// Fail the build when a page is over. Off, the same report is a warning.
@@ -23,8 +17,7 @@ pub struct BudgetConfig {
     pub js: Option<Bytes>,
     /// Every stylesheet it loads, plus its inline `<style>` bodies.
     pub css: Option<Bytes>,
-    /// Every image it references, responsive candidates excluded: a `srcset`
-    /// offers alternatives, and a visitor is served one of them.
+    /// Every image it references, responsive candidates excluded.
     pub images: Option<Bytes>,
     /// All of the above at once, the page's total transfer weight.
     pub total: Option<Bytes>,
@@ -43,7 +36,6 @@ impl Default for BudgetConfig {
     }
 }
 
-/// The `lint { budget { .. } }` section: per-page weight ceilings.
 impl Section for BudgetConfig {
     const RULES: Block<Self> = Block(&[
         (

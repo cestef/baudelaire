@@ -1,13 +1,5 @@
-//! Findings of the lint pass over the built pages.
-//!
-//! A [`Lint`] is what a rule found; a [`Flaw`] is that finding rendered against
-//! the source it came from, with the offending bytes underlined. The rules
-//! themselves live in [`crate::render::lint`], which produces the [`Lint`]s
-//! while it walks the typed DOM: this module knows only how to say them.
-//!
-//! Both halves follow [`super::link`]: one diagnostic per finding, gathered
-//! into one parent so a page with twenty missing `alt`s is one report and not
-//! twenty.
+//! Findings of the lint pass over the built pages: a [`Lint`] is what a rule
+//! found, a [`Flaw`] is that finding rendered against the source it came from.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -19,12 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::render::Site;
 use crate::ui::{Bytes, Code, Text};
 
-/// What a lint rule found. One variant per rule, carrying exactly what the
-/// message needs, so the wording is written once here rather than assembled at
-/// each rule.
-///
-/// Serialized as part of a page's cached outputs, so a cache hit reports what
-/// it found when it was built.
+/// What a lint rule found; serialized with a page's cached outputs, so a cache
+/// hit reports what it found when it was built.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Lint {
     /// A heading that skips a level: `h{from}` straight to `h{to}`.
@@ -42,26 +30,18 @@ pub enum Lint {
 }
 
 impl Lint {
-    /// The `lint { }` key this finding answers to.
-    ///
-    /// A finding is cached with the page that produced it; how loud it is is
-    /// not, because that is config a site can change between builds without
-    /// recompiling anything. Resolving the severity from the rule at report
-    /// time is what keeps a cache hit reporting what the *current* config asks.
+    /// Resolved at report time rather than cached with the finding, so a cache
+    /// hit reports at the severity the *current* config asks for.
     pub fn ruled(&self) -> crate::config::Ruled {
         use crate::config::Ruled;
         match self {
             Self::Heading { .. } => Ruled::Headings,
             Self::Alt => Ruled::Alt,
             Self::Id(_) => Ruled::Ids,
-            // The three ARIA shapes are one rule and one key: a site turning
-            // ARIA checking down means all of it.
             Self::Role(_) | Self::Attr(_) | Self::Idref { .. } => Ruled::Aria,
         }
     }
 
-    /// The diagnostic code, one per rule so a report can be grepped and a CI
-    /// gate can name what it is failing on.
     fn code(&self) -> &'static str {
         match self {
             Self::Heading { .. } => "baudelaire::lint::heading",
@@ -74,8 +54,7 @@ impl Lint {
     }
 
     /// What to underline in the source. Constant, never interpolated: a label
-    /// is not markup-rendered, so a value carrying a backtick would land raw in
-    /// the output. What the value *is* belongs in the message.
+    /// is not markup-rendered, so a value carrying a backtick would land raw.
     fn label(&self) -> &'static str {
         match self {
             Self::Heading { .. } => "this heading skips a level",
@@ -87,7 +66,6 @@ impl Lint {
         }
     }
 
-    /// What to do about it.
     fn help(&self) -> &'static str {
         match self {
             Self::Heading { .. } => {
@@ -138,13 +116,12 @@ impl fmt::Display for Lint {
 /// One finding, located in the source that produced it.
 #[derive(Debug)]
 pub struct Flaw {
-    /// The page it was found on, relative to the content root.
+    /// Relative to the content root.
     page: String,
     lint: Lint,
-    /// The source file, for rendering the offending line.
     src: NamedSource<String>,
-    /// Byte span of the element within that file, if it could be located: an
-    /// element this crate synthesized belongs to no `.typ` at all.
+    /// Byte span of the element within that file; `None` for an element this
+    /// crate synthesized, which belongs to no `.typ` at all.
     span: Option<SourceSpan>,
     /// Error under `lint { strict }`, warning otherwise; set by the [`Flaws`]
     /// constructor so parent and children render alike.
@@ -152,15 +129,8 @@ pub struct Flaw {
 }
 
 impl Flaw {
-    /// Build a finding's diagnostic against `source`, the text of the file it
-    /// points into ([`Sources`] reads those, once each).
-    ///
-    /// The span is kept only when it actually lies within that text. A page's
-    /// elements do not all come from a file on disk: a templated page compiles
-    /// through a generated wrapper, and a listing page's source is synthesized
-    /// entirely. Handing miette a span into text it does not have prints
-    /// `[Failed to read contents for label]` where the source line belongs, so
-    /// a finding with nothing to underline says only what it found and where.
+    /// The span is kept only when it lies within `source`: miette prints
+    /// `[Failed to read contents for label]` for a span into text it lacks.
     pub fn new(page: String, lint: Lint, at: Option<&Site>, source: Option<&str>) -> Self {
         let (name, text, span) = match (at, source) {
             (Some(site), Some(text)) if site.offset + site.len <= text.len() => (
@@ -181,15 +151,10 @@ impl Flaw {
 }
 
 /// The source files a batch of findings points into, read once each.
-///
-/// A page with twenty missing `alt`s is twenty findings in one file, and every
-/// one of them wants that file's text to underline a line of. Without this the
-/// file is read (and copied) twenty times.
 #[derive(Default)]
 pub struct Sources {
     /// Project-relative path -> its text, `None` for a file that is not on
-    /// disk. The absences are cached too: the same synthesized path recurs for
-    /// every finding on that page.
+    /// disk.
     files: HashMap<String, Option<String>>,
 }
 
@@ -238,9 +203,8 @@ impl Diagnostic for Flaw {
     }
 }
 
-/// Everything the lint pass found. An error under `lint { strict }`
-/// ([`Flaws::new`]); otherwise the identical report as a warning
-/// ([`Flaws::warning`]).
+/// An error under `lint { strict }`, otherwise the identical report as a
+/// warning.
 #[derive(Debug)]
 pub struct Flaws {
     flaws: Vec<Flaw>,
@@ -248,7 +212,6 @@ pub struct Flaws {
 }
 
 impl Flaws {
-    /// The strict form: a build-failing error.
     pub fn new(mut flaws: Vec<Flaw>) -> Self {
         for flaw in &mut flaws {
             flaw.severity = Severity::Error;
@@ -259,7 +222,6 @@ impl Flaws {
         }
     }
 
-    /// The lenient form: the identical diagnostic at warning severity.
     pub fn warning(flaws: Vec<Flaw>) -> Self {
         Self {
             flaws,
@@ -316,9 +278,6 @@ mod tests {
         }
     }
 
-    /// A finding whose element came from a source this build cannot open (a
-    /// generated listing, a page compiled through its wrapper) still reports;
-    /// it simply underlines nothing.
     #[test]
     fn a_finding_with_no_readable_source_carries_no_span() {
         let flaw = Flaw::new("a.typ".into(), Lint::Alt, Some(&at(0, 4)), None);
@@ -326,8 +285,6 @@ mod tests {
         assert!(flaw.source_code().is_none());
     }
 
-    /// Nor does one whose span does not fit the text it names: miette would
-    /// print a read failure where the source line belongs.
     #[test]
     fn a_span_past_the_end_of_the_source_is_dropped() {
         let flaw = Flaw::new("a.typ".into(), Lint::Alt, Some(&at(2, 900)), Some("short"));
@@ -341,9 +298,9 @@ mod tests {
 /// One page that ships more bytes than its budget allows.
 #[derive(Debug)]
 pub struct Overweight {
-    /// The page, relative to the content root.
+    /// Relative to the content root.
     pub page: String,
-    /// Which budget it broke, as spelled under `lint { budget { } }`.
+    /// As spelled under `lint { budget { } }`.
     pub budget: &'static str,
     pub weighed: Bytes,
     pub allowed: Bytes,
@@ -370,12 +327,8 @@ impl Diagnostic for Overweight {
     }
 }
 
-/// The pages that broke a weight budget.
-///
 /// An error by default, because a budget is a limit the author wrote down
-/// rather than an opinion this tool holds. `budget { strict #false }` turns it
-/// into a report, which is what a site adopting a budget on pages it already has
-/// needs, and the [`Severity`] it carries is that choice.
+/// rather than an opinion this tool holds.
 #[derive(Debug)]
 pub struct Overweights {
     over: Vec<Overweight>,
@@ -383,8 +336,6 @@ pub struct Overweights {
 }
 
 impl Overweights {
-    /// The strict form: a build-failing error, and what a budget has always
-    /// been.
     pub fn new(over: Vec<Overweight>) -> Self {
         Self {
             over,
@@ -392,8 +343,7 @@ impl Overweights {
         }
     }
 
-    /// The lenient form, for `lint { budget { strict #false } }`: the identical
-    /// report at warning severity.
+    /// For `lint { budget { strict #false } }`.
     pub fn warning(over: Vec<Overweight>) -> Self {
         Self {
             over,

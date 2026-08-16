@@ -38,20 +38,18 @@ use crate::graph::Deps;
 pub(crate) const USER_AGENT: &str = concat!("baudelaire/", env!("CARGO_PKG_VERSION"));
 
 /// The typst features exposable via `features` in config, as `(name, feature)`
-/// pairs. Single source of truth: parsing a feature name and listing the valid
-/// names in errors both read this table.
+/// pairs; `html` is force-enabled on top and `-html` is refused at parse.
 const FEATURES: &[(&str, Feature)] = &[
     ("html", Feature::Html),
     ("bundle", Feature::Bundle),
     ("a11y-extras", Feature::A11yExtras),
 ];
 
-/// Shared project state: fonts, file loader, library. Cloned cheaply per
-/// page compile so comemo memoization survives across the pool.
+/// Shared project state: fonts, file loader, library, cloned cheaply per page
+/// compile so comemo memoization survives across the pool.
 #[derive(Clone)]
 pub struct Project {
     lib: Arc<LazyHash<Library>>,
-    /// What a glyph may resolve to, discovered lazily on first lookup.
     fonts: Arc<Fonts>,
     /// Behind a lock because one build writes files the store has already
     /// served: see [`Project::tables_written`].
@@ -64,17 +62,13 @@ pub struct Project {
 impl Project {
     /// Build shared project state from a config, for the given build `mode`.
     ///
-    /// The theme is passed in rather than resolved here: the caller has already
-    /// resolved it (a package theme is a download), and the two must be the same
-    /// theme or the compiler would import layouts from one and the build would
-    /// layer assets from the other.
+    /// `theme` is already resolved, and must be the one the rest of the build
+    /// layers assets from.
     pub fn new(config: &Config, mode: Mode, theme: Option<&crate::theme::Theme>) -> Result<Self> {
         let project_root = crate::fs::canonical(&config.root);
 
         let now = OffsetDateTime::now_utc();
         let context = BuildContext::detect(&project_root, now, config, mode);
-        // One build-context tree, read twice: injected at `sys.inputs.baudelaire`
-        // and served to the `@baudelaire/*` module registry.
         let tree = codegen::Value::from(&context);
         let mut inputs: Dict = config
             .typst
@@ -82,13 +76,8 @@ impl Project {
             .iter()
             .map(|(k, v)| (Str::from(k.as_str()), v.clone().into_value()))
             .collect();
-        // reserved namespace exposing build metadata to pages.
         inputs.insert(Str::from("baudelaire"), Value::from(&tree));
 
-        // HTML export is non-negotiable: Baudelaire only ever emits an
-        // `HtmlDocument`, so `Feature::Html` is always on and can never be
-        // disabled (`-html` is rejected at parse). Every other feature is a
-        // `+name`/`-name` toggle resolved here in order, so a later entry wins.
         let mut features = vec![Feature::Html];
         for token in &config.typst.features {
             let (enable, name) = match token.strip_prefix('-') {
@@ -117,13 +106,8 @@ impl Project {
             .with_features(Features::from_iter(features))
             .with_inputs(inputs)
             .build();
-        // `#md`'s engine half. In the global scope because that is the only
-        // scope a native function can be put in: a virtual module's bindings
-        // are generated source, so `@baudelaire/markdown` closes over this
-        // rather than carrying it.
         #[cfg(feature = "markdown")]
         markdown::define(&mut library);
-        // Whatever this site asks baudelaire to render differently from typst.
         rules::Rules::install(&mut library, config);
 
         Ok(Self {
@@ -156,9 +140,7 @@ impl Project {
     }
 
     /// The injected values whose per-page reads the cache tracks, each as a
-    /// dotted base and its current tree. One entry today (build metadata), but
-    /// the mechanism is generic, so any future `sys.inputs.*` value tracked for
-    /// fine-grained invalidation is added here.
+    /// dotted base and its current tree.
     pub fn tracked(&self) -> Vec<(String, codegen::Value)> {
         vec![(
             Self::METADATA.to_owned(),
@@ -166,30 +148,23 @@ impl Project {
         )]
     }
 
-    /// A content fingerprint over the generated `@baudelaire/*` modules, for
-    /// the build cache. A virtual module has no path, so it can never appear in
-    /// a page's dependency set; see [`module`] for why this is sound.
+    /// A content fingerprint over the generated `@baudelaire/*` modules, which
+    /// have no path and so can never appear in a page's dependency set.
     pub fn modules(&self) -> crate::graph::Hash {
         self.files.read().loader().fingerprint()
     }
 
-    /// A content fingerprint over the faces the site ships itself, for the build
-    /// cache, or `None` when it ships none. See [`fonts::Fonts::digest`] for why
-    /// a font is not a tracked dependency and has to be hashed here.
+    /// A content fingerprint over the faces the site ships itself, or `None`
+    /// when it ships none; see [`fonts::Fonts::digest`] for why it is needed.
     pub fn fonts(&self) -> Option<crate::graph::Hash> {
         self.fonts.digest()
     }
 
     /// The generated tables (`@baudelaire/sections`, `@baudelaire/pages`) are
-    /// on disk. Called once per build, by the pass that writes them.
+    /// on disk; called once per build, by the pass that writes them.
     ///
-    /// A content page that imports one is evaluated during discovery, before
-    /// this: it is handed the empty table, and the store keeps that answer for
-    /// the file id. Dropping the loaded slots here is what makes the page's
-    /// *compile* read the table this build wrote. Nothing else in the build
-    /// rewrites a file it has already served, so this is the one place that
-    /// needs it, and the cost is paid only by a site that reads a table from
-    /// content.
+    /// A page evaluated during discovery was served the empty table, so the
+    /// loaded slots are dropped here for its compile to read the real one.
     pub fn tables_written(&self) {
         let mut files = self.files.write();
         if files.loader().published() {
@@ -202,17 +177,12 @@ impl Project {
 
     /// The tracked key standing for "this build's clock".
     ///
-    /// `datetime.today()` reads the same instant as
-    /// `sys.inputs.baudelaire.date` but through the [`World`], where nothing
-    /// records it: [`Tracked`] captures `source` and `file` only. A page
-    /// printing the current year was therefore a cache hit into the next one.
-    /// Recording the call as a read of this key reuses the value-digest
-    /// invalidation already in place instead of inventing a second mechanism.
+    /// `datetime.today()` reads the same instant through the [`World`], which
+    /// records no file, so the call is recorded as a read of this key instead.
     pub fn clock() -> String {
         format!("{}.{}", Self::METADATA, BuildContext::DATE)
     }
 
-    /// Project root directory.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -247,10 +217,8 @@ impl Project {
         })
     }
 
-    /// Evaluate a source as a typst module: the compiler's own memoized
-    /// evaluation, so a later compile of the same file reuses it. A module's
-    /// scope carries the page's exports (`#let frontmatter = ..`); its errors
-    /// carry real file spans.
+    /// Evaluate a source as a typst module, through the compiler's own
+    /// memoized evaluation, so a later compile of the same file reuses it.
     pub fn module(&self, source: &Source) -> Result<Module> {
         let world = self.world_for(source);
         let mut sink = Sink::new();
@@ -274,13 +242,9 @@ impl Project {
         })
     }
 
-    /// Evaluate a source as a typst module and capture what the evaluation read:
-    /// the files (the frontmatter's exact dependency set, so discovery can cache
-    /// the extracted frontmatter and re-evaluate only when a dependency changes)
-    /// and whether it read the build clock, which goes through the `World` and
-    /// leaves no file behind. Like [`Project::module`] but through a [`Tracked`]
-    /// world; the page's own source is excluded from the deps (it is
-    /// fingerprinted separately).
+    /// Like [`Project::module`] but through a [`Tracked`] world, also yielding
+    /// the files the evaluation read (excluding the page's own source) and
+    /// whether it read the build clock.
     pub fn module_tracked(&self, source: &Source) -> Result<(Module, Deps, bool)> {
         let world = Tracked::new(self.world_for(source));
         let mut sink = Sink::new();
@@ -317,9 +281,9 @@ impl Project {
         self.files.read().loader().resolve(id).ok()
     }
 
-    /// The files a tracked compilation read, excluding its own `main` source
-    /// (fingerprinted separately): a page's exact dependency set, canonicalized
-    /// where the path resolves and kept as read where it does not.
+    /// The files a tracked compilation read, excluding its own `main` source,
+    /// canonicalized where the path resolves and kept lexically where it does
+    /// not, since a dependency that goes unrecorded can never invalidate.
     pub fn dependencies<W: World>(&self, world: &Tracked<W>) -> Deps {
         let main = world.main();
         world
@@ -327,42 +291,26 @@ impl Project {
             .into_iter()
             .filter(|id| *id != main)
             .filter_map(|id| self.path_of(id))
-            // A path that will not canonicalize (deleted between the read and
-            // here, an editor's write-to-temp-then-rename under `serve`) must
-            // not be dropped: a dependency that goes unrecorded is one the page
-            // can never be invalidated by, and it would serve stale output
-            // forever. That is the unsound direction, the same one
-            // `graph::access` refuses when it cannot load a file. Keep the
-            // lexical path instead (`fs::canonical` falls back to it), where
-            // the cost is at worst one rebuild too many and the file's absence
-            // is itself recorded as a dependency. Not a hard error either: that
-            // rename race is routine, and failing on it would make `serve`
-            // flaky over a file that is fine a millisecond later.
             .map(crate::fs::canonical)
             .collect::<Vec<_>>()
             .into()
     }
 }
 
-/// A [`World`] wrapper that records every file the compiler reads, yielding a
-/// compilation's exact dependency set: transitive imports, data loaders
-/// (`json`, `csv`, ..), and assets alike.
+/// A [`World`] wrapper that records every file the compiler reads: transitive
+/// imports, data loaders (`json`, `csv`, ..), and assets alike.
 ///
-/// This works even though the underlying world is comemo-memoized and shared
-/// across pages: comemo validates a cached result by re-calling the tracked
-/// `source`/`file` accessors, so every dependency still flows through here.
-/// Verified by `tests/incremental_e2e.rs` (`shared_module_tracked_for_every_page`,
-/// `editing_transitive_import_invalidates_page`).
+/// Memoization does not hide a read: comemo validates a cached result by
+/// re-calling the tracked `source`/`file` accessors.
 pub struct Tracked<W> {
     inner: W,
     accessed: parking_lot::Mutex<std::collections::HashSet<FileId>>,
-    /// Whether the compilation asked for the current date. Not a file access,
-    /// so it needs its own flag; see [`Project::clock`] for why it is recorded.
+    /// Whether the compilation asked for the current date, which is not a file
+    /// access and so needs its own flag.
     clock: std::sync::atomic::AtomicBool,
 }
 
 impl<W> Tracked<W> {
-    /// Wrap a world to record its file accesses.
     pub fn new(inner: W) -> Self {
         Self {
             inner,
@@ -371,18 +319,14 @@ impl<W> Tracked<W> {
         }
     }
 
-    /// The wrapped world.
     pub fn inner(&self) -> &W {
         &self.inner
     }
 
-    /// Consume the wrapper, returning the wrapped world, for building an owned
-    /// world (e.g. an `Arc`) once tracking is done.
     pub fn into_inner(self) -> W {
         self.inner
     }
 
-    /// The file ids accessed so far.
     pub fn accessed(&self) -> Vec<FileId> {
         self.accessed.lock().iter().copied().collect()
     }
@@ -430,19 +374,14 @@ impl<W: World> World for Tracked<W> {
     }
 }
 
-/// How a page's synthetic layout module is named to the compiler.
-///
-/// The wrapper is a sibling of the page - so a relative template import
-/// resolves the same way - but a distinct file, so it can `#include` the real
-/// page without shadowing it as `main`. The suffix is written once here and
-/// read back here: [`crate::engine`] builds the id, and the passes that report
-/// a location have to undo it, since `content/a.md@layout` is a path no editor
-/// can open and no author ever wrote.
+/// How a page's synthetic layout module is named to the compiler: a sibling of
+/// the page, so a relative template import resolves the same way, but a
+/// distinct file, so it can `#include` the page without shadowing it as `main`.
 pub struct Wrapper;
 
 impl Wrapper {
-    /// What distinguishes a wrapper's name from the page it wraps. Not a valid
-    /// path character sequence any real file would carry.
+    /// What distinguishes a wrapper's name from the page it wraps, spelled so
+    /// no real file can carry it.
     const SUFFIX: &'static str = "@layout";
 
     /// The wrapper module's file id for the page at `rooted`.
@@ -454,14 +393,14 @@ impl Wrapper {
     }
 
     /// The page behind a wrapper's name, or `path` unchanged when it names no
-    /// wrapper: what an author can actually open.
+    /// wrapper.
     pub fn page(path: &str) -> &str {
         path.strip_suffix(Self::SUFFIX).unwrap_or(path)
     }
 }
 
-/// A world bound to a single page's source as `main`. Shares project fonts,
-/// files, and library so comemo caches hit across compiles.
+/// A world bound to a single page's source as `main`, sharing project fonts,
+/// files and library so comemo caches hit across compiles.
 #[derive(Clone)]
 pub struct PageWorld {
     project: Project,
@@ -469,23 +408,18 @@ pub struct PageWorld {
 }
 
 impl PageWorld {
-    /// The main source file id.
     pub fn id(&self) -> FileId {
         self.main.id()
     }
 
-    /// The main source.
     pub fn source(&self) -> &Source {
         &self.main
     }
 
     /// This build's date, for an exporter that stamps one into its output.
     ///
-    /// Deliberately not [`World::today`]: that call is what [`Tracked`] records
-    /// as a read of the clock, and a page that merely *ships* a dated PDF has
-    /// not displayed the date and must not be invalidated when it turns over.
-    /// It is the same instant either way, so the PDF's creation date and
-    /// `sys.inputs.baudelaire.date` cannot disagree.
+    /// Deliberately not [`World::today`], which [`Tracked`] records as a read
+    /// of the clock: shipping a dated PDF is not displaying the date.
     pub fn stamp(&self) -> Option<Datetime> {
         Some(Datetime::Date(self.project.now.date()))
     }
@@ -520,13 +454,8 @@ impl World for PageWorld {
     }
 
     fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
-        // No offset defaults to UTC (the same clock the build context stamps)
-        // rather than `None`, which typst reports as "unable to determine
-        // current date" on every offset-less `datetime.today()` call.
         let offset = match offset {
-            // Clamped before narrowing, so the cast cannot truncate: an offset
-            // that overflows `i32` is thousands of times past the day
-            // `from_whole_seconds` accepts, and is `None` either way.
+            // Clamped before the narrowing, so the cast cannot truncate.
             #[allow(clippy::cast_possible_truncation)]
             Some(o) => time::UtcOffset::from_whole_seconds(
                 o.seconds().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,

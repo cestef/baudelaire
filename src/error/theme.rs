@@ -6,8 +6,7 @@ use thiserror::Error;
 use crate::ui::{Bytes, Code, Text};
 
 /// A configured theme that could not be resolved. Fatal: the site's templates
-/// and assets are expected to come from it, so continuing would build a
-/// stripped version of the site rather than the one that was asked for.
+/// and assets come from it, so continuing would build a stripped site.
 #[derive(Debug, Error, Diagnostic)]
 pub enum ThemeError {
     #[error("{} is not a package spec: {}", Code(.spec), Text(.why))]
@@ -17,10 +16,6 @@ pub enum ThemeError {
     )]
     Spec { spec: String, why: String },
 
-    /// The package store could not produce the package. Its own
-    /// [`PackageError`](typst::diag::PackageError) is kept as the source: it
-    /// tells "no such package" from "no such version" from "the download
-    /// failed", which a flattened message reduces to one sentence.
     #[error("theme {} could not be obtained", Code(.spec))]
     #[diagnostic(
         code(baudelaire::theme::unavailable),
@@ -66,9 +61,6 @@ pub enum ThemeError {
     )]
     Uninstalled { path: String },
 
-    /// The record beside a theme's files could not be serialized. The
-    /// serializer's own error is kept as the source, so the offending field is
-    /// still named.
     #[error("the theme record at {} could not be written", Code(.path))]
     #[diagnostic(
         code(baudelaire::theme::lock),
@@ -97,9 +89,8 @@ pub enum ThemeError {
     )]
     Unnamed { path: String },
 
-    /// The download itself failed. Boxed because the two halves of one fetch
-    /// fail with different types (the client's error for the request, an
-    /// `io::Error` for the body), and both are the answer.
+    /// Boxed because the two halves of one fetch fail with different types: the
+    /// client's error for the request, an `io::Error` for the body.
     #[error("{} could not be fetched", Code(.url))]
     #[diagnostic(
         code(baudelaire::theme::fetch),
@@ -111,9 +102,8 @@ pub enum ThemeError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    /// The archive could not be decompressed or walked. Boxed for the same
-    /// reason: the tar branch fails with an `io::Error`, the zip branch with
-    /// the zip reader's own error.
+    /// Boxed for the same reason: the tar branch fails with an `io::Error`, the
+    /// zip branch with the zip reader's own error.
     #[error("the archive at {} could not be read", Code(.url))]
     #[diagnostic(
         code(baudelaire::theme::unpack),
@@ -125,12 +115,8 @@ pub enum ThemeError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    /// The download ran past the ceiling a theme may weigh.
-    ///
-    /// Refused rather than truncated. The reader used to stop at the limit and
-    /// hand back what it had, so an oversize (or endless) URL installed as a
-    /// theme missing whatever fell off the end: a green `theme add` and a
-    /// directory of half-written files.
+    /// Refused rather than truncated: a reader that stops at the ceiling
+    /// installs a theme missing whatever fell off the end.
     #[error("the archive at {} is larger than the {} a theme may weigh", Code(.url), Code(Bytes(*limit)))]
     #[diagnostic(
         code(baudelaire::theme::oversize),
@@ -141,10 +127,9 @@ pub enum ThemeError {
     )]
     Oversize { url: String, limit: u64 },
 
-    /// The compressed ceiling says nothing about what the bytes expand to. A
-    /// gzip stream of one repeated byte reaches roughly a thousand to one, so
-    /// an archive well inside [`ThemeError::Oversize`] unpacked into gigabytes
-    /// of memory and then onto the disk.
+    /// The compressed ceiling says nothing about what the bytes expand to: gzip
+    /// reaches roughly a thousand to one, so an archive well inside
+    /// [`ThemeError::Oversize`] can unpack into gigabytes.
     #[error("the archive at {} unpacks to more than the {} a theme may weigh", Code(.url), Code(Bytes(*limit)))]
     #[diagnostic(
         code(baudelaire::theme::unpacked),
@@ -175,13 +160,6 @@ pub enum ThemeError {
 
     /// A theme's `theme.kdl` naming a section that is not a theme's to name.
     ///
-    /// A theme supplies templates, assets, and defaults for what the *pages*
-    /// are. Where the project's files live, what its build runs and where it
-    /// publishes are the site's own, and a theme is fetched: a package theme is
-    /// downloaded at build time, so its `theme.kdl` need never appear in the
-    /// site's repository at all. A hook inherited from one would be a command
-    /// run through a shell that the site never wrote and cannot read.
-    ///
     /// Refused rather than ignored, so a theme author learns their block does
     /// nothing instead of shipping one that silently never applies.
     #[error("theme defaults at {} set {}, which is the site's", Code(.path), Code(.section))]
@@ -209,8 +187,7 @@ pub enum ThemeError {
 }
 
 impl ThemeError {
-    /// `help` is the nearest-name suggestion built from the bundled table, and
-    /// arrives already marked up.
+    /// `help` is a nearest-name suggestion, and arrives already marked up.
     pub fn unknown(name: &str, help: String) -> Self {
         Self::Unknown {
             name: name.to_owned(),
@@ -218,15 +195,10 @@ impl ThemeError {
         }
     }
 
-    /// A spec no source claims, or an origin no source owns: the same answer
-    /// either way, because both mean this binary cannot go and get it.
     pub fn unsupported(spec: String) -> Self {
         Self::Unsupported { spec }
     }
 
-    /// The transport's own error, kept whole: what it says about a redirect or
-    /// a TLS failure is the answer, and it is a different type for the request
-    /// and for the body.
     pub fn fetch(url: &str, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Fetch {
             url: url.to_owned(),
@@ -234,7 +206,6 @@ impl ThemeError {
         }
     }
 
-    /// The decompressor's own error, for the same reason.
     pub fn unpack(url: &str, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Unpack {
             url: url.to_owned(),
@@ -242,8 +213,6 @@ impl ThemeError {
         }
     }
 
-    /// The download stopped at the ceiling, so what arrived is a prefix of a
-    /// theme and not a theme.
     pub fn oversize(url: &str, limit: u64) -> Self {
         Self::Oversize {
             url: url.to_owned(),
@@ -251,7 +220,6 @@ impl ThemeError {
         }
     }
 
-    /// The entries unpacked past the ceiling, so the archive is a bomb.
     pub fn unpacked(url: &str, limit: u64) -> Self {
         Self::Unpacked {
             url: url.to_owned(),
@@ -259,7 +227,6 @@ impl ThemeError {
         }
     }
 
-    /// The archive holds more entries than a theme plausibly has.
     pub fn crowded(url: &str, limit: usize) -> Self {
         Self::Crowded {
             url: url.to_owned(),
@@ -267,9 +234,8 @@ impl ThemeError {
         }
     }
 
-    /// `section` is one of the config's own top-level key names, so it is this
-    /// binary's text rather than the theme author's; `path` is the theme's
-    /// `theme.kdl`, as the run spells it.
+    /// `section` is one of the config's own top-level key names, never the
+    /// theme author's text.
     pub fn governs(path: impl std::fmt::Display, section: &str) -> Self {
         Self::Governs {
             path: path.to_string(),
@@ -302,7 +268,6 @@ impl ThemeError {
         }
     }
 
-    /// The serializer's own error, kept whole.
     pub fn lock(path: impl std::fmt::Display, source: serde_json::Error) -> Self {
         Self::Lock {
             path: path.to_string(),
@@ -310,9 +275,8 @@ impl ThemeError {
         }
     }
 
-    /// The one place a `why: String` is right rather than a `#[source]`:
-    /// `PackageSpec::from_str` fails with an `EcoString`, so there is no error
-    /// to keep. The text *is* the parser's whole answer.
+    /// A `why: String` rather than a `#[source]`: `PackageSpec::from_str` fails
+    /// with an `EcoString`, so there is no error to keep.
     pub fn spec(spec: &str, why: impl std::fmt::Display) -> Self {
         Self::Spec {
             spec: spec.to_owned(),
@@ -320,9 +284,6 @@ impl ThemeError {
         }
     }
 
-    /// The package store's own error, kept whole: it is a real error type, and
-    /// it tells a missing package from a missing version from a failed
-    /// download.
     pub fn unavailable(spec: &str, source: typst::diag::PackageError) -> Self {
         Self::Unavailable {
             spec: spec.to_owned(),

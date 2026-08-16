@@ -1,16 +1,7 @@
 //! Markdown pages: a source dialect that lowers to Typst.
 //!
-//! A `.md` file under `content/` is a page like any other. It is not a second
-//! pipeline: [`Markdown::lower`] turns the body into Typst source and the
-//! frontmatter block into a Typst dict, and from there the engine sees exactly
-//! what it sees for a `.typ` page. Highlighting, math, link resolution,
-//! sidecars, the transform chain and the cache fingerprint all apply unchanged,
-//! because by then there is nothing markdown-shaped left.
-//!
-//! Frontmatter is whatever its fence opens: `---` is YAML, `+++` is TOML, `;;;`
-//! is KDL. A post pasted out of another generator therefore needs no rewriting,
-//! and the fence is the whole of the declaration, so a block is never read as a
-//! language it is not. See [`frontmatter`].
+//! [`Markdown::lower`] turns the body into Typst source and the frontmatter
+//! block into a Typst dict; from there the engine sees a `.typ` page.
 
 mod frontmatter;
 mod lower;
@@ -26,27 +17,21 @@ pub struct Document<'a> {
     /// The text between the fences, absent when the file opens with content.
     pub frontmatter: Option<&'a str>,
     /// The language that text is written in, decided by the fence that opened
-    /// it. Meaningless without `frontmatter`, and defaulted rather than
-    /// optional: an absent block is an empty block of some dialect, and which
-    /// one cannot matter because there is nothing in it.
+    /// it and meaningless without `frontmatter`.
     pub dialect: Dialect,
     /// Everything after the closing fence, or the whole file without one.
     pub body: &'a str,
-    /// Byte offset of `frontmatter` within the file, so a diagnostic can point
-    /// at the line the author wrote rather than at the block's own first line.
+    /// Byte offset of `frontmatter` within the file, so a diagnostic points at
+    /// the line the author wrote rather than at the block's own first line.
     pub offset: usize,
-    /// Byte offset of `body` within the file, for the same reason: a fault the
-    /// lowering finds is reported against the page, not against the body.
+    /// Byte offset of `body` within the file, for the same reason.
     pub body_offset: usize,
 }
 
 impl<'a> Document<'a> {
-    /// `source` as a document that is body from its first byte.
-    ///
-    /// What a `paths { sources { } }` file is read as: the frontmatter came
-    /// from the page that named it, so a fence at the top of this one is a
-    /// thematic break in somebody else's file and not a block to consume. A
-    /// `CHANGELOG.md` opening with `---` under its title is exactly that.
+    /// `source` as a document that is body from its first byte, which is what a
+    /// `paths { sources { } }` file is read as: its frontmatter came from the
+    /// page that named it, so a fence at its top is a thematic break.
     pub fn whole(source: &'a str) -> Self {
         Self {
             frontmatter: None,
@@ -57,8 +42,8 @@ impl<'a> Document<'a> {
         }
     }
 
-    /// Split `source`. A file whose first line is not a fence has no
-    /// frontmatter, which is not an error: a page may declare nothing.
+    /// Split `source`; a file whose first line is not a fence has no
+    /// frontmatter, which is not an error.
     pub fn split(source: &'a str, path: &str) -> Result<Self> {
         let trimmed = source.trim_start_matches(['\u{feff}', '\n', '\r']);
         let bare = |body| Self {
@@ -69,15 +54,11 @@ impl<'a> Document<'a> {
             body_offset: 0,
         };
 
-        // Whichever fence the file opens with decides the language. Read from
-        // the table, so a new dialect is openable the moment it is listed.
         let Some(opened) = FENCES.iter().find(|row| trimmed.starts_with(row.open)) else {
             return Ok(bare(source));
         };
         let fence = opened.open;
         let rest = Self::blank(&trimmed[fence.len()..]);
-        // A fence opens a block only on a line of its own; anything else on that
-        // line is a thematic break or a setext heading, and the file is body.
         let Some(rest) = rest
             .strip_prefix('\n')
             .or_else(|| rest.strip_prefix("\r\n"))
@@ -86,10 +67,6 @@ impl<'a> Document<'a> {
         };
 
         let start = source.len() - rest.len();
-        // The closing fence is held to the rule the opening one is: alone on its
-        // line. `--- and more` used to close a block and leave `" and more"` as
-        // the first bytes of the body, silently, which is not what any other
-        // generator does with it.
         let closing = |rest: &str, i: usize| {
             let before = &rest[..i];
             let after = Self::blank(&rest[i + fence.len()..]);
@@ -104,9 +81,6 @@ impl<'a> Document<'a> {
                 path: path.to_owned(),
                 fence: fence.to_owned(),
                 src: miette::NamedSource::new(path, source.to_owned()),
-                // `start` is past the newline that ended the opening fence, so
-                // the fence itself is that newline's width further back. Fixed
-                // at one byte, the label landed on `--\r` under CRLF.
                 span: (
                     start - fence.len() - Self::newline_before(source, start),
                     fence.len(),
@@ -128,28 +102,21 @@ impl<'a> Document<'a> {
         })
     }
 
-    /// `text` with the horizontal whitespace at its front removed.
-    ///
-    /// What may sit between a fence and the end of its line. An editor that
-    /// trims nothing, or an author who caught the space bar, leaves `--- `, and
-    /// requiring the newline immediately made that block "never closed" -- or,
-    /// on the *opening* fence, made the whole file body with no diagnostic at
-    /// all, which is the same slip with a worse outcome.
+    /// `text` with the horizontal whitespace at its front removed, which is
+    /// what may sit between a fence and the end of its line.
     fn blank(text: &str) -> &str {
         text.trim_start_matches([' ', '\t'])
     }
 
     /// The width of the line ending immediately before `at`: 2 for CRLF, 1 for
-    /// LF. What stepping back over the opening fence's newline costs, which is
-    /// not a constant on a file written on Windows.
+    /// LF.
     fn newline_before(source: &str, at: usize) -> usize {
         if source[..at].ends_with("\r\n") { 2 } else { 1 }
     }
 
-    /// The block this document declares, read in its own dialect. An absent
-    /// block is the empty one, which is still walked: a collection that requires
-    /// fields is not satisfied by a page that declares none, and the emptiest
-    /// page is exactly what a schema exists to catch.
+    /// The block this document declares, read in its own dialect; an absent
+    /// block is the empty one, which is still walked so a schema requiring a
+    /// field fails on the page that wrote none.
     pub fn block(&self, path: &str, source: &str) -> Result<Block> {
         match self.frontmatter {
             Some(text) => self.dialect.parse(text, self.offset, path, source),
@@ -170,8 +137,6 @@ mod tests {
         assert_eq!(doc.body, "# Heading\n");
     }
 
-    /// Each fence opens its own language, and closes it: a block is never
-    /// terminated by a different dialect's fence.
     #[test]
     fn the_fence_decides_the_dialect() {
         for fence in FENCES {
@@ -184,25 +149,17 @@ mod tests {
         }
     }
 
-    /// A fence is alone on its line whether or not the line was trimmed. An
-    /// editor that strips nothing, or an author who caught the space bar,
-    /// leaves `--- `: on the closing fence that made the block "never closed",
-    /// and on the opening one it made the whole file body, silently, with the
-    /// frontmatter served as prose.
     #[test]
     fn a_fence_may_carry_trailing_whitespace() {
         let doc = Document::split("--- \ntitle: A\n---\t\n# Heading\n", "a.md").expect("split");
         assert_eq!(doc.frontmatter, Some("title: A\n"));
         assert_eq!(doc.body, "# Heading\n");
-        // ...and the offsets still name the same bytes of the file.
         let source = "+++ \ntitle = \"A\"\n+++ \nBody.\n";
         let doc = Document::split(source, "a.md").expect("split");
         assert_eq!(&source[doc.offset..doc.offset + 12], "title = \"A\"\n");
         assert_eq!(&source[doc.body_offset..], "Body.\n");
     }
 
-    /// The offsets are what every span a dialect records is shifted by, so a
-    /// diagnostic underlines the page rather than the block.
     #[test]
     fn the_block_knows_where_it_sits_in_the_file() {
         let source = "+++\ntitle = \"A\"\n+++\nBody.\n";
@@ -227,29 +184,19 @@ mod tests {
         }
     }
 
-    /// A closing fence has to be the one that opened: `---` does not end a
-    /// `+++` block, or a TOML page whose body contains a thematic break would
-    /// silently lose everything after it.
     #[test]
     fn only_its_own_fence_closes_a_block() {
         assert!(Document::split("+++\ntitle = 1\n---\nBody.\n", "a.md").is_err());
     }
 
-    /// The closing fence is held to the rule the opening one is. `--- and more`
-    /// used to close the block and leave `" and more"` as the body's first
-    /// bytes, silently, which is not what any other generator does with it.
     #[test]
     fn a_closing_fence_has_to_be_alone_on_its_line() {
         assert!(Document::split("---\ntitle: A\n--- and more\n\nBody\n", "a.md").is_err());
-        // Still closed by a bare one further down.
         let doc = Document::split("---\ntitle: A\n--- and more\n---\nBody\n", "a.md")
             .expect("the bare fence closes it");
         assert_eq!(doc.body, "Body\n");
     }
 
-    /// A file written on Windows splits the same way, and its diagnostic
-    /// underlines the fence rather than the byte before it: the label stepped
-    /// back a fixed one byte over the opening newline and landed on `--\r`.
     #[test]
     fn a_crlf_file_splits_and_labels_the_whole_fence() {
         let doc = Document::split("---\r\ntitle: A\r\n---\r\nBody.\r\n", "a.md").expect("split");
@@ -273,8 +220,6 @@ mod tests {
         assert_eq!(doc.frontmatter, None);
     }
 
-    /// A page that declares nothing still produces a block, because a schema
-    /// requiring a field has to fail on the page that wrote none.
     #[test]
     fn a_page_without_frontmatter_still_has_an_empty_block() {
         let doc = Document::split("Body.\n", "a.md").expect("split");

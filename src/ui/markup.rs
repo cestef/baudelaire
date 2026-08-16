@@ -1,30 +1,5 @@
-//! The inline markup diagnostics are written in, and the one place it is
-//! escaped and rendered.
-//!
-//! Every error and warning message in [`crate::error`] already reads as marked
-//! up prose: a path, a config key or a command sits in `backticks`. This module
-//! makes that a real grammar with a renderer behind it, and closes the hole it
-//! left open, which is that the values interpolated into those messages are
-//! user data. A page slug named `a*b` used to be able to open a span the author
-//! never wrote.
-//!
-//! Three pieces, and they have to agree, so they live together:
-//!
-//! - **The grammar.** [`Kind`] is the one table of delimiters and the styling
-//!   each carries: `` `code` `` and `*bold*`, with `\` escaping either. Spans do
-//!   not nest and do not cross a line.
-//! - **Escaping.** [`Text`] and [`Code`] are the Display adapters an error
-//!   interpolates a value through, so the value cannot be read as markup.
-//!   [`markup!`] does the same for the help strings that are assembled at
-//!   runtime rather than written in an attribute.
-//! - **Rendering.** [`Styled`] wraps a [`Diagnostic`] just before miette sees
-//!   it and rewrites its message and help through [`Markup`], leaving code,
-//!   labels and source snippets alone.
-//!
-//! Rendering is deliberately *structural* rather than a matter of stripping
-//! colour afterwards: with colour, a span is styled and its delimiters are
-//! consumed; without, the delimiters are written back out. So piped output is
-//! exactly the text these messages already produced before any of this existed.
+//! The inline markup diagnostics are written in (`` `code` ``, `*bold*`),
+//! escaped through [`Text`] and [`Code`] and rendered by [`Styled`].
 
 use std::fmt::{self, Display, Write as _};
 
@@ -34,15 +9,6 @@ use miette::Diagnostic;
 const ESCAPE: char = '\\';
 
 /// A span kind: the delimiter that opens and closes it, and how it renders.
-///
-/// The one table. A new kind is a variant plus a row in [`Kind::spellings`];
-/// the parser, the escaper and the plain-text renderer all derive from it.
-///
-/// There is deliberately no `_italic_`. Every delimiter has to be escaped in an
-/// interpolated value, and the escapes are visible to anything reading the
-/// message without rendering it (a caller's `to_string()`, a log line). `_` runs
-/// through the names these messages are made of, so the noise would be constant,
-/// for emphasis nothing here uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     /// A path, config key, command, or anything else quoted as literal text.
@@ -51,17 +17,11 @@ enum Kind {
 }
 
 impl Kind {
-    /// Every kind, so the escaper and the parser cannot fall out of step with
-    /// the table by listing delimiters of their own.
     const ALL: [Self; 2] = [Self::Code, Self::Bold];
 
     /// The delimiter this kind is written with, and the SGR parameters that
-    /// turn its styling on and off.
-    ///
-    /// The *off* parameter is the narrow one (`22` for bold, `39` for a
-    /// foreground colour), never a `0` full reset: miette applies its own style
-    /// to the whole of a help string, and a full reset inside would drop that
-    /// style for everything after the span.
+    /// turn its styling on and off; the *off* one is narrow, never a `0` full
+    /// reset, which would drop miette's own style for the rest of the string.
     const fn spellings(self) -> (char, &'static str, &'static str) {
         match self {
             Self::Code => ('`', "36", "39"),
@@ -77,8 +37,7 @@ impl Kind {
         Self::ALL.into_iter().find(|k| k.delimiter() == c)
     }
 
-    /// Whether `c` means something to the parser and so has to be escaped when
-    /// it arrives inside an interpolated value.
+    /// Whether `c` means something to the parser and so has to be escaped.
     fn is_special(c: char) -> bool {
         c == ESCAPE || Self::of(c).is_some()
     }
@@ -92,14 +51,8 @@ impl Kind {
     }
 }
 
-/// A value interpolated into a diagnostic as literal text: every markup
-/// character in it is escaped, so a path named `a*b` cannot open a span its
-/// author never wrote.
-///
-/// Used inside a delimiter the message already writes:
-/// ``help("run `ssh-keygen -R {}`", Text(.host))``, and as the type of a field
-/// that miette renders directly (`#[help]`), where there is no format string to
-/// put an adapter in.
+/// A value interpolated into a diagnostic as literal text, with every markup
+/// character in it escaped.
 #[derive(Debug, Clone, Copy)]
 pub struct Text<T>(pub T);
 
@@ -111,9 +64,6 @@ impl<T: Display> Display for Text<T> {
 
 /// [`Text`] inside a code span: the one way a diagnostic names a path, a config
 /// key, a command or a URL.
-///
-/// ``#[error("failed to {op} {}", Code(.path))]`` renders as ``failed to read
-/// `content/post.typ` ``, with the value escaped.
 #[derive(Debug, Clone, Copy)]
 pub struct Code<T>(pub T);
 
@@ -124,9 +74,7 @@ impl<T: Display> Display for Code<T> {
     }
 }
 
-/// A [`fmt::Write`] that escapes markup on the way through, so [`Text`] can
-/// forward a value straight into the formatter instead of rendering it to a
-/// `String` first only to walk it again.
+/// A [`fmt::Write`] that escapes markup on the way through.
 struct Escaping<'a, 'b>(&'a mut fmt::Formatter<'b>);
 
 impl fmt::Write for Escaping<'_, '_> {
@@ -141,13 +89,9 @@ impl fmt::Write for Escaping<'_, '_> {
     }
 }
 
-/// Build a diagnostic string with its interpolated values escaped, for the help
-/// text that is assembled at runtime rather than written in an attribute (see
-/// [`crate::error::Annotated`]).
-///
-/// The literal owns the delimiters and the arguments are always plain text:
-/// ``markup!("did you mean `{}`?", guess)``. Positional `{}` only, since every
-/// argument is wrapped on the way in.
+/// Build a diagnostic string with its interpolated values escaped, for help
+/// text assembled at runtime; positional `{}` only, since every argument is
+/// wrapped on the way in.
 macro_rules! markup {
     ($fmt:literal $(, $arg:expr)* $(,)?) => {
         format!($fmt $(, $crate::ui::Text($arg))*)
@@ -155,16 +99,11 @@ macro_rules! markup {
 }
 pub(crate) use markup;
 
-/// Marked-up text, rendered.
-///
-/// With `color`, a span is styled and its delimiters are consumed; without, the
-/// delimiters are written back out, which is the plain rendering these messages
-/// have always had. Either way the escapes are resolved, so a value that
-/// arrived through [`Text`] reads as itself.
+/// Marked-up text, rendered: with `color` a span is styled and its delimiters
+/// consumed, without they are written back out.
 ///
 /// The parser is total: an unpaired delimiter, an empty span, or one that would
-/// span a line break is not markup and renders as the literal character. A
-/// malformed message degrades to plain text rather than failing a build.
+/// span a line break renders as the literal character.
 pub struct Markup<'a> {
     source: &'a str,
     color: bool,
@@ -175,9 +114,8 @@ impl<'a> Markup<'a> {
         Self { source, color }
     }
 
-    /// The byte index of the delimiter closing a span opened at `from`, or
-    /// `None` if the span never closes on this line. Escaped delimiters are
-    /// skipped, so `` `a\`b` `` closes at the third backtick.
+    /// The byte index of the delimiter closing this span, skipping escaped
+    /// ones, or `None` when it never closes on this line.
     fn close(rest: &str, delimiter: char) -> Option<usize> {
         let mut chars = rest.char_indices();
         while let Some((i, c)) = chars.next() {
@@ -193,22 +131,18 @@ impl<'a> Markup<'a> {
         None
     }
 
-    /// Whether the text between two delimiters is a span at all. Empty is not,
-    /// and neither is one padded with whitespace: `a * b * c` is arithmetic, or
-    /// prose, not bold.
+    /// Whether the text between two delimiters is a span at all: not empty,
+    /// and not padded with whitespace.
     fn is_span(body: &str) -> bool {
         !body.is_empty() && body.trim() == body
     }
 
-    /// Write `body` with its escapes resolved: what the author meant, one level
-    /// of `\` removed.
+    /// Write `body` with one level of `\` removed.
     fn unescaped(body: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut chars = body.chars();
         while let Some(c) = chars.next() {
             match c {
                 ESCAPE => match chars.next() {
-                    // A trailing lone backslash is not an escape; it is a
-                    // backslash.
                     None => f.write_char(ESCAPE)?,
                     Some(next) => f.write_char(next)?,
                 },
@@ -235,14 +169,11 @@ impl<'a> Markup<'a> {
 impl Display for Markup<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let source = self.source;
-        // The start of the run of literal text not yet written: flushed whole
-        // when a span opens, so a message with no markup costs one write.
         let mut literal = 0;
         let mut i = 0;
         while let Some(c) = source[i..].chars().next() {
             let next = i + c.len_utf8();
             if c == ESCAPE {
-                // Step over the escaped character: it can never open a span.
                 i = next + source[next..].chars().next().map_or(0, char::len_utf8);
                 continue;
             }
@@ -251,8 +182,6 @@ impl Display for Markup<'_> {
                 continue;
             };
             let body = &source[next..];
-            // A delimiter that never closes, or one wrapping nothing, is not a
-            // span: it stays in the literal run, which `unescaped` resolves.
             match Self::close(body, c).filter(|&end| Self::is_span(&body[..end])) {
                 Some(end) => {
                     Self::unescaped(&source[literal..i], f)?;
@@ -270,20 +199,13 @@ impl Display for Markup<'_> {
 /// A [`Diagnostic`] with its markup rendered, wrapped around one just before
 /// miette formats it.
 ///
-/// Only the message and the help go through [`Markup`]. Everything else is
-/// forwarded untouched, and the source snippet especially: a config error
-/// carries KDL and a compile error carries typst, both full of backticks and
-/// asterisks that are code, not markup.
-///
-/// `related` is wrapped recursively, because that is where this crate's own
-/// aggregates live (a build that failed on three pages, a typst compile with
-/// several diagnostics). `diagnostic_source` is not: it is the handoff to a
-/// foreign diagnostic (kdl's), whose text was never written in this grammar.
+/// Only the message and the help go through [`Markup`]; a source snippet is
+/// forwarded untouched, its backticks being typst or KDL rather than markup.
 #[derive(Debug)]
 pub struct Styled<'a> {
     inner: &'a dyn Diagnostic,
     /// Wrapped eagerly, so [`Diagnostic::related`] has something borrowable to
-    /// hand back. `None` and `Some(vec![])` are different answers to miette.
+    /// hand back; `None` and `Some(vec![])` are different answers to miette.
     related: Option<Vec<Self>>,
     color: bool,
 }
@@ -367,7 +289,6 @@ mod tests {
 
     #[test]
     fn plain_rendering_is_the_text_as_written() {
-        // The pre-existing rendering: piped output must not change.
         let source = "failed to read `content/post.typ`";
         assert_eq!(plain(source), source);
     }
@@ -379,7 +300,6 @@ mod tests {
 
     #[test]
     fn every_kind_renders_with_a_narrow_reset() {
-        // Never `\x1b[0m`: miette styles the whole help string around us.
         assert_eq!(color("*b*"), "\x1b[1mb\x1b[22m");
         assert_eq!(color("`c`"), "\x1b[36mc\x1b[39m");
     }
@@ -405,7 +325,6 @@ mod tests {
         assert_eq!(color(r"a \* b"), "a * b");
         assert_eq!(plain(r"a \* b"), "a * b");
         assert_eq!(color(r"\\"), r"\");
-        // A trailing lone backslash is a backslash.
         assert_eq!(plain(r"end\"), r"end\");
     }
 
@@ -416,7 +335,6 @@ mod tests {
 
     #[test]
     fn spans_do_not_nest() {
-        // The inner delimiter is literal text inside the code span.
         assert_eq!(color("`a *b* c`"), "\x1b[36ma *b* c\x1b[39m");
     }
 
@@ -446,9 +364,7 @@ mod tests {
         assert_eq!(color("é `a` ü"), "é \x1b[36ma\x1b[39m ü");
     }
 
-    /// A diagnostic with one of everything [`Styled`] has to deal with: markup
-    /// in the message and the help, a source snippet that must survive
-    /// untouched, and a related child.
+    /// A diagnostic with one of everything [`Styled`] has to deal with.
     #[derive(Debug)]
     struct Fake {
         related: Vec<Self>,
@@ -476,7 +392,6 @@ mod tests {
         }
 
         fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-            // Typst, not markup: its backticks are the author's raw code.
             Some(&"#let x = `raw`" as &dyn miette::SourceCode)
         }
 
@@ -521,7 +436,6 @@ mod tests {
             .map(ToString::to_string)
             .collect();
         assert_eq!(related, ["read \x1b[36ma.typ\x1b[39m"]);
-        // `None` and an empty iterator are different answers to miette.
         let leaf = Fake { related: vec![] };
         assert!(Styled::new(&leaf, true).related().is_none());
     }
@@ -533,17 +447,12 @@ mod tests {
         miette::GraphicalReportHandler::new_themed(miette::GraphicalTheme::none())
             .render_report(&mut report, &Styled::new(&fake, true))
             .expect("renders");
-        // The message lost its delimiters to styling; the snippet kept its own,
-        // which are typst source and not this crate's markup.
         assert!(report.contains("read \x1b[36ma.typ\x1b[39m"), "{report}");
         assert!(report.contains("#let x = `raw`"), "{report}");
     }
 
-    /// Whether `body` holds the named-field shorthand thiserror and miette both
-    /// accept (`{path}`, `{0:?}`), which is the one way to interpolate a value
-    /// without an adapter having seen it.
-    ///
-    /// ASCII throughout, so byte indices are safe; nothing here is sliced.
+    /// Whether `body` holds the named-field shorthand thiserror and miette
+    /// both accept (`{path}`, `{0:?}`).
     fn shorthand(body: &str) -> bool {
         let name = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let bytes = body.as_bytes();
@@ -553,8 +462,6 @@ mod tests {
                 i += 1;
                 continue;
             }
-            // `{{` is a literal brace; step over both, so text like
-            // `assets {{ fingerprint }}` is not read as a placeholder.
             if bytes.get(i + 1) == Some(&b'{') {
                 i += 2;
                 continue;
@@ -564,8 +471,6 @@ mod tests {
             while end < bytes.len() && name(bytes[end]) {
                 end += 1;
             }
-            // A bare `{}` is positional: its adapter lives in the argument list,
-            // which this literal cannot see.
             if end > start && matches!(bytes.get(end), Some(b'}' | b':')) {
                 return true;
             }
@@ -574,8 +479,7 @@ mod tests {
         false
     }
 
-    /// Everything between a pair of backticks. Naive by design: a diagnostic
-    /// message is one line of prose, not Rust to be parsed.
+    /// Everything between a pair of backticks.
     fn spans(text: &str) -> impl Iterator<Item = &str> {
         text.split('`').skip(1).step_by(2)
     }
@@ -583,37 +487,24 @@ mod tests {
     /// A Rust source file, walked for the text a reader will see rendered as
     /// markup: the string literals inside an `#[error(..)]`, a `help(..)`, or a
     /// [`markup!`] call.
-    ///
-    /// Finding the constructs rather than the files is what makes the check
-    /// reach the whole crate. It used to read `src/error/` alone, one directory
-    /// deep, and only ever looked at whole lines: a diagnostic declared
-    /// anywhere else (`config/permalink.rs`, `cli/serve/open.rs`) was never
-    /// checked at all, an attribute broken across lines was checked one line at
-    /// a time, and a help string built at runtime was invisible.
     struct Scan<'a> {
         text: &'a str,
-        /// Whether every string literal counts, rather than only the ones
-        /// inside one of [`Scan::TRIGGERS`]. True under `src/error/`, where a
-        /// literal is diagnostic text or it is nothing, which is also what
-        /// covers the messages assembled there with `format!`. Elsewhere a
-        /// `format!` is as likely to be a typst message or a test assertion, so
-        /// the construct has to say so.
+        /// Whether every string literal counts, rather than only those inside
+        /// a [`Scan::TRIGGERS`] construct; true under `src/error/`.
         everything: bool,
         at: usize,
         line: usize,
-        /// Unclosed parens of the construct being walked, zero when outside one.
+        /// Unclosed parens of the construct walked, zero when outside one.
         depth: usize,
         found: Vec<(usize, String)>,
     }
 
     impl<'a> Scan<'a> {
         /// The constructs whose text reaches a reader through [`Styled`].
-        /// `help(` covers both the `#[diagnostic(help(..))]` attribute and the
-        /// builders that assemble one.
         const TRIGGERS: &'static [&'static str] = &["#[error(", "help(", "markup!("];
 
-        /// Where the walk stops: a test module's literals are assertions about
-        /// rendered output, not output.
+        /// Where the walk stops: a test module's literals are assertions, not
+        /// output.
         const TESTS: &'static str = "#[cfg(test)]";
 
         fn new(text: &'a str, everything: bool) -> Self {
@@ -671,7 +562,6 @@ mod tests {
                     .iter()
                     .find(|t| rest.starts_with(t.as_bytes()))
             {
-                // The trigger ends in its own `(`, so entering it is depth 1.
                 self.depth = 1;
                 self.at += trigger.len();
                 return;
@@ -709,8 +599,6 @@ mod tests {
             let mut i = start;
             while i < b.len() {
                 match b[i] {
-                    // A `\` at the end of a line continues the literal on the
-                    // next one, so the newline it hides still counts.
                     b'\\' if !raw => {
                         self.line += usize::from(b.get(i + 1) == Some(&b'\n'));
                         i += 2;
@@ -756,8 +644,6 @@ mod tests {
             for entry in std::fs::read_dir(dir).expect("a readable directory") {
                 let path = entry.expect("a readable entry").path();
                 if path.is_dir() {
-                    // A `tests` directory holds assertions about rendered
-                    // output, which quote the shorthand on purpose.
                     if path.file_name().is_some_and(|n| n == "tests") {
                         continue;
                     }
@@ -777,12 +663,7 @@ mod tests {
 
     /// The rule [`Text`] and [`Code`] exist to enforce: a value interpolated
     /// inside a code span goes through an adapter, never through the `{field}`
-    /// shorthand. Nothing in the type system says so, because the shorthand
-    /// belongs to thiserror and miette, so the check is here.
-    ///
-    /// Rendering makes the omission worse than cosmetic: an unescaped value
-    /// carrying a backtick closes the span early, and the rest of the message
-    /// renders as code.
+    /// shorthand.
     #[test]
     fn no_diagnostic_interpolates_a_raw_value_inside_a_code_span() {
         let mut offenders = Vec::new();
@@ -803,9 +684,6 @@ mod tests {
         );
     }
 
-    /// The check has to be able to fail, and to fail on the shapes it is aimed
-    /// at: an attribute broken across lines, a runtime-built help, and the
-    /// `{{` a message quoting a KDL block writes.
     #[test]
     fn the_check_reads_the_constructs_and_not_the_lines() {
         let scan = |text: &str| {
@@ -821,13 +699,10 @@ mod tests {
             1
         );
         assert_eq!(scan("let h = markup!(\"try `{guess}`\");"), 1);
-        // The adapters, the positional form, and doubled braces are all fine.
         assert_eq!(scan("#[error(\"read {}\", Code(.path))]"), 0);
         assert_eq!(scan("markup!(\"did you mean `{}`?\", guess)"), 0);
         assert_eq!(scan("#[error(\"write `assets {{ tsconfig }}`\")]"), 0);
-        // A literal outside any of the constructs is not diagnostic text.
         assert_eq!(scan("let s = \"a `{name}` label\";"), 0);
-        // ..but under `src/error` every literal is.
         assert_eq!(
             Scan::new("let s = \"a `{name}` label\";", true)
                 .messages()

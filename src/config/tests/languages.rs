@@ -36,8 +36,7 @@ fn localize_prefixes_only_non_default_languages() {
 }
 
 /// Values carrying a `codegen::Value` reach the cache fingerprint through a
-/// real `Hash`. Hashing their serialization instead meant any two configs whose
-/// serialization failed fingerprinted identically, and a stale site.
+/// real `Hash`, never through their serialization.
 #[test]
 fn client_and_language_values_key_the_fingerprint() {
     use crate::graph::Hash;
@@ -58,16 +57,14 @@ fn rtl_is_inferred_when_no_language_declares_it() {
     assert_eq!(parse("lang \"fr\"").dir("fr"), None);
 }
 
-/// An explicit `dir` still wins over the inference.
 #[test]
 fn a_declared_dir_overrides_the_inferred_one() {
     let cfg = parse("lang \"en\"\nlanguages {\n  ar { dir \"ltr\" }\n}");
     assert_eq!(cfg.dir("ar"), Some("ltr"));
 }
 
-/// The reading rate is language-shaped: 200 words a minute is European prose,
-/// and a page in a language read three times faster reported a third of the read
-/// it is. A language states its own; the site states the answer for the rest.
+/// The reading rate is language-shaped: a language states its own, and the site
+/// states the answer for the rest.
 #[test]
 fn a_language_states_its_own_reading_rate() {
     let cfg = parse(

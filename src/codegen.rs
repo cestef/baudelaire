@@ -1,19 +1,6 @@
-//! One structured value, rendered to several targets.
-//!
-//! Baudelaire moves data across three boundaries: into generated **Typst**
-//! source (layout binding, taxonomy pages, `page.sections`), into generated
-//! **JavaScript** (the `baudelaire:*` virtual modules), and into a Typst
-//! **runtime** value (`sys.inputs`). All start from one [`Value`] tree:
-//!
-//! - source in a target language -> wrap in the [`Typst`] or [`Js`] display
-//!   adapter (`Typst(&value).to_string()`), which name the target explicitly
-//!   rather than overloading `Display` on the data;
-//! - a runtime Typst value -> `typst::foundations::Value::from(&value)`;
-//! - a Typst value read back -> `Value::from(&typst_value)`.
-//!
-//! Every string is escaped by its [`Format`], so a value can neither break out
-//! of a Typst string literal nor produce invalid JavaScript. Add a target by
-//! implementing `Format` and pairing it with a one-line display adapter.
+//! One structured [`Value`] tree, rendered to generated Typst source, to
+//! generated JavaScript, or to a Typst runtime value, with every string escaped
+//! by its [`Format`].
 
 use std::fmt::{self, Write};
 
@@ -41,8 +28,7 @@ impl fmt::Display for Str<'_> {
 }
 
 /// A structured value built in Rust, rendered to a target language through a
-/// [`Format`] (via the [`Typst`] / [`Js`] adapters) or converted to a Typst
-/// runtime value. The single safe way to move data into generated code.
+/// [`Format`] or converted to a Typst runtime value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Str(String),
@@ -54,20 +40,15 @@ pub enum Value {
     /// A mapping: Typst `(key: value)`, JavaScript `{ "key": value }`. Keys are
     /// quoted where the target requires it, so arbitrary keys are safe.
     Dict(Vec<(String, Self)>),
-    /// A pre-formed expression in the *target's* own syntax, emitted verbatim.
-    /// Carries a Typst runtime value's [`repr`](typst::foundations::Value::repr)
-    /// unchanged; it is Typst-only and becomes `null` / `none` elsewhere.
+    /// A pre-formed expression in the *target's* own syntax, emitted verbatim;
+    /// it is Typst-only and becomes `null` elsewhere.
     Raw(String),
     None,
 }
 
-/// A real `Hash`, so nothing has to take a serialization as identity to
-/// fingerprint a value (the cache key of every config-injected value and every
-/// tracked `sys.inputs` read goes through here). The match destructures every
-/// variant, so a new one fails to compile until it is handled; the discriminant
-/// keeps `Str("x")` and `Raw("x")` apart. `f64` hashes by bit pattern: `Value`
-/// is only `PartialEq`, and two encodings that differ in bits are different
-/// generated output.
+/// The discriminant is hashed, so `Str("x")` and `Raw("x")` stay apart, and an
+/// `f64` by its bit pattern, since two encodings differing in bits are
+/// different generated output.
 impl std::hash::Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);
@@ -101,7 +82,7 @@ impl Value {
         Self::Dict(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
-    /// The string content, for a `Str` value.
+    /// The string content, and `None` for any other variant.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::Str(s) => Some(s),
@@ -109,8 +90,7 @@ impl Value {
         }
     }
 
-    /// The value under `key`, for a `Dict`, so a consumer can serve a sub-tree
-    /// of a larger value (a JS module exposing part of the build context).
+    /// The value under `key`, for a `Dict`, and `None` for any other variant.
     pub fn get(&self, key: &str) -> Option<&Self> {
         match self {
             Self::Dict(pairs) => pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v),
@@ -118,8 +98,8 @@ impl Value {
         }
     }
 
-    /// Render into `out` in the target language `F`. The [`Typst`] and [`Js`]
-    /// display adapters drive this; call it directly only to add a new target.
+    /// Render into `out` in the target language `F`, which the [`Typst`] and
+    /// [`Js`] display adapters drive.
     pub fn render<F: Format>(&self, out: &mut String) {
         match self {
             Self::Str(s) => F::string(s, out),
@@ -163,16 +143,9 @@ impl Value {
     }
 }
 
-/// Read a Typst runtime value into a [`Value`], mapping every shape that has a
-/// counterpart here and carrying the rest as its `repr`.
-///
-/// [`Raw`](Value::Raw) is Typst-only by construction, so a value that reaches it
-/// renders as `null` in JavaScript and is opaque to
-/// [`as_str`](Value::as_str). Everything but `Str` used to land there, which
-/// made a frontmatter `weight: 3` arrive in the browser as `null` while a config
-/// `client { retries 3 }` arrived as `3`: one type, two behaviours, decided by
-/// which parser filled it. What is left for `Raw` is what genuinely has no
-/// counterpart -- content, a function, a length.
+/// Only a shape with no counterpart here (content, a function, a length) is
+/// carried as its `repr`, since [`Raw`](Value::Raw) renders as `null` in
+/// JavaScript and is opaque to [`as_str`](Value::as_str).
 impl From<&typst::foundations::Value> for Value {
     fn from(value: &typst::foundations::Value) -> Self {
         use typst::foundations::Value as Typst;
@@ -194,8 +167,8 @@ impl From<&typst::foundations::Value> for Value {
     }
 }
 
-/// A [`Value`] as a Typst runtime value, for injection into `sys.inputs`. A
-/// [`Raw`](Value::Raw) expression has no runtime equivalent and becomes `none`.
+/// A [`Raw`](Value::Raw) expression has no runtime equivalent and becomes
+/// `none`.
 impl From<&Value> for typst::foundations::Value {
     fn from(value: &Value) -> Self {
         use typst::foundations::{Array, Dict, IntoValue, Str as TypstStr};
@@ -217,27 +190,22 @@ impl From<&Value> for typst::foundations::Value {
 
 /// A target language a [`Value`] renders to: the brackets around sequences and
 /// mappings, and how it writes a string, a key, and a verbatim expression.
-/// Numbers and booleans render the same everywhere, so a format is a few
-/// constants and three small methods.
 pub trait Format {
-    /// The literal for [`Value::None`].
     const NONE: &'static str;
     /// The `(open, close)` brackets around a sequence.
     const ARRAY: (&'static str, &'static str);
     /// Emitted after the last element of a non-empty sequence: a trailing `, `
-    /// in Typst (so `(x, )` stays an array), nothing in JavaScript.
+    /// in Typst, so `(x, )` stays an array.
     const ARRAY_TRAILING: &'static str;
     /// The `(open, close)` brackets around a mapping.
     const DICT: (&'static str, &'static str);
     /// The literal for an empty mapping (Typst needs `(:)`, not `()`).
     const EMPTY_DICT: &'static str;
 
-    /// Write a string literal.
     fn string(s: &str, out: &mut String);
     /// Write a mapping key followed by its `: ` separator.
     fn key(key: &str, out: &mut String);
-    /// Write a [`Value::Raw`] expression. Only Typst carries these; the default
-    /// renders `null` for every other target.
+    /// Write a [`Value::Raw`] expression, which only Typst carries.
     fn raw(_source: &str, out: &mut String) {
         out.push_str("null");
     }
@@ -271,8 +239,8 @@ impl Format for TypstFmt {
     }
 }
 
-/// A JavaScript expression: bracketed arrays, always-quoted object keys, strings
-/// escaped by `serde_json` (the JSON string grammar is a strict JS subset).
+/// A JavaScript expression: bracketed arrays, always-quoted object keys,
+/// strings escaped by `serde_json`.
 struct JsFmt;
 
 impl Format for JsFmt {
@@ -319,14 +287,8 @@ impl fmt::Display for Js<'_> {
 
 /// Displays the TypeScript *type* a [`Value`] has: `Ts(&value).to_string()`.
 ///
-/// The odd one out among the adapters, which render a value *as* source in a
-/// target language. This renders what a declaration file has to say about it,
-/// so a generated module's data can be typed from the very tree the module is
-/// built from instead of from a hand-written shape that drifts from it.
-///
-/// Types come from one sample, so it describes what this build serves, not
-/// every build: a string field is `string`, and one that happens to be absent
-/// here is `null`.
+/// Read off one sample, so it describes what this build serves rather than
+/// every build: a field absent here types as `null`.
 pub struct Ts<'a>(pub &'a Value);
 
 impl fmt::Display for Ts<'_> {
@@ -335,12 +297,8 @@ impl fmt::Display for Ts<'_> {
             Value::Str(_) => f.write_str("string"),
             Value::Int(_) | Value::Float(_) => f.write_str("number"),
             Value::Bool(_) => f.write_str("boolean"),
-            // A Typst-only expression reaches JavaScript as `null`, exactly as
-            // an absent value does, so the two type the same.
             Value::Raw(_) | Value::None => f.write_str("null"),
             Value::Array(items) => match Self::union(items) {
-                // An empty array constrains nothing, and `never[]` would refuse
-                // every element a later build puts in it.
                 None => f.write_str("unknown[]"),
                 Some(item) => write!(f, "Array<{item}>"),
             },
@@ -367,9 +325,6 @@ impl fmt::Display for Ts<'_> {
 impl Ts<'_> {
     /// The union of the element types of `items`, deduplicated in first-seen
     /// order, or `None` when there are no elements to read one from.
-    ///
-    /// Deduplicated because rows of one shape are the common case, and a
-    /// hundred identical members would otherwise be spelled a hundred times.
     fn union<'a>(items: &'a [Value]) -> Option<String> {
         let mut types: Vec<String> = Vec::new();
         for item in items {
@@ -394,29 +349,20 @@ impl fmt::Display for JsonStr<'_> {
 }
 
 /// Whether `s` is a plain JavaScript identifier, and so needs no quoting as an
-/// object key or a declared name. Reserved words are *not* excluded: they are
-/// legal keys, and only the callers that emit bindings care.
+/// object key or a declared name. Reserved words are *not* excluded, since they
+/// are legal keys.
 pub(crate) fn ident(s: &str) -> bool {
     let mut chars = s.chars();
     let head = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$');
     head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
 }
 
-/// Whether `s` is a Typst identifier: a name a `#let` can bind, and a dict key
-/// that can be written bare.
+/// Whether `s` is a name a `#let` can bind and a dict key that can be written
+/// bare.
 ///
-/// [`typst::syntax::is_ident`] is *not* that question, which is the trap this
-/// exists to close. It is the lexer's character rule, so it answers `true` for
-/// every keyword (`none`, `auto`, `in`, `as`, `let`, `set`, `show`, `context`,
-/// ..): those do lex as identifiers and are then reclassified into their own
-/// kinds, so `(in: "series")` is a parse error and `#let none = ..` fails the
-/// module it was written into. Both failures land inside generated source, so
-/// they name a file the author has never opened.
-///
-/// The keyword set belongs to Typst and is derived rather than restated: `s`
-/// is an identifier exactly when parsing it as code yields one `Ident` leaf
-/// spelling it back. Restating the list here would be a second copy of it, and
-/// the one that goes stale on a Typst bump.
+/// Not [`typst::syntax::is_ident`], which is the lexer's character rule and so
+/// admits every keyword; the keyword set is derived by parsing `s` as code
+/// rather than restated here.
 pub(crate) fn bindable(s: &str) -> bool {
     if !typst::syntax::is_ident(s) {
         return false;
@@ -434,21 +380,9 @@ pub(crate) fn bindable(s: &str) -> bool {
 /// Displays a Typst import binding one item under a local alias:
 /// `#import "<path>": <item> as <alias>`.
 ///
-/// Every synthetic module this build compiles opens with one or two of these
-/// (the layout template, a page's own `frontmatter` export), and each was
-/// spelled out with `format!` where it was needed. Three of the six were
-/// byte-identical, which is the shape of a rule about to be applied
-/// inconsistently: the path is the half that comes from user input, and it is
-/// escaped here once rather than at whichever call site last remembered to.
-///
-/// The item and the alias are *not* escaped, because Typst offers no form in
-/// which they could be: an import binds identifiers, and nothing rescues one
-/// that is not the way [`Format::key`] quotes an awkward dict key. Both are
-/// identifiers by construction here, an alias being a name this crate chose and
-/// an item a template's file stem, but neither can be a `&'static str` the way
-/// [`Call::named`]'s key is: two of the six are computed. So the invariant is
-/// stated rather than typed, and a template whose stem is not an identifier
-/// (`2col.typ`) fails in the compiler, exactly as it did before.
+/// The path is escaped; the item and the alias are not, and must be Typst
+/// identifiers, since an import binds names and no quoting rescues one that is
+/// not.
 pub struct Import<'a> {
     path: &'a str,
     item: &'a str,
@@ -456,13 +390,9 @@ pub struct Import<'a> {
 }
 
 impl<'a> Import<'a> {
-    /// An import of `item` from `path`, bound locally as `alias`. The
-    /// arguments are in the order the line writes them, so a call reads as its
-    /// own output.
-    ///
     /// `path` is a project-root absolute path (`/templates/post.typ`) or a
-    /// package spec; `alias` is `__`-prefixed by every caller here, so nothing
-    /// a page or a template binds can shadow it.
+    /// package spec; `alias` is `__`-prefixed by every caller, so nothing a
+    /// page or a template binds can shadow it.
     pub fn new(path: &'a str, item: &'a str, alias: &'a str) -> Self {
         Self { path, item, alias }
     }
@@ -481,8 +411,7 @@ impl fmt::Display for Import<'_> {
 }
 
 /// Displays a Typst `let` binding: `#let name = <value>`, with the value
-/// rendered by [`Typst`]. The one way generated module source binds a value, so
-/// no caller ever formats a binding (and its escaping) by hand.
+/// rendered by [`Typst`].
 pub struct Let<'a>(pub &'a str, pub &'a Value);
 
 impl fmt::Display for Let<'_> {
@@ -492,13 +421,7 @@ impl fmt::Display for Let<'_> {
 }
 
 /// A generated Typst call: `#name(a, key: b)`, optionally opening a content
-/// block or a sequence of them.
-///
-/// Every argument is a [`Value`], so it is escaped by the one renderer that
-/// knows how, and no caller assembles `#name(` and its commas by hand. That
-/// matters most where the generated source is built from user input: a call
-/// spelled with `format!` is escaped only as carefully as its least careful
-/// site, and there is no compiler check that says so.
+/// block or a sequence of them, with every argument escaped as a [`Value`].
 #[must_use]
 pub struct Call<'a> {
     name: &'a str,
@@ -507,8 +430,7 @@ pub struct Call<'a> {
 }
 
 /// Whether a generated call is entering Typst from markup or is already in
-/// code. The whole difference is the leading `#`, and getting it wrong is a
-/// syntax error in either direction.
+/// code; getting it wrong is a syntax error in either direction.
 #[derive(Clone, Copy)]
 enum Mode {
     /// `#name(..)`, the form that opens a call from markup.
@@ -518,7 +440,6 @@ enum Mode {
 }
 
 impl Mode {
-    /// What precedes the callee's name.
     fn sigil(self) -> &'static str {
         match self {
             Self::Markup => "#",
@@ -536,19 +457,13 @@ impl<'a> Call<'a> {
         }
     }
 
-    /// The same call written in *code* position: inside another call's
-    /// arguments, in a `#let` initialiser, or anywhere else Typst is already
-    /// reading expressions rather than markup.
-    ///
-    /// Only the leading `#` differs, and it is not cosmetic: a `#` is what
-    /// enters markup from code, so writing one where Typst is already in code
-    /// is a syntax error rather than a redundancy.
+    /// The same call written in *code* position, where the leading `#` that
+    /// enters markup would be a syntax error.
     pub fn bare(mut self) -> Self {
         self.mode = Mode::Code;
         self
     }
 
-    /// A positional argument.
     pub fn pos(mut self, value: Value) -> Self {
         self.args.push((None, value));
         self
@@ -556,12 +471,8 @@ impl<'a> Call<'a> {
 
     /// A named argument, `key: value`.
     ///
-    /// The key is `&'static str` on purpose. A Typst named argument must be a
-    /// bare identifier -- `#raw("a b": 1)` is refused as firmly as
-    /// `#raw(a b: 1)` -- so unlike [`Format::key`], which can quote its way out,
-    /// there is no rendering that rescues a bad one. A literal is the only
-    /// thing that can be checked by reading the call, so it is the only thing
-    /// accepted.
+    /// The key is `&'static str` because a Typst named argument must be a bare
+    /// identifier and no quoting rescues one that is not.
     pub fn named(mut self, key: &'static str, value: Value) -> Self {
         self.args.push((Some(key), value));
         self
@@ -573,9 +484,8 @@ impl<'a> Call<'a> {
         format!("{}{body}]", self.content())
     }
 
-    /// The same call opening a content block: `#name(..)[`. The caller writes
-    /// the content and closes it, which is what lets content stream rather than
-    /// be buffered whole.
+    /// The same call opening a content block: `#name(..)[`, which the caller
+    /// writes into and closes.
     pub fn content(self) -> Open<'a> {
         Open(self, Bracket::Body)
     }
@@ -609,8 +519,7 @@ impl fmt::Display for Call<'_> {
     }
 }
 
-/// What an [`Open`] call is about to be handed. Not spelled `Content`: that
-/// name belongs to the display adapter below, and means something else.
+/// What an [`Open`] call is about to be handed.
 enum Bracket {
     /// One content block: `[` follows, and the caller closes it with `]`.
     Body,
@@ -619,8 +528,7 @@ enum Bracket {
     Items,
 }
 
-/// A call whose content the caller writes itself. See [`Call::content`] and
-/// [`Call::items`].
+/// A call whose content the caller writes itself.
 #[must_use]
 pub struct Open<'a>(Call<'a>, Bracket);
 
@@ -628,8 +536,6 @@ impl fmt::Display for Open<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.0.mode.sigil(), self.0.name)?;
         match self.1 {
-            // `#emph[` rather than `#emph()[`: an empty argument list is legal
-            // but reads as a call that forgot something.
             Bracket::Body if self.0.args.is_empty() => f.write_char('['),
             Bracket::Body => {
                 f.write_char('(')?;
@@ -698,17 +604,11 @@ mod tests {
 
     #[test]
     fn quotes_non_identifier_keys_per_target() {
-        // A space is not a valid Typst identifier (a hyphen is), so Typst quotes
-        // it; JavaScript quotes every key.
         let v = Value::dict([("a b", Value::Int(1))]);
         assert_eq!(Typst(&v).to_string(), "(\"a b\": 1)");
         assert_eq!(Js(&v).to_string(), "{\"a b\": 1}");
     }
 
-    /// A keyword lexes as an identifier and is then reclassified, so the
-    /// character rule alone would write `(in: ..)` into a generated table and
-    /// fail every template that imports it. The dict is the site-wide one, so
-    /// one page's frontmatter key would take the whole build down.
     #[test]
     fn quotes_keys_that_are_typst_keywords() {
         for key in ["in", "as", "let", "set", "show", "context", "none", "auto"] {
@@ -717,9 +617,6 @@ mod tests {
         }
     }
 
-    /// The predicate is derived from Typst's own parser rather than from a
-    /// restated keyword list, so this pins both halves: what it refuses, and
-    /// that it still admits an ordinary name.
     #[test]
     fn a_bindable_name_is_an_identifier_that_is_not_a_keyword() {
         for name in ["title", "_x", "a-b", "x2", "élan"] {
@@ -742,9 +639,6 @@ mod tests {
         );
     }
 
-    /// An import's path is the half that comes from a config value, so it is
-    /// escaped exactly as a string literal anywhere else would be: a template
-    /// directory carrying a quote cannot close it and start writing Typst.
     #[test]
     fn imports_bind_one_item_under_an_alias() {
         assert_eq!(
@@ -771,16 +665,12 @@ mod tests {
         );
     }
 
-    /// Rows of one shape are the common case, and repeating a member type once
-    /// per element would make a catalogue's type unreadable.
     #[test]
     fn an_array_types_as_the_union_of_its_members_once_each() {
         let v = Value::array([Value::Int(1), Value::Int(2), Value::str("x")]);
         assert_eq!(Ts(&v).to_string(), "Array<number | string>");
     }
 
-    /// Every argument is escaped by the renderer, so a call can carry a value
-    /// that would otherwise close it and start writing Typst.
     #[test]
     fn call_arguments_cannot_break_out() {
         let call = Call::new("link")
@@ -799,8 +689,6 @@ mod tests {
         assert_eq!(call, r#"#raw(block: true, lang: "kdl", "a b")"#);
     }
 
-    /// `#emph[` rather than `#emph()[`: an argumentless call opening a content
-    /// block should read the way an author would write it.
     #[test]
     fn an_argumentless_content_call_omits_the_parentheses() {
         assert_eq!(Call::new("emph").content().to_string(), "#emph[");
@@ -813,9 +701,6 @@ mod tests {
         );
     }
 
-    /// A sequence leaves the argument list open for the caller's `[..],`
-    /// elements, and closes the preceding arguments with a comma so the first
-    /// element does not fuse onto them.
     #[test]
     fn a_sequence_call_leaves_its_arguments_open() {
         assert_eq!(Call::new("list").items().to_string(), "#list(");
@@ -828,9 +713,6 @@ mod tests {
         );
     }
 
-    /// `Value::Raw` is the one unescaped door, and it is the same one the rest
-    /// of this module uses: identifiers no string can spell reach a call
-    /// through it, positionally as well as by name.
     #[test]
     fn a_raw_argument_is_emitted_verbatim() {
         let call = Call::new("table")
@@ -849,8 +731,6 @@ mod tests {
         assert_eq!(positional, "#__layout(__data, __body)");
     }
 
-    /// A call nested in another one's arguments is already in code, where the
-    /// `#` that enters markup would be a syntax error.
     #[test]
     fn a_bare_call_drops_the_sigil() {
         assert_eq!(
@@ -864,12 +744,9 @@ mod tests {
             Call::new("table.header").bare().items().to_string(),
             "table.header("
         );
-        // ...and the markup form is unchanged by its existence.
         assert_eq!(Call::new("linebreak").to_string(), "#linebreak()");
     }
 
-    /// A call whose content is already in hand closes itself, so a caller with
-    /// nothing to stream does not assemble the brackets by hand.
     #[test]
     fn a_closed_body_wraps_content_it_is_given() {
         let call = Call::new("link")
@@ -878,8 +755,6 @@ mod tests {
         assert_eq!(call, r#"#link("/a")[#"Read \"this\""]"#);
     }
 
-    /// An empty array constrains nothing: `never[]` would refuse every element
-    /// the next build puts in it.
     #[test]
     fn an_empty_collection_stays_open() {
         assert_eq!(Ts(&Value::array([])).to_string(), "unknown[]");
@@ -889,8 +764,6 @@ mod tests {
         );
     }
 
-    /// A key that is not an identifier has to be quoted, or the type does not
-    /// parse; the same rule the JS renderer applies to every key.
     #[test]
     fn quotes_a_key_that_is_not_an_identifier() {
         let v = Value::dict([("a b", Value::Int(1))]);

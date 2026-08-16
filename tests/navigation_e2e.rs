@@ -1,7 +1,4 @@
 //! Client-side navigation: the single-file export and the SPA runtime.
-//!
-//! Both are additive: the ordinary multi-file site is still written, and these
-//! only add artifacts beside it.
 
 mod common;
 
@@ -45,11 +42,6 @@ fn site() -> Site {
 
 /// The route table the exported file carries, parsed the way its own script
 /// parses it: as JSON, unmodified.
-///
-/// The island escapes every `<` as `<`, which is an ordinary JSON string
-/// escape, so nothing has to be undone before parsing. This used to reverse the
-/// island's `<\/` by hand, and that step is now not only unnecessary but unable
-/// to find anything to reverse.
 fn routes(html: &str) -> serde_json::Value {
     let after = html
         .split_once("baudelaire-routes")
@@ -77,16 +69,12 @@ fn the_export_is_one_file_holding_every_page() {
         "{routes:?}"
     );
 
-    // The entry route is rendered into the body as well, so the file shows
-    // something with JavaScript off.
     assert!(html.contains("Welcome"), "entry not rendered: {html}");
-    // ..and the multi-file site is still there beside it.
     assert!(site.output("about/index.html").contains("All about it."));
 }
 
 /// A stylesheet both pages link is the document's, so the file inlines it once
-/// rather than once per route. That is the difference between an export that
-/// grows with the site and one that grows with the site squared.
+/// rather than once per route.
 #[test]
 fn a_shared_stylesheet_is_inlined_once() {
     let site = site();
@@ -95,7 +83,6 @@ fn a_shared_stylesheet_is_inlined_once() {
 
     let inlined = html.matches("data:text/css").count();
     assert_eq!(inlined, 1, "stylesheet inlined {inlined} times");
-    // No route repeats it: the shell carries it for all of them.
     let routes = routes(&html);
     for (url, route) in routes.as_object().expect("route table") {
         let markup = route["html"].as_str().expect("route markup");
@@ -114,8 +101,7 @@ fn the_spa_client_is_emitted_with_the_configured_options() {
     assert!(js.contains("mountSpa();"), "auto-mounts: {js}");
 }
 
-/// The two are independent features, not two halves of one. The export carries
-/// its own router, so it navigates with no `spa.js` anywhere in the build.
+/// The two are independent features, not two halves of one.
 #[test]
 fn the_export_stands_alone_without_the_spa_runtime() {
     let site = Site::with(
@@ -152,7 +138,6 @@ fn the_export_stands_alone_without_the_spa_runtime() {
     assert_eq!(routes(&html).as_object().expect("route table").len(), 2);
 }
 
-/// ..and the runtime is useful on its own, with no export beside it.
 #[test]
 fn the_spa_runtime_stands_alone_without_the_export() {
     let site = Site::with(
@@ -213,7 +198,6 @@ fn speculation_rules_land_in_the_head() {
     assert!(!site.exists("public/spa.js"), "nothing is shipped");
 }
 
-/// Neither output exists unless the site asks for it.
 #[test]
 fn nothing_is_emitted_without_the_blocks() {
     let site = Site::with(

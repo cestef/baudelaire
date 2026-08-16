@@ -7,19 +7,15 @@ use crate::config::dispatch::Kind::{Flag, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 
-/// Cache options.
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
-    /// Cache directory.
     pub dir: PathBuf,
-    /// Enable incremental builds.
     pub incremental: bool,
 }
 
-/// Hand-written so `incremental` stays *out* of the fingerprint, for the same
-/// reason [`Mode`](crate::world::Mode) does: a `--no-cache` run still writes the next manifest, and
-/// keying it on "caching was off" makes the following normal build a whole-site
-/// miss. Destructured, so a new field fails to compile until it is placed.
+/// Keeps `incremental` out of the fingerprint: a `--no-cache` run still writes
+/// the next manifest, so keying on it would make the following normal build a
+/// whole-site miss.
 impl std::hash::Hash for CacheConfig {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {

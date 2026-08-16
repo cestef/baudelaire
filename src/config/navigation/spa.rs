@@ -8,29 +8,26 @@ use crate::config::value::ValueExt;
 
 /// Client-side navigation over the ordinary multi-file output: a runtime
 /// intercepts internal link clicks, fetches the target page, and swaps one
-/// container instead of reloading. Enabled by the presence of a
-/// `navigation { spa { .. } }` block.
+/// container instead of reloading.
 #[derive(Debug, Clone, Hash)]
 pub struct SpaConfig {
     /// Whether to emit the navigation runtime.
     pub enabled: bool,
-    /// CSS selector of the element swapped on navigation. Everything outside it
-    /// (a header, a sidebar) survives untouched, so it must be the one element
-    /// whose contents differ between pages.
+    /// CSS selector of the element swapped on navigation; everything outside it
+    /// survives untouched, so it must be the one element whose contents differ
+    /// between pages.
     pub root: String,
-    /// When to warm a link's target before it is clicked.
     pub prefetch: Prefetch,
 }
 
 /// When the router warms a link's target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Prefetch {
-    /// Never: every navigation pays its own fetch.
     None,
-    /// On pointer-over or keyboard focus, the moment intent is visible.
+    /// On pointer-over or keyboard focus.
     #[default]
     Hover,
-    /// As soon as the link scrolls into view. Warms far more than is clicked.
+    /// As soon as the link scrolls into view.
     Visible,
 }
 
@@ -44,9 +41,6 @@ impl Named for Prefetch {
 
 impl Default for SpaConfig {
     fn default() -> Self {
-        // opt-in like `standalone`. `main` is the element typst-html templates
-        // conventionally wrap page content in; anything shared (header, nav)
-        // sits outside it and survives a navigation.
         Self {
             enabled: false,
             root: "main".into(),
@@ -55,8 +49,6 @@ impl Default for SpaConfig {
     }
 }
 
-/// The `spa { root ..; prefetch .. }` block. Its presence enables the
-/// client-side navigation runtime.
 impl Section for SpaConfig {
     const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
 

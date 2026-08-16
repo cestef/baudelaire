@@ -1,15 +1,6 @@
-//! The compile every paged artifact runs: a synthetic module, laid out on
-//! pages rather than exported as a DOM.
-//!
-//! Three things are drawn this way and none of them are alike: a social card is
-//! one page of one document, a page's PDF is one document, a bundle is every
-//! page of a collection at once. What they share is everything *around* the
-//! compile, and it lives here so it is written once: the fabricated file id, the
-//! tracked world that yields the dependency set, the diagnostics label, and the
-//! PDF export options that have to be pinned or the bytes move on their own.
-//!
-//! [`super::sidecar`] runs this per page; [`super::bundle`] runs it per
-//! document. Neither reimplements it.
+//! The compile every paged artifact runs: a synthetic module laid out on pages
+//! rather than exported as a DOM, with the file id, tracked world, diagnostics
+//! label and export options they all share.
 
 use std::sync::Arc;
 
@@ -21,22 +12,16 @@ use crate::graph::Deps;
 use crate::world::{PageWorld, Project, Tracked};
 
 /// One paged compile: the module text, and the label its diagnostics carry.
-///
-/// The label doubles as the suffix of the fabricated file id, so an artifact's
-/// name is the one thing that distinguishes its compile from every other
-/// compile of the same page.
 pub(in crate::engine) struct Paged<'a> {
     /// What the fabricated module hangs off: a page's path for a per-page
-    /// artifact, the bundle's id for a document. It has no file of its own, so
-    /// this is also all a reader has to tell which compile failed.
+    /// artifact, the bundle's id for a document.
     pub name: String,
     pub kind: &'a str,
     pub text: String,
 }
 
 /// A finished paged compile: the laid-out document, what the compile read, and
-/// the world it read it through, which an exporter needs to report its own
-/// failures with the same spans.
+/// the world it read it through.
 pub(in crate::engine) struct Laid {
     pub document: PagedDocument,
     pub deps: Deps,
@@ -45,11 +30,9 @@ pub(in crate::engine) struct Laid {
 }
 
 impl Paged<'_> {
-    /// Lay the module out, reporting what it read.
-    ///
-    /// The dependency set matters as much as the document: nothing else in the
-    /// build reads the paged template, so until the caller folds these in,
-    /// nothing ties the artifact to the template that drew it.
+    /// Lay the module out, reporting what it read: nothing else in the build
+    /// reads the paged template, so only folding these deps in ties the
+    /// artifact to the template that drew it.
     pub(in crate::engine) fn run(self, project: &Project) -> Result<Laid> {
         let source = Source::new(self.id(), self.text);
         let world = Tracked::new(project.world_for(&source));
@@ -57,11 +40,6 @@ impl Paged<'_> {
         let document = compiled
             .output
             .map_err(|errs| Laid::failed(errs, self.kind, &source, world.inner()))?;
-        // `main` here is the fabricated id, not the page's, so a page source
-        // this module imports its frontmatter from survives `dependencies`'
-        // filter instead of being dropped as the compilation's own main.
-        // Harmless: a page's text is already what its cache entry is keyed on,
-        // and hashing it a second time as a dependency cannot disagree.
         let deps = project.dependencies(&world);
         Ok(Laid {
             document,
@@ -72,9 +50,8 @@ impl Paged<'_> {
     }
 
     /// The module's file id: a project-root path suffixed with the artifact
-    /// kind, so it collides with neither the page it is drawn from (which the
-    /// module imports frontmatter from, and which must not be shadowed) nor
-    /// with another kind's compile of the same page.
+    /// kind, so it shadows neither the page it is drawn from nor another kind's
+    /// compile of that page.
     fn id(&self) -> FileId {
         let name = format!("{}@{}", self.name, self.kind);
         let vpath = VirtualPath::new(&name)
@@ -90,8 +67,7 @@ impl Paged<'_> {
 
 impl Laid {
     /// Bridge typst's diagnostics against this compile's own source, for an
-    /// exporter that fails the way the compiler does (PDF export rejects
-    /// documents the layout accepted).
+    /// exporter that fails the way the compiler does.
     pub(in crate::engine) fn failed(
         errs: typst::ecow::EcoVec<typst::diag::SourceDiagnostic>,
         kind: &str,
@@ -108,13 +84,9 @@ impl Laid {
 
     /// Export this document as PDF, identified by `ident`.
     ///
-    /// The options are pinned here for every caller, and this is the whole
-    /// reason they are: both of typst's defaults are `Smart::Auto`, which
-    /// stamps the instant of the export into the file, so two builds of an
-    /// unchanged document produced two different files and every deploy
-    /// re-uploaded the lot. The identifier is the artifact's own URL and the
-    /// timestamp is the build's date, the one `sys.inputs.baudelaire.date`
-    /// reports.
+    /// The identifier and timestamp are pinned because typst's `Smart::Auto`
+    /// defaults stamp the instant of the export into the file, making two
+    /// builds of an unchanged document two different files.
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn pdf(&self, kind: &str, ident: &str) -> crate::error::Result<Vec<u8>> {
         let options = typst_pdf::PdfOptions {
@@ -131,10 +103,6 @@ impl Laid {
 mod tests {
     use super::*;
 
-    /// The module's id is the artifact's own: a sibling of whatever it is drawn
-    /// from, suffixed with the kind. It must differ from the page's own id,
-    /// which the module imports its frontmatter from and must not shadow, and
-    /// from what another kind fabricates for the same page.
     #[test]
     fn the_module_id_is_the_name_suffixed_with_the_kind() {
         let rooted = RootedPath::new(

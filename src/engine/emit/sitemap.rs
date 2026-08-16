@@ -8,13 +8,11 @@ use crate::error::Result;
 
 /// Emits a [sitemaps.org] `sitemap.xml` listing every built page as an absolute
 /// URL under the site `base`, with an optional `lastmod` from its date.
-/// Requires a base `url` for the absolute URLs the protocol mandates.
 ///
 /// [sitemaps.org]: https://www.sitemaps.org/protocol.html
 pub(super) struct SiteMap;
 
 impl SiteMap {
-    /// The output file name; robots.txt references it too.
     pub(super) const FILE: &'static str = "sitemap.xml";
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
     const XHTML: &'static str = "http://www.w3.org/1999/xhtml";
@@ -30,8 +28,6 @@ impl SiteMap {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
                     if let Some(date) = page.frontmatter.modified() {
-                        // `time::Date` displays as an ISO-8601 calendar date,
-                        // exactly the W3C format `lastmod` wants.
                         xml.leaf("lastmod", &date.to_string());
                     }
                     Self::alternates(xml, base, page, config);

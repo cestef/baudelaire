@@ -1,9 +1,4 @@
 //! The themes shipped in `themes/`, built as real sites.
-//!
-//! A theme is Typst that nothing else in the tree compiles, so without this it
-//! rots silently: a template still parses, and the first person to name the
-//! theme finds out. Every theme is built from a shell of content it recognises,
-//! and each then gets a case for the thing it exists to do.
 
 mod common;
 
@@ -12,17 +7,14 @@ use std::path::Path;
 
 use common::Site;
 
-/// Every theme in `themes/`, named so a missing case is a compile error rather
-/// than a test that quietly never runs.
+/// Every theme in `themes/`.
 const THEMES: &[&str] = &["albatros", "spleen", "phares", "paysage"];
 
-/// The two that are blogs, and so share one content shape (posts with dates,
-/// tags and summaries) and one set of claims about it.
+/// The two that are blogs, and so share one content shape.
 const BLOGS: &[&str] = &["albatros", "spleen"];
 
-/// Copy a directory tree, which is how a theme gets from the repository into a
-/// site: `theme "themes/x"` resolves inside the project, since a Typst import
-/// cannot leave the project root.
+/// Copy a directory tree: `theme "themes/x"` resolves inside the project, since
+/// a Typst import cannot leave the project root.
 fn copy(from: &Path, to: &Path) {
     fs::create_dir_all(to).expect("mkdir");
     for entry in fs::read_dir(from).expect("read theme dir") {
@@ -70,8 +62,6 @@ fn blog(theme: &str) -> Site {
     site
 }
 
-/// Every theme renders a page through its own shell, with the layout and the
-/// stylesheet wired up, whatever its content model is.
 #[test]
 fn every_theme_builds_a_site() {
     for theme in THEMES {
@@ -85,7 +75,6 @@ fn every_theme_builds_a_site() {
             home.contains("/assets/style.css"),
             "{theme}: theme stylesheet linked: {home}"
         );
-        // The theme's assets are published beside a project's own.
         assert!(
             site.exists("public/assets/style.css"),
             "{theme}: stylesheet"
@@ -93,8 +82,6 @@ fn every_theme_builds_a_site() {
     }
 }
 
-/// A blog theme renders a post, its own index, and a term page, with the entry
-/// data, the tag links and the pager all wired up.
 #[test]
 fn a_blog_theme_builds_posts_an_index_and_a_term_page() {
     for theme in BLOGS {
@@ -105,8 +92,7 @@ fn a_blog_theme_builds_posts_an_index_and_a_term_page() {
         assert!(post.contains("First"), "{theme}: post title: {post}");
         assert!(post.contains("Body text."), "{theme}: post body: {post}");
         assert!(post.contains("/tags/rust/"), "{theme}: tag links: {post}");
-        // The pager reads `page.nav`, so it names the sibling rather than a URL
-        // the theme guessed at.
+        // The pager reads `page.nav`, so it names the sibling itself.
         assert!(post.contains("Second"), "{theme}: pager: {post}");
 
         let index = site.output("posts/index.html");
@@ -122,7 +108,7 @@ fn a_blog_theme_builds_posts_an_index_and_a_term_page() {
 }
 
 /// A `home.typ` page lists the collection from `@baudelaire/pages`, the build's
-/// own catalogue, so publishing a post is the only step to it appearing there.
+/// own catalogue.
 #[test]
 fn a_blog_theme_lists_recent_posts_on_a_home_page() {
     for theme in BLOGS {
@@ -142,8 +128,7 @@ fn a_blog_theme_lists_recent_posts_on_a_home_page() {
     }
 }
 
-/// `spleen` is the one that ships no script at all, which is a promise a
-/// stray `<script>` in a template would quietly break.
+/// `spleen` is the one that ships no script at all.
 #[test]
 fn the_terminal_theme_emits_no_script() {
     let site = blog("spleen");
@@ -153,8 +138,8 @@ fn the_terminal_theme_emits_no_script() {
     assert!(!post.contains("<script"), "no script: {post}");
 }
 
-/// `albatros` is the multilingual one: its switcher is built from the page's own
-/// editions, and its labels come from the language's string table.
+/// `albatros` is the multilingual one: its switcher is built from the page's
+/// own editions, and its labels come from the language's string table.
 #[test]
 fn the_blog_theme_switches_languages() {
     let site = blog("albatros");
@@ -181,13 +166,13 @@ fn the_blog_theme_switches_languages() {
         french.contains("min de lecture"),
         "labels come from the string table: {french}"
     );
-    // The date is written the way French writes it, by baudelaire rather than by
-    // the theme: typst's own `display` knows English month names only.
+    // typst's own `display` knows English month names only, so the localized
+    // date comes from baudelaire.
     assert!(french.contains("juillet"), "localized date: {french}");
 }
 
-/// `phares` is the documentation one: a sidebar of the site's own tree, a search
-/// client to open, and a contents placeholder its script fills in.
+/// `phares` is the documentation one: a sidebar of the site's own tree, a
+/// search client to open, and a contents placeholder its script fills in.
 #[test]
 fn the_docs_theme_builds_a_sidebar_and_a_search_client() {
     let site = wearing("phares", "");
@@ -211,13 +196,12 @@ fn the_docs_theme_builds_a_sidebar_and_a_search_client() {
         page.contains("data-search-open") && page.contains("/search.js"),
         "search trigger and client: {page}"
     );
-    // One collection covers the whole tree, so the pager runs past a directory.
     assert!(page.contains("Writing"), "pager: {page}");
     assert!(site.exists("public/search.json"), "search index");
 }
 
-/// `paysage` is the portfolio one: the landing page's grid is the catalogue, and
-/// a project page shows the facts its own frontmatter carries.
+/// `paysage` is the portfolio one: the landing page's grid is the catalogue,
+/// and a project page shows the facts its own frontmatter carries.
 #[test]
 fn the_portfolio_theme_builds_a_work_grid_and_a_case_study() {
     let site = wearing("paysage", "");
@@ -244,8 +228,6 @@ fn the_portfolio_theme_builds_a_work_grid_and_a_case_study() {
     assert!(term.contains("/work/ledger/"), "term page: {term}");
 }
 
-/// A project file at the same relative path wins, which is what makes a theme
-/// adjustable without forking it.
 #[test]
 fn a_project_file_still_overrides_a_shipped_theme() {
     let site = blog("albatros");
@@ -263,15 +245,11 @@ fn a_project_file_still_overrides_a_shipped_theme() {
     );
 }
 
-/// The nav is derived from the build's own view of the site, so it names the
-/// site's real directories instead of a menu the theme hardcoded.
 #[test]
 fn every_theme_navigates_to_the_sections_it_finds() {
     for theme in THEMES {
-        // Each theme's own content shape, so the directory it is handed is one
-        // its config actually collects, and the link it draws for that
-        // directory: a docs sidebar lists the pages, everything else links the
-        // section index.
+        // Each theme's own content shape, and the link it draws for it: a docs
+        // sidebar lists the pages, everything else links the section index.
         let (site, link) = match *theme {
             "phares" => {
                 let site = wearing(theme, "");

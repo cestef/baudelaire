@@ -21,7 +21,6 @@ fn copies_files_verbatim_to_dist_root() {
     );
     site.write("static/install.sh", "#!/bin/sh\necho hi\n");
     site.stats();
-    // Same path at the site root, byte-identical, name untouched (no fingerprint).
     assert_eq!(site.read("public/install.sh"), "#!/bin/sh\necho hi\n");
 }
 
@@ -47,7 +46,6 @@ fn a_generated_page_overrides_a_static_file() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\ngenerated\n",
     );
-    // A static index.html at the same output path must lose to the page.
     site.write("static/index.html", "STATIC");
     site.stats();
     let html = site.read("public/index.html");
@@ -62,21 +60,16 @@ fn missing_static_dir_is_not_an_error() {
         "content/index.typ",
         "#let frontmatter = (title: \"H\",)\nhi\n",
     );
-    // No `static/` directory at all.
     site.stats();
     assert!(site.exists("public/index.html"));
 }
 
-/// `static/` is the documented override escape hatch, but processors run after
-/// the static copy, so with `sitemap` on by default a hand-authored
-/// `static/sitemap.xml` was overwritten on every build. Only whole-site derived
-/// files yield; a page still wins, see
+/// Only whole-site derived files yield to `static/`; a page still wins, see
 /// `a_generated_page_overrides_a_static_file`.
 #[test]
 fn a_static_file_overrides_generated_processor_output() {
-    // The sitemap processor has to actually run, so this needs `url` *and* the
-    // opt-in: without them nothing would compete with the static copy and the
-    // test would pass with the override deleted.
+    // The sitemap processor must actually run, so `url` and the opt-in are
+    // both needed or nothing competes with the static copy.
     let site = Site::with(
         r#"
         site "T"
@@ -100,9 +93,6 @@ fn a_static_file_overrides_generated_processor_output() {
     assert_eq!(site.read("public/sitemap.xml"), "<!-- mine -->\n");
 }
 
-/// A static file inside the asset directory survives. The pipeline replaces
-/// `dist/assets` wholesale when it publishes, so a file the static copy had
-/// already written there was deleted with the directory it replaced.
 #[test]
 fn a_static_file_under_the_asset_dir_survives_the_pipeline() {
     let site = Site::with(
@@ -131,8 +121,8 @@ fn a_static_file_under_the_asset_dir_survives_the_pipeline() {
     );
 }
 
-/// A failed build leaves no staged asset tree in `dist`: `deploy` walks the
-/// whole directory and would upload it as a duplicate copy of the assets.
+/// `deploy` walks the whole `dist` directory, so a leftover staging tree would
+/// be uploaded as a second copy of the assets.
 #[test]
 fn a_failed_build_leaves_no_staging_tree() {
     let site = Site::with(
