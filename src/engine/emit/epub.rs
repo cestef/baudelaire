@@ -266,10 +266,10 @@ impl<'a> Book<'a> {
     /// and re-add the book to every library that had it.
     fn identifier(&self) -> String {
         let url = self.selection.url(self.config, BundleFormat::Epub.ext());
-        match self.config.base() {
-            Some(base) => base.join(&url),
-            None => format!("urn:baudelaire:{}", self.selection.id),
-        }
+        self.config.base().map_or_else(
+            || format!("urn:baudelaire:{}", self.selection.id),
+            |base| base.join(&url),
+        )
     }
 
     /// The navigation document: the table of contents, which is also a chapter

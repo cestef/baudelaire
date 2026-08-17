@@ -96,10 +96,10 @@ impl FsError {
     /// The path portion of the message, built through [`markup!`] so a path
     /// carrying a delimiter of its own cannot open a span.
     fn location(&self) -> String {
-        match &self.dest {
-            Some(to) => markup!("`{}` → `{}`", self.path.display(), to.display()),
-            None => markup!("`{}`", self.path.display()),
-        }
+        self.dest.as_ref().map_or_else(
+            || markup!("`{}`", self.path.display()),
+            |to| markup!("`{}` → `{}`", self.path.display(), to.display()),
+        )
     }
 
     pub fn kind(&self) -> io::ErrorKind {

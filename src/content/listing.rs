@@ -15,10 +15,9 @@ pub struct Titlecase<'a>(pub &'a str);
 impl fmt::Display for Titlecase<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut chars = self.0.chars();
-        match chars.next() {
-            Some(first) => write!(f, "{}{}", first.to_uppercase(), chars.as_str()),
-            None => Ok(()),
-        }
+        chars.next().map_or(Ok(()), |first| {
+            write!(f, "{}{}", first.to_uppercase(), chars.as_str())
+        })
     }
 }
 

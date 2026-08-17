@@ -1,7 +1,8 @@
 //! Plain-text extraction from rendered HTML, and the reading estimate taken
-//! from a page's typst source before it is rendered at all. A tag-aware
-//! scanner, not an HTML parser, scoped to one region of the page ([`Region`])
-//! so site chrome never pollutes the prose.
+//! from a page's typst source before it is rendered at all.
+//!
+//! A tag-aware scanner, not an HTML parser, scoped to one region of the page
+//! ([`Region`]) so site chrome never pollutes the prose.
 
 /// The predefined HTML/XML entities as `(char, name)`, read when decoding
 /// `&name;` back to its character during extraction.
@@ -62,10 +63,7 @@ impl Text {
             return html;
         };
         let start = open + gt + 1;
-        match Self::closing(html, start, element) {
-            Some(end) => &html[start..end],
-            None => &html[start..],
-        }
+        Self::closing(html, start, element).map_or_else(|| &html[start..], |end| &html[start..end])
     }
 
     /// Where `<element` opens at or after `from`, as a whole tag name: `<mainly>`
@@ -254,8 +252,10 @@ impl Text {
 
 /// How long a page takes to read, as the prose words it carries, counted from
 /// the page's *source*: the render has not happened when a template is handed
-/// its page. Words and not minutes, because the rate is the site's and this is
-/// measured before a page knows its language; [`Reading::minutes`] applies it.
+/// its page.
+///
+/// Words and not minutes, because the rate is the site's and this is measured
+/// before a page knows its language; [`Reading::minutes`] applies it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub words: usize,

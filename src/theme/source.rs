@@ -111,10 +111,9 @@ impl Origin {
             Self::Path { path } => path.display().to_string(),
             Self::Package { spec } => spec.clone(),
             Self::Archive { url, .. } => url.clone(),
-            Self::Forge { repo, r#ref, .. } => match r#ref {
-                Some(name) => format!("{repo}#{name}"),
-                None => repo.clone(),
-            },
+            Self::Forge { repo, r#ref, .. } => r#ref
+                .as_ref()
+                .map_or_else(|| repo.clone(), |name| format!("{repo}#{name}")),
         }
     }
 

@@ -1,5 +1,6 @@
 //! Cryptographic digests a browser verifies, for `integrity` attributes and
 //! `Content-Security-Policy` hash sources, and the base64 they are written in.
+//!
 //! Not [`crate::graph::Hash`], which answers whether something changed.
 
 use std::fmt::{self, Write as _};

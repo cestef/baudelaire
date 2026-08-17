@@ -326,10 +326,9 @@ impl Sources {
     /// What a declared source is served as under the prefix: its declared name
     /// carrying the real file's extension, so a reader sees the kind of file.
     fn key(name: &str, path: &Path) -> String {
-        match path.extension().and_then(|ext| ext.to_str()) {
-            Some(ext) => format!("{name}.{ext}"),
-            None => name.to_owned(),
-        }
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map_or_else(|| name.to_owned(), |ext| format!("{name}.{ext}"))
     }
 
     /// The virtual path a declared source is served at, which is both the

@@ -184,11 +184,13 @@ pub(super) trait ValueExt {
 
 impl ValueExt for KdlValue {
     fn as_str(&self, text: &str, span: SourceSpan) -> Result<String> {
-        match self.as_string() {
-            Some(s) => Env::expand(s)
-                .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into()),
-            None => Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
-        }
+        self.as_string().map_or_else(
+            || Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
+            |s| {
+                Env::expand(s)
+                    .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
+            },
+        )
     }
 
     fn template(&self, text: &str, span: SourceSpan) -> Result<String> {
@@ -200,12 +202,10 @@ impl ValueExt for KdlValue {
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {
-        match self.as_integer() {
-            Some(n) => {
-                i64::try_from(n).map_err(|_| ConfigError::integer_overflow(text, n, span).into())
-            }
-            None => Err(ConfigError::type_mismatch(text, "integer", self.kind(), span).into()),
-        }
+        self.as_integer().map_or_else(
+            || Err(ConfigError::type_mismatch(text, "integer", self.kind(), span).into()),
+            |n| i64::try_from(n).map_err(|_| ConfigError::integer_overflow(text, n, span).into()),
+        )
     }
 
     fn ranged(&self, text: &str, span: SourceSpan, min: i64, max: i64) -> Result<i64> {
@@ -229,10 +229,10 @@ impl ValueExt for KdlValue {
     }
 
     fn boolean(&self, text: &str, span: SourceSpan) -> Result<bool> {
-        match self.as_bool() {
-            Some(b) => Ok(b),
-            None => Err(ConfigError::type_mismatch(text, "boolean", self.kind(), span).into()),
-        }
+        self.as_bool().map_or_else(
+            || Err(ConfigError::type_mismatch(text, "boolean", self.kind(), span).into()),
+            Ok,
+        )
     }
 
     fn kind(&self) -> &'static str {

@@ -111,10 +111,10 @@ fn serve_s3(mut stream: TcpStream, store: &Store, log: &Log, refusing: Option<&'
     }
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).unwrap();
-    log.lock().unwrap().push(match cache_control {
-        Some(cache) => format!("{method} {path} [{cache}]"),
-        None => format!("{method} {path}"),
-    });
+    log.lock().unwrap().push(cache_control.map_or_else(
+        || format!("{method} {path}"),
+        |cache| format!("{method} {path} [{cache}]"),
+    ));
 
     if let Some(code) = refusing.filter(|_| method != "GET") {
         let body = format!(

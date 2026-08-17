@@ -428,14 +428,16 @@ impl Card<'_> {
             (part.len() == 2 && part.chars().all(|c| c.is_ascii_alphabetic()))
                 || (part.len() == 3 && part.chars().all(|c| c.is_ascii_digit()))
         });
-        match region {
-            Some(region) => format!(
-                "{}_{}",
-                language.to_ascii_lowercase(),
-                region.to_uppercase()
-            ),
-            None => language.to_ascii_lowercase(),
-        }
+        region.map_or_else(
+            || language.to_ascii_lowercase(),
+            |region| {
+                format!(
+                    "{}_{}",
+                    language.to_ascii_lowercase(),
+                    region.to_uppercase()
+                )
+            },
+        )
     }
 
     /// A `<meta property=".." content="..">` tag (OpenGraph).

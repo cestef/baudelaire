@@ -643,10 +643,7 @@ impl Engine {
                 }
             }
         }
-        match BuildFailed::aggregate(errors) {
-            Some(e) => Err(e),
-            None => Ok(rendered),
-        }
+        BuildFailed::aggregate(errors).map_or_else(|| Ok(rendered), Err)
     }
 
     /// A page's source path relative to the content root, for display. Handles

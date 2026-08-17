@@ -80,10 +80,9 @@ impl Project {
 
         let mut features = vec![Feature::Html];
         for token in &config.typst.features {
-            let (enable, name) = match token.strip_prefix('-') {
-                Some(rest) => (false, rest),
-                None => (true, token.as_str()),
-            };
+            let (enable, name) = token
+                .strip_prefix('-')
+                .map_or((true, token.as_str()), |rest| (false, rest));
             match FEATURES.iter().find(|(n, _)| *n == name) {
                 Some((_, feature)) if enable => {
                     if !features.contains(feature) {
@@ -374,9 +373,11 @@ impl<W: World> World for Tracked<W> {
     }
 }
 
-/// How a page's synthetic layout module is named to the compiler: a sibling of
-/// the page, so a relative template import resolves the same way, but a
-/// distinct file, so it can `#include` the page without shadowing it as `main`.
+/// How a page's synthetic layout module is named to the compiler.
+///
+/// A sibling of the page, so a relative template import resolves the same way,
+/// but a distinct file, so it can `#include` the page without shadowing it as
+/// `main`.
 pub struct Wrapper;
 
 impl Wrapper {

@@ -12,9 +12,11 @@ use crate::content::{Rebased, SourceMap};
 use crate::ui::Text;
 
 /// A typst diagnostic bridged to miette, with span resolution via the world
-/// that produced it. A label is drawn only for spans in the one file
-/// [`src`](Self::src) holds: a span reaching into another file would overrun
-/// that text and panic miette with `OutOfBounds`.
+/// that produced it.
+///
+/// A label is drawn only for spans in the one file [`src`](Self::src) holds: a
+/// span reaching into another file would overrun that text and panic miette
+/// with `OutOfBounds`.
 pub struct TypstSourceDiagnostic {
     inner: SourceDiagnostic,
     src: NamedSource<String>,

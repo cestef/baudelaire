@@ -311,13 +311,13 @@ impl<'a> SrcSet<'a> {
             .candidates()
             .into_iter()
             .map(|(url, descriptor)| {
-                let url = match f(url) {
-                    Some(new) => {
+                let url = f(url).map_or_else(
+                    || url.to_owned(),
+                    |new| {
                         changed = true;
                         new
-                    }
-                    None => url.to_owned(),
-                };
+                    },
+                );
                 match descriptor {
                     "" => url,
                     d => format!("{url} {d}"),
@@ -348,10 +348,9 @@ impl<'a> SrcSet<'a> {
                 rest = tail;
                 continue;
             }
-            let (descriptor, after) = match tail.find(',') {
-                Some(i) => (&tail[..i], &tail[i + 1..]),
-                None => (tail, ""),
-            };
+            let (descriptor, after) = tail
+                .find(',')
+                .map_or((tail, ""), |i| (&tail[..i], &tail[i + 1..]));
             out.push((url, descriptor.trim()));
             rest = after;
         }

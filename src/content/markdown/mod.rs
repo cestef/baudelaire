@@ -118,10 +118,10 @@ impl<'a> Document<'a> {
     /// block is the empty one, which is still walked so a schema requiring a
     /// field fails on the page that wrote none.
     pub fn block(&self, path: &str, source: &str) -> Result<Block> {
-        match self.frontmatter {
-            Some(text) => self.dialect.parse(text, self.offset, path, source),
-            None => Ok(Block::empty()),
-        }
+        self.frontmatter.map_or_else(
+            || Ok(Block::empty()),
+            |text| self.dialect.parse(text, self.offset, path, source),
+        )
     }
 }
 

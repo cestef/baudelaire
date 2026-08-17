@@ -7,8 +7,10 @@ use thiserror::Error;
 use crate::ui::{Code, markup};
 
 /// A template the build was pointed at that is in neither the template
-/// directory nor the theme's, reported before the first compile so it names the
-/// config line rather than the generated wrapper that imports it.
+/// directory nor the theme's.
+///
+/// Reported before the first compile, so it names the config line rather than
+/// the generated wrapper that imports it.
 #[derive(Debug, Error, Diagnostic)]
 #[error("template {} was not found", Code(.file))]
 #[diagnostic(code(baudelaire::template::missing), help("{help}"))]

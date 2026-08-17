@@ -231,8 +231,9 @@ impl Cache {
     ) -> Result<Self> {
         let dir = config.cache.dir.clone();
         let manifest = dir.join(MANIFEST);
-        let prev = match fs::read(&manifest) {
-            Ok(bytes) => match serde_json::from_slice(&bytes) {
+        let prev = fs::read(&manifest).map_or_else(
+            |_| Manifest::default(),
+            |bytes| match serde_json::from_slice(&bytes) {
                 Ok(prev) => prev,
                 Err(e) => {
                     ui.warn(ManifestUnreadable {
@@ -242,8 +243,7 @@ impl Cache {
                     Manifest::default()
                 }
             },
-            Err(_) => Manifest::default(),
-        };
+        );
         let fingerprint = Hash::of(&(config, inputs, Renderer::current()));
         let root = crate::fs::canonical(root);
         Ok(Self {
@@ -387,10 +387,11 @@ impl Cache {
         let hit = self.enabled
             && self.prev.config.as_ref() == Some(&self.config)
             && path.exists()
-            && match self.prev.bundles.get(id) {
-                Some(entry) => &entry.hash == fingerprint && self.intact(&entry.deps),
-                None => false,
-            };
+            && self
+                .prev
+                .bundles
+                .get(id)
+                .is_some_and(|entry| &entry.hash == fingerprint && self.intact(&entry.deps));
         if hit && let Some(entry) = self.prev.bundles.get(id).cloned() {
             self.next.bundles.insert(id.to_owned(), entry);
         }

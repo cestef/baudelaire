@@ -1,6 +1,8 @@
-//! Collection index pages, optionally paginated: a collection that configures
-//! `paginate { }` gets a generated index [`Listing`] at `/{collection}/`, its
-//! members chunked across `/{collection}/page/2/`, .. when it names a size.
+//! Collection index pages, optionally paginated.
+//!
+//! A collection that configures `paginate { }` gets a generated index
+//! [`Listing`] at `/{collection}/`, its members chunked across
+//! `/{collection}/page/2/`, .. when it names a size.
 
 use crate::config::{Config, Permalink};
 use crate::content::generate::{Generate, PlanCtx};

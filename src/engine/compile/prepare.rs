@@ -416,9 +416,10 @@ impl<'a> Prepare<'a> {
     /// The prev/next sibling links as a typst dict value:
     /// `(prev: (url: .., title: ..), next: none)`, each link a dict or `none`.
     fn nav(siblings: &Siblings) -> Value {
-        let link = |s: &Option<Sibling>| match s {
-            Some(s) => Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))]),
-            None => Value::None,
+        let link = |s: &Option<Sibling>| {
+            s.as_ref().map_or(Value::None, |s| {
+                Value::dict([("url", Value::str(&s.url)), ("title", Value::str(&s.title))])
+            })
         };
         Value::dict([
             ("prev", link(&siblings.prev)),
@@ -456,16 +457,15 @@ impl<'a> Prepare<'a> {
     /// only, so a template cannot derive the localized form from the ISO one.
     fn date(&self, page: &Page) -> Value {
         let strings = Strings::new(self.config, &page.lang);
-        match page.frontmatter.date {
-            None => Value::None,
-            Some(date) => Value::dict([
+        page.frontmatter.date.map_or(Value::None, |date| {
+            Value::dict([
                 ("iso", Value::str(Iso(date).to_string())),
                 (
                     "display",
                     Value::str(Localized::new(date, &strings).to_string()),
                 ),
-            ]),
-        }
+            ])
+        })
     }
 
     /// A page's translations as an array value:

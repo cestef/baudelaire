@@ -104,9 +104,11 @@ impl Section for LintConfig {
     ]);
 }
 
-/// Which lint rule a finding came from. A finding is cached with its page and
-/// its severity is not, so resolving the severity from the rule at report time
-/// is what keeps a cache hit reporting what the current config asks for.
+/// Which lint rule a finding came from.
+///
+/// A finding is cached with its page and its severity is not, so resolving the
+/// severity from the rule at report time is what keeps a cache hit reporting
+/// what the current config asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ruled {
     Headings,

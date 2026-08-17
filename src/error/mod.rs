@@ -1,6 +1,8 @@
 //! Every error the crate can fail with, and the one enum that carries them: one
-//! module per error class, each a typed [`miette::Diagnostic`]. [`warning`]
-//! holds the same at `severity(warning)`, which reports without failing a run.
+//! module per error class, each a typed [`miette::Diagnostic`].
+//!
+//! [`warning`] holds the same at `severity(warning)`, which reports without
+//! failing a run.
 
 use typst::syntax::VirtualizeError;
 

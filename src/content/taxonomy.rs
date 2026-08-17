@@ -153,10 +153,10 @@ impl<'a> Group<'a> {
             }
             let described = self.described(name);
             resolved.push(Term {
-                url: match described {
-                    Some(page) => page.permalink.clone(),
-                    None => self.url(&[self.name, &slug]),
-                },
+                url: described.map_or_else(
+                    || self.url(&[self.name, &slug]),
+                    |page| page.permalink.clone(),
+                ),
                 described,
                 name,
                 slug,

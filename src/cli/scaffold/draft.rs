@@ -164,10 +164,9 @@ impl Draft {
             .filter(|w| !w.is_empty())
             .map(|w| {
                 let mut chars = w.chars();
-                match chars.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    None => String::new(),
-                }
+                chars.next().map_or_else(String::new, |first| {
+                    first.to_uppercase().collect::<String>() + chars.as_str()
+                })
             })
             .collect::<Vec<_>>()
             .join(" ")

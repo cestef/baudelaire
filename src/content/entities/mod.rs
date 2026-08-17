@@ -1,5 +1,6 @@
 //! The named things a page refers to, and what is known about each: a term the
 //! page writes, an id in a registry, and a set of fields the build can render.
+//!
 //! [`Registries`] is built once per plan, from the
 //! [`entities`](crate::config::RegistryConfig) block.
 
@@ -70,10 +71,10 @@ impl Entity {
         editions: BTreeMap<String, Vec<(String, Value)>>,
         pages: BTreeMap<String, std::path::PathBuf>,
     ) -> Result<Self> {
-        let aliases = match fields.iter().position(|(key, _)| key == Self::ALIAS) {
-            Some(at) => Self::names(fields.remove(at).1),
-            None => Vec::new(),
-        };
+        let aliases = fields
+            .iter()
+            .position(|(key, _)| key == Self::ALIAS)
+            .map_or_else(Vec::new, |at| Self::names(fields.remove(at).1));
         let aliases = aliases
             .iter()
             .map(|alias| Ok(Slug::require(alias)?.into_string()))

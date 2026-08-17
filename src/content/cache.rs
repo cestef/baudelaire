@@ -337,10 +337,10 @@ impl<'a> DiscoveryCache<'a> {
     /// Read the `frontmatter` export from an evaluated module, defaulting when
     /// the module exports none.
     fn interpret(module: &Module, origin: &Origin, config: &Config) -> Result<(Frontmatter, bool)> {
-        match Frontmatter::extract(module, origin, config)? {
-            Some(frontmatter) => Ok((frontmatter, true)),
-            None => Ok((Frontmatter::default(), false)),
-        }
+        Frontmatter::extract(module, origin, config)?.map_or_else(
+            || Ok((Frontmatter::default(), false)),
+            |frontmatter| Ok((frontmatter, true)),
+        )
     }
 
     /// Persist the accumulated manifest. A no-op when disabled.

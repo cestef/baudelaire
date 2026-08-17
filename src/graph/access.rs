@@ -319,10 +319,10 @@ impl<'a> Analyzer<'a> {
         if let Some(cached) = self.memo.lock().get(path) {
             return Arc::clone(cached);
         }
-        let found = match self.project.source(path) {
-            Ok(source) => self.roots.reads(&source),
-            Err(_) => self.roots.everything(),
-        };
+        let found = self.project.source(path).map_or_else(
+            |_| self.roots.everything(),
+            |source| self.roots.reads(&source),
+        );
         let found = Arc::new(found);
         self.memo.lock().insert(path.to_owned(), Arc::clone(&found));
         found

@@ -40,10 +40,7 @@ pub(crate) struct Tail<'a> {
 
 impl<'a> Tail<'a> {
     pub fn of(raw: &'a str) -> Self {
-        let (path, tail) = match raw.find(['#', '?']) {
-            Some(i) => raw.split_at(i),
-            None => (raw, ""),
-        };
+        let (path, tail) = raw.find(['#', '?']).map_or((raw, ""), |i| raw.split_at(i));
         Self { path, tail }
     }
 }

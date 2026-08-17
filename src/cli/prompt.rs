@@ -171,8 +171,10 @@ impl<'a, T: Clone> Prompt<'a, T> {
 }
 
 /// A styled hidden-input prompt for secrets: the same `? question` prefix as
-/// [`Input`], but the typed characters never echo. Returns `None` on a
-/// non-terminal (nothing to read) or an empty answer, so a caller can fall back.
+/// [`Input`], but the typed characters never echo.
+///
+/// Returns `None` on a non-terminal (nothing to read) or an empty answer, so a
+/// caller can fall back.
 pub struct Secret<'a> {
     question: &'a str,
 }

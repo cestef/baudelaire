@@ -1,6 +1,8 @@
 //! Editor support for the modules a build serves from memory: `baudelaire
 //! packages` mirrors the `@baudelaire/*` and `baudelaire:*` families to disk so
-//! an editor resolves them. Nothing here is read back by a build.
+//! an editor resolves them.
+//!
+//! Nothing here is read back by a build.
 
 mod packages;
 #[cfg(feature = "js")]

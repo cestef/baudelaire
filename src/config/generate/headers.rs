@@ -7,7 +7,9 @@ use crate::config::node::NodeExt;
 use crate::error::Result;
 
 /// The `_headers` file Netlify and Cloudflare Pages read from the publish
-/// directory: whether it is written, and the rules the site states beyond the
+/// directory.
+///
+/// Holds whether it is written and the rules the site states beyond the
 /// `Cache-Control` and CSP the build already derives from `caching { }` and
 /// `security { csp { } }`.
 #[derive(Debug, Clone, Hash, Default)]

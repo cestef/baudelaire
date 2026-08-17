@@ -194,10 +194,10 @@ impl Page {
         match &fm.lang {
             Some(lang) if !config.knows(lang) => unknown(lang),
             Some(lang) => Ok(lang.clone()),
-            None => match stem.undeclared(config) {
-                Some(code) => unknown(code),
-                None => Ok(stem.lang().unwrap_or(&config.lang).to_owned()),
-            },
+            None => stem.undeclared(config).map_or_else(
+                || Ok(stem.lang().unwrap_or(&config.lang).to_owned()),
+                unknown,
+            ),
         }
     }
 

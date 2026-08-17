@@ -6,9 +6,10 @@ use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 
 /// Responsive images: pre-generate downscaled copies of each raster and let
-/// the browser pick the smallest that fits via `srcset`. Variants stay in the
-/// source format, and a width wider than the source is skipped, never
-/// upscaled.
+/// the browser pick the smallest that fits via `srcset`.
+///
+/// Variants stay in the source format, and a width wider than the source is
+/// skipped, never upscaled.
 #[derive(Debug, Clone, Hash)]
 pub struct ResponsiveConfig {
     pub enabled: bool,

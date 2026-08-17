@@ -309,10 +309,7 @@ impl Details {
             }
             None => (PathBuf::from("."), Self::dir_name(Path::new("."), root)),
         };
-        let site = match &args.title {
-            Some(t) => t.clone(),
-            None => site,
-        };
+        let site = args.title.as_ref().map_or(site, std::clone::Clone::clone);
         let author = ask("Author", &git, args.author.as_ref())?;
         let url = ask("Base URL", "https://example.com", args.url.as_ref())?;
         if !crate::config::BaseUrl::absolute(&url) {

@@ -58,16 +58,15 @@ impl External {
                 })
                 .collect()
         };
-        let probed: Vec<(&str, Probe)> = match policy.concurrency {
-            Some(threads) => match rayon::ThreadPoolBuilder::new().num_threads(threads).build() {
+        let probed: Vec<(&str, Probe)> = policy.concurrency.map_or_else(probe, |threads| {
+            match rayon::ThreadPoolBuilder::new().num_threads(threads).build() {
                 Ok(pool) => pool.install(probe),
                 Err(e) => {
                     tracing::debug!("link checker pool of {threads} not built: {e}");
                     probe()
                 }
-            },
-            None => probe(),
-        };
+            }
+        });
         progress.finish();
 
         let mut dead: Vec<Dead> = Vec::new();

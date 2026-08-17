@@ -90,10 +90,9 @@ impl Display for Table {
                 Accent::Right => writeln!(f, "  {left}{pad}{}", Literal(right))?,
             }
         }
-        match &self.footer {
-            Some(footer) => write!(f, "\n{footer}"),
-            None => Ok(()),
-        }
+        self.footer
+            .as_ref()
+            .map_or(Ok(()), |footer| write!(f, "\n{footer}"))
     }
 }
 

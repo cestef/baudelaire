@@ -148,17 +148,20 @@ impl Bucket {
         secret_key: String,
         token: Option<String>,
     ) -> Self {
-        let (authority, host, root) = if let Some(endpoint) = &config.endpoint {
-            let endpoint = endpoint.trim_end_matches('/');
-            let host = endpoint
-                .split_once("://")
-                .map_or(endpoint, |(_, h)| h)
-                .to_owned();
-            (endpoint.to_owned(), host, format!("/{}", config.bucket))
-        } else {
-            let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region());
-            (format!("https://{host}"), host, String::new())
-        };
+        let (authority, host, root) = config.endpoint.as_ref().map_or_else(
+            || {
+                let host = format!("{}.s3.{}.amazonaws.com", config.bucket, config.region());
+                (format!("https://{host}"), host, String::new())
+            },
+            |endpoint| {
+                let endpoint = endpoint.trim_end_matches('/');
+                let host = endpoint
+                    .split_once("://")
+                    .map_or(endpoint, |(_, h)| h)
+                    .to_owned();
+                (endpoint.to_owned(), host, format!("/{}", config.bucket))
+            },
+        );
         Self {
             agent: crate::remote::Http::agent("deploy", crate::remote::Status::Read),
             name: config.bucket.clone(),

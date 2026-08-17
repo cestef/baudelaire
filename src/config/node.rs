@@ -127,13 +127,13 @@ struct Toggle<'a> {
 
 impl<'a> Toggle<'a> {
     fn of(raw: &'a str) -> Self {
-        match raw.strip_prefix('-') {
-            Some(name) => Self { name, add: false },
-            None => Self {
+        raw.strip_prefix('-').map_or_else(
+            || Self {
                 name: raw.strip_prefix('+').unwrap_or(raw),
                 add: true,
             },
-        }
+            |name| Self { name, add: false },
+        )
     }
 
     /// A list in this grammar amends the key's defaults, so one naming nothing
@@ -160,22 +160,20 @@ impl NodeExt for KdlNode {
     }
 
     fn arg(&self, text: &str, idx: usize) -> Result<&KdlValue> {
-        match self.get(idx) {
-            Some(value) => Ok(value),
-            None => {
-                Err(ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into())
-            }
-        }
+        self.get(idx).map_or_else(
+            || Err(ConfigError::missing_arg(text, self.name().value(), NodeExt::span(self)).into()),
+            Ok,
+        )
     }
 
     /// A flag node's boolean: a bare node (`prune`) enables, a present argument
     /// must be a KDL boolean (`prune #false`); anything else is a type error,
     /// never a silent coercion.
     fn boolean(&self, text: &str, idx: usize) -> Result<bool> {
-        match self.get(idx) {
-            None => Ok(true),
-            Some(value) => value.boolean(text, NodeExt::span(self)),
-        }
+        self.get(idx).map_or_else(
+            || Ok(true),
+            |value| value.boolean(text, NodeExt::span(self)),
+        )
     }
 
     fn int(&self, text: &str, idx: usize) -> Result<i64> {

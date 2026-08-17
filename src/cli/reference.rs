@@ -41,10 +41,10 @@ impl Run for ReferenceArgs {
                 let keys = crate::config::dispatch::Keys::of(&paths);
                 UnknownKey {
                     key: key.clone(),
-                    help: match keys.nearest(key) {
-                        Some(near) => markup!("did you mean `{}`?", near),
-                        None => markup!("run `{}` for every key", "baudelaire reference"),
-                    },
+                    help: keys.nearest(key).map_or_else(
+                        || markup!("run `{}` for every key", "baudelaire reference"),
+                        |near| markup!("did you mean `{}`?", near),
+                    ),
                 }
             })?,
         };

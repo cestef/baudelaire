@@ -95,24 +95,25 @@ impl<'a> AssetName<'a> {
     /// The name in place, parent directories kept: `css/app.<digest>.css` for
     /// `css/app.css`.
     pub fn path(&self) -> PathBuf {
-        match &self.suffix {
-            Some(suffix) => self.path.with_file_name(self.spliced(suffix)),
-            None => self.path.to_path_buf(),
-        }
+        self.suffix.as_ref().map_or_else(
+            || self.path.to_path_buf(),
+            |suffix| self.path.with_file_name(self.spliced(suffix)),
+        )
     }
 
     /// The bare file name, parent directories dropped, as an externalized image
     /// is served flat out of the asset root.
     pub fn file(&self) -> String {
-        match &self.suffix {
-            Some(suffix) => self.spliced(suffix),
-            None => self
-                .path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned(),
-        }
+        self.suffix.as_ref().map_or_else(
+            || {
+                self.path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            |suffix| self.spliced(suffix),
+        )
     }
 
     /// The file name rebuilt: `suffix` after the stem, the extension echoed as
@@ -123,10 +124,13 @@ impl<'a> AssetName<'a> {
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or_default();
-        match self.path.extension().and_then(|ext| ext.to_str()) {
-            Some(ext) => format!("{stem}{suffix}.{ext}"),
-            None => format!("{stem}{suffix}"),
-        }
+        self.path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map_or_else(
+                || format!("{stem}{suffix}"),
+                |ext| format!("{stem}{suffix}.{ext}"),
+            )
     }
 }
 

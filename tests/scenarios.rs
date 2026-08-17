@@ -322,12 +322,11 @@ impl Claim {
             }
             "size" => {
                 let bound = |key| -> Result<Option<u64>, String> {
-                    match node.get(key) {
-                        None => Ok(None),
-                        Some(value) => size(value)
+                    node.get(key).map_or(Ok(None), |value| {
+                        size(value)
                             .map(Some)
-                            .ok_or_else(|| format!("`size {key}=` is not a byte size")),
-                    }
+                            .ok_or_else(|| format!("`size {key}=` is not a byte size"))
+                    })
                 };
                 let (min, max) = (bound("min")?, bound("max")?);
                 if min.is_none() && max.is_none() {
@@ -465,10 +464,9 @@ impl Json {
                 let want = binds.expand(want).ok()?;
                 // A JSON string compares as its bare content, so a claim reads
                 // `equals="A"`; anything else compares as compact JSON.
-                let got = match found.as_str() {
-                    Some(text) => text.to_owned(),
-                    None => found.to_string(),
-                };
+                let got = found
+                    .as_str()
+                    .map_or_else(|| found.to_string(), std::borrow::ToOwned::to_owned);
                 (got != want).then(|| format!("has {got:?} at `{pointer}`, not {want:?}"))
             }
             Self::Count(want) => {
@@ -1221,10 +1219,10 @@ fn count(n: i128) -> Option<usize> {
 /// A byte size written as an integer of bytes or as a string with a unit, read
 /// by the parser the config itself uses.
 fn size(value: &KdlValue) -> Option<u64> {
-    match value.as_string() {
-        Some(text) => Bytes::parse(text).map(|b| b.0),
-        None => value.as_integer().and_then(|n| u64::try_from(n).ok()),
-    }
+    value.as_string().map_or_else(
+        || value.as_integer().and_then(|n| u64::try_from(n).ok()),
+        |text| Bytes::parse(text).map(|b| b.0),
+    )
 }
 
 /// The 1-based line a node starts on, so a malformed case points at itself.

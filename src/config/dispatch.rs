@@ -550,10 +550,9 @@ impl Keys<'_> {
     /// the break survives miette's wrapper, which re-indents the rest into the
     /// help column.
     pub(crate) fn help(&self, unknown: &str, noun: &str) -> String {
-        let suggestion = match self.nearest(unknown) {
-            Some(near) => markup!("did you mean `{}`?\n", near),
-            None => String::new(),
-        };
+        let suggestion = self
+            .nearest(unknown)
+            .map_or_else(String::new, |near| markup!("did you mean `{}`?\n", near));
         let names = self.0.iter().map(Code).format(", ");
         format!("{suggestion}{}{names}", markup!("valid {}: ", noun))
     }

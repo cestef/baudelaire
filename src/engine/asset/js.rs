@@ -100,10 +100,10 @@ impl Js {
     /// project root, not the bundler's `cwd`, which is the asset directory.
     fn tsconfig(root: &Path, path: &Path) -> Result<TsConfig> {
         let full = root.join(path);
-        match fs::canonicalize(&full) {
-            Ok(full) => Ok(TsConfig::Manual(full)),
-            Err(_) => Err(AssetError::tsconfig(path.display()).into()),
-        }
+        fs::canonicalize(&full).map_or_else(
+            |_| Err(AssetError::tsconfig(path.display()).into()),
+            |full| Ok(TsConfig::Manual(full)),
+        )
     }
 
     /// Bundle a single entry to its output code: one entry in, one file out,
@@ -175,9 +175,7 @@ impl Js {
     /// names the map after the file it was told to write, and the pipeline
     /// appends a link to the fingerprinted name it actually serves.
     fn unlinked(code: &str) -> String {
-        match code.rfind("//# sourceMappingURL=") {
-            Some(at) => code[..at].to_owned(),
-            None => code.to_owned(),
-        }
+        code.rfind("//# sourceMappingURL=")
+            .map_or_else(|| code.to_owned(), |at| code[..at].to_owned())
     }
 }

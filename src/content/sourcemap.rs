@@ -55,8 +55,10 @@ impl Mapping {
 }
 
 /// The lowered body of a page paired with the text its author wrote, as the
-/// ranges of one that came from ranges of the other. Only what the lowering
-/// drew from authored text is recorded, so anything else maps to nothing.
+/// ranges of one that came from ranges of the other.
+///
+/// Only what the lowering drew from authored text is recorded, so anything
+/// else maps to nothing.
 #[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
 pub struct SourceMap {
     /// The authored file, whole, frontmatter block included, so a position is

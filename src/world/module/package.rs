@@ -117,10 +117,10 @@ impl Packages {
     fn source(name: &'static str, entrypoint: &Entrypoint) -> (String, bool) {
         match entrypoint {
             Entrypoint::Memory(bytes) => (String::from_utf8_lossy(bytes).into_owned(), false),
-            Entrypoint::File(path) => match std::fs::read_to_string(path) {
-                Ok(source) => (source, false),
-                Err(_) => (super::Table::empty(name).source(), true),
-            },
+            Entrypoint::File(path) => std::fs::read_to_string(path).map_or_else(
+                |_| (super::Table::empty(name).source(), true),
+                |source| (source, false),
+            ),
         }
     }
 }

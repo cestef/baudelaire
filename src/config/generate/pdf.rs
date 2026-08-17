@@ -21,9 +21,10 @@ impl PdfConfig {
 }
 
 /// One PDF per page, enabled by the presence of a
-/// `generate { pdf { pages { .. } } }` block. Like a card it needs its own
-/// template, because a layout that emits `html.elem` produces nothing on the
-/// paged target.
+/// `generate { pdf { pages { .. } } }` block.
+///
+/// Like a card it needs its own template, because a layout that emits
+/// `html.elem` produces nothing on the paged target.
 #[derive(Debug, Clone, Hash)]
 pub struct PdfPages {
     pub enabled: bool,

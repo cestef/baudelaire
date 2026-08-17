@@ -33,21 +33,18 @@ impl SchemaError {
         ty: &FieldType,
     ) -> Self {
         let (leaf, parent) = Self::split(key);
-        let help = match parent {
-            Some(parent) => markup!(
+        let help = parent.map_or_else(|| markup!(
+                "add `{}: {}` to this page's frontmatter, or declare it `optional=#true` in the `{}` collection's schema",
+                leaf,
+                ty.example(),
+                collection
+            ), |parent| markup!(
                 "add `{}: {}` to `{}` in this page's frontmatter, or declare it `optional=#true` in the `{}` collection's schema",
                 leaf,
                 ty.example(),
                 parent,
                 collection
-            ),
-            None => markup!(
-                "add `{}: {}` to this page's frontmatter, or declare it `optional=#true` in the `{}` collection's schema",
-                leaf,
-                ty.example(),
-                collection
-            ),
-        };
+            ));
         Self::new(
             page,
             source,

@@ -297,9 +297,11 @@ impl Resolution {
     }
 }
 
-/// Maps content source files to their resolved permalinks. Links written
-/// against source paths (the typst-native way to cross-reference pages) resolve
-/// to the target page's clean URL, so links survive permalink changes.
+/// Maps content source files to their resolved permalinks.
+///
+/// Links written against source paths (the typst-native way to cross-reference
+/// pages) resolve to the target page's clean URL, so links survive permalink
+/// changes.
 #[derive(Debug)]
 pub struct LinkMap {
     by_source: HashMap<PathBuf, String>,
@@ -393,23 +395,23 @@ impl LinkMap {
         if !self.sources.iter().any(|source| extension == *source) {
             return Resolution::passthrough();
         }
-        let target = match split.path.strip_prefix('/') {
-            Some(rooted) => self.root.join(rooted),
-            None => from
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join(split.path),
-        };
+        let target = split.path.strip_prefix('/').map_or_else(
+            || {
+                from.parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join(split.path)
+            },
+            |rooted| self.root.join(rooted),
+        );
         let mut probed = LinkDeps::new();
         let resolved = Self::candidates(&target, lang).find_map(|candidate| {
             let permalink = self.by_source.get(&candidate).cloned();
             probed.insert(candidate, permalink.clone());
             permalink
         });
-        let link = match resolved {
-            Some(permalink) => Link::Resolved(Target::new(&permalink, raw)),
-            None => Link::Broken,
-        };
+        let link = resolved.map_or(Link::Broken, |permalink| {
+            Link::Resolved(Target::new(&permalink, raw))
+        });
         Resolution { link, probed }
     }
 

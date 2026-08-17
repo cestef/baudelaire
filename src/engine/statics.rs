@@ -72,10 +72,10 @@ impl<'a> Static<'a> {
     fn destination(&self, rel: &Path) -> PathBuf {
         let (served, staging) = &self.assets;
         let direct = self.dist.join(rel);
-        match direct.strip_prefix(served) {
-            Ok(inside) => staging.join(inside),
-            Err(_) => direct,
-        }
+        direct
+            .strip_prefix(served)
+            .map(|inside| staging.join(inside))
+            .unwrap_or(direct)
     }
 
     /// Whether `dst` already holds `src` verbatim: same size and the *same*

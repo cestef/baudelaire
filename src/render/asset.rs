@@ -8,8 +8,10 @@ use std::collections::BTreeMap;
 use crate::render::Tail;
 
 /// Maps an asset's authored request path (`/assets/style.css`) to the URL it is
-/// actually served at (`/assets/style.<hash>.css`). An asset whose name is
-/// unchanged needs no rewrite and is simply absent from the map.
+/// actually served at (`/assets/style.<hash>.css`).
+///
+/// An asset whose name is unchanged needs no rewrite and is simply absent from
+/// the map.
 #[derive(Debug, Default, Clone, Hash)]
 pub struct AssetMap {
     map: BTreeMap<String, String>,

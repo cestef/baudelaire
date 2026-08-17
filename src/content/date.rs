@@ -62,8 +62,10 @@ impl Iso {
 }
 
 /// A date written the way its language writes one: `30 juillet 2026` beside
-/// `July 30, 2026`. Both halves come from the per-language `strings` table,
-/// `months` naming the twelve and `date` the pattern they slot into.
+/// `July 30, 2026`.
+///
+/// Both halves come from the per-language `strings` table, `months` naming the
+/// twelve and `date` the pattern they slot into.
 pub struct Localized<'a> {
     date: time::Date,
     strings: &'a Strings<'a>,
