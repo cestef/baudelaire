@@ -3,6 +3,7 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+#[cfg(feature = "epub")]
 use crate::ui::Code;
 
 /// A bundle whose container could not be written, fatal like every other
