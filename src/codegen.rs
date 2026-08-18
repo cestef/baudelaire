@@ -106,9 +106,7 @@ impl Value {
             Self::Int(n) => {
                 let _ = write!(out, "{n}");
             }
-            Self::Float(n) => {
-                let _ = write!(out, "{n}");
-            }
+            Self::Float(n) => F::float(*n, out),
             Self::Bool(b) => {
                 let _ = write!(out, "{b}");
             }
@@ -203,6 +201,9 @@ pub trait Format {
     const EMPTY_DICT: &'static str;
 
     fn string(s: &str, out: &mut String);
+    /// Write a floating-point number, which each language spells its own way
+    /// once it is not finite and has to keep its type when it is.
+    fn float(n: f64, out: &mut String);
     /// Write a mapping key followed by its `: ` separator.
     fn key(key: &str, out: &mut String);
     /// Write a [`Value::Raw`] expression, which only Typst carries.
@@ -223,6 +224,20 @@ impl Format for TypstFmt {
 
     fn string(s: &str, out: &mut String) {
         let _ = write!(out, "{}", Str(s));
+    }
+
+    fn float(n: f64, out: &mut String) {
+        if n.is_nan() {
+            out.push_str("float.nan");
+        } else if n.is_infinite() {
+            out.push_str(if n.is_sign_negative() {
+                "-float.inf"
+            } else {
+                "float.inf"
+            });
+        } else {
+            let _ = write!(out, "{n:?}");
+        }
     }
 
     fn key(key: &str, out: &mut String) {
@@ -254,6 +269,20 @@ impl Format for JsFmt {
         match serde_json::to_string(s) {
             Ok(escaped) => out.push_str(&escaped),
             Err(_) => out.push_str("\"\""),
+        }
+    }
+
+    fn float(n: f64, out: &mut String) {
+        if n.is_nan() {
+            out.push_str("NaN");
+        } else if n.is_infinite() {
+            out.push_str(if n.is_sign_negative() {
+                "-Infinity"
+            } else {
+                "Infinity"
+            });
+        } else {
+            let _ = write!(out, "{n:?}");
         }
     }
 
@@ -573,6 +602,25 @@ mod tests {
     fn escapes_quotes_and_backslashes() {
         assert_eq!(Str("a\"b\\c").to_string(), "\"a\\\"b\\\\c\"");
         assert_eq!(Str("plain").to_string(), "\"plain\"");
+    }
+
+    /// A page's frontmatter round-trips through this, so a float that arrives
+    /// as an int changes what a template computes; `inf` and `nan` are literals
+    /// in neither language.
+    #[test]
+    fn a_float_keeps_its_type_in_both_languages() {
+        for (n, typst, js) in [
+            (3.0_f64, "3.0", "3.0"),
+            (0.5, "0.5", "0.5"),
+            (-0.0, "-0.0", "-0.0"),
+            (f64::INFINITY, "float.inf", "Infinity"),
+            (f64::NEG_INFINITY, "-float.inf", "-Infinity"),
+            (f64::NAN, "float.nan", "NaN"),
+        ] {
+            let value = Value::Float(n);
+            assert_eq!(Typst(&value).to_string(), typst, "{n}");
+            assert_eq!(Js(&value).to_string(), js, "{n}");
+        }
     }
 
     fn sample() -> Value {

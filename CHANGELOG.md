@@ -39,6 +39,12 @@ chores are visible in the git history and change nothing for a site.
   was dropped from `search.json` and from the reading estimate. A closing tag
   now matches a whole element name, as an opening tag already did.
 
+- **A float in frontmatter reaches a template as a float.** Generated Typst
+  wrote `3.0` as `3`, so `type(page.data.weight)` was `int` and integer division
+  changed the answer; an infinity or a NaN wrote `inf` / `NaN`, which is a
+  literal in neither Typst nor JavaScript and failed to compile in a generated
+  file nobody opens. Both are now spelled per language.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
