@@ -10,6 +10,38 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Fixed
+
+- **A URL that names a file can no longer be written outside `dist`.** A
+  frontmatter `path`, a frontmatter `redirect`, or a config `redirect { }` key
+  ending in an extension bypassed the `..` filter every other URL went through,
+  so `path: "/../../x.html"` wrote the page anywhere the build could reach. The
+  filter now covers both shapes, and a URL naming a `..` segment is refused
+  where it is written rather than silently rewritten.
+
+- **A theme's install record can no longer name a file outside the theme.**
+  `.baudelaire-lock.json` ships inside a theme directory, so a hostile archive
+  writes it; `theme remove` joined its keys onto the directory unchecked and
+  deleted what they named. A record entry that climbs out is now read for
+  nothing and deleted at no force.
+
+- **A theme can no longer set `client { }`.** Its values are written verbatim
+  into the bundled JavaScript, and a config string expands `${VAR}` from the
+  build machine's environment, so an installed theme could publish a CI secret
+  as static content. `client` joins the nine blocks a site owns outright.
+
+### Upgrading
+
+- A `path` or `redirect` in frontmatter, and a `redirect { }` key in the config,
+  now fail the build when they contain a `..` segment. A site that relied on one
+  was writing outside its output directory; spell the URL without the `..`.
+
+- A theme that sets `client { }` in its `theme.kdl` now fails to load. Move
+  those values into the site's own `config.kdl`, which is where a reader can
+  see them.
+
 ## [0.0.15] - 2026-08-18
 
 ### Added
