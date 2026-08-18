@@ -348,7 +348,7 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     assert_eq!(mixed.lint.severity(&Rule::Headings.into()), Severity::Warn);
     assert_eq!(mixed.lint.severity(&Rule::Ids.into()), Severity::Off);
     assert!(!mixed.lint.ids.on());
-    assert!(mixed.lint.headings.on(), "a warning rule still runs");
+    assert!(mixed.lint.headings.level.on(), "a warning rule still runs");
 
     let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
     assert_eq!(flags.lint.severity(&Rule::Aria.into()), Severity::Off);
@@ -361,6 +361,34 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
         flags.lint.severity(&Rule::Headings.into()),
         Severity::Error,
         "a bare rule is on, and follows `strict` like any other"
+    );
+}
+
+/// The shorthand and the block reach the very same handler, and the block is
+/// the only place the outline's opening level can be said.
+#[test]
+fn a_heading_rule_takes_a_severity_or_a_block() {
+    use crate::config::{Rule, Severity};
+
+    let shorthand = parse("lint {\n  headings \"error\"\n}");
+    assert_eq!(
+        shorthand.lint.severity(&Rule::Headings.into()),
+        Severity::Error
+    );
+    assert_eq!(shorthand.lint.headings.start, None);
+
+    let block = parse("lint {\n  headings {\n    level \"warn\"\n    start 3\n  }\n}");
+    assert_eq!(block.lint.severity(&Rule::Headings.into()), Severity::Warn);
+    assert_eq!(block.lint.headings.start, Some(3));
+    assert!(block.lint.headings.opens(3));
+    assert!(!block.lint.headings.opens(4));
+}
+
+#[test]
+fn err_an_outline_may_not_open_below_the_last_heading_level() {
+    assert_eq!(
+        code("lint {\n  headings {\n    start 7\n  }\n}"),
+        "baudelaire::config::out_of_range"
     );
 }
 

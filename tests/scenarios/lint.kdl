@@ -56,6 +56,111 @@ scenario "a skipped heading level fails a strict build" {
   }
 }
 
+scenario "an outline that opens at `start` is not a skip" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      lint {
+        strict
+        headings {
+          start 3
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A", template: "page.typ",)
+
+      == Opens at three
+
+      === Four
+      """#
+  }
+  expect {
+    ok
+  }
+}
+
+scenario "`start` excuses where a page opens and not a skip further down" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      lint {
+        strict
+        headings {
+          start 4
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A", template: "page.typ",)
+
+      = Two
+
+      === Four
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "`start` excuses the opening level and nothing deeper" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      lint {
+        strict
+        headings {
+          start 3
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", {
+        html.elem("h1", page.frontmatter.title)
+        body
+      })
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A", template: "page.typ",)
+
+      == Opens at three
+
+      ==== Five
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
 scenario "a heading that steps down one level at a time is fine" {
   files {
     "config.kdl" #"""

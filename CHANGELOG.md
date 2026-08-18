@@ -14,6 +14,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **The heading rule can be told which level a page's outline opens at.** A
+  layout that writes the title as an `<h1>` leaves a page's own sections opening
+  deeper, which read as a skipped level and made the rule unusable on such a
+  site:
+
+  ```kdl
+  //! @ignore
+  lint {
+    headings {
+      start 3
+    }
+  }
+  ```
+
+  Only the heading right under the layout's own may land there; a skip further
+  down the page is still reported. `headings "warn"` is now the shorthand for
+  `headings { level "warn" }`, so both spellings take a block and the old one
+  still means what it did.
+
 - **A taxonomy's terms can be things the build knows about**, rather than words.
   `content { entities { } }` declares a registry -- `people`, `series`,
   `organizations`, whatever a site has -- and a taxonomy resolves its terms

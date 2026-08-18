@@ -98,6 +98,7 @@ pub use links::external::ExternalConfig;
 pub use links::{LinkConfig, Linked};
 pub use lint::LintConfig;
 pub use lint::budget::BudgetConfig;
+pub use lint::headings::HeadingConfig;
 pub use lint::rule::{Rule, Ruled};
 pub use lint::severity::{Level, Severity};
 pub use lint::snippets::SnippetConfig;

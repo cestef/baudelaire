@@ -12,14 +12,17 @@ pub(super) struct Headings;
 
 impl Check for Headings {
     fn enabled(&self, config: &LintConfig) -> bool {
-        config.headings.on()
+        config.headings.level.on()
     }
 
-    fn check(&self, page: &Page, _cx: &Cx<'_>, found: &mut Findings<'_>) {
+    fn check(&self, page: &Page, cx: &Cx<'_>, found: &mut Findings<'_>) {
+        let headings = &cx.config.headings;
         let mut previous: Option<u8> = None;
-        for &(level, span) in &page.headings {
+        for (seen, &(level, span)) in page.headings.iter().enumerate() {
+            let opens = seen == 1 && headings.opens(level);
             if let Some(from) = previous
                 && level > from + 1
+                && !opens
             {
                 found.push(span, Lint::Heading { from, to: level });
             }

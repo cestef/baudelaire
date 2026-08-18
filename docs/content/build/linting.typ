@@ -76,7 +76,20 @@ are accepted by prefix, since they are real ARIA extension modules.
   typst-html reserves `<h1>` for the document title, so a `=` in your content is
   an `<h2>` and a `==` is an `<h3>`. A layout that emits its own `<h1>` over
   pages opening at `==` goes `h1` straight to `h3`. Open your sections at `=`, or
-  turn the rule off.
+  say which level yours open at:
+
+  ```kdl
+  lint {
+    headings {
+      start 3
+    }
+  }
+  ```
+
+  Only the heading right under the layout's own may land there; a skip further
+  down the page is still reported, so an `h3` page jumping to `h5` still fails.
+  `headings "warn"` is the shorthand for `headings { level "warn" }`, and both
+  spellings take a block.
 ]
 
 `links { strict }` is the same idea for broken internal links, and it defaults to

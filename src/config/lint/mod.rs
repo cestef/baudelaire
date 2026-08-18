@@ -1,6 +1,7 @@
 //! `lint { }`: post-render checks over the typed DOM.
 
 pub mod budget;
+pub mod headings;
 pub mod rule;
 pub mod severity;
 pub mod snippets;
@@ -10,7 +11,7 @@ use crate::config::dispatch::Kind::{Flag, Level as Loud, Lines};
 use crate::config::dispatch::{Attributed, Block, Section, Switch};
 use crate::config::lint::rule::{Rule, Ruled};
 use crate::config::node::NodeExt;
-use crate::config::{BudgetConfig, Level, Named, Severity, SnippetConfig};
+use crate::config::{BudgetConfig, HeadingConfig, Level, Named, Severity, SnippetConfig};
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a
 /// finding is, and how many bytes a page may weigh. Off until a `lint { }`
@@ -21,8 +22,9 @@ pub struct LintConfig {
     pub enabled: bool,
     /// The severity a rule that names none takes.
     pub strict: bool,
-    /// Report a heading that skips a level (`h2` straight to `h4`).
-    pub headings: Level,
+    /// Report a heading that skips a level (`h2` straight to `h4`), and the
+    /// level a page's own outline opens at.
+    pub headings: HeadingConfig,
     /// Report an `<img>` carrying no `alt` (an empty one is a decorative image,
     /// and is fine).
     pub alt: Level,
@@ -43,7 +45,7 @@ impl Default for LintConfig {
         Self {
             enabled: false,
             strict: false,
-            headings: Level::DEFAULT,
+            headings: HeadingConfig::default(),
             alt: Level::DEFAULT,
             ids: Level::DEFAULT,
             aria: Level::DEFAULT,
@@ -68,12 +70,9 @@ impl Section for LintConfig {
         ),
         (
             Rule::Headings.key(),
-            Loud(Severity::names),
-            "Report a heading that skips a level, e.g. `h2` straight to `h4`.",
-            |c, n, t| {
-                c.headings = n.level(t, 0)?;
-                Ok(())
-            },
+            Nested(HeadingConfig::rows),
+            "Report a heading that skips a level, e.g. `h2` straight to `h4`. `headings \"warn\"` is `headings { level \"warn\" }`.",
+            |c, n, t| c.headings.shorthand(n, t, "level"),
         ),
         (
             Rule::Alt.key(),
@@ -126,7 +125,7 @@ impl LintConfig {
     /// a config that named it, and this one does not.
     pub fn severity(&self, rule: &Ruled) -> Severity {
         let level = match (rule.rule, rule.lang.as_deref()) {
-            (Rule::Headings, _) => self.headings,
+            (Rule::Headings, _) => self.headings.level,
             (Rule::Alt, _) => self.alt,
             (Rule::Ids, _) => self.ids,
             (Rule::Aria, _) => self.aria,
