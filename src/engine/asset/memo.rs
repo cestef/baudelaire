@@ -88,6 +88,10 @@ impl Memo {
 
     /// Record what `key` rendered to. Best-effort: a cache that cannot be
     /// written costs the next build the same work, nothing worse.
+    ///
+    /// A blob is staged and renamed, and a file whose bytes do not hash to its
+    /// own name is rewritten rather than kept: an interrupted write is a miss
+    /// once, not a key that misses forever.
     pub(in crate::engine) fn put(&self, key: &Hash, primary: Option<&[u8]>, variants: &[Variant]) {
         if !self.enabled {
             return;
@@ -95,11 +99,8 @@ impl Memo {
         let store = |bytes: &[u8]| {
             let hash = Hash::of_bytes(bytes);
             let path = self.object(&hash);
-            if !path.exists()
-                && let Some(parent) = path.parent()
-            {
-                let _ = std::fs::create_dir_all(parent);
-                let _ = std::fs::write(&path, bytes);
+            if self.blob(&hash).is_none() {
+                let _ = crate::fs::write_atomic(&path, bytes);
             }
             hash
         };
@@ -137,5 +138,45 @@ impl Memo {
     fn blob(&self, hash: &Hash) -> Option<Vec<u8>> {
         let bytes = std::fs::read(self.object(hash)).ok()?;
         (Hash::of_bytes(&bytes) == *hash).then_some(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Memo;
+    use crate::config::Config;
+    use crate::graph::Hash;
+
+    fn memo(dir: &std::path::Path) -> Memo {
+        let mut config = Config::default();
+        config.cache.dir = dir.join(".baudelaire/cache");
+        config.cache.incremental = true;
+        Memo::new(&config)
+    }
+
+    /// A blob is content-addressed, so a torn one is a permanent miss unless
+    /// the write that finds it replaces it: `put` used to skip any path that
+    /// merely existed.
+    #[test]
+    fn a_torn_blob_is_rewritten_on_the_next_put() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let memo = memo(tmp.path());
+        let key = Hash::of(&"a-key");
+        memo.put(&key, Some(b"rendered"), &[]);
+        assert_eq!(
+            memo.get(&key).expect("stored").0.as_deref(),
+            Some(b"rendered".as_slice())
+        );
+
+        let blob = memo.object(&Hash::of_bytes(b"rendered"));
+        std::fs::write(&blob, b"tor").expect("truncate");
+        assert!(memo.get(&key).is_none(), "a torn blob reads as a miss");
+
+        memo.put(&key, Some(b"rendered"), &[]);
+        assert_eq!(
+            memo.get(&key).expect("rewritten").0.as_deref(),
+            Some(b"rendered".as_slice()),
+            "the next build repaired it"
+        );
     }
 }
