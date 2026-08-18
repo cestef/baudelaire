@@ -155,10 +155,9 @@ impl Kind {
             | Self::Url
             | Self::Template
             | Self::Choice(_)
-            | Self::Table
             | Self::Tables => Arity::Args(1),
             Self::Choices(_) | Self::Texts | Self::Numbers | Self::Toggles => Arity::Every,
-            Self::Items(_) | Self::Lines(_) | Self::Overlay => Arity::Args(0),
+            Self::Items(_) | Self::Lines(_) | Self::Overlay | Self::Table => Arity::Args(0),
             Self::Block(_) | Self::Line(_) | Self::Toggled(..) => Arity::Elsewhere,
         }
     }

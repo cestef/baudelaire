@@ -91,6 +91,12 @@ chores are visible in the git history and change nothing for a site.
   takes an ISO string, which is the only form YAML, TOML and KDL frontmatter can
   hand over: `schema { date "date" }` failed every markdown page carrying a date.
 
+- **A config value nothing reads is refused rather than dropped.** A free table
+  (`client { }`, `typst { inputs }`, `paths { sources }`, `generate { headers }`,
+  an entity's inline fields) accepted an argument on its own line and an
+  attribute on any of its children, then discarded both while the site believed
+  the value was in effect.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
@@ -104,6 +110,10 @@ chores are visible in the git history and change nothing for a site.
 - A `path` or `redirect` in frontmatter, and a `redirect { }` key in the config,
   now fail the build when they contain a `..` segment. A site that relied on one
   was writing outside its output directory; spell the URL without the `..`.
+
+- A config that wrote an attribute inside a free table (`client { env "prod"
+  extra="x" }`) now fails to parse. The value was being dropped; write it as a
+  child node, or delete it.
 
 - A theme that sets `client { }` in its `theme.kdl` now fails to load. Move
   those values into the site's own `config.kdl`, which is where a reader can

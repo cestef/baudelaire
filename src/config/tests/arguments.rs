@@ -20,6 +20,13 @@ fn err_a_value_on_a_section_line_is_refused() {
             "taxonomies",
         ),
         ("profiles \"junk\" {\n  dev { prune #true }\n}", "profiles"),
+        // A free table reads its block and nothing on its own line.
+        ("client \"junk\" {\n  env \"prod\"\n}", "client"),
+        ("typst {\n  inputs \"junk\" { key \"v\" }\n}", "inputs"),
+        (
+            "paths {\n  sources \"junk\" { docs \"../docs\" }\n}",
+            "sources",
+        ),
     ] {
         let rendered = err(config);
         assert!(
@@ -28,6 +35,24 @@ fn err_a_value_on_a_section_line_is_refused() {
         );
         assert!(
             rendered.contains(&format!("`{node}` is configured from its block")),
+            "{config}: {rendered}"
+        );
+    }
+}
+
+/// A free table's children are the author's own keys, so nothing reads an
+/// attribute written on one: a build that accepted it dropped the value while
+/// the site believed it was in effect.
+#[test]
+fn err_an_attribute_inside_a_free_table_is_refused() {
+    for config in [
+        "client {\n  env \"prod\" extra=\"dropped\"\n}",
+        "typst {\n  inputs {\n    key \"v\" also=\"dropped\"\n  }\n}",
+        "generate {\n  headers {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\" mode=\"dropped\"\n    }\n  }\n}",
+    ] {
+        let rendered = err(config);
+        assert!(
+            rendered.contains("unexpected") && rendered.contains("dropped"),
             "{config}: {rendered}"
         );
     }

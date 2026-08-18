@@ -8,6 +8,7 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::assets::targets::Version;
+use crate::config::dispatch::Arity;
 use crate::config::lint::severity::{Level, Severity};
 use crate::config::url::BaseUrl;
 use crate::config::value::{Kdl, ValueExt};
@@ -340,6 +341,7 @@ impl NodeExt for KdlNode {
             .nodes()
             .iter()
             .map(|child| {
+                Arity::Every.check(child, text)?;
                 let span = NodeExt::span(child);
                 let mut values = Vec::new();
                 let mut index = 0;
@@ -361,7 +363,10 @@ impl NodeExt for KdlNode {
         self.block(text)?
             .nodes()
             .iter()
-            .map(|child| Ok((child.name().value().to_owned(), child.string(text, 0)?)))
+            .map(|child| {
+                Arity::Args(1).check(child, text)?;
+                Ok((child.name().value().to_owned(), child.string(text, 0)?))
+            })
             .collect()
     }
 
