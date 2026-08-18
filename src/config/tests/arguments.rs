@@ -40,6 +40,19 @@ fn err_a_value_on_a_section_line_is_refused() {
     }
 }
 
+/// A bundle with no block never reached the check that refuses what nothing
+/// reads, so a typo on its line parsed and vanished.
+#[test]
+fn err_a_blockless_bundle_line_is_still_checked() {
+    for config in [
+        "generate {\n  bundles {\n    guide \"junk\"\n  }\n}",
+        "generate {\n  bundles {\n    guide extra=#true\n  }\n}",
+    ] {
+        let rendered = err(config);
+        assert!(rendered.contains("unexpected"), "{config}: {rendered}");
+    }
+}
+
 /// A free table's children are the author's own keys, so nothing reads an
 /// attribute written on one: a build that accepted it dropped the value while
 /// the site believed it was in effect.

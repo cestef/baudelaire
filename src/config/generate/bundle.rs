@@ -71,6 +71,7 @@ impl BundleConfig {
     /// filename stem every format is written under.
     pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let mut cfg = Self::default();
+        Self::line(node, text)?;
         if node.children().is_some() {
             cfg.fill(node, text)?;
         }
