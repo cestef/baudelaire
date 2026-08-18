@@ -67,13 +67,30 @@ impl Backend<Dist> for S3 {
 
 impl S3 {
     /// An empty `bucket` is not a default: it would sign every request against
-    /// an authority nobody meant.
+    /// an authority nobody meant. `bucket` and `region` are both spliced into
+    /// that authority, so neither may carry anything a host name cannot.
     pub(super) fn check(config: &S3Config) -> Result<()> {
         if config.bucket.trim().is_empty() {
-            Err(DeployError::required(Required::S3Bucket).into())
-        } else {
-            Ok(())
+            return Err(DeployError::required(Required::S3Bucket).into());
         }
+        for (setting, value) in [
+            ("deploy { s3 { bucket } }", config.bucket.as_str()),
+            ("deploy { s3 { region } }", config.region()),
+        ] {
+            if !Self::names_a_host(value) {
+                return Err(DeployError::not_a_name(setting, value).into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `value` can stand in a host name: the characters that would end
+    /// the authority and point the signed request somewhere else are refused.
+    fn names_a_host(value: &str) -> bool {
+        !value.is_empty()
+            && !value
+                .chars()
+                .any(|c| "/?#@:\\".contains(c) || c.is_whitespace() || c.is_control())
     }
 
     /// Whether `endpoint` is plain HTTP, so the signed request travels in
@@ -491,6 +508,29 @@ impl Listing {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both are spliced into `<bucket>.s3.<region>.amazonaws.com`, and the
+    /// request carries a usable AWS credential: a `region` of `evil.example/`
+    /// sent it to `evil.example`.
+    #[test]
+    fn a_bucket_or_region_that_is_not_a_name_is_refused() {
+        for (bucket, region) in [
+            ("my-site", Some("evil.example/")),
+            ("my-site/../other", None),
+            ("my site", None),
+            ("my-site", Some("us-east-1:443")),
+            ("my-site", Some("us-east-1?x")),
+        ] {
+            let mut cfg = config(None, "");
+            cfg.bucket = bucket.into();
+            cfg.region = region.map(String::from);
+            assert!(S3::check(&cfg).is_err(), "{bucket} / {region:?}");
+        }
+
+        let mut ok = config(None, "");
+        ok.region = Some("eu-west-3".into());
+        assert!(S3::check(&ok).is_ok());
+    }
 
     fn config(endpoint: Option<&str>, prefix: &str) -> S3Config {
         S3Config {

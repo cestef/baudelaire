@@ -149,6 +149,17 @@ pub enum DeployError {
     #[diagnostic(code(baudelaire::deploy::required), help("{}", setting.help()))]
     Required { setting: Required },
 
+    /// Both are spliced into the request authority, so anything but a plain
+    /// name can send the signed credential to a host the author did not write.
+    #[error("{} is not a name: {}", Code(.setting), Code(.got))]
+    #[diagnostic(
+        code(baudelaire::deploy::not_a_name),
+        help(
+            "this is spliced into the host the signed request goes to, so it may not carry `/`, `?`, `#`, `@`, `:` or whitespace"
+        )
+    )]
+    NotAName { setting: &'static str, got: String },
+
     /// The remote path is joined by string and never resolved, so a relative
     /// one lands wherever the host starts the SFTP session.
     #[error("{} is not an absolute remote path", Code(.path))]
@@ -339,6 +350,13 @@ impl DeployError {
 
     pub fn required(setting: Required) -> Self {
         Self::Required { setting }
+    }
+
+    pub fn not_a_name(setting: &'static str, got: &str) -> Self {
+        Self::NotAName {
+            setting,
+            got: got.to_owned(),
+        }
     }
 
     pub fn request(method: Method, uri: &str, status: u16, body: &str) -> Self {

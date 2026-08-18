@@ -98,7 +98,7 @@ impl Section for SshConfig {
         (
             "strict",
             Flag,
-            "Refuse to connect to a host whose key is not already known.",
+            "Verify the host key against `known_hosts`, learning an unseen host on first connect and refusing a changed one.",
             |c| c.strict.into(),
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;

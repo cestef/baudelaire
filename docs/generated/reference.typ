@@ -292,7 +292,7 @@
   (path: "deploy.ssh.port", key: "port", shape: "number", doc: "The SSH port.", depth: 2, section: false),
   (path: "deploy.ssh.user", key: "user", shape: "text", doc: "The user to connect as.", depth: 2, section: false),
   (path: "deploy.ssh.key", key: "key", shape: "path", doc: "The private key to authenticate with. Prefer an ed25519 key.", depth: 2, section: false),
-  (path: "deploy.ssh.strict", key: "strict", shape: "flag", doc: "Refuse to connect to a host whose key is not already known.", depth: 2, section: false),
+  (path: "deploy.ssh.strict", key: "strict", shape: "flag", doc: "Verify the host key against `known_hosts`, learning an unseen host on first connect and refusing a changed one.", depth: 2, section: false),
   (path: "deploy.ssh.delete", key: "delete", shape: "flag", doc: "Delete remote files this build did not produce.", depth: 2, section: false),
   (path: "serve", key: "serve", shape: "block", doc: "The development server.", depth: 0, section: true),
   (path: "serve.port", key: "port", shape: "number", doc: "The port the dev server listens on.", depth: 1, section: false),

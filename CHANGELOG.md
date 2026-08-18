@@ -107,6 +107,15 @@ chores are visible in the git history and change nothing for a site.
   whose last segment repeated one already matched (`serve.port.port`) resolved
   to the shorter key and reported its value.
 
+- **`deploy { s3 }` refuses a bucket or region that is not a name.** Both are
+  spliced into the host the signed request goes to, and neither was checked, so
+  `region "evil.example/"` sent the AWS credential and the whole site to that
+  host.
+
+- **`deploy { ssh { strict } }` documents what it does.** Its help said it
+  refuses an unknown host; it learns one on first connect and refuses a *changed*
+  key. The behaviour is unchanged, the description was wrong.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
