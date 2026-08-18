@@ -278,7 +278,32 @@ impl Diagnostic for Flaws {
 
 #[cfg(test)]
 mod tests {
-    use miette::Diagnostic as _;
+    use super::{Bytes, Overweight, Overweights};
+    use miette::{Diagnostic as _, Severity};
+
+    /// A child with no severity of its own renders as an error whatever its
+    /// parent says, so a non-strict budget printed a warning headline over rows
+    /// marked `error`.
+    #[test]
+    fn a_budget_child_renders_at_its_parents_severity() {
+        let over = || {
+            vec![Overweight::new(
+                "posts/a.typ".to_owned(),
+                "total",
+                Bytes(2),
+                Bytes(1),
+            )]
+        };
+        for (aggregate, severity) in [
+            (Overweights::new(over()), Severity::Error),
+            (Overweights::warning(over()), Severity::Warning),
+        ] {
+            assert_eq!(aggregate.severity(), Some(severity));
+            let children: Vec<_> = aggregate.related().expect("children").collect();
+            assert_eq!(children.len(), 1);
+            assert_eq!(children[0].severity(), Some(severity));
+        }
+    }
 
     use super::{Flaw, Lint};
     use crate::render::Site;
@@ -317,6 +342,23 @@ pub struct Overweight {
     pub budget: &'static str,
     pub weighed: Bytes,
     pub allowed: Bytes,
+    /// Error under `lint { budget { strict } }`, warning otherwise; set by the
+    /// [`Overweights`] constructor so parent and children render alike.
+    severity: Severity,
+}
+
+impl Overweight {
+    /// A warning until [`Overweights::new`] raises it, which is the default a
+    /// child keeps when its parent is the non-strict aggregate.
+    pub fn new(page: String, budget: &'static str, weighed: Bytes, allowed: Bytes) -> Self {
+        Self {
+            page,
+            budget,
+            weighed,
+            allowed,
+            severity: Severity::Warning,
+        }
+    }
 }
 
 impl fmt::Display for Overweight {
@@ -338,6 +380,10 @@ impl Diagnostic for Overweight {
     fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
         Some(Box::new("baudelaire::lint::budget"))
     }
+
+    fn severity(&self) -> Option<Severity> {
+        Some(self.severity)
+    }
 }
 
 /// An error by default, because a budget is a limit the author wrote down
@@ -349,7 +395,10 @@ pub struct Overweights {
 }
 
 impl Overweights {
-    pub fn new(over: Vec<Overweight>) -> Self {
+    pub fn new(mut over: Vec<Overweight>) -> Self {
+        for page in &mut over {
+            page.severity = Severity::Error;
+        }
         Self {
             over,
             severity: Severity::Error,

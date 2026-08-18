@@ -78,6 +78,10 @@ chores are visible in the git history and change nothing for a site.
   backlink graph were concerned. A `?` written after the `#` is now part of the
   fragment, as a browser reads it.
 
+- **A non-strict budget no longer prints error rows under a warning.** The
+  per-page children of `lint { budget { strict #false } }` carried no severity
+  of their own, so miette defaulted each to `error` beneath a warning headline.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

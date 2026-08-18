@@ -166,12 +166,8 @@ impl Scale {
         .into_iter()
         .filter_map(|(name, weighed, allowed)| {
             let allowed = allowed?;
-            (weighed > allowed.0).then(|| Overweight {
-                page: page.to_owned(),
-                budget: name,
-                weighed: Bytes(weighed),
-                allowed,
-            })
+            (weighed > allowed.0)
+                .then(|| Overweight::new(page.to_owned(), name, Bytes(weighed), allowed))
         })
         .collect()
     }
