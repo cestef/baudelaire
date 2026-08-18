@@ -931,6 +931,42 @@ scenario "a marked region is left alone, native elements included" {
   }
 }
 
+// The splice lifts an inner marker into the element the walk has already left,
+// so one pass removed the outer wrapper and shipped the inner one, `data-lint`
+// attribute and all.
+scenario "a marker inside a marker leaves nothing behind" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { strict }
+      """#
+    "content/a.typ" #"""
+      #import "@baudelaire/html:0.1.0": nolint
+      #let frontmatter = (title: "A",)
+
+      #nolint("headings")[
+        ==== Deep on purpose
+
+        #nolint("alt")[
+          #html.elem("img", attrs: (src: "/logo.png"))
+        ]
+      ]
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+    file "a/index.html" {
+      contains "<h5"
+      missing "data-lint"
+    }
+  }
+}
+
 // A marker that names rules keeps only those off, so a page can say "this
 // heading is deliberate" without going blind to everything else.
 scenario "a marker names the rules it keeps off" {

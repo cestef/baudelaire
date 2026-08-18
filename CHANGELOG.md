@@ -82,6 +82,10 @@ chores are visible in the git history and change nothing for a site.
   per-page children of `lint { budget { strict #false } }` carried no severity
   of their own, so miette defaulted each to `error` beneath a warning headline.
 
+- **A `nolint` inside a `nolint` no longer ships its wrapper.** Splicing a
+  marker out lifted any nested marker into an element the walk had already
+  passed, so the inner `<div data-lint="..">` was written to the page.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

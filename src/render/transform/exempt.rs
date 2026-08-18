@@ -56,21 +56,25 @@ impl Exempt {
 
     /// Splice a marker element's children into its parent, so the page is the
     /// one the author would have written without it.
+    ///
+    /// Repeated until none is left: a splice lifts a nested marker into this
+    /// element, and the walk has already descended past where that child was.
     fn unwrap(element: &mut HtmlElement) {
-        if !element.children.iter().any(
-            |node| matches!(node, HtmlNode::Element(child) if child.attrs.get(EXEMPT).is_some()),
-        ) {
-            return;
-        }
-        let mut kept = typst::ecow::EcoVec::new();
-        for node in &element.children {
-            match node {
-                HtmlNode::Element(child) if child.attrs.get(EXEMPT).is_some() => {
-                    kept.extend(child.children.iter().cloned());
+        while element.children.iter().any(Self::marker) {
+            let mut kept = typst::ecow::EcoVec::new();
+            for node in &element.children {
+                match node {
+                    HtmlNode::Element(child) if child.attrs.get(EXEMPT).is_some() => {
+                        kept.extend(child.children.iter().cloned());
+                    }
+                    other => kept.push(other.clone()),
                 }
-                other => kept.push(other.clone()),
             }
+            element.children = kept;
         }
-        element.children = kept;
+    }
+
+    fn marker(node: &HtmlNode) -> bool {
+        matches!(node, HtmlNode::Element(child) if child.attrs.get(EXEMPT).is_some())
     }
 }
