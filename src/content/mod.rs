@@ -65,7 +65,12 @@ impl Held {
     }
 
     pub fn any(self) -> bool {
-        self.drafts + self.future + self.expired > 0
+        self.total() > 0
+    }
+
+    /// How many pages were held back, whatever the reason.
+    pub fn total(self) -> usize {
+        self.drafts + self.future + self.expired
     }
 }
 
@@ -97,6 +102,13 @@ impl std::fmt::Display for Held {
 pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
     let collections = discover(config, project)?;
     let held = Held::of(&collections, config);
+    for collection in &collections {
+        tracing::debug!(
+            collection = collection.id,
+            pages = collection.pages.len(),
+            "collected"
+        );
+    }
     let mut pages: Vec<Page> = Vec::new();
     for collection in &collections {
         let eligible: Vec<&Page> = collection
@@ -125,6 +137,12 @@ pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
         pages: &pages,
         collections: &collections,
     })?;
+    tracing::debug!(
+        generated = generated.len(),
+        authored = pages.len(),
+        held = held.total(),
+        "planned"
+    );
     pages.extend(generated);
     Page::relate(&mut pages, config);
     Claim::unique(&pages, config)?;

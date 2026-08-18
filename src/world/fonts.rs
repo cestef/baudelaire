@@ -40,6 +40,7 @@ impl Fonts {
         Self {
             dirs,
             store: LazyLock::new(Box::new(move || {
+                let started = std::time::Instant::now();
                 let mut fonts = FontStore::new();
                 // Without this feature the defaults are not bundled at all.
                 #[cfg(feature = "embedded-fonts")]
@@ -50,6 +51,15 @@ impl Fonts {
                 if system {
                     fonts.extend(typst_kit::fonts::system());
                 }
+                // Lazily, on the first compile that needs a face: this is the
+                // startup cost that happens after everything else looks ready.
+                tracing::debug!(
+                    families = fonts.book().families().count(),
+                    dirs = paths.len(),
+                    system,
+                    elapsed = ?started.elapsed(),
+                    "fonts loaded"
+                );
                 fonts
             })),
         }

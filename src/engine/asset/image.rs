@@ -21,6 +21,10 @@ use super::{Ctx, Handler, PathExt, Produced, Variant};
 pub(in crate::engine) struct Raster;
 
 impl Handler for Raster {
+    fn name(&self) -> &'static str {
+        "raster"
+    }
+
     /// Re-encoding depends on the file's own bytes and the `images` options and
     /// nothing else, so the result memoizes across builds.
     fn pure(&self) -> bool {

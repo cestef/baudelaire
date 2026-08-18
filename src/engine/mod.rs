@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use rayon::prelude::*;
-use tracing::debug;
+use tracing::{debug, trace};
 use typst::syntax::{FileId, Source};
 use typst_html::{HtmlDocument, HtmlOptions};
 
@@ -712,6 +712,7 @@ impl Engine {
         fingerprint: Hash,
         pass: &Pass<'_>,
     ) -> Result<Rendered<'a>> {
+        let timer = Timer::start();
         let source = Source::new(id, text);
         let world = Tracked::new(self.project.world_for(&source));
         let compiled = typst::compile::<HtmlDocument>(&world);
@@ -761,6 +762,13 @@ impl Engine {
         let (artifacts, drawn) =
             pass.sidecars
                 .draw(&self.project, &self.config, &pass.prepare, page)?;
+        trace!(
+            page = %page.source.display(),
+            bytes = html.len(),
+            sidecars = artifacts.len(),
+            elapsed = ?timer.elapsed(),
+            "compiled"
+        );
         let mut deps = self.project.dependencies(&world);
         deps.extend(std::mem::take(&mut rewrite.read));
         deps.extend(drawn.files().iter().cloned());

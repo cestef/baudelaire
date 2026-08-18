@@ -25,6 +25,10 @@ use crate::engine::layers::Layered;
 pub(super) struct Stylesheet;
 
 impl Handler for Stylesheet {
+    fn name(&self) -> &'static str {
+        "stylesheet"
+    }
+
     fn claims(&self, file: &Path, _config: &Config) -> bool {
         Self::claimed(file)
     }

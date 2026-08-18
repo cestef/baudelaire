@@ -139,6 +139,9 @@ impl PathExt for Path {
 /// One asset-processing strategy: which files it claims, when it runs, and how a
 /// claimed file becomes its emitted bytes.
 pub(super) trait Handler: Sync {
+    /// What this handler is called in the debug log.
+    fn name(&self) -> &'static str;
+
     /// Whether this handler processes `file`. The first handler in [`builtin`]
     /// to claim a file owns it, so specific handlers come first and [`Verbatim`]
     /// claims whatever is left.
@@ -240,6 +243,10 @@ pub(super) fn builtin() -> Vec<Box<dyn Handler>> {
 struct Verbatim;
 
 impl Handler for Verbatim {
+    fn name(&self) -> &'static str {
+        "verbatim"
+    }
+
     fn claims(&self, _file: &Path, _config: &Config) -> bool {
         true
     }

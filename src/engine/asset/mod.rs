@@ -302,6 +302,11 @@ impl<'a> Assets<'a> {
         out: &mut Processed,
     ) -> Result<()> {
         let files = handler.order(files, ctx);
+        tracing::debug!(
+            handler = handler.name(),
+            files = files.len(),
+            "asset handler"
+        );
         if handler.pure() {
             let rendered: Vec<Render> = files
                 .par_iter()

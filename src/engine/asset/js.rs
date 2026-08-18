@@ -32,6 +32,10 @@ const SCRIPTS: &[&str] = &["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"]
 pub(super) struct Script;
 
 impl Handler for Script {
+    fn name(&self) -> &'static str {
+        "script"
+    }
+
     fn claims(&self, file: &Path, config: &Config) -> bool {
         config.assets.bundling() && SCRIPTS.contains(&file.ext().to_ascii_lowercase().as_str())
     }
