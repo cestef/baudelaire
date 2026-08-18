@@ -10,9 +10,30 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [0.0.15] - 2026-08-18
 
 ### Added
+
+- **A bundle is a named selection of pages, written as PDF or EPUB.** One block
+  per bound document, each named by the id its files are written under:
+
+  ```kdl
+  //! @ignore
+  generate {
+    bundles {
+      guide { collections "guide"; template "book.typ" }
+      everything { site #true; formats "pdf" "epub" }
+    }
+  }
+  ```
+
+  That writes `/guide.pdf`, `/everything.pdf` and `/everything.epub`, localized
+  like every other per-language artifact. A bundle takes `title`, `sort` and
+  `reverse` of its own, so the bound order no longer has to be the collection's,
+  and `formats` may name both, one selection reaching two files. The EPUB is
+  reflowable and built from the pages as they were rendered, behind a new
+  default-on `epub` cargo feature; the PDF is still laid out by a paged Typst
+  template.
 
 - **A config value knows where it came from.** Every dispatch row now says how
   its key is *read* as well as how it is written, so a config can be asked what
@@ -333,7 +354,63 @@ chores are visible in the git history and change nothing for a site.
   The generator is the `tailwind` cargo feature, on in the default (`full`)
   flavor.
 
+### Fixed
+
+- **A stylesheet's `@import` of another stylesheet follows it to its
+  fingerprinted name.** Under `assets { fingerprint }` an imported sheet was
+  renamed like everything else, but the importer kept the name as authored, so
+  every `@import` pointed at a file that no longer existed and a site whose
+  stylesheet was split into parts served one that loaded none of them. Nothing
+  failed: the build was green and the pages came out unstyled. A `url()` naming
+  an image was always rewritten, which is why this survived -- an image is
+  another handler's file, already renamed a phase earlier, while two stylesheets
+  are one handler's and are renamed together. The asset pipeline rendered every
+  file in a handler's batch before recording any of them, so a sheet's importer
+  read a map its dependency was not in yet, however carefully the stylesheet
+  handler had sorted the dependency first. Each file is now recorded before the
+  next one renders, which is what `Handler::render` already promised.
+
+- **`serve` no longer rebuilds forever on a site whose build reads a file back.**
+  The asset pipeline stages through `<dist>/.assets.staging/`, and a build that
+  reads any file back records its directory as one to watch, so the staging
+  writes read as an edit and every build queued the next one. The output
+  directory is now excluded from the watch exactly as the scratch tree already
+  was: both are what the build writes, and neither can be an input to it.
+
 ### Upgrading
+
+- **`generate { pdf { bundle } }` is now `generate { bundles { <name> } }`.** A
+  bundle is named, so a site may bind more than one document, and the name is
+  what its files are written under. The old block:
+
+  ```kdl
+  //! @ignore
+  generate {
+    pdf {
+      bundle {
+        collections "guide"
+        template "book.typ"
+      }
+    }
+  }
+  ```
+
+  becomes:
+
+  ```kdl
+  //! @ignore
+  generate {
+    bundles {
+      guide {
+        collections "guide"
+        template "book.typ"
+      }
+    }
+  }
+  ```
+
+  The file moves with the name: what was `/bundle.pdf` is now `/guide.pdf`.
+  `generate { pdf }` still writes one PDF per page and is untouched.
 
 - **`Renderer::SCHEMA` moves to 20**: the first build after upgrading recompiles
   every page. The head tags a page carries changed shape, and a manifest written
@@ -408,27 +485,6 @@ chores are visible in the git history and change nothing for a site.
   normal; nothing to do.
 
 ### Fixed
-
-- **A stylesheet's `@import` of another stylesheet follows it to its
-  fingerprinted name.** Under `assets { fingerprint }` an imported sheet was
-  renamed like everything else, but the importer kept the name as authored, so
-  every `@import` pointed at a file that no longer existed and a site whose
-  stylesheet was split into parts served one that loaded none of them. Nothing
-  failed: the build was green and the pages came out unstyled. A `url()` naming
-  an image was always rewritten, which is why this survived -- an image is
-  another handler's file, already renamed a phase earlier, while two stylesheets
-  are one handler's and are renamed together. The asset pipeline rendered every
-  file in a handler's batch before recording any of them, so a sheet's importer
-  read a map its dependency was not in yet, however carefully the stylesheet
-  handler had sorted the dependency first. Each file is now recorded before the
-  next one renders, which is what `Handler::render` already promised.
-
-- **`serve` no longer rebuilds forever on a site whose build reads a file back.**
-  The asset pipeline stages through `<dist>/.assets.staging/`, and a build that
-  reads any file back records its directory as one to watch, so the staging
-  writes read as an edit and every build queued the next one. The output
-  directory is now excluded from the watch exactly as the scratch tree already
-  was: both are what the build writes, and neither can be an input to it.
 
 - **A subpath-hosted site's full-content feed no longer spells the base path
   twice.** A `content "full"` entry carries the finished page, whose URLs the
@@ -3208,7 +3264,8 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.14...HEAD
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.15...HEAD
+[0.0.15]: https://github.com/cestef/baudelaire/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/cestef/baudelaire/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/cestef/baudelaire/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/cestef/baudelaire/compare/v0.0.11...v0.0.12
