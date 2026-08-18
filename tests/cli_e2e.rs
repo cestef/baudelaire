@@ -660,3 +660,49 @@ fn stdout_is_empty_without_json() {
     assert!(out.status.success());
     assert!(out.stdout.is_empty(), "stdout: {:?}", out.stdout);
 }
+
+/// `config check` is the only way to find out whether a config parses without
+/// building the site it configures.
+#[test]
+fn config_check_validates_the_projects_own_config() {
+    let sb = Site::with("site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n");
+    let out = sb.run(&["config", "check"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("config.kdl"));
+}
+
+#[test]
+fn config_check_fails_on_a_key_no_build_would_accept() {
+    let sb = Site::with("site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n");
+    sb.write(
+        "wrong.kdl",
+        "site \"T\"\ngenerate {\n  cards {\n    widht 100\n  }\n}\n",
+    );
+    let out = sb.run(&["config", "check", "--isolated", "wrong.kdl"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("unknown config key"), "{stderr}");
+    assert!(stderr.contains("did you mean `width`?"), "{stderr}");
+}
+
+/// What a documentation snippet is: config text with no project around it, and
+/// no theme directory for a `theme` line to resolve against.
+#[test]
+fn config_check_isolated_reads_the_text_alone() {
+    let sb = Site::with("site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n");
+    sb.write("fragment.kdl", "theme \"themes/nowhere\"\n");
+
+    let out = sb.run(&["config", "check", "--isolated", "fragment.kdl"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = sb.run(&["config", "check", "fragment.kdl"]);
+    assert!(!out.status.success(), "a build would resolve that theme");
+}

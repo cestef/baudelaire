@@ -7,6 +7,7 @@ pub mod build;
 pub mod check;
 pub mod clean;
 pub mod completions;
+pub mod config;
 pub mod deploy;
 mod help;
 pub mod init;
@@ -37,6 +38,7 @@ pub use build::BuildArgs;
 pub use check::CheckArgs;
 pub use clean::CleanArgs;
 pub use completions::{CompletionsArgs, Shell};
+pub use config::ConfigArgs;
 pub use deploy::DeployArgs;
 pub use init::InitArgs;
 pub use man::ManArgs;
@@ -308,6 +310,9 @@ pub enum Command {
     /// Print every key config.kdl accepts, with its value shape.
     #[command(visible_alias = "ref")]
     Reference(ReferenceArgs),
+    /// Validate a config without building it.
+    #[command(visible_alias = "cfg")]
+    Config(ConfigArgs),
     /// Write the generated modules where an editor can resolve them.
     #[command(visible_aliases = ["packages", "pkg"])]
     Mirror(MirrorArgs),
@@ -606,6 +611,9 @@ impl Command {
         matches!(
             self,
             Self::Completions(_) | Self::Man(_) | Self::Reference(_)
+        ) || matches!(
+            self,
+            Self::Config(args) if args.owns_stdout()
         )
     }
 
@@ -623,6 +631,7 @@ impl Command {
             Self::Completions(args) => args.run(cx),
             Self::Man(args) => args.run(cx),
             Self::Reference(args) => args.run(cx),
+            Self::Config(args) => args.run(cx),
             Self::Mirror(args) => args.run(cx),
             #[cfg(feature = "themes")]
             Self::Theme(args) => args.run(cx),

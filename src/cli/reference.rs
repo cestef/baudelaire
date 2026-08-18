@@ -5,7 +5,6 @@ use clap::Args;
 use super::{Cx, Run, help};
 use crate::error::Result;
 use crate::error::cli::{Generated, UnknownKey};
-use crate::ui::markup;
 
 #[derive(Args, Debug, Clone)]
 #[command(after_help = ReferenceArgs::examples())]
@@ -35,18 +34,7 @@ impl Run for ReferenceArgs {
 
         let reference = match &self.key {
             None => Reference::new(),
-            Some(key) => Reference::at(key).ok_or_else(|| {
-                let all = Reference::new();
-                let paths = all.paths();
-                let keys = crate::config::dispatch::Keys::of(&paths);
-                UnknownKey {
-                    key: key.clone(),
-                    help: keys.nearest(key).map_or_else(
-                        || markup!("run `{}` for every key", "baudelaire reference"),
-                        |near| markup!("did you mean `{}`?", near),
-                    ),
-                }
-            })?,
+            Some(key) => Reference::at(key).ok_or_else(|| UnknownKey::at(key))?,
         };
         Generated::Reference.emit(Terminal(&reference).to_string().as_bytes())?;
         Ok(())
