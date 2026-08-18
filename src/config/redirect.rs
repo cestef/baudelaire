@@ -5,7 +5,7 @@ use kdl::KdlNode;
 use crate::config::dispatch::Kind::Number;
 use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::value::ValueExt;
-use crate::error::Result;
+use crate::error::{ConfigError, Result};
 
 /// One declared redirect: where the old path goes, and what the host is told to
 /// say about it.
@@ -24,6 +24,14 @@ impl RedirectConfig {
     /// One `"/old/" "/new/" status=302` line, keyed by its old path.
     pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
         let old = node.name().value().to_owned();
+        if crate::config::Config::traverses(&old) {
+            return Err(ConfigError::url_traversal(
+                text,
+                &old,
+                crate::config::node::NodeExt::span(node),
+            )
+            .into());
+        }
         let mut rule = Self {
             target: crate::config::node::NodeExt::string(node, text, 0)?,
             status: Self::PERMANENT,

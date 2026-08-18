@@ -280,6 +280,17 @@ impl<'a> At<'a> {
         .into()
     }
 
+    /// A URL this key holds that would write outside the output directory.
+    pub(super) fn traversal(self) -> BaudelaireErrorKind {
+        ContentError::frontmatter_traversal(
+            self.origin.path,
+            self.origin.text(),
+            self.span(),
+            self.key,
+        )
+        .into()
+    }
+
     /// A name this key does not answer to, underlined where it was written;
     /// `valid` is the set of names it does.
     pub(super) fn name(self, got: &str, valid: &[&str]) -> BaudelaireErrorKind {

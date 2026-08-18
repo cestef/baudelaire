@@ -44,7 +44,7 @@ impl Permalink {
     /// Parse a template string into segments. Unknown placeholders, an
     /// unterminated `{`, and `..` path segments all error.
     pub fn parse(src: &str) -> Result<Self, PermalinkError> {
-        if src.split('/').any(|segment| segment == "..") {
+        if super::Config::traverses(src) {
             return Err(PermalinkError::Traversal);
         }
         let mut segments = Vec::new();

@@ -63,6 +63,25 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
+    #[error(
+        "frontmatter {} in {} has a {} segment",
+        Code(.key),
+        Text(.path),
+        Code("..")
+    )]
+    #[diagnostic(
+        code(baudelaire::content::frontmatter_traversal),
+        help("a page's URL cannot point outside the output directory")
+    )]
+    FrontmatterTraversal {
+        path: String,
+        key: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("would write outside `dist`")]
+        span: Option<SourceSpan>,
+    },
+
     #[error("{} declares frontmatter with the removed `#frontmatter(..)` call", Text(.path))]
     #[diagnostic(
         code(baudelaire::content::frontmatter_call),
@@ -269,6 +288,22 @@ impl ContentError {
             key: key.to_owned(),
             got: got.to_owned(),
             help: help.to_owned(),
+            page,
+            span,
+        }
+    }
+
+    /// A frontmatter URL key whose value would escape the output directory.
+    pub fn frontmatter_traversal(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        key: &str,
+    ) -> Self {
+        let (page, span) = Self::located(path, source, span);
+        Self::FrontmatterTraversal {
+            path: path.display().to_string(),
+            key: key.to_owned(),
             page,
             span,
         }

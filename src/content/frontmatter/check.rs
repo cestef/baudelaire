@@ -14,6 +14,11 @@ pub(super) trait ValueExt {
     fn integer(&self, at: At<'_>) -> Result<i64>;
     fn date(&self, at: At<'_>) -> Result<time::Date>;
     fn strings(&self, at: At<'_>) -> Result<Vec<String>>;
+    /// A string that names a URL this page writes, refused when it climbs out
+    /// of the output directory.
+    fn url(&self, at: At<'_>) -> Result<String>;
+    /// The list counterpart of [`ValueExt::url`].
+    fn urls(&self, at: At<'_>) -> Result<Vec<String>>;
     /// This value's typst type name with the article that reads before it
     /// (`a string`, `an integer`), for error messages.
     fn kind(&self) -> String;

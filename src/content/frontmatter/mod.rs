@@ -109,7 +109,7 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         "path",
         || FieldType::Str,
         |fm, v, at| {
-            fm.path = Some(v.string(at)?);
+            fm.path = Some(v.url(at)?);
             Ok(())
         },
     ),
@@ -149,7 +149,7 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         "redirect",
         || FieldType::List(Box::new(FieldType::Str)),
         |fm, v, at| {
-            fm.redirect = v.strings(at)?;
+            fm.redirect = v.urls(at)?;
             Ok(())
         },
     ),
@@ -518,6 +518,21 @@ impl ValueExt for Value {
                 .collect(),
             _ => Err(wrong(at, &self.kind())),
         }
+    }
+
+    fn url(&self, at: At<'_>) -> Result<String> {
+        let url = self.string(at)?;
+        if Config::traverses(&url) {
+            return Err(at.traversal());
+        }
+        Ok(url)
+    }
+
+    fn urls(&self, at: At<'_>) -> Result<Vec<String>> {
+        let urls = self.strings(at)?;
+        urls.iter()
+            .position(|url| Config::traverses(url))
+            .map_or_else(|| Ok(urls), |i| Err(at.nth(i).traversal()))
     }
 
     /// What this value is, with the article that reads before it: `a string`,

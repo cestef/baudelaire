@@ -41,3 +41,43 @@ scenario "a slug with no url-safe characters is rejected" {
     fails { code "baudelaire::content::empty_slug" }
   }
 }
+
+// A `path` or a `redirect` names the file a page writes, so a `..` in one is a
+// write outside `dist` rather than a URL.
+scenario "a frontmatter path climbing out of dist is rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/p.typ" #"""
+      #let frontmatter = (title: "P", path: "/../../escaped.html",)
+      p
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::frontmatter_traversal" }
+  }
+}
+
+scenario "a frontmatter redirect climbing out of dist is rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/posts/p.typ" #"""
+      #let frontmatter = (title: "P", redirect: ("/../escaped.html",),)
+      p
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::frontmatter_traversal" }
+  }
+}

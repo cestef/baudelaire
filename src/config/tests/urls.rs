@@ -139,7 +139,13 @@ fn err_a_feed_name_leaving_dist_is_refused() {
 fn destination_never_escapes_dist() {
     let cfg = parse("");
     let dist = cfg.paths.dist.clone();
-    for url in ["/../../etc/passwd/", "/posts/../../secret/"] {
+    for url in [
+        "/../../etc/passwd/",
+        "/posts/../../secret/",
+        "/../../etc/passwd.html",
+        "/posts/../../secret.html",
+        "/../../../tmp/pwned.html",
+    ] {
         let written = cfg.destination(url);
         assert!(written.starts_with(&dist), "{url} -> {}", written.display());
         assert!(
@@ -283,6 +289,18 @@ fn a_redirect_carries_its_own_status() {
     assert_eq!(temp.target, "/elsewhere/");
     assert_eq!(temp.status, 302);
     assert!(temp.needs_rules(), "a stub cannot say 302");
+}
+
+/// A redirect key names an output file, so a `..` in it is a write outside
+/// `dist` rather than a URL: refused where it is written, not silently dropped.
+#[test]
+fn err_a_redirect_key_cannot_climb_out_of_dist() {
+    for text in [
+        "redirect {\n  \"/../escaped.html\" \"/\"\n}",
+        "redirect {\n  \"/old/../../escaped/\" \"/\"\n}",
+    ] {
+        assert_eq!(code(text), "baudelaire::config::url_traversal", "{text}");
+    }
 }
 
 #[test]

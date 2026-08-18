@@ -351,6 +351,10 @@ impl Config {
     /// is written to: `index` plus [`UrlStyle::PAGE`].
     pub const INDEX: &'static str = "index.html";
 
+    /// The URL segment that climbs a directory, refused wherever a page, a
+    /// redirect or a permalink template names its own output.
+    pub(crate) const PARENT: &'static str = "..";
+
     /// The key holding the profile partials, shared by the top-level rule that
     /// parses it and the guard refusing one *inside* a profile.
     pub(crate) const PROFILES: &'static str = "profiles";
@@ -643,9 +647,16 @@ impl Config {
     /// no page can be written outside `dist`.
     fn segments(url: &str) -> String {
         url.split('/')
-            .filter(|segment| !segment.is_empty() && *segment != "..")
+            .filter(|segment| !segment.is_empty() && *segment != Self::PARENT)
             .collect::<Vec<_>>()
             .join("/")
+    }
+
+    /// Whether `url` names a segment that climbs out of the directory it is
+    /// resolved against, which [`Config::segments`] drops and every URL a page
+    /// or a redirect can name is refused for.
+    pub(crate) fn traverses(url: &str) -> bool {
+        url.split('/').any(|segment| segment == Self::PARENT)
     }
 
     /// The file `url` is written to when it names the not-found page, and
@@ -676,7 +687,7 @@ impl Config {
     /// [`Config::destination`] is its counterpart for a *page* URL, which has no
     /// extension and so has to be given one according to `links { style }`.
     pub fn file(&self, url: &str) -> PathBuf {
-        self.paths.dist.join(url.trim_start_matches('/'))
+        self.paths.dist.join(Self::segments(url))
     }
 
     /// The file a page URL is written to under `dist`, honoring clean URLs:

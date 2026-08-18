@@ -389,6 +389,18 @@ impl ConfigError {
         )
     }
 
+    /// A URL that climbs out of the output directory, wherever a config key
+    /// names one a build writes.
+    pub fn url_traversal(source: &str, got: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::UrlTraversal {
+                got: got.to_owned(),
+            },
+            span,
+        )
+    }
+
     pub fn nested_profiles(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::NestedProfiles, span)
     }
@@ -574,6 +586,13 @@ pub enum ConfigErrorKind {
         )
     )]
     NotAbsoluteUrl { got: String },
+
+    #[error("{} has a {} segment", Code(.got), Code(".."))]
+    #[diagnostic(
+        code(baudelaire::config::url_traversal),
+        help("a URL this site writes cannot point outside the output directory")
+    )]
+    UrlTraversal { got: String },
 
     #[error("{} is not https", Code(.got))]
     #[diagnostic(
