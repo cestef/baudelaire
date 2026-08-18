@@ -135,6 +135,13 @@ chores are visible in the git history and change nothing for a site.
   rewritten rather than kept: an interrupted build used to leave a cache key
   that missed forever.
 
+- **A site shipping its own fonts keeps its cache when it moves.** The font
+  fingerprint keyed every face by absolute path, so `mv site site2`, a fresh
+  clone at another path, or a CI runner with a different checkout directory was
+  a full cold rebuild. It also hashed every file in the directory, so a
+  `.DS_Store` beside a face invalidated the site; only the extensions the
+  scanner loads count now.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

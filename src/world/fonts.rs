@@ -25,6 +25,9 @@ pub(super) struct Fonts {
     /// The site's own directories, resolved against the root, kept out of the
     /// initializer so [`Fonts::digest`] can read them without forcing the scan.
     dirs: Vec<PathBuf>,
+    /// What a face's path is recorded relative to, so the digest is the same
+    /// after `mv site site2` and the warm manifest still hits.
+    root: PathBuf,
 }
 
 impl Fonts {
@@ -35,10 +38,12 @@ impl Fonts {
     /// site ships, then the machine's.
     pub(super) fn of(config: &FontConfig, root: &Path) -> Self {
         let dirs: Vec<PathBuf> = config.paths.iter().map(|dir| root.join(dir)).collect();
+        let base = root.to_path_buf();
         let paths = dirs.clone();
         let system = config.system;
         Self {
             dirs,
+            root: base,
             store: LazyLock::new(Box::new(move || {
                 let started = std::time::Instant::now();
                 let mut fonts = FontStore::new();
@@ -77,25 +82,38 @@ impl Fonts {
         }
         let mut faces = Faces::new();
         for dir in &self.dirs {
-            Self::walk(dir, &mut faces);
+            self.walk(dir, &mut faces);
         }
         Some(Hash::of(&faces))
     }
 
-    /// Every file under `dir`, recursively, with the hash of its contents; a
-    /// directory that cannot be read contributes nothing rather than failing.
-    fn walk(dir: &Path, into: &mut Faces) {
+    /// Every font file under `dir`, recursively, keyed relative to the project
+    /// root and carrying the hash of its contents; a directory that cannot be
+    /// read contributes nothing rather than failing.
+    ///
+    /// Only the extensions the scanner itself loads, so an editor's swap file
+    /// or a `.DS_Store` beside a face does not invalidate the site.
+    fn walk(&self, dir: &Path, into: &mut Faces) {
+        const FACES: [&str; 4] = ["ttf", "ttc", "otf", "otc"];
+
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                Self::walk(&path, into);
+                self.walk(&path, into);
+                continue;
+            }
+            if !FACES
+                .iter()
+                .any(|ext| crate::config::Config::has_ext(&path, ext))
+            {
                 continue;
             }
             let digest = Hash::of_file(&path);
-            into.insert(path, digest);
+            let key = path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf();
+            into.insert(key, digest);
         }
     }
 
@@ -145,6 +163,40 @@ mod tests {
 
         std::fs::write(dir.join("italic/slanted.ttf"), b"three").expect("write");
         assert_ne!(after, fonts(root.path(), &["faces"]).digest());
+    }
+
+    /// The digest is folded into the site fingerprint, which `Config`'s own
+    /// `Hash` leaves `root` out of so a warm manifest survives `mv site site2`.
+    #[test]
+    fn the_digest_does_not_depend_on_where_the_site_sits() {
+        let write = |root: &std::path::Path| {
+            let dir = root.join("faces");
+            std::fs::create_dir_all(&dir).expect("mkdir");
+            std::fs::write(dir.join("regular.ttf"), b"one").expect("write");
+        };
+        let here = tempfile::tempdir().expect("tempdir");
+        let moved = tempfile::tempdir().expect("tempdir");
+        write(here.path());
+        write(moved.path());
+        assert_eq!(
+            fonts(here.path(), &["faces"]).digest(),
+            fonts(moved.path(), &["faces"]).digest()
+        );
+    }
+
+    /// A face is loaded by extension, so anything else living beside one is not
+    /// a site input: an editor swap file used to cold-rebuild the whole site.
+    #[test]
+    fn a_file_that_is_not_a_face_is_not_fingerprinted() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let dir = root.path().join("faces");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        std::fs::write(dir.join("regular.ttf"), b"one").expect("write");
+        let before = fonts(root.path(), &["faces"]).digest();
+
+        std::fs::write(dir.join(".DS_Store"), b"junk").expect("write");
+        std::fs::write(dir.join("notes.txt"), b"junk").expect("write");
+        assert_eq!(before, fonts(root.path(), &["faces"]).digest());
     }
 
     #[test]
