@@ -4,12 +4,12 @@
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Cx, Findings, Page, Rule};
+use super::{Check, Cx, Findings, Page};
 
 /// The rule that reports an `<img>` carrying no `alt`.
 pub(super) struct Alt;
 
-impl Rule for Alt {
+impl Check for Alt {
     fn enabled(&self, config: &LintConfig) -> bool {
         config.alt.on()
     }

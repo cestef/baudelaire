@@ -1,12 +1,14 @@
 //! `lint { }`: post-render checks over the typed DOM.
 
 pub mod budget;
+pub mod rule;
 pub mod severity;
 pub mod snippets;
 
 use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::Kind::{Flag, Level as Loud, Lines};
 use crate::config::dispatch::{Attributed, Block, Section, Switch};
+use crate::config::lint::rule::{Rule, Ruled};
 use crate::config::node::NodeExt;
 use crate::config::{BudgetConfig, Level, Named, Severity, SnippetConfig};
 
@@ -65,7 +67,7 @@ impl Section for LintConfig {
             },
         ),
         (
-            "headings",
+            Rule::Headings.key(),
             Loud(Severity::names),
             "Report a heading that skips a level, e.g. `h2` straight to `h4`.",
             |c, n, t| {
@@ -74,7 +76,7 @@ impl Section for LintConfig {
             },
         ),
         (
-            "alt",
+            Rule::Alt.key(),
             Loud(Severity::names),
             "Report an image with no `alt` attribute at all (an empty one marks it decorative).",
             |c, n, t| {
@@ -83,7 +85,7 @@ impl Section for LintConfig {
             },
         ),
         (
-            "ids",
+            Rule::Ids.key(),
             Loud(Severity::names),
             "Report an `id` used more than once on a page.",
             |c, n, t| {
@@ -92,7 +94,7 @@ impl Section for LintConfig {
             },
         ),
         (
-            "aria",
+            Rule::Aria.key(),
             Loud(Severity::names),
             "Report an unknown ARIA role or attribute, and one referring to an id that is not there.",
             |c, n, t| {
@@ -107,7 +109,7 @@ impl Section for LintConfig {
             |c, n, t| c.budget.fill(n, t),
         ),
         (
-            "snippets",
+            Rule::Snippets.key(),
             Lines(SnippetConfig::rows),
             "One line per code fence language, saying how a snippet of it is checked.",
             |c, n, t| {
@@ -118,33 +120,20 @@ impl Section for LintConfig {
     ]);
 }
 
-/// Which lint rule a finding came from.
-///
-/// A finding is cached with its page and its severity is not, so resolving the
-/// severity from the rule at report time is what keeps a cache hit reporting
-/// what the current config asks for.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Ruled {
-    Headings,
-    Alt,
-    Ids,
-    Aria,
-    /// A fence of this language, whose loudness the line that configured it
-    /// carries rather than a field of its own.
-    Snippet(String),
-}
-
 impl LintConfig {
     /// How loud `rule` is under this config. A snippet language nothing
     /// configures is [`Level::OFF`]: the finding it came from was cached under
     /// a config that named it, and this one does not.
     pub fn severity(&self, rule: &Ruled) -> Severity {
-        let level = match rule {
-            Ruled::Headings => self.headings,
-            Ruled::Alt => self.alt,
-            Ruled::Ids => self.ids,
-            Ruled::Aria => self.aria,
-            Ruled::Snippet(lang) => self.snippet(lang).map_or(Level::OFF, |rule| rule.level),
+        let level = match (rule.rule, rule.lang.as_deref()) {
+            (Rule::Headings, _) => self.headings,
+            (Rule::Alt, _) => self.alt,
+            (Rule::Ids, _) => self.ids,
+            (Rule::Aria, _) => self.aria,
+            (Rule::Snippets, Some(lang)) => {
+                self.snippet(lang).map_or(Level::OFF, |rule| rule.level)
+            }
+            (Rule::Snippets, None) => Level::OFF,
         };
         level.severity(self.strict)
     }

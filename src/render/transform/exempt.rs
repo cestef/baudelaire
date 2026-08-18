@@ -9,7 +9,7 @@ use typst::syntax::Span;
 use typst_html::{HtmlDocument, HtmlElement, HtmlNode};
 
 use crate::config::Config;
-use crate::render::lint::EXEMPT;
+use crate::render::lint::{EXEMPT, Exemption};
 
 use super::{Cx, DocumentExt, Transform};
 
@@ -22,13 +22,19 @@ impl Transform for Exempt {
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
-        let mut covered = Vec::new();
+        let mut marked: Vec<(Exemption, Vec<Span>)> = Vec::new();
         doc.walk(|element| {
-            if element.attrs.get(EXEMPT).is_some() {
+            if let Some(value) = element.attrs.get(EXEMPT) {
+                let mut covered = Vec::new();
                 Self::cover(element, &mut covered);
+                marked.push((Exemption::parse(value), covered));
             }
         });
-        cx.exempt.extend(covered);
+        for (exemption, covered) in marked {
+            for span in covered {
+                cx.exempt.insert(span, &exemption);
+            }
+        }
         doc.walk(Self::unwrap);
     }
 }

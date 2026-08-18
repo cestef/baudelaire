@@ -36,13 +36,13 @@ impl Lint {
     /// Resolved at report time rather than cached with the finding, so a cache
     /// hit reports at the severity the *current* config asks for.
     pub fn ruled(&self) -> crate::config::Ruled {
-        use crate::config::Ruled;
+        use crate::config::{Rule, Ruled};
         match self {
-            Self::Heading { .. } => Ruled::Headings,
-            Self::Alt => Ruled::Alt,
-            Self::Id(_) => Ruled::Ids,
-            Self::Role(_) | Self::Attr(_) | Self::Idref { .. } => Ruled::Aria,
-            Self::Snippet { lang, .. } => Ruled::Snippet(lang.clone()),
+            Self::Heading { .. } => Rule::Headings.into(),
+            Self::Alt => Rule::Alt.into(),
+            Self::Id(_) => Rule::Ids.into(),
+            Self::Role(_) | Self::Attr(_) | Self::Idref { .. } => Rule::Aria.into(),
+            Self::Snippet { lang, .. } => Ruled::snippet(lang),
         }
     }
 

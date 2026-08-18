@@ -13,7 +13,7 @@ pub use weigh::{Load, Reference, Weight};
 use typst::syntax::Span;
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, attr, tag};
 
-use crate::config::LintConfig;
+use crate::config::{LintConfig, Named as _, Rule};
 use crate::error::Lint;
 use crate::world::PageWorld;
 
@@ -32,14 +32,14 @@ pub struct Finding {
 /// The findings of one page, and the resolver that locates them.
 pub struct Findings<'a> {
     origins: Origins<'a>,
-    /// The spans the author marked, which no rule reports against.
-    exempt: &'a std::collections::HashSet<Span>,
+    /// What the author marked, and which rules each marker keeps off.
+    exempt: &'a Exemptions,
     out: Vec<Finding>,
 }
 
 impl Findings<'_> {
     fn push(&mut self, span: Span, lint: Lint) {
-        if self.exempt.contains(&span) {
+        if self.exempt.covers(span, lint.ruled().rule) {
             return;
         }
         let at = self.origins.site(span);
@@ -47,12 +47,72 @@ impl Findings<'_> {
     }
 }
 
-/// The attribute an author marks one element with to keep the lint off it, for
-/// the finding that is right about the markup and wrong about the page.
+/// Every marked span on one page, and what each marker keeps off.
+#[derive(Debug, Default)]
+pub struct Exemptions(std::collections::HashMap<Span, Exemption>);
+
+impl Exemptions {
+    /// Mark `span`, folding in whatever a marker around it already said.
+    pub fn insert(&mut self, span: Span, exemption: &Exemption) {
+        self.0.entry(span).or_default().merge(exemption);
+    }
+
+    /// Whether a finding of `rule` at `span` was asked for.
+    fn covers(&self, span: Span, rule: Rule) -> bool {
+        self.0.get(&span).is_some_and(|marked| marked.covers(rule))
+    }
+}
+
+/// The attribute an author marks a region with to keep the lint off it, for the
+/// finding that is right about the markup and wrong about the page.
 ///
-/// It is the author's own attribute and stays in the output, like any other
-/// `data-*` they write.
+/// Read and removed before the page is written: see
+/// [`Exempt`](crate::render::transform).
 pub const EXEMPT: HtmlAttr = HtmlAttr::constant("data-lint");
+
+/// What a marker keeps off: every rule (`None`), or the ones it names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exemption(Option<Vec<Rule>>);
+
+/// Nothing, which is what a span no marker covers is owed.
+impl Default for Exemption {
+    fn default() -> Self {
+        Self(Some(Vec::new()))
+    }
+}
+
+impl Exemption {
+    /// The value that means every rule, spelled as the config spells a rule
+    /// that does not run.
+    const ALL: &'static str = "off";
+
+    /// What `value` exempts, or `None` when it names nothing this build has.
+    ///
+    /// Unknown names are dropped rather than refused: the marker is markup, and
+    /// a page that names a rule this build has never heard of is still a page.
+    pub fn parse(value: &str) -> Self {
+        if value.split_whitespace().any(|word| word == Self::ALL) {
+            return Self(None);
+        }
+        Self(Some(
+            value.split_whitespace().filter_map(Rule::of).collect(),
+        ))
+    }
+
+    /// Whether `rule` is one of the rules this keeps off.
+    fn covers(&self, rule: Rule) -> bool {
+        self.0.as_ref().is_none_or(|named| named.contains(&rule))
+    }
+
+    /// Both markers at once, for a region inside another.
+    fn merge(&mut self, other: &Self) {
+        match (&mut self.0, &other.0) {
+            (_, None) => self.0 = None,
+            (None, _) => {}
+            (Some(named), Some(more)) => named.extend(more.iter().copied()),
+        }
+    }
+}
 
 /// What a lint rule is given besides the page: the config it answers to, the
 /// project root a checker of its own runs in, and the fences the transform
@@ -133,7 +193,7 @@ impl Page {
     }
 }
 
-pub(super) trait Rule: Send + Sync {
+pub(super) trait Check: Send + Sync {
     /// Whether to run, from config alone.
     fn enabled(&self, config: &LintConfig) -> bool;
     /// Judge the gathered page, recording what it finds.
@@ -141,7 +201,7 @@ pub(super) trait Rule: Send + Sync {
 }
 
 /// The built-in rules, in report order.
-pub(super) struct Rules(Vec<Box<dyn Rule>>);
+pub(super) struct Rules(Vec<Box<dyn Check>>);
 
 impl Rules {
     pub(super) fn builtin() -> Self {
@@ -165,7 +225,7 @@ impl Rules {
         world: &PageWorld,
         root: &std::path::Path,
         fences: &[crate::render::snippet::Snippet],
-        exempt: &std::collections::HashSet<Span>,
+        exempt: &Exemptions,
     ) -> (Vec<Finding>, Weight) {
         let page = Page::of(doc);
         let cx = Cx {

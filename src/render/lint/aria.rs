@@ -4,7 +4,7 @@
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Cx, Findings, Page, Rule};
+use super::{Check, Cx, Findings, Page};
 
 /// The rule that reports unknown or dangling ARIA.
 pub(super) struct Aria;
@@ -187,7 +187,7 @@ impl Aria {
     }
 }
 
-impl Rule for Aria {
+impl Check for Aria {
     fn enabled(&self, config: &LintConfig) -> bool {
         config.aria.on()
     }

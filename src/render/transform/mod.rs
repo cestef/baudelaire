@@ -91,9 +91,9 @@ pub(super) struct Cx<'a> {
     /// rather than read off the DOM, since that pass is what removes the hidden
     /// lines the snippet lint has to check.
     pub fences: Vec<super::snippet::Snippet>,
-    /// What the author has kept the lint off, as the spans [`Exempt`] read
-    /// before removing the markers that named them.
-    pub exempt: std::collections::HashSet<typst::syntax::Span>,
+    /// What the author has kept the lint off, as [`Exempt`] read it before
+    /// removing the markers that said so.
+    pub exempt: super::lint::Exemptions,
 }
 
 /// The attributes that unconditionally carry a URL to an asset this site owns.

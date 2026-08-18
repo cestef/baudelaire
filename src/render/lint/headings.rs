@@ -5,12 +5,12 @@
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Cx, Findings, Page, Rule};
+use super::{Check, Cx, Findings, Page};
 
 /// The rule that reports a heading level jumping by more than one.
 pub(super) struct Headings;
 
-impl Rule for Headings {
+impl Check for Headings {
     fn enabled(&self, config: &LintConfig) -> bool {
         config.headings.on()
     }

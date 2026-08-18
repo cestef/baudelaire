@@ -13,7 +13,7 @@ use crate::render::snippet::{Fault, Snippet};
 use command::Command;
 use parser::Parser;
 
-use super::{Cx, Findings, Rule};
+use super::{Check, Cx, Findings};
 
 /// What checks the fences of one language: the command the site named for it,
 /// or the parser this build carries.
@@ -46,7 +46,7 @@ impl<'a> Checker<'a> {
 /// Every fence checked as the language it claims.
 pub(super) struct Snippets;
 
-impl Rule for Snippets {
+impl Check for Snippets {
     fn enabled(&self, config: &LintConfig) -> bool {
         config.snippets.iter().any(|(_, rule)| rule.level.on())
     }

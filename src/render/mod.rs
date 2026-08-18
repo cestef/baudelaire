@@ -197,7 +197,7 @@ impl Renderer {
             found: Rewrite::default(),
             extracted: std::collections::BTreeMap::new(),
             fences: Vec::new(),
-            exempt: std::collections::HashSet::new(),
+            exempt: lint::Exemptions::default(),
         };
         if doc.head().is_none() {
             let named = page.source.strip_prefix(&self.root).unwrap_or(&page.source);

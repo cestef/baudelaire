@@ -825,3 +825,33 @@ scenario "a marked region is left alone, native elements included" {
     }
   }
 }
+
+// A marker that names rules keeps only those off, so a page can say "this
+// heading is deliberate" without going blind to everything else.
+scenario "a marker names the rules it keeps off" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint { }
+      """#
+    "content/a.typ" #"""
+      #import "@baudelaire/html:0.1.0": nolint
+      #let frontmatter = (title: "A",)
+
+      #nolint("headings")[
+        ==== Deep on purpose
+
+        #html.elem("img", attrs: (src: "/logo.png"))
+      ]
+      """#
+  }
+  expect {
+    ok
+    // The heading is spared; the image is not.
+    warns "baudelaire::lint::found"
+  }
+}

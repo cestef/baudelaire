@@ -57,11 +57,19 @@
 //   nolint[
 //     == A section that starts deep on purpose
 //   ]
+//   nolint("headings", "alt")[..]   // only those two
 //
-// Everything inside it, native Typst elements included, is invisible to every
-// lint rule. The wrapper is read and removed before the page is written, so the
-// output is the one you would have had without it.
-#let nolint(body) = h("div", ..((_lint-marker, "off"),).to-dict(), body)
+// Everything inside it, native Typst elements included, is invisible to the
+// rules named, or to every rule when it names none. The wrapper is read and
+// removed before the page is written, so the output is the one you would have
+// had without it.
+#let nolint(..args) = {
+  // The body is the last positional, whatever rules came before it.
+  let items = args.pos()
+  let body = items.pop()
+  let value = if items.len() == 0 { "off" } else { items.join(" ") }
+  h("div", ..((_lint-marker, value),).to-dict(), body)
+}
 
 // Join class names, dropping anything absent and taking a `(name, condition)`
 // pair for a conditional one:

@@ -6,12 +6,12 @@ use std::collections::HashSet;
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Cx, Findings, Page, Rule};
+use super::{Check, Cx, Findings, Page};
 
 /// The rule that reports a duplicate `id`.
 pub(super) struct Ids;
 
-impl Rule for Ids {
+impl Check for Ids {
     fn enabled(&self, config: &LintConfig) -> bool {
         config.ids.on()
     }
