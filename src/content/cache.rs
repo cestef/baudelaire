@@ -359,8 +359,10 @@ impl<'a> DiscoveryCache<'a> {
 
     /// Fingerprint the inputs that change how a frontmatter is interpreted or
     /// judged: the taxonomy keys, the collection schemas and their globs, the
-    /// renderer, `paths`, and the generated modules. The last two are what an
-    /// evaluation can read that no per-page dependency will ever record.
+    /// renderer, `paths`, `typst`, and the generated modules. The last three are
+    /// what an evaluation can read that no per-page dependency will ever record
+    /// (`typst { inputs }` reaches a page as `sys.inputs`, which the tracker
+    /// only follows under its own `baudelaire` key).
     fn salt(config: &Config, modules: Hash) -> Hash {
         let keys: Vec<&str> = config
             .content
@@ -374,7 +376,14 @@ impl<'a> DiscoveryCache<'a> {
             .iter()
             .map(|(id, c)| (id, &c.glob, &c.schema))
             .collect();
-        Hash::of(&(keys, schemas, &config.paths, modules, Renderer::current()))
+        Hash::of(&(
+            keys,
+            schemas,
+            &config.paths,
+            &config.typst,
+            modules,
+            Renderer::current(),
+        ))
     }
 }
 

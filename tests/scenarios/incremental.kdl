@@ -284,3 +284,38 @@ scenario "turning the cache off does not poison the build after it" {
   build { cache #false; expect { ok; cached 0 } }
   build { expect { ok; cached 1 } }
 }
+
+// `typst { inputs }` reaches a page as `sys.inputs`, which the per-value
+// tracker follows only under its own `baudelaire` key: a frontmatter reading
+// one is invisible to every per-page dependency, so the discovery cache has to
+// carry it in its salt or the old title is served out of a green build.
+scenario "a changed typst input re-reads the frontmatter that reads it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths { content "content"; dist "public" }
+      typst { inputs { flavor "first" } }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: sys.inputs.flavor,)
+      alpha
+      """#
+  }
+  build { expect { ok; file "posts/a/index.html" { contains "first" } } }
+  build {
+    files {
+      "config.kdl" #"""
+        site "T"
+        paths { content "content"; dist "public" }
+        typst { inputs { flavor "second" } }
+        """#
+    }
+    expect {
+      ok
+      file "posts/a/index.html" {
+        contains "second"
+        missing "first"
+      }
+    }
+  }
+}

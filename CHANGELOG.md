@@ -67,6 +67,11 @@ chores are visible in the git history and change nothing for a site.
   name, but the dict a template reads spelled the authored name, so every link
   written from `page.assets` 404'd. Both now name the file by one rule.
 
+- **A changed `typst { inputs }` re-reads the frontmatter that reads it.** The
+  discovery cache did not carry the typst section in its salt, and `sys.inputs`
+  is followed per value only under baudelaire's own key, so a page whose
+  frontmatter read a site input kept serving the value from the previous build.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
