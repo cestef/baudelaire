@@ -59,12 +59,16 @@ impl Section for ContentConfig {
             |c| c.index.clone().into(),
             |c, n, t| {
                 let stem = n.string(t, 0)?;
-                if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
+                let named = crate::config::Config::SOURCES.iter().find_map(|ext| {
+                    stem.strip_suffix(&format!(".{ext}"))
+                        .filter(|bare| !bare.is_empty())
+                });
+                if let Some(bare) = named {
                     return Err(ConfigError::at(
                         t,
                         ConfigErrorKind::IndexExtension {
-                            got: n.string(t, 0)?,
-                            stem: stem.to_owned(),
+                            got: stem.clone(),
+                            stem: bare.to_owned(),
                         },
                         n.span(),
                     )

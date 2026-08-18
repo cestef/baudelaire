@@ -97,6 +97,12 @@ chores are visible in the git history and change nothing for a site.
   attribute on any of its children, then discarded both while the site believed
   the value was in effect.
 
+- **Two config keys that accepted a value and then ignored it.** `content {
+  index "index.md" }` passed the extension guard (which knew only `.typ`),
+  matched no page, and built a site with nothing at `/`; a bundle written with
+  no block (`bundles { guide "typo" }`) never reached the check that refuses
+  what nothing reads.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

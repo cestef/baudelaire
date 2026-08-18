@@ -147,19 +147,24 @@ fn err_duplicate_taxonomy() {
 }
 
 /// `index` names a stem, matched against `Stem::slug`, which never carries an
-/// extension.
+/// extension: every page extension is refused, since `index.md` matched no page
+/// and left the site with nothing at `/`.
 #[test]
 fn index_rejects_a_filename_and_names_the_stem() {
-    let err = Config::parse("content { index \"index.typ\" }").expect_err("should refuse");
-    let BaudelaireErrorKind::Config(config) = &err else {
-        panic!("expected a config diagnostic, got: {err:?}");
-    };
-    assert_eq!(
-        config.code().map(|c| c.to_string()).as_deref(),
-        Some("baudelaire::config::index_extension")
-    );
-    let help = config.help().expect("a help").to_string();
-    assert!(help.contains("index"), "help should name the stem: {help}");
+    for written in ["index.typ", "index.md"] {
+        let err =
+            Config::parse(&format!("content {{ index {written:?} }}")).expect_err("should refuse");
+        let BaudelaireErrorKind::Config(config) = &err else {
+            panic!("expected a config diagnostic, got: {err:?}");
+        };
+        assert_eq!(
+            config.code().map(|c| c.to_string()).as_deref(),
+            Some("baudelaire::config::index_extension"),
+            "{written}"
+        );
+        let help = config.help().expect("a help").to_string();
+        assert!(help.contains("index"), "help should name the stem: {help}");
+    }
 
     assert_eq!(
         parse("content { index \"index\" }")

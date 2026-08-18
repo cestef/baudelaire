@@ -331,6 +331,11 @@ impl Config {
     pub const TYPST: &'static str = "typ";
     pub const MARKDOWN: &'static str = "md";
 
+    /// Every extension a page can be written with, whatever this binary was
+    /// built with and whatever the site asked for: what a *name* is judged
+    /// against, where [`Config::sources`] is what a *build* reads.
+    pub const SOURCES: &'static [&'static str] = &[Self::TYPST, Self::MARKDOWN];
+
     /// The extensions of a Sass source, SCSS and the indented syntax.
     ///
     /// Here rather than beside the compiler, because a build without that
