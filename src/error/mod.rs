@@ -173,6 +173,9 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     CliKey(#[from] crate::error::cli::UnknownKey),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    CliUnsetKey(#[from] crate::error::cli::UnsetKey),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

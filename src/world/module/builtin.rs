@@ -17,6 +17,10 @@ impl Html {
 
     /// The binding `typ/html.typ` reads the marker through.
     const MARKER_BINDING: &'static str = "_svg-marker";
+
+    /// The binding `typ/html.typ` writes the lint marker through, so the
+    /// attribute is spelled once, in [`crate::render::lint`].
+    const LINT_BINDING: &'static str = "_lint-marker";
 }
 
 impl Module for Html {
@@ -25,7 +29,13 @@ impl Module for Html {
     }
 
     fn bindings(&self, _cx: &ModuleCx) -> Vec<(String, Value)> {
-        vec![(Self::MARKER_BINDING.to_owned(), Value::str(Self::MARKER))]
+        vec![
+            (Self::MARKER_BINDING.to_owned(), Value::str(Self::MARKER)),
+            (
+                Self::LINT_BINDING.to_owned(),
+                Value::str(crate::render::lint::EXEMPT.resolve()),
+            ),
+        ]
     }
 
     fn body(&self) -> &'static str {

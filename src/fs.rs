@@ -65,6 +65,27 @@ pub fn write_all(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<(
     write(path, contents)
 }
 
+/// Write bytes beside the file and move them into place, so a reader of `path`
+/// sees either nothing or the whole thing.
+///
+/// Each writer stages under a name of its own: two threads writing the same
+/// path would otherwise rename the one staging file twice, and the second
+/// rename would find it already gone.
+pub fn write_atomic(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
+    static WRITER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    let path = path.as_ref();
+    let mut staging = path.as_os_str().to_owned();
+    staging.push(format!(
+        ".{}.{}.staging",
+        std::process::id(),
+        WRITER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let staging = PathBuf::from(staging);
+    write_all(&staging, contents)?;
+    rename(&staging, path)
+}
+
 pub fn canonicalize(path: impl AsRef<Path>) -> Result<PathBuf> {
     let path = path.as_ref();
     std::fs::canonicalize(path).map_err(|e| FsError::new(Op::Canonicalize, path, e).into())

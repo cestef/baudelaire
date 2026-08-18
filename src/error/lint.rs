@@ -27,6 +27,9 @@ pub enum Lint {
     Attr(String),
     /// An id-referencing ARIA attribute naming an id the page does not have.
     Idref { attr: String, id: String },
+    /// What a code fence's checker objected to. `message` is that checker's own
+    /// words, escaped rather than read as markup.
+    Snippet { lang: String, message: String },
 }
 
 impl Lint {
@@ -39,6 +42,7 @@ impl Lint {
             Self::Alt => Ruled::Alt,
             Self::Id(_) => Ruled::Ids,
             Self::Role(_) | Self::Attr(_) | Self::Idref { .. } => Ruled::Aria,
+            Self::Snippet { lang, .. } => Ruled::Snippet(lang.clone()),
         }
     }
 
@@ -50,6 +54,7 @@ impl Lint {
             Self::Role(_) => "baudelaire::lint::role",
             Self::Attr(_) => "baudelaire::lint::attr",
             Self::Idref { .. } => "baudelaire::lint::idref",
+            Self::Snippet { .. } => "baudelaire::lint::snippet",
         }
     }
 
@@ -63,6 +68,7 @@ impl Lint {
             Self::Role(_) => "not an ARIA role",
             Self::Attr(_) => "not an ARIA attribute",
             Self::Idref { .. } => "nothing on this page has that id",
+            Self::Snippet { .. } => "the checker stopped here",
         }
     }
 
@@ -85,6 +91,10 @@ impl Lint {
             Self::Idref { .. } => {
                 "point it at an element that is on this page, or drop the \
                  attribute"
+            }
+            Self::Snippet { .. } => {
+                "fix the snippet, or take the language out of \
+                 `lint { snippets }` if its fences are not meant to check"
             }
         }
     }
@@ -109,6 +119,9 @@ impl fmt::Display for Lint {
                 Code(attr),
                 Code(&format!("#{id}"))
             ),
+            Self::Snippet { lang, message } => {
+                write!(f, "{} snippet: {}", Code(lang), Text(message))
+            }
         }
     }
 }

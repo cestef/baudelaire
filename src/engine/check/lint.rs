@@ -29,7 +29,7 @@ impl Lints {
                     at,
                     sources.at(at, root),
                 );
-                (site.config.lint.severity(finding.lint.ruled()), flaw)
+                (site.config.lint.severity(&finding.lint.ruled()), flaw)
             })
             .collect();
         if flaws.is_empty() {

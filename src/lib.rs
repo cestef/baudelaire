@@ -18,6 +18,7 @@ pub mod mirror;
 pub mod owned;
 pub mod remote;
 pub mod render;
+pub mod shell;
 pub mod theme;
 pub mod ui;
 pub mod version;

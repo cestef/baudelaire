@@ -5,12 +5,11 @@
 //! written. Commands run through the system shell in the project root,
 //! inheriting stdio.
 
-use std::process::Command;
-
 use tracing::debug;
 
 use crate::config::Config;
 use crate::error::{HookError, HookPhase, Result};
+use crate::shell::Shell;
 use crate::ui::Ui;
 
 /// Runs the configured lifecycle hooks.
@@ -41,9 +40,8 @@ impl<'a> Hooks<'a> {
         for command in commands {
             ui.detail(format_args!("$ {command}"));
             debug!(%phase, command, "running hook");
-            let status = Self::shell()
-                .current_dir(cwd)
-                .arg(command)
+            let status = Shell::HOST
+                .command(command, cwd)
                 .status()
                 .map_err(|e| HookError::spawn(phase, command, e))?;
             if !status.success() {
@@ -51,19 +49,6 @@ impl<'a> Hooks<'a> {
             }
         }
         Ok(())
-    }
-
-    /// The platform shell configured to take a command string.
-    fn shell() -> Command {
-        if cfg!(windows) {
-            let mut c = Command::new("cmd");
-            c.arg("/C");
-            c
-        } else {
-            let mut c = Command::new("sh");
-            c.arg("-c");
-            c
-        }
     }
 }
 

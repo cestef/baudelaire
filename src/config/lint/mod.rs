@@ -2,12 +2,13 @@
 
 pub mod budget;
 pub mod severity;
+pub mod snippets;
 
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::{Flag, Level as Loud};
-use crate::config::dispatch::{Block, Section, Switch};
+use crate::config::dispatch::Kind::{Flag, Level as Loud, Lines};
+use crate::config::dispatch::{Attributed, Block, Section, Switch};
 use crate::config::node::NodeExt;
-use crate::config::{BudgetConfig, Level, Named, Severity};
+use crate::config::{BudgetConfig, Level, Named, Severity, SnippetConfig};
 
 /// Linting of the built pages: which rules run over the typed DOM, how loud a
 /// finding is, and how many bytes a page may weigh. Off until a `lint { }`
@@ -30,6 +31,9 @@ pub struct LintConfig {
     pub aria: Level,
     /// How many bytes a single page may ship.
     pub budget: BudgetConfig,
+    /// How a code fence is checked, one entry per language it may claim, in the
+    /// order the config declares them.
+    pub snippets: Vec<(String, SnippetConfig)>,
 }
 
 impl Default for LintConfig {
@@ -42,6 +46,7 @@ impl Default for LintConfig {
             ids: Level::DEFAULT,
             aria: Level::DEFAULT,
             budget: BudgetConfig::default(),
+            snippets: Vec::new(),
         }
     }
 }
@@ -101,6 +106,15 @@ impl Section for LintConfig {
             "How many bytes one page may ship.",
             |c, n, t| c.budget.fill(n, t),
         ),
+        (
+            "snippets",
+            Lines(SnippetConfig::rows),
+            "One line per code fence language, saying how a snippet of it is checked.",
+            |c, n, t| {
+                c.snippets = n.unique(t, "snippet language", SnippetConfig::item)?;
+                Ok(())
+            },
+        ),
     ]);
 }
 
@@ -109,23 +123,37 @@ impl Section for LintConfig {
 /// A finding is cached with its page and its severity is not, so resolving the
 /// severity from the rule at report time is what keeps a cache hit reporting
 /// what the current config asks for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ruled {
     Headings,
     Alt,
     Ids,
     Aria,
+    /// A fence of this language, whose loudness the line that configured it
+    /// carries rather than a field of its own.
+    Snippet(String),
 }
 
 impl LintConfig {
-    /// How loud `rule` is under this config.
-    pub fn severity(&self, rule: Ruled) -> Severity {
+    /// How loud `rule` is under this config. A snippet language nothing
+    /// configures is [`Level::OFF`]: the finding it came from was cached under
+    /// a config that named it, and this one does not.
+    pub fn severity(&self, rule: &Ruled) -> Severity {
         let level = match rule {
             Ruled::Headings => self.headings,
             Ruled::Alt => self.alt,
             Ruled::Ids => self.ids,
             Ruled::Aria => self.aria,
+            Ruled::Snippet(lang) => self.snippet(lang).map_or(Level::OFF, |rule| rule.level),
         };
         level.severity(self.strict)
+    }
+
+    /// How fences of `lang` are checked, or `None` for a language no line names.
+    pub fn snippet(&self, lang: &str) -> Option<&SnippetConfig> {
+        self.snippets
+            .iter()
+            .find(|(named, _)| named == lang)
+            .map(|(_, rule)| rule)
     }
 }

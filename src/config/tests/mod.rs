@@ -334,28 +334,28 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     use crate::config::{Ruled, Severity};
 
     let lenient = parse("lint { }");
-    assert_eq!(lenient.lint.severity(Ruled::Alt), Severity::Warn);
+    assert_eq!(lenient.lint.severity(&Ruled::Alt), Severity::Warn);
 
     let strict = parse("lint {\n  strict\n}");
-    assert_eq!(strict.lint.severity(Ruled::Alt), Severity::Error);
-    assert_eq!(strict.lint.severity(Ruled::Headings), Severity::Error);
+    assert_eq!(strict.lint.severity(&Ruled::Alt), Severity::Error);
+    assert_eq!(strict.lint.severity(&Ruled::Headings), Severity::Error);
 
     let mixed = parse("lint {\n  strict\n  headings \"warn\"\n  ids \"off\"\n}");
-    assert_eq!(mixed.lint.severity(Ruled::Alt), Severity::Error);
-    assert_eq!(mixed.lint.severity(Ruled::Headings), Severity::Warn);
-    assert_eq!(mixed.lint.severity(Ruled::Ids), Severity::Off);
+    assert_eq!(mixed.lint.severity(&Ruled::Alt), Severity::Error);
+    assert_eq!(mixed.lint.severity(&Ruled::Headings), Severity::Warn);
+    assert_eq!(mixed.lint.severity(&Ruled::Ids), Severity::Off);
     assert!(!mixed.lint.ids.on());
     assert!(mixed.lint.headings.on(), "a warning rule still runs");
 
     let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
-    assert_eq!(flags.lint.severity(Ruled::Aria), Severity::Off);
+    assert_eq!(flags.lint.severity(&Ruled::Aria), Severity::Off);
     assert_eq!(
-        flags.lint.severity(Ruled::Alt),
+        flags.lint.severity(&Ruled::Alt),
         Severity::Error,
         "`#true` is on, and `strict` says how loud"
     );
     assert_eq!(
-        flags.lint.severity(Ruled::Headings),
+        flags.lint.severity(&Ruled::Headings),
         Severity::Error,
         "a bare rule is on, and follows `strict` like any other"
     );

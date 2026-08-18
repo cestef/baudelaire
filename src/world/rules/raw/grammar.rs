@@ -15,24 +15,26 @@ use typst::text::{RAW_SYNTAXES, RawElem};
 
 use crate::config::Token;
 
+use super::TYPST;
+
 use super::scope::Scopes;
 
 /// One classed piece of a highlighted block, in document order.
-pub(super) struct Piece<'a> {
+pub(crate) struct Piece<'a> {
     /// Which of the block's lines it falls on.
-    pub(super) line: usize,
+    pub(crate) line: usize,
     /// The text itself, never empty and never spanning a line break.
-    pub(super) text: &'a str,
+    pub(crate) text: &'a str,
     /// Its byte offset within that line.
-    pub(super) offset: usize,
+    pub(crate) offset: usize,
     /// The vocabulary entry it resolved to and the grammar's own scope name,
     /// or `None` for text the vocabulary does not name.
-    pub(super) token: Option<(Token, EcoString)>,
+    pub(crate) token: Option<(Token, EcoString)>,
 }
 
 /// How typst parses a block of its own code, per the language tag.
 #[derive(Debug, Clone, Copy)]
-pub(super) enum Mode {
+pub(crate) enum Mode {
     Markup,
     Code,
     Math,
@@ -40,13 +42,13 @@ pub(super) enum Mode {
 
 /// Where a resolved grammar's syntax set lives: typst's bundled one, or one the
 /// page loaded itself.
-pub(super) enum Set {
+pub(crate) enum Set {
     Builtin,
     Loaded(Arc<SyntaxSet>),
 }
 
 /// The highlighter a code block resolved to.
-pub(super) enum Grammar {
+pub(crate) enum Grammar {
     /// typst's own parser, for `typ`, `typc` and `typm`.
     Typst(Mode),
     /// A sublime grammar, named by the language token that found it.
@@ -80,6 +82,31 @@ impl Set {
 }
 
 impl Grammar {
+    /// The bundled grammar for `lang`, for text that came from somewhere other
+    /// than a page: what the terminal highlights a config with.
+    pub(crate) fn named(lang: &str) -> Self {
+        let lang = lang.to_lowercase();
+        if TYPST.contains(&lang.as_str()) {
+            return Self::Typst(Mode::Markup);
+        }
+        Self::sets()
+            .into_iter()
+            .find_map(|set| {
+                set.get()
+                    .find_syntax_by_token(&lang)
+                    .is_some()
+                    .then(|| Self::Sublime(set, lang.clone().into()))
+            })
+            .unwrap_or(Self::Plain)
+    }
+
+    /// The sets every language is looked for in, in the order they win:
+    /// syntect's own first, then the grammars this binary ships for languages
+    /// it has none of.
+    fn sets() -> Vec<Set> {
+        vec![Set::Builtin, Set::Loaded(super::shipped::set())]
+    }
+
     /// What `elem` should be highlighted with, resolved the way typst resolves
     /// it: typst's own languages first, then the grammars the page loaded, then
     /// the bundled set.
@@ -116,22 +143,22 @@ impl Grammar {
             _ => {}
         }
 
-        for set in Self::loaded(elem, engine, styles)? {
+        let sets = Self::loaded(elem, engine, styles)?
+            .into_iter()
+            .chain(Self::sets());
+        for set in sets {
             if set.get().find_syntax_by_token(&lang).is_some() {
                 return Ok(Self::Sublime(set, lang));
             }
         }
-        Ok(match RAW_SYNTAXES.find_syntax_by_token(&lang) {
-            Some(_) => Self::Sublime(Set::Builtin, lang),
-            None => Self::Plain,
-        })
+        Ok(Self::Plain)
     }
 
     /// Split `lines` into classed pieces and hand each to `piece`, in order.
     ///
     /// `lines` are the block's lines as typst preprocessed them: tabs expanded,
     /// no line breaks left inside one.
-    pub(super) fn tokens(&self, lines: &[EcoString], piece: &mut dyn FnMut(Piece<'_>)) {
+    pub(crate) fn tokens(&self, lines: &[EcoString], piece: &mut dyn FnMut(Piece<'_>)) {
         match self {
             Self::Typst(mode) => Self::typst(*mode, lines, piece),
             Self::Sublime(set, lang) => Self::sublime(set.get(), lang, lines, piece),

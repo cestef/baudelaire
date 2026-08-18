@@ -4,7 +4,7 @@
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Findings, Page, Rule};
+use super::{Cx, Findings, Page, Rule};
 
 /// The rule that reports unknown or dangling ARIA.
 pub(super) struct Aria;
@@ -192,7 +192,7 @@ impl Rule for Aria {
         config.aria.on()
     }
 
-    fn check(&self, page: &Page, found: &mut Findings<'_>) {
+    fn check(&self, page: &Page, _cx: &Cx<'_>, found: &mut Findings<'_>) {
         for (roles, span) in &page.roles {
             for role in roles.split_ascii_whitespace() {
                 if !Self::role(role) {

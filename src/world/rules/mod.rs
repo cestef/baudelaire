@@ -5,7 +5,8 @@ mod image;
 mod raw;
 
 pub use image::MARKER;
-pub use raw::{SCOPE, TOKEN, TYPST};
+pub(crate) use raw::Grammar;
+pub use raw::{LANG, SCOPE, TOKEN, TYPST};
 
 use typst::Library;
 use typst::foundations::Target;

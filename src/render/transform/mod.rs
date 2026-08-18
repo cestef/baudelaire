@@ -6,7 +6,9 @@
 mod anchors;
 mod base;
 mod embed;
+mod exempt;
 mod externalize;
+mod fences;
 mod fingerprint;
 mod footnotes;
 mod highlight;
@@ -40,7 +42,9 @@ use super::SrcSets;
 use anchors::Anchors;
 use base::BasePath;
 use embed::Embed;
+use exempt::Exempt;
 use externalize::Externalize;
+use fences::Fences;
 use fingerprint::Fingerprint;
 use footnotes::Footnotes;
 use highlight::Highlight;
@@ -83,6 +87,13 @@ pub(super) struct Cx<'a> {
     /// Written by [`Externalize`] and read by [`Sources`], which run in that
     /// order.
     pub extracted: std::collections::BTreeMap<String, Vec<super::Candidate>>,
+    /// Every code fence on the page, as [`Fences`] gathered it: written here
+    /// rather than read off the DOM, since that pass is what removes the hidden
+    /// lines the snippet lint has to check.
+    pub fences: Vec<super::snippet::Snippet>,
+    /// What the author has kept the lint off, as the spans [`Exempt`] read
+    /// before removing the markers that named them.
+    pub exempt: std::collections::HashSet<typst::syntax::Span>,
 }
 
 /// The attributes that unconditionally carry a URL to an asset this site owns.
@@ -378,12 +389,14 @@ impl Transforms {
     /// the base path, and digest the finished markup last.
     pub(super) fn builtin() -> Self {
         Self(vec![
+            Box::new(Exempt),
             Box::new(Links),
             Box::new(Svg),
             Box::new(Lang),
             Box::new(Anchors),
             Box::new(Footnotes),
             Box::new(Highlight),
+            Box::new(Fences),
             Box::new(Spans),
             Box::new(Meta),
             Box::new(Math),

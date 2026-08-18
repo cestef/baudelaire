@@ -51,6 +51,18 @@
   h("svg", ..attrs.named(), ..marker)
 }
 
+// Keep the lint off a piece of a page, wherever the finding is right about the
+// markup and wrong about the page:
+//
+//   nolint[
+//     == A section that starts deep on purpose
+//   ]
+//
+// Everything inside it, native Typst elements included, is invisible to every
+// lint rule. The wrapper is read and removed before the page is written, so the
+// output is the one you would have had without it.
+#let nolint(body) = h("div", ..((_lint-marker, "off"),).to-dict(), body)
+
 // Join class names, dropping anything absent and taking a `(name, condition)`
 // pair for a conditional one:
 //

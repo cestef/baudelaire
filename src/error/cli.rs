@@ -12,6 +12,8 @@ pub enum Generated {
     Completions,
     Man,
     Reference,
+    /// What `config get` answers with, which a script reads off stdout.
+    Value,
 }
 
 impl Generated {
@@ -20,6 +22,7 @@ impl Generated {
             Self::Completions => "baudelaire completions",
             Self::Man => "baudelaire man",
             Self::Reference => "baudelaire reference",
+            Self::Value => "baudelaire config get",
         }
     }
 
@@ -28,6 +31,7 @@ impl Generated {
             Self::Completions => "completion script",
             Self::Man => "man page",
             Self::Reference => "config reference",
+            Self::Value => "value",
         }
     }
 
@@ -75,4 +79,34 @@ pub struct WriteFailed {
 pub struct UnknownKey {
     pub key: String,
     pub help: String,
+}
+
+impl UnknownKey {
+    /// The error for `key`, its help pointing at the nearest key there is.
+    pub fn at(key: &str) -> Self {
+        use crate::config::dispatch::Keys;
+        use crate::config::reference::Reference;
+        use crate::ui::markup;
+
+        let all = Reference::new();
+        let paths = all.paths();
+        Self {
+            key: key.to_owned(),
+            help: Keys::of(&paths).nearest(key).map_or_else(
+                || markup!("run `{}` for every key", "baudelaire reference"),
+                |near| markup!("did you mean `{}`?", near),
+            ),
+        }
+    }
+}
+
+/// A key the config never sets, which `get` and `show` have no answer for.
+#[derive(Debug, Error, Diagnostic)]
+#[error("this config does not set {}", Code(.key))]
+#[diagnostic(
+    code(baudelaire::cli::unset_key),
+    help("the built-in default applies; `baudelaire config explain <key>` says what it is for")
+)]
+pub struct UnsetKey {
+    pub key: String,
 }

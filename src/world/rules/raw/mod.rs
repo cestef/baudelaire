@@ -4,6 +4,7 @@
 
 mod grammar;
 mod scope;
+mod shipped;
 
 use typst::ecow::EcoVec;
 use typst::foundations::{Content, NativeElement, Packed, ShowFn};
@@ -13,7 +14,7 @@ use typst_html::{HtmlAttr, HtmlAttrs, HtmlElem, tag};
 
 use crate::config::Named;
 
-use grammar::Grammar;
+pub(crate) use grammar::Grammar;
 
 /// The info-string tags naming typst *markup*, which is what a fence body is.
 ///
@@ -28,6 +29,9 @@ pub const TOKEN: HtmlAttr = HtmlAttr::constant("data-token");
 /// The mark naming the grammar's own scope, kept in the output only when
 /// `highlight { scopes }` asks for it.
 pub const SCOPE: HtmlAttr = HtmlAttr::constant("data-scope");
+
+/// The language a fence claimed, as the snippet lint reads it back off the DOM.
+pub const LANG: HtmlAttr = HtmlAttr::constant("data-lang");
 
 /// The raw show rule: mark a code block's tokens instead of colouring them,
 /// each line keeping the number, count and text a `show raw.line` rule expects.
@@ -75,7 +79,7 @@ pub(super) const RAW_RULE: ShowFn<RawElem> = |elem, engine, styles| {
 
     let lang = elem.lang.get_ref(styles);
     let code = HtmlElem::new(tag::code)
-        .with_optional_attr(const { HtmlAttr::constant("data-lang") }, lang.clone())
+        .with_optional_attr(LANG, lang.clone())
         .with_body(Some(Content::sequence(seq)))
         .pack()
         .spanned(elem.span());

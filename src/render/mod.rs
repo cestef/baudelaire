@@ -8,9 +8,10 @@ mod emitted;
 mod fragment;
 mod inline;
 mod links;
-mod lint;
+pub mod lint;
 mod origin;
 mod scope;
+pub mod snippet;
 mod srcset;
 mod transform;
 
@@ -195,6 +196,8 @@ impl Renderer {
             world,
             found: Rewrite::default(),
             extracted: std::collections::BTreeMap::new(),
+            fences: Vec::new(),
+            exempt: std::collections::HashSet::new(),
         };
         if doc.head().is_none() {
             let named = page.source.strip_prefix(&self.root).unwrap_or(&page.source);
@@ -204,7 +207,9 @@ impl Renderer {
         }
         self.transforms.apply(doc, &mut cx);
         if config.lint.enabled {
-            let (lints, weight) = self.lints.run(doc, &config.lint, world);
+            let (lints, weight) =
+                self.lints
+                    .run(doc, &config.lint, world, &self.root, &cx.fences, &cx.exempt);
             cx.found.lints = lints;
             cx.found.weight = weight;
         }

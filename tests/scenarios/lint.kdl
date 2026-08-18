@@ -490,3 +490,338 @@ scenario "a budget can report instead of failing" {
     file "a/index.html" { contains "larger than one byte" }
   }
 }
+
+// `lint { snippets { } }`: a code fence checked against the language it claims,
+// by this build's parser for it or by a command the site names.
+
+scenario "a malformed fence is reported where its checker stopped" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets { kdl }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      site "unclosed
+      ```
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::lint::found"
+  }
+}
+
+scenario "a fence that parses is not reported" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets {
+          kdl
+          json
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      site "T"
+      paths { dist "public" }
+      ```
+
+      ```json
+      {"a": [1, 2]}
+      ```
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+  }
+}
+
+// A fence of a language no line names is shown, never checked: a site opts one
+// language at a time into being held to its own syntax.
+scenario "a language the config does not name is left alone" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets { json }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      site "unclosed
+      ```
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+  }
+}
+
+scenario "a fence language names its own severity" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets { kdl "error" }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      site "unclosed
+      ```
+      """#
+  }
+  expect {
+    fails { code "baudelaire::lint::found" }
+  }
+}
+
+scenario "a language nothing here parses is refused rather than never run" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets { sh }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::no_snippet_checker" }
+  }
+}
+
+scenario "a language with a command of its own is checked by it" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets {
+          sh run="test -s {file}"
+          text run="false"
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```sh
+      baudelaire build
+      ```
+
+      ```text
+      whatever
+      ```
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::lint::found"
+  }
+}
+
+// A hidden line is checked and not shown: what a fragment needs to stand on its
+// own without the page carrying the scaffolding around it.
+scenario "a hidden line is checked but never rendered" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets {
+          kdl hidden="%% "
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      %% content {
+      index "index"
+      %% }
+      ```
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+    file "a/index.html" {
+      contains #"index "index""#
+      missing "content {"
+    }
+  }
+}
+
+scenario "a fragment that only parses with its hidden lines is not reported" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets {
+          kdl hidden="%% "
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      %% a {
+      b 1
+      ```
+      """#
+  }
+  expect {
+    ok
+    warns "baudelaire::lint::found"
+  }
+}
+
+scenario "a fence that is wrong on purpose says so and is left alone" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        snippets {
+          kdl "error" hidden="%% "
+        }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      ```kdl
+      %% @ignore
+      site "unclosed
+      ```
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+    file "a/index.html" { missing "@ignore" }
+  }
+}
+
+// The escape hatch for a finding that is right about the markup and wrong about
+// the page: one element, marked by the author, that no rule looks at.
+scenario "an element marked off is left alone by every rule" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict
+        snippets { kdl }
+      }
+      """#
+    "content/a.typ" #"""
+      #let frontmatter = (title: "A",)
+
+      #html.elem("img", attrs: ("src": "/logo.png", "data-lint": "off"))
+
+      #html.elem("code", attrs: ("data-lang": "kdl", "data-lint": "off"))[site "unclosed]
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+  }
+}
+
+// `nolint` is transparent: the page it writes is the page it would have written
+// without it, and everything inside is invisible to every rule.
+scenario "a marked region is left alone, native elements included" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      lint {
+        strict
+        snippets { kdl }
+      }
+      """#
+    "content/a.typ" #"""
+      #import "@baudelaire/html:0.1.0": nolint
+      #let frontmatter = (title: "A",)
+
+      #nolint[
+        ==== Deep on purpose
+
+        #html.elem("img", attrs: (src: "/logo.png"))
+
+        ```kdl
+        site "unclosed
+        ```
+      ]
+      """#
+  }
+  expect {
+    ok
+    unwarned "baudelaire::lint::found"
+    file "a/index.html" {
+      contains "<h5"
+      missing "data-lint"
+      missing "<div>"
+    }
+  }
+}

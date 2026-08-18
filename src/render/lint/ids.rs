@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use crate::config::LintConfig;
 use crate::error::Lint;
 
-use super::{Findings, Page, Rule};
+use super::{Cx, Findings, Page, Rule};
 
 /// The rule that reports a duplicate `id`.
 pub(super) struct Ids;
@@ -16,7 +16,7 @@ impl Rule for Ids {
         config.ids.on()
     }
 
-    fn check(&self, page: &Page, found: &mut Findings<'_>) {
+    fn check(&self, page: &Page, _cx: &Cx<'_>, found: &mut Findings<'_>) {
         let mut seen: HashSet<&str> = HashSet::new();
         for (id, span) in &page.ids {
             if !seen.insert(id.as_str()) {

@@ -109,13 +109,7 @@ ssh = ["dep:russh", "dep:russh-sftp", "dep:tokio"]
 announce = []
 
 # `.md` content pages, lowered to Typst source before they compile
-markdown = [
-  "dep:pulldown-cmark",
-  "dep:saphyr",
-  "dep:toml_edit",
-  "dep:typst-library",
-  "dep:typst-utils",
-]
+markdown = ["dep:pulldown-cmark", "dep:typst-library", "dep:typst-utils"]
 
 # Build OpenSSL from source and link it statically instead of the host's libssl
 vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
@@ -143,7 +137,9 @@ syntect = { version = "5.3", default-features = false, features = [
 comemo = "0.5"
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
-clap = { version = "4", features = ["derive"] }
+# `string`: the config keys a `config` verb completes are read out of the
+# dispatch tables at runtime, so its possible values are owned strings.
+clap = { version = "4", features = ["derive", "string"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
 clap_mangen = "0.2"
@@ -214,10 +210,11 @@ zip = { version = "8.6.0", default-features = false, features = [
   "deflate",
 ], optional = true }
 pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
-toml_edit = { version = "0.22", default-features = false, features = [
-  "parse",
-], optional = true }
-saphyr = { version = "0.0.11", default-features = false, optional = true }
+# Read by the markdown frontmatter dialects and by the snippet lint, which is
+# in every flavor: a `toml` or `yaml` fence is checked whether or not this build
+# can publish a `.md` page.
+toml_edit = { version = "0.22", default-features = false, features = ["parse"] }
+saphyr = { version = "0.0.11", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

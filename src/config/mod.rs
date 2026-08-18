@@ -13,9 +13,12 @@ pub mod caching;
 pub mod content;
 pub mod deploy;
 pub(crate) mod dispatch;
+pub mod edit;
+pub mod explain;
 pub mod generate;
 pub mod hooks;
 pub mod html;
+pub mod key;
 pub mod lang;
 pub mod links;
 pub mod lint;
@@ -95,6 +98,7 @@ pub use links::external::ExternalConfig;
 pub use links::{LinkConfig, Linked};
 pub use lint::budget::BudgetConfig;
 pub use lint::severity::{Level, Severity};
+pub use lint::snippets::SnippetConfig;
 pub use lint::{LintConfig, Ruled};
 pub use named::Named;
 pub use navigation::NavigationConfig;
@@ -229,8 +233,8 @@ impl Config {
     /// `root` is the project's and is passed in rather than taken from the
     /// parse. Everything in [`OWNED`](Config::OWNED) is refused outright, since
     /// a theme is fetched at build time and those sections decide what the
-    /// machine runs or what the browser trusts in the site's name. Refused
-    /// rather than dropped, so a theme author finds out.
+    /// machine runs, what the browser trusts in the site's name, or what a
+    /// build fails on. Refused rather than dropped, so a theme author finds out.
     fn floor(at: &Path, root: PathBuf) -> Result<Self> {
         let text = crate::fs::read_to_string(at)?;
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(&text, e))?;
@@ -341,10 +345,11 @@ impl Config {
     /// Suffixed because [`Config::TYPST`] is already the *extension* `typ`.
     const TYPST_SECTION: &'static str = "typst";
     const SECURITY: &'static str = "security";
+    const LINT: &'static str = "lint";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
     /// may not carry; `Config::floor` says why.
-    const OWNED: [&'static str; 8] = [
+    pub const OWNED: [&'static str; 9] = [
         Self::PATHS,
         Self::HOOKS,
         Self::ANNOUNCE,
@@ -353,7 +358,14 @@ impl Config {
         Self::SERVE,
         Self::TYPST_SECTION,
         Self::SECURITY,
+        Self::LINT,
     ];
+
+    /// The text this was parsed from, which is what `config explain` reads a
+    /// key's own line back out of.
+    pub fn text(&self) -> &str {
+        &self.source
+    }
 
     /// The path of a named scratch subdirectory under
     /// [`SCRATCH`](Config::SCRATCH).
@@ -897,6 +909,9 @@ pub enum Scratch {
     /// What the external-link check has already seen: loss re-requests every
     /// outbound URL.
     Links,
+    /// Code fences written out for a `lint { snippets { } }` command to read:
+    /// loss is rewritten by the next lint pass.
+    Snippets,
 }
 
 impl Scratch {
@@ -906,6 +921,7 @@ impl Scratch {
             Self::Announce => "announce",
             Self::Generated => "generated",
             Self::Links => "links",
+            Self::Snippets => "snippets",
         }
     }
 }
@@ -1015,7 +1031,7 @@ impl Section for Config {
             },
         ),
         (
-            "lint",
+            Self::LINT,
             Nested(LintConfig::rows),
             "Checks run over the built pages. Its presence turns them on; `#false` turns them off again.",
             |c, n, t| c.lint.fill(n, t),

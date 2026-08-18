@@ -2,6 +2,7 @@
 //! prints, on stderr, since stdout stays reserved for `--json` data.
 
 mod fmt;
+mod highlight;
 mod marker;
 mod markup;
 mod progress;
@@ -17,6 +18,7 @@ use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
 pub use fmt::{Bytes, Count, Dur, List, Paths, Wrap};
+pub use highlight::Highlighted;
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;
 pub use markup::{Code, Markup, Styled, Text};

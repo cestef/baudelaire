@@ -42,6 +42,18 @@ impl ConfigError {
         }
     }
 
+    /// A config that did not check out, for a caller that has already said
+    /// what was wrong with it in its own words.
+    pub fn invalid(path: &str) -> Self {
+        Self {
+            file: NamedSource::new(path, String::new()),
+            span: SourceSpan::new(0.into(), 0),
+            kind: ConfigErrorKind::Invalid {
+                path: path.to_owned(),
+            },
+        }
+    }
+
     pub fn unknown_feature(name: &str, valid: &str) -> Self {
         Self {
             file: NamedSource::new(Config::FILE, String::new()),
@@ -600,9 +612,22 @@ pub enum ConfigErrorKind {
     #[diagnostic(code(baudelaire::config::paginate_too_small))]
     PaginateTooSmall { got: i64 },
 
+    /// Reported after the fault itself has been written out, so it carries no
+    /// help of its own: it is the exit code with a name.
+    #[error("{} did not check out", Code(.path))]
+    #[diagnostic(code(baudelaire::config::invalid))]
+    Invalid { path: String },
+
     #[error("duplicate {noun} {}", Code(.id))]
     #[diagnostic(code(baudelaire::config::duplicate_id))]
     DuplicateId { noun: &'static str, id: String },
+
+    /// A snippet language with no command and no parser, refused rather than
+    /// ignored: it parses, checks nothing, and leaves a site believing its
+    /// fences of that language are looked at.
+    #[error("nothing here checks a {} snippet", Code(.lang))]
+    #[diagnostic(code(baudelaire::config::no_snippet_checker), help("{help}"))]
+    NoSnippetChecker { lang: String, help: String },
 
     /// A schema field declaring a type its built-in frontmatter key cannot
     /// hold, which nothing would satisfy, so it fails here rather than on every
