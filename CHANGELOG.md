@@ -27,12 +27,21 @@ chores are visible in the git history and change nothing for a site.
   deleted what they named. A record entry that climbs out is now read for
   nothing and deleted at no force.
 
+- **`check --external` probes a cached page's links again.** The outbound URLs
+  a page carries were the one check input the cache did not store, so a second
+  run against a warm cache replayed an empty list and reported nothing: a CI
+  job gating on dead links stopped gating the moment its cache was warm. They
+  are now recorded with the page and replayed on a hit.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- The build cache's schema changed, so the first build after upgrading is a cold
+  one. Nothing to do.
 
 - A `path` or `redirect` in frontmatter, and a `redirect { }` key in the config,
   now fail the build when they contain a `..` segment. A site that relied on one

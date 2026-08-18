@@ -114,6 +114,10 @@ pub struct Outputs {
     /// while `generate { feed { content "full" } }` is on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub syndicated: Option<Syndicated>,
+    /// The `http(s)` links the page carries, stored so `check --external`
+    /// probes a cached page's links too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external: Vec<String>,
     /// What the lint pass found on the page, stored so the check sees a cached
     /// page too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

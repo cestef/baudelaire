@@ -796,21 +796,21 @@ impl Engine {
                 backlinks: pass.prepare.digest(page),
                 fragments,
                 syndicated,
+                external: rewrite.external,
                 lints: rewrite.lints,
                 weight: rewrite.weight,
                 inline: rewrite.inline,
             },
-            external: rewrite.external,
             artifacts,
             warnings,
         })
     }
 
     /// Run the post-render validation passes over every page, compiled and
-    /// cached alike, a cache hit replaying the broken links it was built with
-    /// so the gate does not weaken on rebuild. `outbound` reaches the network and
-    /// so is passed only by [`Engine::check`], which recompiles every page; a
-    /// build stays offline whatever the config says.
+    /// cached alike, a cache hit replaying the links it was built with so the
+    /// gate does not weaken on rebuild. `outbound` reaches the network and so is
+    /// passed only by [`Engine::check`]; a build stays offline whatever the
+    /// config says.
     fn validate(
         &self,
         rendered: &[Rendered],
@@ -821,18 +821,18 @@ impl Engine {
     ) -> Result<()> {
         let fresh = rendered
             .iter()
-            .map(|r| (r.page, r.html.as_str(), &r.outputs, r.external.as_slice()));
+            .map(|r| (r.page, r.html.as_str(), &r.outputs));
         let reused = cached
             .iter()
-            .map(|(page, html, outputs)| (*page, html.as_str(), outputs, &[] as &[String]));
+            .map(|(page, html, outputs)| (*page, html.as_str(), outputs));
         let pages: Vec<CheckedPage> = fresh
             .chain(reused)
-            .map(|(page, html, outputs, external)| CheckedPage {
+            .map(|(page, html, outputs)| CheckedPage {
                 label: self.relative(page),
                 source: &page.source,
                 permalink: &page.permalink,
                 broken: &outputs.broken,
-                external,
+                external: &outputs.external,
                 anchors: &outputs.anchors,
                 deep: &outputs.deep,
                 lints: &outputs.lints,

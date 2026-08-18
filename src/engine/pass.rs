@@ -136,9 +136,6 @@ pub(super) struct Rendered<'a> {
     /// The render pass's own results (externalized images, broken links), the
     /// same shape the cache stores and replays for a hit.
     pub(super) outputs: Outputs,
-    /// Outbound `http(s)` links the page carries, for `check --external`. Not
-    /// cached: only a fresh compile collects them, and only `check` reads them.
-    pub(super) external: Vec<String>,
     /// The files this page produces beside its HTML (a social card..), each
     /// with the destination it was drawn for.
     pub(super) artifacts: Vec<Artifact>,
