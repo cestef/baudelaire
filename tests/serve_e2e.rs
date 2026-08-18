@@ -56,6 +56,35 @@ fn serve_rejects_path_traversal() {
     }
 }
 
+/// The dev server is loopback-only, which a page on the public web reaches by
+/// rebinding its own name to 127.0.0.1. The browser calls that same-origin, so
+/// the `Host` it sends is the only thing that gives it away.
+#[test]
+fn serve_refuses_a_request_for_another_host() {
+    let t = Site::new();
+    t.write(
+        "config.kdl",
+        r#"site "S"
+        paths {
+            content "content"
+            dist "public"
+        }
+        serve { open #false; }"#,
+    );
+    t.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"H\",)\nhome",
+    );
+    let srv = Serve::start(&t, &["--no-watch"]);
+    let (code, body) = srv.get_as_host("/", "attacker.example");
+    assert_eq!(code, 421, "foreign host answered: {body}");
+    assert!(!body.contains("home"), "leaked the page: {body}");
+
+    let (code, body) = srv.get_as_host("/", &format!("localhost:{}", srv.port));
+    assert_eq!(code, 200, "{body}");
+    assert!(body.contains("home"), "{body}");
+}
+
 #[test]
 fn serve_404_for_missing() {
     let t = Site::new();

@@ -274,7 +274,7 @@ pub fn wait_for_port(port: u16, timeout_ms: u64) -> bool {
 /// and killed on drop.
 pub struct Serve {
     _child: Child,
-    port: u16,
+    pub port: u16,
 }
 
 impl Serve {
@@ -329,6 +329,21 @@ impl Serve {
     /// client: the only way to exercise path-traversal defenses.
     pub fn get_raw(&self, path: &str) -> (u16, String) {
         self.request(path, true)
+    }
+
+    /// A request carrying a `Host` the server was not bound under, as a page
+    /// that rebound its own name to loopback sends.
+    pub fn get_as_host(&self, path: &str, host: &str) -> (u16, String) {
+        let url = format!("http://127.0.0.1:{}{path}", self.port);
+        let resp = Command::new("curl")
+            .args(["-s", "-o", "-", "-w", "\n%{http_code}"])
+            .args(["-H", &format!("Host: {host}")])
+            .arg(&url)
+            .output()
+            .expect("curl");
+        let out = String::from_utf8_lossy(&resp.stdout);
+        let (body, status) = out.rsplit_once('\n').unwrap_or_else(|| ("", out.as_ref()));
+        (status.trim().parse().unwrap_or(0), body.to_owned())
     }
 
     fn request(&self, path: &str, raw: bool) -> (u16, String) {

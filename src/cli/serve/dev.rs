@@ -65,10 +65,8 @@ impl<'a> Dev<'a> {
     fn run(mut self) -> Result<()> {
         let requested = format!("{}:{}", self.config.serve.bind, self.config.serve.port);
         let server = Server::http(&requested).map_err(|e| ServeError::bind(&requested, e))?;
-        let addr = server
-            .server_addr()
-            .to_ip()
-            .map_or(requested, |bound| bound.to_string());
+        let bound = server.server_addr().to_ip();
+        let addr = bound.map_or(requested, |ip| ip.to_string());
 
         match self.rebuild() {
             Ok(stats) => self.tracked = stats.read,
@@ -112,11 +110,11 @@ impl<'a> Dev<'a> {
         }
 
         let level = self.ui.level();
-        let route = Arc::new(Mutex::new(Route::new(&self.config)));
+        let route = Arc::new(Mutex::new(Route::new(&self.config, bound)));
         if let Some(watching) = watching {
             let live = Live::default();
             Handler::new(Arc::clone(&route), Some(live.clone()), level).spawn(server);
-            return self.watch(watching, &live, &route);
+            return self.watch(watching, &live, &route, bound);
         }
         Handler::new(route, None, level).serve(&server);
         Ok(())
@@ -162,7 +160,13 @@ impl<'a> Dev<'a> {
     /// Rebuild on every relevant change, until the watch channel closes.
     /// `watching` is re-established whenever `config.kdl` is reloaded, though a
     /// `bind`/`port` change still needs a restart: the server is already bound.
-    fn watch(mut self, mut watching: Watching, live: &Live, route: &Mutex<Route>) -> Result<()> {
+    fn watch(
+        mut self,
+        mut watching: Watching,
+        live: &Live,
+        route: &Mutex<Route>,
+        bound: Option<std::net::SocketAddr>,
+    ) -> Result<()> {
         loop {
             self.rewatch = false;
             let mut reloaded = false;
@@ -177,7 +181,7 @@ impl<'a> Dev<'a> {
             if !reloaded {
                 return Ok(());
             }
-            *route.lock() = Route::new(&self.config);
+            *route.lock() = Route::new(&self.config, bound);
             watching = self.establish()?;
         }
     }

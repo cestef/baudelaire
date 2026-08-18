@@ -116,6 +116,15 @@ chores are visible in the git history and change nothing for a site.
   refuses an unknown host; it learns one on first connect and refuses a *changed*
   key. The behaviour is unchanged, the description was wrong.
 
+- **The dev server answers only the address it was bound under.** A request
+  carrying a `Host` it does not serve is refused with 421, which closes DNS
+  rebinding: a page on the public web that points its own name at 127.0.0.1
+  looks same-origin to the browser and could read `dist` and, where `serve {
+  editor }` is set, spawn that editor on a project file.
+
+- **A base path is stripped by segment.** Under `url "https://site/docs"`, the
+  dev server resolved `/docsomething/` to `dist/omething/`.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

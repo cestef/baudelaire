@@ -1,5 +1,6 @@
 //! Answering a request: which file a URL names, and refusing the ones outside.
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -42,6 +43,10 @@ pub(super) struct Route {
     /// The declared language codes, so an unmatched URL under `/fr/` is answered
     /// with the French not-found page. Empty on a single-language site.
     langs: Vec<String>,
+    /// The authorities this server answers to, lowercased. A request naming any
+    /// other host resolved this one by a name the author did not bind, which is
+    /// how a page on the public web reaches a loopback server.
+    hosts: Vec<String>,
 }
 
 impl Route {
@@ -51,15 +56,24 @@ impl Route {
     /// never escape the served root.
     fn resolve(&self, url: &str) -> Option<PathBuf> {
         let path = url.split('?').next().unwrap_or(url);
-        let rel = path
-            .strip_prefix(&self.base)
-            .unwrap_or(path)
-            .trim_start_matches('/');
+        let rel = Self::below(&self.base, path).trim_start_matches('/');
         let rel = Percent::decode(rel);
         let base = self.dist.join(&rel);
         self.within(&base)
             .or_else(|| self.within(&base.join(Config::INDEX)))
             .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
+    }
+
+    /// `url` with the site's base path removed, which only happens where the
+    /// base is a whole path segment: under a base of `/docs`, `/docsomething/`
+    /// is a different URL and not `/omething/`.
+    fn below<'a>(base: &str, url: &'a str) -> &'a str {
+        if base.is_empty() {
+            return url;
+        }
+        url.strip_prefix(base)
+            .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+            .unwrap_or(url)
     }
 
     /// The canonical path of `candidate` when it is an existing file inside
@@ -71,7 +85,7 @@ impl Route {
         (canon.starts_with(&self.dist) && canon.is_file()).then_some(canon)
     }
 
-    pub(super) fn new(config: &Config) -> Self {
+    pub(super) fn new(config: &Config, addr: Option<SocketAddr>) -> Self {
         let dist = config.paths.dist.clone();
         Self {
             dist: crate::fs::canonicalize(&dist).unwrap_or(dist),
@@ -82,7 +96,38 @@ impl Route {
             } else {
                 Vec::new()
             },
+            hosts: addr.map(Self::hosts).unwrap_or_default(),
         }
+    }
+
+    /// The `Host` values a request may carry: the bound address as written, and
+    /// the loopback names that resolve to it when it is one.
+    fn hosts(addr: SocketAddr) -> Vec<String> {
+        let port = addr.port();
+        let mut hosts = vec![addr.to_string(), format!("{}", addr.ip())];
+        if addr.ip().is_loopback() || addr.ip().is_unspecified() {
+            hosts.extend([
+                format!("localhost:{port}"),
+                "localhost".to_owned(),
+                format!("127.0.0.1:{port}"),
+                "127.0.0.1".to_owned(),
+                format!("[::1]:{port}"),
+                "[::1]".to_owned(),
+            ]);
+        }
+        hosts.iter().map(|h| h.to_lowercase()).collect()
+    }
+
+    /// Whether a request's `Host` names this server. A request carrying none is
+    /// allowed: HTTP/1.0 and every command-line client omit it.
+    fn addressed_here(&self, req: &Request) -> bool {
+        if self.hosts.is_empty() {
+            return true;
+        }
+        req.headers()
+            .iter()
+            .find(|header| header.field.equiv("Host"))
+            .is_none_or(|header| self.hosts.contains(&header.value.as_str().to_lowercase()))
     }
 }
 
@@ -90,7 +135,7 @@ impl Route {
     /// The declared language a request URL sits under, if any: the first path
     /// segment, when it names one.
     fn scope(&self, url: &str) -> Option<&str> {
-        let path = url.strip_prefix(&self.base).unwrap_or(url);
+        let path = Self::below(&self.base, url);
         let head = path.trim_start_matches('/').split('/').next()?;
         self.langs
             .iter()
@@ -126,6 +171,11 @@ impl Handler {
     /// a guard held into an arm would deadlock against `respond_404`.
     fn handle(&self, req: Request) {
         let url = req.url().to_owned();
+        if !self.route.lock().addressed_here(&req) {
+            self.ui.request(421, &url);
+            let _ = req.respond(Response::empty(421));
+            return;
+        }
         if let Some(live) = &self.live
             && url.starts_with(Live::ENDPOINT)
         {
@@ -272,6 +322,7 @@ mod tests {
             base: String::new(),
             open: None,
             langs: Vec::new(),
+            hosts: Vec::new(),
         };
         (tmp, route)
     }
@@ -290,6 +341,47 @@ mod tests {
             assert_eq!(route.resolve(url), Some(route.dist.join(expected)), "{url}");
         }
         assert_eq!(route.resolve("/nowhere/"), None);
+    }
+
+    /// `Sec-Fetch-Site` is computed by the browser from the *origin*, so a page
+    /// on the public web that rebinds its name to 127.0.0.1 still calls itself
+    /// same-origin: the `Host` it sends is what gives it away.
+    #[test]
+    fn only_the_bound_authority_is_answered() {
+        let bound: SocketAddr = "127.0.0.1:1313".parse().expect("addr");
+        let hosts = Route::hosts(bound);
+        for named in [
+            "127.0.0.1:1313",
+            "localhost:1313",
+            "LocalHost:1313",
+            "localhost",
+        ] {
+            assert!(hosts.contains(&named.to_lowercase()), "{named}");
+        }
+        for foreign in ["attacker.example", "attacker.example:1313", "site.test"] {
+            assert!(!hosts.contains(&foreign.to_owned()), "{foreign}");
+        }
+
+        let public: SocketAddr = "203.0.113.7:80".parse().expect("addr");
+        assert!(!Route::hosts(public).contains(&"localhost".to_owned()));
+    }
+
+    /// A base path is a whole segment, so a URL that merely starts with its
+    /// characters is a different URL: `/docsomething/` under a base of `/docs`
+    /// resolved to `dist/omething/`.
+    #[test]
+    fn a_base_path_is_stripped_by_segment() {
+        let (_tmp, mut route) = served();
+        route.base = "/docs".to_owned();
+        assert_eq!(
+            route.resolve("/docs/posts/a/"),
+            Some(route.dist.join("posts/a/index.html"))
+        );
+        assert_eq!(route.resolve("/docs/"), Some(route.dist.join("index.html")));
+        assert_eq!(route.resolve("/docsposts/a/"), None);
+        route.langs = vec!["fr".to_owned()];
+        assert_eq!(route.scope("/docs/fr/x/"), Some("fr"));
+        assert_eq!(route.scope("/docsfr/x/"), None);
     }
 
     /// A percent-encoded `..` is refused after decoding, which is the case
