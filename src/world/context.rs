@@ -18,6 +18,21 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// Where this mode keeps its incremental state, under the configured cache
+    /// directory.
+    ///
+    /// `check` keeps its own: it renders without the asset pipeline, so its
+    /// HTML is not the HTML a build writes, and an entry of one read by the
+    /// other would serve markup whose asset references were never resolved.
+    /// `build` and `serve` share, and must: switching between them would
+    /// otherwise be a whole-site miss every time.
+    pub fn cache(self, dir: &std::path::Path) -> std::path::PathBuf {
+        match self {
+            Self::Build | Self::Serve => dir.to_path_buf(),
+            Self::Check => dir.join(Self::Check.as_str()),
+        }
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             Self::Build => "build",

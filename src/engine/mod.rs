@@ -85,6 +85,8 @@ struct Generated {
 pub struct Engine {
     project: Project,
     config: Config,
+    /// What this run is for, which decides where its incremental state lives.
+    mode: Mode,
     /// The resolved theme, when the site names one.
     theme: Option<Theme>,
     /// What this binary cannot do that the site asked for, from [`Gate`].
@@ -113,6 +115,7 @@ impl Engine {
         Ok(Self {
             project,
             config,
+            mode,
             theme,
             gaps,
             inert,
@@ -134,7 +137,7 @@ impl Engine {
     /// A build, phase by phase; this is the only place their order is spelled.
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        let statics = self.stage()?;
+        let statics = self.staged(ui)?;
         let planned = self.planned("planned build", ui)?;
         let warned = ui.warnings();
         for gap in &self.gaps {
@@ -149,8 +152,7 @@ impl Engine {
         }
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
-        let prepare = self.prepare(&planned)?;
-        prepare.verify()?;
+        let prepare = self.prepared(&planned, ui)?;
         #[cfg(feature = "js")]
         let modules = Modules::new(self, &prepare);
         let assets = Assets::new(
@@ -159,10 +161,9 @@ impl Engine {
             #[cfg(feature = "js")]
             modules.ctx(&planned.pages),
         );
-        let mut processed = assets.process()?;
+        let mut processed = Self::processed(&assets, ui)?;
         let deferred = std::mem::take(&mut processed.deferred);
         let (asset_count, asset_bytes) = (processed.count, processed.bytes);
-        debug!(count = asset_count, bytes = asset_bytes, "assets processed");
         let mut emitted = processed.emitted;
         let mut pass = Pass::new(
             self,
@@ -172,7 +173,7 @@ impl Engine {
             processed.srcsets,
             emitted.clone(),
         );
-        let mut cache = self.cache(&pass, &planned, ui)?;
+        let mut cache = self.cached(&pass, &planned, ui)?;
         if self.config.links.backlinks {
             pass.prepare.assume(Graph::predicted(
                 &self.project,
@@ -205,7 +206,6 @@ impl Engine {
 
         ui.flush();
         let total = rendered.len() + cached.len();
-        let page_bytes: u64 = outputs.iter().map(|out| out.html.len() as u64).sum();
         let sidecars = Tally::of(artifacts.iter().copied());
         Summary {
             pages: total,
@@ -213,7 +213,7 @@ impl Engine {
             assets: asset_count + images.count() + owned.count,
             statics: statics.count,
             generated: generated.count,
-            bytes: page_bytes
+            bytes: outputs.iter().map(|out| out.html.len() as u64).sum::<u64>()
                 + asset_bytes
                 + owned.bytes
                 + images.bytes()
@@ -269,7 +269,10 @@ impl Engine {
     /// Plan the pages this pass covers, alongside the tracked value trees every
     /// consumer of them borrows. `what` names the pass in the trace line.
     fn planned(&self, what: &'static str, ui: &Ui) -> Result<Planned> {
-        let planned = plan(&self.config, &self.project)?;
+        let planned = {
+            let _step = ui.step("reading content");
+            plan(&self.config, &self.project)?
+        };
         debug!(
             pages = planned.pages.len(),
             site = self.config.label(),
@@ -310,6 +313,38 @@ impl Engine {
         Ok(prepare)
     }
 
+    /// Copy the static tree, which is one phase however many files it holds.
+    fn staged(&self, ui: &Ui) -> Result<Copied> {
+        let _step = ui.step("staging static files");
+        self.stage()
+    }
+
+    /// Build the compile inputs, and refuse the ones that cannot stand.
+    fn prepared<'a>(&'a self, planned: &'a Planned, ui: &Ui) -> Result<Prepare<'a>> {
+        let _step = ui.step("preparing pages");
+        let prepare = self.prepare(planned)?;
+        prepare.verify()?;
+        Ok(prepare)
+    }
+
+    /// Read the manifest of the last run of this mode.
+    fn cached(&self, pass: &Pass, planned: &Planned, ui: &Ui) -> Result<Cache> {
+        let _step = ui.step("reading the cache");
+        self.cache(pass, planned, ui)
+    }
+
+    /// Run the asset pipeline, which is one phase however many files it walks.
+    fn processed(assets: &Assets<'_>, ui: &Ui) -> Result<crate::engine::asset::Processed> {
+        let _step = ui.step("processing assets");
+        let processed = assets.process()?;
+        debug!(
+            count = processed.count,
+            bytes = processed.bytes,
+            "assets processed"
+        );
+        Ok(processed)
+    }
+
     /// Load the build cache, keyed on every site-wide input the per-page
     /// dependency tracker cannot see.
     fn cache(&self, pass: &Pass, planned: &Planned, ui: &Ui) -> Result<Cache> {
@@ -323,6 +358,7 @@ impl Engine {
             planned.tracked.clone(),
             pass.renderer.maps(),
             self.project.root(),
+            self.mode.cache(&self.config.cache.dir),
             ui,
         )
     }
@@ -560,36 +596,37 @@ impl Engine {
         Ok(())
     }
 
-    /// Compile every page and report diagnostics without writing any output.
+    /// Compile what changed, report diagnostics, and write no output.
+    ///
+    /// Incremental like a build, against a manifest of its own: this renders
+    /// without the asset pipeline, so its markup is not the markup a build
+    /// writes and the two must not read each other's entries.
     pub fn check(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let planned = self.planned("planned check", ui)?;
         let pass = Pass::new(
             self,
             &planned,
-            self.prepare(&planned)?,
+            self.prepared(&planned, ui)?,
             AssetMap::new(self.config.asset_prefix()),
             SrcSets::default(),
             Emitted::default(),
         );
-        let rendered = self.render_pages("checking", pass.pages.iter().collect(), ui, |page| {
-            (
-                page,
-                pass.prepare
-                    .input(page)
-                    .and_then(|(id, text, fp)| self.compile(page, id, text, fp, &pass)),
-            )
-        })?;
-        self.validate(&rendered, &[], None, true, ui)?;
+        let mut cache = self.cached(&pass, &planned, ui)?;
+        let (rendered, cached) = self.incremental(&pass, &mut cache, ui)?;
+        self.validate(&rendered, &cached, None, true, ui)?;
+        let outputs = Self::outputs(&rendered, &cached);
+        cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
         ui.flush();
+        let total = rendered.len() + cached.len();
         ui.done(format_args!(
             "checked {} in {}",
-            Count::pages(rendered.len()),
+            Count::pages(total),
             Dur(timer.elapsed())
         ));
         Ok(Stats {
-            pages: rendered.len(),
-            cached: 0,
+            pages: total,
+            cached: cached.len(),
             read: Vec::new(),
         })
     }

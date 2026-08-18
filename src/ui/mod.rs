@@ -22,7 +22,7 @@ pub use highlight::Highlighted;
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;
 pub use markup::{Code, Markup, Styled, Text};
-pub use progress::Progress;
+pub use progress::{Progress, Step};
 
 /// Return the cursor to column 0 and erase the line; only ever written to a
 /// tty, where on a pipe it would strand the escape in the log.
@@ -509,5 +509,12 @@ impl Ui {
         } else {
             Progress::hidden()
         }
+    }
+
+    /// A phase with nothing to count: reading the content tree, resolving
+    /// fonts, running the asset pipeline. Ends when the returned [`Step`] is
+    /// dropped, which is also what records how long it took.
+    pub fn step(&self, what: &'static str) -> Step {
+        Step::spinner(what, self.tty && self.level() == Level::Default)
     }
 }

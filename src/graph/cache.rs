@@ -13,6 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 use crate::codegen::Value;
 use crate::config::Config;
@@ -227,9 +228,9 @@ impl Cache {
         roots: Vec<(String, Value)>,
         maps: RenderMaps<'_>,
         root: &Path,
+        dir: PathBuf,
         ui: &Ui,
     ) -> Result<Self> {
-        let dir = config.cache.dir.clone();
         let manifest = dir.join(MANIFEST);
         let prev = fs::read(&manifest).map_or_else(
             |_| Manifest::default(),
@@ -307,16 +308,30 @@ impl Cache {
     /// generated pages (taxonomies, paginated indexes) too, whose synthetic
     /// sources never touch disk and so have no file to hash.
     pub fn reuse(&mut self, page: &Page, fingerprint: &Hash) -> Option<(String, Outputs)> {
-        if !self.enabled || self.prev.config.as_ref() != Some(&self.config) {
-            return None;
+        match self.hit(page, fingerprint) {
+            Ok(reused) => Some(reused),
+            Err(miss) => {
+                debug!(page = %page.source.display(), why = miss.why(), "cache miss");
+                None
+            }
+        }
+    }
+
+    /// The cached page, or what stopped it being one.
+    fn hit(&mut self, page: &Page, fingerprint: &Hash) -> Result<(String, Outputs), Miss> {
+        if !self.enabled {
+            return Err(Miss::Disabled);
+        }
+        if self.prev.config.as_ref() != Some(&self.config) {
+            return Err(Miss::Config);
         }
         let key = self.key(page);
-        let entry = self.prev.pages.get(&key)?;
+        let entry = self.prev.pages.get(&key).ok_or(Miss::Unrecorded)?;
         if &entry.hash != fingerprint {
-            return None;
+            return Err(Miss::Source);
         }
         if !self.intact(&entry.deps) {
-            return None;
+            return Err(Miss::Deps);
         }
         let roots = self.roots();
         if !entry
@@ -324,41 +339,41 @@ impl Cache {
             .iter()
             .all(|(key, hash)| roots.digest(key) == *hash)
         {
-            return None;
+            return Err(Miss::Roots);
         }
         if !entry
             .links
             .iter()
             .all(|(path, permalink)| self.links.get(path) == permalink.as_ref())
         {
-            return None;
+            return Err(Miss::Links);
         }
         if !entry
             .urls
             .iter()
             .all(|(url, served)| self.urls.contains(url) == *served)
         {
-            return None;
+            return Err(Miss::Urls);
         }
         if !entry
             .srcsets
             .iter()
             .all(|(source, digest)| self.srcsets.get(source) == digest.as_ref())
         {
-            return None;
+            return Err(Miss::Srcsets);
         }
         if !entry
             .assets
             .iter()
             .all(|(request, served)| self.assets.get(request) == served.as_ref())
         {
-            return None;
+            return Err(Miss::Assets);
         }
         let entry = entry.clone();
-        let html = self.objects.read(&entry.blob)?;
+        let html = self.objects.read(&entry.blob).ok_or(Miss::Blob)?;
         let outputs = entry.outputs.clone();
         self.next.pages.insert(key, entry);
-        Some((html, outputs))
+        Ok((html, outputs))
     }
 
     /// Whether every file a compile read still hashes to what it hashed then.
@@ -592,6 +607,7 @@ mod tests {
                 assets: &AssetMap::default(),
             },
             root,
+            config.cache.dir.clone(),
             &Ui::new(Level::Silent),
         )
         .expect("cache")
@@ -663,5 +679,53 @@ mod tests {
         let key = cache.key(&page(path.to_str().expect("utf-8 tempdir"), Data::Empty));
 
         assert_eq!(key, Path::new("content/posts/a.typ"));
+    }
+}
+
+/// Why a page could not be served from the cache: the answer to "why did this
+/// rebuild?", which is the one thing an incremental build is asked most often.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Miss {
+    /// `--no-cache`, or `cache { incremental #false }`.
+    Disabled,
+    /// The config, the generated modules or the fonts changed, which nothing
+    /// per-page can vouch for.
+    Config,
+    /// No manifest entry: a new page, or a cache that never saw it.
+    Unrecorded,
+    /// The page's own source, or the wrapper binding it to its template.
+    Source,
+    /// A file the compile read.
+    Deps,
+    /// A value the page took off the site's data roots.
+    Roots,
+    /// A permalink one of its links resolved to.
+    Links,
+    /// Whether a URL it named is served by this site.
+    Urls,
+    /// The width variants one of its images matched.
+    Srcsets,
+    /// An asset it referenced.
+    Assets,
+    /// The recorded HTML is gone from the object store.
+    Blob,
+}
+
+impl Miss {
+    /// One word for the log, so a run can be grepped by reason.
+    const fn why(self) -> &'static str {
+        match self {
+            Self::Disabled => "cache disabled",
+            Self::Config => "site inputs changed",
+            Self::Unrecorded => "not in the manifest",
+            Self::Source => "source changed",
+            Self::Deps => "a file it reads changed",
+            Self::Roots => "site data changed",
+            Self::Links => "a link target moved",
+            Self::Urls => "a url it names appeared or went",
+            Self::Srcsets => "an image variant changed",
+            Self::Assets => "an asset it references changed",
+            Self::Blob => "its recorded html is gone",
+        }
     }
 }
