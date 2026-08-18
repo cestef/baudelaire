@@ -125,6 +125,16 @@ chores are visible in the git history and change nothing for a site.
 - **A base path is stripped by segment.** Under `url "https://site/docs"`, the
   dev server resolved `/docsomething/` to `dist/omething/`.
 
+- **A bundled script is no longer truncated at a `sourceMappingURL` in its own
+  text.** The trailing comment was found by scanning the whole bundle for the
+  last occurrence, so a dependency carrying that string in a literal dropped
+  everything after it.
+
+- **A half-written asset-cache blob repairs itself.** Blobs are written through
+  a staging file now, and a blob whose bytes do not match its own name is
+  rewritten rather than kept: an interrupted build used to leave a cache key
+  that missed forever.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

@@ -175,11 +175,46 @@ impl Js {
         })
     }
 
-    /// `code` with any trailing `sourceMappingURL` comment removed: the bundler
+    /// `code` with a trailing `sourceMappingURL` comment removed: the bundler
     /// names the map after the file it was told to write, and the pipeline
     /// appends a link to the fingerprinted name it actually serves.
+    ///
+    /// Only the last *line*, and only when it is the whole comment: the marker
+    /// is ordinary text inside a string literal, and a dependency carrying one
+    /// would otherwise truncate the bundle at it.
     fn unlinked(code: &str) -> String {
-        code.rfind("//# sourceMappingURL=")
-            .map_or_else(|| code.to_owned(), |at| code[..at].to_owned())
+        const MARKER: &str = "//# sourceMappingURL=";
+        let trimmed = code.trim_end_matches(['\n', '\r']);
+        let (head, last) = trimmed
+            .rsplit_once('\n')
+            .map_or(("", trimmed), |(head, last)| (head, last));
+        if last.trim_start().starts_with(MARKER) {
+            return head.to_owned();
+        }
+        code.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Js;
+
+    /// The marker is ordinary text in a string literal, and `rfind` over the
+    /// whole bundle read one as the real trailing comment: everything after a
+    /// vendored dependency's copy was dropped.
+    #[test]
+    fn only_a_trailing_source_map_comment_is_stripped() {
+        assert_eq!(
+            Js::unlinked("const a = 1;\n//# sourceMappingURL=app.js.map\n"),
+            "const a = 1;"
+        );
+        assert_eq!(
+            Js::unlinked("  //# sourceMappingURL=app.js.map"),
+            "",
+            "a bundle that is only the comment"
+        );
+        let inline = "const marker = \"//# sourceMappingURL=\";\nexport { marker };\n";
+        assert_eq!(Js::unlinked(inline), inline, "a literal is not a comment");
+        assert_eq!(Js::unlinked("const a = 1;\n"), "const a = 1;\n");
     }
 }
