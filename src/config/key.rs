@@ -21,21 +21,25 @@ impl<'a> Key<'a> {
 
     /// The table path this names, the author's own names dropped, or `None`
     /// when no table has it.
+    ///
+    /// The *last* segment has to be the one that extended the path, not merely
+    /// share its name with it: `serve.port.port` names no key, though its tail
+    /// spells one the tables know.
     pub fn resolved(&self) -> Option<String> {
         let mut known = String::new();
+        let mut extended = false;
         for segment in self.segments() {
             let below = if known.is_empty() {
                 segment.to_owned()
             } else {
                 format!("{known}.{segment}")
             };
-            if Reference::at(&below).is_some() {
+            extended = Reference::at(&below).is_some();
+            if extended {
                 known = below;
             }
         }
-        let last = self.segments().last().copied()?;
-        let resolves = known.rsplit('.').next() == Some(last);
-        resolves.then_some(known)
+        extended.then_some(known)
     }
 
     /// The shape of the key this names.
@@ -71,5 +75,13 @@ mod tests {
     fn a_path_whose_last_segment_is_no_key_resolves_to_nothing() {
         assert!(Key::new("paths.dsit").resolved().is_none());
         assert!(Key::new("content.collections.blog").resolved().is_none());
+    }
+
+    /// The tail spelled a key the tables know, so comparing names alone made
+    /// `config get serve.port.port` answer as if the key existed.
+    #[test]
+    fn a_repeated_segment_resolves_to_nothing() {
+        assert!(Key::new("serve.port.port").resolved().is_none());
+        assert!(Key::new("paths.content.content").resolved().is_none());
     }
 }

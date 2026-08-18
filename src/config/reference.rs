@@ -41,7 +41,7 @@ impl Reference {
     /// `None` when nothing is named that, which is a different answer from an
     /// empty `Reference` (a key with no settings of its own).
     pub fn at(path: &str) -> Option<Self> {
-        let all = Self::new();
+        let all = Self::whole();
         let start = all.0.iter().position(|e| e.path == path)?;
         let root = all.0[start].depth;
         let len = all.0[start + 1..]
@@ -50,15 +50,23 @@ impl Reference {
             .count();
         Some(Self(
             all.0
-                .into_iter()
+                .iter()
                 .skip(start)
                 .take(len + 1)
                 .map(|e| Entry {
+                    path: e.path.clone(),
                     depth: e.depth - root,
-                    ..e
+                    ..*e
                 })
                 .collect(),
         ))
+    }
+
+    /// The whole schema, walked once: `at` is called per dotted segment and per
+    /// config node visited, and each walk allocates a `String` per key.
+    fn whole() -> &'static Self {
+        static WHOLE: std::sync::LazyLock<Reference> = std::sync::LazyLock::new(Reference::new);
+        &WHOLE
     }
 
     pub fn entries(&self) -> &[Entry] {

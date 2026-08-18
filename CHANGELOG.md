@@ -103,6 +103,10 @@ chores are visible in the git history and change nothing for a site.
   no block (`bundles { guide "typo" }`) never reached the check that refuses
   what nothing reads.
 
+- **`config get` answers nothing for a key that does not exist.** A dotted path
+  whose last segment repeated one already matched (`serve.port.port`) resolved
+  to the shorter key and reported its value.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
