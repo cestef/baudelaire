@@ -118,7 +118,9 @@ What `slim` leaves out:
   [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and
     PNG/JPEG assets are copied unchanged.],
   [`cards`], [`generate { cards }` warns and renders no card.],
-  [`pdf`], [`generate { pdf }` warns and writes no PDF.],
+  [`pdf`], [`generate { pdf }` and a bundle asking for `pdf` warn, and no PDF is
+    written.],
+  [`epub`], [A bundle asking for `epub` warns and no EPUB is written.],
   [`ssh`], [`deploy { ssh }` warns and that destination is skipped.
     `deploy { s3 }` is unaffected.],
   [`announce`], [`announce { standard }` warns, the `announce` command is gone,

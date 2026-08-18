@@ -2,7 +2,7 @@
 //! withholds ([`INERT`]), both read once by `Engine::new` so the whole build
 //! agrees on one answer.
 
-use crate::config::{Config, SearchConfig};
+use crate::config::{BundleFormat, Config, SearchConfig};
 use crate::error::warning::{FeatureMissing, SettingInert};
 
 /// One optional capability, the config that asks for it, and what a binary
@@ -121,6 +121,22 @@ const GATES: &[Gate] = &[
         setting: "generate { pdf }",
         asked: |config| config.generate.pdf.enabled(),
         effect: "no PDF is written beside a page, and nothing links to one",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "pdf",
+        compiled: cfg!(feature = "pdf"),
+        setting: "generate { bundles { formats \"pdf\" } }",
+        asked: |config| Gate::bundles(config, BundleFormat::Pdf),
+        effect: "no PDF is written for that bundle",
+        rewrites: false,
+    },
+    Gate {
+        cargo: "epub",
+        compiled: cfg!(feature = "epub"),
+        setting: "generate { bundles { formats \"epub\" } }",
+        asked: |config| Gate::bundles(config, BundleFormat::Epub),
+        effect: "no EPUB is written for that bundle",
         rewrites: false,
     },
     Gate {
@@ -325,6 +341,16 @@ impl Gate {
     /// at least one `.md` file sits under the content tree. A filesystem probe
     /// rather than a config read, because a markdown page asks for nothing: it
     /// is a file.
+    /// Whether any bundle asks for `format`, read off the *defaulted* list so
+    /// the row still fires for the `pdf` a bundle takes by writing nothing.
+    fn bundles(config: &Config, format: BundleFormat) -> bool {
+        config
+            .generate
+            .bundles
+            .iter()
+            .any(|(_, bundle)| bundle.enabled() && bundle.formats().contains(&format))
+    }
+
     fn markdown(config: &Config) -> bool {
         config.content.markdown.enabled
             && crate::fs::Walk::new(&config.paths.content)
@@ -398,6 +424,51 @@ mod tests {
                 .any(|gap| gap.setting == "assets { fingerprint }" && gap.cargo == "css"),
             !cfg!(feature = "css"),
             "turning a setting off is never silent"
+        );
+    }
+
+    /// A feature with no row degrades silently, which is what `epub` did until
+    /// it got one: every capability a build can lack is either gated or named
+    /// here as gating no setting of its own.
+    #[test]
+    fn every_optional_capability_owns_a_gate_row() {
+        /// Features that gate no config setting: one supplies fonts the binary
+        /// falls back from on its own, the other only decides whether `theme`
+        /// can fetch, which its own command reports.
+        const UNGATED: [&str; 2] = ["embedded-fonts", "themes"];
+
+        for (feature, _) in crate::version::Version::FEATURES {
+            let gated = GATES.iter().any(|gate| gate.cargo == *feature);
+            assert_eq!(
+                gated,
+                !UNGATED.contains(feature),
+                "`{feature}` has {} gate row",
+                if gated { "a" } else { "no" }
+            );
+        }
+    }
+
+    /// A bundle takes `pdf` by writing no `formats` at all, so a row reading
+    /// the stored list rather than the defaulted one never fires.
+    #[test]
+    fn a_bundle_asks_for_the_format_it_defaults_to() {
+        let cfg = config("generate {\n  bundles {\n    guide { collections \"guide\" }\n  }\n}");
+        assert!(
+            Gate::bundles(&cfg, crate::config::BundleFormat::Pdf),
+            "a bundle with no `formats` still asks for a PDF"
+        );
+        assert!(!Gate::bundles(&cfg, crate::config::BundleFormat::Epub));
+
+        let epub = config(
+            "generate {\n  bundles {\n    guide { collections \"guide\"; formats \"epub\" }\n  }\n}",
+        );
+        assert!(Gate::bundles(&epub, crate::config::BundleFormat::Epub));
+        assert!(!Gate::bundles(&epub, crate::config::BundleFormat::Pdf));
+
+        let unbound = config("generate {\n  bundles {\n    guide { }\n  }\n}");
+        assert!(
+            !Gate::bundles(&unbound, crate::config::BundleFormat::Pdf),
+            "a bundle binding nothing asks for nothing"
         );
     }
 

@@ -55,6 +55,13 @@ chores are visible in the git history and change nothing for a site.
   starting with a multi-byte character was sliced mid-codepoint by the handler
   check. Both aborted the build with a raw Rust message instead of a diagnostic.
 
+- **A bundle format the binary cannot write is now reported.** `generate {
+  bundles { formats "epub" } }` on a build without the `epub` feature (and the
+  same for `pdf`) filtered the format out and exited green with nothing written,
+  where three places in the code and one in the docs promised a
+  `baudelaire::feature::missing` warning. Both formats own a gate row, and a
+  test now holds every optional capability to owning one.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
