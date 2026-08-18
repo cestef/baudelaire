@@ -317,7 +317,8 @@ impl<'a> Prepare<'a> {
             let rel = rel
                 .strip_prefix(&content)
                 .unwrap_or_else(|_| rel.strip_prefix(&root).unwrap_or(&rel));
-            entries.push((name.to_owned(), Value::str(self.config.asset_url(rel))));
+            let named = crate::graph::AssetName::new(rel, self.config.digest_of(&path)).path();
+            entries.push((name.to_owned(), Value::str(self.config.asset_url(&named))));
         }
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         Value::dict(entries)

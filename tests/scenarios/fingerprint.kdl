@@ -132,3 +132,29 @@ scenario "a chain of @imports resolves all the way down" {
     absent "assets/leaf.css"
   }
 }
+
+// `page.assets` names a file sitting beside a page bundle, and that file is
+// published under the digest `#image()` gave it: the dict spelled the authored
+// name, so every template-written link 404'd under fingerprinting.
+scenario "a page's own asset url carries the digest its file was written under" {
+  requires "images"
+  files {
+    "content/posts/hello/index.typ" #"""
+      #let frontmatter = (title: "Hello", template: "post.typ",)
+      #image("cover.png")
+      """#
+    "content/posts/hello/cover.png" png="8x8"
+    "templates/post.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #let post(page, body) = h("main", h("img", src: page.assets.at("cover.png")), body)
+      """#
+  }
+  expect {
+    ok
+    file "posts/hello/index.html" {
+      capture "cover" #"src=\"/assets/posts/hello/(cover\.[0-9a-f]+\.png)\""#
+      missing "src=\"/assets/posts/hello/cover.png\""
+    }
+    file "assets/posts/hello/{cover}"
+  }
+}

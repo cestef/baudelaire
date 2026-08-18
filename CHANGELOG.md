@@ -62,6 +62,11 @@ chores are visible in the git history and change nothing for a site.
   `baudelaire::feature::missing` warning. Both formats own a gate row, and a
   test now holds every optional capability to owning one.
 
+- **`page.assets` names the file the build actually wrote.** Under `assets {
+  fingerprint }`, a colocated file is published with a content digest in its
+  name, but the dict a template reads spelled the authored name, so every link
+  written from `page.assets` 404'd. Both now name the file by one rule.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

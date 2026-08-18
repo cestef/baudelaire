@@ -627,6 +627,18 @@ impl Config {
         )
     }
 
+    /// The digest that names a published file by its content, or `None` when
+    /// `assets { fingerprint }` is off: the one rule both the image
+    /// externalizer and a page's own `assets` dict name a colocated file by, so
+    /// the URL a template writes is the file the build wrote.
+    pub fn digest_of(&self, source: &Path) -> Option<String> {
+        self.assets
+            .fingerprint
+            .then(|| crate::fs::read(source).ok())
+            .flatten()
+            .map(|bytes| crate::graph::AssetName::digest(&bytes))
+    }
+
     /// The processed assets directory under `dist`: the *published* location.
     pub fn asset_dist(&self) -> PathBuf {
         self.paths.dist.join(self.asset_name())

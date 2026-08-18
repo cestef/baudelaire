@@ -99,12 +99,7 @@ impl ImageRef {
     /// files rather than one name claimed twice.
     fn of(vpath: &str, root: &Path, config: &Config) -> Self {
         let source = root.join(vpath);
-        let digest = config
-            .assets
-            .fingerprint
-            .then(|| crate::fs::read(&source).ok())
-            .flatten()
-            .map(|bytes| AssetName::digest(&bytes));
+        let digest = config.digest_of(&source);
         let content = Self::rooted(&config.paths.content, root);
         let rel = Path::new(vpath)
             .strip_prefix(content)
