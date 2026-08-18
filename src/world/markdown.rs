@@ -115,14 +115,34 @@ fn md(
         }
         (None, None) => bail!(span, "`md` needs markdown to render, or a `path`"),
     };
+    let named = |name: &str, valid: Vec<&'static str>| {
+        format!("`md` knows no {name}; valid ones are {}", valid.join(", "))
+    };
+    let mut enabled = Vec::with_capacity(extensions.len());
+    for name in extensions {
+        match Extension::of(&name) {
+            Some(extension) => enabled.push(extension),
+            None => bail!(
+                span,
+                "{}",
+                named(&format!("extension `{name}`"), Extension::names())
+            ),
+        }
+    }
+    let html = match html {
+        None => RawHtml::Refuse,
+        Some(name) => match RawHtml::of(&name) {
+            Some(mode) => mode,
+            None => bail!(
+                span,
+                "{}",
+                named(&format!("`html` mode `{name}`"), RawHtml::names())
+            ),
+        },
+    };
     let config = MarkdownConfig {
-        extensions: extensions
-            .into_iter()
-            .filter_map(|name| Extension::of(&name))
-            .collect(),
-        html: html
-            .and_then(|name| RawHtml::of(&name))
-            .unwrap_or(RawHtml::Refuse),
+        extensions: enabled,
+        html,
         eval,
         ..MarkdownConfig::default()
     };

@@ -39,10 +39,13 @@
   // Typst carries each argument's span through a `..` forward, so a mistake is
   // underlined where the *page* wrote it rather than somewhere inside this
   // package, which its author has never opened.
+  // The site's own settings go first and the caller's spread after: typst
+  // keeps the *last* of a repeated named argument, so a page that writes
+  // `eval: false` overrides the config rather than being silently dropped.
   _native(
-    ..given,
     extensions: _extensions,
     html: _html,
     eval: _eval,
+    ..given,
   )
 }

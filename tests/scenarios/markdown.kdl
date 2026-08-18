@@ -1383,3 +1383,65 @@ scenario "either spelling of the typst fence tag runs under eval" {
     }
   }
 }
+
+// The wrapper spread the caller's arguments *before* the site's, and typst
+// keeps the last of a repeated named argument: every per-call `extensions`,
+// `html` and `eval` was accepted and then overridden by the config.
+scenario "md takes its own settings over the site's" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      content {
+        markdown { extensions "-tables" }
+      }
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md(```md
+      | a | b |
+      | - | - |
+      ```, extensions: ("tables",))
+      #md("A #calc.pow(2, 3) B", eval: false)
+      """##
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<table>"
+      contains "#calc.pow(2, 3)"
+    }
+  }
+}
+
+// A name the parser does not know is a mistake in the page, not a setting to
+// drop: the drop left the author with a document lowered by rules they did not
+// ask for.
+scenario "md refuses an extension it does not know" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      """#
+    "content/a.typ" ##"""
+      #import "@baudelaire/markdown:0.1.0": md
+      #let frontmatter = (title: "A")
+      #md("x", extensions: ("tabels",))
+      """##
+  }
+  expect {
+    fails {
+      code "baudelaire::typst::compile"
+      contains "knows no extension `tabels`"
+    }
+  }
+}

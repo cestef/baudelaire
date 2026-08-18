@@ -142,6 +142,12 @@ chores are visible in the git history and change nothing for a site.
   `.DS_Store` beside a face invalidated the site; only the extensions the
   scanner loads count now.
 
+- **`md` honours the `extensions`, `html` and `eval` a call writes.** The
+  wrapper forwarded the caller's arguments before the site's, and typst keeps
+  the last of a repeated named argument, so every per-call setting was accepted
+  and then overridden by the config. A name none of them knows is now an error
+  at the call rather than a silently dropped setting.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
@@ -155,6 +161,10 @@ chores are visible in the git history and change nothing for a site.
 - A `path` or `redirect` in frontmatter, and a `redirect { }` key in the config,
   now fail the build when they contain a `..` segment. A site that relied on one
   was writing outside its output directory; spell the URL without the `..`.
+
+- `md(.., extensions: ..)` now takes effect where it previously did nothing, so
+  a call that named an extension the site disables starts applying it. A name
+  the parser does not know is now an error.
 
 - A config that wrote an attribute inside a free table (`client { env "prod"
   extra="x" }`) now fails to parse. The value was being dropped; write it as a
