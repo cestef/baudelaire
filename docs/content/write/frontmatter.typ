@@ -229,17 +229,19 @@ system:
 A list says what it holds, so the parameter nests as deep as the data does:
 
 ```kdl
+//! content { collections { posts {
 schema {
   widths "list<int>"
   matrix "list<list<int>>"
-  author "dict" {
+  editor "dict" {
     name "str"
     email "str" optional=#true
   }
-  authors "list<dict>" {
+  reviewers "list<dict>" {
     name "str"
   }
 }
+//! } } }
 ```
 
 A block declares the fields of the dictionary the type ends in, through however
@@ -248,7 +250,7 @@ unless they say `optional=#true` themselves. The diagnostic names the one that
 broke, down to the element:
 
 ```text
-  × frontmatter `authors.1.name` must be a string, but is of type `integer`
+  × frontmatter `reviewers.1.name` must be a string, but is of type `integer`
 ```
 
 A recognized key can appear in a schema, to require it. Its type is already

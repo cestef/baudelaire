@@ -59,11 +59,15 @@ page the manifest was linked from.
 == Icons
 
 ```kdl
+//! generate {
+//!   manifest {
 icons {
   "/icons/app-192.png" size=192
   "/icons/app.svg"
   "/icons/badge.png" size=96 purpose="monochrome"
 }
+//!   }
+//! }
 ```
 
 The node name is the path, exactly as the browser will request it: put the files

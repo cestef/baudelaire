@@ -38,6 +38,7 @@ Each is on while the block is present, and off by name.
   [`alt`], [Reports an `<img>` with no `alt` attribute at all.],
   [`ids`], [Reports an `id` used more than once on a page.],
   [`aria`], [Reports an unknown ARIA role or attribute, and one pointing at an id that is not there.],
+  [`snippets`], [Checks each code fence as the language it claims. One line per language; see #link(<snippets>)[below].],
 )
 
 === How loud each one is
@@ -220,6 +221,101 @@ is billed to `html`.
   `baudelaire check` compiles every page but processes no assets, so it can see
   *what* a page loads and not how large any of it is. It runs the rules and
   leaves the budgets to `baudelaire build`, which has the bytes.
+]
+
+== Code fences <snippets>
+
+A fence claims a language. `snippets` is where a site says what that claim is
+worth: nothing until a language is named, and from then on every fence of it is
+read by something that knows the language.
+
+```kdl
+lint {
+  snippets {
+    kdl  run="$BAUDELAIRE config check --isolated --compact {file}"
+    json
+    typ "warn"
+    sh   run="shellcheck -s sh {file}"
+  }
+}
+```
+
+A line with no `run` is checked by the parser this binary already carries:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Language], [Read by]),
+  [`kdl`], [The KDL parser, for syntax alone.],
+  [`json`], [`serde_json`.],
+  [`toml`], [`toml_edit`.],
+  [`yaml`, `yml`], [`saphyr`.],
+  [`typ`, `typst`], [Typst's own parser, which parses without evaluating.],
+)
+
+Naming any other language without a `run` is a config error rather than a line
+that checks nothing.
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Type], [Does]),
+  [`run`], [str], [The command that checks one snippet. `{file}` is the snippet on disk, as one shell word, and `{lang}` the language it claimed. Nonzero exit is a finding; what the command wrote is the message.],
+  [`hidden`], [str], [A line prefix that is checked and never shown, for the context a fragment needs. See #link(<hidden>)[hidden lines].],
+)
+
+A `run` command is run through the system shell in the project root, like a
+#link("hooks.typ")[hook], and `$BAUDELAIRE` is the binary running the build, so a
+site checks its own config examples with the very build that renders them rather
+than with whatever is on `PATH`. A command that reports `file:line:column:` has
+its message placed on that line of the fence; one that reports anything else is
+reported against the fence itself.
+
+=== Hidden lines <hidden>
+
+A documentation fence usually shows a fragment: the block that matters, not the
+three blocks around it. `hidden` is the prefix that carries the rest:
+
+````typ
+```kdl
+//! content { collections { posts {
+schema { title "str" }
+//! } } }
+```
+````
+
+The reader sees the `schema` block. The checker reads all five lines. The prefix
+is yours to pick, and a comment in the language keeps the raw file readable to
+anyone who never renders it.
+
+One line is a directive rather than context: `//! @ignore` (the prefix, then
+`@ignore`) says this fence is not meant to check at all, which is what a snippet
+that is wrong on purpose needs.
+
+== Keeping a rule off one place
+
+A finding can be right about the markup and wrong about the page. `nolint` marks
+a region the lint does not look at:
+
+```typ
+#import "@baudelaire/html:0.1.0": nolint
+
+#nolint[
+  ==== A section that starts deep on purpose
+]
+
+#nolint("headings", "alt")[..]   // only those two
+```
+
+Everything inside is invisible to the rules it names, or to every rule when it
+names none, native Typst elements included. The marker is read and removed
+before the page is written, so the output is the one you would have had without
+it.
+
+#callout(kind: "note")[
+  The marker is an attribute, `data-lint`, so markup that builds its own
+  elements can write it directly: `h("div", data-lint: "headings")[..]`. `off`
+  is every rule.
 ]
 
 == Elsewhere

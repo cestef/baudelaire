@@ -50,6 +50,89 @@ chores are visible in the git history and change nothing for a site.
   `headings { level "warn" }`, so both spellings take a block and the old one
   still means what it did.
 
+- **Every code fence can be checked as the language it claims.** A site names
+  the languages it wants held to their own syntax, and each is read by the
+  parser this binary already carries or by a command of its own:
+
+  ```kdl
+  //! @ignore
+  lint {
+    snippets {
+      kdl  run="$BAUDELAIRE config check --isolated --compact {file}"
+      json
+      typ "warn"
+      sh   run="shellcheck -s sh {file}"
+    }
+  }
+  ```
+
+  `kdl`, `json`, `toml`, `yaml` and `typ` are parsed in-process; any other
+  language needs a `run`, and naming one without it is a config error rather
+  than a line that checks nothing. A finding lands on the line of the fence it
+  came from, and `$BAUDELAIRE` is the binary running the build, so a site checks
+  its own examples with the build that renders them.
+
+  A `hidden` prefix carries the context a fragment needs without showing it, and
+  a hidden `@ignore` line says a fence is not meant to check at all:
+
+  ````typ
+  ```kdl
+  //! content { collections { posts {
+  schema { title "str" }
+  //! } } }
+  ```
+  ````
+
+- **`baudelaire config`**: what can be said about a config without building the
+  site it configures. `check` parses it, resolves the theme it names and applies
+  every profile it declares; `explain` says what one key is and everywhere this
+  config sets it; `get` prints a value for a script; `set` writes one key back
+  with the rest of the file exactly as authored, comments and all; `show`
+  prints the config, or one block of it, highlighted.
+
+  Every verb takes a dotted key, which the generated shell completions now
+  offer, read out of the same tables that parse `config.kdl`.
+
+- **`nolint` keeps the lint off a region**, for the finding that is right about
+  the markup and wrong about the page:
+
+  ```typ
+  #import "@baudelaire/html:0.1.0": nolint
+
+  #nolint("headings")[
+    ==== A section that starts deep on purpose
+  ]
+  ```
+
+  It names the rules it silences, or every rule when it names none, and native
+  Typst elements are covered like any other. The marker is read and removed
+  before the page is written, so the output is unchanged. Markup that builds its
+  own elements can write the attribute directly: `data-lint="headings"`.
+
+- **KDL is highlighted out of the box**, in the built pages and in
+  `baudelaire config show`. A site that shipped its own `kdl.sublime-syntax` for
+  its config examples can drop it.
+
+- **A verbose run says what each phase did.** `-v` now reports the time spent
+  reading content, preparing pages, processing assets and reading the cache,
+  each of which shows a spinner while it runs, and `cache miss` names *why* a
+  page was recompiled: its source, a file it reads, a link target that moved, an
+  asset that changed.
+
+### Changed
+
+- **`baudelaire check` is incremental.** It reuses what it compiled last time
+  and reports the cached count, so checking a site twice is not compiling it
+  twice. Its manifest is its own: `check` renders without the asset pipeline, so
+  its markup is not the markup a build writes, and neither reads the other's
+  entries.
+
+- **A theme may not set `lint`.** It joins `paths`, `hooks`, `announce`,
+  `deploy`, `profiles`, `serve`, `typst` and `security` as a section the site
+  owns outright, for the same reason `hooks` is one: `lint { snippets { run } }`
+  runs commands through the system shell on every build of every site that
+  adopted the theme.
+
 - **A taxonomy's terms can be things the build knows about**, rather than words.
   `content { entities { } }` declares a registry -- `people`, `series`,
   `organizations`, whatever a site has -- and a taxonomy resolves its terms
@@ -104,10 +187,12 @@ chores are visible in the git history and change nothing for a site.
   says what a page claims about the entities it names:
 
   ```kdl
+  //! content {
   taxonomies {
     authors     entities="people" credit="author"
     translators entities="people" credit="translator"
   }
+  //! }
   ```
 
   Every surface then spells that role its own way, or stays quiet where its
@@ -1111,6 +1196,7 @@ chores are visible in the git history and change nothing for a site.
   matters takes a bare flag:
 
   ```kdl
+  //! @ignore
   content { draft { build #true } }   // was
   content { drafts #true }            // is, and `drafts { build #true }` still reads
   ```
@@ -1144,6 +1230,7 @@ chores are visible in the git history and change nothing for a site.
   configured nothing:
 
   ```kdl
+  //! @ignore
   lint #false                          // turned linting ON
   html { highlight #false }            // turned highlighting ON
   generate { cards #false }            // enabled cards
@@ -1668,6 +1755,7 @@ chores are visible in the git history and change nothing for a site.
   goes red here was already not doing what its config said:
 
   ```kdl
+  //! @ignore
   assets { images { optimize { png { level 6 } } } }   // was silently level 2
   assets { images { optimize { png level=6 } } }       // what it has to say
   ```
@@ -1689,6 +1777,7 @@ chores are visible in the git history and change nothing for a site.
   always the `<main>` landmark:
 
   ```kdl
+  //! @ignore
   generate {
     search {
       region "article"      // the element whose contents are indexed
@@ -2712,6 +2801,7 @@ passed, which is what they are for. Neither runs on a site that declares no
   directory. To keep the old URLs, set the old template explicitly:
 
   ```kdl
+  //! @ignore
   content { collections { posts permalink="/{collection}/{slug}/" } }
   ```
 
@@ -2742,6 +2832,7 @@ passed, which is what they are for. Neither runs on a site that declares no
   second the index over them.
 
   ```kdl
+  //! @ignore
   // before
   content { collections { blog sort="date" template="post.typ" list="index.typ" paginate=5 } }
 

@@ -122,8 +122,8 @@ Your site is at [localhost:1821](http://localhost:1821), rebuilding as you save.
 
 ## Themes
 
-A theme is templates, assets, and config defaults shipped as one unit, named
-like any Typst dependency. Four come with the repository:
+A theme is templates, assets, and config defaults shipped as one unit. Four come
+with the repository:
 
 | | |
 |---|---|
@@ -136,7 +136,8 @@ They are inside the binary, so nothing is fetched. `baudelaire init` offers them
 alongside the starter shapes, and an existing project adds one with:
 
 ```sh
-baudelaire theme add albatros
+baudelaire theme add albatros            # one this binary ships
+baudelaire theme add gh:owner/repo       # or a directory, archive or package
 ```
 
 Either way the files land in `themes/albatros/` and the config names them:
@@ -146,7 +147,10 @@ theme "themes/albatros"
 ```
 
 Everything a theme provides is a default: your file at the same path wins, and
-your config wins key by key.
+your config wins key by key. Nine sections are yours alone, and a theme naming
+one is refused rather than obeyed: `paths`, `hooks`, `announce`, `deploy`,
+`profiles`, `serve`, `typst`, `security` and `lint`. They decide what runs on
+your machine and what a browser is told, which is not a styling decision.
 
 ## License
 

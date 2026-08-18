@@ -74,12 +74,9 @@ the whole site, as a single PDF.
 
 ```kdl
 generate {
-  pdf {
-    bundle {
-      template "book.typ"
-      collections "guide"
-      site #true
-    }
+  bundles {
+    guide { collections "guide"; template "book.typ" }
+    everything { site #true; formats "pdf" "epub" }
   }
 }
 ```
@@ -88,16 +85,21 @@ generate {
   columns: 4,
   align: (left, left, left, left),
   table.header([Key], [Type], [Default], [Does]),
-  [`template`], [str], [`book.typ`], [The paged template the bundle is typeset with.],
-  [`collections`], [str ..], [--], [Which collections to bind, one document each.],
-  [`site`], [bool], [`#false`], [Bind the whole site as well.],
+  [`collections`], [str ..], [--], [Which collections the bundle binds, one word each.],
+  [`site`], [bool], [`#false`], [Bind every page in the site rather than named collections.],
+  [`title`], [str], [--], [The document's title. Unset, the bound collection's title, or the site's.],
+  [`sort`], [`order` \| `date` \| `title`], [--], [How the bound pages are ordered. Unset, each collection's own sort.],
+  [`reverse`], [bool], [`#false`], [Reverse the order the pages are bound in.],
+  [`formats`], [(`pdf` \| `epub`) ..], [`pdf`], [What the bundle is written as.],
+  [`template`], [str], [`book.typ`], [The paged template the PDF is laid out with.],
 )
 
-Each target is written as `/<target>.pdf`, so that config produces `/guide.pdf`
-and `/site.pdf`, localized like every other per-language artifact
-(`/fr/guide.pdf`). Pages are bound in the order the site already puts them: each
-collection's own sort order. Generated listings are left out. A `bundle { }`
-naming no target writes nothing, and the build says so.
+Each bundle is written under the name its block carries, so that config produces
+`/guide.pdf` and `/everything.pdf` beside `/everything.epub`, localized like
+every other per-language artifact (`/fr/guide.pdf`). Pages are bound in the order
+the site already puts them: each collection's own sort order. Generated listings
+are left out. A bundle naming neither `collections` nor `site` binds nothing, and
+the build says so.
 
 The template is handed the document, then every page at once:
 

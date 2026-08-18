@@ -31,6 +31,7 @@ Every command has a visible short alias, so `baudelaire b` builds and
   [`completions <shell>`], [`comp`], [Print a shell completion script to stdout.],
   [`man`], [--], [Print the manual as roff to stdout.],
   [`reference [key]`], [`ref`], [Print every config key and its value shape.],
+  [`config <verb>`], [`cfg`], [Check, explain, get, set or show the config without building.],
   [`mirror`], [`packages`, `pkg`], [Write the generated modules to disk for editor tooling.],
   [`theme <verb>`], [`th`], [List, add, inspect, update or remove a shipped theme.],
 )
@@ -39,6 +40,65 @@ Every command has a visible short alias, so `baudelaire b` builds and
   `check` takes `c` and `clean` takes `cl`, not the other way around. One
   keystroke should not be the difference between compiling and deleting.
 ]
+
+== `config` <config>
+
+What can be said about a config without building the site it configures. Every
+verb takes the global `-c` and `-p`, so a profile is applied by naming it there.
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Verb], [Alias], [Does]),
+  [`check [paths..]`], [`c`], [Parse it, resolve the theme it names and apply every profile it declares. `-` reads standard input.],
+  [`explain <key>`], [`e`], [What one key is, what it holds, and which layer put it there.],
+  [`get <key>`], [`g`], [What it holds, defaults included, on stdout for a script.],
+  [`set <key> <value>`], [`s`], [Write one key back, the rest of the file exactly as authored.],
+  [`show [key]`], [--], [The config, or one block of it, highlighted.],
+)
+
+```sh
+baudelaire config check                          # would a build accept it?
+baudelaire config check --isolated snippet.kdl   # a fragment, no project around it
+baudelaire config explain content.collections.sort
+baudelaire config set serve.port 4000
+baudelaire config get paths.dist                 # public
+baudelaire config get lint.headings.start --written   # only what the file says
+baudelaire config show --effective lint          # every layer resolved, as KDL
+```
+
+A value is read out of the layers a config is built from, in the order they
+apply:
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Layer], [Is]),
+  [`default`], [What a site holds before anything is written down.],
+  [`theme`], [The theme's own `theme.kdl`, the floor a site stands on.],
+  [`config`], [Your `config.kdl`.],
+  [`profile`], [The profile `-p` names, applied over it.],
+)
+
+`get` and `show --effective` answer with the last layer that had something to
+say; `explain` names it and lists the ones it stood on. `get --written` and
+`show` without `--effective` read the file alone, which is what a script
+checking whether a key is *authored* wants.
+
+A key is a dotted path, completed by every generated
+#link(<completions>)[completion script]. A path may name a block of your own:
+`content.collections.blog.sort` is `sort` under the collection you called
+`blog`.
+
+#callout(kind: "note")[
+  `set` edits the KDL as a document, not as text: comments, blank lines and the
+  order of blocks come back out unchanged. Nothing is written that would not
+  parse, so a value the key refuses leaves the file alone.
+]
+
+`check --compact` reports each fault as one `file:line:column: message` line,
+which is what a tool reading the output expects; it is what
+#link("../build/linting.typ")[`lint { snippets }`] runs to check a `kdl` fence.
 
 == Global flags <global>
 
@@ -460,7 +520,7 @@ See #link("../start/themes.typ")[themes] for what each one is, and
   yourself.
 ]
 
-== completions
+== completions <completions>
 
 ```sh
 baudelaire completions fish > ~/.config/fish/completions/baudelaire.fish
@@ -472,7 +532,9 @@ completion directory. `baudelaire completions --help` prints the line for every
 shell, including where each expects the file.
 
 The script is generated from the same definition the binary parses with, so it
-offers exactly the commands and flags this build has.
+offers exactly the commands and flags this build has, and every config key a
+#link(<config>)[`config`] verb takes, read out of the same tables that parse
+`config.kdl`.
 
 == man
 

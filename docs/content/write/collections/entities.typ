@@ -61,13 +61,16 @@ contact details while profile pages carry the prose.
 )
 
 ```kdl
+//! content { entities { people {
 sources {
   pages "content/people"
   data "data/people.kdl"
 }
+//! } } }
 ```
 
 ```kdl
+//! @ignore
 // data/people.kdl
 zoe {
   name "Zoe Quill"
@@ -91,6 +94,7 @@ language a #link("../../configure/reference.typ")[collection schema] speaks.
 Declaring a field *requires* it, which is how you make a roster complete:
 
 ```kdl
+//! content { entities {
 people {
   shape "person"
   fields {
@@ -98,6 +102,7 @@ people {
     pronouns "str" optional=#true
   }
 }
+//! } }
 ```
 
 *Slots* say which field answers each question a renderer asks. They are what
@@ -115,11 +120,13 @@ keeps the rest of the build from being written about people.
 )
 
 ```kdl
+//! content { entities {
 series {
   fields { title "str"; cover "str" optional=#true }
   slots display="title" image="cover"
   sources { pages "content/series" }
 }
+//! } }
 ```
 
 A slot naming a field the registry does not declare is refused at the line that
@@ -149,10 +156,12 @@ word for it.
 )
 
 ```kdl
+//! content {
 taxonomies {
   authors     entities="people" credit="author"
   translators entities="people" credit="translator"
 }
+//! }
 ```
 
 A taxonomy that names a registry without a `credit` is a plain reference: it

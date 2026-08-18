@@ -95,7 +95,7 @@
   ]
 }
 
-#let site-header(url) = h("header", class: "site-header")[
+#let site-header(url, sidebar: true) = h("header", class: "site-header")[
   #h("a", class: "skip-link", href: "#main", "Skip to content")
   #h("a", class: "brand", href: "/", "Baudelaire")
   #h("nav", class: "top-nav", aria-label: "Primary")[
@@ -107,7 +107,7 @@
   #version-picker(url)
   #search-trigger
   #theme-toggle
-  #nav-toggle
+  #if sidebar { nav-toggle }
 ]
 
 // Title-case a directory name for display: `storage` -> `Storage`.
@@ -299,16 +299,19 @@
     // always typst's own highlighting and never a string built in the browser.
     #h("div", class: "pane")[
       #h("p", class: "pane-label", "config.kdl")
+      // Each line is its own fence so it can be shown or hidden on its own, so
+      // none of them is a config a checker could read: `@ignore` says so.
+      #let line(text) = raw("//! @ignore\n" + text, lang: "kdl")
       #h("pre", class: "emit-kdl", {
-        h("span", class: "emit-line", raw(block + " {", lang: "kdl"))
+        h("span", class: "emit-line", line(block + " {"))
         for opt in options {
           h("span",
             class: "emit-line",
             hidden: not opt.at("on", default: false),
             data-emit-line: opt.id,
-            raw("  " + opt.kdl, lang: "kdl"))
+            line("  " + opt.kdl))
         }
-        h("span", class: "emit-line", raw("}", lang: "kdl"))
+        h("span", class: "emit-line", line("}"))
       })
     ]
     #h("div", class: "pane", hidden: true, data-emit-tree-pane: true)[
@@ -329,12 +332,11 @@
 // jump lands on that version's home rather than on this page.
 #let shell(title, main, tags: (), sections: (), heading: true, class: none, url: none) = {
   set document(title: title)
-  show raw.where(lang: "kdl"): set raw(syntaxes: "/highlight/kdl.sublime-syntax")
   show raw.where(lang: "powershell"): set raw(syntaxes: "/highlight/powershell.sublime-syntax")
 
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg")
-  site-header(url)
+  site-header(url, sidebar: sections != none)
   h("div", class: classes("layout", ("layout-full", sections == none)))[
     #if sections != none { sidebar(sections) }
     #h("main", class: "content", id: "main")[

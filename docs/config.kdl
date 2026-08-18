@@ -29,13 +29,13 @@ content {
   // single index page at its own URL (`/write/`), so a trimmed URL lands
   // somewhere.
   collections {
-    start { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    write { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    configure { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    build { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    ship { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    lookup { sort "order"; template "page.typ"; paginate { template "list.typ" } }
-    blog { sort "date"; reverse #true; template "page.typ"; paginate { size 5; template "list.typ" } }
+    start { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    write { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    configure { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    build { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    ship { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    lookup { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    blog { sort "date"; reverse #true; template "page.typ"; paginate { size 5; template "list.typ" }}
   }
 
   taxonomies {
@@ -76,6 +76,9 @@ assets {
   bundle #true
   fingerprint #true
   tsconfig "tsconfig.json"
+images{
+lazy #true
+    }
 }
 
 // Old paths nothing on the site owns. `/latest/` is the URL that never goes
@@ -155,6 +158,25 @@ serve {
 client {
   repo "https://github.com/cestef/baudelaire"
   edits #true
+}
+
+// Every code fence on this site is checked as the language it claims: a `kdl`
+// one by this very binary (`BAUDELAIRE` is the build that is rendering the
+// page), a `typ` or `json` one by the parser already inside it. `hidden` marks
+// a line the checker reads and the reader never sees, which is what lets a
+// fragment carry the block it belongs in.
+// A page's title is the `h1` the template writes and its own sections open at
+// `==`, which typst-html renders as `h3`. `start` says so, and every level under
+// it is still checked.
+lint {
+  headings {
+    start 3
+  }
+  snippets {
+    kdl hidden="//! " run="$BAUDELAIRE -qq config check --isolated --compact {file}"
+    typ hidden="//! "
+    json hidden="//! "
+  }
 }
 
 // `baudelaire build --profile dev` skips the parts of the asset pipeline that

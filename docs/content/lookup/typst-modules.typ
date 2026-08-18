@@ -18,7 +18,7 @@ disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
   columns: 3,
   align: (left, left, left),
   table.header([Module], [Exports], [Gives you]),
-  [`@baudelaire/html`], [`h`, `classes`, `svg`], [Element construction and SVG inlining.],
+  [`@baudelaire/html`], [`h`, `classes`, `svg`, `nolint`], [Element construction, SVG inlining, and keeping the #link("../build/linting.typ")[lint] off a region.],
   [`@baudelaire/site`], [`version`, `title`, `url`, `lang`, `author`, `languages`], [Site identity as typed bindings.],
   [`@baudelaire/sections`], [`sections(lang)`], [The site's content tree.],
   [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
@@ -61,6 +61,7 @@ export TYPST_PACKAGE_PATH="$PWD/.baudelaire/generated/packages"
 ```
 
 ```json
+//! @ignore
 // tinymist
 "tinymist.typstExtraArgs": ["--package-path", "/abs/path/.baudelaire/generated/packages"]
 ```
