@@ -136,6 +136,9 @@ impl Check {
 
     /// Whether a value is the leaf a type asks for. A compound type reaching
     /// here was already handed a value of the wrong shape.
+    ///
+    /// A date is an ISO string as much as a datetime, because that is what the
+    /// reader takes and what every markdown dialect hands over.
     pub(super) fn scalar(ty: &FieldType, value: &Value) -> bool {
         match ty {
             FieldType::Any => true,
@@ -143,10 +146,11 @@ impl Check {
             FieldType::Bool => matches!(value, Value::Bool(_)),
             FieldType::Int => matches!(value, Value::Int(_)),
             FieldType::Float => matches!(value, Value::Float(_)),
-            FieldType::Date => matches!(
-                value,
-                Value::Datetime(Datetime::Date(_) | Datetime::Datetime(_))
-            ),
+            FieldType::Date => match value {
+                Value::Datetime(Datetime::Date(_) | Datetime::Datetime(_)) => true,
+                Value::Str(text) => text.as_str().parse::<crate::content::date::Iso>().is_ok(),
+                _ => false,
+            },
             FieldType::List(_) | FieldType::Dict(_) => false,
         }
     }

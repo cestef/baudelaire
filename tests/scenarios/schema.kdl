@@ -455,3 +455,67 @@ scenario "a schema-declared key is not a typo of a built-in" {
     file "blog/post/index.html" { contains "body" }
   }
 }
+
+// `date` is the one type with two spellings: the reader takes an ISO string as
+// well as a typst datetime, and every markdown dialect hands one over as a
+// string. The check accepted only the datetime, so a well-formed `.md` page
+// failed a schema its own dialect could not satisfy.
+scenario "a date field takes the iso string every dialect writes" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { date "date" } }
+        }
+      }
+      """#
+    "content/blog/typst.typ" #"""
+      #let frontmatter = (title: "T", date: "2024-01-01",)
+      body
+      """#
+    "content/blog/yaml.md" #"""
+      ---
+      title: Y
+      date: 2024-01-02
+      ---
+
+      body
+      """#
+    "content/blog/native.typ" #"""
+      #let frontmatter = (title: "N", date: datetime(year: 2024, month: 1, day: 3),)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/typst/index.html"
+    file "blog/yaml/index.html"
+    file "blog/native/index.html"
+  }
+}
+
+// ..and a string that is not a date is still refused, so the type still means
+// something.
+scenario "a date field refuses a string that is not one" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { date "date" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", date: "last tuesday",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::mismatch" }
+  }
+}

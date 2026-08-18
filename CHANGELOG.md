@@ -86,6 +86,11 @@ chores are visible in the git history and change nothing for a site.
   marker out lifted any nested marker into an element the walk had already
   passed, so the inner `<div data-lint="..">` was written to the page.
 
+- **A `date` field in a collection schema accepts the string a page writes.**
+  The check took only a typst datetime, while the reader (and its own help text)
+  takes an ISO string, which is the only form YAML, TOML and KDL frontmatter can
+  hand over: `schema { date "date" }` failed every markdown page carrying a date.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
