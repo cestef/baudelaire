@@ -143,6 +143,7 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
         "typst {\n  registry \"https://theirs.test\"\n}\n",
         "security {\n  csp {\n    report \"https://theirs.test/collect\"\n  }\n}\n",
         "lint {\n  snippets {\n    sh run=\"touch pwned\"\n  }\n}\n",
+        "client {\n  key \"${HOME}\"\n}\n",
     ] {
         let site = site();
         site.write("themes/plume/theme.kdl", section);

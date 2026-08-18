@@ -369,10 +369,11 @@ impl Config {
     const TYPST_SECTION: &'static str = "typst";
     const SECURITY: &'static str = "security";
     const LINT: &'static str = "lint";
+    const CLIENT: &'static str = "client";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
     /// may not carry; `Config::floor` says why.
-    pub const OWNED: [&'static str; 9] = [
+    pub const OWNED: [&'static str; 10] = [
         Self::PATHS,
         Self::HOOKS,
         Self::ANNOUNCE,
@@ -382,6 +383,7 @@ impl Config {
         Self::TYPST_SECTION,
         Self::SECURITY,
         Self::LINT,
+        Self::CLIENT,
     ];
 
     /// The text this was parsed from, which is what `config explain` reads a
@@ -1081,7 +1083,7 @@ impl Section for Config {
             |c, n, t| c.lint.fill(n, t),
         ),
         (
-            "security",
+            Self::SECURITY,
             Nested(SecurityConfig::rows),
             "What the built pages tell a browser to trust.",
             |c| c.security.values(),
@@ -1123,14 +1125,14 @@ impl Section for Config {
             |c, n, t| c.caching.fill(n, t),
         ),
         (
-            "typst",
+            Self::TYPST_SECTION,
             Nested(TypstConfig::rows),
             "Typst engine knobs: language features, inputs, fonts, package registry.",
             |c| c.typst.values(),
             |c, n, t| c.typst.fill(n, t),
         ),
         (
-            "client",
+            Self::CLIENT,
             Table,
             "Constants exposed to client-side JavaScript, one `key value` line per entry.",
             |c| Value::each(&c.client, |value| value.into()),
@@ -1161,7 +1163,7 @@ impl Section for Config {
             |c, n, t| c.deploy.fill(n, t),
         ),
         (
-            "serve",
+            Self::SERVE,
             Nested(ServeConfig::rows),
             "The development server.",
             |c| c.serve.values(),
