@@ -217,14 +217,19 @@ impl Text {
     }
 
     /// The byte offset of `</tag` at or after `from`, matched case-insensitively
-    /// without copying the haystack. HTML tag names are case-insensitive, so
-    /// `</SCRIPT>` closes a `<script>` skip.
+    /// and as a whole name, without copying the haystack. HTML tag names are
+    /// case-insensitive, so `</SCRIPT>` closes a `<script>` skip, while
+    /// `</main-menu>` closes no `<main>`.
     fn find_close(hay: &[u8], from: usize, tag: &[u8]) -> Option<usize> {
         let mut i = from;
         while i + 2 + tag.len() <= hay.len() {
+            let end = i + 2 + tag.len();
             if hay[i] == b'<'
                 && hay[i + 1] == b'/'
-                && hay[i + 2..i + 2 + tag.len()].eq_ignore_ascii_case(tag)
+                && hay[i + 2..end].eq_ignore_ascii_case(tag)
+                && hay
+                    .get(end)
+                    .is_none_or(|b| *b == b'>' || b.is_ascii_whitespace())
             {
                 return Some(i);
             }
@@ -386,6 +391,20 @@ mod tests {
     fn a_region_matches_a_whole_tag_name() {
         let html = "<main-menu>chrome</main-menu><main>prose</main>";
         assert_eq!(text(html), "prose");
+    }
+
+    /// A custom element carries a hyphen, so `</main-menu>` shares a prefix
+    /// with every `</main>` the region is looking for.
+    #[test]
+    fn a_closing_tag_matches_a_whole_name_too() {
+        let html = "<main>a<main-menu>b</main-menu>c</main>";
+        assert_eq!(text(html), "a b c");
+        let ignored = "<main><nav>a<nav-bar>b</nav-bar></nav><p>prose</p></main>";
+        let region = Region {
+            element: crate::config::RegionConfig::MAIN,
+            ignore: &["nav".to_owned()],
+        };
+        assert_eq!(Text::extract(ignored, region), "prose");
     }
 
     #[test]

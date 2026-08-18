@@ -33,6 +33,12 @@ chores are visible in the git history and change nothing for a site.
   job gating on dead links stopped gating the moment its cache was warm. They
   are now recorded with the page and replayed on a hit.
 
+- **A custom element no longer truncates the search index.** The scanner that
+  finds a region's closing tag matched by prefix, so `</main-menu>` ended a
+  `<main>` region and `</nav-bar>` ended a `nav` exclusion: everything after it
+  was dropped from `search.json` and from the reading estimate. A closing tag
+  now matches a whole element name, as an opening tag already did.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
