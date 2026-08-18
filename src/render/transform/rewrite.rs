@@ -107,13 +107,13 @@ mod tests {
         assert_eq!(target.to_string(), "/posts/a/#install");
     }
 
-    /// A query after the fragment is not part of it, which is the rule the
-    /// target type already keeps; anything that is not a fragment, and a `#`
-    /// that names no section, are not deep links.
+    /// A `?` after the `#` is part of the fragment, since that is what a
+    /// browser resolves; anything that is not a fragment, and a `#` that names
+    /// no section, are not deep links.
     #[test]
     fn only_a_fragment_naming_a_section_is_a_deep_link() {
         let queried = Links::fragment("#install?x=1", "/a/").expect("a fragment");
-        assert_eq!(queried.fragment(), Some("install"));
+        assert_eq!(queried.fragment(), Some("install?x=1"));
 
         for raw in ["#", "b.typ", "b.typ#install", "/a/#install", ""] {
             assert!(Links::fragment(raw, "/a/").is_none(), "{raw}");

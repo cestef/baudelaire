@@ -42,11 +42,12 @@ impl Target {
 
     /// The heading id the link aimed at, without the `#`.
     ///
-    /// `None` when it named the page rather than a section within it: a
-    /// `?query` is not a section, and neither is a bare `#`.
+    /// Everything after the first `#`, since a `?` after it is part of the
+    /// fragment a browser resolves. `None` when the link named the page rather
+    /// than a section within it: a `?query` alone is not a section, and neither
+    /// is a bare `#`.
     pub fn fragment(&self) -> Option<&str> {
-        let anchor = self.tail.strip_prefix('#')?;
-        let anchor = anchor.split('?').next().unwrap_or(anchor);
+        let anchor = self.tail.split_once('#')?.1;
         (!anchor.is_empty()).then_some(anchor)
     }
 }
@@ -478,7 +479,10 @@ mod tests {
             ("/b/#install", "/b/", Some("install")),
             ("/b/?x=1", "/b/", None),
             ("/b/#", "/b/", None),
-            ("/b/#install?x=1", "/b/", Some("install")),
+            // A `?` after the `#` is part of the fragment, and a `?` before it
+            // does not hide the fragment: RFC 3986 orders query then fragment.
+            ("/b/#install?x=1", "/b/", Some("install?x=1")),
+            ("/b/?x=1#install", "/b/", Some("install")),
         ] {
             let target = Target::from(raw);
             assert_eq!(

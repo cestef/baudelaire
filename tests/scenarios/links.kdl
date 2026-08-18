@@ -240,6 +240,29 @@ scenario "a link to a heading that does not exist is caught" {
   }
 }
 
+// RFC 3986 orders `?query` before `#fragment`, and the split read the first of
+// either: a link written `guide.typ?tab=x#anchor` had no fragment at all, so a
+// heading that never existed shipped out of a green build.
+scenario "a query before a fragment does not hide the anchor check" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Installing
+      how to install
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("/content/guide.typ?tab=x#instaling")[typo'd anchor behind a query]
+      """#
+  }
+  expect {
+    fails { code "baudelaire::links::broken" }
+  }
+}
+
 scenario "a link to a heading that exists is fine" {
   files {
     "config.kdl" #"""

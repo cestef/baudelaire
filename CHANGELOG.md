@@ -72,6 +72,12 @@ chores are visible in the git history and change nothing for a site.
   is followed per value only under baudelaire's own key, so a page whose
   frontmatter read a site input kept serving the value from the previous build.
 
+- **A link written `page.typ?tab=x#section` is checked again.** The split read
+  the first of `#` or `?`, where RFC 3986 orders query before fragment, so a
+  link carrying both had no fragment as far as the deep-link check and the
+  backlink graph were concerned. A `?` written after the `#` is now part of the
+  fragment, as a browser reads it.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
