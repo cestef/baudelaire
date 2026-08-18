@@ -254,8 +254,9 @@ impl Format for TypstFmt {
     }
 }
 
-/// A JavaScript expression: bracketed arrays, always-quoted object keys,
-/// strings escaped by `serde_json`.
+/// A JavaScript expression: bracketed arrays, always-quoted object keys, and
+/// strings whose `<`, `>`, `&` and U+2028/U+2029 are escaped, so a value cannot
+/// close the `<script>` element it is inlined in or break its parse.
 struct JsFmt;
 
 impl Format for JsFmt {
@@ -266,10 +267,26 @@ impl Format for JsFmt {
     const EMPTY_DICT: &'static str = "{}";
 
     fn string(s: &str, out: &mut String) {
-        match serde_json::to_string(s) {
-            Ok(escaped) => out.push_str(&escaped),
-            Err(_) => out.push_str("\"\""),
+        out.push('"');
+        for c in s.chars() {
+            match c {
+                '"' | '\\' => {
+                    out.push('\\');
+                    out.push(c);
+                }
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                '<' | '>' | '&' | '\u{2028}' | '\u{2029}' => {
+                    let _ = write!(out, "\\u{:04x}", c as u32);
+                }
+                c if (c as u32) < 0x20 => {
+                    let _ = write!(out, "\\u{:04x}", c as u32);
+                }
+                c => out.push(c),
+            }
         }
+        out.push('"');
     }
 
     fn float(n: f64, out: &mut String) {
@@ -621,6 +638,22 @@ mod tests {
             assert_eq!(Typst(&value).to_string(), typst, "{n}");
             assert_eq!(Js(&value).to_string(), js, "{n}");
         }
+    }
+
+    /// A generated client is inlined into a `<script>` wherever the single-file
+    /// export or the router island is on, so no value may close it.
+    #[test]
+    fn a_js_string_cannot_close_a_script_element() {
+        let hostile = Value::str("</script><script>x()</script>\u{2028}&amp;");
+        let js = Js(&hostile).to_string();
+        assert!(!js.contains('<'), "{js}");
+        assert!(!js.contains('>'), "{js}");
+        assert!(!js.contains('&'), "{js}");
+        assert!(!js.contains('\u{2028}'), "{js}");
+        assert_eq!(
+            js,
+            "\"\\u003c/script\\u003e\\u003cscript\\u003ex()\\u003c/script\\u003e\\u2028\\u0026amp;\""
+        );
     }
 
     fn sample() -> Value {

@@ -438,5 +438,12 @@ mod tests {
         .script("/");
         assert!(!script.contains("</script"), "{script}");
         assert!(script.contains(r#"const MODE = "history";"#), "{script}");
+
+        let hostile = StandaloneConfig {
+            router: Router::History,
+            ..StandaloneConfig::default()
+        }
+        .script("</script><script>pwned()</script>");
+        assert!(!hostile.contains("</script"), "{hostile}");
     }
 }

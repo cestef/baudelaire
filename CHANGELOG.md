@@ -45,6 +45,11 @@ chores are visible in the git history and change nothing for a site.
   literal in neither Typst nor JavaScript and failed to compile in a generated
   file nobody opens. Both are now spelled per language.
 
+- **A generated JavaScript string cannot close the script it is inlined in.**
+  `<`, `>`, `&` and the U+2028/U+2029 line terminators are now escaped in every
+  generated string, so a config value such as `navigation { standalone { entry
+  "</script>.." } }` can no longer terminate the router island early.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
