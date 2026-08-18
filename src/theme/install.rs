@@ -27,6 +27,9 @@ pub enum State {
     /// In the fetched theme, here, and never ours: `update` replaces it only
     /// under `force` and `remove` never deletes it.
     Yours,
+    /// Named by the record with a path that would leave the theme directory, so
+    /// nothing on disk is read for it and nothing is ever deleted.
+    Foreign,
 }
 
 pub struct Tracked {
@@ -76,13 +79,21 @@ impl Lock {
         let mut tracked: Vec<Tracked> = self
             .files
             .iter()
-            .map(|(rel, digest)| Tracked {
-                rel: PathBuf::from(rel),
-                state: match std::fs::read(dir.join(rel)) {
-                    Err(_) => State::Gone,
-                    Ok(bytes) if Hash::of_bytes(&bytes).hex() == *digest => State::Pristine,
-                    Ok(_) => State::Edited,
-                },
+            .map(|(rel, digest)| {
+                let Some(inside) = crate::fs::Contained::new(rel) else {
+                    return Tracked {
+                        rel: PathBuf::from(rel),
+                        state: State::Foreign,
+                    };
+                };
+                Tracked {
+                    rel: inside.path().to_owned(),
+                    state: match std::fs::read(inside.under(dir)) {
+                        Err(_) => State::Gone,
+                        Ok(bytes) if Hash::of_bytes(&bytes).hex() == *digest => State::Pristine,
+                        Ok(_) => State::Edited,
+                    },
+                }
             })
             .collect();
         tracked.sort_by(|a, b| a.rel.cmp(&b.rel));
@@ -108,7 +119,7 @@ impl Lock {
             let remove = match file.state {
                 State::Pristine => true,
                 State::Edited => force,
-                State::Gone | State::Added | State::Yours => false,
+                State::Gone | State::Added | State::Yours | State::Foreign => false,
             };
             if remove {
                 crate::fs::remove_file(dir.join(&file.rel))?;
@@ -184,7 +195,7 @@ impl Fetched {
             let replace = match file.state {
                 State::Pristine | State::Added => true,
                 State::Edited | State::Yours => force,
-                State::Gone => false,
+                State::Gone | State::Foreign => false,
             };
             if replace {
                 Self::place(&dir.join(&file.rel), contents)?;
@@ -386,6 +397,37 @@ mod tests {
                 name: "albatros".to_owned()
             }
         );
+    }
+
+    /// The record ships inside the theme, so a hostile archive writes it: a
+    /// path climbing out of the theme directory is read for nothing and deleted
+    /// at no force.
+    #[test]
+    fn a_record_naming_a_path_outside_the_theme_deletes_nothing() {
+        const THEIRS: &[u8] = b"not the theme's\n";
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let outside = tmp.path().join("secret");
+        std::fs::write(&outside, THEIRS).expect("write");
+
+        let dir = tmp.path().join("albatros");
+        albatros().install(&dir).expect("install");
+        let mut lock = Lock::read(&dir).expect("lock");
+        lock.files.insert(
+            "../secret".to_owned(),
+            crate::graph::Hash::of_bytes(THEIRS).hex(),
+        );
+        write(&dir, &lock);
+
+        let lock = Lock::read(&dir).expect("lock");
+        assert!(
+            lock.state(&dir)
+                .iter()
+                .any(|file| file.rel == *"../secret" && file.state == State::Foreign),
+            "a climbing path is judged without reading it"
+        );
+
+        Lock::uninstall(&dir, true).expect("remove");
+        assert_eq!(std::fs::read(&outside).expect("read"), THEIRS);
     }
 
     /// What an earlier baudelaire's install leaves behind.

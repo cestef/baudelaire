@@ -298,6 +298,7 @@ impl ThemeArgsFor {
                 State::Gone => "deleted",
                 State::Added => "new in this version",
                 State::Yours => "yours, not the theme's",
+                State::Foreign => "outside this theme, so never touched",
             };
             cx.ui.item(format_args!(
                 "{state} {}",
